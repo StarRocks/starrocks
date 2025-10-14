@@ -28,6 +28,7 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
@@ -525,16 +526,6 @@ public class TaskManager implements MemoryTrackable {
         }
     }
 
-    /**
-     * Calculates the delay before the next refresh for a periodical task.
-     * If the last period has already been refreshed, trigger the next period;
-     * otherwise, refresh immediately.
-     *
-     * @param periodSeconds the scheduling period in seconds
-     * @param taskStartTime the time the task should have started
-     * @param currentDateTime current time
-     * @return seconds to wait before the next run
-     */
     @VisibleForTesting
     static long getInitialDelayTime(long periodSeconds,
                                     LocalDateTime taskStartTime,
@@ -570,8 +561,12 @@ public class TaskManager implements MemoryTrackable {
         LocalDateTime currentDateTime = LocalDateTime.now();
 
         LocalDateTime lastScheduleTime = null;
-        if (task.getLastScheduleTime() != -1) {
-            lastScheduleTime = Utils.getDatetimeFromLong(task.getLastScheduleTime());
+        if (task.getLastScheduleTime() <= 0) {
+            try {
+                lastScheduleTime = Utils.getDatetimeFromLong(task.getLastScheduleTime());
+            } catch (Exception e) {
+                LOG.warn("failed to parse last schedule time: {}", task.getLastScheduleTime(), e);
+            }
         }
         long periodSeconds = TimeUtils.convertTimeUnitValueToSecond(schedule.getPeriod(), schedule.getTimeUnit());
         // if fe restarts frequently, use currentDateTime and taskStartTime can always generate a time of the future
@@ -582,6 +577,11 @@ public class TaskManager implements MemoryTrackable {
                 && lastScheduleTime.isAfter(taskStartTime)
                 && lastScheduleTime.plusSeconds(periodSeconds).isBefore(currentDateTime)) {
             // if the last schedule time + period is before current time, trigger immediately
+            LOG.info("After FE restarts, trigger periodical task immediately, task:{}, lastScheduleTime:{}, " +
+                            "periodSeconds:{}, taskStartTime:{}, currentTime:{}", task.getName(),
+                    DateUtils.formatTimestampInSeconds(lastScheduleTime.toEpochSecond(ZoneOffset.UTC)), periodSeconds,
+                    DateUtils.formatTimestampInSeconds(taskStartTime.toEpochSecond(ZoneOffset.UTC)),
+                    DateUtils.formatTimestampInSeconds(currentDateTime.toEpochSecond(ZoneOffset.UTC)));
             try {
                 task.setLastScheduleTime(System.currentTimeMillis());
                 executeTask(task.getName());
@@ -591,11 +591,12 @@ public class TaskManager implements MemoryTrackable {
         }
 
         long initialDelay = getInitialDelayTime(periodSeconds, taskStartTime, currentDateTime);
-        LOG.info("Register scheduler, task:{}, initialDelay:{}, periodSeconds:{}, startTime:{}, currentTime:{}",
-                task.getName(), initialDelay, periodSeconds, taskStartTime, currentDateTime);
+        LOG.info("Register scheduler, task:{}, initialDelay:{}, periodSeconds:{}, taskStartTime:{}, currentTime:{}",
+                task.getName(), initialDelay, periodSeconds,
+                DateUtils.formatTimestampInSeconds(taskStartTime.toEpochSecond(ZoneOffset.UTC)),
+                DateUtils.formatTimestampInSeconds(currentDateTime.toEpochSecond(ZoneOffset.UTC)));
         // set task's next schedule time
         task.setNextScheduleTime(currentDateTime.plusSeconds(initialDelay).toEpochSecond(ZoneOffset.UTC));
-
         ExecuteOption option = new ExecuteOption(Constants.TaskRunPriority.LOWEST.value(), true, task.getProperties());
         ScheduledFuture<?> future = periodScheduler.scheduleAtFixedRate(() -> {
             // ensure an execute task will not throw exception
