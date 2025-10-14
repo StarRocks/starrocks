@@ -17,6 +17,7 @@ package com.starrocks.sql.plan;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.analysis.RowPositionDescriptor;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
@@ -4255,7 +4256,6 @@ public class PlanFragmentBuilder {
             }
         }
 
-<<<<<<< HEAD
         private ScalarOperator extractAndValidateAsofTemporalPredicate(List<ScalarOperator> otherJoin,
                                                             ColumnRefSet leftColumns,
                                                             ColumnRefSet rightColumns) {
@@ -4320,7 +4320,6 @@ public class PlanFragmentBuilder {
             return true;
         }
 
-=======
         @Override
         public PlanFragment visitPhysicalFetch(OptExpression optExpression, ExecPlan context) {
             PlanFragment childFragment = visit(optExpression.getInputs().get(0), context);
@@ -4432,6 +4431,5 @@ public class PlanFragmentBuilder {
             context.getFragments().add(fragment);
             return fragment;
         }
->>>>>>> e4134218dc (Squash: Combine all commits after ce3f9f09670b1ca733cfc20e1dd6e56b0e499e12)
     }
 }

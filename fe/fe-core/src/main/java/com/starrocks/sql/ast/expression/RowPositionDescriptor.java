@@ -18,6 +18,7 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
+import com.starrocks.planner.SlotId;
 import com.starrocks.thrift.TRowPositionDescriptor;
 import com.starrocks.thrift.TRowPositionType;
 
@@ -34,9 +35,12 @@ public class RowPositionDescriptor {
     private List<SlotId> lookupRefSlots;
 
     public RowPositionDescriptor(Type type, SlotId rowSourceSlot, List<SlotId> fetchRefSlots, List<SlotId> lookupRefSlots) {
-        Preconditions.checkState(fetchRefSlots != null && !fetchRefSlots.isEmpty(), "fetchRefSlots can't be null or empty");
-        Preconditions.checkState(lookupRefSlots != null && !lookupRefSlots.isEmpty(), "lookupRefSlots can't be null or empty");
-        Preconditions.checkState(fetchRefSlots.size() == lookupRefSlots.size(), "fetchRefSlots'size shoule be same with lookupRefSlots");
+        Preconditions.checkState(fetchRefSlots != null && !fetchRefSlots.isEmpty(),
+                "fetchRefSlots can't be null or empty");
+        Preconditions.checkState(lookupRefSlots != null && !lookupRefSlots.isEmpty(),
+                "lookupRefSlots can't be null or empty");
+        Preconditions.checkState(fetchRefSlots.size() == lookupRefSlots.size(),
+                "fetchRefSlots'size shoule be same with lookupRefSlots");
         this.type = type;
         this.rowSourceSlot = rowSourceSlot;
         this.fetchRefSlots = fetchRefSlots;

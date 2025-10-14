@@ -15,17 +15,10 @@
 package com.starrocks.planner;
 
 import com.starrocks.analysis.RowPositionDescriptor;
-import com.starrocks.analysis.SlotDescriptor;
-import com.starrocks.analysis.SlotId;
-import com.starrocks.analysis.TupleDescriptor;
-import com.starrocks.analysis.TupleId;
-import com.starrocks.catalog.Table;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TLookUpNode;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
-import org.sparkproject.guava.collect.Lists;
-import software.amazon.awssdk.services.lexruntimev2.model.Slot;
 
 import java.util.ArrayList;
 import java.util.HashMap;

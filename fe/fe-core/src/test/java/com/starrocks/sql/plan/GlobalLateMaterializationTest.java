@@ -15,12 +15,12 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.common.FeConstants;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class GlobalLateMaterializationTest extends ConnectorPlanTestBase {
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         ConnectorPlanTestBase.beforeClass();
 
