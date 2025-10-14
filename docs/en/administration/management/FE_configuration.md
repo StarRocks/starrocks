@@ -5527,16 +5527,4 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: Whether to allow the system to trace the historical nodes. By setting this item to `true`, you can enable the Cache Sharing feature and allow the system to choose the right cache nodes during elastic scaling.
 - Introduced in: v3.5.1
 
-<<<<<<< HEAD
-=======
-##### transform_type_prefer_string_for_varchar
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether to prefer string type for fixed length varchar columns in materialized view creation and CTAS operations.
-- Introduced in: v4.0.0
-
->>>>>>> 4a0f07d790 ([Doc] rename snippets .md to .mdx (#63977))
 <EditionSpecificFEItem />
