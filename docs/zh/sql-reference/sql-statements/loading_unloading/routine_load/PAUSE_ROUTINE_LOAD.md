@@ -4,7 +4,7 @@ displayed_sidebar: docs
 
 # PAUSE ROUTINE LOAD
 
-import RoutineLoadPrivNote from '../../../../_assets/commonMarkdown/RoutineLoadPrivNote.md'
+import RoutineLoadPrivNote from '../../../../_assets/commonMarkdown/RoutineLoadPrivNote.mdx'
 
 ## 功能
 

@@ -4,7 +4,7 @@ displayed_sidebar: docs
 
 # DROP USER
 
-import UserManagementPriv from '../../../_assets/commonMarkdown/userManagementPriv.md'
+import UserManagementPriv from '../../../_assets/commonMarkdown/userManagementPriv.mdx'
 
 ## 説明
 

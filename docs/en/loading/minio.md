@@ -5,7 +5,7 @@ toc_max_heading_level: 4
 
 # Load data from MinIO
 
-import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
+import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.mdx'
 
 StarRocks provides the following options for loading data from MinIO:
 

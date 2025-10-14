@@ -5,7 +5,7 @@ toc_max_heading_level: 4
 
 # 概念介绍
 
-import InsertPrivNote from '../../_assets/commonMarkdown/insertPrivNote.md'
+import InsertPrivNote from '../../_assets/commonMarkdown/insertPrivNote.mdx'
 
 本文介绍数据导入相关的一些概念和信息。
 

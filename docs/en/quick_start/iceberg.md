@@ -6,7 +6,7 @@ toc_max_heading_level: 2
 keywords: [ 'iceberg' ]
 ---
 
-import DataLakeIntro from '../_assets/commonMarkdown/datalakeIntro.md'
+import DataLakeIntro from '../_assets/commonMarkdown/datalakeIntro.mdx'
 import Clients from '../_assets/quick-start/_clientsCompose.mdx'
 
 # Apache Iceberg Lakehouse

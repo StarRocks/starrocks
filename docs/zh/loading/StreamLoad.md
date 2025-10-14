@@ -5,7 +5,7 @@ keywords: ['Stream Load']
 
 # 从本地文件系统导入数据
 
-import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
+import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.mdx'
 
 StarRocks 提供了两种从本地文件系统导入数据的方法：
 

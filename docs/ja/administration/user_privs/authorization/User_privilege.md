@@ -5,7 +5,7 @@ sidebar_position: 30
 
 # ユーザー権限の管理
 
-import UserPrivilegeCase from '../../../_assets/commonMarkdown/userPrivilegeCase.md'
+import UserPrivilegeCase from '../../../_assets/commonMarkdown/userPrivilegeCase.mdx'
 import GrantToGroup from '../../../_assets/commonMarkdown/grant_to_group.mdx'
 
 このトピックでは、StarRocks におけるユーザー、ロール、および権限の管理方法について説明します。

@@ -5,7 +5,7 @@ toc_max_heading_level: 4
 
 # GRANT
 
-import UserPrivilegeCase from '../../../_assets/commonMarkdown/userPrivilegeCase.md'
+import UserPrivilegeCase from '../../../_assets/commonMarkdown/userPrivilegeCase.mdx'
 
 ## 功能
 
