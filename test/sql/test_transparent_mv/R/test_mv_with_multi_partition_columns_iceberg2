@@ -588,6 +588,7 @@ SELECT * FROM mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_years order by l
 DROP MATERIALIZED VIEW test_years;
 -- result:
 -- !result
+<<<<<<< HEAD
 CREATE MATERIALIZED VIEW test_years
 PARTITION BY (l_returnflag, l_linestatus, date_trunc('year', l_shipdate))
 REFRESH DEFERRED MANUAL
@@ -666,6 +667,8 @@ SELECT * FROM test_years where l_shipdate >= '2024-11-13 00:00:00' order by l_or
 DROP MATERIALIZED VIEW test_years;
 -- result:
 -- !result
+=======
+>>>>>>> 9281abb6d7 ([UT] Fix unstable tests (#64015))
 drop table mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_days;
 -- result:
 -- !result

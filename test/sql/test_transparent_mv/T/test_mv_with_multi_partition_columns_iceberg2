@@ -262,6 +262,7 @@ SELECT * FROM mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_years where l_re
 SELECT * FROM mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_years where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;
 SELECT * FROM mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_years order by l_orderkey;
 DROP MATERIALIZED VIEW test_years;
+<<<<<<< HEAD
 
 CREATE MATERIALIZED VIEW test_years
 PARTITION BY (l_returnflag, l_linestatus, date_trunc('year', l_shipdate))
@@ -292,6 +293,8 @@ SELECT * FROM test_years where l_shipdate >= '2024-11-13 00:00:00' order by l_or
 
 DROP MATERIALIZED VIEW test_years;
 
+=======
+>>>>>>> 9281abb6d7 ([UT] Fix unstable tests (#64015))
 drop table mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_days;
 drop table mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_months;
 drop table mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_years;
