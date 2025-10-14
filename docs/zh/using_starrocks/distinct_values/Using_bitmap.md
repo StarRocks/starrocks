@@ -34,12 +34,12 @@ StarRocks 在计算时，会按照下图进行计算，先根据 page 列和 use
 
 ```sql
 select page, count(distinct user_id) as uv from table group by page;
-
-|  page      |   uv  |
-| :---:      | :---: |
-|  game      |  1    |
-|  shopping  |   2   |
 ```
+
+|  page   |   uv  |
+| :---: | :---: |
+|   game  |  1   |
+|   shopping  |   2  |
 
 ## Bitmap 去重的优势
 
