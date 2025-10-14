@@ -90,6 +90,7 @@ public class TaskRunManager implements MemoryTrackable {
     /**
      * Kill the running task run. If force is true, it will always clear the task run from task run scheduler whether it's
      * canceled or not so can trigger the pending task runs as soon as possible.
+     * NOTE: This method is not thread safe, the caller should ensure the thread safety.
      */
     public boolean killRunningTaskRun(TaskRun taskRun, boolean force) {
         if (taskRun == null) {
@@ -122,6 +123,7 @@ public class TaskRunManager implements MemoryTrackable {
 
     /**
      * Kill all pending task runs of the input task id.
+     * NOTE: This method is not thread safe, the caller should ensure the thread safety.
      */
     public void killPendingTaskRuns(Long taskId) {
         // mark pending tasks as failed
