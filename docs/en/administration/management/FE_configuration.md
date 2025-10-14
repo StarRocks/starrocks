@@ -3844,6 +3844,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The maximum number of jobs that can wait in a report queue. The report is about disk, task, and tablet information of BEs. If too many report jobs are piling up in a queue, OOM will occur.
 - Introduced in: -
 
+##### enable_collect_tablet_num_in_show_proc_backend_disk_path
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable the collection of tablet numbers for each disk in the `SHOW PROC /BACKENDS/{id}` command
+- Introduced in: v4.0.1, v3.5.8
+
 ##### enable_metric_calculator
 
 - Default: true
