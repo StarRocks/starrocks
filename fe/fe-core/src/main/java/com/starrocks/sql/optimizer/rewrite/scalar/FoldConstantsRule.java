@@ -310,7 +310,14 @@ public class FoldConstantsRule extends BottomUpScalarOperatorRewriteRule {
                         .put("array_position", this::constArrayPosition)
                         .build();
         if (handlers.containsKey(call.getFnName())) {
-            return handlers.get(call.getFnName()).apply(call);
+            Optional<ScalarOperator> optResult = handlers.get(call.getFnName()).apply(call);
+            if (optResult.isPresent()) {
+                CastOperator castOp = new CastOperator(call.getType(), optResult.get());
+                ScalarOperator op =
+                        new ScalarOperatorRewriter().rewrite(castOp, Lists.newArrayList(new ReduceCastRule()));
+                return Optional.of(op);
+            }
+            return optResult;
         }
         return Optional.empty();
     }
