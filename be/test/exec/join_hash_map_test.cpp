@@ -1050,7 +1050,9 @@ TEST_F(JoinHashMapTest, CompileFixedSizeKeyColumn) {
     auto c2 = JoinHashMapTest::create_int32_column(2, 2);
     Columns columns{c1, c2};
 
-    JoinHashMapHelper::serialize_fixed_size_key_column<LogicalType::TYPE_BIGINT>(columns, data_column.get(), 0, 2);
+    std::vector<uint32_t> serialized_fixed_size_key_bytes{4, 4};
+    JoinHashMapHelper::serialize_fixed_size_key_column<LogicalType::TYPE_BIGINT>(columns, data_column.get(),
+                                                                                 serialized_fixed_size_key_bytes, 0, 2);
 
     auto* c3 = ColumnHelper::as_raw_column<Int64Column>(data_column);
     ASSERT_EQ(c3->get_data()[0], 8589934592l);
