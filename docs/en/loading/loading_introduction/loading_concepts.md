@@ -5,7 +5,7 @@ toc_max_heading_level: 4
 
 # Loading concepts
 
-import InsertPrivNote from '../../_assets/commonMarkdown/insertPrivNote.md'
+import InsertPrivNote from '../../_assets/commonMarkdown/insertPrivNote.mdx'
 
 This topic introduces common concepts and information about data loading.
 

@@ -3,11 +3,11 @@ displayed_sidebar: docs
 keywords: ['Canshu']
 ---
 
-import BEConfigMethod from '../../_assets/commonMarkdown/BE_config_method.md'
+import BEConfigMethod from '../../_assets/commonMarkdown/BE_config_method.mdx'
 
-import PostBEConfig from '../../_assets/commonMarkdown/BE_dynamic_note.md'
+import PostBEConfig from '../../_assets/commonMarkdown/BE_dynamic_note.mdx'
 
-import StaticBEConfigNote from '../../_assets/commonMarkdown/StaticBE_config_note.md'
+import StaticBEConfigNote from '../../_assets/commonMarkdown/StaticBE_config_note.mdx'
 
 # BE 配置项
 

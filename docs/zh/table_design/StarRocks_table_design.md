@@ -6,7 +6,7 @@ keywords: ['linshi']
 
 # 表概览
 
-import Replicanum from '../_assets/commonMarkdown/replicanum.md'
+import Replicanum from '../_assets/commonMarkdown/replicanum.mdx'
 
 表是数据存储单元。理解 StarRocks 中的表结构，以及如何设计合理的表结构，有利于优化数据组织，提高查询效率。相比于传统的数据库，StarRocks 会以列的方式存储 JSON、ARRAY 等复杂的半结构化数据，保证高效查询。
 本文由浅入深介绍表结构。

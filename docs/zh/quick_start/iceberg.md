@@ -5,7 +5,7 @@ description: "湖仓分析"
 toc_max_heading_level: 2
 keywords: ['iceberg']
 ---
-import DataLakeIntro from '../_assets/commonMarkdown/datalakeIntro.md'
+import DataLakeIntro from '../_assets/commonMarkdown/datalakeIntro.mdx'
 import Clients from '../_assets/quick-start/_clientsCompose.mdx'
 
 # 基于 Apache Iceberg 的数据湖分析

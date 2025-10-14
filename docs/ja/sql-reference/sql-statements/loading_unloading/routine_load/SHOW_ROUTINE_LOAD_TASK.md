@@ -4,7 +4,7 @@ displayed_sidebar: docs
 
 # SHOW ROUTINE LOAD TASK
 
-import RoutineLoadPrivNote from '../../../../_assets/commonMarkdown/RoutineLoadPrivNote.md'
+import RoutineLoadPrivNote from '../../../../_assets/commonMarkdown/RoutineLoadPrivNote.mdx'
 
 ## 説明
 

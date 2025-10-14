@@ -5,7 +5,7 @@ toc_max_heading_level: 4
 
 # 从 MinIO 导入
 
-import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
+import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.mdx'
 
 StarRocks 支持通过以下方式从 MinIO 导入数据：
 

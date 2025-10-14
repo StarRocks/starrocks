@@ -4,7 +4,7 @@ displayed_sidebar: docs
 
 # ロード時のデータ変換
 
-import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
+import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.mdx'
 
 StarRocks はロード時のデータ変換をサポートしています。
 

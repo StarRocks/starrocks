@@ -5,7 +5,7 @@ description: Cloud based Kafka from AutoMQ
 
 # AutoMQ Kafka
 
-import Replicanum from '../_assets/commonMarkdown/replicanum.md'
+import Replicanum from '../_assets/commonMarkdown/replicanum.mdx'
 
 [AutoMQ for Kafka](https://www.automq.com/docs) is a cloud-native version of Kafka redesigned for cloud environments.
 AutoMQ Kafka is [open source](https://github.com/AutoMQ/automq-for-kafka) and fully compatible with the Kafka protocol, fully leveraging cloud benefits.

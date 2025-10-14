@@ -4,7 +4,7 @@ displayed_sidebar: docs
 
 # Change data through loading
 
-import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
+import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.mdx'
 
 [Primary Key tables](../table_design/table_types/primary_key_table.md) provided by StarRocks allow you to make data changes to StarRocks tables by running [Stream Load](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md), [Broker Load](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md), or [Routine Load](../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md) jobs. These data changes include inserts, updates, and deletions. However, Primary Key tables do not support changing data by using [Spark Load](../sql-reference/sql-statements/loading_unloading/SPARK_LOAD.md) or [INSERT](../sql-reference/sql-statements/loading_unloading/INSERT.md).
 
