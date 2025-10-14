@@ -125,6 +125,8 @@ export CFLAGS="-march=armv8-a -O3"
 export CXXFLAGS="-march=armv8-a -O3 -stdlib=libc++"
 export LDFLAGS="-L$OPENSSL_ROOT_DIR/lib"
 export CPPFLAGS="-I$OPENSSL_ROOT_DIR/include"
+# Add Homebrew bin directories to PATH for Bison and other tools
+export PATH="$HOMEBREW_PREFIX/opt/bison/bin:$HOMEBREW_PREFIX/bin:$PATH"
 
 log_info "Starting StarRocks macOS third-party build"
 log_info "Root directory: $ROOT_DIR"
@@ -159,6 +161,7 @@ install_homebrew_deps() {
         "cmake"
         "ninja"
         "ccache"
+        "bison"
 
         # SSL and crypto
         "openssl@3"
@@ -198,12 +201,19 @@ install_homebrew_deps() {
 GFLAGS_VERSION="2.2.2"
 GLOG_VERSION="0.7.1"
 PROTOBUF_VERSION="3.14.0"
+THRIFT_VERSION="0.20.0"
 LEVELDB_VERSION="1.20"
 BRPC_VERSION="1.9.0"
 ROCKSDB_VERSION="6.22.1"
 BITSHUFFLE_VERSION="0.5.1"
 VECTORSCAN_VERSION="5.4.12"
 VELOCYPACK_VERSION="XYZ1.0"
+
+# Thrift
+THRIFT_DOWNLOAD="http://archive.apache.org/dist/thrift/0.20.0/thrift-0.20.0.tar.gz"
+THRIFT_NAME="thrift-0.20.0.tar.gz"
+THRIFT_SOURCE="thrift-0.20.0"
+THRIFT_MD5SUM="aadebde599e1f5235acd3c730721b873"
 
 # datasketches-cpp
 DATASKETCHES_VERSION="4.0.0"
@@ -227,6 +237,12 @@ LIBDIVIDE_DOWNLOAD="https://github.com/ridiculousfish/libdivide/archive/refs/tag
 LIBDIVIDE_NAME="libdivide-v5.2.0.tar.gz"
 LIBDIVIDE_SOURCE="libdivide-5.2.0"
 LIBDIVIDE_MD5SUM="4ba77777192c295d6de2b86d88f3239a"
+
+# CROARINGBITMAP
+CROARINGBITMAP_DOWNLOAD="https://github.com/RoaringBitmap/CRoaring/archive/refs/tags/v4.2.1.tar.gz"
+CROARINGBITMAP_NAME=CRoaring-4.2.1.tar.gz
+CROARINGBITMAP_SOURCE=CRoaring-4.2.1
+CROARINGBITMAP_MD5SUM="00667266a60709978368cf867fb3a3aa"
 
 download_source() {
     local name="$1"
@@ -456,6 +472,136 @@ build_protobuf() {
     "$INSTALL_DIR/bin/protoc" --version
 
     log_success "protobuf built successfully"
+}
+
+build_thrift() {
+    # Check if already built
+    if [[ -f "$INSTALL_DIR/lib/libthrift.a" && -f "$INSTALL_DIR/lib/libthriftnb.a" && -f "$INSTALL_DIR/include/thrift/Thrift.h" ]]; then
+        log_success "thrift already built, skipping"
+        return 0
+    fi
+
+    log_info "Building thrift $THRIFT_VERSION..."
+
+    local src_dir="$THIRDPARTY_DIR/src"
+    local build_dir="$THIRDPARTY_DIR/build/thrift"
+
+    download_source "thrift" "$THRIFT_VERSION" \
+        "$THRIFT_DOWNLOAD" \
+        "$THRIFT_NAME"
+
+    mkdir -p "$build_dir"
+    cd "$build_dir"
+
+    if [[ ! -d "$THRIFT_SOURCE" ]]; then
+        tar -xzf "$src_dir/$THRIFT_NAME"
+    fi
+
+    cd "$THRIFT_SOURCE"
+
+    # Run bootstrap if configure doesn't exist
+    if [[ ! -f configure ]]; then
+        ./bootstrap.sh
+    fi
+
+    # Generate hash memory shim for macOS libc++ compatibility
+    local shim_src="$build_dir/hash_memory_impl.cc"
+    cat > "$shim_src" <<'EOF'
+#ifndef _LIBCPP_HAS_NO_HASH_MEMORY
+#define _LIBCPP_HAS_NO_HASH_MEMORY 1
+#endif
+#include <cstddef>
+namespace std { namespace __1 {
+[[gnu::pure]] size_t
+__hash_memory(const void* __ptr, size_t __size) noexcept
+{
+    // Compatible with old libc++ implementation
+    size_t h = 0;
+    const unsigned char* p = static_cast<const unsigned char*>(__ptr);
+    for (size_t i = 0; i < __size; ++i)
+        h = h * 31 + p[i];
+    return h;
+}
+} }
+EOF
+
+    local shim_obj="$build_dir/hash_memory_shim.o"
+    $CXX $CXXFLAGS -c "$shim_src" -o "$shim_obj"
+
+    # Configure for macOS ARM64 with static libraries
+    ./configure LDFLAGS="-L${INSTALL_DIR}/lib -L${OPENSSL_ROOT_DIR}/lib" \
+        LIBS="-lssl -lcrypto -ldl $shim_obj" \
+        CPPFLAGS="-DTHRIFT_STATIC_DEFINE $CPPFLAGS" \
+        --prefix="$INSTALL_DIR" \
+        --docdir="$INSTALL_DIR/doc" \
+        --enable-static \
+        --disable-shared \
+        --disable-tests \
+        --disable-tutorial \
+        --without-qt4 \
+        --without-qt5 \
+        --without-csharp \
+        --without-erlang \
+        --without-nodejs \
+        --without-lua \
+        --without-perl \
+        --without-php \
+        --without-php_extension \
+        --without-dart \
+        --without-ruby \
+        --without-haskell \
+        --without-go \
+        --without-haxe \
+        --without-d \
+        --without-python \
+        --without-java \
+        --without-rs \
+        --with-cpp \
+        --with-libevent="$INSTALL_DIR" \
+        --with-boost="$HOMEBREW_PREFIX" \
+        --with-openssl="$OPENSSL_ROOT_DIR" \
+        CC="$CC" \
+        CXX="$CXX" \
+        CFLAGS="$CFLAGS" \
+        CXXFLAGS="$CXXFLAGS"
+
+    # Fix naming issue for macOS
+    if [[ -f compiler/cpp/thrifty.hh ]]; then
+        mv compiler/cpp/thrifty.hh compiler/cpp/thrifty.h
+    fi
+
+    make -j"$PARALLEL_JOBS" CXXFLAGS="$CXXFLAGS -Wno-error" CFLAGS="$CFLAGS -Wno-error"
+    make install || echo "make install failed, manually installing binaries"
+
+    # Manual installation if make install fails
+    if [[ -f "compiler/cpp/thrift" ]]; then
+        cp compiler/cpp/thrift "$INSTALL_DIR/bin/"
+        log_success "Manually installed thrift binary"
+    fi
+
+    # Copy any library files that were built
+    if [[ -f "lib/cpp/.libs/libthrift.a" ]]; then
+        cp lib/cpp/.libs/libthrift.a "$INSTALL_DIR/lib/"
+        log_success "Manually installed libthrift.a"
+    fi
+
+    if [[ -f "lib/cpp/.libs/libthriftnb.a" ]]; then
+        cp lib/cpp/.libs/libthriftnb.a "$INSTALL_DIR/lib/"
+        log_success "Manually installed libthriftnb.a"
+    fi
+
+    # Verify libraries were created
+    if [[ ! -f "$INSTALL_DIR/lib/libthrift.a" ]]; then
+        log_error "libthrift.a not found after build"
+        return 1
+    fi
+
+    if [[ ! -f "$INSTALL_DIR/lib/libthriftnb.a" ]]; then
+        log_error "libthriftnb.a not found after build"
+        return 1
+    fi
+
+    log_success "thrift built successfully"
 }
 
 build_leveldb() {
@@ -1023,6 +1169,212 @@ EOF
     log_success "vectorscan built successfully"
 }
 
+build_croaringbitmap() {
+    # Check if already built
+    if [[ -f "$INSTALL_DIR/lib/libroaring.a" && -f "$INSTALL_DIR/include/roaring/roaring.h" ]]; then
+        log_success "croaringbitmap already built, skipping"
+        return 0
+    fi
+
+    log_info "Building croaringbitmap..."
+
+    local src_dir="$THIRDPARTY_DIR/src"
+    local build_dir="$THIRDPARTY_DIR/build/croaringbitmap"
+
+    download_source "croaringbitmap" "v4.2.1" \
+        "$CROARINGBITMAP_DOWNLOAD" \
+        "$CROARINGBITMAP_NAME"
+
+    mkdir -p "$build_dir"
+    cd "$build_dir"
+
+    if [[ ! -d "$CROARINGBITMAP_SOURCE" ]]; then
+        tar -xzf "$src_dir/$CROARINGBITMAP_NAME"
+    fi
+
+    cd "$CROARINGBITMAP_SOURCE"
+
+    # Pre-download CPM.cmake to avoid network issues during build
+    local cpm_dir="$CROARINGBITMAP_SOURCE/cmake"
+    mkdir -p "$cpm_dir"
+    if [[ ! -f "$cpm_dir/CPM.cmake" ]]; then
+        log_info "Downloading CPM.cmake for offline build..."
+        if curl -fL -o "$cpm_dir/CPM.cmake" "https://github.com/cpm-cmake/CPM.cmake/releases/download/v0.38.6/CPM.cmake" 2>/dev/null; then
+            log_success "CPM.cmake downloaded successfully"
+        else
+            log_warn "Failed to download CPM.cmake, will try to build without it"
+        fi
+    fi
+
+    mkdir -p build && cd build
+
+    # Configure AVX support for macOS ARM64
+    local FORCE_AVX=FALSE
+    # avx2 is not supported by aarch64
+    if [[ "$(uname -m)" != "arm64" ]]; then
+        # Only enable AVX on non-ARM64 architectures
+        FORCE_AVX=ON
+    fi
+
+    # Try to build with CPM first, fallback to simple build if it fails
+    if ! cmake .. \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" \
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+        -DROARING_BUILD_STATIC=ON \
+        -DENABLE_ROARING_TESTS=OFF \
+        -DROARING_DISABLE_NATIVE=ON \
+        -DFORCE_AVX=$FORCE_AVX \
+        -DROARING_DISABLE_AVX512=ON \
+        -DCMAKE_INSTALL_LIBDIR=lib \
+        -DCMAKE_C_FLAGS="${CFLAGS} -Wno-error" \
+        -DCMAKE_CXX_FLAGS="${CXXFLAGS} -D_LIBCPP_HAS_NO_HASH_MEMORY=1 -Wno-error" \
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5; then
+
+        log_warn "CMake configuration failed, trying simple build without CPM..."
+
+        # Fallback: Simple manual build without CPM
+        cd ..
+
+        # Create a simple build without external dependencies
+        if [[ -f "src/roaring.c" && -f "include/roaring/roaring.h" ]]; then
+            log_info "Building roaring bitmap manually..."
+
+            # Debug: Show directory structure
+            log_info "Source directory structure:"
+            ls -la src/ 2>/dev/null || log_warn "src directory not found"
+            ls -la include/ 2>/dev/null || log_warn "include directory not found"
+
+            # Build directly from source
+            mkdir -p "$INSTALL_DIR/include/roaring"
+            mkdir -p "$INSTALL_DIR/lib"
+
+            # Copy headers
+            cp -r include/roaring/* "$INSTALL_DIR/include/roaring/"
+
+            # Compile the static library manually with proper include paths
+            local object_files=()
+            local include_flags="-I./include -I./src"
+
+            # List source files to be compiled
+            log_info "Compiling source files:"
+            for src_file in src/*.c; do
+                if [[ -f "$src_file" ]]; then
+                    log_info "  Found source file: $src_file"
+                    local obj_file="$build_dir/$(basename "$src_file" .c).o"
+                    log_info "  Compiling: $src_file -> $obj_file"
+                    if "$CC" $CFLAGS $include_flags -c "$src_file" -o "$obj_file" 2>&1; then
+                        object_files+=("$obj_file")
+                        log_info "  ✓ Successfully compiled $src_file"
+                    else
+                        log_warn "  ✗ Failed to compile $src_file"
+                    fi
+                fi
+            done
+
+            # Also compile any additional source files in subdirectories
+            for src_file in src/*/*.c; do
+                if [[ -f "$src_file" ]]; then
+                    log_info "  Found source file: $src_file"
+                    local obj_file="$build_dir/$(basename "$src_file" .c).o"
+                    log_info "  Compiling: $src_file -> $obj_file"
+                    if "$CC" $CFLAGS $include_flags -c "$src_file" -o "$obj_file" 2>&1; then
+                        object_files+=("$obj_file")
+                        log_info "  ✓ Successfully compiled $src_file"
+                    else
+                        log_warn "  ✗ Failed to compile $src_file"
+                    fi
+                fi
+            done
+
+            log_info "Total object files compiled: ${#object_files[@]}"
+
+            # Create the static library
+            if [[ ${#object_files[@]} -gt 0 ]]; then
+                log_info "Creating static library with ${#object_files[@]} object files..."
+                "${AR:-ar}" rcs "$INSTALL_DIR/lib/libroaring.a" "${object_files[@]}"
+                "${RANLIB:-ranlib}" "$INSTALL_DIR/lib/libroaring.a" 2>/dev/null || true
+                log_info "Static library created: $INSTALL_DIR/lib/libroaring.a"
+                ls -la "$INSTALL_DIR/lib/libroaring.a" 2>/dev/null || log_error "Library file not found"
+            else
+                log_error "No object files were compiled successfully"
+                return 1
+            fi
+
+            # Inject libc++ hash memory shim for macOS compatibility
+            local shim_src="$build_dir/hash_memory_impl.cc"
+            cat > "$shim_src" <<'EOF'
+#ifndef _LIBCPP_HAS_NO_HASH_MEMORY
+#define _LIBCPP_HAS_NO_HASH_MEMORY 1
+#endif
+#include <cstddef>
+namespace std { namespace __1 {
+[[gnu::pure]] size_t
+__hash_memory(const void* __ptr, size_t __size) noexcept
+{
+    size_t h = 0;
+    const unsigned char* p = static_cast<const unsigned char*>(__ptr);
+    for (size_t i = 0; i < __size; ++i)
+        h = h * 31 + p[i];
+    return h;
+}
+} }
+EOF
+            local shim_obj="$build_dir/hash_memory_shim.o"
+            $CXX $CXXFLAGS -c "$shim_src" -o "$shim_obj"
+            ( cd "$INSTALL_DIR/lib" && ar rcs libroaring.a "$shim_obj" && ranlib libroaring.a 2>/dev/null || true )
+            log_success "Injected hash_memory shim into libroaring.a"
+
+            # Verify installation
+            if [[ -f "$INSTALL_DIR/lib/libroaring.a" && -f "$INSTALL_DIR/include/roaring/roaring.h" ]]; then
+                log_success "Manual build completed successfully"
+            else
+                log_error "Manual build verification failed"
+                return 1
+            fi
+
+        else
+            log_error "Cannot find required source files for manual build"
+            log_info "Looking for: src/roaring.c and include/roaring/roaring.h"
+            ls -la src/roaring.c 2>/dev/null || log_info "src/roaring.c not found"
+            ls -la include/roaring/roaring.h 2>/dev/null || log_info "include/roaring/roaring.h not found"
+            return 1
+        fi
+    else
+        # CMake succeeded, continue with normal build
+        make -j"$PARALLEL_JOBS"
+        make install
+
+        # Inject libc++ hash memory shim for macOS compatibility if needed
+        if [[ -f "$INSTALL_DIR/lib/libroaring.a" ]]; then
+            local shim_src="$build_dir/hash_memory_impl.cc"
+            cat > "$shim_src" <<'EOF'
+#ifndef _LIBCPP_HAS_NO_HASH_MEMORY
+#define _LIBCPP_HAS_NO_HASH_MEMORY 1
+#endif
+#include <cstddef>
+namespace std { namespace __1 {
+[[gnu::pure]] size_t
+__hash_memory(const void* __ptr, size_t __size) noexcept
+{
+    size_t h = 0;
+    const unsigned char* p = static_cast<const unsigned char*>(__ptr);
+    for (size_t i = 0; i < __size; ++i)
+        h = h * 31 + p[i];
+    return h;
+}
+} }
+EOF
+            local shim_obj="$build_dir/hash_memory_shim.o"
+            $CXX $CXXFLAGS -c "$shim_src" -o "$shim_obj"
+            ( cd "$INSTALL_DIR/lib" && ar rcs libroaring.a "$shim_obj" && ranlib libroaring.a 2>/dev/null || true )
+            log_success "Injected hash_memory shim into libroaring.a"
+        fi
+    fi
+
+    log_success "croaringbitmap built successfully"
+}
+
 build_source_deps() {
     log_info "Building source dependencies..."
 
@@ -1030,11 +1382,13 @@ build_source_deps() {
     build_gflags
     build_glog
     build_protobuf
+    build_thrift
     build_leveldb
     build_datasketches
     build_ryu
     build_libdivide
     build_icu
+    build_croaringbitmap
 
     # Layer 2: Libraries that depend on Layer 1
     build_brpc
@@ -1056,6 +1410,7 @@ build_source_deps() {
     ln -sf ../lib/libryu.a "$INSTALL_DIR/lib64/libryu.a" 2>/dev/null || true
     ln -sf ../lib/libicuuc.a "$INSTALL_DIR/lib64/libicuuc.a" 2>/dev/null || true
     ln -sf ../lib/libicui18n.a "$INSTALL_DIR/lib64/libicui18n.a" 2>/dev/null || true
+    ln -sf ../lib/libroaring.a "$INSTALL_DIR/lib64/libroaring.a" 2>/dev/null || true
 
     log_success "All source dependencies built successfully"
 }
@@ -1089,6 +1444,7 @@ main() {
         "libryu.a"
         "libicuuc.a"
         "libicui18n.a"
+        "libroaring.a"
     )
 
     local missing_libs=()
