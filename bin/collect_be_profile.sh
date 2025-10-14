@@ -168,15 +168,12 @@ collect_profile() {
     fi
     
     # Collect pprof format (default format from BE)
-    local pprof_file="$OUTPUT_DIR/${base_name}-pprof"
-    local pprof_tar="$OUTPUT_DIR/${base_name}-pprof.tar.gz"
+    local pprof_file="$OUTPUT_DIR/${base_name}-pprof.gz"
     local pprof_url="http://localhost:$BRPC_PORT/pprof/${endpoint}?seconds=$DURATION"
     
-    log "Executing curl command: curl -s \"$pprof_url\" > \"$pprof_file\""
-    curl -s "$pprof_url" > "$pprof_file"
-    tar -czf "$pprof_tar" -C "$OUTPUT_DIR" "$(basename "$pprof_file")"
-    rm -f "$pprof_file"
-    log "${profile_type^} pprof saved: $pprof_tar"
+    log "Executing curl command: curl -s \"$pprof_url\" | gzip > \"$pprof_file\""
+    curl -s "$pprof_url" | gzip > "$pprof_file"
+    log "${profile_type^} pprof saved: $pprof_file"
 }
 
 # Collect CPU profile
@@ -198,7 +195,7 @@ cleanup_old_files() {
     
     # Get all profile files sorted by modification time (oldest first)
     while IFS= read -r -d '' file; do
-        if [[ "$file" =~ (cpu-profile-|contention-profile-).*\.tar\.gz$ ]]; then
+        if [[ "$file" =~ (cpu-profile-|contention-profile-).*\.gz$ ]]; then
             local file_size=$(stat -c%s "$file" 2>/dev/null || echo 0)
             local file_age=$(($(date +%s) - $(stat -c%Y "$file" 2>/dev/null || echo 0)))
             local file_age_days=$((file_age / 86400))
@@ -211,7 +208,7 @@ cleanup_old_files() {
                 total_size=$((total_size + file_size))
             fi
         fi
-    done < <(find "$OUTPUT_DIR" -name "*.tar.gz" -type f -print0 | sort -z)
+    done < <(find "$OUTPUT_DIR" -name "*.gz" -type f -print0 | sort -z)
     
     # Delete files that are too old
     for file in "${files_to_delete[@]}"; do
@@ -224,7 +221,7 @@ cleanup_old_files() {
         log_warn "Total size ($(numfmt --to=iec $total_size)) exceeds limit ($(numfmt --to=iec $CLEANUP_SIZE))"
         
         while IFS= read -r -d '' file; do
-            if [[ "$file" =~ (cpu-profile-|contention-profile-).*\.tar\.gz$ ]]; then
+            if [[ "$file" =~ (cpu-profile-|contention-profile-).*\.gz$ ]]; then
                 local file_size=$(stat -c%s "$file" 2>/dev/null || echo 0)
                 rm -f "$file"
                 total_size=$((total_size - file_size))
@@ -234,7 +231,7 @@ cleanup_old_files() {
                     break
                 fi
             fi
-        done < <(find "$OUTPUT_DIR" -name "*.tar.gz" -type f -print0 | sort -z)
+        done < <(find "$OUTPUT_DIR" -name "*.gz" -type f -print0 | sort -z)
     fi
 }
 

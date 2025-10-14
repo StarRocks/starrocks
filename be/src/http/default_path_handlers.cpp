@@ -297,12 +297,7 @@ void proc_profile_handler(const WebPageHandler::ArgumentMap& args, std::stringst
         (*output) << "<td>" << timestamp << "</td>";
         (*output) << "<td>" << file_size_str << "</td>";
         (*output) << "<td>";
-
-        if (format == "Flame") {
-            (*output) << "<a href=\"/proc_profile/file?filename=" << filename << "\" target=\"_blank\">View</a>";
-        } else {
-            (*output) << "<a href=\"/proc_profile/file?filename=" << filename << "\">Download</a>";
-        }
+        (*output) << "<a href=\"/proc_profile/file?filename=" << filename << R"(" target="_blank">View</a>)";
 
         (*output) << "</td>";
         (*output) << "</tr>";

@@ -35,6 +35,8 @@ private:
     bool is_valid_filename(const std::string& filename);
     void serve_gzipped_html(HttpRequest* req, const std::string& file_path);
     void serve_gz_file(HttpRequest* req, const std::string& file_path);
+    void serve_pprof_as_flame(HttpRequest* req, const std::string& file_path);
+    bool convert_pprof_to_flame(const std::string& pprof_file_path, std::string& flame_svg_content);
 
     [[maybe_unused]] ExecEnv* _exec_env;
 };
