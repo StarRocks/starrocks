@@ -1123,7 +1123,8 @@ public class RedirectStatusTest {
 
     @Test
     public void testCreateCatalogStmt() {
-        CreateCatalogStmt stmt = new CreateCatalogStmt("test_catalog", "hive", java.util.Collections.emptyMap(), false);
+        CreateCatalogStmt stmt =
+                new CreateCatalogStmt("test_catalog", "hive", java.util.Collections.emptyMap(), false, NodePosition.ZERO);
         Assertions.assertEquals(RedirectStatus.FORWARD_WITH_SYNC, RedirectStatus.getRedirectStatus(stmt));
     }
 

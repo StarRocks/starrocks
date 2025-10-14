@@ -53,7 +53,6 @@ import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
 import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
 import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
 import com.starrocks.sql.ast.ShowColumnStmt;
-import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowCreateExternalCatalogStmt;
 import com.starrocks.sql.ast.ShowCreateRoutineLoadStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
@@ -318,14 +317,6 @@ public class ShowStmtAnalyzer {
                 }
             }
             return db;
-        }
-
-        @Override
-        public Void visitShowCreateDbStatement(ShowCreateDbStmt node, ConnectContext context) {
-            String dbName = node.getDb();
-            dbName = getDatabaseName(dbName, context);
-            node.setDb(dbName);
-            return null;
         }
 
         @Override

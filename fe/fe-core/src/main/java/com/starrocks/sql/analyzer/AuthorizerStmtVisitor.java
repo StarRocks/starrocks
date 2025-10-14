@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.AuthorizationMgr;
@@ -250,6 +251,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
+
+import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 
 public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
     // For show tablet detail command, if user has any privilege on the corresponding table, user can run it
@@ -541,12 +544,16 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
 
     @Override
     public Void visitShowCreateDbStatement(ShowCreateDbStmt statement, ConnectContext context) {
+        String catalogName = context.getCurrentCatalog();
+        if (Strings.isNullOrEmpty(catalogName)) {
+            throw new SemanticException(PARSER_ERROR_MSG.noCatalogSelected());
+        }
+
         try {
-            Authorizer.checkAnyActionOnDb(context,
-                    statement.getCatalogName(), statement.getDb());
+            Authorizer.checkAnyActionOnDb(context, catalogName, statement.getDb());
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(
-                    statement.getCatalogName(),
+                    catalogName,
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     PrivilegeType.ANY.name(), ObjectType.DATABASE.name(), statement.getDb());
         }
@@ -555,15 +562,18 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
 
     @Override
     public Void visitRecoverDbStatement(RecoverDbStmt statement, ConnectContext context) {
-        // Need to check the `CREATE_DATABASE` action on corresponding catalog
+        String catalogName = context.getCurrentCatalog();
+        if (Strings.isNullOrEmpty(catalogName)) {
+            throw new SemanticException(PARSER_ERROR_MSG.noCatalogSelected());
+        }
+
         try {
-            Authorizer.checkCatalogAction(context,
-                    statement.getCatalogName(), PrivilegeType.CREATE_DATABASE);
+            Authorizer.checkCatalogAction(context, catalogName, PrivilegeType.CREATE_DATABASE);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(
-                    statement.getCatalogName(),
+                    catalogName,
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeType.CREATE_DATABASE.name(), ObjectType.CATALOG.name(), statement.getCatalogName());
+                    PrivilegeType.CREATE_DATABASE.name(), ObjectType.CATALOG.name(), catalogName);
         }
         return null;
     }
