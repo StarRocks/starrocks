@@ -580,29 +580,48 @@ public abstract class Type implements Cloneable {
         compatibilityMatrix[JSON.ordinal()][DECIMAL128.ordinal()] = PrimitiveType.INVALID_TYPE;
         compatibilityMatrix[JSON.ordinal()][DECIMAL256.ordinal()] = PrimitiveType.INVALID_TYPE;
 
-        // binary type
-        for (PrimitiveType type : PrimitiveType.BINARY_INCOMPATIBLE_TYPE_LIST) {
-            ScalarType scalar = ScalarType.createType(type);
-            compatibilityMatrix[scalar.ordinal()][VARBINARY.ordinal()] = PrimitiveType.INVALID_TYPE;
-        }
-
         // VARIANT
         for (PrimitiveType type : PrimitiveType.VARIANT_COMPATIBLE_TYPE) {
             ScalarType scalar = ScalarType.createType(type);
             compatibilityMatrix[scalar.ordinal()][VARIANT.ordinal()] = type;
+            // VARIANT to other types - according to Parquet Variant encoding spec
+            // VARIANT can store primitive values and should be able to cast to them
+            compatibilityMatrix[VARIANT.ordinal()][scalar.ordinal()] = PrimitiveType.VARIANT;
         }
         for (PrimitiveType type : PrimitiveType.VARIANT_INCOMPATIBLE_TYPES) {
             ScalarType scalar = ScalarType.createType(type);
             compatibilityMatrix[scalar.ordinal()][VARIANT.ordinal()] = PrimitiveType.INVALID_TYPE;
         }
+        // VARIANT is incompatible with temporal types (cannot directly cast)
         compatibilityMatrix[VARIANT.ordinal()][DATE.ordinal()] = PrimitiveType.INVALID_TYPE;
         compatibilityMatrix[VARIANT.ordinal()][DATETIME.ordinal()] = PrimitiveType.INVALID_TYPE;
         compatibilityMatrix[VARIANT.ordinal()][TIME.ordinal()] = PrimitiveType.INVALID_TYPE;
+
+        // VARIANT is incompatible with all decimal types
+        // Variant stores decimals in its own format, not compatible with StarRocks decimal types
+        compatibilityMatrix[VARIANT.ordinal()][DECIMALV2.ordinal()] = PrimitiveType.INVALID_TYPE;
         compatibilityMatrix[VARIANT.ordinal()][DECIMAL32.ordinal()] = PrimitiveType.INVALID_TYPE;
         compatibilityMatrix[VARIANT.ordinal()][DECIMAL64.ordinal()] = PrimitiveType.INVALID_TYPE;
         compatibilityMatrix[VARIANT.ordinal()][DECIMAL128.ordinal()] = PrimitiveType.INVALID_TYPE;
         compatibilityMatrix[VARIANT.ordinal()][DECIMAL256.ordinal()] = PrimitiveType.INVALID_TYPE;
+
+        // VARIANT is incompatible with complex/aggregate types
+        compatibilityMatrix[VARIANT.ordinal()][HLL.ordinal()] = PrimitiveType.INVALID_TYPE;
+        compatibilityMatrix[VARIANT.ordinal()][BITMAP.ordinal()] = PrimitiveType.INVALID_TYPE;
+        compatibilityMatrix[VARIANT.ordinal()][PERCENTILE.ordinal()] = PrimitiveType.INVALID_TYPE;
+
+        // VARIANT and JSON have different internal representations - should be invalid
+        compatibilityMatrix[VARIANT.ordinal()][JSON.ordinal()] = PrimitiveType.INVALID_TYPE;
+
+        // VARIANT is incompatible with binary and special types
+        compatibilityMatrix[VARIANT.ordinal()][VARBINARY.ordinal()] = PrimitiveType.INVALID_TYPE;
         compatibilityMatrix[VARIANT.ordinal()][UNKNOWN_TYPE.ordinal()] = PrimitiveType.INVALID_TYPE;
+
+        // binary type
+        for (PrimitiveType type : PrimitiveType.BINARY_INCOMPATIBLE_TYPE_LIST) {
+            ScalarType scalar = ScalarType.createType(type);
+            compatibilityMatrix[scalar.ordinal()][VARBINARY.ordinal()] = PrimitiveType.INVALID_TYPE;
+        }
 
         // Check all the necessary entries that should be filled.
         // ignore binary

@@ -122,12 +122,14 @@ public enum PrimitiveType {
     public static final ImmutableList<PrimitiveType> VARIANT_COMPATIBLE_TYPE =
             new ImmutableList.Builder<PrimitiveType>()
                     .add(BOOLEAN)
-                    .addAll(NUMBER_TYPE_LIST)
+                    .addAll(INTEGER_TYPE_LIST)
+                    .addAll(FLOAT_TYPE_LIST.subList(0, 2)) // Only DOUBLE and FLOAT, exclude decimals
                     .addAll(STRING_TYPE_LIST)
                     .build();
 
     public static final ImmutableList<PrimitiveType> VARIANT_INCOMPATIBLE_TYPES =
-            ImmutableList.of(DATE, DATETIME, TIME, HLL, BITMAP, PERCENTILE, FUNCTION, VARBINARY);
+            ImmutableList.of(DATE, DATETIME, TIME, DECIMALV2, DECIMAL32, DECIMAL64, DECIMAL128, DECIMAL256,
+                    HLL, BITMAP, PERCENTILE, FUNCTION, VARBINARY, JSON);
 
     private static final ImmutableList<PrimitiveType> TIME_TYPE_LIST =
             ImmutableList.of(TIME, DATE, DATETIME);
