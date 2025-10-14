@@ -116,7 +116,7 @@ public:
         DCHECK_EQ(num_rows, selection.size());
 
         if (array_elements->has_null()) {
-            auto* nullable_elements = down_cast<NullableColumn*>(array_elements);
+            const auto* nullable_elements = down_cast<const NullableColumn*>(array_elements);
             const uint8_t* nulls = nullable_elements->null_column()->raw_data();
             for (size_t i = 0; i < num_rows; i++) {
                 null_flags[i] |= nulls[selection[i]];

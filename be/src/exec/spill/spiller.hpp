@@ -292,7 +292,7 @@ Status PartitionedSpillerWriter::spill(RuntimeState* state, const ChunkPtr& chun
     {
         SCOPED_TIMER(_spiller->metrics().shuffle_timer);
         std::vector<uint32_t> shuffle_result;
-        shuffle(shuffle_result, down_cast<SpillHashColumn*>(hash_column.get()));
+        shuffle(shuffle_result, down_cast<SpillHashColumn*>(hash_column->as_mutable_raw_ptr()));
         process_partition_data(chunk, shuffle_result,
                                [&chunk](SpilledPartition* partition, const std::vector<uint32_t>& selection,
                                         int32_t from, int32_t size) {

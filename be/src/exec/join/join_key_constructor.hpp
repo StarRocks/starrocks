@@ -110,7 +110,7 @@ void BuildKeyConstructorForSerializedFixedSize<LT>::build_key(RuntimeState* stat
         }
     }
     // Serialize to key columns.
-    JoinHashMapHelper::serialize_fixed_size_key_column<LT>(data_columns, table_items->build_key_column.get(), 1,
+    JoinHashMapHelper::serialize_fixed_size_key_column<LT>(data_columns, table_items->build_key_column->as_mutable_raw_ptr(), 1,
                                                            row_count);
     // Build key is_nulls.
     if (!null_columns.empty()) {
@@ -156,7 +156,7 @@ void ProbeKeyConstructorForSerializedFixedSize<LT>::build_key(const JoinHashTabl
 
     // Build key and is_nulls.
     const uint32_t row_count = probe_state->probe_row_count;
-    JoinHashMapHelper::serialize_fixed_size_key_column<LT>(data_columns, probe_state->probe_key_column.get(), 0,
+    JoinHashMapHelper::serialize_fixed_size_key_column<LT>(data_columns, probe_state->probe_key_column->as_mutable_raw_ptr(), 0,
                                                            row_count);
 
     if (null_columns.empty()) {

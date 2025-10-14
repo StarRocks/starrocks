@@ -512,7 +512,7 @@ Status OrcChunkReader::_fill_chunk(ChunkPtr* chunk, const std::vector<SlotDescri
                 }
             }
         }
-        ColumnPtr& col = (*chunk)->get_column_by_slot_id(slot_desc->id());
+        auto col = (*chunk)->get_mutable_column_by_slot_id(slot_desc->id());
         RETURN_IF_ERROR(_column_readers[src_index]->get_next(cvb, col, 0, _batch->numElements));
     }
 

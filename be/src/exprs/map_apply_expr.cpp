@@ -56,7 +56,7 @@ Status MapApplyExpr::prepare(starrocks::RuntimeState* state, starrocks::ExprCont
 StatusOr<ColumnPtr> MapApplyExpr::evaluate_checked(ExprContext* context, Chunk* chunk) {
     Columns input_columns;
     NullColumn::MutablePtr input_null_map = nullptr;
-    MapColumn* input_map = nullptr;
+    const MapColumn* input_map = nullptr;
     ColumnPtr input_map_ptr_ref = nullptr; // hold shared_ptr to avoid early deleted.
     // step 1: get input columns from map(key_col, value_col)
     for (int i = 1; i < _children.size(); ++i) { // currently only 2 children, may be more in the future
@@ -86,11 +86,11 @@ StatusOr<ColumnPtr> MapApplyExpr::evaluate_checked(ExprContext* context, Chunk* 
             }
         }
         DCHECK(data_column->is_map());
-        auto cur_map = down_cast<MapColumn*>(data_column.get());
+        const auto* cur_map = down_cast<const MapColumn*>(data_column.get());
 
-        if (input_map == nullptr) {
-            input_map = cur_map;
+        if (input_map_ptr_ref == nullptr) {
             input_map_ptr_ref = data_column;
+            input_map = cur_map;
         } else {
             if (UNLIKELY(!ColumnHelper::offsets_equal(cur_map->offsets_column(), input_map->offsets_column()))) {
                 return Status::InternalError("Input map element's size are not equal in map_apply().");
@@ -157,13 +157,12 @@ StatusOr<ColumnPtr> MapApplyExpr::evaluate_checked(ExprContext* context, Chunk* 
                                                  map_col->keys_column()->size()));
     }
 
-    auto res_map = MapColumn::create(map_col->keys_column(), map_col->values_column(),
+    auto res_map_imm = MapColumn::create(map_col->keys_column(), map_col->values_column(),
                                      ColumnHelper::as_column<UInt32Column>(input_map->offsets_column()->clone()));
+    MutableColumnPtr res_map = res_map_imm->clone();
 
     if (_maybe_duplicated_keys && res_map->size() > 0) {
-        auto res_map_mut = res_map->as_mutable_ptr();
-        down_cast<MapColumn*>(res_map_mut.get())->remove_duplicated_keys();
-        res_map = std::move(res_map_mut);
+        down_cast<MapColumn*>(res_map->as_mutable_raw_ptr())->remove_duplicated_keys();
     }
     // attach null info
     if (input_null_map != nullptr) {

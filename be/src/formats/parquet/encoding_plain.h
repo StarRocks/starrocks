@@ -514,7 +514,7 @@ public:
         // fill null columns
         _next_null_column(count, null_infos, nullable_column);
         // fill data columns
-        auto* binary_column = down_cast<BinaryColumn*>(nullable_column->data_column().get());
+        auto* binary_column = down_cast<BinaryColumn*>(nullable_column->mutable_data_column());
         size_t null_cnt = null_infos.num_nulls;
         size_t read_count = count - null_cnt;
 

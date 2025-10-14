@@ -300,7 +300,7 @@ void ScrollParser::_append_data(Column* column, CppType& value) {
 
     if (column->is_nullable()) {
         auto* nullable_column = down_cast<NullableColumn*>(column);
-        auto* data_column = nullable_column->data_column().get();
+        auto* data_column = nullable_column->mutable_data_column();
         NullData& null_data = nullable_column->null_column_data();
         null_data.push_back(0);
         appender(data_column, value);
@@ -553,7 +553,7 @@ Status ScrollParser::_append_array_val(const rapidjson::Value& col, const TypeDe
 
     if (column->is_nullable()) {
         auto* nullable_column = down_cast<NullableColumn*>(column);
-        auto* data_column = nullable_column->data_column().get();
+        auto* data_column = nullable_column->mutable_data_column();
         NullData& null_data = nullable_column->null_column_data();
         null_data.push_back(0);
         array = down_cast<ArrayColumn*>(data_column);

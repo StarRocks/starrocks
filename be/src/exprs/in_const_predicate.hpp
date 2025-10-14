@@ -480,7 +480,7 @@ public:
             }
             columns_ref[i] = value;
             if (value->is_constant()) {
-                value = down_cast<ConstColumn*>(value.get())->data_column();
+                value = down_cast<const ConstColumn*>(value.get())->data_column();
             }
             if (value->is_nullable()) {
                 auto nullable = down_cast<const NullableColumn*>(value.get());

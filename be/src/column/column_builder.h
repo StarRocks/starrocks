@@ -124,8 +124,8 @@ public:
         _null_column->resize_uninitialized(size);
     }
 
-    DataColumnPtr data_column() { return _column->as_mutable_ptr(); }
-    NullColumnPtr null_column() { return _null_column->as_mutable_ptr(); }
+    DataColumnPtr data_column() { return DataColumn::static_pointer_cast(_column->as_mutable_ptr()); }
+    NullColumnPtr null_column() { return NullColumn::static_pointer_cast(_null_column->as_mutable_ptr()); }
     void set_has_null(bool v) { _has_null = v; }
 
 protected:
@@ -211,7 +211,7 @@ public:
         bytes.resize(bytes.size() - n);
     }
 
-    NullColumnPtr get_null_column() { return _null_column->as_mutable_ptr(); }
+    NullColumnPtr get_null_column() { return NullColumn::static_pointer_cast(_null_column->as_mutable_ptr()); }
 
     NullColumn::Container& get_null_data() { return _null_column->get_data(); }
 

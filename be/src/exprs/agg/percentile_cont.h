@@ -664,7 +664,7 @@ public:
         size_t serialize_row = (sizeof(int) + sizeof(InputCppType) + sizeof(int64_t));
         size_t serialize_size = serialize_row * chunk_size;
 
-        auto* column = down_cast<BinaryColumn*>(dst->get());
+        auto* column = down_cast<BinaryColumn*>(dst.get());
         Bytes& bytes = column->get_bytes();
         size_t old_size = bytes.size();
         size_t new_size = old_size + serialize_size;

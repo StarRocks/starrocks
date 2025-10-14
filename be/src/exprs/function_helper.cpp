@@ -148,16 +148,16 @@ ColumnPtr FunctionHelper::merge_column_and_null_column(ColumnPtr&& column, NullC
     if (column->only_null()) {
         return std::move(column);
     } else if (column->is_constant()) {
-        auto* const_column = down_cast<ConstColumn*>(column.get());
+        const auto* const_column = down_cast<const ConstColumn*>(column.get());
         const auto& data_column = const_column->data_column();
         auto new_data_column = data_column->clone();
         new_data_column->assign(null_column->size(), 0);
         return NullableColumn::create(std::move(new_data_column), std::move(null_column));
     } else if (column->is_nullable()) {
         DCHECK_EQ(column->size(), null_column->size());
-        auto* nullable_column = down_cast<NullableColumn*>(column.get());
+        const auto* nullable_column = down_cast<const NullableColumn*>(column.get());
         auto new_null_column = union_null_column(nullable_column->null_column(), null_column);
-        return NullableColumn::create(std::move(nullable_column->data_column()), std::move(new_null_column));
+        return NullableColumn::create(nullable_column->data_column()->clone(), std::move(new_null_column));
     } else {
         return NullableColumn::create(std::move(column), std::move(null_column));
     }

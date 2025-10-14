@@ -649,15 +649,19 @@ public:
     Status do_visit(const FixedLengthColumnBase<T>& column) {
         using ColumnT = FixedLengthColumn<T>;
         using ContainerT = typename ColumnT::Container;
+        using ImmContainerT = typename ColumnT::ImmContainer;
 
         _result = column.clone_empty();
-        auto output = ColumnHelper::as_column<ColumnT>(_result);
+        auto* output = down_cast<ColumnT*>(_result->as_mutable_raw_ptr());
         const size_t segment_size = _segment_column->segment_size();
 
-        std::vector<const ContainerT*> buffers;
+        std::vector<ImmContainerT> imm_containers;
+        std::vector<const T*> buffers;
         auto columns = _segment_column->columns();
         for (auto& seg_column : columns) {
-            buffers.push_back(&(ColumnHelper::as_column<ColumnT>(seg_column)->get_data()));
+            auto imm_data = ColumnHelper::as_column<ColumnT>(seg_column)->immutable_data();
+            imm_containers.push_back(imm_data);
+            buffers.push_back(imm_data.data());
         }
 
         ContainerT& output_items = output->get_data();
@@ -669,7 +673,7 @@ public:
             DCHECK_LT(segment_id, columns.size());
             DCHECK_LT(segment_offset, columns[segment_id]->size());
 
-            output_items[i] = (*buffers[segment_id])[segment_offset];
+            output_items[i] = buffers[segment_id][segment_offset];
         }
         return {};
     }
@@ -684,18 +688,19 @@ public:
         using Offsets = typename ColumnT::Offsets;
 
         _result = column.clone_empty();
-        auto output = ColumnHelper::as_column<ColumnT>(_result);
+        auto* output = down_cast<ColumnT*>(_result->as_mutable_raw_ptr());
         auto& output_offsets = output->get_offset();
         auto& output_bytes = output->get_bytes();
         const size_t segment_size = _segment_column->segment_size();
 
         // input
         auto columns = _segment_column->columns();
-        std::vector<Bytes*> input_bytes;
-        std::vector<Offsets*> input_offsets;
+        std::vector<const Bytes*> input_bytes;
+        std::vector<const Offsets*> input_offsets;
         for (auto& seg_column : columns) {
-            input_bytes.push_back(&ColumnHelper::as_column<ColumnT>(seg_column)->get_bytes());
-            input_offsets.push_back(&ColumnHelper::as_column<ColumnT>(seg_column)->get_offset());
+            auto col_ptr = ColumnHelper::as_column<ColumnT>(seg_column);
+            input_bytes.push_back(&col_ptr->get_bytes());
+            input_offsets.push_back(&col_ptr->get_offset());
         }
 
 #ifndef NDEBUG
@@ -714,7 +719,7 @@ public:
             DCHECK_LT(segment_id, columns.size());
             DCHECK_LT(segment_offset, columns[segment_id]->size());
 
-            Offsets& src_offsets = *input_offsets[segment_id];
+            const Offsets& src_offsets = *input_offsets[segment_id];
             Offset str_size = src_offsets[segment_offset + 1] - src_offsets[segment_offset];
 
             output_offsets[i + 1] = output_offsets[i] + str_size;
@@ -727,10 +732,10 @@ public:
         for (size_t i = 0; i < _size; i++) {
             size_t idx = _indexes[from + i];
             auto [segment_id, segment_offset] = _segment_address(idx, segment_size);
-            Bytes& src_bytes = *input_bytes[segment_id];
-            Offsets& src_offsets = *input_offsets[segment_id];
+            const Bytes& src_bytes = *input_bytes[segment_id];
+            const Offsets& src_offsets = *input_offsets[segment_id];
             Offset str_size = src_offsets[segment_offset + 1] - src_offsets[segment_offset];
-            Byte* str_data = src_bytes.data() + src_offsets[segment_offset];
+            const Byte* str_data = src_bytes.data() + src_offsets[segment_offset];
 
             strings::memcpy_inlined(dest_bytes + output_offsets[i], str_data, str_size);
         }
@@ -746,7 +751,7 @@ public:
     template <class ColumnT>
     typename std::enable_if_t<is_object<ColumnT>, Status> do_visit(const ColumnT& column) {
         _result = column.clone_empty();
-        auto output = ColumnHelper::as_column<ColumnT>(_result);
+        auto* output = down_cast<ColumnT*>(_result->as_mutable_raw_ptr());
         const size_t segment_size = _segment_column->segment_size();
         output->reserve(_size);
 

@@ -1584,8 +1584,8 @@ public:
                 dst = NullableColumn::create(std::move(dst), NullColumn::create());
                 auto* nullable_dst_column = down_cast<NullableColumn*>(dst.get());
                 auto* nullable_src_column = down_cast<NullableColumn*>(const_cast<Column*>(&src));
-                auto* dst_column = down_cast<DstColumnType*>(nullable_dst_column->data_column().get());
-                auto* src_column = down_cast<SrcColumnType*>(nullable_src_column->data_column().get());
+                auto* dst_column = down_cast<DstColumnType*>(nullable_dst_column->mutable_data_column());
+                auto* src_column = down_cast<SrcColumnType*>(nullable_src_column->mutable_data_column());
                 auto null_dst_column = nullable_dst_column->null_column_mutable_ptr();
                 auto null_src_column = nullable_src_column->null_column_mutable_ptr();
                 // TODO (by satanson): unsafe abstraction leak

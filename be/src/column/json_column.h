@@ -116,10 +116,6 @@ public:
 
     LogicalType get_flat_field_type(const std::string& path) const;
 
-    Columns& get_flat_fields() { return _flat_columns; };
-
-    const Columns& get_flat_fields() const { return _flat_columns; };
-
     Columns get_flat_fields_ptrs() const {
         Columns columns;
         columns.reserve(_flat_columns.size());

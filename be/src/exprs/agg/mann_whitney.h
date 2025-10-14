@@ -345,7 +345,7 @@ public:
                 state.update(x, treatment);
             }
 
-            serialize_to_column(ctx, reinterpret_cast<AggDataPtr>(&state), dst->get());
+            serialize_to_column(ctx, reinterpret_cast<AggDataPtr>(&state), dst->as_mutable_raw_ptr());
         }
     }
 

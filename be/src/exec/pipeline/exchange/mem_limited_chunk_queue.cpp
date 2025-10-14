@@ -515,7 +515,7 @@ Status MemLimitedChunkQueue::_load(Block* block) {
     std::vector<ChunkPtr> chunks(flush_chunks);
     for (auto& chunk : chunks) {
         chunk = _chunk_builder->clone_empty();
-        for (auto& column : chunk->columns()) {
+        for (auto& column : chunk->mutable_columns()) {
             read_cursor = serde::ColumnArraySerde::deserialize(read_cursor, column.get(), false, _opts.encode_level);
             RETURN_IF(read_cursor == nullptr, Status::InternalError("deserialize failed"));
         }

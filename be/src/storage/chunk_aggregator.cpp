@@ -195,7 +195,7 @@ void ChunkAggregator::aggregate_reset() {
     _aggregate_rows = 0;
     SCOPED_THREAD_LOCAL_AGG_STATE_ALLOCATOR_SETTER(&kDefaultColumnAggregatorAllocator);
     for (int i = 0; i < _num_fields; ++i) {
-        auto p = _aggregate_chunk->get_column_by_index(i).get();
+        auto p = _aggregate_chunk->get_column_by_index(i)->as_mutable_raw_ptr();
         _column_aggregator[i]->update_aggregate(p);
     }
     _has_aggregate = false;

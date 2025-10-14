@@ -846,7 +846,7 @@ StatusOr<ColumnPtr> MathFunctions::decimal_round(FunctionContext* context, const
     bool has_null = false;
     if (c0->has_null() || c1->has_null()) {
         has_null = true;
-        null_flags = FunctionHelper::union_nullable_column(c0, c1)->as_mutable_ptr();
+        null_flags = FunctionHelper::union_nullable_column(c0, c1);
     } else {
         null_flags = NullColumn::create();
         null_flags->reserve(c0->size());

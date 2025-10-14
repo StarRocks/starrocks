@@ -297,11 +297,11 @@ public:
         size_t lstep = l->is_constant() ? 0 : 1;
         size_t rstep = r->is_constant() ? 0 : 1;
 
-        auto& const1 = FunctionHelper::get_data_column_of_const(l);
-        auto& const2 = FunctionHelper::get_data_column_of_const(r);
+        ColumnPtr const1 = FunctionHelper::get_data_column_of_const(l);
+        ColumnPtr const2 = FunctionHelper::get_data_column_of_const(r);
 
-        auto& data1 = FunctionHelper::get_data_column_of_nullable(const1);
-        auto& data2 = FunctionHelper::get_data_column_of_nullable(const2);
+        ColumnPtr data1 = FunctionHelper::get_data_column_of_nullable(const1);
+        ColumnPtr data2 = FunctionHelper::get_data_column_of_nullable(const2);
 
         size_t size = l->size();
         ColumnBuilder<TYPE_BOOLEAN> builder(size);
@@ -361,14 +361,14 @@ public:
             return is_null_predicate(l);
         }
 
-        auto& const1 = FunctionHelper::get_data_column_of_nullable(l);
-        auto& const2 = FunctionHelper::get_data_column_of_nullable(r);
+        ColumnPtr const1 = FunctionHelper::get_data_column_of_nullable(l);
+        ColumnPtr const2 = FunctionHelper::get_data_column_of_nullable(r);
 
         size_t lstep = const1->is_constant() ? 0 : 1;
         size_t rstep = const2->is_constant() ? 0 : 1;
 
-        auto& data1 = FunctionHelper::get_data_column_of_const(const1);
-        auto& data2 = FunctionHelper::get_data_column_of_const(const2);
+        const auto& data1 = FunctionHelper::get_data_column_of_const(const1);
+        const auto& data2 = FunctionHelper::get_data_column_of_const(const2);
 
         size_t size = l->size();
         ColumnBuilder<TYPE_BOOLEAN> builder(size);

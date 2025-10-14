@@ -52,8 +52,7 @@ public:
     void empty_result(FunctionContext* ctx, Column* to) const {
         if (to->is_nullable()) {
             auto* nullable = down_cast<NullableColumn*>(to);
-            auto& data_column = nullable->data_column();
-            auto* output = down_cast<BooleanColumn*>(data_column.get());
+            auto* output = down_cast<BooleanColumn*>(nullable->mutable_data_column());
             output->append(false);
             nullable->null_column_data().push_back(1);
         } else {
@@ -167,8 +166,7 @@ public:
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         if (to->is_nullable()) {
             auto* nullable = down_cast<NullableColumn*>(to);
-            auto& data_column = nullable->data_column();
-            auto* output = down_cast<BooleanColumn*>(data_column.get());
+            auto* output = down_cast<BooleanColumn*>(nullable->mutable_data_column());
             output->append(this->data(state).result);
             nullable->null_column_data().push_back(0);
         } else {
@@ -179,14 +177,13 @@ public:
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
                                      MutableColumnPtr& dst) const override {
-        *dst = src[0];
+        dst = src[0]->clone();
     }
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         if (to->is_nullable()) {
             auto* nullable = down_cast<NullableColumn*>(to);
-            auto& data_column = nullable->data_column();
-            auto* output = down_cast<BooleanColumn*>(data_column.get());
+            auto* output = down_cast<BooleanColumn*>(nullable->mutable_data_column());
             output->append(this->data(state).result);
             nullable->null_column_data().push_back(0);
         } else {
@@ -202,8 +199,7 @@ public:
         for (size_t i = start; i < end; ++i) {
             if (dst->is_nullable()) {
                 auto* nullable = down_cast<NullableColumn*>(dst);
-                auto& data_column = nullable->data_column();
-                auto* output = down_cast<BooleanColumn*>(data_column.get());
+                auto* output = down_cast<BooleanColumn*>(nullable->mutable_data_column());
                 output->get_data()[i] = this->data(state).result;
             } else {
                 auto* output = down_cast<BooleanColumn*>(dst);

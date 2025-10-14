@@ -101,7 +101,7 @@ private:
 
             bool output = is_lazy ? hash_table_slot.need_lazy_materialize : hash_table_slot.need_output;
             if (output) {
-                auto& column = (*probe_chunk)->get_column_by_slot_id(slot->id());
+                auto column = (*probe_chunk)->get_mutable_column_by_slot_id(slot->id());
                 if (!column->is_nullable()) {
                     _copy_probe_column(&column, chunk, slot, to_nullable);
                 } else {

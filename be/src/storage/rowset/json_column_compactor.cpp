@@ -92,7 +92,7 @@ Status FlatJsonColumnCompactor::_merge_columns(MutableColumns& json_datas) {
         NullColumnPtr null_col;
         if (col->is_nullable()) {
             auto nullable_column = down_cast<const NullableColumn*>(col.get());
-            json_col = down_cast<const JsonColumn*>(nullable_column->data_column().get());
+            json_col = down_cast<const JsonColumn*>(nullable_column->immutable_data_column());
             null_col = nullable_column->null_column();
         } else {
             json_col = down_cast<const JsonColumn*>(col.get());
@@ -138,7 +138,7 @@ Status FlatJsonColumnCompactor::_flatten_columns(MutableColumns& json_datas) {
         JsonColumn* json_col;
         if (col->is_nullable()) {
             auto nullable_column = down_cast<NullableColumn*>(col.get());
-            json_col = down_cast<JsonColumn*>(nullable_column->data_column().get());
+            json_col = down_cast<JsonColumn*>(nullable_column->mutable_data_column());
         } else {
             json_col = down_cast<JsonColumn*>(col.get());
         }
@@ -167,7 +167,7 @@ Status FlatJsonColumnCompactor::_flatten_columns(MutableColumns& json_datas) {
                 nulls->append_value_multiple_times(&IS_NULL, col->size());
             } else if (col->is_nullable()) {
                 auto* nullable_column = down_cast<NullableColumn*>(col.get());
-                auto* nl = down_cast<NullColumn*>(nullable_column->null_column().get());
+                const auto* nl = down_cast<const NullColumn*>(nullable_column->immutable_null_column());
                 nulls->append(*nl, 0, nl->size());
             } else {
                 nulls->append_value_multiple_times(&NOT_NULL, col->size());
@@ -211,7 +211,7 @@ Status JsonColumnCompactor::append(const Column& column) {
     if (column.is_nullable()) {
         auto nullable_column = down_cast<const NullableColumn*>(&column);
         nulls = nullable_column->null_column();
-        json_col = down_cast<const JsonColumn*>(nullable_column->data_column().get());
+        json_col = down_cast<const JsonColumn*>(nullable_column->immutable_data_column());
     } else {
         json_col = down_cast<const JsonColumn*>(&column);
     }

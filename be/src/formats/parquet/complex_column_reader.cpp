@@ -130,7 +130,9 @@ Status ListColumnReader::fill_dst_column(MutableColumnPtr& dst, ColumnPtr& src_i
     dst_offsets->swap_column(*src_offsets);
     auto dst_elements = array_column_dst->elements_column_mutable_ptr();
     auto src_elements = array_column_src->elements_column_mutable_ptr();
-    RETURN_IF_ERROR(_element_reader->fill_dst_column(dst_elements, src_elements));
+    ColumnPtr src_elements_immut(std::move(src_elements));
+    RETURN_IF_ERROR(_element_reader->fill_dst_column(dst_elements, src_elements_immut));
+    src_elements = src_elements_immut->as_mutable_ptr();
     return Status::OK();
 }
 
@@ -325,7 +327,9 @@ Status StructColumnReader::fill_dst_column(MutableColumnPtr& dst, ColumnPtr& src
             } else {
                 auto dst_field = struct_column_dst->field_column_mutable(field_name);
                 auto src_field = struct_column_src->field_column_mutable(field_name);
-                RETURN_IF_ERROR(_child_readers[field_name]->fill_dst_column(dst_field, src_field));
+                ColumnPtr src_field_immut(std::move(src_field));
+                RETURN_IF_ERROR(_child_readers[field_name]->fill_dst_column(dst_field, src_field_immut));
+                src_field = src_field_immut->as_mutable_ptr();
             }
         } else {
             return Status::InternalError(strings::Substitute("there is no match subfield reader for $1", field_name));

@@ -127,8 +127,18 @@ Status StreamAggregator::process_chunk(StreamChunk* chunk) {
     DCHECK_EQ(_streaming_selection.size(), chunk_size);
 
     auto ops = StreamChunkConverter::ops(chunk);
+    std::vector<Columns> agg_input_columns_immut;
+    agg_input_columns_immut.reserve(_agg_input_columns.size());
+    for (auto& mutable_cols : _agg_input_columns) {
+        Columns cols;
+        cols.reserve(mutable_cols.size());
+        for (auto& col : mutable_cols) {
+            cols.emplace_back(col);
+        }
+        agg_input_columns_immut.emplace_back(std::move(cols));
+    }
     RETURN_IF_ERROR(_agg_group_state->process_chunk(chunk_size, _group_by_columns, _streaming_selection, ops,
-                                                    _agg_input_columns, _agg_input_raw_columns, _tmp_agg_states));
+                                                    agg_input_columns_immut, _agg_input_raw_columns, _tmp_agg_states));
     return Status::OK();
 }
 

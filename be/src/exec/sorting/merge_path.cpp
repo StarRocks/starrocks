@@ -1068,7 +1068,11 @@ void MergePathCascadeMerger::_split_chunk(const int32_t parallel_idx) {
     while (remain_size > 0) {
         auto pair = big_run.steal(_late_materialization, _chunk_size, 0);
         ChunkPtr chunk = pair.first;
-        Columns orderby = std::move(pair.second);
+        Columns orderby;
+        orderby.reserve(pair.second.size());
+        for (auto& col : pair.second) {
+            orderby.emplace_back(std::move(col));
+        }
         DCHECK(chunk != nullptr);
         DCHECK_GE(remain_size, chunk->num_rows());
         remain_size -= chunk->num_rows();
@@ -1200,7 +1204,7 @@ ChunkPtr MergePathCascadeMerger::_restore_according_to_ordinal(const int32_t par
         return nullptr;
     }
 
-    const auto& ordinals = down_cast<Int64Column*>(chunk->get_column_by_index(0).get())->get_data();
+    const auto& ordinals = down_cast<const Int64Column*>(chunk->get_column_by_index(0).get())->immutable_data();
 
     ChunkPtr output = nullptr;
 

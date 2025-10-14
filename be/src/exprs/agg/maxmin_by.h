@@ -474,7 +474,7 @@ public:
             if (this->data(state).buffer_result.size() == 0 && !State::not_filter_nulls_flag) {
                 column->append_default();
             } else {
-                down_cast<BinaryColumn*>(column->data_column().get())->append(Slice(buffer.data(), buffer.size()));
+                down_cast<BinaryColumn*>(column->mutable_data_column())->append(Slice(buffer.data(), buffer.size()));
                 column->null_column_data().push_back(0);
             }
         } else {
@@ -729,7 +729,7 @@ public:
             if (!this->data(state).has_value()) {
                 column->append_default();
             } else {
-                down_cast<BinaryColumn*>(column->data_column().get())->append(Slice(buffer.data(), buffer.size()));
+                down_cast<BinaryColumn*>(column->mutable_data_column())->append(Slice(buffer.data(), buffer.size()));
                 column->null_column_data().push_back(0);
             }
         } else {

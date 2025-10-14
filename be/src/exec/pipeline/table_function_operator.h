@@ -49,7 +49,7 @@ public:
     Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) override;
 
 private:
-    ChunkPtr _build_chunk(const MutableColumns& output_columns);
+    ChunkPtr _build_chunk(MutableColumns& output_columns);
     Status _process_table_function(RuntimeState* state);
     void _copy_result(MutableColumns& columns, uint32_t max_column_size);
 

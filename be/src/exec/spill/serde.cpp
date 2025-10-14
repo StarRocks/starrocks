@@ -172,7 +172,7 @@ StatusOr<ChunkUniquePtr> ColumnarSerde::deserialize(SerdeContext& ctx, BlockRead
     }
 
     auto chunk = _chunk_builder();
-    auto& columns = chunk->columns();
+    auto columns = chunk->mutable_columns();
 
     auto& serialize_buffer = ctx.serialize_buffer;
     serialize_buffer.resize(attachment_size);

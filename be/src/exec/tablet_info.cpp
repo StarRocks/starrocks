@@ -391,7 +391,7 @@ Status OlapTablePartitionParam::_create_partition_keys(const std::vector<TExprNo
         }
 
         // unwrap nullable column since partition column can be nullable
-        auto* partition_data_column = ColumnHelper::get_data_column(_partition_columns[i].get());
+        auto* partition_data_column = ColumnHelper::get_data_column(_partition_columns[i]->as_mutable_raw_ptr());
         switch (type) {
         case TYPE_DATE: {
             DateValue v;

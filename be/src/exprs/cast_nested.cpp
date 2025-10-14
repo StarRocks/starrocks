@@ -27,7 +27,7 @@ StatusOr<ColumnPtr> CastMapExpr::evaluate_checked(ExprContext* context, Chunk* p
         return ColumnHelper::create_const_null_column(orig_column->size());
     }
     // NOTE: const(nullable) case is handled by last if case
-    auto* map_column = down_cast<MapColumn*>(ColumnHelper::get_data_column(orig_column.get()));
+    const auto* map_column = down_cast<const MapColumn*>(ColumnHelper::get_data_column(orig_column.get()));
 
     ColumnPtr casted_key_column;
     ColumnPtr casted_value_column;
@@ -70,7 +70,7 @@ StatusOr<ColumnPtr> CastStructExpr::evaluate_checked(ExprContext* context, Chunk
         return ColumnHelper::create_const_null_column(orig_column->size());
     }
     // NOTE: const(nullable) case is handled by last if case
-    auto* struct_column = down_cast<StructColumn*>(ColumnHelper::get_data_column(orig_column.get()));
+    const auto* struct_column = down_cast<const StructColumn*>(ColumnHelper::get_data_column(orig_column.get()));
     Columns casted_fields;
     for (int i = 0; i < _field_casts.size(); ++i) {
         if (_field_casts[i] != nullptr) {
@@ -103,7 +103,7 @@ StatusOr<ColumnPtr> CastArrayExpr::evaluate_checked(ExprContext* context, Chunk*
         return ColumnHelper::create_const_null_column(orig_column->size());
     }
     // NOTE: const(nullable) case is handled by last if case
-    auto* array_column = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(orig_column.get()));
+    const auto* array_column = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(orig_column.get()));
 
     ColumnPtr casted_element_column;
     // cast element column

@@ -109,8 +109,8 @@ public:
         } else {
             _builder->add(_field_name, vpack::Value(vpack::ValueType::Object));
         }
-        auto& names = col.field_names();
-        auto& columns = col.fields();
+        const auto& names = col.field_names();
+        const auto columns = col.fields();
         for (int i = 0; i < columns.size(); i++) {
             auto name = names.size() > i ? names[i] : fmt::format("k{}", i);
             auto& field_column = columns[i];
@@ -130,7 +130,7 @@ public:
             _builder->add(_field_name, vpack::Value(vpack::ValueType::Object));
         }
         auto [map_start, map_size] = col.get_map_offset_size(_row);
-        auto& val_col = col.values_column();
+        const auto val_col = col.values_column();
 
         auto key_col = col.keys_column();
         if (key_col->has_null()) {
@@ -175,7 +175,7 @@ public:
         }
 
         auto [offset, size] = col.get_element_offset_size(_row);
-        auto& elements = col.elements_column();
+        const auto elements = col.elements_column();
         for (int i = offset; i < offset + size; i++) {
             RETURN_IF_ERROR(cast_datum_to_json(elements, i, "", _builder));
         }

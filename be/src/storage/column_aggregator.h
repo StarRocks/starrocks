@@ -109,7 +109,7 @@ public:
         int size = end - start;
         if (need_deep_copy() && end == _source_column->size()) {
             // copy the last rows of same key to prevent to be overwritten or reset by get_next in aggregate iterator.
-            ColumnPtr column = _source_column->clone_empty();
+            MutableColumnPtr column = _source_column->clone_empty();
             column->append(*_source_column, start, size);
             aggregate_batch_impl(0, size, column);
         } else {
@@ -147,9 +147,9 @@ public:
         _aggregate_column = agg;
 
         auto* n = down_cast<NullableColumn*>(agg);
-        _child->update_aggregate(n->data_column().get());
+        _child->update_aggregate(n->mutable_data_column());
 
-        _aggregate_nulls = down_cast<NullColumn*>(n->null_column().get());
+        _aggregate_nulls = down_cast<NullColumn*>(n->null_column_mutable_ptr().get());
         reset();
     }
 
@@ -199,7 +199,7 @@ public:
             int size = end - start;
             if (_child->need_deep_copy() && end == _child->_source_column->size()) {
                 // copy the last rows of same key to prevent to be overwritten or reset by get_next in aggregate iterator.
-                ColumnPtr column = _child->_source_column->clone_empty();
+                MutableColumnPtr column = _child->_source_column->clone_empty();
                 column->append(*_child->_source_column, start, size);
                 _child->aggregate_batch_impl(0, size, column);
             } else {
@@ -225,7 +225,7 @@ public:
 
             if (_child->need_deep_copy() && end == _child->_source_column->size()) {
                 // copy the last rows of same key to prevent to be overwritten or reset by get_next in aggregate iterator.
-                ColumnPtr column = _child->_source_column->clone_empty();
+                MutableColumnPtr column = _child->_source_column->clone_empty();
                 column->append(*_child->_source_column, start, size);
                 for (int j = 0; j < size; ++j) {
                     if (_source_nulls_data[start + j] != 1) {

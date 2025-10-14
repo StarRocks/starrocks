@@ -39,6 +39,7 @@ struct SortedRun {
     SortedRun(const SortedRun& rhs) = delete;
     SortedRun(SortedRun&& rhs) = default;
     SortedRun& operator=(const SortedRun& rhs) = delete;
+    SortedRun& operator=(SortedRun&& rhs) = default;
 
     SortedRun(const ChunkPtr& ichunk, MutableColumns columns)
             : chunk(ichunk), orderby(std::move(columns)), range(0, ichunk->num_rows()) {}

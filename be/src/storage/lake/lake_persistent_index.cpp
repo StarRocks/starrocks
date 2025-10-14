@@ -774,7 +774,7 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
                         PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get());
                         pkc = pk_column.get();
                     } else {
-                        pkc = chunk->columns()[0].get();
+                        pkc = const_cast<Column*>(chunk->columns()[0].get());
                     }
                     uint32_t rssid = rowset->id() + i;
                     uint64_t base = ((uint64_t)rssid) << 32;

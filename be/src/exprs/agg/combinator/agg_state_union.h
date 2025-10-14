@@ -51,7 +51,7 @@ public:
     void convert_to_serialize_format([[maybe_unused]] FunctionContext* ctx, const Columns& srcs, size_t chunk_size,
                                      MutableColumnPtr& dst) const override {
         DCHECK_EQ(1, srcs.size());
-        *dst = srcs[0];
+        dst = srcs[0]->clone();
     }
 
     void finalize_to_column(FunctionContext* ctx __attribute__((unused)), ConstAggDataPtr __restrict state,

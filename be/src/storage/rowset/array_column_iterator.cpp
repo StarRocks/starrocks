@@ -57,8 +57,8 @@ static inline std::tuple<ArrayColumn*, NullColumn*> unpack_array_column(Column* 
 
     if (col->is_nullable()) {
         auto nullable = down_cast<NullableColumn*>(col);
-        array_col = down_cast<ArrayColumn*>(nullable->data_column().get());
-        array_null = down_cast<NullColumn*>(nullable->null_column().get());
+        array_col = down_cast<ArrayColumn*>(nullable->mutable_data_column());
+        array_null = down_cast<NullColumn*>(nullable->mutable_null_column());
     } else {
         array_col = down_cast<ArrayColumn*>(col);
     }

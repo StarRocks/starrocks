@@ -984,9 +984,12 @@ ColumnPtr JsonMerger::merge(const Columns& columns) {
     DCHECK_GE(columns.size(), 1);
     DCHECK(_src_columns.empty());
 
-    _result = NullableColumn::create(JsonColumn::create(), NullColumn::create());
-    _json_result = down_cast<JsonColumn*>(down_cast<NullableColumn*>(_result.get())->data_column().get());
-    _null_result = down_cast<NullColumn*>(down_cast<NullableColumn*>(_result.get())->null_column().get());
+    // 使用 MutablePtr 参数版本的 create()，直接返回 MutablePtr
+    _result = NullableColumn::create(JsonColumn::create()->as_mutable_ptr(), 
+                                      NullColumn::create()->as_mutable_ptr());
+    auto* nullable_result = down_cast<NullableColumn*>(_result->as_mutable_raw_ptr());
+    _json_result = down_cast<JsonColumn*>(nullable_result->mutable_data_column());
+    _null_result = down_cast<NullColumn*>(nullable_result->mutable_null_column());
     size_t rows = columns[0]->size();
     _result->reserve(rows);
 

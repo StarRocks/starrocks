@@ -584,8 +584,20 @@ Status ChunksSorterTopn::_merge_sort_common(MergedRuns* dst, DataSegments& segme
         // prepare right chunk
         ChunkPtr right_chunk = std::move(right_unique_chunk);
 
-        const SortedRun left = {left_chunk, left_columns};
-        const SortedRun right = {right_chunk, right_columns};
+        // Convert Columns to MutableColumns
+        MutableColumns left_mutable_columns;
+        left_mutable_columns.reserve(left_columns.size());
+        for (auto& col : left_columns) {
+            left_mutable_columns.push_back(col->as_mutable_ptr());
+        }
+        MutableColumns right_mutable_columns;
+        right_mutable_columns.reserve(right_columns.size());
+        for (auto& col : right_columns) {
+            right_mutable_columns.push_back(col->as_mutable_ptr());
+        }
+
+        const SortedRun left = {left_chunk, std::move(left_mutable_columns)};
+        const SortedRun right = {right_chunk, std::move(right_mutable_columns)};
         bool intersected = !left.empty() && !right.empty() && !left.intersect(_sort_desc, right);
         // adjust chunks capacity
         _adjust_chunks_capacity(intersected);

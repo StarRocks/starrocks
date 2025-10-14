@@ -525,13 +525,15 @@ ColumnPtr string_func_const(StringConstFuncType func, const Columns& columns, Ar
                 return binary;
             }
             if (binary->is_constant()) {
-                auto* dst_const = down_cast<ConstColumn*>(binary.get());
+                auto binary_mut = binary->as_mutable_ptr();
+                auto* dst_const = down_cast<ConstColumn*>(binary_mut->as_mutable_raw_ptr());
                 auto data_mut = dst_const->data_column()->as_mutable_ptr();
                 data_mut->assign(dst_const->size(), 0);
                 return NullableColumn::create(std::move(data_mut), std::move(src_null));
             }
             if (binary->is_nullable()) {
-                auto* binary_nullable = down_cast<NullableColumn*>(binary.get());
+                auto binary_mut = binary->as_mutable_ptr();
+                auto* binary_nullable = down_cast<NullableColumn*>(binary_mut->as_mutable_raw_ptr());
                 if (binary_nullable->has_null()) {
                     // case 2: some rows are nulls and some rows are non-nulls, merge the column
                     // inside original result and the null column inside the columns[0].

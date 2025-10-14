@@ -49,15 +49,16 @@ struct SelectIfOP {
             SIMD_selector<Type>::select_if(select_vec.data(), res_data, v0, v1);
         } else if constexpr (isConstC0 && !isConst1) {
             auto v0 = ColumnHelper::get_const_value<Type>(value0);
-            auto* raw_col1 = down_cast<RunTimeColumnType<Type>*>(input_data1);
+            // Use const_cast for read-only access to avoid data copy
+            auto* raw_col1 = const_cast<RunTimeColumnType<Type>*>(down_cast<const RunTimeColumnType<Type>*>(input_data1));
             SIMD_selector<Type>::select_if(select_vec.data(), res_data, v0, raw_col1->get_data());
         } else if constexpr (!isConstC0 && isConst1) {
-            auto* raw_col0 = down_cast<RunTimeColumnType<Type>*>(input_data0);
+            auto* raw_col0 = const_cast<RunTimeColumnType<Type>*>(down_cast<const RunTimeColumnType<Type>*>(input_data0));
             auto v1 = ColumnHelper::get_const_value<Type>(value1);
             SIMD_selector<Type>::select_if(select_vec.data(), res_data, raw_col0->get_data(), v1);
         } else if constexpr (!isConstC0 && !isConst1) {
-            auto* raw_col0 = down_cast<RunTimeColumnType<Type>*>(input_data0);
-            auto* raw_col1 = down_cast<RunTimeColumnType<Type>*>(input_data1);
+            auto* raw_col0 = const_cast<RunTimeColumnType<Type>*>(down_cast<const RunTimeColumnType<Type>*>(input_data0));
+            auto* raw_col1 = const_cast<RunTimeColumnType<Type>*>(down_cast<const RunTimeColumnType<Type>*>(input_data1));
             SIMD_selector<Type>::select_if(select_vec.data(), res_data, raw_col0->get_data(), raw_col1->get_data());
         }
         return res;
@@ -155,7 +156,7 @@ public:
 
         ASSIGN_OR_RETURN(auto rhs, _children[1]->evaluate_checked(context, ptr));
         if (ColumnHelper::count_nulls(rhs) == rhs->size()) {
-            return Column::mutate(std::move(lhs));
+            return lhs;
         }
 
         Columns list = {lhs, rhs};
@@ -198,11 +199,12 @@ private:
         }
         auto res = ColumnHelper::create_column(this->type(), true);
         res->reserve(num_rows);
-        auto right_data = columns[1];
+        ColumnPtr right_data = columns[1];
         NullColumnPtr right_nulls = nullptr;
         if (columns[1]->is_nullable()) {
-            right_data = down_cast<NullableColumn*>(columns[1].get())->data_column();
-            right_nulls = down_cast<NullableColumn*>(columns[1].get())->null_column();
+            const auto* nullable_col = down_cast<const NullableColumn*>(columns[1].get());
+            right_data = nullable_col->data_column();
+            right_nulls = nullable_col->null_column();
         }
         for (int row = 0; row < num_rows; ++row) {
             if ((right_nulls == nullptr || !right_nulls->immutable_data()[row]) &&
@@ -287,7 +289,7 @@ private:
         if (input_col->only_null()) {
             return ColumnHelper::create_const_column<TYPE_BOOLEAN>(1, num_rows);
         } else if (input_col->is_nullable()) {
-            return down_cast<NullableColumn*>(input_col.get())->null_column();
+            return down_cast<const NullableColumn*>(input_col.get())->null_column();
         } else {
             return ColumnHelper::create_const_column<TYPE_BOOLEAN>(0, num_rows);
         }
@@ -298,7 +300,7 @@ private:
             res->resize(1);
             return ConstColumn::create(std::move(res), num_rows);
         } else if (input_col->is_nullable()) {
-            return down_cast<NullableColumn*>(input_col.get())->data_column();
+            return down_cast<const NullableColumn*>(input_col.get())->data_column();
         } else {
             return input_col;
         }
@@ -459,7 +461,7 @@ private:
         nullColumns.resize(col_size);
         for (auto i = 0; i < col_size; ++i) {
             if (columns[i]->is_nullable()) {
-                nullColumns[i] = down_cast<NullableColumn*>(columns[i].get())->null_column();
+                nullColumns[i] = down_cast<const NullableColumn*>(columns[i].get())->null_column();
             } else {
                 nullColumns[i] = nullptr;
             }

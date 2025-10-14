@@ -419,10 +419,11 @@ ColumnPtr cast_int_from_string_fn(ColumnPtr& column) {
     res_data_column->resize(sz);
     auto& res_data = res_data_column->get_data();
     if (column->is_nullable()) {
-        auto* input_column = down_cast<NullableColumn*>(column.get());
-        NullColumnPtr null_column = ColumnHelper::as_column<NullColumn>(input_column->null_column()->clone());
-        auto* data_column = down_cast<BinaryColumn*>(input_column->data_column().get());
-        auto& null_data = down_cast<NullColumn*>(null_column.get())->get_data();
+        const auto* input_column = down_cast<const NullableColumn*>(column.get());
+        auto null_column_ptr = input_column->null_column()->clone();
+        auto* null_column = down_cast<NullColumn*>(null_column_ptr->as_mutable_raw_ptr());
+        const auto* data_column = down_cast<const BinaryColumn*>(input_column->immutable_data_column());
+        auto& null_data = null_column->get_data();
         for (int i = 0; i < sz; ++i) {
             if (!null_data[i]) {
                 auto slice = data_column->get_slice(i);
@@ -439,7 +440,7 @@ ColumnPtr cast_int_from_string_fn(ColumnPtr& column) {
     } else {
         NullColumn::MutablePtr null_column = NullColumn::create(sz);
         auto& null_data = null_column->get_data();
-        auto* data_column = down_cast<BinaryColumn*>(column.get());
+        const auto* data_column = down_cast<const BinaryColumn*>(column.get());
 
         bool has_null = false;
         for (int i = 0; i < sz; ++i) {
@@ -884,11 +885,12 @@ static ColumnPtr cast_from_string_to_datetime_fn(ColumnPtr& column) {
     auto& res_data = res_data_column->get_data();
 
     if (column->is_nullable()) {
-        auto* input_column = down_cast<NullableColumn*>(column.get());
-        auto* data_column = down_cast<BinaryColumn*>(input_column->data_column().get());
+        const auto* input_column = down_cast<const NullableColumn*>(column.get());
+        const auto* data_column = down_cast<const BinaryColumn*>(input_column->immutable_data_column());
 
-        NullColumnPtr null_column = ColumnHelper::as_column<NullColumn>(input_column->null_column()->clone());
-        auto& null_data = down_cast<NullColumn*>(null_column.get())->get_data();
+        auto null_column_ptr = input_column->null_column()->clone();
+        auto* null_column = down_cast<NullColumn*>(null_column_ptr->as_mutable_raw_ptr());
+        auto& null_data = null_column->get_data();
 
         for (int i = 0; i < num_rows; ++i) {
             if (!null_data[i]) {
@@ -905,7 +907,7 @@ static ColumnPtr cast_from_string_to_datetime_fn(ColumnPtr& column) {
         }
         return NullableColumn::create(std::move(res_data_column), std::move(null_column));
     } else {
-        auto* data_column = down_cast<BinaryColumn*>(column.get());
+        const auto* data_column = down_cast<const BinaryColumn*>(column.get());
         NullColumn::MutablePtr null_column = NullColumn::create(num_rows);
         auto& null_data = null_column->get_data();
 
@@ -1157,8 +1159,8 @@ public:
                 if constexpr ((std::is_floating_point_v<ToCppType> || std::is_floating_point_v<FromCppType>)
                                       ? (static_cast<long double>(std::numeric_limits<ToCppType>::max()) <
                                          static_cast<long double>(std::numeric_limits<FromCppType>::max()))
-                                      : (std::numeric_limits<ToCppType>::max() <
-                                         std::numeric_limits<FromCppType>::max())) {
+                                      : (static_cast<long double>(std::numeric_limits<ToCppType>::max()) <
+                                         static_cast<long double>(std::numeric_limits<FromCppType>::max()))) {
                     // Check overflow.
 
                     llvm::Value* max_overflow = nullptr;

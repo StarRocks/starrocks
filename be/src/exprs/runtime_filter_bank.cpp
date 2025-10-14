@@ -494,7 +494,7 @@ StatusOr<ExprContext*> RuntimeFilterHelper::rewrite_runtime_filter_in_cross_join
         if (res->is_null(0)) {
             col = ColumnHelper::create_const_null_column(1);
         } else {
-            auto data_col = down_cast<NullableColumn*>(res.get())->data_column();
+            auto data_col = down_cast<NullableColumn*>(res->as_mutable_raw_ptr())->data_column_mutable_ptr();
             col = ConstColumn::create(std::move(data_col), 1);
         }
     } else {
@@ -869,7 +869,7 @@ void RuntimeFilterProbeCollector::evaluate_partial_chunk(Chunk* partial_chunk,
     }
 }
 
-void RuntimeFilterProbeCollector::compute_hash_values(Chunk* chunk, Column* column,
+void RuntimeFilterProbeCollector::compute_hash_values(Chunk* chunk, const Column* column,
                                                       RuntimeFilterProbeDescriptor* rf_desc,
                                                       RuntimeMembershipFilterEvalContext& eval_context) {
     // TODO: Hash values will be computed multi times for runtime filters with the same partition_by_exprs.

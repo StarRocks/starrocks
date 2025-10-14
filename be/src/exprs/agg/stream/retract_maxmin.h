@@ -152,7 +152,7 @@ public:
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
                                      MutableColumnPtr& dst) const override {
-        *dst = src[0];
+        dst = src[0]->as_mutable_ptr();
     }
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
@@ -278,8 +278,8 @@ public:
             DCHECK((*to[0]).is_numeric());
         }
         DCHECK((*to[1]).is_numeric());
-        auto* column0 = down_cast<InputColumnType*>(to[0].get());
-        auto* column1 = down_cast<Int64Column*>(to[1].get());
+        auto* column0 = down_cast<InputColumnType*>(to[0]->as_mutable_raw_ptr());
+        auto* column1 = down_cast<Int64Column*>(to[1]->as_mutable_raw_ptr());
         auto& detail_state = this->data(state).detail_state();
         for (auto iter = detail_state.cbegin(); iter != detail_state.cend(); iter++) {
             // is it possible that count is negative?

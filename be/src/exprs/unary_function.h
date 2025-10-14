@@ -201,7 +201,7 @@ public:
                     return result;
                 }
 
-                auto nullable_data = down_cast<NullableColumn*>(result.get());
+                auto nullable_data = down_cast<const NullableColumn*>(result.get());
                 if (result->has_null()) {
                     // case 2: the result rows are partially nulls, must merge null columns
                     // both inside the input column and inside the results.

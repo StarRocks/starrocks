@@ -529,7 +529,8 @@ Status SortedStreamingAggregator::_build_group_by_columns(size_t chunk_size, siz
     }
 
     for (size_t i = 0; i < agg_group_by_columns.size(); ++i) {
-        AppendWithMask appender(_group_by_columns[i].get(), selector, selected_size);
+        auto mutable_col = _group_by_columns[i]->as_mutable_ptr();
+        AppendWithMask appender(mutable_col.get(), selector, selected_size);
         RETURN_IF_ERROR(agg_group_by_columns[i]->accept_mutable(&appender));
     }
     return Status::OK();
@@ -542,7 +543,7 @@ StatusOr<ChunkPtr> SortedStreamingAggregator::pull_eos_chunk() {
     SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(_allocator.get());
     bool use_intermediate = _use_intermediate_as_output();
     auto agg_result_columns = _create_agg_result_columns(1, use_intermediate);
-    auto group_by_columns = _last_columns;
+    MutableColumns group_by_columns = std::move(_last_columns);
     if (use_intermediate) {
         TRY_CATCH_BAD_ALLOC(_serialize_to_chunk(_last_state, agg_result_columns));
     } else {

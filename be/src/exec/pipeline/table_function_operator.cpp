@@ -159,17 +159,22 @@ Status TableFunctionOperator::push_chunk(RuntimeState* state, const ChunkPtr& ch
     return Status::OK();
 }
 
-ChunkPtr TableFunctionOperator::_build_chunk(const MutableColumns& columns) {
+ChunkPtr TableFunctionOperator::_build_chunk(MutableColumns& columns) {
     ChunkPtr chunk = std::make_shared<Chunk>();
 
+    Columns immutable_cols;
+    immutable_cols.reserve(columns.size());
+    for (auto& col : columns) {
+        immutable_cols.emplace_back(std::move(col));
+    }
+
     for (size_t i = 0; i < _outer_slots.size(); ++i) {
-        ColumnPtr col_ptr = columns[i];
-        chunk->append_column(std::move(col_ptr), _outer_slots[i]);
+        chunk->append_column(std::move(immutable_cols[i]), _outer_slots[i]);
     }
 
     if (_fn_result_required) {
         for (size_t i = 0; i < _fn_result_slots.size(); ++i) {
-            chunk->append_column(columns[_outer_slots.size() + i], _fn_result_slots[i]);
+            chunk->append_column(std::move(immutable_cols[_outer_slots.size() + i]), _fn_result_slots[i]);
         }
     }
 

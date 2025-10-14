@@ -662,7 +662,7 @@ public:
         size_t length = 0;
         std::vector<BinaryColumn*> binary_cols(output_col_num);
         for (auto i = 0; i < output_col_num; ++i) {
-            auto tmp = ColumnHelper::get_data_column(outputs[i].get());
+            auto tmp = ColumnHelper::get_data_column(outputs[i]->as_mutable_raw_ptr());
             binary_cols[i] = down_cast<BinaryColumn*>(tmp);
             length += binary_cols[i]->get_bytes().size();
         }

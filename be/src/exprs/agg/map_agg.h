@@ -104,16 +104,16 @@ public:
         auto* map_column = down_cast<MapColumn*>(ColumnHelper::get_data_column(to));
 
         auto elem_size = state_impl.hash_map.size();
-        auto* key_column = down_cast<KeyColumnType*>(ColumnHelper::get_data_column(map_column->keys_column().get()));
+        auto* key_column = down_cast<KeyColumnType*>(ColumnHelper::get_data_column(map_column->keys_column_mutable_ptr().get()));
         if constexpr (lt_is_string<KT>) {
             for (const auto& entry : state_impl.hash_map) {
                 key_column->append(Slice(entry.first.data, entry.first.size));
-                map_column->values_column()->append_datum(state_impl.value_column->get(entry.second));
+                map_column->values_column_mutable_ptr()->append_datum(state_impl.value_column->get(entry.second));
             }
         } else {
             for (const auto& entry : state_impl.hash_map) {
                 key_column->append(entry.first);
-                map_column->values_column()->append_datum(state_impl.value_column->get(entry.second));
+                map_column->values_column_mutable_ptr()->append_datum(state_impl.value_column->get(entry.second));
             }
         }
 

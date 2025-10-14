@@ -337,7 +337,7 @@ public:
                     PRODUCE_NULL_FN::template evaluate<LType, RType, TYPE_NULL>(v1, data2));
 
             // is null, return only null
-            if (1 == null_result->get_data()[0]) {
+            if (1 == null_result->immutable_data()[0]) {
                 return ColumnHelper::create_const_null_column(v1->size());
             } else {
                 // not null return const column
@@ -365,8 +365,13 @@ public:
 
         ColumnPtr produce_null = PRODUCE_NULL_FN::template evaluate<LType, RType, TYPE_NULL>(data1, data2);
 
-        NullColumn::MutablePtr null_result = ColumnHelper::as_column<NullColumn>(produce_null)->as_mutable_ptr();
-        FunctionHelper::union_produce_nullable_column(v1, v2, &null_result);
+        auto null_col_shared = ColumnHelper::as_column<NullColumn>(produce_null)->clone();
+        NullColumn* null_raw = down_cast<NullColumn*>(null_col_shared->as_mutable_raw_ptr());
+        NullColumn::MutablePtr null_temp = NullColumn::create(0); // Temporary for API
+        null_temp->swap_column(*null_raw); // Transfer data
+        FunctionHelper::union_produce_nullable_column(v1, v2, &null_temp);
+        null_raw->swap_column(*null_temp); // Swap back
+        NullColumn::MutablePtr null_result = NullColumn::static_pointer_cast(std::move(null_col_shared));
 
         ColumnPtr data_result = FN::template evaluate<LType, RType, ResultType>(data1, data2);
         // for decimal arithmetics, data_column of nullable lhs op data_column of nullable rhs maybe produce a nullable

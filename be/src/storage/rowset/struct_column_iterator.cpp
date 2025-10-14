@@ -126,8 +126,8 @@ Status StructColumnIterator::next_batch(size_t* n, Column* dst) {
     if (dst->is_nullable()) {
         auto* nullable_column = down_cast<NullableColumn*>(dst);
 
-        struct_column = down_cast<StructColumn*>(nullable_column->data_column().get());
-        null_column = down_cast<NullColumn*>(nullable_column->null_column().get());
+        struct_column = down_cast<StructColumn*>(nullable_column->mutable_data_column());
+        null_column = down_cast<NullColumn*>(nullable_column->mutable_null_column());
     } else {
         struct_column = down_cast<StructColumn*>(dst);
     }
@@ -198,8 +198,8 @@ Status StructColumnIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t
     // 1. Read null column
     if (_null_iter != nullptr) {
         auto* nullable_column = down_cast<NullableColumn*>(values);
-        struct_column = down_cast<StructColumn*>(nullable_column->data_column().get());
-        null_column = down_cast<NullColumn*>(nullable_column->null_column().get());
+        struct_column = down_cast<StructColumn*>(nullable_column->mutable_data_column());
+        null_column = down_cast<NullColumn*>(nullable_column->mutable_null_column());
         RETURN_IF_ERROR(_null_iter->fetch_values_by_rowid(rowids, size, null_column));
         nullable_column->update_has_null();
     } else {
@@ -259,8 +259,8 @@ Status StructColumnIterator::next_batch(size_t* n, Column* dst, ColumnAccessPath
     NullColumn* null_column = nullptr;
     if (dst->is_nullable()) {
         auto* nullable_column = down_cast<NullableColumn*>(dst);
-        struct_column = down_cast<StructColumn*>(nullable_column->data_column().get());
-        null_column = down_cast<NullColumn*>(nullable_column->null_column().get());
+        struct_column = down_cast<StructColumn*>(nullable_column->mutable_data_column());
+        null_column = down_cast<NullColumn*>(nullable_column->mutable_null_column());
     } else {
         struct_column = down_cast<StructColumn*>(dst);
     }
@@ -317,8 +317,8 @@ Status StructColumnIterator::next_batch(const SparseRange<>& range, Column* dst,
     if (dst->is_nullable()) {
         auto* nullable_column = down_cast<NullableColumn*>(dst);
 
-        struct_column = down_cast<StructColumn*>(nullable_column->data_column().get());
-        null_column = down_cast<NullColumn*>(nullable_column->null_column().get());
+        struct_column = down_cast<StructColumn*>(nullable_column->mutable_data_column());
+        null_column = down_cast<NullColumn*>(nullable_column->mutable_null_column());
     } else {
         struct_column = down_cast<StructColumn*>(dst);
     }

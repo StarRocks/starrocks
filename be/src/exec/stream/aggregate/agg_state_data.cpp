@@ -33,7 +33,7 @@ Status AggStateData::allocate_intermediate_state(size_t chunk_size, const Filter
     auto table_column_idx = intermediate_table_column_idx();
     // deserialize result row and allocate it to agg_state
     DCHECK_LT(table_column_idx, result_chunk->num_columns());
-    Column* column = result_chunk->get_column_by_index(table_column_idx).get();
+    Column* column = result_chunk->get_mutable_column_by_index(table_column_idx).get();
 
     size_t j = 0;
     for (size_t i = 0; i < chunk_size; i++) {

@@ -91,7 +91,7 @@ StatusOr<ColumnPtr> AbstractArrowFuncCallStub::_convert_arrow_to_native(const ar
     auto null_column = nullable_column->mutable_null_column();
     auto null_data = null_column->get_data().data();
 
-    auto data_column = nullable_column->data_column().get();
+    auto data_column = nullable_column->mutable_data_column();
 
     native_column->reserve(result_num_rows);
 

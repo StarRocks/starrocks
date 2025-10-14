@@ -159,7 +159,12 @@ Status TableFunctionNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* e
         }
 
         if (reserve_chunk_size == 0) {
-            return build_chunk(chunk, output_columns);
+            Columns immut_columns;
+            immut_columns.reserve(output_columns.size());
+            for (auto& col : output_columns) {
+                immut_columns.emplace_back(std::move(col));
+            }
+            return build_chunk(chunk, immut_columns);
         }
     }
 
@@ -169,7 +174,12 @@ Status TableFunctionNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* e
             if (*eos) {
                 (*eos) = false;
                 _input_chunk_ptr = nullptr;
-                return build_chunk(chunk, output_columns);
+                Columns immut_columns;
+                immut_columns.reserve(output_columns.size());
+                for (auto& col : output_columns) {
+                    immut_columns.emplace_back(std::move(col));
+                }
+                return build_chunk(chunk, immut_columns);
             }
         }
 
@@ -207,7 +217,12 @@ Status TableFunctionNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* e
             }
 
             if (reserve_chunk_size == 0) {
-                return build_chunk(chunk, output_columns);
+                Columns immut_columns;
+                immut_columns.reserve(output_columns.size());
+                for (auto& col : output_columns) {
+                    immut_columns.emplace_back(std::move(col));
+                }
+                return build_chunk(chunk, immut_columns);
             }
         }
 

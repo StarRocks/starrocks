@@ -65,16 +65,17 @@ StatusOr<ColumnPtr> DictionaryGetExpr::evaluate_checked(ExprContext* context, Ch
             _dictionary_get_expr.null_if_not_exist ? null_column.get() : nullptr));
 
     // merge the value chunk into a single struct column and return
+    auto nullable_mut = nullable_struct_column->as_mutable_ptr();
     auto* struct_col = down_cast<StructColumn*>(
-            down_cast<NullableColumn*>(nullable_struct_column.get())->mutable_data_column());
+            down_cast<NullableColumn*>(nullable_mut->as_mutable_raw_ptr())->mutable_data_column());
     auto fields = struct_col->fields_column_mutable();
     for (size_t i = 0; i < value_chunk->columns().size(); ++i) {
         auto column = value_chunk->columns()[i];
         fields[i]->append(*column, 0, column->size());
     }
-    down_cast<NullableColumn*>(nullable_struct_column.get())
-            ->set_has_null(SIMD::contain_nonzero(down_cast<UInt8Column*>(null_column.get())->get_data(), 0));
-    down_cast<NullableColumn*>(nullable_struct_column.get())->mutable_null_column()->swap_column(*null_column);
+    auto* nullable_col = down_cast<NullableColumn*>(nullable_mut->as_mutable_raw_ptr());
+    nullable_col->set_has_null(SIMD::contain_nonzero(down_cast<const UInt8Column*>(null_column.get())->immutable_data(), 0));
+    nullable_col->mutable_null_column()->swap_column(*null_column);
 
     return nullable_struct_column;
 }

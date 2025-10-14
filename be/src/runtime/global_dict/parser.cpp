@@ -55,8 +55,8 @@ public:
         if (!_always_null && !_always_const) {
             _is_nullable_column = _dict_opt_ctx->convert_column->is_nullable();
             if (_dict_opt_ctx->convert_column->is_nullable()) {
-                auto convert_col = down_cast<NullableColumn*>(_dict_opt_ctx->convert_column.get());
-                const auto& null_data = convert_col->null_column_data();
+                const auto* convert_col = down_cast<const NullableColumn*>(_dict_opt_ctx->convert_column.get());
+                const auto& null_data = convert_col->immutable_null_column_data();
                 _is_strict = null_data[0] == 1 &&
                              std::all_of(null_data.begin() + 1, null_data.end(), [](auto a) { return a == 0; });
                 _null_column_ptr = convert_col->null_column();
@@ -119,7 +119,7 @@ private:
                 RETURN_IF_ERROR((*_dict_opt_ctx->err_status)[_dict_opt_ctx->code_convert_map[idx]]);
             } else {
                 if (input->is_nullable()) {
-                    auto* nullable_column = down_cast<NullableColumn*>(input.get());
+                    auto* nullable_column = down_cast<NullableColumn*>(input->as_mutable_raw_ptr());
                     nullable_column->fill_null_with_default();
                 }
                 const auto* data_column =
@@ -153,10 +153,10 @@ private:
             }
         } else if (input->is_nullable()) {
             // is nullable
-            auto* null_column = down_cast<NullableColumn*>(input.get());
+            auto* null_column = down_cast<NullableColumn*>(input->as_mutable_raw_ptr());
             // fill data to 0 if input value is null
             null_column->fill_null_with_default();
-            const auto* data_column = down_cast<LowCardDictColumn*>(null_column->data_column().get());
+            const auto* data_column = down_cast<const LowCardDictColumn*>(null_column->immutable_data_column());
             // we could use data_column to avoid check null
             // because 0 in LowCardDictColumn means null
             const auto container = data_column->immutable_data();
@@ -192,12 +192,12 @@ private:
             return ColumnHelper::create_const_null_column(num_rows);
         }
 
-        ArrayColumn* array_col = nullptr;
+        const ArrayColumn* array_col = nullptr;
         TypeDescriptor stringType;
         stringType.type = TYPE_VARCHAR;
         if (array->is_constant()) {
-            auto* const_column = down_cast<ConstColumn*>(array.get());
-            array_col = down_cast<ArrayColumn*>(const_column->data_column().get());
+            const auto* const_column = down_cast<const ConstColumn*>(array.get());
+            array_col = down_cast<const ArrayColumn*>(const_column->data_column().get());
 
             auto element = array_col->elements_column();
             auto offsets = UInt32Column::create(array_col->offsets());
@@ -206,8 +206,8 @@ private:
             string_col = ColumnHelper::unfold_const_column(stringType, element->size(), string_col);
             return ConstColumn::create(ArrayColumn::create(string_col, std::move(offsets)), num_rows);
         } else if (array->is_nullable()) {
-            auto nullable = down_cast<NullableColumn*>(array.get());
-            array_col = down_cast<ArrayColumn*>(nullable->data_column().get());
+            const auto* nullable = down_cast<const NullableColumn*>(array.get());
+            array_col = down_cast<const ArrayColumn*>(nullable->immutable_data_column());
             NullColumnPtr array_null = NullColumn::create(*nullable->null_column());
 
             auto element = array_col->elements_column();
@@ -217,7 +217,7 @@ private:
             string_col = ColumnHelper::unfold_const_column(stringType, element->size(), string_col);
             return NullableColumn::create(ArrayColumn::create(string_col, std::move(offsets)), array_null);
         } else {
-            array_col = down_cast<ArrayColumn*>(array.get());
+            array_col = down_cast<const ArrayColumn*>(array.get());
             auto element = array_col->elements_column();
             auto offsets = UInt32Column::create(array_col->offsets());
 

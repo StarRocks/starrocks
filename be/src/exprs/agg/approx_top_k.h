@@ -123,8 +123,9 @@ struct ApproxTopKState {
         auto nullable_struct_null_col = nullable_struct_column->null_column_mutable_ptr();
         auto* struct_column = down_cast<StructColumn*>(nullable_struct_column->mutable_data_column());
         // Struct's fields must be nullable
-        auto* value_column = down_cast<NullableColumn*>(struct_column->fields_column()[0].get());
-        auto* order_column = down_cast<NullableColumn*>(struct_column->fields_column()[1].get());
+        auto fields = struct_column->fields_column_mutable();
+        auto* value_column = down_cast<NullableColumn*>(fields[0].get());
+        auto* order_column = down_cast<NullableColumn*>(fields[1].get());
 
         for (size_t row = start; row < end; row++) {
             bool has_null = null_counter.count > 0;

@@ -349,7 +349,7 @@ Status JDBCScanner::_fill_chunk(jobject jchunk, size_t num_rows, ChunkPtr* chunk
                 return Status::DataQualityError(
                         fmt::format("Unexpected NULL value occurs on NOT NULL column[{}]", slot_desc->col_name()));
             }
-            column = down_cast<NullableColumn*>(result.get())->data_column();
+            column = down_cast<const NullableColumn*>(result.get())->data_column();
         }
     }
     return Status::OK();

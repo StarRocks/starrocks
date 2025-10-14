@@ -186,7 +186,7 @@ Status AvroReader::read_chunk(ChunkPtr& chunk, int rows_to_read) {
             continue;
         }
 
-        column_raw_ptrs[i] = down_cast<AdaptiveNullableColumn*>(chunk->get_column_by_slot_id(desc->id()).get());
+        column_raw_ptrs[i] = down_cast<AdaptiveNullableColumn*>(chunk->get_mutable_column_by_slot_id(desc->id()).get());
     }
 
     try {

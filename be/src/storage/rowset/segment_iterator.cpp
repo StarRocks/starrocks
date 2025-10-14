@@ -2124,8 +2124,8 @@ Status SegmentIterator::_decode_dict_codes(ScanContext* ctx) {
             DCHECK_EQ(dict_codes->size(), dict_values->size());
             may_has_del_row |= (dict_values->delete_state() != DEL_NOT_SATISFIED);
             if (f->is_nullable()) {
-                auto* nullable_codes = down_cast<NullableColumn*>(dict_codes.get());
-                auto* nullable_values = down_cast<NullableColumn*>(dict_values.get());
+                auto* nullable_codes = down_cast<NullableColumn*>(dict_codes->as_mutable_raw_ptr());
+                auto* nullable_values = down_cast<NullableColumn*>(dict_values->as_mutable_raw_ptr());
                 nullable_values->null_column_data().swap(nullable_codes->null_column_data());
                 nullable_values->set_has_null(nullable_codes->has_null());
             }
@@ -2162,7 +2162,7 @@ Status SegmentIterator::_finish_late_materialization(ScanContext* ctx) {
 
     // last column of |_dict_chunk| is a fake column: it's filled by `RowIdColumnIterator`.
     ColumnPtr rowid_column = ctx->_dict_chunk->get_column_by_index(m - 1);
-    const auto* ordinals = down_cast<FixedLengthColumn<rowid_t>*>(rowid_column.get());
+    const auto* ordinals = down_cast<const FixedLengthColumn<rowid_t>*>(rowid_column.get());
 
     if (_predicate_columns < _schema.num_fields()) {
         const size_t n = _schema.num_fields();

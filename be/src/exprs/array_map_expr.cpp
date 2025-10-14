@@ -316,7 +316,7 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* 
             DCHECK(nullable_column);
             data_column = nullable_column->data_column();
 
-            NullColumn::MutablePtr null_column = nullable_column->null_column()->as_mutable_ptr();
+            NullColumn::MutablePtr null_column = NullColumn::static_pointer_cast(nullable_column->null_column()->clone());
             if (is_const) {
                 // if null_column is from const_column, should unpack
                 null_column->assign(num_rows, 0);

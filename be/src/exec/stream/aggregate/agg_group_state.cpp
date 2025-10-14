@@ -215,7 +215,7 @@ Status AggGroupState::output_results(size_t chunk_size, const Columns& group_by_
                                      const Buffer<AggDataPtr>& agg_group_data, Columns output_columns) const {
     // TODO: use `batch_finalize_with_selection` to filter count=0 rows.
     for (auto& agg_state : _agg_states) {
-        auto* to = output_columns[agg_state->agg_func_id()].get();
+        auto* to = output_columns[agg_state->agg_func_id()]->as_mutable_raw_ptr();
         StateTable* state_table = nullptr;
         if (!_detail_state_tables.empty() && agg_state->is_detail_agg_state()) {
             state_table = _find_detail_state_table(agg_state);

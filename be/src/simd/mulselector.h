@@ -39,7 +39,7 @@ public:
 
     // a normal implements
     static void multi_select_if(SelectVec __restrict select_vec[], int select_vec_size, Container& dst,
-                                Container* __restrict select_list[], int select_list_size,
+                                const Container* __restrict select_list[], int select_list_size,
                                 const std::vector<bool>& then_column_is_const, const int row_sz) {
         DCHECK_GT(select_list_size, 0);
         DCHECK_EQ(select_vec_size + 1, select_list_size);

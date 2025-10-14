@@ -237,8 +237,8 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
         ColumnPtr column_ptr = ColumnHelper::create_column(slot_desc->type(), true);
         dict_value_chunk->append_column(column_ptr, slot_id);
 
-        auto* nullable_column = down_cast<NullableColumn*>(column_ptr.get());
-        auto* dict_value_column = down_cast<BinaryColumn*>(nullable_column->data_column().get());
+        auto* nullable_column = down_cast<NullableColumn*>(column_ptr->as_mutable_raw_ptr());
+        auto* dict_value_column = down_cast<BinaryColumn*>(nullable_column->mutable_data_column());
 
         // copy dict and offset to column.
         Bytes& bytes = dict_value_column->get_bytes();

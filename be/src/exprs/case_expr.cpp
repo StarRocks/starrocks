@@ -364,7 +364,7 @@ private:
             auto when_num = when_columns.size();
             const NullColumn* case_nulls = nullptr;
             if (case_column->is_nullable()) {
-                case_nulls = down_cast<NullableColumn*>(case_column.get())->immutable_null_column();
+                case_nulls = down_cast<const NullableColumn*>(case_column.get())->immutable_null_column();
             }
             auto case_data = ColumnHelper::get_data_column(case_column.get());
 
@@ -587,16 +587,17 @@ private:
 
                     using ResultContainer = typename RunTimeColumnType<ResultType>::Container;
 
-                    ResultContainer* select_list[then_column_size];
+                    const ResultContainer* select_list[then_column_size];
                     for (int i = 0; i < then_column_size; ++i) {
-                        auto* data_column = ColumnHelper::get_data_column(then_columns[i].get());
-                        select_list[i] = &down_cast<RunTimeColumnType<ResultType>*>(data_column)->get_data();
+                        auto* data_column = const_cast<Column*>(ColumnHelper::get_data_column(then_columns[i].get()));
+                        auto* typed_column = const_cast<RunTimeColumnType<ResultType>*>(down_cast<const RunTimeColumnType<ResultType>*>(data_column));
+                        select_list[i] = &typed_column->get_data();
                     }
 
                     uint8_t* select_vec[when_column_size];
                     for (int i = 0; i < when_column_size; ++i) {
-                        auto* data_column = ColumnHelper::get_data_column(when_columns[i].get());
-                        select_vec[i] = down_cast<BooleanColumn*>(data_column)->get_data().data();
+                        const auto* data_column = ColumnHelper::get_data_column(when_columns[i].get());
+                        select_vec[i] = const_cast<uint8_t*>(down_cast<const BooleanColumn*>(data_column)->immutable_data().data());
                     }
 
                     auto res = RunTimeColumnType<ResultType>::create();

@@ -127,13 +127,23 @@ bool MergeTwoCursor::move_cursor() {
     if (_left_run.empty() && !_left_cursor->is_eos()) {
         auto chunk = _left_cursor->try_get_next();
         if (chunk.first) {
-            _left_run = SortedRun(ChunkPtr(chunk.first.release()), chunk.second);
+            MutableColumns mutable_cols;
+            mutable_cols.reserve(chunk.second.size());
+            for (auto& col : chunk.second) {
+                mutable_cols.emplace_back(col->as_mutable_ptr());
+            }
+            _left_run = SortedRun(ChunkPtr(chunk.first.release()), std::move(mutable_cols));
         }
     }
     if (_right_run.empty() && !_right_cursor->is_eos()) {
         auto chunk = _right_cursor->try_get_next();
         if (chunk.first) {
-            _right_run = SortedRun(ChunkPtr(chunk.first.release()), chunk.second);
+            MutableColumns mutable_cols;
+            mutable_cols.reserve(chunk.second.size());
+            for (auto& col : chunk.second) {
+                mutable_cols.emplace_back(col->as_mutable_ptr());
+            }
+            _right_run = SortedRun(ChunkPtr(chunk.first.release()), std::move(mutable_cols));
         }
     }
 

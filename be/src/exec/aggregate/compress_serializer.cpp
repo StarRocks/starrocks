@@ -203,7 +203,7 @@ public:
         // TODO: opt me
         column->null_column_data().resize(_num_rows);
         _null_data = column->null_column_data().data();
-        RETURN_IF_ERROR(column->data_column()->accept_mutable(this));
+        RETURN_IF_ERROR(column->mutable_data_column()->accept_mutable(this));
         column->update_has_null();
         return Status::OK();
     }
