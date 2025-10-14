@@ -80,6 +80,14 @@ public class Task implements Writable {
     @SerializedName("createUserIdentity")
     private UserIdentity userIdentity;
 
+    // the last time this task is scheduled, unit: second
+    @SerializedName("lastScheduleTime")
+    private long lastScheduleTime = -1;
+
+    // the next time this task is to be scheduled, unit: second
+    @SerializedName("nextScheduleTime")
+    private long nextScheduleTime = -1;
+
     public Task() {}
 
     public Task(String name) {
@@ -216,9 +224,30 @@ public class Task implements Writable {
         this.postRun = postRun;
     }
 
+<<<<<<< HEAD
     public static Task read(DataInput in) throws IOException {
         String json = Text.readString(in);
         return GsonUtils.GSON.fromJson(json, Task.class);
+=======
+    // unit: second
+    public long getLastScheduleTime() {
+        return lastScheduleTime;
+    }
+
+    // unit: second
+    public void setLastScheduleTime(long lastScheduleTime) {
+        this.lastScheduleTime = lastScheduleTime;
+    }
+
+    // unit: second
+    public long getNextScheduleTime() {
+        return nextScheduleTime;
+    }
+
+    // unit: second
+    public void setNextScheduleTime(long nextScheduleTime) {
+        this.nextScheduleTime = nextScheduleTime;
+>>>>>>> ee133d0239 ([BugFix] Fix task fail to schedule if fe restarts frequently (#63966))
     }
 
     @Override
@@ -237,6 +266,8 @@ public class Task implements Writable {
                 ", expireTime=" + expireTime +
                 ", source=" + source +
                 ", createUser='" + createUser + '\'' +
+                ", lastScheduleTime=" + lastScheduleTime +
+                ", nextScheduleTime=" + nextScheduleTime +
                 '}';
     }
 }
