@@ -17,6 +17,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
+import com.nimbusds.oauth2.sdk.util.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -251,7 +252,13 @@ public class TaskRunFIFOQueue {
         rLock.lock();
         try {
             for (Set<TaskRun> taskRuns : gIdToTaskRunsMap.values()) {
+                if (CollectionUtils.isEmpty(taskRuns)) {
+                    continue;
+                }
                 for (TaskRun taskRun : taskRuns) {
+                    if (taskRun == null) {
+                        continue;
+                    }
                     if (taskRun.getRunCtx() == null) {
                         continue;
                     }

@@ -61,4 +61,12 @@ public class SubmitResult {
         REJECTED,
         FAILED
     }
+
+    @Override
+    public String toString() {
+        return "{" +
+                "queryId='" + queryId + '\'' +
+                ", status=" + status +
+                '}';
+    }
 }
