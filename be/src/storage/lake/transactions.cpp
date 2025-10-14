@@ -390,7 +390,11 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
             }
             for (const auto& load_id : txns[i].load_ids()) {
                 auto tablet_log_path = tablet_mgr->txn_log_location(tablet_id, txns[i].txn_id(), load_id);
-                files_to_delete.emplace_back(tablet_log_path);
+                if (!skip_write_tablet_metadata) {
+                    // CAN NOT delete txn log immediately, let vacuum do the work
+                    // because tablet meta may not be written successfully, and may need to reapply the txn log.
+                    files_to_delete.emplace_back(tablet_log_path);
+                }
                 tablet_mgr->metacache()->erase(tablet_log_path);
             }
             continue;
@@ -409,7 +413,7 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
         }
 
         auto tablet_log_path = tablet_mgr->txn_log_location(tablet_id, txns[i].txn_id());
-        if (txns.size() == 1 && !txns[i].combined_txn_log()) {
+        if (txns.size() == 1 && !txns[i].combined_txn_log() && !skip_write_tablet_metadata) {
             files_to_delete.emplace_back(tablet_log_path);
         }
 
@@ -444,7 +448,11 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
                 return st;
             }
 
-            files_to_delete.emplace_back(vlog_path);
+            if (!skip_write_tablet_metadata) {
+                // CAN NOT delete txn log immediately, let vacuum do the work
+                // because tablet meta may not be written successfully, and may need to reapply the txn log.
+                files_to_delete.emplace_back(vlog_path);
+            }
 
             tablet_mgr->metacache()->erase(vlog_path);
         }
