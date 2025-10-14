@@ -1630,6 +1630,23 @@ build_libdivide() {
     cp libdivide.h $TP_INSTALL_DIR/include/
 }
 
+# pprof
+build_pprof() {
+    check_if_source_exist $PPROF_SOURCE
+    cp $TP_SOURCE_DIR/$PPROF_SOURCE $TP_INSTALL_DIR/pprof
+    chmod +x $TP_INSTALL_DIR/pprof
+}
+
+# flamegraph
+build_flamegraph() {
+    check_if_source_exist $FLAMEGRAPH_SOURCE
+    mkdir -p $TP_INSTALL_DIR/flamegraph
+    cp -r $TP_SOURCE_DIR/$FLAMEGRAPH_SOURCE/stackcollapse-perf.pl $TP_INSTALL_DIR/flamegraph/
+    cp -r $TP_SOURCE_DIR/$FLAMEGRAPH_SOURCE/stackcollapse-go.pl $TP_INSTALL_DIR/flamegraph/
+    cp -r $TP_SOURCE_DIR/$FLAMEGRAPH_SOURCE/flamegraph.pl $TP_INSTALL_DIR/flamegraph/
+    chmod +x $TP_INSTALL_DIR/flamegraph/*.pl
+}
+
 # restore cxxflags/cppflags/cflags to default one
 restore_compile_flags() {
     # c preprocessor flags
@@ -1731,6 +1748,8 @@ declare -a all_packages=(
     libxml2
     azure
     libdivide
+    pprof
+    flamegraph
 )
 
 # Machine specific packages
