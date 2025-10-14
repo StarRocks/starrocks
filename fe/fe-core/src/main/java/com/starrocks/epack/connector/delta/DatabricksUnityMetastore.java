@@ -129,7 +129,12 @@ public class DatabricksUnityMetastore implements IMetastore {
             }
             CloudConfiguration cloudConfiguration = null;
             if (vendedCredentialsEnabled) {
-                cloudConfiguration = getVendedCredentials(tableInfo);
+                try {
+                    cloudConfiguration = getVendedCredentials(tableInfo);
+                } catch (Exception e) {
+                    LOG.warn("Get vended credentials for table {} failed, use the default credentials. error: {}",
+                            fullName, e.getMessage());
+                }
             }
             String path = tableInfo.getStorageLocation();
             long createTime = tableInfo.getCreatedAt();
