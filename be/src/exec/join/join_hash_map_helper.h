@@ -113,6 +113,8 @@ public:
     static void serialize_fixed_size_key_column(const Columns& key_columns, Column* fixed_size_key_column,
                                                 const std::vector<uint32_t>& serialized_fixed_size_key_bytes,
                                                 uint32_t start, uint32_t count) {
+        DCHECK_EQ(serialized_fixed_size_key_bytes.size(), key_columns.size());
+
         using CppType = typename RunTimeTypeTraits<LT>::CppType;
         using ColumnType = typename RunTimeTypeTraits<LT>::ColumnType;
 
