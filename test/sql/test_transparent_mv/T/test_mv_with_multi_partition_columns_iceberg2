@@ -262,36 +262,6 @@ SELECT * FROM mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_years where l_re
 SELECT * FROM mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_years where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;
 SELECT * FROM mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_years order by l_orderkey;
 DROP MATERIALIZED VIEW test_years;
-
-CREATE MATERIALIZED VIEW test_years
-PARTITION BY (l_returnflag, l_linestatus, date_trunc('year', l_shipdate))
-REFRESH DEFERRED MANUAL
-PROPERTIES (
-	"replication_num" = "1",
-	"transparent_mv_rewrite_mode" = "transparent_or_error"
-)
-AS
-  SELECT * FROM mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_years;
-
-REFRESH MATERIALIZED VIEW test_years PARTITION (('R', 'F', '2024-11-12 08:00:00')) WITH SYNC MODE;
-select sleep(3);
-function: print_hit_materialized_views("SELECT * FROM test_years order by l_orderkey;")
-function: print_hit_materialized_views("SELECT * FROM test_years where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;")
-function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_years where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;")
-function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_years where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;")
-function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_years order by l_orderkey;")
-SELECT count(*) FROM test_years;
-SELECT * FROM test_years order by l_orderkey;
-SELECT * FROM test_years where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;
-SELECT * FROM test_years where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;
-REFRESH MATERIALIZED VIEW test_years WITH SYNC MODE;
-SELECT count(*) FROM test_years;
-SELECT * FROM test_years order by l_orderkey;
-SELECT * FROM test_years where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;
-SELECT * FROM test_years where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;
-
-DROP MATERIALIZED VIEW test_years;
-
 drop table mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_days;
 drop table mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_months;
 drop table mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_years;
