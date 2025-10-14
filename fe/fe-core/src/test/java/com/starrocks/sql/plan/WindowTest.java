@@ -15,16 +15,45 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.common.FeConstants;
+import com.starrocks.planner.AnalyticEvalNode;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.utframe.StarRocksAssert;
 import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.jupiter.api.Assertions;
+
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 public class WindowTest extends PlanTestBase {
 
+    @BeforeClass
+    public static void beforeClass() throws Exception {
+        PlanTestBase.beforeClass();
+        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+        starRocksAssert.withTable("CREATE TABLE `s1` (    \n" +
+                "  `v1` bigint(20) NULL COMMENT \"\",    \n" +
+                "  `v2` int(11) NULL COMMENT \"\",    \n" +
+                "  `a1` array<varchar(65533)> NULL COMMENT \"\",    \n" +
+                "  `a2` array<varchar(65533)> NULL COMMENT \"\"    \n" +
+                ") ENGINE=OLAP    \n" +
+                "DUPLICATE KEY(`v1`)    \n" +
+                "COMMENT \"OLAP\"    \n" +
+                "DISTRIBUTED BY HASH(`v1`) BUCKETS 10    \n" +
+                "PROPERTIES (    \n" +
+                "\"replication_num\" = \"1\",       \n" +
+                "\"in_memory\" = \"false\",    \n" +
+                "\"enable_persistent_index\" = \"true\",    \n" +
+                "\"replicated_storage\" = \"false\",    \n" +
+                "\"light_schema_change\" = \"true\",    \n" +
+                "\"compression\" = \"LZ4\"    \n" +
+                ");");
+    }
+    
     @Test
     public void testLagWindowFunction() throws Exception {
         String sql = "select lag(id_datetime, 1, '2020-01-01') over(partition by t1c) from test_all_type;";
@@ -1641,5 +1670,37 @@ public class WindowTest extends PlanTestBase {
                         " rows between unbounded PRECEDING and unbounded following) from t0";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "window: ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING");
+    }
+
+    @Test
+    public void testFirstValueIgnoreNullsAndFirstValueMerging() throws Exception {
+
+        String sql = "select  \n" +
+                "  v1, v2,\n" +
+                "  first_value(v2 ignore nulls) over(order by v1, v2),\n" +
+                "  first_value(v2) over(order by v1, v2)\n" +
+                "from s1;";
+
+        ExecPlan execPlan = getExecPlan(sql);
+        List<AnalyticEvalNode> analyticNodes = new ArrayList<>();
+        execPlan.getTopFragment().getPlanRoot().collect(AnalyticEvalNode.class, analyticNodes);
+        Assertions.assertFalse(analyticNodes.isEmpty());
+        Assertions.assertEquals(analyticNodes.get(0).getAnalyticFnCalls().size(), 2);
+        Assertions.assertTrue(analyticNodes.get(0).getAnalyticFnCalls().get(0).getIgnoreNulls());
+        Assertions.assertFalse(analyticNodes.get(0).getAnalyticFnCalls().get(1).getIgnoreNulls());
+    }
+
+    @Test
+    public void testFirstValueValueRange() throws Exception {
+
+        String sql = "select v1,v2,v3,\n" +
+                "      first_value(v3 ignore nulls) \n" +
+                "      \tover(partition by v1 order by v2 range between UNBOUNDED preceding and current row)\n" +
+                "from t0;";
+
+        ExecPlan execPlan = getExecPlan(sql);
+        List<AnalyticEvalNode> analyticNodes = new ArrayList<>();
+        execPlan.getTopFragment().getPlanRoot().collect(AnalyticEvalNode.class, analyticNodes);
+        Assertions.assertFalse(analyticNodes.isEmpty());
     }
 }
