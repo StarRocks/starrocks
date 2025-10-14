@@ -111,17 +111,23 @@ public:
     // combine keys into fixed size key by column.
     template <LogicalType LT>
     static void serialize_fixed_size_key_column(const Columns& key_columns, Column* fixed_size_key_column,
+                                                const std::vector<uint32_t>& serialized_fixed_size_key_bytes,
                                                 uint32_t start, uint32_t count) {
         using CppType = typename RunTimeTypeTraits<LT>::CppType;
         using ColumnType = typename RunTimeTypeTraits<LT>::ColumnType;
 
-        auto& data = reinterpret_cast<ColumnType*>(fixed_size_key_column)->get_data();
+        auto& data = down_cast<ColumnType*>(fixed_size_key_column)->get_data();
         auto* buf = reinterpret_cast<uint8_t*>(&data[start]);
 
-        const size_t byte_interval = sizeof(CppType);
+        constexpr size_t byte_interval = sizeof(CppType);
+        std::memset(buf, 0, count * byte_interval);
+
         size_t byte_offset = 0;
-        for (const auto& key_col : key_columns) {
-            size_t offset = key_col->serialize_batch_at_interval(buf, byte_offset, byte_interval, start, count);
+        for (uint32_t i = 0; i < key_columns.size(); i++) {
+            const auto& key_col = key_columns[i];
+            const uint32_t max_row_size = serialized_fixed_size_key_bytes[i];
+            const size_t offset =
+                    key_col->serialize_batch_at_interval(buf, byte_offset, byte_interval, max_row_size, start, count);
             byte_offset += offset;
         }
     }
