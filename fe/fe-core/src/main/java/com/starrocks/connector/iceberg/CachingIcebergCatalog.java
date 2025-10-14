@@ -437,7 +437,16 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     }
 
     private void invalidateCache(IcebergTableName key) {
-        tables.invalidate(new IcebergTableCacheKey(key, new ConnectContext()));
+        if (key.ignoreSnapshotId) {
+            // invalidate all snapshots of this table if snapshotId is not specified
+            tables.asMap().keySet().stream()
+                    .filter(k -> k.icebergTableName.dbName.equals(key.dbName) &&
+                            k.icebergTableName.tableName.equals(key.tableName))
+                    .forEach(tables::invalidate);
+        } else {
+            // only invalidate the specified snapshot
+            tables.invalidate(new IcebergTableCacheKey(key, new ConnectContext()));
+        }
         // will invalidate all snapshots of this table
         partitionCache.invalidate(key);
         Set<String> paths = metaFileCacheMap.get(key);
