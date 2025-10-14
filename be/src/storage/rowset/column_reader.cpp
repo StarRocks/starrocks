@@ -666,47 +666,35 @@ Status ColumnReader::_zone_map_filter(const std::vector<const ColumnPredicate*>&
     };
 
     const std::vector<ZoneMapPB>& zone_maps = _zonemap_index->page_zone_maps();
-    int32_t page_size = _zonemap_index->num_pages();
+    int32_t page_start = 0;
+    int32_t page_end = _zonemap_index->num_pages();
 
-    // Skip pages that are completely outside the scan range to reduce overhead
+    // Skip pages that are completely outside the scan range to reduce filtering overhead
     if (!scan_range.empty() && scan_range.is_sorted()) {
         auto ordinal_iter = _ordinal_index->seek_at_or_before(scan_range.begin());
-        for (; ordinal_iter.valid(); ordinal_iter.next()) {
-            int32_t page_index = ordinal_iter.page_index();
-            ordinal_t last = ordinal_iter.last_ordinal();
-            if (last >= scan_range.end()) {
-                break;
-            }
-
-            // parse and check the zonemap
-            const ZoneMapPB& zm = zone_maps[page_index];
-            ZoneMapDetail detail;
-            RETURN_IF_ERROR(_parse_zone_map(lt, zm, &detail));
-
-            if (!page_satisfies_zone_map_filter(detail)) {
-                continue;
-            }
-            pages->emplace_back(page_index);
-
-            if (del_predicate && del_predicate->zone_map_filter(detail)) {
-                del_partial_filtered_pages->emplace(page_index);
+        if (ordinal_iter.valid()) {
+            page_start = ordinal_iter.page_index();
+            for (; ordinal_iter.valid(); ordinal_iter.next()) {
+                if (ordinal_iter.last_ordinal() > scan_range.end()) {
+                    break;
+                }
+                page_end = ordinal_iter.page_index() + 1;
             }
         }
-    } else {
-        // fallback to iterate all zonemaps
-        for (int32_t i = 0; i < page_size; ++i) {
-            const ZoneMapPB& zm = zone_maps[i];
-            ZoneMapDetail detail;
-            RETURN_IF_ERROR(_parse_zone_map(lt, zm, &detail));
+    }
 
-            if (!page_satisfies_zone_map_filter(detail)) {
-                continue;
-            }
-            pages->emplace_back(i);
+    for (int32_t i = page_start; i < page_end; ++i) {
+        const ZoneMapPB& zm = zone_maps[i];
+        ZoneMapDetail detail;
+        RETURN_IF_ERROR(_parse_zone_map(lt, zm, &detail));
 
-            if (del_predicate && del_predicate->zone_map_filter(detail)) {
-                del_partial_filtered_pages->emplace(i);
-            }
+        if (!page_satisfies_zone_map_filter(detail)) {
+            continue;
+        }
+        pages->emplace_back(i);
+
+        if (del_predicate && del_predicate->zone_map_filter(detail)) {
+            del_partial_filtered_pages->emplace(i);
         }
     }
     return Status::OK();
