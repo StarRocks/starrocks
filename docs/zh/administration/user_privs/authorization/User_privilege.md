@@ -5,7 +5,7 @@ sidebar_position: 30
 
 # 管理用户权限
 
-import UserPrivilegeCase from '../../../_assets/commonMarkdown/userPrivilegeCase.md'
+import UserPrivilegeCase from '../../../_assets/commonMarkdown/userPrivilegeCase.mdx'
 import GrantToGroup from '../../../_assets/commonMarkdown/grant_to_group.mdx'
 
 本文介绍如何在 StarRocks 中管理用户、角色和权限。
