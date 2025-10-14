@@ -14,11 +14,14 @@
 
 #include "http/action/proc_profile_file_action.h"
 
+#include <unistd.h>
+
 #include <fstream>
-#include <sstream>
 #include <string>
+#include <vector>
 
 #include "common/config.h"
+#include "http/action/profile_utils.h"
 #include "http/http_channel.h"
 #include "http/http_headers.h"
 #include "http/http_request.h"
@@ -34,15 +37,17 @@ ProcProfileFileAction::ProcProfileFileAction(ExecEnv* exec_env) : _exec_env(exec
 void ProcProfileFileAction::handle(HttpRequest* req) {
     const std::string& filename = req->param("filename");
 
+    LOG(INFO) << "ProcProfileFileAction: Handling request for filename: " << filename;
+
     if (filename.empty()) {
-        LOG(ERROR) << "Missing filename parameter";
+        LOG(ERROR) << "ProcProfileFileAction: Missing filename parameter";
         HttpChannel::send_reply(req, HttpStatus::BAD_REQUEST, "Missing filename parameter");
         return;
     }
 
     // Validate filename security
     if (!is_valid_filename(filename)) {
-        LOG(ERROR) << "Invalid filename: " << filename;
+        LOG(ERROR) << "ProcProfileFileAction: Invalid filename: " << filename;
         HttpChannel::send_reply(req, HttpStatus::FORBIDDEN, "Invalid filename");
         return;
     }
@@ -50,31 +55,33 @@ void ProcProfileFileAction::handle(HttpRequest* req) {
     std::string profile_log_dir = std::string(config::sys_log_dir) + "/proc_profile";
     std::string profile_file_path = profile_log_dir + "/" + filename;
 
+    LOG(INFO) << "ProcProfileFileAction: Looking for file at: " << profile_file_path;
+
     std::ifstream file(profile_file_path, std::ios::binary);
     if (!file.good()) {
-        LOG(ERROR) << "Profile file not found: " << profile_file_path;
+        LOG(ERROR) << "ProcProfileFileAction: Profile file not found: " << profile_file_path;
         HttpChannel::send_reply(req, HttpStatus::NOT_FOUND, "Profile file not found");
         return;
     }
 
     try {
-        if (filename.find("-flame.html.tar.gz") != std::string::npos) {
-            // Extract and serve HTML content
-            std::string html_content = extract_html_from_tar_gz(profile_file_path);
-            if (html_content.empty()) {
-                LOG(ERROR) << "Failed to extract HTML content from: " << filename;
-                HttpChannel::send_reply(req, HttpStatus::INTERNAL_SERVER_ERROR, "Failed to extract HTML content");
-                return;
-            }
+        std::string format = ProfileUtils::get_profile_format(filename);
+        LOG(INFO) << "ProcProfileFileAction: Detected format: " << format << " for file: " << filename;
 
-            req->add_output_header(HttpHeaders::CONTENT_TYPE, HEADER_HTML.c_str());
-            HttpChannel::send_reply(req, HttpStatus::OK, html_content);
+        if (format == "Flame") {
+            LOG(INFO) << "ProcProfileFileAction: Serving gzipped HTML content for: " << filename;
+            // Serve gzipped HTML content with proper headers
+            serve_gzipped_html(req, profile_file_path);
+        } else if (format == "Pprof") {
+            LOG(INFO) << "ProcProfileFileAction: Serving gzipped binary file for: " << filename;
+            // Serve gz file directly for pprof files
+            serve_gz_file(req, profile_file_path);
         } else {
-            // Serve tar.gz file directly for pprof files
-            serve_tar_gz_file(req, profile_file_path);
+            LOG(ERROR) << "ProcProfileFileAction: Unsupported profile file format: " << filename;
+            HttpChannel::send_reply(req, HttpStatus::BAD_REQUEST, "Unsupported profile file format");
         }
     } catch (const std::exception& e) {
-        LOG(ERROR) << "Error serving profile file: " << filename << ", error: " << e.what();
+        LOG(ERROR) << "ProcProfileFileAction: Error serving profile file: " << filename << ", error: " << e.what();
         HttpChannel::send_reply(req, HttpStatus::INTERNAL_SERVER_ERROR, "Error serving profile file");
     }
 }
@@ -90,61 +97,44 @@ bool ProcProfileFileAction::is_valid_filename(const std::string& filename) {
         return false;
     }
 
-    // Check for dangerous characters
-    if (filename.find('<') != std::string::npos || filename.find('>') != std::string::npos ||
-        filename.find('&') != std::string::npos || filename.find('"') != std::string::npos) {
-        return false;
-    }
+    // Use ProfileUtils to validate the filename format
+    std::string profile_type = ProfileUtils::get_profile_type(filename);
+    std::string profile_format = ProfileUtils::get_profile_format(filename);
 
-    // Must be a valid profile file
-    if (!filename.ends_with(".tar.gz")) {
-        return false;
-    }
-
-    // Must start with known prefixes
-    if (!filename.starts_with("cpu-profile-") && !filename.starts_with("contention-profile-")) {
+    // Must be a valid profile type and format
+    if (profile_type == "Unknown" || profile_format == "Unknown") {
         return false;
     }
 
     return true;
 }
 
-std::string ProcProfileFileAction::extract_html_from_tar_gz(const std::string& file_path) {
-    // For now, we'll implement a simple approach that reads the tar.gz file
-    // In a production environment, you might want to use a proper tar.gz library
-    // This is a simplified implementation that assumes the HTML content is at the beginning
-
+void ProcProfileFileAction::serve_gzipped_html(HttpRequest* req, const std::string& file_path) {
+    // Serve the gzipped HTML file directly with proper Content-Encoding header
     std::ifstream file(file_path, std::ios::binary);
     if (!file.good()) {
-        return "";
+        HttpChannel::send_reply(req, HttpStatus::NOT_FOUND, "File not found");
+        return;
     }
 
-    // Read the entire file into memory
+    // Read file content
     file.seekg(0, std::ios::end);
     size_t file_size = file.tellg();
     file.seekg(0, std::ios::beg);
 
     std::vector<char> buffer(file_size);
     file.read(buffer.data(), file_size);
+    file.close();
 
-    // For this simplified implementation, we'll return a placeholder
-    // In a real implementation, you would decompress the tar.gz and extract the HTML
-    std::stringstream ss;
-    ss << R"(<!DOCTYPE html>
-<html><head><title>Profile Viewer</title></head>
-<body>
-<h1>Profile File: )"
-       << file_path << R"(</h1>
-<p>This is a placeholder for the extracted HTML content.</p>
-<p>File size: )"
-       << file_size << R"( bytes</p>
-<p>Note: Full tar.gz extraction not implemented in this demo.</p>
-</body></html>)";
+    // Set headers for gzipped HTML content
+    req->add_output_header(HttpHeaders::CONTENT_TYPE, HEADER_HTML.c_str());
+    req->add_output_header(HttpHeaders::CONTENT_ENCODING, "gzip");
+    req->add_output_header(HttpHeaders::CONTENT_LENGTH, std::to_string(file_size).c_str());
 
-    return ss.str();
+    HttpChannel::send_reply(req, HttpStatus::OK, std::string(buffer.data(), file_size));
 }
 
-void ProcProfileFileAction::serve_tar_gz_file(HttpRequest* req, const std::string& file_path) {
+void ProcProfileFileAction::serve_gz_file(HttpRequest* req, const std::string& file_path) {
     std::ifstream file(file_path, std::ios::binary);
     if (!file.good()) {
         HttpChannel::send_reply(req, HttpStatus::NOT_FOUND, "File not found");

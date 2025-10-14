@@ -33,8 +33,8 @@ public:
 
 private:
     bool is_valid_filename(const std::string& filename);
-    std::string extract_html_from_tar_gz(const std::string& file_path);
-    void serve_tar_gz_file(HttpRequest* req, const std::string& file_path);
+    void serve_gzipped_html(HttpRequest* req, const std::string& file_path);
+    void serve_gz_file(HttpRequest* req, const std::string& file_path);
 
     [[maybe_unused]] ExecEnv* _exec_env;
 };

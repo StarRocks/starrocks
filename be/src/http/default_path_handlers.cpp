@@ -37,10 +37,15 @@
 #include <gutil/strings/numbers.h>
 #include <gutil/strings/substitute.h>
 
+#include <algorithm>
 #include <boost/algorithm/string.hpp>
+#include <cctype>
+#include <filesystem>
 #include <sstream>
+#include <vector>
 
 #include "common/configbase.h"
+#include "http/action/profile_utils.h"
 #include "http/web_page_handler.h"
 #include "jemalloc/jemalloc.h"
 #include "runtime/exec_env.h"
@@ -216,7 +221,95 @@ void proc_profile_handler(const WebPageHandler::ArgumentMap& args, std::stringst
     (*output) << "<p>This page displays collected CPU and contention profiles from BRPC.</p>";
     (*output) << "<p>To collect profiles, use the <code>collect_be_profile.sh</code> script.</p>";
     (*output) << "<p>Profiles are stored in: <code>" << config::sys_log_dir << "/proc_profile</code></p>";
-    (*output) << "<p><a href=\"/proc_profile\" class=\"btn btn-primary\">View Profile Files</a></p>";
+
+    // List profile files directly in this page
+    std::string profile_log_dir = std::string(config::sys_log_dir) + "/proc_profile";
+    std::filesystem::path dir_path(profile_log_dir);
+
+    if (!std::filesystem::exists(dir_path) || !std::filesystem::is_directory(dir_path)) {
+        (*output) << "<p><strong>No profile directory found:</strong> " << profile_log_dir << "</p>";
+        return;
+    }
+
+    std::vector<std::pair<std::string, std::string>> profile_files; // filename, timestamp
+
+    try {
+        for (const auto& entry : std::filesystem::directory_iterator(dir_path)) {
+            if (entry.is_regular_file()) {
+                std::string filename = entry.path().filename().string();
+                if (filename.ends_with(".gz")) {
+                    // Extract timestamp from filename using utility function
+                    std::string timestamp = ProfileUtils::extract_timestamp_from_filename(filename);
+                    if (!timestamp.empty()) {
+                        profile_files.emplace_back(filename, timestamp);
+                    }
+                }
+            }
+        }
+    } catch (const std::filesystem::filesystem_error& e) {
+        (*output) << "<p><strong>Error reading profile directory:</strong> " << e.what() << "</p>";
+        return;
+    }
+
+    // Sort by timestamp descending (newest first)
+    std::sort(profile_files.begin(), profile_files.end(),
+              [](const std::pair<std::string, std::string>& a, const std::pair<std::string, std::string>& b) {
+                  return a.second > b.second;
+              });
+
+    if (profile_files.empty()) {
+        (*output) << "<p><strong>No profile files found.</strong></p>";
+        return;
+    }
+
+    (*output) << "<h3>Available Profile Files</h3>";
+    (*output) << "<table class=\"table table-hover table-bordered table-striped table-condensed\">";
+    (*output) << "<thead><tr>";
+    (*output) << "<th>Type</th>";
+    (*output) << "<th>Format</th>";
+    (*output) << "<th>Timestamp</th>";
+    (*output) << "<th>File Size</th>";
+    (*output) << "<th>Actions</th>";
+    (*output) << "</tr></thead>";
+    (*output) << "<tbody>";
+
+    for (const auto& file_info : profile_files) {
+        const std::string& filename = file_info.first;
+        const std::string& timestamp = file_info.second;
+
+        // Determine profile type and format using utility functions
+        std::string profile_type = ProfileUtils::get_profile_type(filename);
+        std::string format = ProfileUtils::get_profile_format(filename);
+
+        // Get file size
+        std::string file_path = profile_log_dir + "/" + filename;
+        std::string file_size_str = "Unknown";
+        try {
+            auto file_size = std::filesystem::file_size(file_path);
+            file_size_str = std::to_string(file_size) + " bytes";
+        } catch (const std::filesystem::filesystem_error&) {
+            // Keep "Unknown" if we can't get file size
+        }
+
+        (*output) << "<tr>";
+        (*output) << "<td>" << profile_type << "</td>";
+        (*output) << "<td>" << format << "</td>";
+        (*output) << "<td>" << timestamp << "</td>";
+        (*output) << "<td>" << file_size_str << "</td>";
+        (*output) << "<td>";
+
+        if (format == "Flame") {
+            (*output) << "<a href=\"/proc_profile/file?filename=" << filename << "\" target=\"_blank\">View</a>";
+        } else {
+            (*output) << "<a href=\"/proc_profile/file?filename=" << filename << "\">Download</a>";
+        }
+
+        (*output) << "</td>";
+        (*output) << "</tr>";
+    }
+
+    (*output) << "</tbody>";
+    (*output) << "</table>";
 }
 
 void add_default_path_handlers(WebPageHandler* web_page_handler, MemTracker* process_mem_tracker) {
@@ -237,7 +330,7 @@ void add_default_path_handlers(WebPageHandler* web_page_handler, MemTracker* pro
                                                         std::forward<decltype(PH2)>(PH2));
             },
             true);
-    web_page_handler->register_page("/proc_profile", "Proc Profiles", proc_profile_handler, true /* is_on_nav_bar */);
+    web_page_handler->register_page("/proc_profile", "Proc Profiles", proc_profile_handler, true);
 }
 
 } // namespace starrocks
