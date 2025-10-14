@@ -619,6 +619,10 @@ if [ ${BUILD_BE} -eq 1 ]; then
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/jemalloc-debug/lib/libjemalloc.so.2 ${STARROCKS_OUTPUT}/be/lib/libjemalloc-dbg.so.2
     ln -s ./libjemalloc.so.2 ${STARROCKS_OUTPUT}/be/lib/libjemalloc.so
 
+    # Copy pprof and FlameGraph tools
+    mkdir -p ${STARROCKS_OUTPUT}/be/bin/flamegraph/
+    cp -r -p ${STARROCKS_THIRDPARTY}/installed/flamegraph/* ${STARROCKS_OUTPUT}/be/bin/flamegraph/
+
     # format $BUILD_TYPE to lower case
     ibuildtype=`echo ${BUILD_TYPE} | tr 'A-Z' 'a-z'`
     if [ "${ibuildtype}" == "release" ] ; then
