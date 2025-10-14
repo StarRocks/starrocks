@@ -63,6 +63,7 @@ import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TUniqueId;
@@ -72,6 +73,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -102,6 +104,24 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
             ThreadPoolManager.newDaemonFixedThreadPool(
                     Config.refresh_dictionary_cache_thread_num, Integer.MAX_VALUE, "refresh-dictionary-cache-pool",
                     true);
+
+    public static class DictionaryCacheNodeStatistic {
+        private final PProcessDictionaryCacheResult result;
+        private final String errorMessage;
+
+        public DictionaryCacheNodeStatistic(PProcessDictionaryCacheResult result, String errorMessage) {
+            this.result = result;
+            this.errorMessage = errorMessage;
+        }
+
+        public PProcessDictionaryCacheResult getResult() {
+            return result;
+        }
+
+        public String getErrorMessage() {
+            return errorMessage;
+        }
+    }
 
     public DictionaryMgr() {
     }
@@ -159,21 +179,27 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
     }
 
     public static void fillBackendsOrComputeNodes(List<TNetworkAddress> nodes) {
-        List<Backend> backends = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackends();
+        SystemInfoService clusterInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+
+        List<Backend> backends = clusterInfo.getBackends();
         for (Backend backend : backends) {
-            nodes.add(backend.getBrpcAddress());
+            if (backend.isAvailable()) {
+                nodes.add(backend.getBrpcAddress());
+            }
         }
 
-        List<ComputeNode> computeNodes =
-                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNodes();
+        List<ComputeNode> computeNodes = clusterInfo.getComputeNodes();
         for (ComputeNode cn : computeNodes) {
-            nodes.add(cn.getBrpcAddress());
+            if (cn.isAvailable()) {
+                nodes.add(cn.getBrpcAddress());
+            }
         }
     }
 
     public static boolean processDictionaryCacheInteranl(PProcessDictionaryCacheRequest request, String errMsg,
                                                          List<TNetworkAddress> beNodes,
-                                                         List<PProcessDictionaryCacheResult> results) {
+                                                         Map<TNetworkAddress, DictionaryCacheNodeStatistic> resultMap) {
+        boolean hasError = false;
         for (TNetworkAddress address : beNodes) {
             PProcessDictionaryCacheResult result = null;
             try {
@@ -182,28 +208,35 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
                 result = future.get();
             } catch (Exception e) {
                 LOG.warn(" processDictionaryCache failed in: " + address + " rpc error :" + e.getMessage());
-                if (errMsg != null) {
-                    errMsg = e.getMessage();
+                hasError = true;
+                if (resultMap != null) {
+                    resultMap.put(address, new DictionaryCacheNodeStatistic(null,
+                            errMsg == null ? e.getMessage() : errMsg));
                 }
-                return true;
+                continue;
             }
 
             TStatusCode code = TStatusCode.findByValue(result.status.statusCode);
             if (code != TStatusCode.OK) {
                 LOG.warn(" processDictionaryCache failed in: " + address + " err msg " + result.status.errorMsgs);
-                if (errMsg != null) {
-                    errMsg = result.status.errorMsgs.size() == 0 ? "" : result.status.errorMsgs.get(0);
+                hasError = true;
+                String message = result.status.errorMsgs.size() == 0 ? "" : result.status.errorMsgs.get(0);
+                if (resultMap != null) {
+                    resultMap.put(address, new DictionaryCacheNodeStatistic(result,
+                            errMsg == null ? message : errMsg));
                 }
-                return true;
+                continue;
             }
 
-            if (results != null) {
-                results.add(result);
+            if (resultMap != null) {
+                resultMap.put(address, new DictionaryCacheNodeStatistic(result, null));
             }
         }
-        LOG.info("finish processDictionaryCache dictionary id: {}, request type: {}",
-                request.dictId, request.txnId, request.type);
-        return false;
+        if (!hasError) {
+            LOG.info("finish processDictionaryCache dictionary id: {}, request type: {}",
+                    request.dictId, request.txnId, request.type);
+        }
+        return hasError;
     }
 
     public void createDictionary(CreateDictionaryStmt stmt, String catalogName, String dbName) throws DdlException {
@@ -407,7 +440,7 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
         executor.submit(task);
     }
 
-    public Map<TNetworkAddress, PProcessDictionaryCacheResult> getDictionaryStatistic(Dictionary dictionary) {
+    public Map<TNetworkAddress, DictionaryCacheNodeStatistic> getDictionaryStatistic(Dictionary dictionary) {
         PProcessDictionaryCacheRequest request = new PProcessDictionaryCacheRequest();
         request.dictId = dictionary.getDictionaryId();
         request.type = PProcessDictionaryCacheRequestType.STATISTIC;
@@ -415,18 +448,9 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
         List<TNetworkAddress> beNodes = Lists.newArrayList();
         fillBackendsOrComputeNodes(beNodes);
 
-        List<PProcessDictionaryCacheResult> results = Lists.newArrayList();
-        DictionaryMgr.processDictionaryCacheInteranl(request, null, beNodes, results);
-        Map<TNetworkAddress, PProcessDictionaryCacheResult> resultMap = new HashMap<>();
-        if (results.size() < beNodes.size()) {
-            return resultMap;
-        }
-        Preconditions.checkState(results.size() == beNodes.size());
-
-        for (int i = 0; i < results.size(); i++) {
-            resultMap.put(beNodes.get(i), results.get(i));
-        }
-        return resultMap;
+        Map<TNetworkAddress, DictionaryCacheNodeStatistic> nodeStats = new LinkedHashMap<>();
+        DictionaryMgr.processDictionaryCacheInteranl(request, null, beNodes, nodeStats);
+        return nodeStats;
     }
 
     public List<List<String>> getAllInfo(String dictionaryName) throws Exception {
@@ -441,20 +465,30 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
 
                 allInfo.add(dictionary.getInfo());
 
-                Map<TNetworkAddress, PProcessDictionaryCacheResult> resultMap = getDictionaryStatistic(dictionary);
+                Map<TNetworkAddress, DictionaryCacheNodeStatistic> nodeStats = getDictionaryStatistic(dictionary);
+                StringBuilder memoryUsage = new StringBuilder();
+                if (nodeStats.isEmpty()) {
+                    memoryUsage.append("No alive nodes for statistics");
+                } else {
+                    for (Map.Entry<TNetworkAddress, DictionaryCacheNodeStatistic> result : nodeStats.entrySet()) {
+                        TNetworkAddress address = result.getKey();
+                        DictionaryCacheNodeStatistic statistic = result.getValue();
+                        memoryUsage.append(address.getHostname()).append(":").append(address.getPort()).append(" : ");
 
-                String memoryUsage = "";
-                for (Map.Entry<TNetworkAddress, PProcessDictionaryCacheResult> result : resultMap.entrySet()) {
-                    TNetworkAddress address = result.getKey();
-                    memoryUsage += address.getHostname() + ":" + String.valueOf(address.getPort()) + " : ";
+                        if (statistic.getResult() != null) {
+                            memoryUsage.append(statistic.getResult().dictionaryMemoryUsage);
+                        } else {
+                            String errorMessage = statistic.getErrorMessage();
+                            memoryUsage.append(errorMessage == null ? "Unavailable" : errorMessage);
+                        }
+                        memoryUsage.append(", ");
+                    }
 
-                    if (result.getValue() != null) {
-                        memoryUsage += String.valueOf(result.getValue().dictionaryMemoryUsage) + ", ";
-                    } else {
-                        memoryUsage += "Can not get Memory info" + ", ";
+                    if (memoryUsage.length() >= 2) {
+                        memoryUsage.setLength(memoryUsage.length() - 2);
                     }
                 }
-                allInfo.get(allInfo.size() - 1).add(memoryUsage.substring(0, memoryUsage.length() - 2));
+                allInfo.get(allInfo.size() - 1).add(memoryUsage.toString());
             }
         } finally {
             lock.unlock();
@@ -679,7 +713,12 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
             request.txnId = txnId;
             request.type = PProcessDictionaryCacheRequestType.BEGIN;
 
-            error = DictionaryMgr.processDictionaryCacheInteranl(request, errMsg, beNodes, null);
+            boolean hasError = DictionaryMgr.processDictionaryCacheInteranl(request, errMsg, beNodes, null);
+            if (hasError) {
+                errMsg = errMsg == null ? "Some nodes failed when beginning dictionary refresh." : errMsg;
+                LOG.warn("begin dictionary refresh encountered errors: {}", errMsg);
+            }
+            error = hasError;
         }
 
         private void commit() {
@@ -696,7 +735,12 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
             request.txnId = txnId;
             request.type = PProcessDictionaryCacheRequestType.COMMIT;
 
-            error = DictionaryMgr.processDictionaryCacheInteranl(request, errMsg, beNodes, null);
+            boolean hasError = DictionaryMgr.processDictionaryCacheInteranl(request, errMsg, beNodes, null);
+            if (hasError) {
+                errMsg = errMsg == null ? "Some nodes failed when committing dictionary refresh." : errMsg;
+                LOG.warn("commit dictionary refresh encountered errors: {}", errMsg);
+            }
+            error = hasError;
         }
 
         private void finish(long dictionaryId) {
