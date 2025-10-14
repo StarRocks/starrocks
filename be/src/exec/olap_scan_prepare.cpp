@@ -437,7 +437,12 @@ static bool is_not_in(const auto* pred) {
     } else {
         return pred->is_not_in();
     }
-};
+}
+
+template <class InputType>
+using GlobalDictCodeDecoder = detail::RuntimeColumnPredicateBuilder::GlobalDictCodeDecoder<InputType>;
+template <class InputType>
+using DummyDecoder = detail::RuntimeColumnPredicateBuilder::DummyDecoder<InputType>;
 
 // clang-format off
 template <BoxedExprType E, CompoundNodeType Type>
@@ -449,63 +454,88 @@ requires(!lt_is_date<SlotType>) Status ChunkPredicateBuilder<E, Type>::normalize
     const auto& global_dicts = _opts.runtime_state->get_query_global_dict_map();
     const auto global_dict_iter = SlotType == TYPE_VARCHAR ? global_dicts.find(slot.id()) : global_dicts.end();
 
-    auto process_expr = [&]<LogicalType MappingType, template <typename> typename Decoder, typename... Args>(
-                                size_t i, Args && ... args)
-                                ->Status {
-        Status status;
+    auto is_in_values_dict_encoded = [&](const Expr* root_expr) -> bool {
+        if constexpr (SlotType != TYPE_VARCHAR) {
+            return false;
+        }
+        return global_dict_iter != global_dicts.end() && root_expr->get_num_children() == 2 &&
+               root_expr->get_child(1)->type().type != TYPE_VARCHAR;
+    };
+
+    auto normalize_in_pred = [&]<LogicalType MappingType, template <typename> typename Decoder, typename... Args>(
+                                     const size_t i, const Expr* root_expr, Args&&... args)
+                                     ->Status {
+        const Expr* l = root_expr->get_child(0);
+
+        if (!l->is_slotref() ||
+            (l->type().type != slot.type().type && l->type().type != MappingType && !ignore_cast(slot, *l))) {
+            return Status::OK();
+        }
+
+        std::vector<SlotId> slot_ids;
+        if (1 != l->get_slot_ids(&slot_ids) || slot_ids[0] != slot.id()) {
+            return Status::OK();
+        }
+
+        const auto* pred = down_cast<const VectorizedInConstPredicate<MappingType>*>(root_expr);
+        // join in runtime filter  will handle by `_normalize_join_runtime_filter`
+        if (pred->is_join_runtime_filter()) {
+            return Status::OK();
+        }
+
+        if (is_not_in<Negative>(pred) || pred->hash_set().size() > config::max_pushdown_conditions_per_column) {
+            return Status::OK();
+        }
+
+        if (pred->null_in_set()) {
+            if (pred->is_eq_null()) {
+                // TODO: equal null is also can be normalized, will be optimized later
+                return Status::OK();
+            }
+            if constexpr (Negative) {
+                // or col not in (v1, v2, v3, null)
+                _normalized_exprs[i] = true;
+                return Status::OK();
+            } else {
+                // and col in (v1, v2, v3, null), null can be eliminated
+            }
+        }
+
+        using DecoderType = Decoder<typename RunTimeTypeTraits<MappingType>::CppType>;
+        DecoderType decoder(std::forward<Args>(args)...);
+
+        boost::container::flat_set<RangeValueType> values;
+        values.reserve(pred->hash_set().size());
+        for (const auto& value : pred->hash_set()) {
+            values.insert(decoder.decode(value));
+        }
+
+        if (range->add_fixed_values(FILTER_IN, values).ok()) {
+            _normalized_exprs[i] = true;
+        }
+
+        return Status::OK();
+    };
+
+    Status status;
+
+    for (size_t i = 0; i < _exprs.size(); i++) {
+        if (_normalized_exprs[i]) {
+            continue;
+        }
 
         const Expr* root_expr = _exprs[i].root();
 
         // 1. Normalize in conjuncts like 'where col in (v1, v2, v3)'
         if (TExprOpcode::FILTER_IN == maybe_invert_in_and_equal_op<Negative>(root_expr->op())) {
-            const Expr* l = root_expr->get_child(0);
-
-            if (!l->is_slotref() ||
-                (l->type().type != slot.type().type && l->type().type != MappingType && !ignore_cast(slot, *l))) {
-                return Status::OK();
-            }
-
-            std::vector<SlotId> slot_ids;
-            if (1 != l->get_slot_ids(&slot_ids) || slot_ids[0] != slot.id()) {
-                return Status::OK();
-            }
-
-            const auto* pred = down_cast<const VectorizedInConstPredicate<MappingType>*>(root_expr);
-            // join in runtime filter  will handle by `_normalize_join_runtime_filter`
-            if (pred->is_join_runtime_filter()) {
-                return Status::OK();
-            }
-
-            if (is_not_in<Negative>(pred) || pred->hash_set().size() > config::max_pushdown_conditions_per_column) {
-                return Status::OK();
-            }
-
-            if (pred->null_in_set()) {
-                if (pred->is_eq_null()) {
-                    // TODO: equal null is also can be normalized, will be optimized later
-                    return Status::OK();
-                }
-                if constexpr (Negative) {
-                    // or col not in (v1, v2, v3, null)
-                    _normalized_exprs[i] = true;
-                    return Status::OK();
-                } else {
-                    // and col in (v1, v2, v3, null), null can be eliminated
+            if constexpr (SlotType == TYPE_VARCHAR) {
+                if (is_in_values_dict_encoded(root_expr)) {
+                    RETURN_IF_ERROR((normalize_in_pred.template operator()<LowCardDictType, GlobalDictCodeDecoder>(
+                            i, root_expr, &global_dict_iter->second.first)));
+                    continue;
                 }
             }
-
-            using DecoderType = Decoder<typename RunTimeTypeTraits<MappingType>::CppType>;
-            DecoderType decoder(std::forward<Args>(args)...);
-
-            boost::container::flat_set<RangeValueType> values;
-            values.reserve(pred->hash_set().size());
-            for (const auto& value : pred->hash_set()) {
-                values.insert(decoder.decode(value));
-            }
-
-            if (range->add_fixed_values(FILTER_IN, values).ok()) {
-                _normalized_exprs[i] = true;
-            }
+            RETURN_IF_ERROR((normalize_in_pred.template operator()<SlotType, DummyDecoder>(i, root_expr, nullptr)));
         }
 
         // 2. Normalize eq conjuncts like 'where col = value'
@@ -515,34 +545,13 @@ requires(!lt_is_date<SlotType>) Status ChunkPredicateBuilder<E, Type>::normalize
             SQLFilterOp op;
             ValueType value;
             ASSIGN_OR_RETURN(auto* expr_context, _exprs[i].expr_context(_opts.obj_pool, _opts.runtime_state));
+
             bool ok = get_predicate_value<Negative>(_opts.obj_pool, slot, get_root_expr(expr_context), expr_context,
                                                     &value, &op, &status);
             if (ok && range->add_fixed_values(FILTER_IN, boost::container::flat_set<RangeValueType>{value}).ok()) {
                 _normalized_exprs[i] = true;
             }
         }
-
-        return Status::OK();
-    };
-
-    for (size_t i = 0; i < _exprs.size(); i++) {
-        if (_normalized_exprs[i]) {
-            continue;
-        }
-
-        if constexpr (SlotType == TYPE_VARCHAR) {
-            if (global_dict_iter != global_dicts.end() && !_exprs[i].is_dict_mapping_expr()) {
-                auto status = process_expr.template
-                              operator()<LowCardDictType, detail::RuntimeColumnPredicateBuilder::GlobalDictCodeDecoder>(
-                                      i, &global_dict_iter->second.first);
-                RETURN_IF_ERROR(status);
-                continue;
-            }
-        }
-
-        auto status = process_expr.template operator()<SlotType, detail::RuntimeColumnPredicateBuilder::DummyDecoder>(
-                i, nullptr);
-        RETURN_IF_ERROR(status);
     }
 
     return Status::OK();
@@ -859,13 +868,10 @@ Status ChunkPredicateBuilder<E, Type>::normalize_join_runtime_filter(const SlotD
 
     if constexpr (SlotType == TYPE_VARCHAR) {
         if (global_dict_iter != global_dicts.end()) {
-            return process
-                    .template operator()<LowCardDictType, detail::RuntimeColumnPredicateBuilder::GlobalDictCodeDecoder>(
-                            &global_dict_iter->second.first);
+            return process.template operator()<LowCardDictType, GlobalDictCodeDecoder>(&global_dict_iter->second.first);
         }
     }
-
-    return process.template operator()<SlotType, detail::RuntimeColumnPredicateBuilder::DummyDecoder>(nullptr);
+    return process.template operator()<SlotType, DummyDecoder>(nullptr);
 }
 
 template <BoxedExprType E, CompoundNodeType Type>
