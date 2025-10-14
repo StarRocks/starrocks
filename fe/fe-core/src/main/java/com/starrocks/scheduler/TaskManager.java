@@ -533,28 +533,19 @@ public class TaskManager implements MemoryTrackable {
      * @param periodSeconds the scheduling period in seconds
      * @param taskStartTime the time the task should have started
      * @param currentDateTime current time
-     * @param lastScheduleTime the last time the task was scheduled
      * @return seconds to wait before the next run
      */
     @VisibleForTesting
     static long getInitialDelayTime(long periodSeconds,
                                     LocalDateTime taskStartTime,
-                                    LocalDateTime currentDateTime,
-                                    LocalDateTime lastScheduleTime) {
-        if  (currentDateTime == null || lastScheduleTime == null) {
+                                    LocalDateTime currentDateTime) {
+        if  (currentDateTime == null || taskStartTime == null) {
             return 0;
         }
-        // if fe restarts frequently, use currentDateTime and taskStartTime can always generate a time of the future
-        // which can cause the task never to be scheduled.
-        // so use lastScheduleTime to check if the last schedule + period is before current time to avoid this.
-        if (lastScheduleTime != null
-                && lastScheduleTime.plusSeconds(periodSeconds).isBefore(currentDateTime)
-                && lastScheduleTime.isAfter(taskStartTime)) {
-            // if the last schedule time + period is before current time, trigger immediately
-            return 0;
-        }
-        // if taskStartTime < currentDateTime, start scheduling from the next period
-        if (taskStartTime.isBefore(currentDateTime)) {
+        Duration duration = Duration.between(currentDateTime, taskStartTime);
+        long initialDelay = duration.getSeconds();
+        // if startTime < now, start scheduling from the next period
+        if (initialDelay < 0) {
             // if schedule time is not a complete second, add extra 1 second to avoid less than expect scheduler time.
             // eg:
             //  Register scheduler, task:mv-271809, initialDay:22, periodSeconds:60, startTime:2023-12-29T17:50,
@@ -562,17 +553,18 @@ public class TaskManager implements MemoryTrackable {
             // Before:schedule at : Hour:MINUTE:59
             // After: schedule at : HOUR:MINUTE:00
             int extra = currentDateTime.getNano() > 0 ? 1 : 0;
-            Duration diffDuration = Duration.between(taskStartTime, currentDateTime);
-            long diff = diffDuration.getSeconds();
-            return (diff + periodSeconds + extra) % periodSeconds;
+            return ((initialDelay % periodSeconds) + periodSeconds + extra) % periodSeconds;
         } else {
-            Duration duration = Duration.between(currentDateTime, taskStartTime);
-            return duration.getSeconds();
+            return initialDelay;
         }
     }
 
     @VisibleForTesting
     void registerScheduler(Task task) {
+        if (task.getType() != Constants.TaskType.PERIODICAL) {
+            return;
+        }
+
         TaskSchedule schedule = task.getSchedule();
         LocalDateTime taskStartTime = Utils.getDatetimeFromLong(schedule.getStartTime());
         LocalDateTime currentDateTime = LocalDateTime.now();
@@ -582,7 +574,23 @@ public class TaskManager implements MemoryTrackable {
             lastScheduleTime = Utils.getDatetimeFromLong(task.getLastScheduleTime());
         }
         long periodSeconds = TimeUtils.convertTimeUnitValueToSecond(schedule.getPeriod(), schedule.getTimeUnit());
-        long initialDelay = getInitialDelayTime(periodSeconds, taskStartTime, currentDateTime, lastScheduleTime);
+        // if fe restarts frequently, use currentDateTime and taskStartTime can always generate a time of the future
+        // which can cause the task never to be scheduled.
+        // so use lastScheduleTime to check if the last schedule + period is before current time to avoid this.
+        if (lastScheduleTime != null
+                && Constants.TaskSource.MV.equals(task.getSource())
+                && lastScheduleTime.isAfter(taskStartTime)
+                && lastScheduleTime.plusSeconds(periodSeconds).isBefore(currentDateTime)) {
+            // if the last schedule time + period is before current time, trigger immediately
+            try {
+                task.setLastScheduleTime(System.currentTimeMillis());
+                executeTask(task.getName());
+            } catch (Exception e) {
+                LOG.warn("failed to execute periodical task immediately: {}", task, e);
+            }
+        }
+
+        long initialDelay = getInitialDelayTime(periodSeconds, taskStartTime, currentDateTime);
         LOG.info("Register scheduler, task:{}, initialDelay:{}, periodSeconds:{}, startTime:{}, currentTime:{}",
                 task.getName(), initialDelay, periodSeconds, taskStartTime, currentDateTime);
         // set task's next schedule time
