@@ -464,5 +464,4 @@ public class CreateFunctionStmtAnalyzerTest {
             new CreateFunctionAnalyzer().analyze(stmt, connectContext);
         });
     }
-
 }
