@@ -5,7 +5,7 @@ toc_max_heading_level: 4
 
 # MinIO からのデータロード
 
-import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
+import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.mdx'
 
 StarRocks は、MinIO からデータをロードするために以下のオプションを提供しています。
 
