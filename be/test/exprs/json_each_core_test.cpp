@@ -22,6 +22,7 @@
 #include "column/column_helper.h"
 #include "column/json_column.h"
 #include "exprs/table_function/json_each.h"
+#include "gen_cpp/Functions_types.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/runtime_state.h"
 #include "types/json_value.h"

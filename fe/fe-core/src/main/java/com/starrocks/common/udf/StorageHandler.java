@@ -12,17 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
+package com.starrocks.common.udf;
 
-#include <string>
+import java.io.InputStream;
 
-#include "common/status.h"
+public interface StorageHandler extends AutoCloseable {
 
-namespace starrocks {
-class TCloudConfiguration;
-class DownloadUtil {
-public:
-    static Status download(const std::string& url, const std::string& target_file, const std::string& expected_checksum,
-                           const TCloudConfiguration& cloud_configuration);
-};
-} // namespace starrocks
+    void getObject(String remotePath, String localPath) throws Exception;
+
+    InputStream openStream(String remotePath) throws Exception;
+
+    @Override
+    void close();
+}
