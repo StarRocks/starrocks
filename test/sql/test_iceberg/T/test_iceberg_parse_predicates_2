@@ -1,4 +1,4 @@
--- name: test_iceberg_parse_predicates_2
+
 
 create external catalog ice_cat_${uuid0}
 properties (
