@@ -401,7 +401,9 @@ public class TaskRun implements Comparable<TaskRun> {
         try {
             Constants.TaskRunState result = doExecuteTaskRun();
             // clear the fail count
-            task.resetConsecutiveFailCount();
+            if (result != null && result.isSuccessState()) {
+                task.resetConsecutiveFailCount();
+            }
             return result;
         } catch (Exception e) {
             task.incConsecutiveFailCount();

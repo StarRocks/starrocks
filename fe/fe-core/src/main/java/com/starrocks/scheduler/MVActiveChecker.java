@@ -60,7 +60,7 @@ public class MVActiveChecker extends FrontendDaemon {
 
     // there are some reasons that we don't active mv automatically, eg: mv backup/restore which may cause to refresh all
     // mv's data behind which is not expected.
-    public static final Set<String> MV_NO_AUTOMATIC_ACTIVE_REASONS = ImmutableSet.of(
+    private static final Set<String> MV_NO_AUTOMATIC_ACTIVE_REASONS = ImmutableSet.of(
             MV_BACKUP_INACTIVE_REASON,
             MaterializedViewExceptions.INACTIVE_REASON_FOR_BASE_TABLE_OPTIMIZED,
             MaterializedViewExceptions.INACTIVE_REASON_FOR_CONSECUTIVE_FAILURES

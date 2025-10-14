@@ -430,46 +430,60 @@ public class TaskManager implements MemoryTrackable {
 
     /**
      * Suspend a task, which will stop the task scheduler and kill the running task run.
+     * NOTE: this method is thread safe, no need to task lock again.
      */
     public void suspendTask(Task task) {
         if (task == null) {
             return;
         }
-
-        task.setState(Constants.TaskState.PAUSE);
-        // stop task scheduler
-        if (task.getType() == Constants.TaskType.PERIODICAL) {
-            boolean isCancel = stopScheduler(task.getName());
-            if (!isCancel) {
-                LOG.warn("stop scheduler failed for task [{}]", task.getName());
+        if (!tryTaskLock()) {
+            throw new RuntimeException("Failed to get task lock when suspend Task sync[" + task.getName() + "]");
+        }
+        try {
+            task.setState(Constants.TaskState.PAUSE);
+            // stop task scheduler
+            if (task.getType() == Constants.TaskType.PERIODICAL) {
+                boolean isCancel = stopScheduler(task.getName());
+                if (!isCancel) {
+                    LOG.warn("stop scheduler failed for task [{}]", task.getName());
+                }
             }
-        }
 
-        // kill running task run
-        if (!killTask(task.getName(), true)) {
-            LOG.warn("kill task failed: {}", task.getName());
+            // kill running task run
+            if (!killTask(task.getName(), true)) {
+                LOG.warn("kill task failed: {}", task.getName());
+            }
+            // remove task from scheduler
+            periodFutureMap.remove(task.getId());
+        } finally {
+            taskUnlock();
         }
-
-        // remove task from scheduler
-        periodFutureMap.remove(task.getId());
     }
 
     /**
      * Resume a task, which will restart the task scheduler if the task is periodical.
+     * NOTE: This method is thread safe, no need to task lock again.
      */
     public void resumeTask(Task task) {
         if (task == null) {
             return;
         }
-        task.setState(Constants.TaskState.ACTIVE);
-        if (task.getType() == Constants.TaskType.PERIODICAL) {
-            TaskSchedule schedule = task.getSchedule();
-            if (schedule != null) {
-                registerScheduler(task);
-            }
+        if (!tryTaskLock()) {
+            throw new RuntimeException("Failed to get task lock when resume Task sync[" + task.getName() + "]");
         }
-        // reset consecutive failure number
-        task.resetConsecutiveFailCount();
+        try {
+            task.setState(Constants.TaskState.ACTIVE);
+            if (task.getType() == Constants.TaskType.PERIODICAL) {
+                TaskSchedule schedule = task.getSchedule();
+                if (schedule != null) {
+                    registerScheduler(task);
+                }
+            }
+            // reset consecutive failure number
+            task.resetConsecutiveFailCount();
+        } finally {
+            taskUnlock();
+        }
     }
 
     public void dropTasks(List<Long> taskIdList, boolean isReplay) {

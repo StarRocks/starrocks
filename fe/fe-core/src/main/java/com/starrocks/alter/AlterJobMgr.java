@@ -235,7 +235,6 @@ public class AlterJobMgr {
                     Lists.newArrayList(MaterializedViewAnalyzer.getBaseTableInfos(mvQueryStatement, !isReplay));
             materializedView.setBaseTableInfos(baseTableInfos);
             materializedView.fixRelationship();
-
             // resume the mv scheduler
             TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
             Task task = taskManager.getTask(materializedView);
@@ -251,7 +250,15 @@ public class AlterJobMgr {
             // suspend the inactive mv's task
             if (currentTask != null) {
                 TaskRunManager taskRunManager = taskManager.getTaskRunManager();
-                taskRunManager.killTaskRun(currentTask.getId(), true);
+                if (!taskRunManager.tryTaskRunLock()) {
+                    LOG.warn("skip clear pending and running task runs for inactive materialized view {}, " +
+                            "since get task run lock failed", materializedView.getName());
+                }
+                try {
+                    taskRunManager.killTaskRun(currentTask.getId(), true);
+                } finally {
+                    taskRunManager.taskRunUnlock();
+                }
                 // suspend the task to avoid scheduling new task runs
                 taskManager.suspendTask(currentTask);
             }
