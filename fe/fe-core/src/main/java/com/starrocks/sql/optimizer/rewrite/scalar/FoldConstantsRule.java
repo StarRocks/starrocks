@@ -14,11 +14,6 @@
 
 package com.starrocks.sql.optimizer.rewrite.scalar;
 
-import com.starrocks.analysis.ArithmeticExpr;
-import com.starrocks.analysis.BinaryType;
-import com.starrocks.analysis.Expr;
-import com.starrocks.catalog.Type;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
@@ -26,10 +21,15 @@ import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.ImmutableSortedSet;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.ArithmeticExpr;
+import com.starrocks.analysis.BinaryType;
+import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.Type;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.operator.scalar.ArrayOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -310,7 +310,14 @@ public class FoldConstantsRule extends BottomUpScalarOperatorRewriteRule {
                         .put("array_position", this::constArrayPosition)
                         .build();
         if (handlers.containsKey(call.getFnName())) {
-            return handlers.get(call.getFnName()).apply(call);
+            Optional<ScalarOperator> optResult = handlers.get(call.getFnName()).apply(call);
+            if (optResult.isPresent()) {
+                CastOperator castOp = new CastOperator(call.getType(), optResult.get());
+                ScalarOperator op =
+                        new ScalarOperatorRewriter().rewrite(castOp, Lists.newArrayList(new ReduceCastRule()));
+                return Optional.of(op);
+            }
+            return optResult;
         }
         return Optional.empty();
     }
