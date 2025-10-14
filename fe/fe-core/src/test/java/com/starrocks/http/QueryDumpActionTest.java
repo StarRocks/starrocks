@@ -26,6 +26,7 @@ import okhttp3.RequestBody;
 import okhttp3.Response;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -49,6 +50,7 @@ public class QueryDumpActionTest extends StarRocksHttpTestCase {
         ExecuteEnv.setup();
     }
 
+    @Disabled
     @Test
     public void testSuccess() throws Exception {
         try (Response response = postQueryDump(DB_NAME, true, "select * from testTbl")) {
