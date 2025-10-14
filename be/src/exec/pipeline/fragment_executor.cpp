@@ -840,7 +840,8 @@ Status FragmentExecutor::prepare_global_state(ExecEnv* exec_env, const TExecPlan
     const auto& t_desc_tbl = request.common().desc_tbl;
 
     DCHECK(t_desc_tbl.__isset.is_cached && !t_desc_tbl.is_cached);
-    // only dla need runtime state, so only support olap table here
+    // only data lake table need runtime state, and we baned the plan with dla using single node parallel prepare
+    // so it's safe to pass nullptr here
     RETURN_IF_ERROR(DescriptorTbl::create(nullptr, _query_ctx->object_pool(), t_desc_tbl, &desc_tbl,
                                           config::vector_chunk_size));
     _query_ctx->set_desc_tbl(desc_tbl);

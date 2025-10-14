@@ -299,9 +299,7 @@ public class DefaultCoordinator extends Coordinator {
         }
         if (enablePhasedScheduler) {
             scheduler = new PhasedExecutionSchedule(connectContext);
-        } else if (context.getSessionVariable().enableSingleNodeSchedule() && 
-                   context.getAliveExecutionNodesNumber() == 1 && 
-                   !jobSpec.isIncrementalScanRanges()) {
+        } else if (jobSpec.supportSingleNodeParallelSchedule()) {
             scheduler = new SingleNodeSchedule();
         } else {
             scheduler = new AllAtOnceExecutionSchedule();
