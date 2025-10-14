@@ -149,7 +149,7 @@ public class CachingIcebergCatalogTest {
     public void testInvalidateCache(@Mocked IcebergCatalog icebergCatalog, @Mocked Table nativeTable) {
         new Expectations() {
             {
-                icebergCatalog.getTable(connectContext, "db1", "tbl1");
+                icebergCatalog.getTable("db1", "tbl1");
                 result = nativeTable;
                 times = 2; // Called twice: once for initial cache, once after invalidation
             }
@@ -159,14 +159,14 @@ public class CachingIcebergCatalogTest {
                 DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
 
         // First call - populates cache
-        Table t1 = cachingIcebergCatalog.getTable(connectContext, "db1", "tbl1");
+        Table t1 = cachingIcebergCatalog.getTable("db1", "tbl1");
         Assertions.assertEquals(nativeTable, t1);
 
         // Invalidate cache
         cachingIcebergCatalog.invalidateCache("db1", "tbl1");
 
         // Second call - should hit delegate again because cache was invalidated
-        Table t2 = cachingIcebergCatalog.getTable(connectContext, "db1", "tbl1");
+        Table t2 = cachingIcebergCatalog.getTable("db1", "tbl1");
         Assertions.assertEquals(nativeTable, t2);
     }
 }
