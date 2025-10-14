@@ -5,7 +5,7 @@ toc_max_heading_level: 4
 
 # GRANT
 
-import UserPrivilegeCase from '../../../_assets/commonMarkdown/userPrivilegeCase.md'
+import UserPrivilegeCase from '../../../_assets/commonMarkdown/userPrivilegeCase.mdx'
 import MultiServiceAccess from '../../../_assets/commonMarkdown/multi-service-access.mdx'
 
 GRANT grants one or more privileges on specific objects to a user or a role.
