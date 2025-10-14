@@ -6,7 +6,7 @@ keywords: ['Broker Load']
 
 # Load data from GCS
 
-import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
+import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.mdx'
 
 StarRocks provides the following options for loading data from GCS:
 
