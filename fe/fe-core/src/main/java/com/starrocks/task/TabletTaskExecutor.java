@@ -35,7 +35,6 @@ import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
-import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TAgentResult;
 import com.starrocks.thrift.TAgentTaskRequest;
@@ -407,7 +406,11 @@ public class TabletTaskExecutor {
                 for (Map.Entry<Long, Long> mark : firstThree) {
                     sb.append(mark.getValue()); // TabletId
                     sb.append('(');
-                    Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(mark.getKey());
+                    ComputeNode backend = GlobalStateMgr.
+                            getCurrentState().
+                            getNodeMgr().
+                            getClusterInfo().
+                            getBackendOrComputeNode(mark.getKey());
                     sb.append(backend != null ? backend.getHost() : "N/A");
                     sb.append(") ");
                 }
