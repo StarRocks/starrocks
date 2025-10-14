@@ -719,7 +719,6 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
             assertContains(plan, "  0:OlapScanNode\n" +
                     "     table: sc0, rollup: sc0\n" +
                     "     preAggregation: on\n" +
-                    "     Predicates: array_length([1,2,3]) IS NOT NULL\n" +
                     "     partitionsRatio=0/1, tabletsRatio=0/0\n" +
                     "     tabletList=\n" +
                     "     actualRows=0, avgRowSize=3.0\n" +
