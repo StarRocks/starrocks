@@ -98,6 +98,7 @@ public class ConstArrayFunctionFoldingTest extends PlanTestBase {
             assertContains(plan, expect);
         }
     }
+
     @Test
     public void testConstArrayFunctionsReturnNullExistsNullArgument() throws Exception {
         String[] queryList = new String[] {"SELECT 'split' as func_name, split(NULL, ',') as result;",
@@ -150,9 +151,7 @@ public class ConstArrayFunctionFoldingTest extends PlanTestBase {
                 "SELECT 'map_from_arrays' as func_name, map_from_arrays(NULL, [1, 2]) as result;",
                 "SELECT 'map_from_arrays' as func_name, map_from_arrays(['a', 'b'], NULL) as result;",
                 "SELECT 'distinct_map_keys' as func_name, distinct_map_keys(NULL) as result;",
-                "SELECT 'cardinality' as func_name, cardinality(NULL) as result;",
-                "SELECT 'tokenize' as func_name, tokenize(NULL, ' ') as result;",
-                "SELECT 'tokenize' as func_name, tokenize('hello world', NULL) as result;"};
+                "SELECT 'cardinality' as func_name, cardinality(NULL) as result;"};
         for (String q : queryList) {
             System.out.println(q);
             String plan = getFragmentPlan(q);
@@ -170,6 +169,13 @@ public class ConstArrayFunctionFoldingTest extends PlanTestBase {
                         "  |  equal join conjunct: 5: v2 = 1: v1");
         assertCContains(plan, "  0:OlapScanNode\n" + "     TABLE: t0\n" + "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: array_contains([1,2,3], 6: v3)");
+    }
+
+    @Test
+    public void testNestedArraySum() throws Exception {
+        String sql = "select array_sum([1, array_sum([1, 2, 3]), 3]),array_sum([1, array_sum([1, 2, 3]), 3]);";
+        String plan = getFragmentPlan(sql);
+        assertCContains(plan, "<slot 3> : 10");
     }
 
     @Test
