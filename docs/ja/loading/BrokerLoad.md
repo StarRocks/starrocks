@@ -4,7 +4,7 @@ displayed_sidebar: docs
 
 # HDFS またはクラウドストレージからデータをロードする
 
-import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
+import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.mdx'
 
 StarRocks は、HDFS またはクラウドストレージから大量のデータを StarRocks にロードするために、MySQL ベースの Broker Load というロード方法を提供しています。
 

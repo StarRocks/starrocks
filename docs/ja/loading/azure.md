@@ -6,7 +6,7 @@ keywords: ['Broker Load']
 
 # Microsoft Azure Storage からのデータロード
 
-import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
+import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.mdx'
 
 StarRocks は、Azure からデータをロードするために次のオプションを提供しています。
 

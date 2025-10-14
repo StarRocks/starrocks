@@ -4,7 +4,7 @@ displayed_sidebar: docs
 
 # ロードによるデータ変更
 
-import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
+import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.mdx'
 
 StarRocks が提供する [Primary Key tables](../table_design/table_types/primary_key_table.md) を使用すると、[Stream Load](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)、[Broker Load](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md)、または [Routine Load](../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md) ジョブを実行して StarRocks テーブルにデータ変更を加えることができます。これらのデータ変更には、挿入、更新、削除が含まれます。ただし、Primary Key tables は [Spark Load](../sql-reference/sql-statements/loading_unloading/SPARK_LOAD.md) または [INSERT](../sql-reference/sql-statements/loading_unloading/INSERT.md) を使用したデータ変更をサポートしていません。
 

@@ -4,7 +4,7 @@ displayed_sidebar: docs
 
 # Manage user privileges
 
-import UserPrivilegeCase from '../../_assets/commonMarkdown/userPrivilegeCase.md'
+import UserPrivilegeCase from '../../_assets/commonMarkdown/userPrivilegeCase.mdx'
 
 This topic describes how to manage users, roles, and privileges in StarRocks.
 
