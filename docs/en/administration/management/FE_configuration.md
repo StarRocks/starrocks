@@ -2,13 +2,13 @@
 displayed_sidebar: docs
 ---
 
-import FEConfigMethod from '../../_assets/commonMarkdown/FE_config_method.md'
+import FEConfigMethod from '../../_assets/commonMarkdown/FE_config_method.mdx'
 
-import AdminSetFrontendNote from '../../_assets/commonMarkdown/FE_config_note.md'
+import AdminSetFrontendNote from '../../_assets/commonMarkdown/FE_config_note.mdx'
 
-import StaticFEConfigNote from '../../_assets/commonMarkdown/StaticFE_config_note.md'
+import StaticFEConfigNote from '../../_assets/commonMarkdown/StaticFE_config_note.mdx'
 
-import EditionSpecificFEItem from '../../_assets/commonMarkdown/Edition_Specific_FE_Item.md'
+import EditionSpecificFEItem from '../../_assets/commonMarkdown/Edition_Specific_FE_Item.mdx'
 
 # FE Configuration
 
@@ -5271,4 +5271,34 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: Whether to enable prefixes with materialized view names in logs for better debug.
 - Introduced in: v3.4.0
 
+<<<<<<< HEAD
+=======
+##### enable_mv_post_image_reload_cache
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to perform reload flag check after FE loaded an image. If the check is performed for a base materialized view, it is not needed for other materialized views that related to it.
+- Introduced in: v3.5.0
+
+##### enable_trace_historical_node
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to allow the system to trace the historical nodes. By setting this item to `true`, you can enable the Cache Sharing feature and allow the system to choose the right cache nodes during elastic scaling.
+- Introduced in: v3.5.1
+
+##### transform_type_prefer_string_for_varchar
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to prefer string type for fixed length varchar columns in materialized view creation and CTAS operations.
+- Introduced in: v4.0.0
+
+>>>>>>> 4a0f07d790 ([Doc] rename snippets .md to .mdx (#63977))
 <EditionSpecificFEItem />

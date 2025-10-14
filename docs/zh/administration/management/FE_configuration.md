@@ -3,13 +3,13 @@ displayed_sidebar: docs
 keywords: ['Canshu']
 ---
 
-import FEConfigMethod from '../../_assets/commonMarkdown/FE_config_method.md'
+import FEConfigMethod from '../../_assets/commonMarkdown/FE_config_method.mdx'
 
-import AdminSetFrontendNote from '../../_assets/commonMarkdown/FE_config_note.md'
+import AdminSetFrontendNote from '../../_assets/commonMarkdown/FE_config_note.mdx'
 
-import StaticFEConfigNote from '../../_assets/commonMarkdown/StaticFE_config_note.md'
+import StaticFEConfigNote from '../../_assets/commonMarkdown/StaticFE_config_note.mdx'
 
-import EditionSpecificFEItem from '../../_assets/commonMarkdown/Edition_Specific_FE_Item.md'
+import EditionSpecificFEItem from '../../_assets/commonMarkdown/Edition_Specific_FE_Item.mdx'
 
 # FE 配置项
 
@@ -5233,4 +5233,32 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 描述：是否启用附加物化视图名称前缀的日志记录，用于提升调试能力。
 - 引入版本：v3.4.0
 
+<<<<<<< HEAD
+=======
+##### enable_mv_post_image_reload_cache
+- 默认值：true
+- 类型：布尔值
+- 单位：-
+- 是否动态：是
+- 描述：FE 加载镜像后是否进行重载标志检测。如果某个 Base MV 已完成重载，其他依赖它的 MV 则无需再次重载。
+- 引入版本：v3.5.0
+
+##### enable_trace_historical_node
+- 默认值：false
+- 类型：布尔值
+- 单位：-
+- 是否动态：是
+- 描述：是否允许系统跟踪历史节点。将此项设置为 `true`，就可以启用 Cache Sharing 功能，并允许系统在弹性扩展过程中选择正确的缓存节点。
+- 引入版本：v3.5.1
+
+
+##### transform_type_prefer_string_for_varchar
+- 默认值：true
+- 类型：布尔值
+- 单位：-
+- 是否动态：是
+- 描述：在物化视图创建和 CTAS 操作中，是否优先对固定长度的 VARCHAR 列使用 STRING 类型。
+- 引入版本：v4.0.0
+
+>>>>>>> 4a0f07d790 ([Doc] rename snippets .md to .mdx (#63977))
 <EditionSpecificFEItem />
