@@ -375,6 +375,19 @@ Status parse_page_v1(std::unique_ptr<ParsedPage>* result, PageHandle handle, con
     return Status::OK();
 }
 
+template <class Encoding>
+Status parse_null_data(faststring* dst_null_flags, const Slice& null_data, size_t elements) {
+    // bitshuffle format null flags
+    size_t elements_pad = ALIGN_UP(elements, 8u);
+    dst_null_flags->resize(elements_pad * sizeof(uint8_t));
+    int64_t r = Encoding::decode(null_data.data, dst_null_flags->data(), elements_pad, sizeof(uint8_t), 0);
+    if (r < 0) {
+        return Status::Corruption("bitshuffle decompress failed: " + bitshuffle_error_msg(r));
+    }
+    dst_null_flags->resize(elements);
+    return Status::OK();
+}
+
 Status parse_page_v2(std::unique_ptr<ParsedPage>* result, PageHandle handle, const Slice& body,
                      const DataPageFooterPB& footer, const EncodingInfo* encoding, const PagePointer& page_pointer,
                      uint32_t page_index) {
@@ -392,15 +405,11 @@ Status parse_page_v2(std::unique_ptr<ParsedPage>* result, PageHandle handle, con
                 footer.has_null_encoding() ? footer.null_encoding() : NullEncodingPB::BITSHUFFLE_NULL;
         if (null_encoding == NullEncodingPB::BITSHUFFLE_NULL) {
             // bitshuffle format null flags
-            size_t elements = footer.num_values();
-            size_t elements_pad = ALIGN_UP(elements, 8u);
-            page->_null_flags.resize(elements_pad * sizeof(uint8_t));
-            int64_t r = bitshuffle::decompress_lz4(null_flags.data, page->_null_flags.data(), elements_pad,
-                                                   sizeof(uint8_t), 0);
-            if (r < 0) {
-                return Status::Corruption("bitshuffle decompress failed: " + bitshuffle_error_msg(r));
-            }
-            page->_null_flags.resize(elements);
+            using BShfLz4 = BitShuffleEncodingLz4;
+            RETURN_IF_ERROR(parse_null_data<BShfLz4>(&page->_null_flags, null_flags, footer.num_values()));
+        } else if (null_encoding == NullEncodingPB::BITSHUFFLE_PLAIN_NULL) {
+            using BShfPlain = BitShuffleEncodingPlain;
+            RETURN_IF_ERROR(parse_null_data<BShfPlain>(&page->_null_flags, null_flags, footer.num_values()));
         } else if (null_encoding == NullEncodingPB::LZ4_NULL) {
             // decompress null flags by lz4
             size_t elements = footer.num_values();

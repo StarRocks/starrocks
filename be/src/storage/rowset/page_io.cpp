@@ -251,8 +251,11 @@ Status PageIO::read_and_decompress_page(const PageReadOptions& opts, PageHandle*
     } else {
         opts.stats->uncompressed_bytes_read += page_slice.size;
     }
-
-    RETURN_IF_ERROR(StoragePageDecoder::decode_page(footer, footer_size + 4, opts.encoding_type, &page, &page_slice));
+    {
+        SCOPED_RAW_TIMER(&opts.stats->decode_page_ns);
+        using Decoder = StoragePageDecoder;
+        RETURN_IF_ERROR(Decoder::decode_page(footer, footer_size + 4, opts.encoding_type, &page, &page_slice));
+    }
 
     *body = Slice(page_slice.data, page_slice.size - 4 - footer_size);
     if (opts.use_page_cache && page_cache_available) {

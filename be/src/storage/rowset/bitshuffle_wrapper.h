@@ -43,7 +43,36 @@ namespace starrocks::bitshuffle {
 
 // See <bitshuffle.h> for documentation on these functions.
 size_t compress_lz4_bound(size_t size, size_t elem_size, size_t block_size);
-int64_t compress_lz4(void* in, void* out, size_t size, size_t elem_size, size_t block_size);
-int64_t decompress_lz4(void* in, void* out, size_t size, size_t elem_size, size_t block_size);
+int64_t compress_lz4(const void* in, void* out, size_t size, size_t elem_size, size_t block_size);
+int64_t decompress_lz4(const void* in, void* out, size_t size, size_t elem_size, size_t block_size);
+
+int64_t encode(const void* in, void* out, const size_t size, const size_t elem_size, size_t block_size);
+int64_t decode(const void* in, void* out, const size_t size, const size_t elem_size, size_t block_size);
 
 } // namespace starrocks::bitshuffle
+
+namespace starrocks {
+struct BitShuffleEncodingLz4 {
+    static size_t encoding_size(size_t size, size_t elem_size, size_t block_size) {
+        return bitshuffle::compress_lz4_bound(size, elem_size, block_size);
+    }
+    static size_t encode(const void* in, void* out, size_t size, size_t elem_size, size_t block_size) {
+        return bitshuffle::compress_lz4(in, out, size, elem_size, block_size);
+    }
+    static size_t decode(const void* in, void* out, size_t size, size_t elem_size, size_t block_size) {
+        return bitshuffle::decompress_lz4(in, out, size, elem_size, block_size);
+    }
+};
+
+struct BitShuffleEncodingPlain {
+    static size_t encoding_size(size_t size, size_t elem_size, size_t block_size) { return size * elem_size; }
+
+    static size_t encode(const void* in, void* out, size_t size, size_t elem_size, size_t block_size) {
+        return bitshuffle::encode(in, out, size, elem_size, block_size);
+    }
+
+    static size_t decode(const void* in, void* out, size_t size, size_t elem_size, size_t block_size) {
+        return bitshuffle::decode(in, out, size, elem_size, block_size);
+    }
+};
+} // namespace starrocks
