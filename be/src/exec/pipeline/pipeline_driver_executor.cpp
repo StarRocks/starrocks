@@ -44,7 +44,7 @@ GlobalDriverExecutor::GlobalDriverExecutor(const std::string& name, std::unique_
           _thread_pool(std::move(thread_pool)),
           _blocked_driver_poller(
                   new PipelineDriverPoller(name, _driver_queue.get(), cpuids, metrics->get_poller_metrics())),
-          _exec_state_reporter(new ExecStateReporter(cpuids)),
+          _exec_state_reporter(new ExecStateReporter(cpuids, metrics->get_exec_state_reporter_metrics())),
           _audit_statistics_reporter(new AuditStatisticsReporter()),
           _metrics(metrics->get_driver_executor_metrics()) {}
 
