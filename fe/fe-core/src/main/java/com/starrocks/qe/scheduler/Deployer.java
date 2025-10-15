@@ -438,11 +438,9 @@ public class Deployer {
         TExecBatchPlanFragmentsParams tRequest = new TExecBatchPlanFragmentsParams();
         tRequest.setUnique_param_per_instance(requestsToDeploy);
 
-        // 1. create a common param only with desc table, it will prepare first
+        // 1. create a common param with desc table, it will prepare first to create query context and desc table
         TExecPlanFragmentParams commonParam = requestsToDeploy.get(0).deepCopy();
         commonParam.setDesc_tbl(jobSpec.getDescTable());
-        commonParam.setFragment(null);
-        commonParam.setParams(null);
         tRequest.setCommon_param(commonParam);
 
         // 2. clear unique param's desc table, so fragment instances can prepare parallelly
