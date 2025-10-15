@@ -356,8 +356,8 @@ public:
         return NullableColumn::create(_data_column->clone_empty(), _null_column->clone_empty());
     }
 
-    size_t serialize_batch_at_interval(uint8_t* dst, size_t byte_offset, size_t byte_interval, size_t start,
-                                       size_t count) const override;
+    size_t serialize_batch_at_interval(uint8_t* dst, size_t byte_offset, size_t byte_interval, uint32_t max_row_size,
+                                       size_t start, size_t count) const override;
 
     int compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const override;
 
