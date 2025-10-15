@@ -334,6 +334,25 @@ Status TabletManager::put_bundle_tablet_metadata(std::map<int64_t, TabletMetadat
     return Status::OK();
 }
 
+<<<<<<< HEAD
+=======
+Status TabletManager::corrupted_tablet_meta_handler(const Status& s, const std::string& metadata_location) {
+    if (s.is_corruption() && config::lake_clear_corrupted_cache_meta) {
+        auto drop_status = drop_local_cache(metadata_location);
+        TEST_SYNC_POINT_CALLBACK("TabletManager::corrupted_tablet_meta_handler", &drop_status);
+        if (!drop_status.ok()) {
+            LOG(WARNING) << "clear corrupted cache for " << metadata_location << " failed, "
+                         << "error: " << drop_status;
+            return s; // return error so load tablet meta can be retried
+        }
+        LOG(INFO) << "clear corrupted cache for " << metadata_location;
+        return Status::OK();
+    } else {
+        return s;
+    }
+}
+
+>>>>>>> 8dbb0bbce3 ([BugFix] support clear corrupted lake data cache (#63182))
 StatusOr<TabletMetadataPtr> TabletManager::load_tablet_metadata(const string& metadata_location, bool fill_cache,
                                                                 int64_t expected_gtid,
                                                                 const std::shared_ptr<FileSystem>& fs) {
