@@ -1,10 +1,10 @@
-他のオブジェクトストレージ用のストレージボリュームの作成方法およびデフォルトのストレージボリュームの設定方法については、[CREATE STORAGE VOLUME](../../sql-reference/sql-statements/cluster-management/storage_volume/CREATE_STORAGE_VOLUME.md) および [SET DEFAULT STORAGE VOLUME](../../sql-reference/sql-statements/cluster-management/storage_volume/SET_DEFAULT_STORAGE_VOLUME.md) を参照してください。
+他のオブジェクトストレージ用のストレージボリュームの作成方法およびデフォルトのストレージボリュームの設定方法については、[CREATE STORAGE VOLUME](/sql-reference/sql-statements/cluster-management/storage_volume/CREATE_STORAGE_VOLUME.md) および [SET DEFAULT STORAGE VOLUME](/sql-reference/sql-statements/cluster-management/storage_volume/SET_DEFAULT_STORAGE_VOLUME.md) を参照してください。
 
 ### データベースとクラウドネイティブテーブルの作成
 
 デフォルトのストレージボリュームを作成した後、このストレージボリュームを使用してデータベースとクラウドネイティブテーブルを作成できます。
 
-共有データ StarRocks クラスターは、すべての [StarRocks テーブルタイプ](../../table_design/table_types/table_types.md)をサポートしています。
+共有データ StarRocks クラスターは、すべての [StarRocks テーブルタイプ](/table_design/table_types/table_types.md)をサポートしています。
 
 次の例では、データベース `cloud_db` とテーブル `detail_demo` を重複キーテーブルタイプに基づいて作成し、ローカルディスクキャッシュを有効にし、ホットデータの有効期間を1か月に設定し、オブジェクトストレージへの非同期データ取り込みを無効にしています。
 
@@ -61,7 +61,7 @@ PROPERTIES (
 
 ### テーブル情報の表示
 
-特定のデータベース内のテーブル情報を `SHOW PROC "/dbs/<db_id>"` を使用して表示できます。詳細は [SHOW PROC](../../sql-reference/sql-statements/cluster-management/nodes_processes/SHOW_PROC.md) を参照してください。
+特定のデータベース内のテーブル情報を `SHOW PROC "/dbs/<db_id>"` を使用して表示できます。詳細は [SHOW PROC](/sql-reference/sql-statements/cluster-management/nodes_processes/SHOW_PROC.md) を参照してください。
 
 例:
 
@@ -78,12 +78,12 @@ mysql> SHOW PROC "/dbs/xxxxx";
 
 ### 共有データ StarRocks クラスターへのデータロード
 
-共有データ StarRocks クラスターは、StarRocks が提供するすべてのロード方法をサポートしています。詳細は [Loading options](../../loading/Loading_intro.md) を参照してください。
+共有データ StarRocks クラスターは、StarRocks が提供するすべてのロード方法をサポートしています。詳細は [Loading options](/loading/Loading_intro.md) を参照してください。
 
 ### 共有データ StarRocks クラスターでのクエリ
 
-共有データ StarRocks クラスター内のテーブルは、StarRocks が提供するすべてのクエリタイプをサポートしています。詳細は StarRocks [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) を参照してください。
+共有データ StarRocks クラスター内のテーブルは、StarRocks が提供するすべてのクエリタイプをサポートしています。詳細は StarRocks [SELECT](/sql-reference/sql-statements/table_bucket_part_index/SELECT.md) を参照してください。
 
 > **NOTE**
 >
-> 共有データ StarRocks クラスターは、v3.4.0 から [同期マテリアライズドビュー](../../using_starrocks/Materialized_view-single_table.md) をサポートしています。
+> 共有データ StarRocks クラスターは、v3.4.0 から [同期マテリアライズドビュー](/using_starrocks/Materialized_view-single_table.md) をサポートしています。

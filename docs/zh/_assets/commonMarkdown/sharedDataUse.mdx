@@ -1,11 +1,11 @@
 
-有关如何为其他远程存储创建存储卷和设置默认存储卷的更多信息，请参阅 [CREATE STORAGE VOLUME](../../sql-reference/sql-statements/cluster-management/storage_volume/CREATE_STORAGE_VOLUME.md) 和 [SET DEFAULT STORAGE VOLUME](../../sql-reference/sql-statements/cluster-management/storage_volume/SET_DEFAULT_STORAGE_VOLUME.md)。
+有关如何为其他远程存储创建存储卷和设置默认存储卷的更多信息，请参阅 [CREATE STORAGE VOLUME](/sql-reference/sql-statements/cluster-management/storage_volume/CREATE_STORAGE_VOLUME.md) 和 [SET DEFAULT STORAGE VOLUME](/sql-reference/sql-statements/cluster-management/storage_volume/SET_DEFAULT_STORAGE_VOLUME.md)。
 
 ### 创建数据库和云原生表
 
 创建默认存储卷后，您可以使用该存储卷创建数据库和云原生表。
 
-StarRocks 存算分离集群支持所有[表类型](../../table_design/table_types/table_types.md)。
+StarRocks 存算分离集群支持所有[表类型](/table_design/table_types/table_types.md)。
 
 以下示例创建数据库 `cloud_db`，并创建明细表 `detail_demo`，启用本地磁盘缓存，将热数据有效期设置为一个月，并禁用异步数据导入：
 
@@ -60,7 +60,7 @@ PROPERTIES (
 
 ### 查看表信息
 
-您可以通过 `SHOW PROC "/dbs/<db_id>"` 查看特定数据库中的表的信息。详细信息，请参阅 [SHOW PROC](../../sql-reference/sql-statements/cluster-management/nodes_processes/SHOW_PROC.md)。
+您可以通过 `SHOW PROC "/dbs/<db_id>"` 查看特定数据库中的表的信息。详细信息，请参阅 [SHOW PROC](/sql-reference/sql-statements/cluster-management/nodes_processes/SHOW_PROC.md)。
 
 示例：
 
@@ -77,12 +77,12 @@ StarRocks 存算分离集群中表的 `Type` 为 `CLOUD_NATIVE`。`StoragePath` 
 
 ### 向 StarRocks 存算分离集群导入数据
 
-StarRocks 存算分离集群支持 StarRocks 提供的所有导入方式。详细信息，请参阅 [导入方案](../../loading/Loading_intro.md)。
+StarRocks 存算分离集群支持 StarRocks 提供的所有导入方式。详细信息，请参阅 [导入方案](/loading/Loading_intro.md)。
 
 ### 在 StarRocks 存算分离集群查询
 
-StarRocks 存算分离集群支持 StarRocks 提供的所有查询方式。详细信息，请参阅 [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT.md)。
+StarRocks 存算分离集群支持 StarRocks 提供的所有查询方式。详细信息，请参阅 [SELECT](/sql-reference/sql-statements/table_bucket_part_index/SELECT.md)。
 
 > **说明**
 >
-> 自 v3.4.0 起，StarRocks 存算分离集群支持[同步物化视图](../../using_starrocks/Materialized_view-single_table.md)。
+> 自 v3.4.0 起，StarRocks 存算分离集群支持[同步物化视图](/using_starrocks/Materialized_view-single_table.md)。
