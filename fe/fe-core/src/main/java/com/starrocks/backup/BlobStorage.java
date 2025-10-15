@@ -53,7 +53,6 @@ import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
-import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.thrift.TBrokerCheckPathExistRequest;
 import com.starrocks.thrift.TBrokerCheckPathExistResponse;
 import com.starrocks.thrift.TBrokerCloseReaderRequest;
@@ -324,7 +323,7 @@ public class BlobStorage implements Writable {
 
         long start = System.currentTimeMillis();
         // 1. open remote file
-        HdfsReader reader = HdfsUtil.openHdfsReader(remoteFilePath, toRuntimeBrokerDesc());
+        HdfsReader reader = HdfsUtil.openHdfsReader(remoteFilePath, this.properties);
         if (reader == null) {
             return new Status(ErrCode.COMMON_ERROR, "fail to open reader for " + remoteFilePath);
         }
@@ -437,7 +436,7 @@ public class BlobStorage implements Writable {
     public Status directUploadWithoutBroker(String content, String remoteFile) {
         Status status = Status.OK;
         try {
-            HdfsUtil.writeFile(content.getBytes(StandardCharsets.UTF_8), remoteFile, toRuntimeBrokerDesc());
+            HdfsUtil.writeFile(content.getBytes(StandardCharsets.UTF_8), remoteFile, this.properties);
         } catch (StarRocksException e) {
             status = new Status(ErrCode.BAD_CONNECTION, "write exception: " + e.getMessage());
         }
@@ -572,7 +571,7 @@ public class BlobStorage implements Writable {
 
         Status status = Status.OK;
 
-        HdfsWriter writer = HdfsUtil.openHdfsWriter(remotePath, toRuntimeBrokerDesc());
+        HdfsWriter writer = HdfsUtil.openHdfsWriter(remotePath, this.properties);
         if (writer == null) {
             return new Status(ErrCode.COMMON_ERROR, "fail to open writer for " + remotePath);
         }
@@ -657,7 +656,7 @@ public class BlobStorage implements Writable {
         long start = System.currentTimeMillis();
 
         try {
-            HdfsUtil.rename(origFilePath, destFilePath, toRuntimeBrokerDesc());
+            HdfsUtil.rename(origFilePath, destFilePath, this.properties);
         } catch (StarRocksException e) {
             return new Status(ErrCode.COMMON_ERROR,
                     "failed to rename " + origFilePath + " to " + destFilePath + ", msg: " + e.getMessage());
@@ -702,7 +701,7 @@ public class BlobStorage implements Writable {
 
     public Status deleteWithoutBroker(String remotePath) {
         try {
-            HdfsUtil.deletePath(remotePath, toRuntimeBrokerDesc().getProperties());
+            HdfsUtil.deletePath(remotePath, this.properties);
             LOG.info("finished to delete remote path {}.", remotePath);
         } catch (StarRocksException e) {
             return new Status(ErrCode.COMMON_ERROR,
@@ -756,7 +755,7 @@ public class BlobStorage implements Writable {
     public Status listWithoutBroker(String remotePath, List<RemoteFile> result) {
         try {
             List<TBrokerFileStatus> fileStatus = Lists.newArrayList();
-            HdfsUtil.parseFile(remotePath, toRuntimeBrokerDesc(), fileStatus, false, true);
+            HdfsUtil.parseFile(remotePath, this.properties, fileStatus, false, true);
             for (TBrokerFileStatus tFile : fileStatus) {
                 RemoteFile file = new RemoteFile(tFile.path, !tFile.isDir, tFile.size);
                 result.add(file);
@@ -809,7 +808,7 @@ public class BlobStorage implements Writable {
 
     public Status checkPathExistWithoutBroker(String remotePath) {
         try {
-            boolean exist = HdfsUtil.checkPathExist(remotePath, toRuntimeBrokerDesc());
+            boolean exist = HdfsUtil.checkPathExist(remotePath, this.properties);
             if (!exist) {
                 return new Status(ErrCode.NOT_FOUND, "remote path does not exist: " + remotePath);
             }
@@ -819,14 +818,6 @@ public class BlobStorage implements Writable {
                     "failed to check remote path exist: " + remotePath
                             + ". msg: " + e.getMessage());
         }
-    }
-
-    private BrokerDesc toRuntimeBrokerDesc() {
-        Map<String, String> props = !hasBroker ?
-                (this.brokerPersistInfo != null ? this.brokerPersistInfo.getProperties() : this.properties)
-                : this.properties;
-        String n = hasBroker ? this.brokerName : (this.brokerPersistInfo != null ? this.brokerPersistInfo.getName() : "");
-        return new BrokerDesc(n, props);
     }
 
     public static String clientId() {

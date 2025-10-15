@@ -70,7 +70,6 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.expression.TableRefPersist;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -658,9 +657,8 @@ public class BackupJob extends AbstractJob {
                 }
                 Preconditions.checkState(brokers.size() == 1);
             } else {
-                BrokerDesc brokerDesc = new BrokerDesc(repo.getStorage().getProperties());
                 try {
-                    HdfsUtil.getTProperties(repo.getLocation(), brokerDesc, hdfsProperties);
+                    HdfsUtil.getTProperties(repo.getLocation(), repo.getStorage().getProperties(), hdfsProperties);
                 } catch (StarRocksException e) {
                     status = new Status(ErrCode.COMMON_ERROR, "Get properties from " + repo.getLocation() + " error.");
                     return;

@@ -23,7 +23,6 @@ import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.fs.hdfs.HdfsService;
-import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.thrift.TBrokerCheckPathExistRequest;
 import com.starrocks.thrift.TBrokerCloseReaderRequest;
 import com.starrocks.thrift.TBrokerCloseWriterRequest;
@@ -60,10 +59,10 @@ public class HdfsUtil {
 
     private static HdfsService hdfsService = new HdfsService();
 
-    
-    public static void getTProperties(String path, BrokerDesc brokerDesc,  THdfsProperties tProperties) throws
+
+    public static void getTProperties(String path, Map<String, String> properties, THdfsProperties tProperties) throws
             StarRocksException {
-        hdfsService.getTProperties(path, brokerDesc.getProperties(), tProperties);
+        hdfsService.getTProperties(path, properties, tProperties);
     }
 
     public static void copyToLocal(String srcPath, String destPath, Map<String, String> properties)
@@ -80,34 +79,34 @@ public class HdfsUtil {
      * Parse file status in path with broker, except directory
      *
      * @param path
-     * @param brokerDesc
+     * @param properties
      * @param fileStatuses: file path, size, isDir, isSplitable
      * @throws StarRocksException if broker op failed
      */
-    public static void parseFile(String path, BrokerDesc brokerDesc, List<TBrokerFileStatus> fileStatuses, boolean skipDir,
-                                 boolean fileNameOnly) throws StarRocksException {
+    public static void parseFile(String path, Map<String, String> properties, List<TBrokerFileStatus> fileStatuses,
+                                 boolean skipDir, boolean fileNameOnly) throws StarRocksException {
         if (path.startsWith(TableFunctionTable.FAKE_PATH)) {
             fileStatuses.add(new TBrokerFileStatus("file1", false, 1024, false));
             return;
         }
         TBrokerListPathRequest request = new TBrokerListPathRequest(
-                TBrokerVersion.VERSION_ONE, path, false, brokerDesc.getProperties());
+                TBrokerVersion.VERSION_ONE, path, false, properties);
         hdfsService.listPath(request, fileStatuses, skipDir, fileNameOnly);
     }
 
-    public static List<FileStatus> listFileMeta(String path, BrokerDesc brokerDesc, boolean skipDir) throws
+    public static List<FileStatus> listFileMeta(String path, Map<String, String> properties, boolean skipDir) throws
             StarRocksException {
         if (path.startsWith(TableFunctionTable.FAKE_PATH)) {
             path = StringUtils.removeStart(path, TableFunctionTable.FAKE_PATH);
             FileStatus fakeFile = new FileStatus(1, false, 1, 1024, System.currentTimeMillis(), new Path(path));
             return Lists.newArrayList(fakeFile);
         }
-        return hdfsService.listFileMeta(path, brokerDesc.getProperties(), skipDir);
+        return hdfsService.listFileMeta(path, properties, skipDir);
     }
 
-    public static void parseFile(String path, BrokerDesc brokerDesc, List<TBrokerFileStatus> fileStatuses)
+    public static void parseFile(String path, Map<String, String> properties, List<TBrokerFileStatus> fileStatuses)
             throws StarRocksException {
-        parseFile(path, brokerDesc, fileStatuses, true, false);
+        parseFile(path, properties, fileStatuses, true, false);
     }
 
     public static List<String> parseColumnsFromPath(String filePath, List<String> columnsFromPath)
@@ -150,12 +149,12 @@ public class HdfsUtil {
      * Read binary data from path with broker
      *
      * @param path
-     * @param brokerDesc
+     * @param properties
      * @return byte[]
      * @throws StarRocksException if broker op failed or not only one file
      */
-    public static byte[] readFile(String path, BrokerDesc brokerDesc) throws StarRocksException {
-        HdfsReader reader = new HdfsReader(path, brokerDesc);
+    public static byte[] readFile(String path, Map<String, String> properties) throws StarRocksException {
+        HdfsReader reader = new HdfsReader(path, properties);
         try {
             reader.open();
             long fileSize = reader.getFileSize();
@@ -166,8 +165,8 @@ public class HdfsUtil {
         }
     }
 
-    public static HdfsReader openHdfsReader(String path, BrokerDesc brokerDesc) {
-        HdfsReader reader = new HdfsReader(path, brokerDesc);
+    public static HdfsReader openHdfsReader(String path, Map<String, String> properties) {
+        HdfsReader reader = new HdfsReader(path, properties);
         try {
             reader.open();
         } catch (StarRocksException e) {
@@ -182,11 +181,11 @@ public class HdfsUtil {
      *
      * @param data
      * @param destFilePath
-     * @param brokerDesc
+     * @param properties
      * @throws StarRocksException if broker op failed
      */
-    public static void writeFile(byte[] data, String destFilePath, BrokerDesc brokerDesc) throws StarRocksException {
-        HdfsWriter writer = new HdfsWriter(destFilePath, brokerDesc);
+    public static void writeFile(byte[] data, String destFilePath, Map<String, String> properties) throws StarRocksException {
+        HdfsWriter writer = new HdfsWriter(destFilePath, properties);
         try {
             writer.open();
             ByteBuffer byteBuffer = ByteBuffer.wrap(data);
@@ -196,8 +195,8 @@ public class HdfsUtil {
         }
     }
 
-    public static HdfsWriter openHdfsWriter(String destFilePath, BrokerDesc brokerDesc) {
-        HdfsWriter writer = new HdfsWriter(destFilePath, brokerDesc);
+    public static HdfsWriter openHdfsWriter(String destFilePath, Map<String, String> properties) {
+        HdfsWriter writer = new HdfsWriter(destFilePath, properties);
         try {
             writer.open();
         } catch (StarRocksException e) {
@@ -212,12 +211,12 @@ public class HdfsUtil {
      *
      * @param srcFilePath
      * @param destFilePath
-     * @param brokerDesc
+     * @param properties
      * @throws StarRocksException if broker op failed
      */
     public static void writeFile(String srcFilePath, String destFilePath,
-            BrokerDesc brokerDesc) throws StarRocksException {
-        HdfsWriter writer = new HdfsWriter(destFilePath, brokerDesc);
+                                 Map<String, String> properties) throws StarRocksException {
+        HdfsWriter writer = new HdfsWriter(destFilePath, properties);
         ByteBuffer byteBuffer = ByteBuffer.allocate(READ_BUFFER_SIZE_B);
         try (FileInputStream inputFs = new FileInputStream(srcFilePath); FileChannel channel = inputFs.getChannel()) {
             writer.open();
@@ -232,7 +231,7 @@ public class HdfsUtil {
                 byteBuffer.clear();
             }
         } catch (IOException e) {
-            String failMsg = "Write file exception. srcPath = " + srcFilePath + 
+            String failMsg = "Write file exception. srcPath = " + srcFilePath +
                     ", destPath = " + destFilePath;
             LOG.warn(failMsg, e);
             throw new StarRocksException(failMsg);
@@ -245,56 +244,56 @@ public class HdfsUtil {
     /**
      * Delete path with broker
      *
-     * @param path remote path to delete
+     * @param path       remote path to delete
      * @param properties broker/hdfs properties
      * @throws StarRocksException if broker op failed
      */
     public static void deletePath(String path, Map<String, String> properties) throws StarRocksException {
         TBrokerDeletePathRequest tDeletePathRequest = new TBrokerDeletePathRequest(
-                    TBrokerVersion.VERSION_ONE, path, properties);
+                TBrokerVersion.VERSION_ONE, path, properties);
         hdfsService.deletePath(tDeletePathRequest);
     }
 
     // removed BrokerDesc overload; use deletePath(String, Map<String,String>) instead
 
-    public static boolean checkPathExist(String remotePath, BrokerDesc brokerDesc) throws StarRocksException {
+    public static boolean checkPathExist(String remotePath, Map<String, String> properties) throws StarRocksException {
         TBrokerCheckPathExistRequest tCheckPathExistRequest = new TBrokerCheckPathExistRequest(
                 TBrokerVersion.VERSION_ONE,
-                remotePath, brokerDesc.getProperties());
+                remotePath, properties);
         return hdfsService.checkPathExist(tCheckPathExistRequest);
     }
 
-    public static void rename(String origFilePath, String destFilePath, BrokerDesc brokerDesc) throws
+    public static void rename(String origFilePath, String destFilePath, Map<String, String> properties) throws
             StarRocksException {
-        rename(origFilePath, destFilePath, brokerDesc, Config.broker_client_timeout_ms);
+        rename(origFilePath, destFilePath, properties, Config.broker_client_timeout_ms);
     }
 
-    public static void rename(String origFilePath, String destFilePath, BrokerDesc brokerDesc, int timeoutMs)
-        throws StarRocksException {
+    public static void rename(String origFilePath, String destFilePath, Map<String, String> properties, int timeoutMs)
+            throws StarRocksException {
         TBrokerRenamePathRequest tRenamePathRequest = new TBrokerRenamePathRequest(TBrokerVersion.VERSION_ONE,
                 origFilePath,
-                destFilePath, brokerDesc.getProperties());
+                destFilePath, properties);
         hdfsService.renamePath(tRenamePathRequest);
     }
 
     public static class HdfsReader {
         private String filePath;
-        private BrokerDesc brokerDesc;
+        private Map<String, String> properties;
         private TBrokerFD fd;
         private long currentOffset;
         private boolean isReady;
         private long fileSize;
 
-        public HdfsReader(String filePath, BrokerDesc brokerDesc) {
+        public HdfsReader(String filePath, Map<String, String> properties) {
             this.filePath = filePath;
-            this.brokerDesc = brokerDesc;
+            this.properties = properties;
             this.isReady = false;
         }
 
         public void open() throws StarRocksException {
             // get file size
-            TBrokerListPathRequest request = new TBrokerListPathRequest(TBrokerVersion.VERSION_ONE, filePath, 
-                    false, brokerDesc.getProperties());
+            TBrokerListPathRequest request = new TBrokerListPathRequest(TBrokerVersion.VERSION_ONE, filePath,
+                    false, properties);
             List<TBrokerFileStatus> fileStatuses = Lists.newArrayList();
             hdfsService.listPath(request, fileStatuses, true, false);
             if (fileStatuses.size() != 1) {
@@ -305,7 +304,7 @@ public class HdfsUtil {
 
             // open reader
             TBrokerOpenReaderRequest tOpenReaderRequest = new TBrokerOpenReaderRequest(
-                    TBrokerVersion.VERSION_ONE, filePath, 0, "", brokerDesc.getProperties());
+                    TBrokerVersion.VERSION_ONE, filePath, 0, "", properties);
             fd = hdfsService.openReader(tOpenReaderRequest);
             currentOffset = 0L;
             isReady = true;
@@ -347,21 +346,21 @@ public class HdfsUtil {
 
     public static class HdfsWriter {
         private String filePath;
-        private BrokerDesc brokerDesc;
+        private Map<String, String> properties;
         private TBrokerFD fd;
         private long currentOffset;
         private boolean isReady;
 
-        public HdfsWriter(String filePath, BrokerDesc brokerDesc) {
+        public HdfsWriter(String filePath, Map<String, String> properties) {
             this.filePath = filePath;
-            this.brokerDesc = brokerDesc;
+            this.properties = properties;
             this.isReady = false;
         }
 
         public void open() throws StarRocksException {
             TBrokerOpenWriterRequest tOpenWriterRequest = new TBrokerOpenWriterRequest(
                     TBrokerVersion.VERSION_ONE, filePath, TBrokerOpenMode.APPEND,
-                    "", brokerDesc.getProperties());
+                    "", properties);
             fd = hdfsService.openWriter(tOpenWriterRequest);
             currentOffset = 0L;
             isReady = true;

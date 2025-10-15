@@ -20,7 +20,6 @@ package com.starrocks.fs;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.fs.hdfs.HdfsFs;
 import com.starrocks.fs.hdfs.HdfsFsManager;
-import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.thrift.THdfsProperties;
 import mockit.Mock;
 import mockit.MockUp;
@@ -69,10 +68,10 @@ public class HdfsUtilTest {
                 HdfsUtil.deletePath("hdfs://abc/dbf", new HashMap<>()));
 
         Assertions.assertThrows(StarRocksException.class, () ->
-                HdfsUtil.rename("hdfs://abc/dbf", "hdfs://abc/dba", new BrokerDesc(new HashMap<>()), 1000));
+                HdfsUtil.rename("hdfs://abc/dbf", "hdfs://abc/dba", new HashMap<>(), 1000));
 
         Assertions.assertThrows(StarRocksException.class, () ->
-                HdfsUtil.checkPathExist("hdfs://abc/dbf", new BrokerDesc(new HashMap<>())));
+                HdfsUtil.checkPathExist("hdfs://abc/dbf", new HashMap<>()));
 
         HdfsFsManager fileSystemManager = new HdfsFsManager();
         Assertions.assertThrows(StarRocksException.class, () ->

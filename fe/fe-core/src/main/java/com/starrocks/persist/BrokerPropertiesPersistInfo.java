@@ -34,10 +34,6 @@ public class BrokerPropertiesPersistInfo {
     public BrokerPropertiesPersistInfo() {
     }
 
-    public BrokerPropertiesPersistInfo(Map<String, String> properties) {
-        this.properties = properties;
-    }
-
     public BrokerPropertiesPersistInfo(String name, Map<String, String> properties) {
         this.name = name;
         this.properties = properties;

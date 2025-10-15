@@ -139,7 +139,7 @@ public class SparkEtlJobHandler {
             if (brokerDesc.hasBroker()) {
                 BrokerUtil.writeFile(configData, jobConfigHdfsPath, brokerDesc);
             } else {
-                HdfsUtil.writeFile(configData, jobConfigHdfsPath, brokerDesc);
+                HdfsUtil.writeFile(configData, jobConfigHdfsPath, brokerDesc.getProperties());
             }
         } catch (StarRocksException e) {
             throw new LoadException(e.getMessage());
@@ -311,7 +311,7 @@ public class SparkEtlJobHandler {
                 if (brokerDesc.hasBroker()) {
                     data = BrokerUtil.readFile(dppResultFilePath, brokerDesc);
                 } else {
-                    data = HdfsUtil.readFile(dppResultFilePath, brokerDesc);
+                    data = HdfsUtil.readFile(dppResultFilePath, brokerDesc.getProperties());
                 }
                 String dppResultStr = new String(data, StandardCharsets.UTF_8);
                 DppResult dppResult = new Gson().fromJson(dppResultStr, DppResult.class);
@@ -360,7 +360,7 @@ public class SparkEtlJobHandler {
             if (brokerDesc.hasBroker()) {
                 BrokerUtil.parseFile(etlFilePaths, brokerDesc, fileStatuses);
             } else {
-                HdfsUtil.parseFile(etlFilePaths, brokerDesc, fileStatuses);
+                HdfsUtil.parseFile(etlFilePaths, brokerDesc.getProperties(), fileStatuses);
             }
         } catch (StarRocksException e) {
             throw new Exception(e);

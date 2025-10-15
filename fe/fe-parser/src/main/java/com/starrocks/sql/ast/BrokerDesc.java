@@ -36,6 +36,7 @@ public class BrokerDesc implements ParseNode {
     public BrokerDesc(String name, Map<String, String> properties) {
         this(name, properties, NodePosition.ZERO);
     }
+
     public BrokerDesc(String name, Map<String, String> properties, NodePosition pos) {
         this.pos = pos;
         this.name = name;

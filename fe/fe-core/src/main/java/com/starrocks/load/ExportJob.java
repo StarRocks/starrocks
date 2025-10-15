@@ -250,9 +250,9 @@ public class ExportJob implements Writable, GsonPostProcessable {
         }
 
         BrokerDesc brokerDescFromStmt = stmt.getBrokerDesc();
-        this.brokerPersistInfo = brokerDescFromStmt != null ?
-                new BrokerPropertiesPersistInfo(brokerDescFromStmt.getName(), brokerDescFromStmt.getProperties()) : null;
         Preconditions.checkNotNull(brokerDescFromStmt);
+        this.brokerPersistInfo =
+                new BrokerPropertiesPersistInfo(brokerDescFromStmt.getName(), brokerDescFromStmt.getProperties());
 
         this.columnSeparator = stmt.getColumnSeparator();
         this.rowDelimiter = stmt.getRowDelimiter();
@@ -458,10 +458,10 @@ public class ExportJob implements Writable, GsonPostProcessable {
 
         scanNode.setFragmentId(fragment.getFragmentId());
         THdfsProperties hdfsProperties = new THdfsProperties();
-        BrokerDesc runtimeBrokerDesc = new BrokerDesc(brokerPersistInfo.getName(), brokerPersistInfo.getProperties());
         if (!brokerPersistInfo.hasBroker()) {
-            HdfsUtil.getTProperties(exportTempPath, runtimeBrokerDesc, hdfsProperties);
+            HdfsUtil.getTProperties(exportTempPath, brokerPersistInfo.getProperties(), hdfsProperties);
         }
+        BrokerDesc runtimeBrokerDesc = new BrokerDesc(brokerPersistInfo.getName(), brokerPersistInfo.getProperties());
         fragment.setSink(new ExportSink(exportTempPath, fileNamePrefix + taskIdx + "_", columnSeparator,
                 rowDelimiter, runtimeBrokerDesc, hdfsProperties));
         try {
@@ -603,7 +603,8 @@ public class ExportJob implements Writable, GsonPostProcessable {
     }
 
     public void setBrokerDesc(BrokerDesc brokerDesc) {
-        this.brokerPersistInfo = brokerDesc == null ? null : new BrokerPropertiesPersistInfo(brokerDesc.getProperties());
+        this.brokerPersistInfo = brokerDesc == null ? null
+                : new BrokerPropertiesPersistInfo(brokerDesc.getName(), brokerDesc.getProperties());
     }
 
     public String getExportPath() {
@@ -877,6 +878,9 @@ public class ExportJob implements Writable, GsonPostProcessable {
                 if (Strings.isNullOrEmpty(brokerPersistInfo.getName())) {
                     HdfsUtil.deletePath(exportTempPath, brokerPersistInfo.getProperties());
                 } else {
+                    if (brokerPersistInfo == null) {
+                        throw new StarRocksException("Broker delete path failed, broker is null");
+                    }
                     BrokerUtil.deletePath(exportTempPath,
                             new BrokerDesc(brokerPersistInfo.getName(), brokerPersistInfo.getProperties()));
                 }
@@ -887,7 +891,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
             // try to remove exported files
             for (String exportedFile : exportedFiles) {
                 try {
-                    if (Strings.isNullOrEmpty(brokerPersistInfo.getName())) {
+                    if (!brokerPersistInfo.hasBroker()) {
                         HdfsUtil.deletePath(exportedFile, brokerPersistInfo.getProperties());
                     } else {
                         BrokerUtil.deletePath(exportedFile,
@@ -919,7 +923,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
 
             // try to remove exported temp files
             try {
-                if (Strings.isNullOrEmpty(brokerPersistInfo.getName())) {
+                if (!brokerPersistInfo.hasBroker()) {
                     HdfsUtil.deletePath(exportTempPath, brokerPersistInfo.getProperties());
                 } else {
                     BrokerUtil.deletePath(exportTempPath,
@@ -1005,7 +1009,6 @@ public class ExportJob implements Writable, GsonPostProcessable {
             queryId = UUID.fromString(queryIdString);
         }
         isReplayed = true;
-        // brokerDesc now built on demand from brokerPersistInfo
         GlobalStateMgr stateMgr = GlobalStateMgr.getCurrentState();
         Database db = null;
         if (stateMgr.getLocalMetastore() != null) {

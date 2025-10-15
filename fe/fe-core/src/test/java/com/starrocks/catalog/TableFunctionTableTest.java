@@ -213,7 +213,8 @@ public class TableFunctionTableTest {
     public void testNoFilesFound() throws DdlException {
         new MockUp<HdfsUtil>() {
             @Mock
-            public List<FileStatus> listFileMeta(String path, BrokerDesc brokerDesc, boolean skipDir) throws StarRocksException {
+            public static List<FileStatus> listFileMeta(String path, Map<String, String> properties, boolean skipDir)
+                    throws StarRocksException {
                 return Lists.newArrayList();
             }
         };
