@@ -41,7 +41,9 @@ public class S3StorageHandler implements StorageHandler {
         Map<String, String> svProperties = sv.getProperties();
         String s3Region = svProperties.get(AWS_S3_REGION);
         AwsCloudConfiguration awsCloudConfiguration = (AwsCloudConfiguration) sv.getCloudConfiguration();
-        AwsCredentialsProvider awsCredentialsProvider = awsCloudConfiguration.getAwsCloudCredential().generateAWSCredentialsProvider();
+        AwsCredentialsProvider awsCredentialsProvider = awsCloudConfiguration
+                .getAwsCloudCredential()
+                .generateAWSCredentialsProvider();
         this.s3Client = S3Client.builder()
                 .region(Region.of(s3Region))
                 .credentialsProvider(awsCredentialsProvider)

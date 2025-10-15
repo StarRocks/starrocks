@@ -14,7 +14,9 @@
 
 package com.starrocks.common.udf;
 
+import com.starrocks.common.Status;
 import com.starrocks.storagevolume.StorageVolume;
+import com.starrocks.thrift.TStatusCode;
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
 
@@ -30,8 +32,8 @@ public class UDFDownloader {
     public static void download2Local(StorageVolume sv, String remotePath, String localPath) {
         Status status = doDownload(sv, remotePath, localPath);
         if (status != Status.OK) {
-            LOG.error(status.getErrMsg());
-            throw new RuntimeException(status.getErrMsg());
+            LOG.error(status.getErrorMsg());
+            throw new RuntimeException(status.getErrorMsg());
         }
     }
 
@@ -44,16 +46,16 @@ public class UDFDownloader {
             File localFile = new File(localPath);
             if (localFile.exists() && !localFile.delete()) {
                 String errMsg = String.format("Failed to delete existing local file %s", localFile);
-                return new Status(Status.ErrCode.FAILED, errMsg);
+                return new Status(new Status(TStatusCode.RUNTIME_ERROR, errMsg));
             }
             StorageHandler handler = StorageHandlerFactory.create(sv);
             handler.getObject(remotePath, localFile);
             return Status.OK;
         } catch (UnsupportedOperationException e) {
-            return new Status(Status.ErrCode.FAILED, e.getMessage());
+            return new Status(new Status(TStatusCode.RUNTIME_ERROR, e.getMessage()));
         } catch (Exception e) {
             String errMsg = String.format("Failed to download remote file %s as %s", remotePath , e.getMessage());
-            return new Status(Status.ErrCode.FAILED, errMsg);
+            return new Status(new Status(TStatusCode.RUNTIME_ERROR, errMsg));
         }
     }
 }
