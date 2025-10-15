@@ -157,7 +157,11 @@ public class UGIManager {
         final int CHECK_INTERVAL_MS = 300 * 1000; // 5 min;
         while (true) {
             LOGGER.info(HadoopExt.LOGGER_MESSAGE_PREFIX + " run background job once");
-            refreshTickets();
+            try {
+                refreshTickets();
+            } catch (Exception e) {
+                LOGGER.warn(HadoopExt.LOGGER_MESSAGE_PREFIX + " failed to refresh kerberos tickets", e);
+            }
             try {
                 Thread.sleep(CHECK_INTERVAL_MS);
             } catch (InterruptedException e) {
@@ -168,7 +172,7 @@ public class UGIManager {
     }
 
     public void refreshTickets() {
-        LOGGER.debug(HadoopExt.LOGGER_MESSAGE_PREFIX + " refresh tickets");
+        LOGGER.info(HadoopExt.LOGGER_MESSAGE_PREFIX + " refresh tickets");
         kerberosUserCache.forEach((key, value) -> {
             CachingKerberosAuthentication auth = value.auth;
             auth.authenticateIfSoonWillBeExpired();
