@@ -477,16 +477,16 @@ LIBDIVIDE_SOURCE="libdivide-v5.2.0"
 LIBDIVIDE_MD5SUM="4ba77777192c295d6de2b86d88f3239a"
 
 # pprof
-PPROF_DOWNLOAD="https://github.com/murphyatwork/pprof/releases/download/20251014/pprof-linux-amd64.gz"
-PPROF_NAME="pprof.gz"
+PPROF_DOWNLOAD="https://github.com/murphyatwork/pprof/releases/download/20251014/pprof-linux-amd64.zip"
+PPROF_NAME="pprof.zip"
 PPROF_SOURCE="pprof"
-PPROF_MD5SUM="fd497bc8aa303458e02da184594dbb3f"
+PPROF_MD5SUM="98f892dfc7925533bbd98ab927b4ca6b"
 
 # flamegraph
-FLAMEGRAPH_DOWNLOAD="https://github.com/brendangregg/FlameGraph"
-FLAMEGRAPH_NAME="FlameGraph"
+FLAMEGRAPH_DOWNLOAD="https://github.com/murphyatwork/FlameGraph/archive/refs/tags/20251015.tar.gz"
+FLAMEGRAPH_NAME="FlameGraph-20251015.tar.gz"
 FLAMEGRAPH_SOURCE="FlameGraph"
-FLAMEGRAPH_MD5SUM=""
+FLAMEGRAPH_MD5SUM="bddefda5f1271a3dd5324b02ad61d4a5"
 
 # all thirdparties which need to be downloaded is set in array TP_ARCHIVES
 TP_ARCHIVES="CLUCENE LIBEVENT OPENSSL THRIFT PROTOBUF GFLAGS GLOG GTEST RAPIDJSON SIMDJSON SNAPPY GPERFTOOLS ZLIB LZ4 BZIP CURL \

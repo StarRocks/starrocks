@@ -1632,7 +1632,6 @@ build_libdivide() {
 
 # pprof
 build_pprof() {
-    check_if_source_exist $PPROF_SOURCE
     mkdir -p $TP_INSTALL_DIR/flamegraph
     cp $TP_SOURCE_DIR/$PPROF_SOURCE $TP_INSTALL_DIR/flamegraph/
     chmod +x $TP_INSTALL_DIR/flamegraph/pprof
