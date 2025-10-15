@@ -99,21 +99,22 @@ public class CreateFunctionAnalyzer {
 
     private String getRealUrl(String url) {
         if (url.contains("s3") || url.contains("hdfs")) {
-            return getJavaUdfUrl(url);
+            return getJUdfUrl(url);
         }
         return url;
     }
 
-    private String getJavaUdfUrl(String url) {
-        String targetPath = STARROCKS_HOME_DIR + "/plugins/java_udf";
-        String fileName = targetPath.substring(targetPath.lastIndexOf("/") + 1);
+    private String getJUdfUrl(String url) {
+        String fileName = url.substring(url.lastIndexOf("/") + 1);
         StorageVolume sv = GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getDefaultStorageVolume();
         if (sv == null) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                     "No default cloud storage volume. Please create a cloud storage volume and set it as default");
         }
+        String targetPath = String.format("%s/%s", STARROCKS_HOME_DIR + "/plugins/java_udf", fileName);
+        String targetUrl = String.format("file://%s", targetPath);
         UDFDownloader.download2Local(sv, url, targetPath);
-        return "file://" + targetPath + "/" + fileName;
+        return targetUrl;
     }
 
     public String computeMd5(CreateFunctionStmt stmt) {

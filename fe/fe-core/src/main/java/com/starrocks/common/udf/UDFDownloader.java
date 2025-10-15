@@ -14,8 +14,9 @@
 
 package com.starrocks.common.udf;
 
-import com.starrocks.credential.CloudType;
 import com.starrocks.storagevolume.StorageVolume;
+import org.apache.log4j.LogManager;
+import org.apache.log4j.Logger;
 
 import java.io.File;
 import java.nio.file.Files;
@@ -24,29 +25,35 @@ import java.nio.file.Paths;
 
 public class UDFDownloader {
 
+    private static final Logger LOG = LogManager.getLogger(UDFDownloader.class);
+
     public static void download2Local(StorageVolume sv, String remotePath, String localPath) {
-        try {
-            doDownload(sv, remotePath, localPath);
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to download S3 file to local: " + e.getMessage(), e);
+        Status status = doDownload(sv, remotePath, localPath);
+        if (status != Status.OK) {
+            LOG.error(status.getErrMsg());
+            throw new RuntimeException(status.getErrMsg());
         }
     }
 
-    private static void doDownload(StorageVolume sv, String remotePath, String localPath)
-            throws Exception {
-        Path parentDir = Paths.get(localPath).getParent();
-        if (parentDir != null && !Files.exists(parentDir)) {
-            Files.createDirectories(parentDir);
-        }
-        File localFile = new File(localPath);
-        if (localFile.exists() && !localFile.delete()) {
-            throw new RuntimeException("Failed to delete existing file: " + localPath);
-        }
-        if (sv.getCloudConfiguration().getCloudType() == CloudType.AWS) {
-            S3StorageHandler s3StorageHandler = new S3StorageHandler(sv);
-            s3StorageHandler.getObject(remotePath, localFile);
-        }  else {
-            throw new RuntimeException("Cloud type is not supported: " + sv.getCloudConfiguration().getCloudType());
+    private static Status doDownload(StorageVolume sv, String remotePath, String localPath) {
+        try {
+            Path parentDir = Paths.get(localPath).getParent();
+            if (parentDir != null && !Files.exists(parentDir)) {
+                Files.createDirectories(parentDir);
+            }
+            File localFile = new File(localPath);
+            if (localFile.exists() && !localFile.delete()) {
+                String errMsg = String.format("Failed to delete existing local file %s", localFile);
+                return new Status(Status.ErrCode.FAILED, errMsg);
+            }
+            StorageHandler handler = StorageHandlerFactory.create(sv);
+            handler.getObject(remotePath, localFile);
+            return Status.OK;
+        } catch (UnsupportedOperationException e) {
+            return new Status(Status.ErrCode.FAILED, e.getMessage());
+        } catch (Exception e) {
+            String errMsg = String.format("Failed to download remote file %s as %s", remotePath , e.getMessage());
+            return new Status(Status.ErrCode.FAILED, errMsg);
         }
     }
 }
