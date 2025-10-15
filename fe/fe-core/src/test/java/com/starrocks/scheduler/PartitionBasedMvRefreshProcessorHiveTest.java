@@ -1220,9 +1220,9 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
                 " start('1998-01-01') end('1998-01-04')");
         Assertions.assertEquals(
                 Lists.newArrayList(
-                        Lists.newArrayList("l_shipdate=1998-01-01"),
+                        Lists.newArrayList("l_shipdate=1998-01-03"),
                         Lists.newArrayList("l_shipdate=1998-01-02"),
-                        Lists.newArrayList("l_shipdate=1998-01-03")
+                        Lists.newArrayList("l_shipdate=1998-01-01")
                 ),
                 calls);
     }
