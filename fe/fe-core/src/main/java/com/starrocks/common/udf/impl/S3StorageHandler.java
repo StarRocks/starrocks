@@ -12,13 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.common.udf;
+package com.starrocks.common.udf.impl;
 
+import com.starrocks.common.udf.StorageHandler;
+import com.starrocks.credential.aws.AwsCloudConfiguration;
 import com.starrocks.storagevolume.StorageVolume;
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
-import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
-import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
@@ -28,11 +29,9 @@ import java.io.File;
 import java.net.URI;
 import java.util.Map;
 
-import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_ACCESS_KEY;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_REGION;
-import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_SECRET_KEY;
 
-public class S3StorageHandler {
+public class S3StorageHandler implements StorageHandler {
 
     private static final Logger LOG = LogManager.getLogger(S3StorageHandler.class);
 
@@ -40,12 +39,12 @@ public class S3StorageHandler {
 
     public S3StorageHandler(StorageVolume sv) {
         Map<String, String> svProperties = sv.getProperties();
-        AwsBasicCredentials awsBasicCredential = AwsBasicCredentials.create(
-                svProperties.get(AWS_S3_ACCESS_KEY),
-                svProperties.get(AWS_S3_SECRET_KEY));
+        String s3Region = svProperties.get(AWS_S3_REGION);
+        AwsCloudConfiguration awsCloudConfiguration = (AwsCloudConfiguration) sv.getCloudConfiguration();
+        AwsCredentialsProvider awsCredentialsProvider = awsCloudConfiguration.getAwsCloudCredential().generateAWSCredentialsProvider();
         this.s3Client = S3Client.builder()
-                .region(Region.of(svProperties.get(AWS_S3_REGION)))
-                .credentialsProvider(StaticCredentialsProvider.create(awsBasicCredential))
+                .region(Region.of(s3Region))
+                .credentialsProvider(awsCredentialsProvider)
                 .build();
     }
 
