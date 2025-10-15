@@ -89,7 +89,7 @@ StatusOr<std::shared_ptr<Segment>> Segment::open(std::shared_ptr<FileSystem> fs,
     return std::move(segment);
 }
 
-StatusOr<size_t> Segment::parse_segment_footer(RandomAccessFile* read_file, SegmentFooterPB* footer,
+StatusOr<size_t> parse_segment_footer_internal(RandomAccessFile* read_file, SegmentFooterPB* footer,
                                                size_t* footer_length_hint,
                                                const FooterPointerPB* partial_rowset_footer) {
     // Footer := SegmentFooterPB, FooterPBSize(4), FooterPBChecksum(4), MagicNumber(4)
@@ -178,6 +178,28 @@ StatusOr<size_t> Segment::parse_segment_footer(RandomAccessFile* read_file, Segm
     }
 
     return footer_length + 12;
+}
+
+StatusOr<size_t> Segment::parse_segment_footer(RandomAccessFile* read_file, SegmentFooterPB* footer,
+                                               size_t* footer_length_hint,
+                                               const FooterPointerPB* partial_rowset_footer) {
+    auto s = parse_segment_footer_internal(read_file, footer, footer_length_hint, partial_rowset_footer);
+    if (s.ok()) {
+        return s;
+    }
+#if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
+    if (s.status().is_corruption()) {
+        auto drop_status = drop_local_cache_data(read_file->filename());
+        if (!drop_status.ok()) {
+            return s; // return first read error
+        }
+        return parse_segment_footer_internal(read_file, footer, footer_length_hint, partial_rowset_footer);
+    } else {
+        return s;
+    }
+#else
+    return s;
+#endif
 }
 
 Status Segment::write_segment_footer(WritableFile* write_file, const SegmentFooterPB& footer) {
