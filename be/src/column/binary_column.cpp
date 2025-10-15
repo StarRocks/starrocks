@@ -662,6 +662,53 @@ uint32_t BinaryColumnBase<T>::max_one_element_serialize_size() const {
 }
 
 template <typename T>
+size_t BinaryColumnBase<T>::serialize_batch_at_interval(uint8_t* dst, size_t byte_offset, size_t byte_interval,
+                                                        uint32_t max_row_size, size_t start, size_t count) const {
+    return serialize_batch_at_interval_with_null_masks(dst, byte_offset, byte_interval, max_row_size, start, count,
+                                                       nullptr);
+}
+
+template <typename T>
+size_t BinaryColumnBase<T>::serialize_batch_at_interval_with_null_masks(uint8_t* dst, size_t byte_offset,
+                                                                        size_t byte_interval, uint32_t max_row_size,
+                                                                        size_t start, size_t count,
+                                                                        const uint8_t* null_masks) const {
+    auto process = [&]<bool IsNullable>() {
+        dst += byte_offset;
+        if constexpr (IsNullable) {
+            dst++; // reserve one byte for null flag
+        }
+
+        auto* bytes = _bytes.data();
+        for (size_t i = start; i < start + count; ++i, dst += byte_interval) {
+            if constexpr (IsNullable) {
+                if (null_masks[i]) {
+                    *dst = 0xFF; // Invalid UTF-8 string.
+                    continue;
+                }
+            }
+
+            const size_t length = _offsets[i + 1] - _offsets[i];
+            if (length > max_row_size) {
+                *dst = 0xFF;
+            } else if (length > 0 && bytes[_offsets[i + 1] - 1] == 0) {
+                *dst = 0xFF;
+            } else {
+                strings::memcpy_inlined(dst, bytes + _offsets[i], length);
+            }
+        }
+
+        return max_row_size;
+    };
+
+    if (null_masks != nullptr) {
+        return process.template operator()<true>();
+    } else {
+        return process.template operator()<false>();
+    }
+}
+
+template <typename T>
 uint32_t BinaryColumnBase<T>::serialize_default(uint8_t* pos) const {
     // max size of one string is 2^32, so use uint32_t not T
     uint32_t binary_size = 0;
