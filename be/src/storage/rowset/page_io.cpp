@@ -42,6 +42,7 @@
 #include "column/column.h"
 #include "common/logging.h"
 #include "fs/fs.h"
+#include "fs/fs_starlet.h"
 #include "gutil/strings/substitute.h"
 #include "storage/rowset/storage_page_decoder.h"
 #include "util/coding.h"
@@ -143,8 +144,27 @@ std::string encode_cache_key(const std::string& fname, int64_t offset) {
     return str;
 }
 
-Status PageIO::read_and_decompress_page(const PageReadOptions& opts, PageHandle* handle, Slice* body,
-                                        PageFooterPB* footer) {
+#if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
+Status drop_local_cache_data(const std::string& fname) {
+    if (!config::lake_clear_corrupted_cache_data) {
+        return Status::NotSupported("lake_clear_corrupted_cache_data is turned off");
+    }
+    if (!is_starlet_uri(fname)) {
+        return Status::NotSupported("only support starlet file");
+    }
+    auto fs_or = FileSystem::CreateSharedFromString(fname);
+    if (!fs_or.ok()) {
+        LOG(INFO) << "clear corrupted cache for " << fname << ", error:" << fs_or.status();
+        return fs_or.status();
+    }
+    auto s = (*fs_or)->drop_local_cache(fname);
+    LOG(INFO) << "clear corrupted cache for " << fname << ", error:" << s;
+    return s;
+}
+#endif
+
+Status read_and_decompress_page_internal(const PageReadOptions& opts, PageHandle* handle, Slice* body,
+                                         PageFooterPB* footer) {
     // the function will be used by query or load, current load is not allowed to fail when memory reach the limit,
     // so don't check when tls_thread_state.check is set to false
     CHECK_MEM_LIMIT("read and decompress page");
@@ -264,6 +284,27 @@ Status PageIO::read_and_decompress_page(const PageReadOptions& opts, PageHandle*
     }
     page.release(); // memory now managed by handle
     return Status::OK();
+}
+
+Status PageIO::read_and_decompress_page(const PageReadOptions& opts, PageHandle* handle, Slice* body,
+                                        PageFooterPB* footer) {
+    Status s = read_and_decompress_page_internal(opts, handle, body, footer);
+    if (s.ok()) {
+        return s;
+    }
+#if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
+    if (s.is_corruption()) {
+        auto drop_status = drop_local_cache_data(opts.read_file->filename());
+        if (!drop_status.ok()) {
+            return s; // return first read error
+        }
+        return read_and_decompress_page_internal(opts, handle, body, footer);
+    } else {
+        return s;
+    }
+#else
+    return s;
+#endif
 }
 
 } // namespace starrocks
