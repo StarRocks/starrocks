@@ -3121,4 +3121,76 @@ public class AggregateTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         assertContains(plan, "sum_if");
     }
+
+    @Test
+    public void testPruneAggregateNode() throws Exception {
+        String sql;
+        String plan;
+
+        FeConstants.runningUnitTest = true;
+        try {
+            sql = "with w1 as (SELECT v2, v3 from t0 order by v2 ) SELECT count(v2), sum(v3) from w1";
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "  3:AGGREGATE (update finalize)\n" +
+                    "  |  output: count(2: v2), sum(3: v3)\n" +
+                    "  |  group by: \n" +
+                    "  |  \n" +
+                    "  2:MERGING-EXCHANGE");
+
+            sql = "SELECT count(distinct v2), bitmap_union_count(to_bitmap(v2)) from t0 group by v3;";
+            plan = getCostExplain(sql);
+            assertContains(plan, "  5:AGGREGATE (update finalize)\n" +
+                    "  |  aggregate: count[([2: v2, BIGINT, true]); args: BIGINT; result: BIGINT; " +
+                    "args nullable: true; result nullable: false], " +
+                    "bitmap_union_count[([6: bitmap_union_count, BIGINT, false]); " +
+                    "args: BITMAP; result: BIGINT; args nullable: true; " +
+                    "result nullable: false]\n" +
+                    "  |  group by: [3: v3, BIGINT, true]\n" +
+                    "  |  cardinality: 1\n" +
+                    "  |  column statistics: \n" +
+                    "  |  * v3-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
+                    "  |  * count-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
+                    "  |  * bitmap_union_count-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
+                    "  |  \n" +
+                    "  4:AGGREGATE (merge serialize)\n" +
+                    "  |  aggregate: bitmap_union_count[([6: bitmap_union_count, BITMAP, false]); " +
+                    "args: BITMAP; result: BIGINT; " +
+                    "args nullable: true; result nullable: false]\n" +
+                    "  |  group by: [2: v2, BIGINT, true], [3: v3, BIGINT, true]\n" +
+                    "  |  cardinality: 1");
+
+            sql = "SELECT /*+SET_VAR(enable_cost_based_multi_stage_agg=false)*/ " +
+                    "count(distinct v2), bitmap_union_count(to_bitmap(v2)) from t0 group by v3;";
+            String disabledPlan = getCostExplain(sql);
+            Assertions.assertEquals(disabledPlan, plan);
+
+            // distinct group_concat cannot merge two phase agg to one phase agg.
+            sql = "select group_concat(distinct 1,2 order by 1,2) from t0 group by v1 order by 1;";
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "  2:AGGREGATE (merge finalize)\n" +
+                    "  |  output: group_concat(4: group_concat, '1', '2', ',')\n" +
+                    "  |  group by: 1: v1\n" +
+                    "  |  \n" +
+                    "  1:AGGREGATE (update serialize)\n" +
+                    "  |  STREAMING\n" +
+                    "  |  output: group_concat(DISTINCT '1', '2', ',')\n" +
+                    "  |  group by: 1: v1\n" +
+                    "  |  \n" +
+                    "  0:OlapScanNode");
+
+            // distinct avg cannot merge two phase agg to one phase agg.
+            sql = "select avg(distinct v2) from t0 group by v1";
+            plan  = getFragmentPlan(sql);
+            assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+                    "  |  output: avg(2: v2)\n" +
+                    "  |  group by: 1: v1\n" +
+                    "  |  \n" +
+                    "  1:AGGREGATE (update serialize)\n" +
+                    "  |  group by: 1: v1, 2: v2\n" +
+                    "  |  \n" +
+                    "  0:OlapScanNode");
+        } finally {
+            FeConstants.runningUnitTest = false;
+        }
+    }
 }
