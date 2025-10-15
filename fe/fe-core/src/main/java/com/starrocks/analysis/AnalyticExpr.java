@@ -216,7 +216,8 @@ public class AnalyticExpr extends Expr {
                 Objects.equals(partitionHint, o.partitionHint) &&
                 Objects.equals(skewHint, o.skewHint) &&
                 Objects.equals(useHashBasedPartition, o.useHashBasedPartition) &&
-                Objects.equals(isSkewed, o.isSkewed);
+                Objects.equals(isSkewed, o.isSkewed) &&
+                Objects.equals(fnCall.getIgnoreNulls(), o.fnCall.getIgnoreNulls());
     }
 
     /**
