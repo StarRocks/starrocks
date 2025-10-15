@@ -351,6 +351,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     // --------  New planner session variables start --------
     public static final String NEW_PLANER_AGG_STAGE = "new_planner_agg_stage";
+    public static final String ENABLE_COST_BASED_MULTI_STAGE_AGG = "enable_cost_based_multi_stage_agg";
     public static final String BROADCAST_ROW_LIMIT = "broadcast_row_limit";
     public static final String BROADCAST_RIGHT_TABLE_SCALE_FACTOR =
             "broadcast_right_table_scale_factor";
@@ -1609,6 +1610,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // single-column distinct scenarios
     @VariableMgr.VarAttr(name = NEW_PLANER_AGG_STAGE)
     private int newPlannerAggStage = SessionVariableConstants.AggregationStage.AUTO.ordinal();
+
+    @VariableMgr.VarAttr(name = ENABLE_COST_BASED_MULTI_STAGE_AGG)
+    private boolean enableCostBasedMultiStageAgg = true;
 
     @VariableMgr.VarAttr(name = TRANSMISSION_COMPRESSION_TYPE)
     private String transmissionCompressionType = "AUTO";
@@ -3740,6 +3744,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setNewPlanerAggStage(int stage) {
         this.newPlannerAggStage = stage;
+    }
+
+    public boolean isEnableCostBasedMultiStageAgg() {
+        return newPlannerAggStage == SessionVariableConstants.AggregationStage.AUTO.ordinal() &&  enableCostBasedMultiStageAgg;
     }
 
     public void setMaxTransformReorderJoins(int maxReorderNodeUseExhaustive) {

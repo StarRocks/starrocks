@@ -22,7 +22,12 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
+<<<<<<< HEAD
 import com.starrocks.qe.ConnectContext;
+=======
+import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.ast.expression.Expr;
+>>>>>>> 2fc8c3a270 ([Enhancement] Generate 3-stage aggregation by child distribution (#63660))
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -89,7 +94,6 @@ public class SplitMultiPhaseAggRule extends SplitAggregateRule {
         return agg.getType().isGlobal() && !agg.isSplit() && agg.getDistinctColumnDataSkew() == null;
     }
 
-
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalAggregationOperator aggOp = input.getOp().cast();
@@ -107,7 +111,7 @@ public class SplitMultiPhaseAggRule extends SplitAggregateRule {
             return implementDistinctWithoutGroupByAgg(context.getColumnRefFactory(),
                     input, aggOp, distinctCols.get());
         } else {
-            return implementDistinctWithGroupByAgg(context.getColumnRefFactory(), input, aggOp);
+            return implementDistinctWithGroupByAgg(context.getSessionVariable(), context.getColumnRefFactory(), input, aggOp);
         }
 
     }
@@ -166,9 +170,20 @@ public class SplitMultiPhaseAggRule extends SplitAggregateRule {
         return Lists.newArrayList(globalOptExpression);
     }
 
-    // For SQL: select count(distinct id_bigint) from test_basic group by id_int;
+    private OptExpression connectThreeStageAgg(OptExpression localExpr,
+                                               LogicalAggregationOperator distinctGlobal,
+                                               LogicalAggregationOperator global,
+                                               List<ColumnRefOperator> distinctGlobalPartitionBys,
+                                               boolean globalSplit) {
+        distinctGlobal.setPartitionByColumns(distinctGlobalPartitionBys);
+        global.setSplit(globalSplit);
+        return OptExpression.create(global, OptExpression.create(distinctGlobal, localExpr));
+    }
+
+    // For SQL: select count(distinct k1) from test_basic group by v1;
     // Local Agg -> Distinct global Agg -> Global Agg
     private List<OptExpression> implementDistinctWithGroupByAgg(
+            SessionVariable sv,
             ColumnRefFactory columnRefFactory,
             OptExpression input,
             LogicalAggregationOperator oldAgg) {
@@ -177,38 +192,76 @@ public class SplitMultiPhaseAggRule extends SplitAggregateRule {
                 columnRefFactory,
                 oldAgg.getGroupingKeys(), oldAgg.getAggregations(), AggType.LOCAL);
         local.setPartitionByColumns(oldAgg.getGroupingKeys());
-        OptExpression localOptExpression = OptExpression.create(local, input.getInputs());
+        OptExpression localExpr = OptExpression.create(local, input.getInputs());
 
         LogicalAggregationOperator distinctGlobal = createDistinctAggForFirstPhase(
                 columnRefFactory,
                 oldAgg.getGroupingKeys(), oldAgg.getAggregations(), AggType.DISTINCT_GLOBAL);
-        List<ColumnRefOperator> partitionByCols;
 
-        boolean shouldFurtherSplit = false;
-        if (isThreeStageMoreEfficient(input, distinctGlobal.getGroupingKeys(), local.getPartitionByColumns())
-                || oldAgg.getGroupingKeys().containsAll(distinctGlobal.getGroupingKeys())) {
-            partitionByCols = oldAgg.getGroupingKeys();
-        } else {
-            partitionByCols = distinctGlobal.getGroupingKeys();
-            // use grouping keys and distinct cols to distribute data, we need to continue split the global agg.
-            shouldFurtherSplit = true;
-        }
-
-        distinctGlobal.setPartitionByColumns(partitionByCols);
-        OptExpression distinctGlobalOptExpression = OptExpression.create(distinctGlobal, localOptExpression);
-
-        LogicalAggregationOperator.Builder aggBuilder = new LogicalAggregationOperator.Builder().withOperator(oldAgg)
+        LogicalAggregationOperator global = new LogicalAggregationOperator.Builder()
+                .withOperator(oldAgg)
                 .setType(AggType.GLOBAL)
-                .setAggregations(createDistinctAggForSecondPhase(AggType.GLOBAL, oldAgg.getAggregations()));
-        if (!shouldFurtherSplit) {
-            // set isSplit = true to avoid split the global agg
-            aggBuilder.setSplit();
+                .setAggregations(createDistinctAggForSecondPhase(AggType.GLOBAL, oldAgg.getAggregations()))
+                .build();
+
+        // GB is short for Group By, and PB is short for Partition By.
+        if (oldAgg.getGroupingKeys().containsAll(distinctGlobal.getGroupingKeys())) {
+            // 3-stage: Local(GB k1,v1) -> Distinct Global(GB k1,v1; PB v1) -> Global(GB v1; PB v1)
+            return Lists.newArrayList(
+                    connectThreeStageAgg(localExpr, distinctGlobal, global, oldAgg.getGroupingKeys(), true));
         }
 
-        LogicalAggregationOperator global = aggBuilder.build();
-        OptExpression globalOptExpression = OptExpression.create(global, distinctGlobalOptExpression);
+        if (!isThreeStageMoreEfficient(sv, input, distinctGlobal.getGroupingKeys(), local.getPartitionByColumns())) {
+            // 4-stage: Local(GB k1,v1) -> Distinct Global(GB k1,v1; PB k1,v1) -> Local(GB v1) -> Global(GB v1; PB v1)
+            // Use grouping keys and distinct cols to distribute data, we need to continue split the global agg.
+            return Lists.newArrayList(
+                    connectThreeStageAgg(localExpr, distinctGlobal, global, distinctGlobal.getGroupingKeys(), false));
+        }
 
-        return Lists.newArrayList(globalOptExpression);
+        if (!sv.isEnableCostBasedMultiStageAgg()) {
+            // 3-stage: Local(GB k1,v1) -> Distinct Global(GB k1,v1; PB v1) -> Global(GB v1; PB v1)
+            return Lists.newArrayList(
+                    connectThreeStageAgg(localExpr, distinctGlobal, global, oldAgg.getGroupingKeys(), true));
+        }
+
+        // Two candidates:
+        // - 3-stage: [Local(GB k1,v1) -> Distinct Global(GB k1,v1; PB v1) -> Local(GB v1) -> Global(GB v1; PB v1)]
+        //      - Physical3 : [Local(GB k1,v1) -> Exchange(v1) -> Distinct Global(GB k1,v1) -> Local(GB v1) -> Global(GB v1)],
+        //            which will be rewritten by PruneAggregateNodeRule to:
+        //            [Local(GB k1,v1) -> Exchange(v1) -> Distinct Global(GB k1,v1) -> Global(GB v1)]
+        // - 4-stage: [Local(GB k1,v1) -> Distinct Global(GB k1,v1; PB k1,v1) -> Local(GB v1) -> Global(GB v1; PB v1)]
+        //      - Physical41: [Local(GB k1,v1) -> Distinct Global(GB k1,v1) -> Local(GB v1) -> Exchange(v1) -> Global(GB v1)],
+        //            when the child satisfies (k1,v1) distribution and will be rewritten by PruneAggregateNodeRule to:
+        //            [Distinct Global(GB k1,v1) -> Local(GB v1) -> Exchange(v1) -> Global(GB v1)]
+        //      - Physical42: [Local(GB k1,v1) -> Exchange(k1,v1) -> Distinct Global(GB k1,v1) -> Local(GB v1) -> Exchange(v1) -> Global(GB v1)],
+        //           when the child does not satisfy (k1,v1) distribution.
+
+        // Compared the cost of 3-stage and 4-stage:
+        // - If the child satisfies (k1,v1) distribution, the cost of 4-stage(Physical41) is lower than that of 3-stage(Physical3).
+        //     because in Physical41, the child of Exchange(v1) is Local(GB v1), whereas in Physical3, the child of Exchange(v1)
+        //     is Local(GB k1,v1). The cardinality of Local(GB v1) is always greater than or equal to the output of Local(GB k1,v1).
+        // - Otherwise, the cost of 3-stage(Physical3) is lower than that of 4-stage(Physical42).
+        //     because Physical42 has one more Exchange(k1,v1) than Physical3.
+
+        // Why the 3-stage plan is first transformed into a 4-stage plan, and then the redundant Local node is pruned in the PruneAggregateNodeRule?
+        // CostModel considers `Local(GB v1)->Global(v1)` to have a lower cost than `Global(GB v1)`, which leads to a situation
+        // where the cost of the 3-stage plan:
+        //     [Local(GB k1,v1) -> Exchange(v1) -> Distinct Global(GB k1,v1) -> Global(GB v1)]
+        // is higher than that of the 4-stage plan:
+        //     [Local(GB k1,v1) -> Exchange(k1,v1) -> Distinct Global(GB k1,v1) -> Local(GB v1) -> Exchange(v1) -> Global(GB v1)].
+        OptExpression threeStageAgg =
+                connectThreeStageAgg(localExpr, distinctGlobal, global, oldAgg.getGroupingKeys(), false);
+
+        LogicalAggregationOperator global4 = new LogicalAggregationOperator.Builder().withOperator(global).build();
+        LogicalAggregationOperator distinctGlobal4 =
+                new LogicalAggregationOperator.Builder().withOperator(distinctGlobal).build();
+        LogicalAggregationOperator local4 = new LogicalAggregationOperator.Builder().withOperator(local)
+                .setPartitionByColumns(local.getGroupingKeys()).build();
+        OptExpression localExpr4 = OptExpression.create(local4, input.getInputs());
+        OptExpression fourStageAgg =
+                connectThreeStageAgg(localExpr4, distinctGlobal4, global4, distinctGlobal4.getGroupingKeys(), false);
+
+        return Lists.newArrayList(threeStageAgg, fourStageAgg);
     }
 
     private LogicalAggregationOperator createDistinctAggForFirstPhase(
@@ -342,12 +395,12 @@ public class SplitMultiPhaseAggRule extends SplitAggregateRule {
         return elseOperator;
     }
 
-    private boolean isThreeStageMoreEfficient(OptExpression input, List<ColumnRefOperator> groupKeys,
+    private boolean isThreeStageMoreEfficient(SessionVariable sv, OptExpression input, List<ColumnRefOperator> groupKeys,
                                               List<ColumnRefOperator> partitionByColumns) {
-        if (ConnectContext.get().getSessionVariable().getNewPlannerAggStage() == FOUR_STAGE.ordinal()) {
+        if (sv.getNewPlannerAggStage() == FOUR_STAGE.ordinal()) {
             return false;
         }
-        if (ConnectContext.get().getSessionVariable().getNewPlannerAggStage() == THREE_STAGE.ordinal()) {
+        if (sv.getNewPlannerAggStage() == THREE_STAGE.ordinal()) {
             return true;
         }
 
