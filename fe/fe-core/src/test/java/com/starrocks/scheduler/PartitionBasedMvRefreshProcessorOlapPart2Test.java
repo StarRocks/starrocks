@@ -699,10 +699,9 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVTestBase {
         ExecPlan execPlan = mvTaskRunContext.getExecPlan();
         assertPlanContains(execPlan, "     TABLE: t2\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: (4: dt2 < '2020-07-01') OR (4: dt2 IS NULL)");
+                "     PREDICATES: 4: dt2 >= '2020-08-01', 4: dt2 < '2020-09-01'");
         assertPlanContains(execPlan, "     TABLE: t1\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: (1: dt1 < '2020-07-01') OR (1: dt1 IS NULL)\n" +
                 "     partitions=1/3");
     }
 
@@ -724,11 +723,11 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVTestBase {
         testMVRefreshWithOnePartitionAndOneUnPartitionTable(partitionTable, partitionTableValue, mvQuery,
                 "     TABLE: partition_table\n" +
                         "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: (1: dt1 < '2020-07-01') OR (1: dt1 IS NULL)\n" +
-                        "     partitions=1/3",
+                        "     PREDICATES: (1: dt1 < '2020-09-01') OR (1: dt1 IS NULL)\n" +
+                        "     partitions=3/3",
                 "     TABLE: non_partition_table\n" +
                         "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: (4: dt2 < '2020-07-01') OR (4: dt2 IS NULL)\n" +
+                        "     PREDICATES: (4: dt2 < '2020-09-01') OR (4: dt2 IS NULL)\n" +
                         "     partitions=1/1");
     }
 
@@ -857,7 +856,7 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVTestBase {
                     "    TABLE: test_mv1");
 
             if (query.contains("verbose")) {
-                PlanTestBase.assertContains(plan, "MVToRefreshedPartitions", "p202006");
+                PlanTestBase.assertContains(plan, "MVToRefreshedPartitions", "p202008");
             }
         }
         for (String query : traceQueries) {
