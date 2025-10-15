@@ -23,13 +23,6 @@
 
 namespace starrocks::pipeline {
 
-// @TODO need LookUpTask concept?
-// LookUpTask -> process multiple LookUpRequest with same type?
-// task->execute()
-// LookUpTaskContext -> how to get request paramters, how to fill response, how to finish repsone
-
-// contains all information to process a lookup request
-
 // concepts
 // 1. LookUpRequestCtx: used to describe a single lookup request
 // 2. LookUpTaskContext: used to describe a lookup task, which may contain multiple lookup requests
@@ -52,7 +45,6 @@ public:
     LocalLookUpRequestContext(FetchTaskContextPtr ctx) : fetch_ctx(std::move(ctx)) {}
     ~LocalLookUpRequestContext() override = default;
 
-    // @TODO need a better name
     TupleId request_tuple_id() const override { return fetch_ctx->request_tuple_id; }
     Status collect_input_columns(ChunkPtr chunk) override;
     StatusOr<size_t> fill_response(const ChunkPtr& result_chunk, SlotId source_id_slot, const std::vector<SlotDescriptor*>& slots, size_t start_offset) override;
@@ -91,13 +83,10 @@ public:
     std::vector<SlotId> lookup_ref_slot_ids;
     std::vector<SlotId> fetch_ref_slot_ids;
     std::vector<LookUpRequestContextPtr> request_ctxs;
-    // parent
-    // LookUpProcessor* processor = nullptr;
+
     RuntimeProfile* profile = nullptr;
     Permutation permutation;
-    // @TODO
     LookUpOperator* parent = nullptr;
-    // @TODO set profile
 };
 using LookUpTaskContextPtr = std::shared_ptr<LookUpTaskContext>;
 

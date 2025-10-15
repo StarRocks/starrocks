@@ -838,18 +838,6 @@ Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptio
             seg_options.is_first_split_of_segment = true;
         }
 
-        seg_options.v_id = -1;
-        if (options.need_generate_global_rowid) {
-            pipeline::GlobalLateMaterilizationCtx::SegmentInfo seg_info;
-            seg_info.segment = seg_ptr;
-            ASSIGN_OR_RETURN(seg_info.fs, FileSystem::CreateSharedFromString(_rowset_path));
-
-            seg_options.v_id =
-                    options.runtime_state->query_ctx()->global_late_materialization_ctx()->register_segment(seg_info);
-            seg_options.row_id_column_id = options.row_id_column_id;
-            seg_options.row_id_column_slot = options.row_id_column_slot;
-        }
-
         auto res = seg_ptr->new_iterator(segment_schema, seg_options);
         if (res.status().is_end_of_file()) {
             continue;

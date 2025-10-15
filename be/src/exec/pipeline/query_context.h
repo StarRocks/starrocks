@@ -295,7 +295,7 @@ public:
     ConnectorScanOperatorMemShareArbitrator* connector_scan_operator_mem_share_arbitrator() const {
         return _connector_scan_operator_mem_share_arbitrator;
     }
-    GlobalLateMaterilizationCtx* global_late_materialization_ctx() const { return _global_late_materialization_ctx; }
+    // GlobalLateMaterilizationCtx* global_late_materialization_ctx() const { return _global_late_materialization_ctx; }
     GlobalLateMaterilizationContextMgr* global_late_materialization_ctx_mgr() const {
         return _global_late_materialization_ctx_mgr;
     }
@@ -391,7 +391,7 @@ private:
     int64_t _static_query_mem_limit = 0;
     ConnectorScanOperatorMemShareArbitrator* _connector_scan_operator_mem_share_arbitrator = nullptr;
 
-    GlobalLateMaterilizationCtx* _global_late_materialization_ctx = nullptr;
+    // GlobalLateMaterilizationCtx* _global_late_materialization_ctx = nullptr;
     GlobalLateMaterilizationContextMgr* _global_late_materialization_ctx_mgr = nullptr;
 };
 

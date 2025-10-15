@@ -473,6 +473,7 @@ public class LateMaterializationRewriter {
                     }
                 });
                 if (scanOperator.getProjection() != null) {
+                    // @TODO iceberg may put origin columns into projection
                     List<ColumnRefOperator> columnRefOperators = scanOperator.getProjection().getUsedColumns()
                             .getColumnRefOperators(optimizerContext.getColumnRefFactory());
                     columnRefOperators.forEach(columnRefOperator -> {
@@ -976,6 +977,7 @@ public class LateMaterializationRewriter {
 
             OptExpression result = OptExpression.builder().with(optExpression).setOp(builder.build()).build();
             LogicalProperty newProperty = new LogicalProperty(optExpression.getLogicalProperty());
+            // @TODO consider predicate
             newProperty.setOutputColumns(new ColumnRefSet(newColumnRefMap.keySet()));
             result.setLogicalProperty(newProperty);
             LOG.info("operator + " + result.getOp() +

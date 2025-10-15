@@ -23,24 +23,10 @@
 namespace starrocks::parquet {
 
 Status IcebergRowIdReader::read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) {
-    if (filter == nullptr) {
-        // No filter, generate row ids for all rows in the range
-        for (uint64_t i = range.begin(); i < range.end(); ++i) {
-            // Generate row id based on the first row id and the current row index.
-            int64_t row_id = _first_row_id + i;
-            dst->append_datum(Datum(row_id));
-        }
-    } else {
-        // Apply filter, only generate row ids for selected rows
-        DCHECK_EQ(filter->size(), range.span_size()) << "Filter size must match range size";
-        for (uint64_t i = range.begin(); i < range.end(); ++i) {
-            size_t filter_index = i - range.begin();
-            if ((*filter)[filter_index]) {
-                // Generate row id based on the first row id and the current row index.
-                int64_t row_id = _first_row_id + i;
-                dst->append_datum(Datum(row_id));
-            }
-        }
+    for (uint64_t i = range.begin(); i < range.end(); ++i) {
+        // Generate row id based on the first row id and the current row index.
+        int64_t row_id = _first_row_id + i;
+        dst->append_datum(Datum(row_id));
     }
     return Status::OK();
 }
