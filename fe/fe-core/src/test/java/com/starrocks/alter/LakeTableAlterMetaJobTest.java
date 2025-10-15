@@ -234,12 +234,12 @@ public class LakeTableAlterMetaJobTest {
             }
         };
         
-        // Mock SystemInfoService to return a mock ComputeNode that is not alive
+        // Mock SystemInfoService to return a mock ComputeNode that is alive
         new MockUp<SystemInfoService>() {
             @Mock
             public ComputeNode getBackendOrComputeNode(long nodeId) {
                 ComputeNode mockNode = new ComputeNode(nodeId, "127.0.0.1", 9030);
-                mockNode.setAlive(true); // Set to not alive to trigger the failure
+                mockNode.setAlive(true);
                 return mockNode;
             }
         };
@@ -248,7 +248,6 @@ public class LakeTableAlterMetaJobTest {
         Assertions.assertEquals(AlterJobV2.JobState.PENDING, job.getJobState());
         job.run();
         Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
-        System.err.println(job.errMsg);
         Assertions.assertTrue(job.errMsg.contains("no alive node"));
     }
 
