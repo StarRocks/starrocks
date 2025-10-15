@@ -25,6 +25,7 @@
 #include "common/config.h"
 #include "gutil/strings/join.h"
 #include "service/staros_worker.h"
+#include "storage/rowset/page_io.h"
 #include "testutil/assert.h"
 
 namespace starrocks {
@@ -407,6 +408,48 @@ TEST_P(StarletFileSystemTest, test_delete_files) {
     (void)g_worker->remove_shard(shard_info.id);
 }
 
+<<<<<<< HEAD
+=======
+TEST_P(StarletFileSystemTest, test_tag) {
+    bool old = config::starlet_write_file_with_tag;
+    config::starlet_write_file_with_tag = true;
+    auto uri1 = StarletPath("tag.dat");
+    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(uri1));
+    ASSIGN_OR_ABORT(auto wf1, fs->new_writable_file(uri1));
+
+    auto uri2 = StarletPath("tag.meta");
+    ASSIGN_OR_ABORT(auto wf2, fs->new_writable_file(uri2));
+
+    auto uri3 = StarletPath("tag.log");
+    ASSIGN_OR_ABORT(auto wf3, fs->new_writable_file(uri3));
+
+    auto uri4 = StarletPath("tag.logs");
+    ASSIGN_OR_ABORT(auto wf4, fs->new_writable_file(uri4));
+    config::starlet_write_file_with_tag = old;
+}
+
+TEST_P(StarletFileSystemTest, test_drop_cache) {
+    std::string test_type = GetParam();
+    if (test_type == "s3") {
+        return;
+    }
+    bool old = config::lake_clear_corrupted_cache_data;
+    config::lake_clear_corrupted_cache_data = false;
+    auto uri = StarletPath("cache.dat");
+    ASSERT_TRUE(drop_local_cache_data(uri).is_not_supported());
+    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(uri));
+    ASSIGN_OR_ABORT(auto wf, fs->new_writable_file(uri));
+    ASSERT_OK(wf->append("hello"));
+    ASSERT_OK(wf->append(" world!"));
+    ASSERT_OK(wf->close());
+    config::lake_clear_corrupted_cache_data = true;
+    std::string bad = "bad.dat";
+    ASSERT_TRUE(drop_local_cache_data(bad).is_not_supported());
+    ASSERT_TRUE(drop_local_cache_data(uri).ok());
+    config::lake_clear_corrupted_cache_data = old;
+}
+
+>>>>>>> 8dbb0bbce3 ([BugFix] support clear corrupted lake data cache (#63182))
 INSTANTIATE_TEST_CASE_P(StarletFileSystem, StarletFileSystemTest,
                         ::testing::Values(std::string("s3"), std::string("cachefs")));
 
