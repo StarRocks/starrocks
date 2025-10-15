@@ -211,6 +211,7 @@ public final class MVPCTBasedRefreshProcessor extends BaseMVRefreshProcessor {
 
             // Generate insert stmt's exec plan, make thread local ctx existed
             try (ConnectContext.ScopeGuard guard = ctx.bindScope(); Timer ignored = Tracers.watchScope("MVRefreshPlanner")) {
+                ctx.getSessionVariable().setEnableInsertSelectExternalAutoRefresh(false); //already refreshed before
                 execPlan = StatementPlanner.planInsertStmt(locker, insertStmt, ctx);
             }
         } finally {
