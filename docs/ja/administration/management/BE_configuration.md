@@ -2053,12 +2053,30 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### lake_enable_vertical_compaction_fill_data_cache
 
-- デフォルト: false
+- デフォルト: true
 - タイプ: Boolean
 - 単位: -
 - 可変: はい
 - 説明: 共有データクラスタでコンパクションタスクがローカルディスクにデータをキャッシュすることを許可するかどうか。
 - 導入バージョン: v3.1.7, v3.2.3
+
+##### lake_clear_corrupted_cache_meta
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 可変: はい
+- 説明: 共有データクラスタにおいて、システムが破損したメタデータキャッシュをクリアすることを許可するかどうか。
+- 導入バージョン: v3.3
+
+##### lake_clear_corrupted_cache_data
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 可変: はい
+- 説明: 共有データクラスタにおいて、システムが破損したデータキャッシュをクリアすることを許可するかどうか。
+- 導入バージョン: v3.4
 
 ### その他
 
