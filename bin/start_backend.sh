@@ -232,8 +232,7 @@ if [ ${RUN_DAEMON} -eq 1 ]; then
     
     # Start profile collection daemon for BE
     if [ ${RUN_BE} -eq 1 ]; then
-        echo "Starting profile collection daemon..."
-        nohup ${STARROCKS_HOME}/bin/collect_be_profile.sh --daemon --both --duration 120 --interval 3600 >> ${LOG_DIR}/collect_be_profile.log 2>&1 &
+        ${STARROCKS_HOME}/bin/collect_be_profile.sh --daemon
         echo "Profile collection daemon started"
     fi
 else

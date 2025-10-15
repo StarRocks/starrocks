@@ -139,8 +139,9 @@ check_brpc_server() {
     if ! curl -s --connect-timeout 5 "$url" > /dev/null 2>&1; then
         log_error "Cannot connect to BRPC server at localhost:$BRPC_PORT"
         log_error "Please ensure StarRocks BE is running and BRPC port is correct"
-        exit 1
+        return 1
     fi
+    return 0
 }
 
 # Generate timestamp for filename
