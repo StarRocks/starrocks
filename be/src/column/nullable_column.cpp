@@ -304,6 +304,7 @@ uint32_t NullableColumn::serialize_default(uint8_t* pos) const {
     return sizeof(bool);
 }
 
+<<<<<<< HEAD
 size_t NullableColumn::serialize_batch_at_interval(uint8_t* dst, size_t byte_offset, size_t byte_interval, size_t start,
                                                    size_t count) const {
     _null_column->serialize_batch_at_interval(dst, byte_offset, byte_interval, start, count);
@@ -315,6 +316,16 @@ size_t NullableColumn::serialize_batch_at_interval(uint8_t* dst, size_t byte_off
         }
     }
     return _null_column->type_size() + _data_column->type_size();
+=======
+size_t NullableColumn::serialize_batch_at_interval(uint8_t* dst, size_t byte_offset, size_t byte_interval,
+                                                   uint32_t max_row_size, size_t start, size_t count) const {
+    const auto null_data = _null_column->immutable_data();
+    const size_t null_size = _null_column->type_size();
+    _null_column->serialize_batch_at_interval(dst, byte_offset, byte_interval, null_size, start, count);
+    const size_t data_size = _data_column->serialize_batch_at_interval_with_null_masks(
+            dst, byte_offset, byte_interval, max_row_size - null_size, start, count, null_data.data());
+    return null_size + data_size;
+>>>>>>> d1c9f23fe9 ([Enhancement] Optimize VARCHAR join key when length <= 16 (#63970))
 }
 
 void NullableColumn::serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
