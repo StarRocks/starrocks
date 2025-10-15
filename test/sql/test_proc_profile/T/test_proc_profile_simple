@@ -1,0 +1,17 @@
+-- name: test_proc_profile_simple
+-- Test FE /proc_profile and /proc_profile/file HTTP endpoints
+
+-- Test 1: Check that /proc_profile page is accessible and contains profile information
+shell: curl -s -u root: "${url}/proc_profile" | grep -c "Process Profiles"
+
+-- Test 2: Check that /proc_profile page shows available profile files (should have at least one profile)
+shell: curl -s -u root: "${url}/proc_profile" | grep -c "View"
+
+-- Test 3: Test /proc_profile/file endpoint with a valid filename (if profiles exist)
+-- Get a profile filename from the main page and test accessing it
+shell: curl -s -u root: "${url}/proc_profile" | grep -o 'filename=[^"]*\.tar\.gz' | head -1 | cut -d'=' -f2 > profile_file.txt
+shell: curl -s -u root: "${url}/proc_profile/file?filename=$(cat profile_file.txt)" | wc -l || echo "empty"
+shell: rm profile_file.txt
+
+-- Test 4: Test /proc_profile/file endpoint with invalid filename (should return error)
+shell: curl -s -u root: "${url}/proc_profile/file?filename=invalid_file.tar.gz" | wc -l
