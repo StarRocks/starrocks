@@ -399,7 +399,7 @@ public class TabletInvertedIndex implements MemoryTrackable {
         Map<Long, Long> pathHashToTabletNum = Maps.newHashMap();
         readLock();
         try {
-            Map<Long, Replica> replicaMetaWithBackend = row(backingReplicaMetaTable, backendId);
+            Map<Long, Replica> replicaMetaWithBackend = backingReplicaMetaTable.row(backendId);
             for (Replica r : replicaMetaWithBackend.values()) {
                 pathHashToTabletNum.compute(r.getPathHash(), (k, v) -> v == null ? 1L : v + 1);
             }

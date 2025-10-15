@@ -103,7 +103,7 @@ public class TabletInvertedIndexTest {
         int num = 500000;
         // build test data, create `num` of tablets and distribute them into `diskNum` of disks
         for (int i = 0; i < num; ++i) {
-            TabletMeta meta = new TabletMeta(dbId, tableId, partitionId, indexId, TStorageMedium.HDD);
+            TabletMeta meta = new TabletMeta(dbId, tableId, partitionId, indexId, schemaHash, TStorageMedium.HDD);
             long tabletId = idGenerator.getNextId();
             tabletInvertedIndex.addTablet(tabletId, meta);
 
