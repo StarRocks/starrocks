@@ -367,8 +367,13 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
                                                 MVRefreshParams mvRefreshParams,
                                                 Set<String> mvPotentialPartitionNames) {
         // list partitioned materialized view
+<<<<<<< HEAD
         boolean isAutoRefresh = mvContext.getTaskType().isAutoRefresh();
         Set<String> mvListPartitionNames = getMVPartitionNamesWithTTL(mv, mvRefreshParams, isAutoRefresh);
+=======
+        boolean isAutoRefresh = isAutomaticRefresh();
+        PCellSortedSet mvListPartitionNames = getMVPartitionNamesWithTTL(isAutoRefresh);
+>>>>>>> d46666faa8 ([Enhancement] Change materialized_view_refresh_ascending to false by default (#63925))
 
         // check non-ref base tables
         if (mvRefreshParams.isForce() || needsRefreshBasedOnNonRefTables(snapshotBaseTables)) {
@@ -448,6 +453,7 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
     }
 
     @Override
+<<<<<<< HEAD
     public void filterPartitionByRefreshNumber(Set<String> mvPartitionsToRefresh, Set<String> mvPotentialPartitionNames,
                                                boolean tentative) {
         filterPartitionByRefreshNumberInternal(mvPartitionsToRefresh, mvPotentialPartitionNames, tentative,
@@ -474,6 +480,32 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
                 continue;
             }
             partitionToCells.put(partitionName, listCell);
+=======
+    public void filterPartitionByRefreshNumber(PCellSortedSet toRefreshPartitions,
+                                               MaterializedView.PartitionRefreshStrategy refreshStrategy) {
+        // filter by partition ttl
+        filterPartitionsByTTL(toRefreshPartitions, false);
+        if (toRefreshPartitions == null || toRefreshPartitions.isEmpty()) {
+            return;
+        }
+        // filter invalid cells from input
+        toRefreshPartitions.stream()
+                .filter(cell -> !mv.getListPartitionItems().containsKey(cell.name()))
+                .forEach(toRefreshPartitions::remove);
+        // dynamically get the number of partitions to be refreshed this time
+        int partitionRefreshNumber = getPartitionRefreshNumberAdaptive(toRefreshPartitions, refreshStrategy);
+        if (partitionRefreshNumber <= 0 || partitionRefreshNumber >= toRefreshPartitions.size()) {
+            return;
+        }
+        int i = 0;
+        // refresh the recent partitions first
+        Iterator<PCellWithName> iterator = getToRefreshPartitionsIterator(toRefreshPartitions, 
+                Config.materialized_view_refresh_ascending);
+        while (i++ < partitionRefreshNumber && iterator.hasNext()) {
+            PCellWithName pCell = iterator.next();
+            logger.debug("Materialized view [{}] to refresh partition name {}, value {}",
+                    mv.getName(), pCell.name(), pCell.cell());
+>>>>>>> d46666faa8 ([Enhancement] Change materialized_view_refresh_ascending to false by default (#63925))
         }
 
         // filter by partition ttl

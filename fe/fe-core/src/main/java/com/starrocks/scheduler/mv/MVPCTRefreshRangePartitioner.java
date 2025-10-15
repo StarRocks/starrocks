@@ -281,8 +281,12 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
                                                 MVRefreshParams mvRefreshParams,
                                                 Set<String> mvPotentialPartitionNames) throws AnalysisException {
         // range partitioned materialized views
+<<<<<<< HEAD
         boolean isAutoRefresh = mvContext.getTaskType().isAutoRefresh();
         int partitionTTLNumber = mvContext.getPartitionTTLNumber();
+=======
+        boolean isAutoRefresh = isAutomaticRefresh();
+>>>>>>> d46666faa8 ([Enhancement] Change materialized_view_refresh_ascending to false by default (#63925))
         boolean isRefreshMvBaseOnNonRefTables = needsRefreshBasedOnNonRefTables(snapshotBaseTables);
         String start = mvRefreshParams.getRangeStart();
         String end = mvRefreshParams.getRangeEnd();
@@ -443,6 +447,7 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
         if (partitionRefreshNumber <= 0 || partitionRefreshNumber >= mvRangePartitionMap.size()) {
             return;
         }
+<<<<<<< HEAD
         Map<String, Range<PartitionKey>> mappedPartitionsToRefresh = Maps.newHashMap();
         Iterator<String> mvToRefreshPartitionsIter = mvPartitionsToRefresh.iterator();
         while (mvToRefreshPartitionsIter.hasNext()) {
@@ -455,6 +460,21 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
                 continue;
             }
             mappedPartitionsToRefresh.put(mvPartitionName, mvRangePartitionMap.get(mvPartitionName));
+=======
+
+        // remove invalid cells from the input to-refresh partitions
+        mvPartitionsToRefresh
+                .stream()
+                .filter(pCell -> !mvRangePartitionMap.containsKey(pCell.name()))
+                .forEach(mvPartitionsToRefresh::remove);
+
+        boolean isAscending = Config.materialized_view_refresh_ascending;
+        Iterator<PCellWithName> iterator = getToRefreshPartitionsIterator(mvPartitionsToRefresh, isAscending);
+        // dynamically get the number of partitions to be refreshed this time
+        partitionRefreshNumber = getPartitionRefreshNumberAdaptive(mvPartitionsToRefresh, refreshStrategy);
+        if (partitionRefreshNumber <= 0 || mvPartitionsToRefresh.size() <= partitionRefreshNumber) {
+            return;
+>>>>>>> d46666faa8 ([Enhancement] Change materialized_view_refresh_ascending to false by default (#63925))
         }
         LinkedList<String> sortedPartition = mappedPartitionsToRefresh.entrySet().stream()
                 .sorted(Map.Entry.comparingByValue(RangeUtils.RANGE_COMPARATOR))
@@ -493,7 +513,14 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
             // BTW, since the refresh has already scanned the needed base tables' data, it's better to update
             // more mv's partitions as more as possible.
             // TODO: But it may cause much memory to refresh many partitions, support fine-grained partition refresh later.
+<<<<<<< HEAD
             if (!mvPotentialPartitionNames.isEmpty() && mvPotentialPartitionNames.contains(mvRefreshPartition)) {
+=======
+            if (!mvToRefreshPotentialPartitions.isEmpty() && mvToRefreshPotentialPartitions.contains(pCell.name())) {
+                logger.info("Materialized view [{}] partition {} is in the many-to-many mappings, " +
+                        "skip to filter it, mvToRefreshPotentialPartitions:{}", mv.getName(),
+                        pCell.name(), mvToRefreshPotentialPartitions);
+>>>>>>> d46666faa8 ([Enhancement] Change materialized_view_refresh_ascending to false by default (#63925))
                 return;
             }
         }
@@ -503,6 +530,7 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
         setNextPartitionStartAndEnd(mvPartitionsToRefresh, mappedPartitionsToRefresh, partitionNameIter, tentative);
     }
 
+<<<<<<< HEAD
     public int getAdaptivePartitionRefreshNumber(Iterator<String> partitionNameIter) throws MVAdaptiveRefreshException {
 
         Map<String, Map<Table, Set<String>>> mvToBaseNameRefs = mvContext.getMvRefBaseTableIntersectedPartitions();
@@ -549,12 +577,47 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
             if (endPartitionName != null) {
                 PartitionKey upperEndpoint = mappedPartitionsToRefresh.get(endPartitionName).upperEndpoint();
                 mvContext.setNextPartitionEnd(AnalyzerUtils.parseLiteralExprToDateString(upperEndpoint, 0));
+=======
+        // no matter ascending or descending, we should always keep start is less than end
+        // so we need to update the next start and end partition names in descending order
+        String start = null;
+        String end = null;
+        PCellWithName endCell = null;
+        if (iterator.hasNext()) {
+            PCellWithName pCell = iterator.next();
+            start = getNextPartitionVal(pCell, isAscending, true);
+            endCell = pCell;
+            iterator.remove();
+        }
+        while (iterator.hasNext()) {
+            endCell = iterator.next();
+            iterator.remove();
+        }
+
+        if (!mvRefreshParams.isTentative()) {
+            // partitionNameIter has just been traversed, and endPartitionName is not updated
+            // will cause endPartitionName == null
+            if (endCell != null) {
+                end = getNextPartitionVal(endCell, isAscending, false);
+            }
+            if (isAscending) {
+                mvContext.setNextPartitionStart(start);
+                mvContext.setNextPartitionEnd(end);
+>>>>>>> d46666faa8 ([Enhancement] Change materialized_view_refresh_ascending to false by default (#63925))
             } else {
-                // partitionNameIter has just been traversed, and endPartitionName is not updated
-                // will cause endPartitionName == null
-                mvContext.setNextPartitionEnd(null);
+                mvContext.setNextPartitionStart(end);
+                mvContext.setNextPartitionEnd(start);
             }
         }
+    }
+    private String getNextPartitionVal(PCellWithName pCell,
+                                       boolean isAscending,
+                                       boolean isStart) {
+        PRangeCell pRangeCell = (PRangeCell) pCell.cell();
+        Range<PartitionKey> partitionKeyRange = pRangeCell.getRange();
+        PartitionKey endpoint = (isAscending ^ isStart) ?
+                partitionKeyRange.upperEndpoint() : partitionKeyRange.lowerEndpoint();
+        return AnalyzerUtils.parseLiteralExprToDateString(endpoint, 0);
     }
 
     private void addRangePartitions(Database database, MaterializedView materializedView,
