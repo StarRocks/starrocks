@@ -1000,7 +1000,7 @@ public class PlanTestBase extends PlanTestNoneDBBase {
         connectContext.getSessionVariable().setEnableLowCardinalityOptimize(false);
         connectContext.getSessionVariable().setEnableShortCircuit(true);
         connectContext.getSessionVariable().setCboPushDownGroupingSet(false);
-        connectContext.getSessionVariable().setCboEnableSingleNodePreferTwoStageAggregate(false);
+        connectContext.getSessionVariable().setCboEnableSingleNodePreferTwoOrFourStageAggregate(false);
         connectContext.getSessionVariable().setCboRewriteMonotonicMinmax(false);
     }
 
