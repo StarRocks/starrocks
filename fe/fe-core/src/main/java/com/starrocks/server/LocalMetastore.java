@@ -231,7 +231,7 @@ import com.starrocks.sql.ast.expression.SetVarHint;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.TableName;
-import com.starrocks.sql.ast.expression.TableRef;
+import com.starrocks.sql.ast.expression.TableRefPersist;
 import com.starrocks.sql.ast.expression.UserVariableHint;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.PListCell;
@@ -4467,7 +4467,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
      */
     @Override
     public void truncateTable(TruncateTableStmt truncateTableStmt, ConnectContext context) throws DdlException {
-        TableRef tblRef = truncateTableStmt.getTblRef();
+        TableRefPersist tblRef = truncateTableStmt.getTblRef();
         TableName dbTbl = tblRef.getName();
         // check, and save some info which need to be checked again later
         Map<String, Partition> origPartitions = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);

@@ -12,14 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
-import com.starrocks.sql.ast.expression.TableRef;
 import com.starrocks.sql.parser.NodePosition;
 
 public class ShowDataDistributionStmt extends ShowStmt {
-    private TableRef tblRef;
+    private final TableRef tableRef;
 
     public ShowDataDistributionStmt(TableRef tblRef) {
         this(tblRef, NodePosition.ZERO);
@@ -27,28 +25,24 @@ public class ShowDataDistributionStmt extends ShowStmt {
 
     public ShowDataDistributionStmt(TableRef tblRef, NodePosition pos) {
         super(pos);
-        this.tblRef = tblRef;
+        this.tableRef = tblRef;
     }
 
     public String getDbName() {
-        return tblRef.getName().getDb();
-    }
-
-    public void setDbName(String dbName) {
-        this.tblRef.getName().setDb(dbName);
+        return tableRef.getDbName();
     }
 
     public String getTblName() {
-        return tblRef.getName().getTbl();
+        return tableRef.getTableName();
     }
 
-    public PartitionNames getPartitionNames() {
-        return tblRef.getPartitionNames();
+    public PartitionRef getPartitionDef() {
+        return tableRef.getPartitionDef();
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowDataDistributionStatement(this, context);
+        return visitor.visitShowDataDistributionStatement(this, context);
     }
 }
 

@@ -77,7 +77,7 @@ import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.RestoreStmt;
 import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.sql.ast.expression.TableName;
-import com.starrocks.sql.ast.expression.TableRef;
+import com.starrocks.sql.ast.expression.TableRefPersist;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.task.DirMoveTask;
 import com.starrocks.task.DownloadTask;
@@ -318,8 +318,8 @@ public class BackupHandlerTest {
         }
 
         // process backup
-        List<TableRef> tblRefs = Lists.newArrayList();
-        tblRefs.add(new TableRef(new TableName(CatalogMocker.TEST_DB_NAME, CatalogMocker.TEST_TBL_NAME), null));
+        List<TableRefPersist> tblRefs = Lists.newArrayList();
+        tblRefs.add(new TableRefPersist(new TableName(CatalogMocker.TEST_DB_NAME, CatalogMocker.TEST_TBL_NAME), null));
         BackupStmt backupStmt = new BackupStmt(new LabelName(CatalogMocker.TEST_DB_NAME, "label1"), "repo", tblRefs,
                 Lists.newArrayList(), null, null, false, "", null);
         try {
@@ -359,8 +359,8 @@ public class BackupHandlerTest {
         }
 
         // process primary key table backup
-        List<TableRef> tblRefs1 = Lists.newArrayList();
-        tblRefs1.add(new TableRef(new TableName(CatalogMocker.TEST_DB_NAME, CatalogMocker.TEST_TBL3_NAME), null));
+        List<TableRefPersist> tblRefs1 = Lists.newArrayList();
+        tblRefs1.add(new TableRefPersist(new TableName(CatalogMocker.TEST_DB_NAME, CatalogMocker.TEST_TBL3_NAME), null));
         BackupStmt backupStmt1 =
                 new BackupStmt(new LabelName(CatalogMocker.TEST_DB_NAME, "label2"), "repo", tblRefs1, Lists.newArrayList(),
                         null, null, false, "", null);
@@ -401,8 +401,8 @@ public class BackupHandlerTest {
         }
 
         // process restore
-        List<TableRef> tblRefs2 = Lists.newArrayList();
-        tblRefs2.add(new TableRef(new TableName(CatalogMocker.TEST_DB_NAME, CatalogMocker.TEST_TBL_NAME), null));
+        List<TableRefPersist> tblRefs2 = Lists.newArrayList();
+        tblRefs2.add(new TableRefPersist(new TableName(CatalogMocker.TEST_DB_NAME, CatalogMocker.TEST_TBL_NAME), null));
         Map<String, String> properties = Maps.newHashMap();
         properties.put("backup_timestamp", "2018-08-08-08-08-08");
         RestoreStmt restoreStmt = new RestoreStmt(new LabelName(CatalogMocker.TEST_DB_NAME, "ss2"), "repo", tblRefs2,
@@ -462,8 +462,8 @@ public class BackupHandlerTest {
         handler.cancel(new CancelBackupStmt(CatalogMocker.TEST_DB_NAME, true));
 
         // process primary key table restore
-        List<TableRef> tblRefs3 = Lists.newArrayList();
-        tblRefs3.add(new TableRef(new TableName(CatalogMocker.TEST_DB_NAME, CatalogMocker.TEST_TBL_NAME), null));
+        List<TableRefPersist> tblRefs3 = Lists.newArrayList();
+        tblRefs3.add(new TableRefPersist(new TableName(CatalogMocker.TEST_DB_NAME, CatalogMocker.TEST_TBL_NAME), null));
         Map<String, String> properties1 = Maps.newHashMap();
         properties1.put("backup_timestamp", "2018-08-08-08-08-08");
         RestoreStmt restoreStmt1 = new RestoreStmt(new LabelName(CatalogMocker.TEST_DB_NAME, "label2"), "repo", tblRefs3,
@@ -518,7 +518,7 @@ public class BackupHandlerTest {
         TSnapshotRequest requestSnapshot = snapshotTask1.toThrift();
 
         // process FUNCTION restore
-        List<TableRef> emptyTableRef = Lists.newArrayList();
+        List<TableRefPersist> emptyTableRef = Lists.newArrayList();
         List<FunctionRef> fnRefs = Lists.newArrayList();
         FunctionRef fnRef = new FunctionRef(
                 QualifiedName.of(List.of(db.getFullName(), "test_function")), "new_name", NodePosition.ZERO);
@@ -768,8 +768,8 @@ public class BackupHandlerTest {
         }
 
         // process restore
-        List<TableRef> tblRefs2 = Lists.newArrayList();
-        tblRefs2.add(new TableRef(new TableName(CatalogMocker.TEST_DB_NAME, CatalogMocker.TEST_TBL_NAME), null));
+        List<TableRefPersist> tblRefs2 = Lists.newArrayList();
+        tblRefs2.add(new TableRefPersist(new TableName(CatalogMocker.TEST_DB_NAME, CatalogMocker.TEST_TBL_NAME), null));
         Map<String, String> properties = Maps.newHashMap();
         properties.put("backup_timestamp", "2018-08-08-08-08-08");
         RestoreStmt restoreStmt = new RestoreStmt(new LabelName(null, "ss2"), "repo", tblRefs2,

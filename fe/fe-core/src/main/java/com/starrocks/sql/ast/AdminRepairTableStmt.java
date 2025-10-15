@@ -16,7 +16,7 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
-import com.starrocks.sql.ast.expression.TableRef;
+import com.starrocks.sql.ast.expression.TableRefPersist;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -24,16 +24,16 @@ import java.util.List;
 //  ADMIN REPAIR TABLE table_name partitions;
 public class AdminRepairTableStmt extends DdlStmt {
 
-    private final TableRef tblRef;
+    private final TableRefPersist tblRef;
     private final List<String> partitions = Lists.newArrayList();
 
     private long timeoutS = 0;
 
-    public AdminRepairTableStmt(TableRef tblRef) {
+    public AdminRepairTableStmt(TableRefPersist tblRef) {
         this(tblRef, NodePosition.ZERO);
     }
 
-    public AdminRepairTableStmt(TableRef tblRef, NodePosition pos) {
+    public AdminRepairTableStmt(TableRefPersist tblRef, NodePosition pos) {
         super(pos);
         this.tblRef = tblRef;
     }

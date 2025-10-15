@@ -114,10 +114,6 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
     }
 
 
-    default R visitShowDataDistributionStatement(ShowDataDistributionStmt statement, C context) {
-        return visitShowStatement(statement, context);
-    }
-
     // ---------------------------------------- Table Statement --------------------------------------------------------
 
     default R visitCreateTableStatement(CreateTableStmt statement, C context) {
