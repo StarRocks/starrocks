@@ -195,4 +195,3 @@ public class DomainResolver extends FrontendDaemon {
     }
 
 }
-

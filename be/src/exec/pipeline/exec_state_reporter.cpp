@@ -20,7 +20,6 @@
 #include <memory>
 
 #include "agent/master_info.h"
-#include "common/status.h"
 #include "runtime/client_cache.h"
 #include "runtime/exec_env.h"
 #include "service/backend_options.h"

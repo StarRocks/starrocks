@@ -626,7 +626,6 @@ public class ShowExecutorSimpleTest {
 
         Assertions.assertEquals(34, resultSet.getMetaData().getColumnCount());
         Assertions.assertEquals("BackendId", resultSet.getMetaData().getColumn(0).getName());
-        Assertions.assertEquals("ResolvedIP", resultSet.getMetaData().getColumn(2).getName());
         Assertions.assertEquals("CpuCores", resultSet.getMetaData().getColumn(22).getName());
         Assertions.assertEquals("MemLimit", resultSet.getMetaData().getColumn(23).getName());
         Assertions.assertEquals("NumRunningQueries", resultSet.getMetaData().getColumn(24).getName());
@@ -636,6 +635,7 @@ public class ShowExecutorSimpleTest {
         Assertions.assertEquals("StatusCode", resultSet.getMetaData().getColumn(29).getName());
         Assertions.assertEquals("StarletPort", resultSet.getMetaData().getColumn(30).getName());
         Assertions.assertEquals("WorkerId", resultSet.getMetaData().getColumn(31).getName());
+        Assertions.assertEquals("ResolvedIP", resultSet.getMetaData().getColumn(33).getName());
 
         Assertions.assertTrue(resultSet.next());
         Assertions.assertEquals("1", resultSet.getString(0));

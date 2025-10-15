@@ -188,5 +188,3 @@ public class FrontendsProcNode implements ProcNodeInterface {
         return false;
     }
 }
-
-

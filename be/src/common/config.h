@@ -63,11 +63,11 @@ CONF_Int32(brpc_max_connections_per_server, "1");
 CONF_mInt32(brpc_stub_expire_s, "3600"); // 60 minutes
 
 // Whether to resolve backend hostnames to IP addresses in generated error URLs.
-// - true  (default): StarRocks will attempt to resolve hostnames to IPs.
+// - true: StarRocks will attempt to resolve hostnames to IPs.
 //  Useful in debugging scenarios where internal hostnames (e.g., K8s pod names)
 //  are not resolvable from the client’s network, so you can curl or open the
 //   error URL directly.
-// - false: Keep the original hostname in the error URL.
+// - false (default) : Keep the original hostname in the error URL.
 //  Recommended if your DNS setup already allows resolving backend hostnames
 //  across your network, or if IP-based access is unstable (e.g., NAT environments).
 CONF_mBool(enable_resolve_hostname_to_ip_in_load_error_url, "false");

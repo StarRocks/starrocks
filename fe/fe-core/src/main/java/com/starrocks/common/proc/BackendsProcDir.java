@@ -70,7 +70,7 @@ public class BackendsProcDir implements ProcDirInterface {
     public static final ImmutableList<String> TITLE_NAMES_SHARED_DATA;
     static {
         ImmutableList.Builder<String> builder = new ImmutableList.Builder<String>()
-                .add("BackendId").add("IP").add("ResolvedIP").add("HeartbeatPort")
+                .add("BackendId").add("IP").add("HeartbeatPort")
                 .add("BePort").add("HttpPort").add("BrpcPort").add("LastStartTime").add("LastHeartbeat")
                 .add("Alive").add("SystemDecommissioned").add("ClusterDecommissioned").add("TabletNum")
                 .add("DataUsedCapacity").add("AvailCapacity").add("TotalCapacity").add("UsedPct")
@@ -84,7 +84,8 @@ public class BackendsProcDir implements ProcDirInterface {
                 .addAll(TITLE_NAMES)
                 .add("StarletPort")
                 .add("WorkerId")
-                .add("WarehouseName");
+                .add("WarehouseName")
+                .add("ResolvedIP");
         TITLE_NAMES_SHARED_DATA = builder.build();
     }
 
