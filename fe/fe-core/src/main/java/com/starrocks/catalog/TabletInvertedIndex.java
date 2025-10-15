@@ -821,6 +821,14 @@ public class TabletInvertedIndex implements MemoryTrackable {
         }
     }
 
+    /**
+     * Get the number of tablets on the specified backend and pathHash
+     * @param backendId the ID of the backend
+     * @param pathHash the hash of the path
+     * @return the number of tablets as a long value
+     *
+     * @implNote Linear scan, invoke this interface with caution if the number of replicas is large
+     */
     public long getTabletNumByBackendIdAndPathHash(long backendId, long pathHash) {
         readLock();
         try {
@@ -829,6 +837,27 @@ public class TabletInvertedIndex implements MemoryTrackable {
         } finally {
             readUnlock();
         }
+    }
+
+    /**
+     * Get the number of tablets on the specified backend, grouped by pathHash
+     * @param backendId the ID of the backend
+     * @return Map<pathHash, tabletNum> the number of tablets grouped by pathHash
+     *
+     * @implNote Linear scan, invoke this interface with caution if the number of replicas is large
+     */
+    public Map<Long, Long> getTabletNumByBackendIdGroupByPathHash(long backendId) {
+        Map<Long, Long> pathHashToTabletNum = Maps.newHashMap();
+        readLock();
+        try {
+            Map<Long, Replica> replicaMetaWithBackend = row(backingReplicaMetaTable, backendId);
+            for (Replica r : replicaMetaWithBackend.values()) {
+                pathHashToTabletNum.compute(r.getPathHash(), (k, v) -> v == null ? 1L : v + 1);
+            }
+        } finally {
+            readUnlock();
+        }
+        return pathHashToTabletNum;
     }
 
     public Map<TStorageMedium, Long> getReplicaNumByBeIdAndStorageMedium(long backendId) {
