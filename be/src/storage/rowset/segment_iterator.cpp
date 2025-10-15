@@ -25,7 +25,6 @@
 #include "column/column_helper.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
-#include "column/row_id_column.h"
 #include "common/config.h"
 #include "common/status.h"
 #include "fs/fs.h"
@@ -62,7 +61,6 @@
 #include "storage/rowset/default_value_column_iterator.h"
 #include "storage/rowset/dictcode_column_iterator.h"
 #include "storage/rowset/fill_subfield_iterator.h"
-#include "storage/rowset/global_rowid_column_iterator.h"
 #include "storage/rowset/rowid_column_iterator.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/short_key_range_option.h"
@@ -2255,11 +2253,8 @@ Status SegmentIterator::_finish_late_materialization(ScanContext* ctx) {
     bool may_has_del_row = ctx->_dict_chunk->delete_state() != DEL_NOT_SATISFIED;
 
     // last column of |_dict_chunk| is a fake column: it's filled by `RowIdColumnIterator`.
-    // @TODO consider global lm
     ColumnPtr rowid_column = ctx->_dict_chunk->get_column_by_index(m - 1);
-    const auto* ordinals = rowid_column->is_global_row_id()
-                                   ? down_cast<RowIdColumn*>(rowid_column.get())->ord_ids_column().get()
-                                   : down_cast<FixedLengthColumn<rowid_t>*>(rowid_column.get());
+    const auto* ordinals = down_cast<FixedLengthColumn<rowid_t>*>(rowid_column.get());
 
     if (_predicate_columns < _schema.num_fields()) {
         const size_t n = _schema.num_fields();

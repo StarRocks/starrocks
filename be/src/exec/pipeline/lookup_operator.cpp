@@ -97,7 +97,6 @@ Status LookUpProcessor::_collect_input_columns(RuntimeState* state, const ChunkP
     DCHECK(_parent->_row_pos_descs.contains(_ctx->request_tuple_id)) << "missing request tuple id: " << _ctx->request_tuple_id;
     auto row_pos_desc = _parent->_row_pos_descs.at(_ctx->request_tuple_id);
     for (const auto& slot_id: row_pos_desc->get_fetch_ref_slot_ids()) {
-        // @TODO use lookup slot ids?
         auto slot_desc = state->desc_tbl().get_slot_descriptor(slot_id);
         auto col = ColumnHelper::create_column(slot_desc->type(), slot_desc->is_nullable());
         request_chunk->append_column(std::move(col), slot_desc->id());
@@ -143,7 +142,7 @@ Status LookUpProcessor::process(RuntimeState* state) {
         status = st.status();
         return status;
     }
-    auto task = st.value();
+    const auto& task = st.value();
     RETURN_IF_ERROR(status = task->process(state, request_chunk));
     return Status::OK();
 }

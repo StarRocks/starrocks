@@ -105,20 +105,6 @@ Status OlapScanContext::capture_tablet_rowsets(const std::vector<TInternalScanRa
 
     return Status::OK();
 }
-GlobalLateMaterilizationCtx::~GlobalLateMaterilizationCtx() {
-    for (auto& guard : _rowset_release_guards) {
-        guard->reset();
-    }
-}
-
-void GlobalLateMaterilizationCtx::add_captured_tablet_rowsets(std::vector<std::vector<RowsetSharedPtr>> rowsets) {
-    for (const auto& rowset_vec : rowsets) {
-        Rowset::acquire_readers(rowset_vec);
-    }
-    std::unique_lock l(_mu);
-    _rowset_release_guards.emplace_back(
-            std::make_unique<MultiRowsetReleaseGuard>(std::move(rowsets), adopt_acquire_t{}));
-}
 
 Status OlapScanContext::parse_conjuncts(RuntimeState* state, const std::vector<ExprContext*>& runtime_in_filters,
                                         RuntimeFilterProbeCollector* runtime_bloom_filters, int32_t driver_sequence) {

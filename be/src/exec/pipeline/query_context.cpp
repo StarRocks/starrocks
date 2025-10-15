@@ -167,7 +167,7 @@ void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent,
         _connector_scan_operator_mem_share_arbitrator = _object_pool.add(
                 new ConnectorScanOperatorMemShareArbitrator(_static_query_mem_limit, connector_scan_node_number));
         if (runtime_state->enable_global_late_materialization()) {
-            _global_late_materialization_ctx = _object_pool.add(new GlobalLateMaterilizationCtx());
+            // _global_late_materialization_ctx = _object_pool.add(new GlobalLateMaterilizationCtx());
             _global_late_materialization_ctx_mgr = _object_pool.add(new GlobalLateMaterilizationContextMgr());
         }
 
