@@ -25,6 +25,7 @@
 #include "common/config.h"
 #include "gutil/strings/join.h"
 #include "service/staros_worker.h"
+#include "storage/rowset/page_io.h"
 #include "testutil/assert.h"
 
 namespace starrocks {
@@ -405,6 +406,27 @@ TEST_P(StarletFileSystemTest, test_delete_files) {
     paths.emplace_back(uri3);
     EXPECT_OK(fs->delete_files(paths));
     (void)g_worker->remove_shard(shard_info.id);
+}
+
+TEST_P(StarletFileSystemTest, test_drop_cache) {
+    std::string test_type = GetParam();
+    if (test_type == "s3") {
+        return;
+    }
+    bool old = config::lake_clear_corrupted_cache_data;
+    config::lake_clear_corrupted_cache_data = false;
+    auto uri = StarletPath("cache.dat");
+    ASSERT_TRUE(drop_local_cache_data(uri).is_not_supported());
+    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(uri));
+    ASSIGN_OR_ABORT(auto wf, fs->new_writable_file(uri));
+    ASSERT_OK(wf->append("hello"));
+    ASSERT_OK(wf->append(" world!"));
+    ASSERT_OK(wf->close());
+    config::lake_clear_corrupted_cache_data = true;
+    std::string bad = "bad.dat";
+    ASSERT_TRUE(drop_local_cache_data(bad).is_not_supported());
+    ASSERT_TRUE(drop_local_cache_data(uri).ok());
+    config::lake_clear_corrupted_cache_data = old;
 }
 
 INSTANTIATE_TEST_CASE_P(StarletFileSystem, StarletFileSystemTest,
