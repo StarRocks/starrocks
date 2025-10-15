@@ -37,8 +37,10 @@ package com.starrocks.common.proc;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.server.GlobalStateMgr;
@@ -66,6 +68,15 @@ public class BackendProcNode implements ProcNodeInterface {
 
         BaseProcResult result = new BaseProcResult();
         result.setNames(TITLE_NAMES);
+
+        // pull all the tablet num info from inverted index in a single batch
+        Map<Long, Long> pathHashToTabletNum;
+        if (Config.enable_collect_tablet_num_in_show_proc_backend_disk_path) {
+            pathHashToTabletNum = GlobalStateMgr.getCurrentState()
+                    .getTabletInvertedIndex().getTabletNumByBackendIdGroupByPathHash(backend.getId());
+        } else {
+            pathHashToTabletNum = Maps.newHashMap();
+        }
 
         for (Map.Entry<String, DiskInfo> entry : backend.getDisks().entrySet()) {
             DiskInfo diskInfo = entry.getValue();
@@ -119,8 +130,7 @@ public class BackendProcNode implements ProcNodeInterface {
             }
 
             // tablet num
-            info.add(String.valueOf(GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletNumByBackendIdAndPathHash(
-                    backend.getId(), diskInfo.getPathHash())));
+            info.add(String.valueOf(pathHashToTabletNum.getOrDefault(diskInfo.getPathHash(), 0L)));
 
             // data total
             Pair<Double, String> dataTotalUnitPair = DebugUtil.getByteUint(dataTotalB);
