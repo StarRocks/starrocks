@@ -123,7 +123,8 @@ public enum PrimitiveType {
             new ImmutableList.Builder<PrimitiveType>()
                     .add(BOOLEAN)
                     .addAll(INTEGER_TYPE_LIST)
-                    .addAll(FLOAT_TYPE_LIST.subList(0, 2)) // Only DOUBLE and FLOAT, exclude decimals
+                    .add(FLOAT)
+                    .add(DOUBLE)
                     .addAll(STRING_TYPE_LIST)
                     .build();
 

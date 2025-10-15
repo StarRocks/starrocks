@@ -583,10 +583,8 @@ public abstract class Type implements Cloneable {
         // VARIANT
         for (PrimitiveType type : PrimitiveType.VARIANT_COMPATIBLE_TYPE) {
             ScalarType scalar = ScalarType.createType(type);
-            compatibilityMatrix[scalar.ordinal()][VARIANT.ordinal()] = type;
-            // VARIANT to other types - according to Parquet Variant encoding spec
             // VARIANT can store primitive values and should be able to cast to them
-            compatibilityMatrix[VARIANT.ordinal()][scalar.ordinal()] = PrimitiveType.VARIANT;
+            compatibilityMatrix[scalar.ordinal()][VARIANT.ordinal()] = PrimitiveType.VARIANT;
         }
         for (PrimitiveType type : PrimitiveType.VARIANT_INCOMPATIBLE_TYPES) {
             ScalarType scalar = ScalarType.createType(type);
@@ -598,7 +596,7 @@ public abstract class Type implements Cloneable {
         compatibilityMatrix[VARIANT.ordinal()][TIME.ordinal()] = PrimitiveType.INVALID_TYPE;
 
         // VARIANT is incompatible with all decimal types
-        // Variant stores decimals in its own format, not compatible with StarRocks decimal types
+        // VARIANT stores decimals in its own format, not compatible with StarRocks decimal types
         compatibilityMatrix[VARIANT.ordinal()][DECIMALV2.ordinal()] = PrimitiveType.INVALID_TYPE;
         compatibilityMatrix[VARIANT.ordinal()][DECIMAL32.ordinal()] = PrimitiveType.INVALID_TYPE;
         compatibilityMatrix[VARIANT.ordinal()][DECIMAL64.ordinal()] = PrimitiveType.INVALID_TYPE;
