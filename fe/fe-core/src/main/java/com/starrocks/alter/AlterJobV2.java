@@ -366,6 +366,8 @@ public abstract class AlterJobV2 implements Writable {
                     return publishVersionFuture.get();
                 } catch (InterruptedException | ExecutionException e) {
                     return false;
+                } finally {
+                    publishVersionFuture = null;
                 }
             } else {
                 return false;

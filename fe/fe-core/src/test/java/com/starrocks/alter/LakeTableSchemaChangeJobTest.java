@@ -46,9 +46,12 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class LakeTableSchemaChangeJobTest {
     private static final int NUM_BUCKETS = 4;
@@ -580,6 +583,48 @@ public class LakeTableSchemaChangeJobTest {
     }
 
     @Test
+    public void testPublishRetry() throws Exception {
+        AtomicInteger numPublishRetry = new AtomicInteger(0);
+        new MockUp<LakeTableSchemaChangeJob>() {
+            @Mock
+            public boolean lakePublishVersion() {
+                numPublishRetry.incrementAndGet();
+                return false;
+            }
+        };
+        
+        new MockUp<LakeTableSchemaChangeJob>() {
+            @Mock
+            public void sendAgentTask(AgentBatchTask batchTask) {
+                batchTask.getAllTasks().forEach(t -> t.setFinished(true));
+            }
+        };
+
+        schemaChangeJob.run();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob.getJobState());
+        while (numPublishRetry.get() < 2) {
+            schemaChangeJob.run();
+            Thread.sleep(100);
+        }
+
+        new MockUp<LakeTableSchemaChangeJob>() {
+            @Mock
+            public boolean lakePublishVersion() {
+                return true;
+            }
+        };
+
+        while (schemaChangeJob.getJobState() != AlterJobV2.JobState.FINISHED
+                || table.getState() != OlapTable.OlapTableState.NORMAL) {
+            schemaChangeJob.run();
+            Thread.sleep(100);
+        }
+        Assertions.assertEquals(2, table.getBaseSchema().size());
+        Assertions.assertEquals("c0", table.getBaseSchema().get(0).getName());
+        Assertions.assertEquals("c1", table.getBaseSchema().get(1).getName());
+    }
+
+    @Test
     public void testTransactionRaceCondition() throws AlterCancelException {
         new MockUp<LakeTableSchemaChangeJob>() {
             @Mock
@@ -606,7 +651,13 @@ public class LakeTableSchemaChangeJobTest {
         Exception exception = Assertions.assertThrows(AlterCancelException.class, () ->
                 schemaChangeJob.runPendingJob());
         Assertions.assertTrue(exception.getMessage().contains(
-                    "concurrent transaction detected while adding shadow index, please re-run the alter table command"));
+                "concurrent transaction detected while adding shadow index, please re-run the alter table command"),
+                () -> {
+                    StringWriter sw = new java.io.StringWriter();
+                    PrintWriter pw = new java.io.PrintWriter(sw);
+                    exception.printStackTrace(pw);
+                    return sw.toString();
+                });
         Assertions.assertEquals(AlterJobV2.JobState.PENDING, schemaChangeJob.getJobState());
         Assertions.assertEquals(10101L, schemaChangeJob.getWatershedTxnId());
 
