@@ -34,7 +34,9 @@ CREATE TABLE t1 (
     low1 string NULL,
     low2 string NULL,
     low3 string NULL,
-    str1 string NULL
+    str1 string NULL,
+    low_char1 CHAR(40) NULL,
+    str_char1 CHAR(40) NULL
 ) ENGINE=OLAP
 DUPLICATE KEY(`k1`)
 DISTRIBUTED BY HASH(`k1`) BUCKETS 64
@@ -43,10 +45,20 @@ PROPERTIES (
 );
 -- result:
 -- !result
-insert into t1 select idx, concat('common-low1-', idx % 100), concat('common-low2-', idx % 200), concat('common-low3-', idx % 200), concat('common-str1-', idx) from __row_util;
+insert into t1 select 
+    idx, 
+    concat('common-low1-', idx % 100), concat('common-low2-', idx % 200), concat('common-low3-', idx % 200), 
+    concat('common-str1-', idx),
+    concat('common-low_char1-', idx % 100), concat('common-str_char1-', idx)
+from __row_util;
 -- result:
 -- !result
-insert into t1 select idx, concat('t1-low1-', idx % 50), concat('t1-low2-', idx % 20), concat('t1-low3-', idx % 50), concat('t1-str1-', idx) from __row_util;
+insert into t1 select 
+    idx, 
+    concat('t1-low1-', idx % 50), concat('t1-low2-', idx % 20), concat('t1-low3-', idx % 50), 
+    concat('t1-str1-', idx),
+    concat('t1-low_char1-', idx % 50), concat('t1-str_char1-', idx)
+from __row_util;
 -- result:
 -- !result
 insert into t1(k1) select 10000000;
@@ -57,7 +69,9 @@ CREATE TABLE t2 (
     low1 string NULL,
     low2 string NULL,
     low3 string NULL,
-    str1 string NULL
+    str1 string NULL,
+    low_char1 CHAR(40) NULL,
+    str_char1 CHAR(40) NULL
 ) ENGINE=OLAP
 DUPLICATE KEY(`k1`)
 DISTRIBUTED BY HASH(`k1`) BUCKETS 64
@@ -66,29 +80,51 @@ PROPERTIES (
 );
 -- result:
 -- !result
-insert into t2 select idx, concat('common-low1-', idx % 100), concat('common-low2-', idx % 200), concat('common-low3-', idx % 200), concat('common-str1-', idx) from __row_util where idx <= 1000;
+insert into t2 select 
+    idx, 
+    concat('common-low1-', idx % 100), concat('common-low2-', idx % 200), concat('common-low3-', idx % 200), 
+    concat('common-str1-', idx),
+    concat('common-low_char1-', idx % 100), concat('common-str_char1-', idx)
+from __row_util where idx <= 1000;
 -- result:
 -- !result
-insert into t2 select idx + 1000, concat('t2-low1-', idx % 50), concat('t2-low2-', idx % 20), concat('t2-low3-', idx % 50), concat('t2-str1-', idx) from __row_util where idx <= 1000;
+insert into t2 select 
+    idx + 1000, 
+    concat('t2-low1-', idx % 50), concat('t2-low2-', idx % 20), concat('t2-low3-', idx % 50), 
+    concat('t2-str1-', idx), 
+    concat('t2-low_char1-', idx % 50), concat('t2-str_char1-', idx) 
+from __row_util where idx <= 1000;
 -- result:
 -- !result
 insert into t2(k1) select 10000000;
 -- result:
 -- !result
-SELECT COUNT(DISTINCT t1.low1)
+SELECT COUNT(DISTINCT t1.low1), SUM(murmur_hash3_32(t1.low1)), SUM(murmur_hash3_32(t2.low1)), SUM(murmur_hash3_32(t1.low2)), SUM(murmur_hash3_32(t2.low2)), SUM(murmur_hash3_32(t1.low3)), SUM(murmur_hash3_32(t2.low3)), SUM(murmur_hash3_32(t1.str1)), SUM(murmur_hash3_32(t2.str1))
 FROM t1 JOIN t2 on t1.low1 = t2.low1;
 -- result:
-100
+100	120785980008000	120785980008000	48953462276000	48953462276000	5137044724000	5137044724000	2655454375310	9474888055200
 -- !result
-SELECT SUM(murmur_hash3_32(t1.low1)), SUM(murmur_hash3_32(t2.low1)), SUM(murmur_hash3_32(t1.low2)), SUM(murmur_hash3_32(t2.low2)), SUM(murmur_hash3_32(t1.low3)), SUM(murmur_hash3_32(t2.low3)), SUM(murmur_hash3_32(t1.str1)), SUM(murmur_hash3_32(t2.str1))
-FROM t1 JOIN t2 on t1.low1 <=> t2.low1;
+SELECT COUNT(1) FROM t1 JOIN t2 on t1.low1 = t2.low1 where t2.k1 % 4 = 0;
 -- result:
-120785980008000	120785980008000	48953462276000	48953462276000	5137044724000	5137044724000	2655454375310	9474888055200
+200000
 -- !result
-SELECT SUM(murmur_hash3_32(t1.low1)), SUM(murmur_hash3_32(t2.low1)), SUM(murmur_hash3_32(t1.low2)), SUM(murmur_hash3_32(t2.low2)), SUM(murmur_hash3_32(t1.low3)), SUM(murmur_hash3_32(t2.low3)), SUM(murmur_hash3_32(t1.str1)), SUM(murmur_hash3_32(t2.str1))
+SELECT COUNT(1) FROM t1 JOIN t2 on t1.low1 <=> t2.low1;
+-- result:
+800001
+-- !result
+SELECT COUNT(1) FROM t1 JOIN t2 on t1.low1 <=> t2.low1 where t2.k1 % 4 = 0;
+-- result:
+200001
+-- !result
+SELECT COUNT(1)
 FROM t1 JOIN t2 on t1.low1 <=> t2.low1 and t1.low2 <=> t2.low2 and t1.low3 <=> t2.low3;
 -- result:
-60392990004000	60392990004000	24476731138000	24476731138000	2568522362000	2568522362000	1327727187655	4737444027600
+400001
+-- !result
+SELECT COUNT(1)
+FROM t1 JOIN t2 on t1.low1 <=> t2.low1 and t1.low2 <=> t2.low2 and t1.low3 <=> t2.low3 where t2.k1 % 4 = 0;
+-- result:
+100001
 -- !result
 SELECT COUNT(1)
 FROM t1 
@@ -225,4 +261,136 @@ SELECT SUM(murmur_hash3_32(t1.low1)), SUM(murmur_hash3_32(t2.low1))
 FROM w1 t1 JOIN [bucket] w1 t2 on t1.low1 = t2.low1 and t2.k1 < 1000;
 -- result:
 18080610935200	18080610935200
+-- !result
+SELECT COUNT(1) FROM t1 JOIN t2 on t1.str1 = t2.str1;
+-- result:
+1000
+-- !result
+SELECT COUNT(1) FROM t1 JOIN t2 on t1.str1 = t2.str1 where t2.k1 % 4 = 0;
+-- result:
+250
+-- !result
+SELECT COUNT(1) FROM t1 JOIN t2 on t1.str1 <=> t2.str1;
+-- result:
+1001
+-- !result
+SELECT COUNT(1) FROM t1 JOIN t2 on t1.str1 <=> t2.str1 where t2.k1 % 4 = 0;
+-- result:
+251
+-- !result
+SELECT COUNT(1) FROM t1 JOIN t2 on t1.low_char1 = t2.low_char1;
+-- result:
+800000
+-- !result
+SELECT COUNT(1) FROM t1 JOIN t2 on t1.low_char1 = t2.low_char1 where t2.k1 % 4 = 0;
+-- result:
+200000
+-- !result
+SELECT COUNT(1) FROM t1 JOIN t2 on t1.low_char1 <=> t2.low_char1;
+-- result:
+800001
+-- !result
+SELECT COUNT(1) FROM t1 JOIN t2 on t1.low_char1 <=> t2.low_char1 where t2.k1 % 4 = 0;
+-- result:
+200001
+-- !result
+SELECT COUNT(1) FROM t1 JOIN t2 on t1.str_char1 = t2.str_char1;
+-- result:
+1000
+-- !result
+SELECT COUNT(1) FROM t1 JOIN t2 on t1.str_char1 = t2.str_char1 where t2.k1 % 4 = 0;
+-- result:
+250
+-- !result
+SELECT COUNT(1) FROM t1 JOIN t2 on t1.str_char1 <=> t2.str_char1;
+-- result:
+1001
+-- !result
+SELECT COUNT(1) FROM t1 JOIN t2 on t1.str_char1 <=> t2.str_char1 where t2.k1 % 4 = 0;
+-- result:
+251
+-- !result
+SELECT COUNT(1) FROM t1 WHERE low1 = 'common-low1-10';
+-- result:
+800
+-- !result
+SELECT COUNT(1) FROM t1 WHERE low1 = 'non-exist-low1';
+-- result:
+0
+-- !result
+SELECT COUNT(1) FROM t1 WHERE low1 IS NULL;
+-- result:
+1
+-- !result
+SELECT COUNT(1) FROM t1 WHERE low1 IS NOT NULL;
+-- result:
+160000
+-- !result
+SELECT COUNT(1) FROM t1 WHERE low1 IN ('common-low1-10', 'common-low1-20', 'non-exist-low1') OR low1 is NULL;
+-- result:
+1601
+-- !result
+SELECT COUNT(1) FROM t1 WHERE low1 IN ('common-low1-10', 'common-low1-20', NULL);
+-- result:
+1600
+-- !result
+SELECT COUNT(1) FROM t1 WHERE low1 NOT IN ('common-low1-10', 'common-low1-20');
+-- result:
+158400
+-- !result
+SELECT COUNT(1) FROM t1 WHERE str1 = 'common-str1-10';
+-- result:
+1
+-- !result
+SELECT COUNT(1) FROM t1 WHERE str1 = 'non-exist-str1';
+-- result:
+0
+-- !result
+SELECT COUNT(1) FROM t1 WHERE str1 IS NULL;
+-- result:
+1
+-- !result
+SELECT COUNT(1) FROM t1 WHERE str1 IS NOT NULL;
+-- result:
+160000
+-- !result
+SELECT COUNT(1) FROM t1 WHERE str1 IN ('common-str1-10', 'common-str1-20', 'non-exist-str1');
+-- result:
+2
+-- !result
+SELECT COUNT(1) FROM t1 WHERE str1 IN ('common-str1-10', 'common-str1-20', NULL);
+-- result:
+2
+-- !result
+SELECT COUNT(1) FROM t1 WHERE str1 NOT IN ('common-str1-10', 'common-str1-20');
+-- result:
+159998
+-- !result
+SELECT COUNT(1) FROM t1 WHERE str_char1 = 'common-str_char1-10';
+-- result:
+1
+-- !result
+SELECT COUNT(1) FROM t1 WHERE str_char1 = 'non-exist-str_char1';
+-- result:
+0
+-- !result
+SELECT COUNT(1) FROM t1 WHERE str_char1 IS NULL;
+-- result:
+1
+-- !result
+SELECT COUNT(1) FROM t1 WHERE str_char1 IS NOT NULL;
+-- result:
+160000
+-- !result
+SELECT COUNT(1) FROM t1 WHERE str_char1 IN ('common-str_char1-10', 'common-str_char1-20', 'non-exist-str_char1');
+-- result:
+2
+-- !result
+SELECT COUNT(1) FROM t1 WHERE str_char1 IN ('common-str_char1-10', 'common-str_char1-20', NULL);
+-- result:
+2
+-- !result
+SELECT COUNT(1) FROM t1 WHERE str_char1 NOT IN ('common-str_char1-10', 'common-str_char1-20');
+-- result:
+159998
 -- !result

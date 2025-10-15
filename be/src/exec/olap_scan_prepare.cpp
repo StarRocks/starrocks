@@ -458,8 +458,8 @@ requires(!lt_is_date<SlotType>) Status ChunkPredicateBuilder<E, Type>::normalize
         if constexpr (SlotType != TYPE_VARCHAR) {
             return false;
         }
-        return global_dict_iter != global_dicts.end() && root_expr->get_num_children() == 2 &&
-               root_expr->get_child(1)->type().type != TYPE_VARCHAR;
+        return global_dict_iter != global_dicts.end() && root_expr->get_num_children() > 0 &&
+               root_expr->get_child(0)->type().type == LowCardDictType;
     };
 
     auto normalize_in_pred = [&]<LogicalType MappingType, template <typename> typename Decoder, typename... Args>(
@@ -467,8 +467,8 @@ requires(!lt_is_date<SlotType>) Status ChunkPredicateBuilder<E, Type>::normalize
                                      ->Status {
         const Expr* l = root_expr->get_child(0);
 
-        if (!l->is_slotref() ||
-            (l->type().type != slot.type().type && l->type().type != MappingType && !ignore_cast(slot, *l))) {
+        if (const auto ltype = l->type().type;
+            !l->is_slotref() || (ltype != slot.type().type && ltype != MappingType && !ignore_cast(slot, *l))) {
             return Status::OK();
         }
 
@@ -882,7 +882,70 @@ Status ChunkPredicateBuilder<E, Type>::normalize_not_in_or_not_equal_predicate(
     DCHECK((SlotType == slot.type().type) || (SlotType == TYPE_VARCHAR && slot.type().type == TYPE_CHAR));
 
     using ValueType = typename RunTimeTypeTraits<SlotType>::CppType;
-    // handle not equal.
+
+    const auto& global_dicts = _opts.runtime_state->get_query_global_dict_map();
+    const auto global_dict_iter = SlotType == TYPE_VARCHAR ? global_dicts.find(slot.id()) : global_dicts.end();
+
+    auto is_in_values_dict_encoded = [&](const Expr* root_expr) -> bool {
+        if constexpr (SlotType != TYPE_VARCHAR) {
+            return false;
+        }
+        return global_dict_iter != global_dicts.end() && root_expr->get_num_children() > 0 &&
+               root_expr->get_child(0)->type().type == LowCardDictType;
+    };
+
+    auto normalize_in_pred = [&]<LogicalType MappingType, template <typename> typename Decoder, typename... Args>(
+                                     const size_t i, const Expr* root_expr, Args&&... args)
+                                     ->Status {
+        const Expr* l = root_expr->get_child(0);
+        if (const auto ltype = l->type().type;
+            !l->is_slotref() || (ltype != slot.type().type && ltype != MappingType && !ignore_cast(slot, *l))) {
+            return Status::OK();
+        }
+        std::vector<SlotId> slot_ids;
+
+        if (1 != l->get_slot_ids(&slot_ids) || slot_ids[0] != slot.id()) {
+            return Status::OK();
+        }
+        const auto* pred = down_cast<const VectorizedInConstPredicate<MappingType>*>(root_expr);
+
+        if (pred->is_join_runtime_filter()) {
+            return Status::OK();
+        }
+
+        if (!is_not_in<Negative>(pred) || pred->hash_set().size() > config::max_pushdown_conditions_per_column) {
+            return Status::OK();
+        }
+
+        if (pred->null_in_set()) {
+            if (pred->is_eq_null()) {
+                return Status::OK();
+            }
+            if constexpr (!Negative) {
+                // and col not in (v1, v2, v3, null)
+                range->clear_to_empty();
+                _normalized_exprs[i] = true;
+                return Status::OK();
+            } else {
+                // or col in (v1, v2, v3, null)
+            }
+        }
+
+        using DecoderType = Decoder<typename RunTimeTypeTraits<MappingType>::CppType>;
+        DecoderType decoder(std::forward<Args>(args)...);
+
+        boost::container::flat_set<RangeValueType> values;
+        values.reserve(pred->hash_set().size());
+        for (const auto& value : pred->hash_set()) {
+            values.insert(decoder.decode(value));
+        }
+        if (range->add_fixed_values(FILTER_NOT_IN, values).ok()) {
+            _normalized_exprs[i] = true;
+        }
+
+        return Status::OK();
+    };
+
     for (size_t i = 0; i < _exprs.size(); i++) {
         if (_normalized_exprs[i]) {
             continue;
@@ -905,47 +968,14 @@ Status ChunkPredicateBuilder<E, Type>::normalize_not_in_or_not_equal_predicate(
         // handle not in
         if (root_expr->node_type() == TExprNodeType::IN_PRED &&
             maybe_invert_in_and_equal_op<Negative>(root_expr->op()) == TExprOpcode::FILTER_NOT_IN) {
-            const Expr* l = root_expr->get_child(0);
-            if (!l->is_slotref() || (l->type().type != slot.type().type && !ignore_cast(slot, *l))) {
-                continue;
-            }
-            std::vector<SlotId> slot_ids;
-
-            if (1 == l->get_slot_ids(&slot_ids) && slot_ids[0] == slot.id()) {
-                const auto* pred = down_cast<const VectorizedInConstPredicate<SlotType>*>(root_expr);
-
-                if (pred->is_join_runtime_filter()) {
+            if constexpr (SlotType == TYPE_VARCHAR) {
+                if (is_in_values_dict_encoded(root_expr)) {
+                    RETURN_IF_ERROR((normalize_in_pred.template operator()<LowCardDictType, GlobalDictCodeDecoder>(
+                            i, root_expr, &global_dict_iter->second.first)));
                     continue;
                 }
-
-                if (!is_not_in<Negative>(pred) ||
-                    pred->hash_set().size() > config::max_pushdown_conditions_per_column) {
-                    continue;
-                }
-
-                if (pred->null_in_set()) {
-                    if (pred->is_eq_null()) {
-                        continue;
-                    }
-                    if constexpr (!Negative) {
-                        // and col not in (v1, v2, v3, null)
-                        range->clear_to_empty();
-                        _normalized_exprs[i] = true;
-                        continue;
-                    } else {
-                        // or col in (v1, v2, v3, null)
-                    }
-                }
-
-                boost::container::flat_set<RangeValueType> values;
-                values.reserve(pred->hash_set().size());
-                for (const auto& value : pred->hash_set()) {
-                    values.insert(value);
-                }
-                if (range->add_fixed_values(FILTER_NOT_IN, values).ok()) {
-                    _normalized_exprs[i] = true;
-                }
             }
+            RETURN_IF_ERROR((normalize_in_pred.template operator()<SlotType, DummyDecoder>(i, root_expr, nullptr)));
         }
     }
 
