@@ -68,6 +68,7 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.persist.BrokerPropertiesPersistInfo;
+import com.starrocks.persist.TableRefPersist;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.DescriptorTable;
@@ -93,11 +94,9 @@ import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.PartitionNames;
-import com.starrocks.sql.ast.expression.BaseTableRefPersist;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.TableName;
-import com.starrocks.sql.ast.expression.TableRefPersist;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TAgentResult;
@@ -294,12 +293,11 @@ public class ExportJob implements Writable, GsonPostProcessable {
     }
 
     private void registerToDesc() throws StarRocksException {
-        TableRefPersist
-                ref = new TableRefPersist(tableName, null, partitions == null ? null : new PartitionNames(false, partitions));
-        BaseTableRefPersist tableRef = new BaseTableRefPersist(ref, exportTable, tableName);
+        TableRefPersist ref =
+                new TableRefPersist(tableName, null, partitions == null ? null : new PartitionNames(false, partitions));
         exportTupleDesc = desc.createTupleDescriptor();
         exportTupleDesc.setTable(exportTable);
-        exportTupleDesc.setRef(tableRef);
+        exportTupleDesc.setRef(ref);
 
         Map<String, Column> nameToColumn = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
         List<Column> tableColumns = exportTable.getBaseSchema();
