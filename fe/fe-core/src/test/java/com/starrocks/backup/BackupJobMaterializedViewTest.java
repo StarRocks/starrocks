@@ -31,7 +31,7 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.expression.TableName;
-import com.starrocks.sql.ast.expression.TableRef;
+import com.starrocks.sql.ast.expression.TableRefPersist;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -214,10 +214,10 @@ public class BackupJobMaterializedViewTest {
             }
         };
 
-        List<TableRef> tableRefs = Lists.newArrayList();
+        List<TableRefPersist> tableRefs = Lists.newArrayList();
         // disorder
-        tableRefs.add(new TableRef(new TableName(UnitTestUtil.DB_NAME, UnitTestUtil.MATERIALIZED_VIEW_NAME), null));
-        tableRefs.add(new TableRef(new TableName(UnitTestUtil.DB_NAME, UnitTestUtil.TABLE_NAME), null));
+        tableRefs.add(new TableRefPersist(new TableName(UnitTestUtil.DB_NAME, UnitTestUtil.MATERIALIZED_VIEW_NAME), null));
+        tableRefs.add(new TableRefPersist(new TableName(UnitTestUtil.DB_NAME, UnitTestUtil.TABLE_NAME), null));
 
         job = new BackupJob(MV_LABEL, dbId, UnitTestUtil.DB_NAME, tableRefs, 13600 * 1000, globalStateMgr, repo.getId());
         new Expectations(job) {
@@ -425,9 +425,9 @@ public class BackupJobMaterializedViewTest {
         // 1.pending
         AgentTaskQueue.clearAllTasks();
 
-        List<TableRef> tableRefs = Lists.newArrayList();
-        tableRefs.add(new TableRef(new TableName(UnitTestUtil.DB_NAME, "unknown_tbl"), null));
-        tableRefs.add(new TableRef(new TableName(UnitTestUtil.DB_NAME, "unknown_mv"), null));
+        List<TableRefPersist> tableRefs = Lists.newArrayList();
+        tableRefs.add(new TableRefPersist(new TableName(UnitTestUtil.DB_NAME, "unknown_tbl"), null));
+        tableRefs.add(new TableRefPersist(new TableName(UnitTestUtil.DB_NAME, "unknown_mv"), null));
 
         job = new BackupJob("mv_label_abnormal", dbId, UnitTestUtil.DB_NAME, tableRefs, 13600 * 1000,
                     globalStateMgr, repo.getId());

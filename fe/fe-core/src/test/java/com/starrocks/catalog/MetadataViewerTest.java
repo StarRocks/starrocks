@@ -48,7 +48,7 @@ import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.TableName;
-import com.starrocks.sql.ast.expression.TableRef;
+import com.starrocks.sql.ast.expression.TableRefPersist;
 import com.starrocks.system.SystemInfoService;
 import mockit.Expectations;
 import mockit.Mock;
@@ -191,7 +191,7 @@ public class MetadataViewerTest {
     public void testGetTabletStatusWithStatement() throws Exception {
         // Test with null where clause
         TableName tableName = new TableName(CatalogMocker.TEST_DB_NAME, CatalogMocker.TEST_TBL_NAME);
-        TableRef tableRef = new TableRef(tableName, null);
+        TableRefPersist tableRef = new TableRefPersist(tableName, null);
         AdminShowReplicaStatusStmt stmt = new AdminShowReplicaStatusStmt(tableRef, null);
 
         List<List<String>> result = MetadataViewer.getTabletStatus(stmt);
@@ -202,7 +202,7 @@ public class MetadataViewerTest {
     public void testGetTabletStatusWithWhereClause() throws Exception {
         // Test with where clause: status = 'DEAD'
         TableName tableName = new TableName(CatalogMocker.TEST_DB_NAME, CatalogMocker.TEST_TBL_NAME);
-        TableRef tableRef = new TableRef(tableName, null);
+        TableRefPersist tableRef = new TableRefPersist(tableName, null);
 
         // Create where clause: status = 'DEAD'
         SlotRef leftChild = new SlotRef(tableName, "status");
@@ -219,7 +219,7 @@ public class MetadataViewerTest {
     public void testGetTabletStatusWithNotEqualWhereClause() throws Exception {
         // Test with where clause: status != 'DEAD'
         TableName tableName = new TableName(CatalogMocker.TEST_DB_NAME, CatalogMocker.TEST_TBL_NAME);
-        TableRef tableRef = new TableRef(tableName, null);
+        TableRefPersist tableRef = new TableRefPersist(tableName, null);
 
         // Create where clause: status != 'DEAD'
         SlotRef leftChild = new SlotRef(tableName, "status");
@@ -236,7 +236,7 @@ public class MetadataViewerTest {
     public void testGetTabletStatusWithInvalidStatusFilter() throws Exception {
         // Test with where clause: status = 'INVALID_STATUS'
         TableName tableName = new TableName(CatalogMocker.TEST_DB_NAME, CatalogMocker.TEST_TBL_NAME);
-        TableRef tableRef = new TableRef(tableName, null);
+        TableRefPersist tableRef = new TableRefPersist(tableName, null);
 
         // Create where clause: status = 'INVALID_STATUS'
         SlotRef leftChild = new SlotRef(tableName, "status");
@@ -254,7 +254,7 @@ public class MetadataViewerTest {
     public void testGetTabletStatusWithNonStatusColumn() throws Exception {
         // Test with where clause on non-status column: name = 'test'
         TableName tableName = new TableName(CatalogMocker.TEST_DB_NAME, CatalogMocker.TEST_TBL_NAME);
-        TableRef tableRef = new TableRef(tableName, null);
+        TableRefPersist tableRef = new TableRefPersist(tableName, null);
 
         // Create where clause: name = 'test' (not status column)
         SlotRef leftChild = new SlotRef(tableName, "name");
@@ -272,7 +272,7 @@ public class MetadataViewerTest {
     public void testGetTabletStatusWithOKStatus() throws Exception {
         // Test with where clause: status = 'OK'
         TableName tableName = new TableName(CatalogMocker.TEST_DB_NAME, CatalogMocker.TEST_TBL_NAME);
-        TableRef tableRef = new TableRef(tableName, null);
+        TableRefPersist tableRef = new TableRefPersist(tableName, null);
 
         // Create where clause: status = 'OK'
         SlotRef leftChild = new SlotRef(tableName, "status");

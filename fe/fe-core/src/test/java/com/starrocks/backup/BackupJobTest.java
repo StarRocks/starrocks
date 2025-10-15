@@ -51,7 +51,7 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.expression.TableName;
-import com.starrocks.sql.ast.expression.TableRef;
+import com.starrocks.sql.ast.expression.TableRefPersist;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -245,12 +245,12 @@ public class BackupJobTest {
             }
         };
 
-        List<TableRef> tableRefs = Lists.newArrayList();
-        tableRefs.add(new TableRef(new TableName(UnitTestUtil.DB_NAME, UnitTestUtil.TABLE_NAME), null));
+        List<TableRefPersist> tableRefs = Lists.newArrayList();
+        tableRefs.add(new TableRefPersist(new TableName(UnitTestUtil.DB_NAME, UnitTestUtil.TABLE_NAME), null));
         job = new BackupJob("label", dbId, UnitTestUtil.DB_NAME, tableRefs, 13600 * 1000, globalStateMgr, repo.getId());
 
-        List<TableRef> viewRefs = Lists.newArrayList();
-        viewRefs.add(new TableRef(new TableName(UnitTestUtil.DB_NAME, UnitTestUtil.VIEW_NAME), null));
+        List<TableRefPersist> viewRefs = Lists.newArrayList();
+        viewRefs.add(new TableRefPersist(new TableName(UnitTestUtil.DB_NAME, UnitTestUtil.VIEW_NAME), null));
         jobView = new BackupJob("label-view", dbId, UnitTestUtil.DB_NAME, viewRefs, 13600 * 1000, globalStateMgr, repo.getId());
     }
 
@@ -389,8 +389,8 @@ public class BackupJobTest {
         // 1.pending
         AgentTaskQueue.clearAllTasks();
 
-        List<TableRef> tableRefs = Lists.newArrayList();
-        tableRefs.add(new TableRef(new TableName(UnitTestUtil.DB_NAME, "unknown_tbl"), null));
+        List<TableRefPersist> tableRefs = Lists.newArrayList();
+        tableRefs.add(new TableRefPersist(new TableName(UnitTestUtil.DB_NAME, "unknown_tbl"), null));
         job = new BackupJob("label", dbId, UnitTestUtil.DB_NAME, tableRefs, 13600 * 1000, globalStateMgr, repo.getId());
         job.run();
         Assertions.assertEquals(Status.ErrCode.NOT_FOUND, job.getStatus().getErrCode());

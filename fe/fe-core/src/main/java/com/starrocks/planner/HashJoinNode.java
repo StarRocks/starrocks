@@ -42,7 +42,7 @@ import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.JoinOperator;
 import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.sql.ast.expression.TableRef;
+import com.starrocks.sql.ast.expression.TableRefPersist;
 import com.starrocks.thrift.TAsofJoinCondition;
 import com.starrocks.thrift.TEqJoinCondition;
 import com.starrocks.thrift.THashJoinNode;
@@ -68,10 +68,6 @@ public class HashJoinNode extends JoinNode {
 
     // only set when isSkewJoin = true && shuffle join
     private Map<Integer, Integer> eqJoinConjunctsIndexToRfId;
-    public HashJoinNode(PlanNodeId id, PlanNode outer, PlanNode inner, TableRef innerRef,
-                        List<Expr> eqJoinConjuncts, List<Expr> otherJoinConjuncts) {
-        super("HASH JOIN", id, outer, inner, innerRef, eqJoinConjuncts, otherJoinConjuncts);
-    }
 
     public HashJoinNode(PlanNodeId id, PlanNode outer, PlanNode inner, JoinOperator joinOp,
                         List<Expr> eqJoinConjuncts, List<Expr> otherJoinConjuncts) {
@@ -164,9 +160,6 @@ public class HashJoinNode extends JoinNode {
             }
         }
         msg.hash_join_node.setIs_push_down(isPushDown);
-        if (innerRef != null) {
-            msg.hash_join_node.setIs_rewritten_from_not_in(innerRef.isJoinRewrittenFromNotIn());
-        }
         if (!buildRuntimeFilters.isEmpty()) {
             msg.hash_join_node.setBuild_runtime_filters(
                     RuntimeFilterDescription.toThriftRuntimeFilterDescriptions(buildRuntimeFilters));
@@ -215,7 +208,6 @@ public class HashJoinNode extends JoinNode {
         hashJoinNode.setDistribution_mode(getDistrMode().toThrift());
         hashJoinNode.setEq_join_conjuncts(normalizer.normalizeExprs(new ArrayList<>(eqJoinConjuncts)));
         hashJoinNode.setOther_join_conjuncts(normalizer.normalizeExprs(otherJoinConjuncts));
-        hashJoinNode.setIs_rewritten_from_not_in(innerRef != null && innerRef.isJoinRewrittenFromNotIn());
         hashJoinNode.setPartition_exprs(normalizer.normalizeOrderedExprs(partitionExprs));
         hashJoinNode.setOutput_columns(normalizer.remapIntegerSlotIds(outputSlots));
         hashJoinNode.setLate_materialization(enableLateMaterialization);

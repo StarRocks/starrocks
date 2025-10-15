@@ -94,7 +94,7 @@ import com.starrocks.sql.ast.TruncatePartitionClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.sql.ast.expression.TableName;
-import com.starrocks.sql.ast.expression.TableRef;
+import com.starrocks.sql.ast.expression.TableRefPersist;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.thrift.TTabletType;
@@ -721,7 +721,7 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
     public Void visitTruncatePartitionClause(TruncatePartitionClause clause, ConnectContext context) {
         // This logic is used to adapt mysql syntax.
         // ALTER TABLE test TRUNCATE PARTITION p1;
-        TableRef tableRef = new TableRef(tableName, null, clause.getPartitionNames());
+        TableRefPersist tableRef = new TableRefPersist(tableName, null, clause.getPartitionNames());
         TruncateTableStmt tStmt = new TruncateTableStmt(tableRef);
         ConnectContext ctx = ConnectContext.buildInner();
         ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());

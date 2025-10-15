@@ -92,11 +92,11 @@ import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.PartitionNames;
-import com.starrocks.sql.ast.expression.BaseTableRef;
+import com.starrocks.sql.ast.expression.BaseTableRefPersist;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.TableName;
-import com.starrocks.sql.ast.expression.TableRef;
+import com.starrocks.sql.ast.expression.TableRefPersist;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TAgentResult;
@@ -291,8 +291,9 @@ public class ExportJob implements Writable, GsonPostProcessable {
     }
 
     private void registerToDesc() throws StarRocksException {
-        TableRef ref = new TableRef(tableName, null, partitions == null ? null : new PartitionNames(false, partitions));
-        BaseTableRef tableRef = new BaseTableRef(ref, exportTable, tableName);
+        TableRefPersist
+                ref = new TableRefPersist(tableName, null, partitions == null ? null : new PartitionNames(false, partitions));
+        BaseTableRefPersist tableRef = new BaseTableRefPersist(ref, exportTable, tableName);
         exportTupleDesc = desc.createTupleDescriptor();
         exportTupleDesc.setTable(exportTable);
         exportTupleDesc.setRef(tableRef);

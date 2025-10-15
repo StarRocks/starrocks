@@ -97,9 +97,6 @@ public class MergeJoinNode extends JoinNode {
             }
         }
         msg.merge_join_node.setIs_push_down(isPushDown);
-        if (innerRef != null) {
-            msg.merge_join_node.setIs_rewritten_from_not_in(innerRef.isJoinRewrittenFromNotIn());
-        }
         if (!buildRuntimeFilters.isEmpty()) {
             msg.merge_join_node.setBuild_runtime_filters(
                     RuntimeFilterDescription.toThriftRuntimeFilterDescriptions(buildRuntimeFilters));
