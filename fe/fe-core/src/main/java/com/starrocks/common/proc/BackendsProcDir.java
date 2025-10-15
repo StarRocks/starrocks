@@ -44,7 +44,6 @@ import com.starrocks.alter.DecommissionType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
-import com.starrocks.common.util.DnsCache;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
@@ -84,8 +83,7 @@ public class BackendsProcDir implements ProcDirInterface {
                 .addAll(TITLE_NAMES)
                 .add("StarletPort")
                 .add("WorkerId")
-                .add("WarehouseName")
-                .add("ResolvedIP");
+                .add("WarehouseName");
         TITLE_NAMES_SHARED_DATA = builder.build();
     }
 
@@ -148,10 +146,7 @@ public class BackendsProcDir implements ProcDirInterface {
             watch.stop();
             List<Comparable> backendInfo = Lists.newArrayList();
             backendInfo.add(String.valueOf(backendId));
-            String hostname = backend.getHost();
-            String resolvedIP = DnsCache.tryLookup(hostname);
-            backendInfo.add(hostname);
-            backendInfo.add(resolvedIP);
+            backendInfo.add(backend.getHost());
             backendInfo.add(String.valueOf(backend.getHeartbeatPort()));
             backendInfo.add(String.valueOf(backend.getBePort()));
             backendInfo.add(String.valueOf(backend.getHttpPort()));
@@ -266,7 +261,7 @@ public class BackendsProcDir implements ProcDirInterface {
         for (List<Comparable> backendInfo : comparableBackendInfos) {
             List<String> oneInfo = new ArrayList<String>(backendInfo.size());
             for (Comparable element : backendInfo) {
-                oneInfo.add(element == null ? "" : element.toString());
+                oneInfo.add(element.toString());
             }
             backendInfos.add(oneInfo);
         }
@@ -301,6 +296,5 @@ public class BackendsProcDir implements ProcDirInterface {
     }
 
 }
-
 
 

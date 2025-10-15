@@ -233,15 +233,14 @@ public class ShowStmtMetaTest {
         ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         // BackendsProcDir.getMetadata() returns different column counts based on RunMode
         // For now, we'll just check that it has columns
-        Assertions.assertEquals(31, metaData.getColumnCount());
+        Assertions.assertEquals(30, metaData.getColumnCount());
         // Check some common column names
         Assertions.assertEquals("BackendId", metaData.getColumn(0).getName());
-        Assertions.assertEquals("Address", metaData.getColumn(1).getName());
-        Assertions.assertEquals("IP", metaData.getColumn(2).getName());
-        Assertions.assertEquals("HeartbeatPort", metaData.getColumn(3).getName());
-        Assertions.assertEquals("BePort", metaData.getColumn(4).getName());
-        Assertions.assertEquals("HttpPort", metaData.getColumn(5).getName());
-        Assertions.assertEquals("BrpcPort", metaData.getColumn(6).getName());
+        Assertions.assertEquals("IP", metaData.getColumn(1).getName());
+        Assertions.assertEquals("HeartbeatPort", metaData.getColumn(2).getName());
+        Assertions.assertEquals("BePort", metaData.getColumn(3).getName());
+        Assertions.assertEquals("HttpPort", metaData.getColumn(4).getName());
+        Assertions.assertEquals("BrpcPort", metaData.getColumn(5).getName());
     }
 
     @Test
