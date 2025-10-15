@@ -45,7 +45,7 @@ public class QueryProfileActionTest extends StarRocksHttpTestCase {
     @Test
     public void testEscapeHtmlInPreTag() throws Exception {
         Class<QueryProfileAction> clazz = QueryProfileAction.class;
-        Method method = clazz.getDeclaredMethod("appendQueryProfile", StringBuilder.class, String.class);
+        Method method = clazz.getDeclaredMethod("appendContent", StringBuilder.class, String.class);
         Assertions.assertNotNull(method);
         method.setAccessible(true);
 
