@@ -78,6 +78,7 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
         return alterJob;
     }
 
+<<<<<<< HEAD
     private AlterJobV2 mustAlterTable(Table table, String sql) throws Exception {
         alterTable(connectContext, sql);
         AlterJobV2 alterJob = getAlterJob(table, true);
@@ -99,6 +100,26 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
             Thread.sleep(100);
         }
         Assertions.assertEquals(AlterJobV2.JobState.FINISHED, alterJob.getJobState());
+=======
+    private AlterJobV2 executeAlterAndWaitFinish(
+            LakeTable table, String sql, boolean expectFastSchemaEvolution) throws Exception {
+        alterTable(connectContext, sql);
+        AlterJobV2 alterJob = getAlterJob(table);
+        long startTime = System.currentTimeMillis();
+        long timeoutMs = 10 * 60 * 1000; // 10 minutes timeout
+        while (alterJob.getJobState() != AlterJobV2.JobState.FINISHED
+                || table.getState() != OlapTable.OlapTableState.NORMAL) {
+            long currentTime = System.currentTimeMillis();
+            if (currentTime - startTime > timeoutMs) {
+                throw new RuntimeException(
+                        String.format("Alter job timeout after 10 minutes. Job state: %s, table state: %s",
+                        alterJob.getJobState(), table.getState()));
+            }
+            alterJob.run();
+            Thread.sleep(100);
+        }
+        Assertions.assertEquals(expectFastSchemaEvolution, (alterJob instanceof LakeTableAsyncFastSchemaChangeJob));
+>>>>>>> f4f4d8fe59 ([UT] Fix unstable LakeTableAsyncFastSchemaChangeJobTest (#64057))
         return alterJob;
     }
 
@@ -117,7 +138,6 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
             Assertions.assertEquals("c1", columns.get(1).getName());
             Assertions.assertEquals(1, columns.get(1).getUniqueId());
             Assertions.assertTrue(table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaId() > oldSchemaId);
-            Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
         }
         oldSchemaId = table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaId();
         {
@@ -127,7 +147,6 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
             Assertions.assertEquals("c0", columns.get(0).getName());
             Assertions.assertEquals(0, columns.get(0).getUniqueId());
             Assertions.assertTrue(table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaId() > oldSchemaId);
-            Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
         }
         oldSchemaId = table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaId();
         {
@@ -139,7 +158,6 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
             Assertions.assertEquals("c1", columns.get(1).getName());
             Assertions.assertEquals(2, columns.get(1).getUniqueId());
             Assertions.assertTrue(table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaId() > oldSchemaId);
-            Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
         }
     }
 
@@ -235,7 +253,6 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
             Assertions.assertEquals("c2", columns.get(2).getName());
             Assertions.assertEquals(2, columns.get(2).getUniqueId());
             Assertions.assertTrue(table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaId() > oldSchemaId);
-            Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
         }
         oldSchemaId = table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaId();
         {
@@ -247,7 +264,6 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
             Assertions.assertEquals("c1", columns.get(1).getName());
             Assertions.assertEquals(1, columns.get(1).getUniqueId());
             Assertions.assertTrue(table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaId() > oldSchemaId);
-            Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
         }
     }
 
@@ -315,7 +331,6 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
             Assertions.assertEquals(20, ((ScalarType) columns.get(4).getType()).getLength());
 
             Assertions.assertTrue(table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaId() > oldSchemaId);
-            Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
         }
 
         // zonemap index can not be reused
