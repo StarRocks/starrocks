@@ -1,4 +1,4 @@
--- name: test_asof_join_performance
+-- name: test_asof_join_performance @slow
 DROP DATABASE IF EXISTS test_asof_join_performance;
 -- result:
 -- !result
