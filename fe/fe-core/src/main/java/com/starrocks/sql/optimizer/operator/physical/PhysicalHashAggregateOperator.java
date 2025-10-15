@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.operator.physical;
 
 import com.google.common.base.Preconditions;
@@ -53,11 +52,11 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
     // For normal aggregate function, partitionByColumns are same with groupingKeys
     // but for single distinct function, partitionByColumns are not same with groupingKeys
     private final List<ColumnRefOperator> partitionByColumns;
-    private final Map<ColumnRefOperator, CallOperator> aggregations;
+    private Map<ColumnRefOperator, CallOperator> aggregations;
 
     // The flag for this aggregate operator has split to
     // two stage aggregate or three stage aggregate
-    private final boolean isSplit;
+    private boolean isSplit;
 
     // TODO introduce builder mode to change these fields to final fields
     // flag for this aggregate operator's parent had been pruned
@@ -119,6 +118,10 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
         return aggregations;
     }
 
+    public void setAggregations(Map<ColumnRefOperator, CallOperator> aggregations) {
+        this.aggregations = aggregations;
+    }
+
     public AggType getType() {
         return type;
     }
@@ -153,6 +156,10 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
         return isSplit;
     }
 
+    public void setSplit(boolean split) {
+        isSplit = split;
+    }
+
     public boolean canUseStreamingPreAgg() {
         if (type.isGlobal() || type.isDistinctGlobal()) {
             return false;
@@ -162,7 +169,6 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
             return isSplit && CollectionUtils.isNotEmpty(groupBys) && !mergedLocalAgg;
         }
     }
-
 
     public String getNeededPreaggregationMode() {
         String mode = ConnectContext.get().getSessionVariable().getStreamingPreaggregationMode();
@@ -203,6 +209,7 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
     public void setGroupByMinMaxStatistic(List<Pair<ConstantOperator, ConstantOperator>> groupByMinMaxStatistic) {
         this.groupByMinMaxStatistic = groupByMinMaxStatistic;
     }
+
     public List<Pair<ConstantOperator, ConstantOperator>> getGroupByMinMaxStatistic() {
         return this.groupByMinMaxStatistic;
     }
@@ -226,7 +233,7 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), type, groupBys, aggregations.keySet());
+        return Objects.hash(super.hashCode(), type, groupBys, aggregations.keySet(), partitionByColumns);
     }
 
     @Override
@@ -241,7 +248,7 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
 
         PhysicalHashAggregateOperator that = (PhysicalHashAggregateOperator) o;
         return type == that.type && Objects.equals(aggregations, that.aggregations) &&
-                Objects.equals(groupBys, that.groupBys);
+                Objects.equals(groupBys, that.groupBys) && Objects.equals(partitionByColumns, that.partitionByColumns);
     }
 
     @Override
