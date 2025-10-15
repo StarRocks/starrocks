@@ -255,7 +255,12 @@ StatusOr<ChunkPtr> HashJoiner::_pull_probe_output_chunk(RuntimeState* state) {
     auto& ht = _hash_join_builder->hash_table();
 
     if (_phase == HashJoinPhase::PROBE || !_hash_join_prober->probe_chunk_empty()) {
+<<<<<<< HEAD
         ASSIGN_OR_RETURN(chunk, _hash_join_prober->probe_chunk(state, &ht))
+=======
+        ASSIGN_OR_RETURN(chunk, _hash_join_prober->probe_chunk(state))
+        RETURN_IF_ERROR(chunk->capacity_limit_reached());
+>>>>>>> 27593ec3f5 ([Enhancement] Add capacity_limit_reached() to table_function/nl-join-probe/hash-join-probe to avoid constructing overflowing columns (#64009))
         return chunk;
     }
 
