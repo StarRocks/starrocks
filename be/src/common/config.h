@@ -1196,7 +1196,10 @@ CONF_mInt32(lake_pk_index_sst_max_compaction_versions, "100");
 // When the ratio of cumulative level to base level is greater than this config, use base merge.
 CONF_mDouble(lake_pk_index_cumulative_base_compaction_ratio, "0.1");
 CONF_Int32(lake_pk_index_block_cache_limit_percent, "10");
-CONF_mBool(lake_clear_corrupted_cache, "true");
+// clear *.meta cache for lake table
+CONF_mBool(lake_clear_corrupted_cache_meta, "true");
+// clear *.data cache for lake table
+CONF_mBool(lake_clear_corrupted_cache_data, "false");
 // The maximum number of files which need to rebuilt in cloud native pk index.
 // If files which need to rebuilt larger than this, we will flush memtable immediately.
 CONF_mInt32(cloud_native_pk_index_rebuild_files_threshold, "50");
