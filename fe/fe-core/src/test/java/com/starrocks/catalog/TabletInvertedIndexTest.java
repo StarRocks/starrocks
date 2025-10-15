@@ -14,12 +14,10 @@
 
 package com.starrocks.catalog;
 
-import com.starrocks.authorization.IdGenerator;
 import com.starrocks.thrift.TStorageMedium;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
@@ -32,59 +30,24 @@ import java.util.concurrent.ThreadLocalRandom;
 public class TabletInvertedIndexTest {
     private static final Logger LOG = LogManager.getLogger(TabletInvertedIndexTest.class);
 
-    private TabletInvertedIndex tabletInvertedIndex;
-    private TabletMeta tabletMeta;
-    private Replica replica1;
-    private Replica replica2;
-    private Replica replica3;
+    public static class IdGenerator {
+        private static final int BATCH_ID_INTERVAL = 1000;
+        private long nextId;
 
-    @BeforeEach
-    public void setUp() {
-        tabletInvertedIndex = new TabletInvertedIndex();
-        
-        // Create test tablet meta
-        tabletMeta = new TabletMeta(1L, 2L, 3L, 4L, TStorageMedium.HDD);
-        
-        // Create test replicas
-        replica1 = new Replica(100L, 1000L, 1L, 123, 0L, 0L, 
-                              Replica.ReplicaState.NORMAL, -1L, 1L);
-        replica2 = new Replica(101L, 1001L, 1L, 123, 0L, 0L, 
-                              Replica.ReplicaState.NORMAL, -1L, 1L);
-        replica3 = new Replica(102L, 1002L, 1L, 123, 0L, 0L, 
-                              Replica.ReplicaState.NORMAL, -1L, 1L);
-    }
+        public IdGenerator() {
+            nextId = BATCH_ID_INTERVAL;
+        }
 
-    @Test
-    public void testGetReplicas_WithReplicas() {
-        // Given: Add tablet and replicas
-        long tabletId = 1000L;
-        tabletInvertedIndex.addTablet(tabletId, tabletMeta);
-        tabletInvertedIndex.addReplica(tabletId, replica1);
-        tabletInvertedIndex.addReplica(tabletId, replica2);
-        tabletInvertedIndex.addReplica(tabletId, replica3);
-
-        // When: Get replicas for the tablet
-        Map<Long, Replica> replicas = tabletInvertedIndex.getReplicas(tabletId);
-
-        // Then: Verify the result
-        Assertions.assertNotNull(replicas, "Replicas map should not be null");
-        Assertions.assertEquals(3, replicas.size(), "Should have 3 replicas");
-        
-        // Verify each replica is present
-        Assertions.assertTrue(replicas.containsKey(1000L), "Should contain replica on backend 1000");
-        Assertions.assertTrue(replicas.containsKey(1001L), "Should contain replica on backend 1001");
-        Assertions.assertTrue(replicas.containsKey(1002L), "Should contain replica on backend 1002");
-        
-        // Verify replica details
-        Assertions.assertEquals(replica1, replicas.get(1000L), "Replica on backend 1000 should match");
-        Assertions.assertEquals(replica2, replicas.get(1001L), "Replica on backend 1001 should match");
-        Assertions.assertEquals(replica3, replicas.get(1002L), "Replica on backend 1002 should match");
+        // performance is more quickly
+        public synchronized long getNextId() {
+            return nextId++;
+        }
     }
 
     @Test
     public void testTabletInvertedIndexPerf() {
         // 300k tablets, each tablet has 1 replica, has 24 disks
-        tabletInvertedIndex = new TabletInvertedIndex();
+        TabletInvertedIndex tabletInvertedIndex = new TabletInvertedIndex();
 
         int diskNum = 24;
         Long[] diskHashes = new Long[diskNum];
@@ -103,7 +66,7 @@ public class TabletInvertedIndexTest {
         int num = 500000;
         // build test data, create `num` of tablets and distribute them into `diskNum` of disks
         for (int i = 0; i < num; ++i) {
-            TabletMeta meta = new TabletMeta(dbId, tableId, partitionId, indexId, TStorageMedium.HDD);
+            TabletMeta meta = new TabletMeta(dbId, tableId, partitionId, indexId, schemaHash, TStorageMedium.HDD);
             long tabletId = idGenerator.getNextId();
             tabletInvertedIndex.addTablet(tabletId, meta);
 
