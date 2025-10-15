@@ -2078,6 +2078,12 @@ public class Config extends ConfigBase {
     public static long statistic_cache_columns = 100000;
 
     /**
+     * The max number of io tasks for each connector operator in collect statistic
+     */
+    @ConfField(mutable = true)
+    public static int collect_stats_io_tasks_per_connector_operator = 4;
+
+    /**
      * The size of the thread-pool which will be used to refresh statistic caches
      */
     @ConfField
