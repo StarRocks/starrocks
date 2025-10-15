@@ -463,6 +463,15 @@ Status FragmentContext::prepare_active_drivers() {
             ADD_CHILD_TIMER_THESHOLD(profile, "prepare-pipeline-driver-local", "prepare-pipeline-driver", 0_ms);
     SCOPED_TIMER(prepare_driver_local_timer);
 
+    auto pipeline_prepare_pool = runtime_state()->exec_env()->pipeline_prepare_pool();
+    if (!config::enable_pipeline_driver_parallel_prepare ||
+        pipeline_prepare_pool->get_queue_size() >= config::pipeline_prepare_thread_pool_queue_size - 10) {
+        for (auto& group : _execution_groups) {
+            RETURN_IF_ERROR(group->prepare_active_drivers_sequentially(_runtime_state.get()));
+        }
+        return Status::OK();
+    }
+
     size_t total_active_driver_size = 0;
     for (auto& group : _execution_groups) {
         total_active_driver_size += group->total_active_driver_size();

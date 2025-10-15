@@ -36,4 +36,8 @@ public class SingleNodeSchedule extends AllAtOnceExecutionSchedule {
 
         deployer.deployFragmentsForSingleNode(fragmentInstanceExecStateList);
     }
+
+    @Override
+    public void continueSchedule(Coordinator.ScheduleOption option) throws RpcException, StarRocksException {
+    }
 }

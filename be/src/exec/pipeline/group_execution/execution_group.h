@@ -89,6 +89,8 @@ public:
                                          std::mutex& completion_mutex, std::condition_variable& completion_cv,
                                          std::atomic<std::shared_ptr<Status>>& first_error);
 
+    Status prepare_active_drivers_sequentially(RuntimeState* state);
+
     ExecutionGroupType type() const { return _type; }
     bool is_colocate_exec_group() const { return type() == ExecutionGroupType::COLOCATE; }
 
