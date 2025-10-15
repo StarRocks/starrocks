@@ -128,7 +128,7 @@ bool BackendOptions::init(bool is_cn) {
             if (status.ok()) {
                 _s_resolved_ip = ip;
             }
-            // if failed to parse, keep org value
+            // if failed to parse, keep original value
         }
     }
 
