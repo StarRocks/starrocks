@@ -314,6 +314,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_LOCAL_SHUFFLE_AGG = "enable_local_shuffle_agg";
 
     public static final String ENABLE_QUERY_TABLET_AFFINITY = "enable_query_tablet_affinity";
+    public static final String ENABLE_GATHER_FRAGMENT_LOCALITY_OPTIMIZATION = "enable_gather_fragment_locality_optimization";
 
     public static final String SKIP_LOCAL_DISK_CACHE = "skip_local_disk_cache";
 
@@ -1110,6 +1111,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
      */
     @VariableMgr.VarAttr(name = ENABLE_QUERY_TABLET_AFFINITY)
     private boolean enableQueryTabletAffinity = false;
+
+    /**
+     * used for test
+     * Determines whether to enable gather fragment locality optimization. When enabled, 
+     * gather fragments will be assigned to the same node as other fragments if all 
+     * other fragments' instances are on the same node.
+     */
+    @VariableMgr.VarAttr(name = ENABLE_GATHER_FRAGMENT_LOCALITY_OPTIMIZATION)
+    private boolean enableGatherFragmentLocalityOptimization = false;
 
     @VariableMgr.VarAttr(name = SKIP_LOCAL_DISK_CACHE)
     private boolean skipLocalDiskCache = false;
@@ -3296,6 +3306,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableQueryTabletAffinity() {
         return enableQueryTabletAffinity;
+    }
+
+    public boolean isEnableGatherFragmentLocalityOptimization() {
+        return enableGatherFragmentLocalityOptimization;
     }
 
     public boolean isSkipLocalDiskCache() {

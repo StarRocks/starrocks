@@ -299,8 +299,6 @@ public class DefaultCoordinator extends Coordinator {
         }
         if (enablePhasedScheduler) {
             scheduler = new PhasedExecutionSchedule(connectContext);
-        } else if (jobSpec.supportSingleNodeParallelSchedule()) {
-            scheduler = new SingleNodeSchedule();
         } else {
             scheduler = new AllAtOnceExecutionSchedule();
         }
@@ -507,6 +505,10 @@ public class DefaultCoordinator extends Coordinator {
         prepareResultSink();
 
         prepareProfile();
+
+        // if all the instance are in the same worker, we can send them all in once
+        // but only after prepareExec() we can know the worker number
+        maybeChangeScheduler();
     }
 
     @Override
@@ -670,6 +672,13 @@ public class DefaultCoordinator extends Coordinator {
             queryProfile.attachExecutionProfiles(executionDAG.getExecutions());
         } finally {
             unlock();
+        }
+    }
+
+    private void maybeChangeScheduler() {
+        if (executionDAG.getWorkerNum() == 1 && jobSpec.supportSingleNodeParallelSchedule() &&
+                scheduler instanceof AllAtOnceExecutionSchedule) {
+            scheduler = new SingleNodeSchedule();
         }
     }
 

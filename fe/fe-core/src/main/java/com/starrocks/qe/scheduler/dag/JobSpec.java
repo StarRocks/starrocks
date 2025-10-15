@@ -525,8 +525,7 @@ public class JobSpec {
 
     public boolean supportSingleNodeParallelSchedule() {
         return connectContext.getSessionVariable().enableSingleNodeSchedule() &&
-                connectContext.getAliveExecutionNodesNumber() == 1 &&
-                !isIncrementalScanRanges() && !scanNodes.stream().anyMatch(scanNode -> scanNode.isConnectorScanNode());
+                !scanNodes.stream().anyMatch(scanNode -> scanNode.isConnectorScanNode());
     }
 
     public static class Builder {

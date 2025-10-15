@@ -82,9 +82,9 @@ public class BackendServiceClient {
         return BackendServiceClient.SingletonHolder.INSTANCE;
     }
 
-    private <TResult> Future<TResult> sendRequestAsync(
+    private <R> Future<R> sendRequestAsync(
             TNetworkAddress address,
-            java.util.function.Function<PBackendService, Future<TResult>> serviceCall,
+            java.util.function.Function<PBackendService, Future<R>> serviceCall,
             int dataSize) throws RpcException {
         Tracers.count(Tracers.Module.SCHEDULER, "DeployDataSize", dataSize);
         try (Timer ignored = Tracers.watchScope(Tracers.Module.SCHEDULER, "DeployAsyncSendTime")) {
