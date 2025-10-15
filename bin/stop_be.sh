@@ -92,20 +92,7 @@ if [ -f $profile_pidfile ]; then
     profile_pid=`cat $profile_pidfile`
     if kill -0 $profile_pid > /dev/null 2>&1; then
         echo "Stopping profile collection daemon (PID: $profile_pid)..."
-        kill -TERM $profile_pid > /dev/null 2>&1
-        
-        # Wait up to 10 seconds for graceful shutdown
-        start_ts=$(date +%s)
-        while kill -0 $profile_pid > /dev/null 2>&1; do
-            if [ $(($(date +%s) - $start_ts)) -gt 10 ]; then
-                echo "Profile daemon graceful shutdown timeout, forcing termination..."
-                kill -9 $profile_pid > /dev/null 2>&1
-                break
-            else
-                sleep 1
-            fi
-        done
-        
+        kill -9 $profile_pid > /dev/null 2>&1
         rm -f $profile_pidfile
         echo "Profile collection daemon stopped"
     else
