@@ -40,9 +40,6 @@ void llm_cache_value_deleter(const CacheKey& /* key */, void* value) {
 
 void LLMCache::init(size_t capacity) {
     std::lock_guard<std::mutex> lock(_mutex);
-    if (_cache) {
-        delete _cache.release();
-    }
     _cache.reset(new_lru_cache(capacity));
 
     _cache_hits = 0;
@@ -98,9 +95,7 @@ void LLMCache::insert(const std::string& cache_key, std::string response) {
 
 void LLMCache::release_cache() {
     std::lock_guard<std::mutex> lock(_mutex);
-    if (_cache) {
-        delete _cache.release();
-    }
+    _cache.reset();
 }
 
 CacheMetrics LLMCache::get_metrics() const {
