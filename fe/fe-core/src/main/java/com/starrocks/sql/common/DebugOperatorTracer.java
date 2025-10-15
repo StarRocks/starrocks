@@ -35,6 +35,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalMysqlScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalRawValuesOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalRepeatOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalSchemaScanOperator;
@@ -67,6 +68,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalNestLoopJoinOperato
 import com.starrocks.sql.optimizer.operator.physical.PhysicalNoCTEOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalRawValuesOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalRepeatOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalSchemaScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperator;
@@ -249,6 +251,13 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
     @Override
     public String visitLogicalValues(LogicalValuesOperator node, Void context) {
         return super.visitLogicalValues(node, context);
+    }
+
+    @Override
+    public String visitLogicalRawValues(LogicalRawValuesOperator node, Void context) {
+        return "LogicalRawValuesOperator {" +
+                "count=" + node.getConstantCount() +
+                ", constantType=" + node.getConstantType() + "}";
     }
 
     @Override
@@ -462,6 +471,13 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
     @Override
     public String visitPhysicalValues(PhysicalValuesOperator node, Void context) {
         return super.visitPhysicalValues(node, context);
+    }
+
+    @Override
+    public String visitPhysicalRawValues(PhysicalRawValuesOperator node, Void context) {
+        return "PhysicalRawValuesOperator {" +
+                "count=" + node.getConstantCount() +
+                ", constantType=" + node.getConstantType() + "}";
     }
 
     @Override

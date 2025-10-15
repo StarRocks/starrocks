@@ -158,6 +158,14 @@ public class NonDeterministicVisitor extends OptExpressionVisitor<Boolean, Void>
     }
 
     @Override
+    public Boolean visitLogicalRawValues(OptExpression optExpression, Void context) {
+        if (checkCommon(optExpression)) {
+            return true;
+        }
+        return false;
+    }
+
+    @Override
     public Boolean visitLogicalWindow(OptExpression optExpression, Void context) {
         LogicalWindowOperator operator = (LogicalWindowOperator) optExpression.getOp();
         if (checkAggCall(operator.getWindowCall())) {

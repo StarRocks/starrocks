@@ -161,6 +161,10 @@ public class OptExpressionValidator extends OptExpressionVisitor<OptExpression, 
         return commonValidate(optExpression);
     }
 
+    @Override
+    public OptExpression visitLogicalRawValues(OptExpression optExpression, Void context) {
+        return commonValidate(optExpression);
+    }
 
     @Override
     public OptExpression visitLogicalRepeat(OptExpression optExpression, Void context) {

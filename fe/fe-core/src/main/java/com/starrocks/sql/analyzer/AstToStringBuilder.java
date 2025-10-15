@@ -40,6 +40,7 @@ import com.starrocks.analysis.HintNode;
 import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.InformationFunction;
 import com.starrocks.analysis.IsNullPredicate;
+import com.starrocks.analysis.LargeInPredicate;
 import com.starrocks.analysis.LargeStringLiteral;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LimitElement;
@@ -1273,6 +1274,16 @@ public class AstToStringBuilder {
                 strBuilder.append(printWithParentheses(node.getChild(i)));
                 strBuilder.append((i + 1 != node.getChildren().size()) ? ", " : "");
             }
+            strBuilder.append(")");
+            return strBuilder.toString();
+        }
+
+        @Override
+        public String visitLargeInPredicate(LargeInPredicate node, Void context) {
+            StringBuilder strBuilder = new StringBuilder();
+            String notStr = (node.isNotIn()) ? "NOT " : "";
+            strBuilder.append(printWithParentheses(node.getCompareExpr())).append(" ").append(notStr).append("IN (");
+            strBuilder.append(node.getRawConstantList());
             strBuilder.append(")");
             return strBuilder.toString();
         }

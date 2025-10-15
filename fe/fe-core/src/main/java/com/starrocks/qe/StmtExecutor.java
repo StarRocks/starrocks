@@ -201,6 +201,7 @@ import com.starrocks.sql.ast.warehouse.SetWarehouseStmt;
 import com.starrocks.sql.common.AuditEncryptionChecker;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.LargeInPredicateException;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -841,6 +842,15 @@ public class StmtExecutor {
             // the exception happens when interact with client
             // this exception shows the connection is gone
             context.getState().setError(e.getMessage());
+        } catch (LargeInPredicateException e) {
+            // Re-throw LargeInPredicateException to trigger a full retry from parser stage
+            // The query will be re-parsed and re-executed with enable_large_in_predicate=false
+            // to use the traditional expression-based approach instead of raw constant optimization
+            String sql = originStmt != null ? originStmt.originStmt : "";
+            String truncatedSql = sql.length() > 200 ? sql.substring(0, 200) + "..." : sql;
+            LOG.error("LargeInPredicate optimization failed, sql: {}, error: {}. Will retry with" +
+                    " enable_large_in_predicate=false.", truncatedSql, e.getMessage());
+            throw e;
         } catch (StarRocksException e) {
             String sql = originStmt != null ? originStmt.originStmt : "";
             // analysis exception only print message, not print the stack

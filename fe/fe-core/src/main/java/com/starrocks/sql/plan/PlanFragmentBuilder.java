@@ -107,6 +107,7 @@ import com.starrocks.planner.PaimonScanNode;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanNode;
 import com.starrocks.planner.ProjectNode;
+import com.starrocks.planner.RawValuesNode;
 import com.starrocks.planner.RepeatNode;
 import com.starrocks.planner.RuntimeFilterId;
 import com.starrocks.planner.ScanNode;
@@ -180,6 +181,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalOdpsScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalPaimonScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalRawValuesOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalRepeatOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalSchemaScanOperator;
@@ -2097,6 +2099,39 @@ public class PlanFragmentBuilder {
                 context.getFragments().add(fragment);
                 return fragment;
             }
+        }
+
+        @Override
+        public PlanFragment visitPhysicalRawValues(OptExpression optExpr, ExecPlan context) {
+            PhysicalRawValuesOperator rawValuesOperator = optExpr.getOp().cast();
+
+            TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
+            for (ColumnRefOperator columnRefOperator : rawValuesOperator.getColumnRefSet()) {
+                SlotDescriptor slotDescriptor =
+                        context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(columnRefOperator.getId()));
+                slotDescriptor.setIsNullable(columnRefOperator.isNullable());
+                slotDescriptor.setIsMaterialized(true);
+                slotDescriptor.setType(columnRefOperator.getType());
+                context.getColRefToExpr()
+                        .put(columnRefOperator, new SlotRef(columnRefOperator.toString(), slotDescriptor));
+            }
+            tupleDescriptor.computeMemLayout();
+
+            RawValuesNode rawValuesNode = new RawValuesNode(
+                    context.getNextNodeId(),
+                    tupleDescriptor.getId(),
+                    rawValuesOperator.getConstantType(),
+                    rawValuesOperator.getRawConstantList(),
+                    rawValuesOperator.getConstantCount());
+
+            rawValuesNode.setLimit(rawValuesOperator.getLimit());
+            rawValuesNode.computeStatistics(optExpr.getStatistics());
+            currentExecGroup.add(rawValuesNode, true);
+
+            PlanFragment fragment = new PlanFragment(context.getNextFragmentId(), rawValuesNode,
+                    DataPartition.UNPARTITIONED);
+            context.getFragments().add(fragment);
+            return fragment;
         }
 
         // return true if all leaf offspring are not ExchangeNode

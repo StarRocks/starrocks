@@ -25,6 +25,7 @@ import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LargeInPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 
@@ -60,6 +61,11 @@ public class RangeExtractor extends ScalarOperatorVisitor<Void, Void> {
         }
 
         return visit(predicate, context);
+    }
+
+    @Override
+    public Void visitLargeInPredicate(LargeInPredicateOperator predicate, Void context) {
+        throw new UnsupportedOperationException("not support large in predicate in the RangeValueExtractor");
     }
 
     @Override

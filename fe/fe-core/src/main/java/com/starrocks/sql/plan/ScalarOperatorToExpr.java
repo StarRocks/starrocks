@@ -81,6 +81,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ExistsPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LargeInPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.MapOperator;
 import com.starrocks.sql.optimizer.operator.scalar.MatchExprOperator;
@@ -321,6 +322,11 @@ public class ScalarOperatorToExpr {
         public Expr visitExistsPredicate(ExistsPredicateOperator predicate, FormatterContext context) {
             // @FIXME: support subquery
             return null;
+        }
+
+        @Override
+        public Expr visitLargeInPredicate(LargeInPredicateOperator predicate, FormatterContext context) {
+            throw new UnsupportedOperationException("not support large in predicate in the ScalarOperatorToExpr");
         }
 
         @Override
