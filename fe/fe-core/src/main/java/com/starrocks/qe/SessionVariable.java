@@ -918,6 +918,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_DROP_TABLE_CHECK_MV_DEPENDENCY = "enable_drop_table_check_mv_dependency";
 
+<<<<<<< HEAD
+=======
+    public static final String ENABLE_DESENSITIZE_EXPLAIN = "enable_desensitize_explain";
+
+    public static final String ENABLE_FULL_SORT_USE_GERMAN_STRING = "enable_full_sort_use_german_string";
+
+    public static final String ENABLE_INSERT_SELECT_EXTERNAL_AUTO_REFRESH = "enable_insert_select_external_auto_refresh";
+
+>>>>>>> 14bca121d0 ([Enhancement] make sure insert select data freshness (#64026))
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -1862,6 +1871,23 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_DROP_TABLE_CHECK_MV_DEPENDENCY)
     public boolean enableDropTableCheckMvDependency = false;
 
+<<<<<<< HEAD
+=======
+    public boolean isEnableDesensitizeExplain() {
+        return enableDesensitizeExplain;
+    }
+
+    public void setEnableDesensitizeExplain(boolean enableDesensitizeExplain) {
+        this.enableDesensitizeExplain = enableDesensitizeExplain;
+    }
+
+    @VarAttr(name = ENABLE_FULL_SORT_USE_GERMAN_STRING)
+    private boolean enableFullSortUseGermanString = true;
+
+    @VarAttr(name = ENABLE_INSERT_SELECT_EXTERNAL_AUTO_REFRESH)
+    private boolean enableInsertSelectExternalAutoRefresh = true;
+
+>>>>>>> 14bca121d0 ([Enhancement] make sure insert select data freshness (#64026))
     public int getCboPruneJsonSubfieldDepth() {
         return cboPruneJsonSubfieldDepth;
     }
@@ -5064,6 +5090,33 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableDropTableCheckMvDependency = enableDropTableCheckMvDependency;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isEnableJSONV2DictOpt() {
+        return cboJSONV2DictOpt;
+    }
+
+    public void setEnableJSONV2DictOpt(boolean value) {
+        this.cboJSONV2DictOpt = value;
+    }
+
+    public void setEnableFullSortUseGermanString(boolean value) {
+        this.enableFullSortUseGermanString  = value;
+    }
+
+    public boolean isEnableFullSortUseGermanString() {
+        return this.enableFullSortUseGermanString;
+    }
+
+    public boolean isEnableInsertSelectExternalAutoRefresh() {
+        return enableInsertSelectExternalAutoRefresh;
+    }
+
+    public void setEnableInsertSelectExternalAutoRefresh(boolean enableInsertSelectExternalAutoRefresh) {
+        this.enableInsertSelectExternalAutoRefresh = enableInsertSelectExternalAutoRefresh;
+    }
+
+>>>>>>> 14bca121d0 ([Enhancement] make sure insert select data freshness (#64026))
     // Serialize to thrift object
     // used for rest api
     public TQueryOptions toThrift() {
