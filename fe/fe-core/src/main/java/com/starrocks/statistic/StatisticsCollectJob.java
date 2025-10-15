@@ -183,9 +183,6 @@ public abstract class StatisticsCollectJob {
         // acceleration, then page cache is better filled with the user's data.
         sessionVariable.setUsePageCache(false);
         sessionVariable.setEnableMaterializedViewRewrite(false);
-        // set the max task num of connector io tasks per scan operator to 4, default is 16,
-        // to avoid generate too many chunk source for collect stats in BE
-        sessionVariable.setConnectorIoTasksPerScanOperator(4);
     }
 
     public void setPartitionTabletRowCounts(com.google.common.collect.Table<Long, Long, Long> partitionTabletRowCounts) {
