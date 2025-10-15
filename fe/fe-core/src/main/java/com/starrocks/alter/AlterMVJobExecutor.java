@@ -789,4 +789,19 @@ public class AlterMVJobExecutor extends AlterJobExecutorEPack {
         }
     }
 
+    /**
+     * Inactive the materialized view because of its task is failed for consecutive times and write the edit log.
+     */
+    public static void inactiveForConsecutiveFailures(MaterializedView mv) {
+        if (mv == null) {
+            return;
+        }
+        final String inactiveReason = MaterializedViewExceptions.inactiveReasonForConsecutiveFailures(mv.getName());
+        // inactive related mv
+        mv.setInactiveAndReason(inactiveReason);
+        // write edit log
+        AlterMaterializedViewStatusLog log = new AlterMaterializedViewStatusLog(mv.getDbId(),
+                mv.getId(), AlterMaterializedViewStatusClause.INACTIVE, inactiveReason);
+        GlobalStateMgr.getCurrentState().getEditLog().logAlterMvStatus(log);
+    }
 }
