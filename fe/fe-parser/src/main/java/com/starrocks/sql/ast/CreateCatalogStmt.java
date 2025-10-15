@@ -14,12 +14,9 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.common.util.PrintableMap;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Map;
-
-import static com.starrocks.common.util.Util.normalizeName;
 
 public class CreateCatalogStmt extends DdlStmt {
     public static final String TYPE = "type";
@@ -28,17 +25,12 @@ public class CreateCatalogStmt extends DdlStmt {
     private final String comment;
     private final Map<String, String> properties;
     private String catalogType;
-
     private final boolean ifNotExists;
-
-    public CreateCatalogStmt(String catalogName, String comment, Map<String, String> properties, boolean ifNotExists) {
-        this(catalogName, comment, properties, ifNotExists, NodePosition.ZERO);
-    }
 
     public CreateCatalogStmt(String catalogName, String comment, Map<String, String> properties,
                              boolean ifNotExists, NodePosition pos) {
         super(pos);
-        this.catalogName = normalizeName(catalogName);
+        this.catalogName = catalogName;
         this.comment = comment;
         this.properties = properties;
         this.ifNotExists = ifNotExists;
@@ -70,21 +62,6 @@ public class CreateCatalogStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitCreateCatalogStatement(this, context);
-    }
-
-    @Override
-    public String toSql() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("CREATE EXTERNAL CATALOG ");
-        if (ifNotExists) {
-            sb.append("IF NOT EXISTS ");
-        }
-        sb.append("'").append(catalogName).append("' ");
-        if (comment != null) {
-            sb.append("COMMENT \"").append(comment).append("\" ");
-        }
-        sb.append("PROPERTIES(").append(new PrintableMap<>(properties, " = ", true, false)).append(")");
-        return sb.toString();
+        return visitor.visitCreateCatalogStatement(this, context);
     }
 }

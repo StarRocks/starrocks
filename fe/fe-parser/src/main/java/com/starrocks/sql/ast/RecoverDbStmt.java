@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     https://www.apache.org/licenses/LICENSE-2.0
+//     https://www.apache.org/licenses/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -12,32 +12,29 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
 
-import static com.starrocks.common.util.Util.normalizeName;
+public class RecoverDbStmt extends DdlStmt {
+    private final String dbName;
 
-// SHOW CREATE EXTERNAL CATALOG statement.
-public class ShowCreateExternalCatalogStmt extends ShowStmt {
-    private final String catalogName;
-
-    public ShowCreateExternalCatalogStmt(String catalogName) {
-        this(catalogName, NodePosition.ZERO);
+    public RecoverDbStmt(String dbName) {
+        this(dbName, NodePosition.ZERO);
     }
 
-    public ShowCreateExternalCatalogStmt(String catalogName, NodePosition pos) {
+    public RecoverDbStmt(String dbName, NodePosition pos) {
         super(pos);
-        this.catalogName = normalizeName(catalogName);
+        this.dbName = dbName;
     }
 
-    public String getCatalogName() {
-        return catalogName;
+    public String getDbName() {
+        return dbName;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowCreateExternalCatalogStatement(this, context);
+        return visitor.visitRecoverDbStatement(this, context);
     }
 }
+
