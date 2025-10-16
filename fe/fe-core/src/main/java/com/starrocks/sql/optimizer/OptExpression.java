@@ -185,7 +185,6 @@ public class OptExpression {
         }
         op.clearRowOutputInfo();
         property.setOutputColumns(new ColumnRefSet(getRowOutputInfo().getOutputColRefs()));
-        // @TODO we should update output column in logical proerty
     }
 
 
