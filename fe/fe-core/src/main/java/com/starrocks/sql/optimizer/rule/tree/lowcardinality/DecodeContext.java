@@ -325,7 +325,8 @@ class DecodeContext {
             List<ScalarOperator> newChildren = visitList(call.getChildren(), hasChange);
 
             if (call.getFunction() instanceof AggregateFunction) {
-                Type[] argTypes = new Type[] {Type.INT};
+                Type argType = newChildren.get(0).getType().isArrayType() ? new ArrayType(Type.INT) : Type.INT;
+                Type[] argTypes = new Type[] {argType};
                 Function fn = Expr.getBuiltinFunction(call.getFnName(), argTypes, Function.CompareMode.IS_SUPERTYPE_OF);
                 // min/max function: will rewrite all stage, return type is dict type
                 if (FunctionSet.MAX.equals(call.getFnName()) || FunctionSet.MIN.equals(call.getFnName())) {
