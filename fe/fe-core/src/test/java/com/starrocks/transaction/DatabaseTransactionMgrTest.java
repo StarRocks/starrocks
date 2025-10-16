@@ -36,6 +36,7 @@ package com.starrocks.transaction;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FakeEditLog;
 import com.starrocks.catalog.FakeGlobalStateMgr;
@@ -46,28 +47,42 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.util.StringUtils;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.replication.ReplicationTxnCommitAttachment;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TTransactionStatus;
 import mockit.Mock;
 import mockit.MockUp;
+<<<<<<< HEAD
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
+=======
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+>>>>>>> 450477ac7b ([Enhancement] finishTransaction with table lock timeout (#63981))
 
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
@@ -86,6 +101,7 @@ public class DatabaseTransactionMgrTest {
     private static GlobalStateMgr masterGlobalStateMgr;
     private static GlobalStateMgr slaveGlobalStateMgr;
     private static Map<String, Long> lableToTxnId;
+    private static boolean origin_enable_metric_calculator_value;
 
     private static TransactionGraph transactionGraph = new TransactionGraph();
 
@@ -102,6 +118,10 @@ public class DatabaseTransactionMgrTest {
         masterGlobalStateMgr = GlobalStateMgrTestUtil.createTestState();
         slaveGlobalStateMgr = GlobalStateMgrTestUtil.createTestState();
 
+        origin_enable_metric_calculator_value = Config.enable_metric_calculator;
+        Config.enable_metric_calculator = false;
+        MetricRepo.init();
+
         masterTransMgr = masterGlobalStateMgr.getGlobalTransactionMgr();
 
         slaveTransMgr = slaveGlobalStateMgr.getGlobalTransactionMgr();
@@ -109,7 +129,16 @@ public class DatabaseTransactionMgrTest {
         lableToTxnId = addTransactionToTransactionMgr();
     }
 
+<<<<<<< HEAD
     public void prepareCommittedTransaction() throws UserException {
+=======
+    @AfterEach
+    public void tearDown() {
+        Config.enable_metric_calculator = origin_enable_metric_calculator_value;
+    }
+
+    public void prepareCommittedTransaction() throws StarRocksException {
+>>>>>>> 450477ac7b ([Enhancement] finishTransaction with table lock timeout (#63981))
         long transactionId1 = masterTransMgr
                 .beginTransaction(GlobalStateMgrTestUtil.testDbId1,
                         Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
@@ -396,8 +425,13 @@ public class DatabaseTransactionMgrTest {
                 masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
 
         long txnId = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable10);
+<<<<<<< HEAD
         masterDbTransMgr.finishTransaction(txnId, null);
         assertEquals(TTransactionStatus.VISIBLE, masterDbTransMgr.getTxnStatus(txnId));
+=======
+        masterDbTransMgr.finishTransaction(txnId, null, 0);
+        assertEquals(TransactionStatus.VISIBLE, masterDbTransMgr.getTxnState(txnId).getStatus());
+>>>>>>> 450477ac7b ([Enhancement] finishTransaction with table lock timeout (#63981))
     }
 
 
@@ -415,8 +449,13 @@ public class DatabaseTransactionMgrTest {
                 masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
 
         long txnId = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable10);
+<<<<<<< HEAD
         masterDbTransMgr.finishTransaction(txnId, null);
         assertEquals(TTransactionStatus.VISIBLE, masterDbTransMgr.getTxnStatus(txnId));
+=======
+        masterDbTransMgr.finishTransaction(txnId, null, 0);
+        assertEquals(TransactionStatus.VISIBLE, masterDbTransMgr.getTxnState(txnId).getStatus());
+>>>>>>> 450477ac7b ([Enhancement] finishTransaction with table lock timeout (#63981))
     }
     @Test
     public void testAbortTransactionWithNotFoundException() throws UserException {
@@ -709,5 +748,68 @@ public class DatabaseTransactionMgrTest {
         masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId1, transTablets,
                 Lists.newArrayList(), null);
         masterTransMgr.finishTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId1, null);
+    }
+
+    @Test
+    public void testFinishTransactionWithLockTimeout() throws Exception {
+        String testTxnLabel = StringUtils.generateRandomString(10);
+
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
+        DatabaseTransactionMgr masterDbTransMgr =
+                masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        while (true) { // clean up previous committed transactions
+            List<TransactionState> txnList = masterDbTransMgr.getCommittedTxnList();
+            if (txnList.isEmpty()) {
+                break;
+            }
+            for (TransactionState state : txnList) {
+                if (masterTransMgr.canTxnFinished(state, Sets.newHashSet(), null)) {
+                    masterTransMgr.finishTransaction(GlobalStateMgrTestUtil.testDbId1, state.getTransactionId(), null);
+                }
+            }
+        }
+        long transactionId = masterTransMgr.beginTransaction(GlobalStateMgrTestUtil.testDbId1,
+                Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
+                testTxnLabel,
+                transactionSource,
+                TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+
+        List<TabletCommitInfo> transTablets = buildTabletCommitInfoList();
+        masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId, transTablets,
+                Lists.newArrayList(), null);
+
+        TransactionState txnState = masterDbTransMgr.getTransactionState(transactionId);
+        assertEquals(TransactionStatus.COMMITTED, txnState.getTransactionStatus());
+        Assertions.assertTrue(masterTransMgr.canTxnFinished(txnState, Sets.newHashSet(), null));
+
+        CountDownLatch latchLock = new CountDownLatch(1);
+        CountDownLatch latchUnlock = new CountDownLatch(1);
+        Thread lockThread = new Thread(() -> {
+            Locker locker = new Locker();
+            locker.lockTableWithIntensiveDbLock(GlobalStateMgrTestUtil.testDbId1,
+                    GlobalStateMgrTestUtil.testTableId1, LockType.WRITE);
+            latchLock.countDown();
+            try {
+                latchUnlock.await(5, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                // ignore
+            }
+            locker.unLockTableWithIntensiveDbLock(GlobalStateMgrTestUtil.testDbId1, GlobalStateMgrTestUtil.testTableId1,
+                    LockType.WRITE);
+        });
+        lockThread.start();
+
+        latchLock.await();
+        // now the locker is held by the lockThread
+        StarRocksException exception = Assertions.assertThrows(StarRocksException.class,
+                () -> masterTransMgr.finishTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId, null, 1000L));
+        Assertions.assertEquals(ErrorCode.ERR_LOCK_ERROR, exception.getErrorCode());
+        latchUnlock.countDown();
+
+        // unlock the lock in lockThread
+        Assertions.assertDoesNotThrow(
+                () -> masterTransMgr.finishTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId, null, 1000L));
+        assertEquals(TransactionStatus.VISIBLE, txnState.getTransactionStatus());
+        lockThread.join();
     }
 }
