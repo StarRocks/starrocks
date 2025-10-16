@@ -13,8 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from sqlalchemy.testing.requirements import SuiteRequirements
 from sqlalchemy.testing import exclusions
+from sqlalchemy.testing.requirements import SuiteRequirements
 
 
 class Requirements(SuiteRequirements):
@@ -139,15 +139,15 @@ class Requirements(SuiteRequirements):
         """target dialect supports representation of Python
         datetime.time() with microsecond objects."""
 
-        return exclusions.closed()  # Not supported on Starrocks (no time type)    
-    
+        return exclusions.closed()  # Not supported on Starrocks (no time type)
+
     @property
     def time_microseconds(self):
         """target dialect supports representation of Python
         datetime.time() with microsecond objects."""
 
         return exclusions.closed()  # Not supported on Starrocks (no time type)
-    
+
     @property
     def implements_get_lastrowid(self):
         """target dialect implements the executioncontext.get_lastrowid()
@@ -155,22 +155,22 @@ class Requirements(SuiteRequirements):
         """
 
         return exclusions.closed()
-    
+
     @property
     def reflect_table_options(self):
         """Target database must support reflecting table_options."""
-        
+
         return exclusions.open()
-    
+
     @property
     def comment_reflection(self):
         """Indicates if the database support table comment reflection"""
         return exclusions.open()
-    
+
     @property
     def sane_rowcount(self):
         return exclusions.closed()  # TODO: Check if that is expected
-    
+
     @property
     def views(self):
         """Target database must support VIEWs."""
@@ -182,28 +182,43 @@ class Requirements(SuiteRequirements):
 # ===================================================================================
 # Below is the section with manual exclusions which cannot be excluded by Requirements
 # ===================================================================================
-from sqlalchemy.testing.suite.test_insert import InsertBehaviorTest
-from sqlalchemy.testing.suite.test_dialect import ExceptionTest
-from sqlalchemy.testing.suite.test_select import FetchLimitOffsetTest, LikeFunctionsTest
+# fmt: off
 from sqlalchemy.testing.suite.test_ddl import LongNameBlowoutTest
+from sqlalchemy.testing.suite.test_dialect import ExceptionTest
+from sqlalchemy.testing.suite.test_insert import InsertBehaviorTest
+from sqlalchemy.testing.suite.test_select import FetchLimitOffsetTest, LikeFunctionsTest
 from sqlalchemy.testing.suite.test_types import (
-    DateTest, 
-    DateTimeCoercedToDateTimeTest, 
-    DateTimeTest, 
-    JSONTest, 
-    NumericTest, 
-    StringTest,
     BinaryTest,
+    DateTest,
+    DateTimeCoercedToDateTimeTest,
+    DateTimeTest,
     EnumTest,
+    JSONTest,
+    NumericTest,
+    StringTest,
 )
-from sqlalchemy.testing.suite.test_reflection import (
-    BizarroCharacterFKResolutionTest, 
-    ComponentReflectionTest, 
-    CompositeKeyReflectionTest,
-    HasIndexTest,
-    HasTableTest,
-    QuotedNameArgumentTest,
-)
+# fmt: on
+
+
+try:
+    from sqlalchemy.testing.suite.test_reflection import (
+        BizarroCharacterFKResolutionTest,
+        ComponentReflectionTest,
+        CompositeKeyReflectionTest,
+        HasIndexTest,
+        HasTableTest,
+        QuotedNameArgumentTest,
+    )
+except ImportError:
+    from sqlalchemy.testing.suite.test_reflection import (
+        ComponentReflectionTest,
+        CompositeKeyReflectionTest,
+        HasIndexTest,
+        HasTableTest,
+        QuotedNameArgumentTest,
+    )
+    class BizarroCharacterFKResolutionTest:  # placeholder when removed in newer SQLAlchemy
+        pass
 
 # ========== Add missing requires. TODO: Can be deleted when https://github.com/sqlalchemy/sqlalchemy/pull/12362 is merged
 BinaryTest.__requires__ = ("binary_literals",)

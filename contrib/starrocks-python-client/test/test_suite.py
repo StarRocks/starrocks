@@ -16,17 +16,11 @@
 import decimal
 from textwrap import dedent
 
-from sqlalchemy.testing.suite import *
-
-from sqlalchemy.testing.assertions import AssertsCompiledSQL
-from sqlalchemy import VARCHAR, Table, Column, Integer, MetaData
-from sqlalchemy import schema
-
-from sqlalchemy.testing import fixtures
-from sqlalchemy import testing, literal
-from sqlalchemy.testing.assertions import eq_
+from sqlalchemy import VARCHAR, Column, Integer, MetaData, Table, literal, schema, testing
 from sqlalchemy.sql.sqltypes import Float
-from sqlalchemy.sql import elements
+from sqlalchemy.testing import fixtures
+from sqlalchemy.testing.assertions import AssertsCompiledSQL, eq_
+from sqlalchemy.testing.suite import *
 
 
 class CompileTest(fixtures.TestBase, AssertsCompiledSQL):
@@ -179,7 +173,7 @@ class StarRocksReflectionTest(fixtures.TestBase):
         reflected_meta = MetaData()
         reflected_meta.reflect(connection, only=[tn])
         reflected_table = reflected_meta.tables[tn]
-        
+
         eq_(reflected_table.name, tn)
         eq_(reflected_table.schema, None)
         eq_(len(reflected_table.columns), 2)
