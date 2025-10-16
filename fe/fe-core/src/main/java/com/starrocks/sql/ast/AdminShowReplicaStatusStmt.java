@@ -17,28 +17,28 @@ package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
 import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.TableRef;
+import com.starrocks.sql.ast.expression.TableRefPersist;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 
 // ADMIN SHOW REPLICA STATUS FROM example_db.example_table;
 public class AdminShowReplicaStatusStmt extends ShowStmt {
-    private final TableRef tblRef;
+    private final TableRefPersist tblRef;
     private final Expr where;
     private List<String> partitions = Lists.newArrayList();
 
-    public AdminShowReplicaStatusStmt(TableRef tblRef, Expr where) {
+    public AdminShowReplicaStatusStmt(TableRefPersist tblRef, Expr where) {
         this(tblRef, where, NodePosition.ZERO);
     }
 
-    public AdminShowReplicaStatusStmt(TableRef tblRef, Expr where, NodePosition pos) {
+    public AdminShowReplicaStatusStmt(TableRefPersist tblRef, Expr where, NodePosition pos) {
         super(pos);
         this.tblRef = tblRef;
         this.where = where;
     }
 
-    public TableRef getTblRef() {
+    public TableRefPersist getTblRef() {
         return tblRef;
     }
 

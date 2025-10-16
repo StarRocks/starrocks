@@ -15,24 +15,24 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.sql.ast.expression.TableRef;
+import com.starrocks.sql.ast.expression.TableRefPersist;
 import com.starrocks.sql.parser.NodePosition;
 
 // TRUNCATE TABLE tbl [PARTITION(p1, p2, ...)]
 public class TruncateTableStmt extends DdlStmt {
 
-    private final TableRef tblRef;
+    private final TableRefPersist tblRef;
 
-    public TruncateTableStmt(TableRef tblRef) {
+    public TruncateTableStmt(TableRefPersist tblRef) {
         this(tblRef, NodePosition.ZERO);
     }
 
-    public TruncateTableStmt(TableRef tblRef, NodePosition pos) {
+    public TruncateTableStmt(TableRefPersist tblRef, NodePosition pos) {
         super(pos);
         this.tblRef = tblRef;
     }
 
-    public TableRef getTblRef() {
+    public TableRefPersist getTblRef() {
         return tblRef;
     }
 

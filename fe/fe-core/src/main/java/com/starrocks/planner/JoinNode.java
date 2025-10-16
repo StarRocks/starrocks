@@ -47,7 +47,6 @@ import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.JoinOperator;
 import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.sql.ast.expression.TableRef;
 import com.starrocks.sql.optimizer.operator.UKFKConstraints;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TJoinDistributionMode;
@@ -68,7 +67,6 @@ import java.util.stream.Collectors;
 public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNode {
     private static final Logger LOG = LogManager.getLogger(JoinNode.class);
 
-    protected final TableRef innerRef;
     protected final JoinOperator joinOp;
     // predicates of the form 'a=b' or 'a<=>b'
     protected List<BinaryPredicate> eqJoinConjuncts = Lists.newArrayList();
@@ -105,39 +103,6 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
         buildRuntimeFilters.removeIf(RuntimeFilterDescription::isHasRemoteTargets);
     }
 
-    public JoinNode(String planNodename, PlanNodeId id, PlanNode outer, PlanNode inner, TableRef innerRef,
-                    List<Expr> eqJoinConjuncts, List<Expr> otherJoinConjuncts) {
-        super(id, planNodename);
-        Preconditions.checkArgument(eqJoinConjuncts != null && !eqJoinConjuncts.isEmpty());
-        Preconditions.checkArgument(otherJoinConjuncts != null);
-        tupleIds.addAll(outer.getTupleIds());
-        tupleIds.addAll(inner.getTupleIds());
-        this.innerRef = innerRef;
-        this.joinOp = innerRef.getJoinOp();
-        for (Expr eqJoinPredicate : eqJoinConjuncts) {
-            Preconditions.checkArgument(eqJoinPredicate instanceof BinaryPredicate);
-            this.eqJoinConjuncts.add((BinaryPredicate) eqJoinPredicate);
-        }
-        this.distrMode = DistributionMode.NONE;
-        this.otherJoinConjuncts = otherJoinConjuncts;
-        children.add(outer);
-        children.add(inner);
-        this.isPushDown = false;
-
-        // Inherits all the nullable tuple from the children
-        // Mark tuples that form the "nullable" side of the outer join as nullable.
-        nullableTupleIds.addAll(inner.getNullableTupleIds());
-        nullableTupleIds.addAll(outer.getNullableTupleIds());
-        if (joinOp.equals(JoinOperator.FULL_OUTER_JOIN)) {
-            nullableTupleIds.addAll(outer.getTupleIds());
-            nullableTupleIds.addAll(inner.getTupleIds());
-        } else if (joinOp.equals(JoinOperator.LEFT_OUTER_JOIN)) {
-            nullableTupleIds.addAll(inner.getTupleIds());
-        } else if (joinOp.equals(JoinOperator.RIGHT_OUTER_JOIN)) {
-            nullableTupleIds.addAll(outer.getTupleIds());
-        }
-    }
-
     public JoinNode(String planNodename, PlanNodeId id, PlanNode outer, PlanNode inner, JoinOperator joinOp,
                     List<Expr> eqJoinConjuncts, List<Expr> otherJoinConjuncts) {
         super(id, planNodename);
@@ -145,7 +110,6 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
         tupleIds.addAll(outer.getTupleIds());
         tupleIds.addAll(inner.getTupleIds());
 
-        innerRef = null;
         this.joinOp = joinOp;
         for (Expr eqJoinPredicate : eqJoinConjuncts) {
             Preconditions.checkArgument(eqJoinPredicate instanceof BinaryPredicate);

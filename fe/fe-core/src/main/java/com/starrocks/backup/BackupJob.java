@@ -72,7 +72,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.BrokerDesc;
-import com.starrocks.sql.ast.expression.TableRef;
+import com.starrocks.sql.ast.expression.TableRefPersist;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -121,7 +121,7 @@ public class BackupJob extends AbstractJob {
 
     // all objects which need backup
     @SerializedName(value = "tableRefs")
-    protected List<TableRef> tableRefs = Lists.newArrayList();
+    protected List<TableRefPersist> tableRefs = Lists.newArrayList();
 
     @SerializedName(value = "state")
     protected BackupJobState state;
@@ -164,7 +164,7 @@ public class BackupJob extends AbstractJob {
         super(JobType.BACKUP);
     }
 
-    public BackupJob(String label, long dbId, String dbName, List<TableRef> tableRefs, long timeoutMs,
+    public BackupJob(String label, long dbId, String dbName, List<TableRefPersist> tableRefs, long timeoutMs,
                      GlobalStateMgr globalStateMgr, long repoId) {
         super(JobType.BACKUP, label, dbId, dbName, timeoutMs, globalStateMgr, repoId);
         this.tableRefs = tableRefs;
@@ -203,7 +203,7 @@ public class BackupJob extends AbstractJob {
         return localMetaInfoFilePath;
     }
 
-    public List<TableRef> getTableRef() {
+    public List<TableRefPersist> getTableRef() {
         return tableRefs;
     }
 
@@ -411,7 +411,7 @@ public class BackupJob extends AbstractJob {
     }
 
     protected void checkBackupTables(Database db) {
-        for (TableRef tableRef : tableRefs) {
+        for (TableRefPersist tableRef : tableRefs) {
             String tblName = tableRef.getName().getTbl();
             Table tbl = globalStateMgr.getLocalMetastore().getTable(db.getFullName(), tblName);
             if (tbl == null) {
@@ -504,7 +504,7 @@ public class BackupJob extends AbstractJob {
             taskProgress.clear();
             taskErrMsg.clear();
             // create snapshot tasks
-            for (TableRef tblRef : tableRefs) {
+            for (TableRefPersist tblRef : tableRefs) {
                 String tblName = tblRef.getName().getTbl();
                 Table tbl = globalStateMgr.getLocalMetastore().getTable(db.getFullName(), tblName);
                 if (tbl.isOlapView()) {
@@ -543,7 +543,7 @@ public class BackupJob extends AbstractJob {
 
             // copy all related schema at this moment
             List<Table> copiedTables = Lists.newArrayList();
-            for (TableRef tableRef : tableRefs) {
+            for (TableRefPersist tableRef : tableRefs) {
                 String tblName = tableRef.getName().getTbl();
                 Table tbl = globalStateMgr.getLocalMetastore().getTable(db.getFullName(), tblName);
                 if (tbl.isOlapView()) {

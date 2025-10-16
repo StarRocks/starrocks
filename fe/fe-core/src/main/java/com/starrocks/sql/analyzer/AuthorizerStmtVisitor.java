@@ -216,7 +216,7 @@ import com.starrocks.sql.ast.UserRef;
 import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.sql.ast.expression.SetVarHint;
 import com.starrocks.sql.ast.expression.TableName;
-import com.starrocks.sql.ast.expression.TableRef;
+import com.starrocks.sql.ast.expression.TableRefPersist;
 import com.starrocks.sql.ast.group.CreateGroupProviderStmt;
 import com.starrocks.sql.ast.group.DropGroupProviderStmt;
 import com.starrocks.sql.ast.group.ShowCreateGroupProviderStmt;
@@ -2362,7 +2362,7 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
                     PrivilegeType.REPOSITORY.name(), ObjectType.SYSTEM.name(), null);
         }
         if (!statement.containsExternalCatalog()) {
-            List<TableRef> tableRefs = statement.getTableRefs();
+            List<TableRefPersist> tableRefs = statement.getTableRefs();
             List<FunctionRef> functionRefs = statement.getFnRefs();
             if (tableRefs.isEmpty() && functionRefs.isEmpty()) {
                 String dBName = statement.getDbName();
@@ -2456,7 +2456,7 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
         }
         if (job instanceof BackupJob) {
             BackupJob backupJob = (BackupJob) job;
-            List<TableRef> tableRefs = backupJob.getTableRef();
+            List<TableRefPersist> tableRefs = backupJob.getTableRef();
             tableRefs.forEach(tableRef -> {
                 TableName tableName = tableRef.getName();
                 try {
@@ -2499,7 +2499,7 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
             return null;
         }
 
-        List<TableRef> tableRefs = statement.getTableRefs();
+        List<TableRefPersist> tableRefs = statement.getTableRefs();
         // check create_database on current catalog if we're going to restore the whole database
         if (!statement.withOnClause()) {
             try {
@@ -2529,7 +2529,7 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
                                 PrivilegeType.CREATE_TABLE.name(), ObjectType.DATABASE.name(), db.getFullName());
                     }
                     // check insert on specified table
-                    for (TableRef tableRef : tableRefs) {
+                    for (TableRefPersist tableRef : tableRefs) {
                         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
                                 .getTable(db.getFullName(), tableRef.getName().getTbl());
                         if (table != null) {

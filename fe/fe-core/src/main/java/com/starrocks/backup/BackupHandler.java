@@ -82,7 +82,7 @@ import com.starrocks.sql.ast.FunctionRef;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.RestoreStmt;
 import com.starrocks.sql.ast.expression.FunctionName;
-import com.starrocks.sql.ast.expression.TableRef;
+import com.starrocks.sql.ast.expression.TableRefPersist;
 import com.starrocks.task.DirMoveTask;
 import com.starrocks.task.DownloadTask;
 import com.starrocks.task.SnapshotTask;
@@ -379,7 +379,7 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
         // Check if backup objects are valid
         // This is just a pre-check to avoid most of the invalid backup requests.
         // Also calculate the signature for incremental backup check.
-        List<TableRef> tblRefs = stmt.getTableRefs();
+        List<TableRefPersist> tblRefs = stmt.getTableRefs();
         BackupMeta curBackupMeta = null;
         Locker locker = new Locker();
         if (!stmt.containsExternalCatalog()) {
@@ -387,7 +387,7 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
         }
         try {
             List<Table> backupTbls = Lists.newArrayList();
-            for (TableRef tblRef : tblRefs) {
+            for (TableRefPersist tblRef : tblRefs) {
                 String tblName = tblRef.getName().getTbl();
                 Table tbl = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tblName);
                 if (tbl == null) {
@@ -653,11 +653,11 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
         backupMeta.setFunctions(restoredFunctions);
     }
 
-    private void checkAndFilterRestoreObjsExistInSnapshot(BackupJobInfo jobInfo, List<TableRef> tblRefs, RestoreStmt stmt,
+    private void checkAndFilterRestoreObjsExistInSnapshot(BackupJobInfo jobInfo, List<TableRefPersist> tblRefs, RestoreStmt stmt,
                                                           BackupMeta backupMeta) throws DdlException {
         Set<String> allTbls = Sets.newHashSet();
         Set<String> originTblName = Sets.newHashSet();
-        for (TableRef tblRef : tblRefs) {
+        for (TableRefPersist tblRef : tblRefs) {
             String tblName = tblRef.getName().getTbl();
             originTblName.add(tblName);
             if (!jobInfo.containsTbl(tblName)) {

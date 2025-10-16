@@ -38,7 +38,7 @@ import com.google.common.base.Joiner;
 import com.google.common.base.MoreObjects;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Table;
-import com.starrocks.sql.ast.expression.TableRef;
+import com.starrocks.sql.ast.expression.TableRefPersist;
 import com.starrocks.thrift.TTupleDescriptor;
 
 import java.util.ArrayList;
@@ -53,7 +53,7 @@ public class TupleDescriptor {
     // underlying table, if there is one
     private Table table;
     // underlying table, if there is one
-    private TableRef ref;
+    private TableRefPersist ref;
 
     // All legal aliases of this tuple.
     private String[] aliases_;
@@ -86,11 +86,11 @@ public class TupleDescriptor {
         return id;
     }
 
-    public TableRef getRef() {
+    public TableRefPersist getRef() {
         return ref;
     }
 
-    public void setRef(TableRef new_ref) {
+    public void setRef(TableRefPersist new_ref) {
         ref = new_ref;
     }
 

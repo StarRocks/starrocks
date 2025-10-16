@@ -52,7 +52,7 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.expression.TableName;
-import com.starrocks.sql.ast.expression.TableRef;
+import com.starrocks.sql.ast.expression.TableRefPersist;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -249,8 +249,8 @@ public class BackupJobPrimaryKeyTest {
             }
         };
 
-        List<TableRef> tableRefs = Lists.newArrayList();
-        tableRefs.add(new TableRef(new TableName(testDbName, testTableName), null));
+        List<TableRefPersist> tableRefs = Lists.newArrayList();
+        tableRefs.add(new TableRefPersist(new TableName(testDbName, testTableName), null));
         job = new BackupJob("label_pk", dbId, testDbName, tableRefs, 13600 * 1000, globalStateMgr, repo.getId());
         job.setTestPrimaryKey();
         GlobalStateMgr.getCurrentState().getWarehouseMgr().initDefaultWarehouse();
@@ -385,8 +385,8 @@ public class BackupJobPrimaryKeyTest {
         // 1.pending
         AgentTaskQueue.clearAllTasks();
 
-        List<TableRef> tableRefs = Lists.newArrayList();
-        tableRefs.add(new TableRef(new TableName(testDbName, "unknown_tbl"), null));
+        List<TableRefPersist> tableRefs = Lists.newArrayList();
+        tableRefs.add(new TableRefPersist(new TableName(testDbName, "unknown_tbl"), null));
         job = new BackupJob("label", dbId, testDbName, tableRefs, 13600 * 1000, globalStateMgr, repo.getId());
         job.run();
         Assertions.assertEquals(Status.ErrCode.NOT_FOUND, job.getStatus().getErrCode());

@@ -329,9 +329,10 @@ public class ShowStmtAnalyzer {
 
         @Override
         public Void visitShowDataDistributionStatement(ShowDataDistributionStmt node, ConnectContext context) {
-            String dbName = node.getDbName();
-            dbName = getDatabaseName(dbName, context);
-            node.setDbName(dbName);
+            String db = context.getDatabase();
+            if (Strings.isNullOrEmpty(db)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
+            }
             return null;
         }
 

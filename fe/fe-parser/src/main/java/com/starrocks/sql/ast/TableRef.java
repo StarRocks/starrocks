@@ -1,0 +1,59 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package com.starrocks.sql.ast;
+
+import com.starrocks.sql.parser.NodePosition;
+
+public class TableRef implements ParseNode {
+    private final QualifiedName tableName;
+    private final PartitionRef partitionRef;
+    private final NodePosition pos;
+
+    public TableRef(QualifiedName tableName, PartitionRef partitionRef, NodePosition pos) {
+        this.tableName = tableName;
+        this.partitionRef = partitionRef;
+        this.pos = pos;
+    }
+
+    @Override
+    public NodePosition getPos() {
+        return pos;
+    }
+
+    public String getCatalogName() {
+        if (tableName.getParts().size() < 3) {
+            return null;
+        }
+        return tableName.getParts().get(0);
+    }
+
+    public String getDbName() {
+        if (tableName.getParts().size() < 2) {
+            return null;
+        }
+        return tableName.getParts().get(tableName.getParts().size() - 2);
+    }
+
+    public String getTableName() {
+        if (tableName.getParts().isEmpty()) {
+            return null;
+        }
+        return tableName.getParts().get(tableName.getParts().size() - 1);
+    }
+
+    public PartitionRef getPartitionDef() {
+        return partitionRef;
+    }
+}

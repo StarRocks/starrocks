@@ -23,6 +23,7 @@ import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
 import com.starrocks.sql.ast.DescStorageVolumeStmt;
 import com.starrocks.sql.ast.HelpStmt;
 import com.starrocks.sql.ast.LabelName;
+import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
@@ -98,9 +99,10 @@ import com.starrocks.sql.ast.ShowUserStmt;
 import com.starrocks.sql.ast.ShowVariablesStmt;
 import com.starrocks.sql.ast.ShowWarningStmt;
 import com.starrocks.sql.ast.ShowWhiteListStmt;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.TableName;
-import com.starrocks.sql.ast.expression.TableRef;
+import com.starrocks.sql.ast.expression.TableRefPersist;
 import com.starrocks.sql.ast.group.ShowCreateGroupProviderStmt;
 import com.starrocks.sql.ast.group.ShowGroupProvidersStmt;
 import com.starrocks.sql.ast.integration.ShowCreateSecurityIntegrationStatement;
@@ -941,8 +943,7 @@ public class ShowStmtMetaTest {
 
     @Test
     public void testShowDataDistributionStmt() {
-        TableName tableName = new TableName("test_db", "test_table");
-        TableRef tableRef = new TableRef(tableName, null, null, NodePosition.ZERO);
+        TableRef tableRef = new TableRef(QualifiedName.of(List.of("test_db", "test_table")), null, NodePosition.ZERO);
         ShowDataDistributionStmt stmt = new ShowDataDistributionStmt(tableRef);
         ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(8, metaData.getColumnCount());
@@ -959,7 +960,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testAdminShowReplicaStatusStmt() {
         TableName tableName = new TableName("test_db", "test_table");
-        TableRef tableRef = new TableRef(tableName, null, null, NodePosition.ZERO);
+        TableRefPersist tableRef = new TableRefPersist(tableName, null, null, NodePosition.ZERO);
         AdminShowReplicaStatusStmt stmt = new AdminShowReplicaStatusStmt(tableRef, null);
         ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(13, metaData.getColumnCount());
@@ -1124,7 +1125,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testAdminShowReplicaDistributionStmt() {
         TableName tableName = new TableName("test_db", "test_table");
-        TableRef tableRef = new TableRef(tableName, null, null, NodePosition.ZERO);
+        TableRefPersist tableRef = new TableRefPersist(tableName, null, null, NodePosition.ZERO);
         AdminShowReplicaDistributionStmt stmt = new AdminShowReplicaDistributionStmt(tableRef);
         ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(4, metaData.getColumnCount());
