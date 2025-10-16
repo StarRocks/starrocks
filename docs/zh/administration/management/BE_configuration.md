@@ -5371,3 +5371,12 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型: -
 - 是否动态: 否
 - 描述: table metrics中表的最大数量, metrics/接口最多返回max_table_metrics_num个表的metrics。
+
+##### enable_resolve_hostname_to_ip_in_load_error_url
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否动态: 是
+- 描述: 为 `error_urls` Debug，是否允许 Operator 根据环境需求选择使用 FE 心跳的原始主机名，或强制解析为 IP 地址。
+- 引入版本：-
