@@ -54,8 +54,12 @@ public class LakeSyncMaterializedViewTest {
     @Rule
     public ExpectedException expectedException = ExpectedException.none();
 
+<<<<<<< HEAD
     @Rule
     public TestName name = new TestName();
+=======
+    public String name;
+>>>>>>> f0eef28d93 ([UT] fix unstable UT (#64143))
 
     @ClassRule
     public static TemporaryFolder temp = new TemporaryFolder();
@@ -68,7 +72,7 @@ public class LakeSyncMaterializedViewTest {
     @BeforeClass
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
-        //ConnectorPlanTestBase.doInit(temp.newFolder().toURI().toString());
+        // ConnectorPlanTestBase.doInit(temp.newFolder().toURI().toString());
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
 
@@ -212,19 +216,17 @@ public class LakeSyncMaterializedViewTest {
     @Test
     public void testMaterializedViews() throws Exception {
         String sql = "create materialized view sync_mv1 as select k1, sum(v1) from tbl1 group by k1;";
-        CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
-                parseStmtWithNewParser(sql, connectContext);
+        CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils
+                .parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createTableStmt);
 
         waitingRollupJobV2Finish();
 
         String showMVSql = "show materialized views;";
-        ShowMaterializedViewsStmt showMaterializedViewsStmt = (ShowMaterializedViewsStmt) UtFrameUtils.
-                parseStmtWithNewParser(showMVSql, connectContext);
-        ShowResultSet result = GlobalStateMgr.
-                getCurrentState().
-                getShowExecutor().
-                execute(showMaterializedViewsStmt, connectContext);
+        ShowMaterializedViewsStmt showMaterializedViewsStmt = (ShowMaterializedViewsStmt) UtFrameUtils
+                .parseStmtWithNewParser(showMVSql, connectContext);
+        ShowResultSet result = GlobalStateMgr.getCurrentState().getShowExecutor().execute(showMaterializedViewsStmt,
+                connectContext);
 
         Assert.assertEquals(1, result.getResultRows().size());
         starRocksAssert.dropMaterializedView("sync_mv1");
@@ -233,9 +235,15 @@ public class LakeSyncMaterializedViewTest {
     @Test
     public void testSelectFromSyncMV() throws Exception {
         // `tbl1`'s distribution keys is k2, sync_mv1 no `k2` in its outputs.
+<<<<<<< HEAD
         String sql = "create materialized view sync_mv1 as select k1, sum(v1) from tbl1 group by k1;";
         CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
                 parseStmtWithNewParser(sql, connectContext);
+=======
+        String sql = "create materialized view sync_mv as select k1, sum(v1) from tbl1 group by k1;";
+        CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils
+                .parseStmtWithNewParser(sql, connectContext);
+>>>>>>> f0eef28d93 ([UT] fix unstable UT (#64143))
         GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createTableStmt);
 
         waitingRollupJobV2Finish();
@@ -252,23 +260,34 @@ public class LakeSyncMaterializedViewTest {
     @Test
     public void testCreateSyncMV1() throws Exception {
         String sql = "create materialized view aggregate_table_with_null as select k1, sum(v1) from tbl1 group by k1;";
-        CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
-                parseStmtWithNewParser(sql, connectContext);
+        CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils
+                .parseStmtWithNewParser(sql, connectContext);
         try {
             // aggregate_table_with_null already existed in the db
             GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createTableStmt);
             Assert.fail();
         } catch (Exception e) {
+<<<<<<< HEAD
             Assert.assertTrue(e.getMessage().contains("Table [aggregate_table_with_null] already exists in the db test"));
+=======
+            Assertions.assertTrue(
+                    e.getMessage().contains("Table [aggregate_table_with_null] already exists in the db test"));
+>>>>>>> f0eef28d93 ([UT] fix unstable UT (#64143))
         }
     }
 
     // create sync mv that mv's name already existed in the same table
     @Ignore
     public void testCreateSyncMV2() throws Exception {
+<<<<<<< HEAD
         String sql = "create materialized view sync_mv1 as select k1, sum(v1) from tbl1 group by k1;";
         CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
                 parseStmtWithNewParser(sql, connectContext);
+=======
+        String sql = "create materialized view sync_mv2 as select k1, sum(v1) from tbl1 group by k1;";
+        CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils
+                .parseStmtWithNewParser(sql, connectContext);
+>>>>>>> f0eef28d93 ([UT] fix unstable UT (#64143))
         GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createTableStmt);
 
         waitingRollupJobV2Finish();
@@ -276,10 +295,25 @@ public class LakeSyncMaterializedViewTest {
         Assert.assertTrue(tbl1 != null);
         Assert.assertTrue(tbl1.hasMaterializedIndex("sync_mv1"));
 
+<<<<<<< HEAD
         // sync_mv1 already existed in the tbl1
         sql = "create materialized view sync_mv1 as select k1, sum(v1) from tbl1 group by k1;";
         createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
                 parseStmtWithNewParser(sql, connectContext);
+=======
+        int retryCount = 0;
+        int maxRetries = 100; // 100 * 100ms = 10 seconds
+        while (tbl1.getState() != OlapTable.OlapTableState.NORMAL && retryCount < maxRetries) {
+            Thread.sleep(100);
+            retryCount++;
+        }
+        Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, tbl1.getState(),
+                "Table state should be NORMAL after waiting, but was: " + tbl1.getState());
+
+        // sync_mv2 already existed in the tbl1
+        sql = "create materialized view sync_mv2 as select k1, sum(v1) from tbl1 group by k1;";
+        createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+>>>>>>> f0eef28d93 ([UT] fix unstable UT (#64143))
         try {
             GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createTableStmt);
             Assert.fail();
@@ -294,19 +328,33 @@ public class LakeSyncMaterializedViewTest {
     // create sync mv that mv's name already existed in other table
     @Test
     public void testCreateSyncMV3() throws Exception {
+<<<<<<< HEAD
         String sql = "create materialized view sync_mv1 as select k1, sum(v1) from tbl1 group by k1;";
         CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
                 parseStmtWithNewParser(sql, connectContext);
+=======
+        String sql = "create materialized view sync_mv3 as select k1, sum(v1) from tbl1 group by k1;";
+        CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils
+                .parseStmtWithNewParser(sql, connectContext);
+>>>>>>> f0eef28d93 ([UT] fix unstable UT (#64143))
         GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createTableStmt);
 
         waitingRollupJobV2Finish();
         OlapTable tbl1 = (OlapTable) (getTable("test", "tbl1"));
+<<<<<<< HEAD
         Assert.assertTrue(tbl1 != null);
         Assert.assertTrue(tbl1.hasMaterializedIndex("sync_mv1"));
         // sync_mv1 already existed in tbl1
         sql = "create materialized view sync_mv1 as select k1, sum(v1) from tbl3 group by k1;";
         createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
                 parseStmtWithNewParser(sql, connectContext);
+=======
+        Assertions.assertTrue(tbl1 != null);
+        Assertions.assertTrue(tbl1.hasMaterializedIndex("sync_mv3"));
+        // sync_mv3 already existed in tbl1
+        sql = "create materialized view sync_mv3 as select k1, sum(v1) from tbl3 group by k1;";
+        createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+>>>>>>> f0eef28d93 ([UT] fix unstable UT (#64143))
         try {
             GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createTableStmt);
             Assert.fail();
@@ -321,8 +369,8 @@ public class LakeSyncMaterializedViewTest {
     public void testCreateSyncMV_WithUpperColumn() throws Exception {
         // `tbl1`'s distribution keys is k2, sync_mv1 no `k2` in its outputs.
         String sql = "create materialized view UPPER_MV1 as select K1, sum(V1) from TBL1 group by K1;";
-        CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
-                parseStmtWithNewParser(sql, connectContext);
+        CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils
+                .parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createTableStmt);
 
         waitingRollupJobV2Finish();
@@ -357,8 +405,8 @@ public class LakeSyncMaterializedViewTest {
     public void testCreateSyncMV_WithLowerColumn() throws Exception {
         // `tbl1`'s distribution keys is k2, sync_mv1 no `k2` in its outputs.
         String sql = "create materialized view lower_mv1 as select k1, sum(v1) from tbl1 group by K1;";
-        CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
-                parseStmtWithNewParser(sql, connectContext);
+        CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils
+                .parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createTableStmt);
 
         waitingRollupJobV2Finish();
@@ -434,7 +482,8 @@ public class LakeSyncMaterializedViewTest {
             starRocksAssert.query(query).explainContains("test_mv_with_multi_slots1");
         }
         {
-            String query = "select (case when k6 + k7 + 1> 0 then 1 when k6 + k7 + 1 < 0 then -1 else 0 end) as case1 " +
+            String query = "select (case when k6 + k7 + 1> 0 then 1 when k6 + k7 + 1 < 0 then -1 else 0 end) as case1 "
+                    +
                     "from duplicate_tbl where k1>'2023-01-01';";
             starRocksAssert.query(query).explainWithout("test_mv_with_multi_slots1");
         }
@@ -489,7 +538,8 @@ public class LakeSyncMaterializedViewTest {
             starRocksAssert.query(query).explainContains("test_mv_with_where1");
         }
         {
-            String query = "select (case when k6 + k7 + 1> 0 then 1 when k6 + k7 + 1 < 0 then -1 else 0 end) as case1 " +
+            String query = "select (case when k6 + k7 + 1> 0 then 1 when k6 + k7 + 1 < 0 then -1 else 0 end) as case1 "
+                    +
                     "from duplicate_tbl where k1>'2023-01-01';";
             starRocksAssert.query(query).explainWithout("test_mv_with_where1");
         }
@@ -539,7 +589,6 @@ public class LakeSyncMaterializedViewTest {
         starRocksAssert.dropMaterializedView("test_mv1");
         starRocksAssert.dropTable("t1");
     }
-
 
     @Test
     public void testCreateMVWithAggregateTable2() throws Exception {
@@ -618,7 +667,12 @@ public class LakeSyncMaterializedViewTest {
                     "    a.k1, DATE_FORMAT(a.k4, '%Y-%m')");
             Assert.fail();
         } catch (Exception e) {
+<<<<<<< HEAD
             Assert.assertTrue(e.getMessage().contains("The column[mv_sum_k3] must be the key of materialized view"));
+=======
+            Assertions
+                    .assertTrue(e.getMessage().contains("The column[mv_sum_k3] must be the key of materialized view"));
+>>>>>>> f0eef28d93 ([UT] fix unstable UT (#64143))
         }
         starRocksAssert.dropTable("t1");
     }
@@ -722,9 +776,15 @@ public class LakeSyncMaterializedViewTest {
         GlobalStateMgr.getCurrentState().getRollupHandler().getAlterJobInfosByDb(db);
         Table table = db.getTable("t1");
 
+<<<<<<< HEAD
         long unfinishedJobs = GlobalStateMgr.getCurrentState().getRollupHandler().
                 getUnfinishedAlterJobV2ByTableId(table.getId()).size();
         Assert.assertEquals(0, unfinishedJobs);
+=======
+        long unfinishedJobs = GlobalStateMgr.getCurrentState().getRollupHandler()
+                .getUnfinishedAlterJobV2ByTableId(table.getId()).size();
+        Assertions.assertEquals(0, unfinishedJobs);
+>>>>>>> f0eef28d93 ([UT] fix unstable UT (#64143))
 
         starRocksAssert.dropMaterializedView("mv1");
         starRocksAssert.dropTable("t1");
