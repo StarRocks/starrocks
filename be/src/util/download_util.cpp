@@ -87,7 +87,9 @@ Status DownloadUtil::download(const std::string& url, const std::string& target_
 }
 
 Status DownloadUtil::get_real_url(const std::string& url, std::string* real_url) {
-    if (url.find("s3") == std::string::npos || url.find("hdfs") == std::string::npos) {
+    bool is_http = url.rfind("http://", 0) == 0;
+    bool is_file = url.rfind("file://", 0) == 0;
+    if (!is_http && !is_file) {
          return get_java_udf_url(url, real_url);
     }
     *real_url = url;
