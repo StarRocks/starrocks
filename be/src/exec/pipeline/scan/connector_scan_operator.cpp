@@ -18,10 +18,7 @@
 #include "exec/connector_scan_node.h"
 #include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
-<<<<<<< HEAD
-=======
 #include "runtime/descriptors.h"
->>>>>>> 430643b6b7 ([BugFix] Support table level scan metrics in shared-data cluster. (#62832))
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 
