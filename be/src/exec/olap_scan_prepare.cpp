@@ -229,9 +229,6 @@ static TExprOpcode::type maybe_invert_in_and_equal_op(const TExprOpcode::type op
 // ------------------------------------------------------------------------------------
 
 BoxedExpr::BoxedExpr(Expr* root_expr) : root_expr(root_expr) {}
-bool BoxedExpr::is_dict_mapping_expr() const {
-    return dynamic_cast<DictMappingExpr*>(root_expr) != nullptr;
-}
 Expr* BoxedExpr::root() const {
     return get_root_expr(root_expr);
 }
@@ -250,9 +247,6 @@ StatusOr<ExprContext*> BoxedExpr::expr_context(ObjectPool* obj_pool, RuntimeStat
 }
 
 BoxedExprContext::BoxedExprContext(ExprContext* expr_ctx) : expr_ctx(expr_ctx) {}
-bool BoxedExprContext::is_dict_mapping_expr() const {
-    return dynamic_cast<DictMappingExpr*>(expr_ctx->root()) != nullptr;
-}
 Expr* BoxedExprContext::root() const {
     return get_root_expr(expr_ctx);
 }

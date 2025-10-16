@@ -58,7 +58,6 @@ struct ScanConjunctsManagerOptions {
 struct BoxedExpr {
     explicit BoxedExpr(Expr* root_expr);
 
-    bool is_dict_mapping_expr() const;
     Expr* root() const;
     StatusOr<ExprContext*> expr_context(ObjectPool* obj_pool, RuntimeState* state) const;
 
@@ -69,7 +68,6 @@ struct BoxedExpr {
 struct BoxedExprContext {
     explicit BoxedExprContext(ExprContext* expr_ctx);
 
-    bool is_dict_mapping_expr() const;
     Expr* root() const;
     StatusOr<ExprContext*> expr_context(ObjectPool* obj_pool, RuntimeState* state) const;
 
