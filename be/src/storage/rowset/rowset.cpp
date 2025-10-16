@@ -37,10 +37,7 @@
 #include <memory>
 #include <set>
 
-#include "exec/pipeline/query_context.h"
-#include "exec/pipeline/scan/olap_scan_context.h"
 #include "fmt/format.h"
-#include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/substitute.h"
 #include "rowset_options.h"
@@ -56,7 +53,6 @@
 #include "storage/projection_iterator.h"
 #include "storage/rowset/metadata_cache.h"
 #include "storage/rowset/rowid_range_option.h"
-#include "storage/rowset/segment.h"
 #include "storage/rowset/short_key_range_option.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_index.h"

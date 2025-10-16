@@ -30,7 +30,6 @@ class FetchProcessor;
 class FetchTask;
 using FetchTaskPtr = std::shared_ptr<FetchTask>;
 
-// @TODO need a new name?
 struct BatchUnit {
     std::vector<ChunkPtr> input_chunks;
     phmap::flat_hash_map<TupleId, std::shared_ptr<std::vector<FetchTaskPtr>>> fetch_tasks;
@@ -96,7 +95,6 @@ protected:
     std::atomic_bool _is_done = false;
 };
 
-// @TODO need LookUpRequest?
 
 class IcebergFetchTask : public FetchTask {
 public:

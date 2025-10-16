@@ -29,7 +29,6 @@ public:
     virtual ~GlobalLateMaterilizationContext() = default;
 };
 
-// @TODO we shoukd know scan_range_id
 class IcebergGlobalLateMaterilizationContext : public GlobalLateMaterilizationContext {
 public:
     int32_t assign_scan_range_id(const THdfsScanRange& scan_range) {
@@ -48,25 +47,16 @@ public:
     std::vector<THdfsScanRange> hdfs_scan_ranges;
     THdfsScanNode hdfs_scan_node;
     TPlanNode plan_node;
-
-    // DataCacheOptions datacache_options;
-    // int tuple_id;
-    // TCloudConfiguration cloud_configuration;
-    // @TODo scan_range_id -> hdfs_scan_range?
-
 };
 
 // manage all global late materialization contexts for different data sources
 class GlobalLateMaterilizationContextMgr {
 public:
-    // @TODO update ctx?
-    // @TODO
     void add_ctx(int32_t row_source_slot_id, GlobalLateMaterilizationContext* ctx);
     GlobalLateMaterilizationContext* get_ctx(int32_t row_source_slot_id) const;
     GlobalLateMaterilizationContext* get_or_create_ctx(int32_t row_source_slot_id,
             const std::function<GlobalLateMaterilizationContext*()>& ctor_func);
 
-    // @TODO use parallel hash map
     using MutexType = std::shared_mutex;
     using ContextMap =
             phmap::parallel_flat_hash_map<int32_t, GlobalLateMaterilizationContext*, phmap::Hash<int32_t>, phmap::EqualTo<int32_t>,
