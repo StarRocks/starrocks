@@ -111,8 +111,6 @@ public:
 
     virtual bool is_struct() const { return false; }
 
-    virtual bool is_global_row_id() const { return false; }
-
     virtual const uint8_t* raw_data() const = 0;
 
     virtual uint8_t* mutable_raw_data() = 0;
