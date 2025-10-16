@@ -97,7 +97,7 @@ public class PushDownTopNToPreAggRule extends TransformationRule {
         OptExpression topnChild = input.inputAt(0);
         LogicalAggregationOperator aggGlobal = (LogicalAggregationOperator) topnChild.getOp();
 
-        if (!aggGlobal.isSplit() || aggGlobal.getType() != AggType.GLOBAL) {
+        if (!aggGlobal.isSplit() || aggGlobal.getType() != AggType.GLOBAL || aggGlobal.getPredicate() != null) {
             return false;
         }
 
@@ -110,8 +110,8 @@ public class PushDownTopNToPreAggRule extends TransformationRule {
 
         // verify aggregation result columns are not used in the order by columns of topN.
         List<Ordering> orderByElements = topn.getOrderByElements();
-        Set<ColumnRefOperator> aggColumns = aggGlobal.getAggregations().keySet();
-        return orderByElements.stream().noneMatch(orderByElement -> aggColumns.contains(orderByElement.getColumnRef()));
+        List<ColumnRefOperator> groupingKeys = aggGlobal.getGroupingKeys();
+        return orderByElements.stream().allMatch(orderByElement -> groupingKeys.contains(orderByElement.getColumnRef()));
     }
 
     @Override
