@@ -28,8 +28,10 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.udf.UDFDownloader;
 import com.starrocks.common.util.UDFInternalClassLoader;
+import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.FunctionArgsDef;
 import com.starrocks.sql.ast.FunctionRef;
@@ -64,16 +66,32 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import static com.starrocks.common.Config.STARROCKS_HOME_DIR;
+import static com.starrocks.sql.ast.CreateFunctionStmt.STORAGE_VOLUME_NAME_KEY;
 
 public class CreateFunctionAnalyzer {
 
     private String objectFile;
+
+    private String storageVolumeName;
+
+    private String md5sum;
+
+    private String className;
+
+    private String isAnalytic;
+
+    private String symbol;
+
+    private String inputType;
+
+    private String isolation;
 
     public void analyze(CreateFunctionStmt stmt, ConnectContext context) {
         if (!Config.enable_udf) {
             throw new SemanticException(
                     "UDF is not enabled in FE, please configure enable_udf=true in fe/conf/fe.conf");
         }
+        loadFunctionProperties(stmt);
         analyzeCommon(stmt, context);
         String langType = stmt.getLangType();
 
@@ -88,6 +106,17 @@ public class CreateFunctionAnalyzer {
         // build function
     }
 
+    private void loadFunctionProperties(CreateFunctionStmt stmt) {
+        this.objectFile = stmt.getProperties().get(CreateFunctionStmt.FILE_KEY);
+        this.storageVolumeName = stmt.getProperties().get(STORAGE_VOLUME_NAME_KEY);
+        this.md5sum = stmt.getProperties().get(CreateFunctionStmt.MD5_CHECKSUM);
+        this.className = stmt.getProperties().get(CreateFunctionStmt.SYMBOL_KEY);
+        this.isAnalytic  = stmt.getProperties().get(CreateFunctionStmt.IS_ANALYTIC_NAME);
+        this.symbol = stmt.getProperties().get(CreateFunctionStmt.SYMBOL_KEY);
+        this.inputType = stmt.getProperties().getOrDefault(CreateFunctionStmt.INPUT_TYPE, "scalar");
+        this.isolation = stmt.getProperties().get(CreateFunctionStmt.ISOLATION_KEY);
+    }
+
     private void analyzeCommon(CreateFunctionStmt stmt, ConnectContext context) {
         FunctionRef functionRef = stmt.getFunctionRef();
         FunctionArgsDef argsDef = stmt.getArgsDef();
@@ -98,19 +127,24 @@ public class CreateFunctionAnalyzer {
         TypeDefAnalyzer.analyze(returnType);
     }
 
-    private String getRealUrl(String url) {
-        if (url.contains("s3") || url.contains("hdfs")) {
+    private String getRealUrl(String url) throws IOException {
+        if (!url.startsWith("http://") && !url.startsWith("file://")) {
             return getJUdfUrl(url);
         }
         return url;
     }
 
-    private String getJUdfUrl(String url) {
+    private String getJUdfUrl(String url) throws IOException {
         String fileName = url.substring(url.lastIndexOf("/") + 1);
-        StorageVolume sv = GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getDefaultStorageVolume();
+        StorageVolumeMgr storageVolumeMgr = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
+        if (storageVolumeMgr == null) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                    "StorageVolumeMgr is not initialized");
+        }
+        StorageVolume  sv = storageVolumeMgr.getStorageVolumeByName(this.storageVolumeName);
         if (sv == null) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
-                    "No default cloud storage volume. Please create a cloud storage volume and set it as default");
+                    String.format("Storage volume '%s' not found. Please create it first.", this.storageVolumeName));
         }
         String targetPath = String.format("%s/%s", STARROCKS_HOME_DIR + "/plugins/java_udf", fileName);
         String targetUrl = String.format("file://%s", targetPath);
@@ -126,14 +160,11 @@ public class CreateFunctionAnalyzer {
             return checksum;
         }
 
-        Map<String, String> properties = stmt.getProperties();
-
-        objectFile = properties.get(CreateFunctionStmt.FILE_KEY);
         if (Strings.isNullOrEmpty(objectFile)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "No 'object_file' in properties");
         }
-        objectFile = getRealUrl(objectFile);
         try {
+            objectFile = getRealUrl(objectFile);
             URL url = new URL(objectFile);
             URLConnection urlConnection = url.openConnection();
             InputStream inputStream = urlConnection.getInputStream();
@@ -154,7 +185,6 @@ public class CreateFunctionAnalyzer {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "cannot to compute object's checksum", e);
         }
 
-        String md5sum = properties.get(CreateFunctionStmt.MD5_CHECKSUM);
         if (md5sum != null && !md5sum.equalsIgnoreCase(checksum)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                     "library's checksum is not equal with input, checksum=" + checksum);
@@ -237,12 +267,15 @@ public class CreateFunctionAnalyzer {
         FunctionArgsDef argsDef = stmt.getArgsDef();
         TypeDef returnType = stmt.getReturnType();
         String objectFile = stmt.getProperties().get(CreateFunctionStmt.FILE_KEY);
-        String isolation = stmt.getProperties().get(CreateFunctionStmt.ISOLATION_KEY);
-
+        StorageVolume storageVolume = GlobalStateMgr.getCurrentState()
+                .getStorageVolumeMgr()
+                .getStorageVolumeByName(storageVolumeName);
+        CloudConfiguration cloudConfiguration = storageVolume == null ? null : storageVolume.getCloudConfiguration();
         Function function = ScalarFunction.createUdf(
                 functionName, argsDef.getArgTypes(),
                 returnType.getType(), argsDef.isVariadic(), TFunctionBinaryType.SRJAR,
-                objectFile, handleClass.getCanonicalName(), "", "", !"shared".equalsIgnoreCase(isolation));
+                objectFile, handleClass.getCanonicalName(), "", "", !"shared".equalsIgnoreCase(isolation),
+                cloudConfiguration);
         function.setChecksum(checksum);
         return function;
     }
@@ -374,6 +407,10 @@ public class CreateFunctionAnalyzer {
         FunctionArgsDef argsDef = stmt.getArgsDef();
         TypeDef returnType = stmt.getReturnType();
         String objectFile = stmt.getProperties().get(CreateFunctionStmt.FILE_KEY);
+        StorageVolume storageVolume = GlobalStateMgr.getCurrentState()
+                .getStorageVolumeMgr()
+                .getStorageVolumeByName(storageVolumeName);
+        CloudConfiguration cloudConfiguration = storageVolume == null ? null : storageVolume.getCloudConfiguration();
         {
             // TYPE[] process(INPUT)
             Method method = mainClass.getMethod(CreateFunctionStmt.PROCESS_METHOD_NAME, true);
@@ -392,6 +429,7 @@ public class CreateFunctionAnalyzer {
         tableFunction.setChecksum(checksum);
         tableFunction.setLocation(new HdfsURI(objectFile));
         tableFunction.setSymbolName(mainClass.getCanonicalName());
+        tableFunction.setCloudConfiguration(cloudConfiguration);
         return tableFunction;
     }
 
