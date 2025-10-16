@@ -508,6 +508,11 @@ Status ChunkAccumulator::push(ChunkPtr&& chunk) {
         if (_tmp_chunk) {
             need_rows = std::min(_desired_size - _tmp_chunk->num_rows(), remain_rows);
             TRY_CATCH_BAD_ALLOC(_tmp_chunk->append(*chunk, start, need_rows));
+            std::string err_msg;
+            if (UNLIKELY(_tmp_chunk->capacity_limit_reached(&err_msg))) {
+                return Status::InternalError(
+                        fmt::format("ChunkAccumulator constructed an overflowing column: {}", err_msg));
+            }
         } else {
             need_rows = std::min(_desired_size, remain_rows);
             _tmp_chunk = chunk->clone_empty(_desired_size);
