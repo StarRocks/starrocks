@@ -27,6 +27,8 @@ set(UDF_FILES
   python/env.cpp
   python/callstub.cpp
   udf_call_stub.cpp
+  udf_downloder.cpp
+  udf_downloder.h
 )
 
 ADD_BE_LIB(Udf ${UDF_FILES})
