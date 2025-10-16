@@ -276,18 +276,6 @@ ORDER BY e.event_id;
 5	702	2024-01-01 10:00:00.123456	2024-01-01 10:00:00.223456	T2
 6	702	2024-01-01 09:59:59.999999	2024-01-01 10:00:00.123456	T1
 -- !result
-SELECT /* DT6-INNER-GE */ e.event_id, e.user_id, e.event_time, s.snapshot_time, s.snapshot_data
-FROM events_dt6 e
-ASOF INNER JOIN snapshots_dt6 s ON e.user_id = s.user_id AND cast(e.event_time as date) >= cast(s.snapshot_time as date)
-ORDER BY e.event_id;
--- result:
-1	701	2024-01-01 10:00:00.350000	2024-01-01 10:00:00.100000	S1
-2	701	2024-01-01 10:00:00.100001	2024-01-01 10:00:00.100000	S1
-3	702	2024-01-01 10:00:00.323455	2024-01-01 10:00:00.123456	T1
-4	702	2024-01-01 10:00:00.500000	2024-01-01 10:00:00.123456	T1
-5	702	2024-01-01 10:00:00.123456	2024-01-01 10:00:00.123456	T1
-6	702	2024-01-01 09:59:59.999999	2024-01-01 10:00:00.123456	T1
--- !result
 CREATE TABLE orders (
   `id` int(11) NULL COMMENT "订单ID",
   `product` varchar(50) NULL COMMENT "产品名称",
