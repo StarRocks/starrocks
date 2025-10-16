@@ -4,71 +4,9 @@ displayed_sidebar: docs
 
 # StarRocks version 4.0
 
-## 4.0.0-RC02
+## 4.0.0
 
-リリース日: 2025年9月29日
-
-### 新機能
-
-- Iceberg テーブル作成時にソートキーを設定可能。
-- マルチテーブル Write-Write トランザクションに対応し、`INSERT`、`UPDATE`、`DELETE` 操作のアトミックコミットを実現。Stream Load と `INSERT INTO` インターフェースの両方をサポートし、ETL やリアルタイム書き込みシナリオにおけるクロステーブル一貫性を保証。
-- 集計テーブルの集計キーを変更可能に。
-
-### 機能改善
-
-- Delta Lake Catalog キャッシュ設定を最適化：`DELTA_LAKE_JSON_META_CACHE_TTL` と `DELTA_LAKE_CHECKPOINT_META_CACHE_TTL` のデフォルト値を24時間に変更し、Parquet handler のロジックを簡素化。 [#63441](https://github.com/StarRocks/starrocks/pull/63441)
-- Delta Lake Catalog のエラーログの形式と内容を改善し、デバッグ体験を向上。 [#63389](https://github.com/StarRocks/starrocks/pull/63389)
-- 外部グループ（例: LDAP Group）がロールの付与・剥奪・表示に対応し、SQL 構文とテストケースを強化して権限管理を改善。 [#63385](https://github.com/StarRocks/starrocks/pull/63385)
-- Stream Load のパラメータ一貫性チェックを強化し、パラメータドリフトによるリスクを軽減。 [#63347](https://github.com/StarRocks/starrocks/pull/63347)
-- Stream Load の Label 伝達メカニズムを最適化し依存関係を削減。 [#63334](https://github.com/StarRocks/starrocks/pull/63334)
-- `ANALYZE PROFILE` の形式を改善し、ExplainAnalyzer がオペレーターごとにメトリクスをグループ表示可能に。 [#63326](https://github.com/StarRocks/starrocks/pull/63326)
-- `QueryDetailActionV2` と `QueryProfileActionV2` API を改善し、JSON 形式で結果を返却。 [#63235](https://github.com/StarRocks/starrocks/pull/63235)
-- 大量の CompoundPredicates を含むシナリオでの述語解析を改善。 [#63139](https://github.com/StarRocks/starrocks/pull/63139)
-- 一部の FE メトリクスを leader 認識型に変更。 [#63004](https://github.com/StarRocks/starrocks/pull/63004)
-- `SHOW PROCESS LIST` を改善し、Catalog と Query ID 情報を追加。 [#62552](https://github.com/StarRocks/starrocks/pull/62552)
-- BE JVM メモリ監視メトリクスを改善。 [#62210](https://github.com/StarRocks/starrocks/pull/62210)
-- マテリアライズドビューのリライトロジックとログ出力を最適化。 [#62985](https://github.com/StarRocks/starrocks/pull/62985)
-- ランダムバケット戦略を最適化。 [#63168](https://github.com/StarRocks/starrocks/pull/63168)
-- `ALTER TABLE <table_name> AUTO_INCREMENT = 10000;` で AUTO_INCREMENT 値の開始点をリセット可能に。 [#62767](https://github.com/StarRocks/starrocks/pull/62767)
-- Group Provider が DN による Group マッチングをサポート。 [#62711](https://github.com/StarRocks/starrocks/pull/62711)
-
-### バグ修正
-
-以下の問題を修正しました：
-
-- ARRAY 低カーディナリティ最適化により `Left Join` 結果が不完全になる問題。 [#63419](https://github.com/StarRocks/starrocks/pull/63419)
-- マテリアライズドビュー集計プッシュダウンリライト後に誤った実行計画が生成される問題。 [#63060](https://github.com/StarRocks/starrocks/pull/63060)
-- JSON フィールドの剪定シナリオで Schema にフィールドが見つからない場合、不要な Warning ログが出力される問題。 [#63414](https://github.com/StarRocks/starrocks/pull/63414)
-- ARM 環境で DECIMAL256 データ挿入時に SIMD Batch パラメータ誤りで無限ループが発生する問題。 [#63406](https://github.com/StarRocks/starrocks/pull/63406)
-- ストレージ関連の3つの問題: [#63398](https://github.com/StarRocks/starrocks/pull/63398)
-  - ディスクパスが空の際にキャッシュ例外が発生。
-  - Azure キャッシュ Key プレフィックスの誤り。
-  - S3 マルチパートアップロードの異常。
-- Fast Schema Evolution による CHAR → VARCHAR スキーマ変更後、ZoneMap フィルタが無効になる問題。 [#63377](https://github.com/StarRocks/starrocks/pull/63377)
-- 中間型 `ARRAY<NULL_TYPE>` による ARRAY 集計型解析エラー。 [#63371](https://github.com/StarRocks/starrocks/pull/63371)
-- 自動インクリメント列に基づく Partial Update 時のメタデータ不整合問題。 [#63370](https://github.com/StarRocks/starrocks/pull/63370)
-- Tablet 削除やクエリ同時実行時のメタ情報不整合問題。 [#63291](https://github.com/StarRocks/starrocks/pull/63291)
-- Iceberg テーブル書き込み時に `spill` ディレクトリ作成が失敗する問題。 [#63278](https://github.com/StarRocks/starrocks/pull/63278)
-- Ranger Hive Service 権限変更が反映されない問題。 [#63251](https://github.com/StarRocks/starrocks/pull/63251)
-- Group Provider が `IF NOT EXISTS` と `IF EXISTS` 句をサポートしていない問題。 [#63248](https://github.com/StarRocks/starrocks/pull/63248)
-- Iceberg パーティションに予約語を使用した際の異常。 [#63243](https://github.com/StarRocks/starrocks/pull/63243)
-- Prometheus メトリクス形式の問題。 [#62742](https://github.com/StarRocks/starrocks/pull/62742)
-- Compaction 有効化時にレプリケーショントランザクションを開始するとバージョン検証が失敗する問題。 [#62663](https://github.com/StarRocks/starrocks/pull/62663)
-- File Bunding 有効化後に Compaction Profile が欠落する問題。 [#62638](https://github.com/StarRocks/starrocks/pull/62638)
-- Clone 後の冗長レプリカ処理問題。 [#62542](https://github.com/StarRocks/starrocks/pull/62542)
-- Delta Lake テーブルでパーティション列が見つからない問題。 [#62953](https://github.com/StarRocks/starrocks/pull/62953)
-- 共有データクラスタにおけるマテリアライズドビューが Colocation をサポートしない問題。 [#62941](https://github.com/StarRocks/starrocks/pull/62941)
-- Iceberg テーブル NULL パーティション読み取りの問題。 [#62934](https://github.com/StarRocks/starrocks/pull/62934)
-- Histogram 統計の MCV (Most Common Values) にシングルクォートが含まれると SQL 構文エラーになる問題。 [#62853](https://github.com/StarRocks/starrocks/pull/62853)
-- `KILL ANALYZE` コマンドが無効になる問題。 [#62842](https://github.com/StarRocks/starrocks/pull/62842)
-- Stream Load Profile の収集に失敗する問題。 [#62802](https://github.com/StarRocks/starrocks/pull/62802)
-- CTE Reuse 計画抽出の誤り。 [#62784](https://github.com/StarRocks/starrocks/pull/62784)
-- BE 選択の異常により Rebalance が失敗する問題。 [#62776](https://github.com/StarRocks/starrocks/pull/62776)
-- `User Property` の優先度が `Session Variable` より低い問題。 [#63173](https://github.com/StarRocks/starrocks/pull/63173)
-
-## 4.0.0-RC
-
-リリース日：2025年9月9日
+リリース日：2025年10月17日
 
 ### データレイク分析
 
@@ -77,16 +15,21 @@ displayed_sidebar: docs
 - Iceberg メタデータに対する COUNT/MIN/MAX クエリを最適化し、データファイルスキャンを効率的にスキップすることで、大規模パーティションテーブルの集約クエリ性能を大幅に向上させ、リソース消費を削減。[#60385](https://github.com/StarRocks/starrocks/pull/60385)
 - プロシージャ `rewrite_data_files` により Iceberg テーブルの Compaction をサポート。
 - 隠しパーティション（Hidden Partition）を持つ Iceberg テーブルをサポート（作成、書き込み、読み取りを含む）。[#58914](https://github.com/StarRocks/starrocks/issues/58914)
+- Iceberg テーブル作成時のソートキー設定をサポートします。
+- Iceberg テーブル向けのシンクパフォーマンスを最適化します。
+  - Iceberg シンクは、メモリ使用量の最適化と小ファイル問題の解決のため、大規模オペレータのスパイリング、グローバルシャッフル、ローカルソートをサポートします。[#61963](https://github.com/StarRocks/starrocks/pull/61963)
+  - Iceberg シンクは、Spill Partition Writer に基づくローカルソートを最適化し、書き込み効率を向上させます。[#62096](https://github.com/StarRocks/starrocks/pull/62096)
+  - Iceberg シンクはパーティションのグローバルシャッフルをサポートし、小ファイルをさらに削減します。[#62123](https://github.com/StarRocks/starrocks/pull/62123)
+- Iceberg テーブルのバケット対応実行を強化し、バケット化テーブルの並行処理能力と分散処理能力を向上させました。[#61756](https://github.com/StarRocks/starrocks/pull/61756)
 - Paimon カタログで TIME データ型をサポート。[#58292](https://github.com/StarRocks/starrocks/pull/58292)
-
-<!--
-- Iceberg テーブルのソートを最適化。
--->
+- Iceberg バージョンを 1.10.0 にアップグレード。[#63667](https://github.com/StarRocks/starrocks/pull/63667)
 
 ### セキュリティと認証
 
 - JWT 認証と Iceberg REST Catalog を利用するシナリオで、StarRocks は REST Session Catalog を介してユーザーログイン情報を Iceberg に透過し、その後のデータアクセス認証をサポート。[#59611](https://github.com/StarRocks/starrocks/pull/59611) [#58850](https://github.com/StarRocks/starrocks/pull/58850)
 - Iceberg カタログ用の Vended Credential をサポート。
+- Group Provider 経由で取得した外部グループへの StarRocks 内部ロールの付与をサポート。[#63385](https://github.com/StarRocks/starrocks/pull/63385) [#63258](https://github.com/StarRocks/starrocks/pull/63258)
+- 外部テーブルのリフレッシュ権限を制御するため、外部テーブルに REFRESH 権限を追加しました。[#63385](https://github.com/StarRocks/starrocks/pull/62636)
 
 <!--
 - StarRocks FE 側で証明書を設定することで HTTPS をサポートし、クラウドやイントラネットでの暗号化通信要件を満たす安全なシステムアクセスを実現。[#56394](https://github.com/StarRocks/starrocks/pull/56394)
@@ -96,20 +39,19 @@ displayed_sidebar: docs
 ### ストレージ最適化とクラスタ管理
 
 - 共有データクラスタのクラウドネイティブテーブルにファイルバンドル（File Bundling）最適化を導入。ロード、Compaction、Publish 操作によって生成されるデータファイルを自動的にバンドルし、外部ストレージシステムへの高頻度アクセスによる API コストを削減。[#58316](https://github.com/StarRocks/starrocks/issues/58316)
+- 複数テーブル間の Write-Write トランザクション（Multi-Table Write-Write Transaction）をサポートし、INSERT、UPDATE、DELETE 操作のアトミックコミットを制御可能。Stream Load および INSERT INTO インターフェイスをサポートし、ETL やリアルタイム書き込みシナリオにおけるクロステーブルの一貫性を保証。[#61362](https://github.com/StarRocks/starrocks/issues/61362)
 - Routine Load で Kafka 4.0 をサポート。
 - 共有なしクラスタの主キーテーブルに対する全文インバーテッドインデックスをサポート。
+- 集約テーブルの集約キーの変更をサポート。[#62253](https://github.com/StarRocks/starrocks/issues/62253)s
 - カタログ、データベース、テーブル、ビュー、マテリアライズドビューの名前に対して大文字小文字を区別しない処理を有効化可能。[#61136](https://github.com/StarRocks/starrocks/pull/61136)
 - 共有データクラスタにおける Compute  Node のブラックリスト化をサポート。[#60830](https://github.com/StarRocks/starrocks/pull/60830)
 - グローバル接続 ID をサポート。[#57256](https://github.com/StarRocks/starrocks/pull/57276)
-
-<!--
-- 複数テーブル間の Write-Write トランザクション（Multi-Table Write-Write Transaction）をサポートし、INSERT、UPDATE、DELETE 操作のアトミックコミットを制御可能。Stream Load および INSERT INTO インターフェイスをサポートし、ETL やリアルタイム書き込みシナリオにおけるクロステーブルの一貫性を保証。
-- 集約テーブルの集約キーの変更をサポート。
--->
+- 復元可能な削除済みメタデータを表示するため、Information Schema に `recyclebin_catalogs` メタデータビューを追加しました。[#51007](https://github.com/StarRocks/starrocks/pull/51007)
 
 ### クエリと性能改善
 
 - DECIMAL256 データ型をサポートし、精度の上限を 38 ビットから 76 ビットに拡張。256 ビットのストレージにより、高精度が求められる金融や科学計算シナリオに柔軟に対応し、大規模集約や高次演算での DECIMAL128 の精度オーバーフロー問題を効果的に緩和。[#59645](https://github.com/StarRocks/starrocks/issues/59645)
+- 基本演算子のパフォーマンスを改善しました。[#61691](https://github.com/StarRocks/starrocks/issues/61691) [#61632](https://github.com/StarRocks/starrocks/pull/61632) [#62585](https://github.com/StarRocks/starrocks/pull/62585) [#61405](https://github.com/StarRocks/starrocks/pull/61405)  [#61429](https://github.com/StarRocks/starrocks/pull/61429)
 - JOIN および AGG 演算子の性能を最適化。[#61691](https://github.com/StarRocks/starrocks/issues/61691)
 - [Preview] SQL Plan Manager を導入し、クエリとクエリプランをバインド可能に。これにより、システム状態（データ更新や統計更新）の変化によるクエリプランの変動を防止し、クエリ性能を安定化。[#56310](https://github.com/StarRocks/starrocks/issues/56310)
 - Partition-wise Spillable Aggregate/Distinct 演算子を導入し、従来のソートベース集約による Spill 実装を置き換え。複雑かつ高カーディナリティの GROUP BY シナリオで集約性能を大幅に改善し、読み書き負荷を削減。[#60216](https://github.com/StarRocks/starrocks/pull/60216)
@@ -117,6 +59,13 @@ displayed_sidebar: docs
   - テーブルレベルで Flat JSON を設定可能。[#57379](https://github.com/StarRocks/starrocks/pull/57379)
   - JSON カラム型ストレージを強化：V1 メカニズムを維持しつつ、Page レベルおよび Segment レベルのインデックス（ZoneMap、ブルームフィルター）、遅延マテリアライゼーションを伴う述語プッシュダウン、辞書エンコーディング、低カーディナリティのグローバル辞書の統合を追加し、実行効率を大幅に向上。[#60953](https://github.com/StarRocks/starrocks/issues/60953)
 - STRING データ型向けに適応型 ZoneMap インデックス作成戦略をサポート。[#61960](https://github.com/StarRocks/starrocks/issues/61960)
+- クエリ可視性の強化:
+  - EXPLAIN ANALYZEの出力を最適化し、実行メトリクスをグループ別および演算子別に表示することで可読性を向上。[#63326](https://github.com/StarRocks/starrocks/pull/63326)
+  - `QueryDetailActionV2` および `QueryProfileActionV2` が JSON 形式をサポートし、クロス FE クエリ機能が強化されました。[#63235](https://github.com/StarRocks/starrocks/pull/63235)
+  - 全 FE にわたるクエリプロファイル情報の取得をサポート。[#61345](https://github.com/StarRocks/starrocks/pull/61345)
+  - SHOW PROCESSLIST 文でカタログ、クエリ ID などの情報を表示。[#62552](https://github.com/StarRocks/starrocks/pull/62552)
+  - クエリキューとプロセス監視を強化し、Running/Pending のステータス表示をサポート。[#62261](https://github.com/StarRocks/starrocks/pull/62261)
+- マテリアライズドビューの再作成では、元のテーブルの分散キーとソートキーを考慮し、最適なマテリアライズドビューの選択を改善。[#62830](https://github.com/StarRocks/starrocks/pull/62830)
 
 ### 関数と SQL 構文
 
@@ -128,6 +77,8 @@ displayed_sidebar: docs
   - `regexp_count` [#57182](https://github.com/StarRocks/starrocks/pull/57182)
   - `tokenize` [#58965](https://github.com/StarRocks/starrocks/pull/58965)
   - `format_bytes` [#61535](https://github.com/StarRocks/starrocks/pull/61535)
+  - `encode_sort_key` [#61781](https://github.com/StarRocks/starrocks/pull/61781)
+  - `column_size` および `column_compressed_size`  [#62481](https://github.com/StarRocks/starrocks/pull/62481)
 - 以下の構文拡張を提供：
   - CREATE ANALYZE FULL TABLE で IF NOT EXISTS キーワードをサポート。[#59789](https://github.com/StarRocks/starrocks/pull/59789)
   - SELECT で EXCLUDE 句をサポート。[#57411](https://github.com/StarRocks/starrocks/pull/57411/files)
