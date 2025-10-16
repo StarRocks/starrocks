@@ -120,6 +120,8 @@ public:
         return workgroup::ScanSchedEntityType::CONNECTOR;
     }
 
+    int64_t get_scan_table_id() const override;
+
 private:
     int64_t _adjust_scan_mem_limit(int64_t old_chunk_source_mem_bytes, int64_t new_chunk_source_mem_bytes);
     mutable ConnectorScanOperatorAdaptiveProcessor* _adaptive_processor;
