@@ -131,7 +131,7 @@ TEST_F(AiFunctionsTest, ConfigParsingWithDefaults) {
     ASSERT_TRUE(config_result.ok());
 
     ModelConfig parsed_config = config_result.value();
-    ASSERT_EQ("https://api.openai.com/v1/completions", parsed_config.endpoint);
+    ASSERT_EQ("https://api.openai.com/v1/chat/completions", parsed_config.endpoint);
     ASSERT_EQ("gpt-3.5-turbo", parsed_config.model);
     ASSERT_EQ("test-api-key", parsed_config.api_key);
     ASSERT_EQ(kDefaultTemperature, parsed_config.temperature);
