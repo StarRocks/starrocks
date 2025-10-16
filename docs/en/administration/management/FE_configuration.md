@@ -2065,6 +2065,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The minimum timeout duration allowed for a load job. This limit applies to all types of load jobs.
 - Introduced in: -
 
+##### finish_transaction_default_lock_timeout_ms
+
+- Default: 1000
+- Type: Int
+- Unit: MilliSeconds
+- Is mutable: Yes
+- Description: The default timeout for acquiring the db and table lock during finishing transaction.
+- Introduced in: v4.0.0, v3.5.8
+
 ##### spark_dpp_version
 
 - Default: 1.0.0

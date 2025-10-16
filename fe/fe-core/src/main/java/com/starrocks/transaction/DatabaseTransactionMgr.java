@@ -53,6 +53,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.DuplicatedRequestException;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
@@ -95,11 +96,13 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
 
+import static com.starrocks.common.ErrorCode.ERR_LOCK_ERROR;
 import static com.starrocks.common.ErrorCode.ERR_NO_PARTITIONS_HAVE_DATA_LOAD;
 
 /**
@@ -1013,7 +1016,8 @@ public class DatabaseTransactionMgr {
         return true;
     }
 
-    public void finishTransaction(long transactionId, Set<Long> errorReplicaIds) throws UserException {
+    public void finishTransaction(long transactionId, Set<Long> errorReplicaIds, long lockTimeoutMs)
+            throws UserException {
         TransactionState transactionState = getTransactionState(transactionId);
         // add all commit errors and publish errors to a single set
         if (errorReplicaIds == null) {
@@ -1048,7 +1052,17 @@ public class DatabaseTransactionMgr {
 
         List<Long> tableIdList = transactionState.getTableIdList();
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.WRITE);
+        if (lockTimeoutMs > 0) {
+            if (!locker.tryLockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.WRITE, lockTimeoutMs,
+                    TimeUnit.MILLISECONDS)) {
+                finishSpan.end();
+                throw ErrorReportException.report(ERR_LOCK_ERROR,
+                        "Failed to acquire lock on database " + db.getId() + ", tables: " + tableIdList + " within " +
+                                lockTimeoutMs + " ms");
+            }
+        } else {
+            locker.lockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.WRITE);
+        }
         try {
             transactionState.writeLock();
             try {
@@ -2135,6 +2149,7 @@ public class DatabaseTransactionMgr {
     }
 
     private void updateTransactionMetrics(TransactionState txnState) {
+        updateTransactionPublishMetrics(txnState);
         if (txnState.getTableIdList().isEmpty()) {
             return;
         }
@@ -2155,6 +2170,27 @@ public class DatabaseTransactionMgr {
             entity.counterStreamLoadFinishedTotal.increase(1L);
             entity.counterStreamLoadRowsTotal.increase(streamAttachment.getLoadedRows());
             entity.counterStreamLoadBytesTotal.increase(streamAttachment.getLoadedBytes());
+        }
+    }
+
+    private void updateTransactionPublishMetrics(TransactionState txnState) {
+        if (txnState.getTransactionStatus() != TransactionStatus.VISIBLE) {
+            return;
+        }
+        long commitTime = txnState.getCommitTime();
+        long publishVersionTime = txnState.getPublishVersionTime();
+        long publishVersionFinishTime = txnState.getPublishVersionFinishTime();
+        long finishTime = txnState.getFinishTime();
+        if (commitTime > 0) {
+            if (publishVersionTime >= commitTime) {
+                MetricRepo.HISTO_TXN_WAIT_FOR_PUBLISH_LATENCY.update(publishVersionTime - commitTime);
+            }
+            if (finishTime >= commitTime) {
+                MetricRepo.HISTO_TXN_PUBLISH_TOTAL_LATENCY.update(finishTime - commitTime);
+            }
+        }
+        if (publishVersionFinishTime > 0 && finishTime >= publishVersionFinishTime) {
+            MetricRepo.HISTO_TXN_FINISH_PUBLISH_LATENCY.update(finishTime - publishVersionFinishTime);
         }
     }
 
