@@ -21,40 +21,54 @@ import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
 
 import java.io.File;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class UDFDownloader {
 
     private static final Logger LOG = LogManager.getLogger(UDFDownloader.class);
 
-    public static void download2Local(StorageVolume sv, String remotePath, String localPath) {
-        Status status = doDownload(sv, remotePath, localPath);
-        if (status != Status.OK) {
-            LOG.error(status.getErrorMsg());
-            throw new RuntimeException(status.getErrorMsg());
+    private static final ConcurrentHashMap<String, Object> LOCK = new ConcurrentHashMap<>();
+
+    private static Object getLockForPath(String path) {
+        return LOCK.computeIfAbsent(path, k -> new Object());
+    }
+
+    public static void download2Local(StorageVolume sv, String remotePath, String localPath) throws IOException {
+        synchronized (getLockForPath(localPath)) {
+            setUpLocalPath(localPath);
+            Status status = doDownload(sv, remotePath, localPath);
+            if (status != Status.OK) {
+                LOG.error(status.getErrorMsg());
+                throw new RuntimeException(status.getErrorMsg());
+            }
+        }
+    }
+
+    private static void setUpLocalPath(String localPath) throws IOException {
+        Path parentDir = Paths.get(localPath).getParent();
+        if (parentDir != null && !Files.exists(parentDir)) {
+            Files.createDirectories(parentDir);
+        }
+        File localFile = new File(localPath);
+        if (localFile.exists() && !localFile.delete()) {
+            String errMsg = String.format("Failed to delete existing local file %s", localFile);
+            throw new RuntimeException(errMsg);
         }
     }
 
     private static Status doDownload(StorageVolume sv, String remotePath, String localPath) {
         try {
-            Path parentDir = Paths.get(localPath).getParent();
-            if (parentDir != null && !Files.exists(parentDir)) {
-                Files.createDirectories(parentDir);
-            }
-            File localFile = new File(localPath);
-            if (localFile.exists() && !localFile.delete()) {
-                String errMsg = String.format("Failed to delete existing local file %s", localFile);
-                return new Status(new Status(TStatusCode.RUNTIME_ERROR, errMsg));
-            }
             StorageHandler handler = StorageHandlerFactory.create(sv);
-            handler.getObject(remotePath, localFile);
+            handler.getObject(remotePath, localPath);
             return Status.OK;
         } catch (UnsupportedOperationException e) {
             return new Status(new Status(TStatusCode.RUNTIME_ERROR, e.getMessage()));
         } catch (Exception e) {
-            String errMsg = String.format("Failed to download remote file %s as %s", remotePath, e.getMessage());
+            String errMsg = String.format("Failed to download remote file from %s as %s", remotePath, e.getMessage());
             return new Status(new Status(TStatusCode.RUNTIME_ERROR, errMsg));
         }
     }

@@ -31,6 +31,7 @@ public class CreateFunctionStmt extends DdlStmt {
     public static final String MD5_CHECKSUM = "md5";
     public static final String TYPE_KEY = "type";
     public static final String ISOLATION_KEY = "isolation";
+    public static final String STORAGE_VOLUME_NAME_KEY = "storageVolumeName";
     public static final String TYPE_STARROCKS_JAR = "StarrocksJar";
     public static final String TYPE_STARROCKS_PYTHON = "Python";
     public static final String EVAL_METHOD_NAME = "evaluate";

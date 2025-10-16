@@ -361,7 +361,7 @@ public class StarRocksAssert {
         Function function = ScalarFunction.createUdf(
                 functionName, argsDef.getArgTypes(),
                 returnType.getType(), argsDef.isVariadic(), TFunctionBinaryType.SRJAR,
-                "", "", "", "", !"shared".equalsIgnoreCase(""));
+                "", "", "", "", !"shared".equalsIgnoreCase(""), null);
 
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(ctx.getDatabase());
         db.addFunction(function, true, false);

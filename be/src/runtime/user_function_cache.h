@@ -40,86 +40,110 @@
 #include <mutex>
 #include <string>
 #include <unordered_map>
+#include <gen_cpp/CloudConfiguration_types.h>
 
 #include "common/status.h"
 #include "common/statusor.h"
 #include "gen_cpp/Types_types.h"
 
-namespace starrocks {
+namespace starrocks
+{
+    struct UserFunctionCacheEntry;
 
-struct UserFunctionCacheEntry;
+    // This class is used for caching user-defined functions.
+    // We will support UDF/UDAF/UDTF and user-defined window functions.
+    // A user-defined function has a unique function id, and we get the
+    // corresponding function based on the function id. If the function does
+    // not exist or if the md5 does not match, then the corresponding lib will be
+    // downloaded from the specified URL. when user wants to
+    // change its implementation(URL), StarRocks will generate a new function
+    // id.
+    class UserFunctionCache
+    {
+    public:
+        using FuncType = TFunctionBinaryType::type;
+        static constexpr const char* JAVA_UDF_SUFFIX = ".jar";
+        static constexpr const char* PY_UDF_SUFFIX = ".py.zip";
+        static constexpr FuncType UDF_TYPE_UNKNOWN = TFunctionBinaryType::BUILTIN;
+        static constexpr FuncType UDF_TYPE_JAVA = TFunctionBinaryType::SRJAR;
+        static constexpr FuncType UDF_TYPE_PYTHON = TFunctionBinaryType::PYTHON;
 
-// This class is used for caching user-defined functions.
-// We will support UDF/UDAF/UDTF and user-defined window functions.
-// A user-defined function has a unique function id, and we get the
-// corresponding function based on the function id. If the function does
-// not exist or if the md5 does not match, then the corresponding lib will be
-// downloaded from the specified URL. when user wants to
-// change its implementation(URL), StarRocks will generate a new function
-// id.
-class UserFunctionCache {
-public:
-    using FuncType = TFunctionBinaryType::type;
-    static constexpr const char* JAVA_UDF_SUFFIX = ".jar";
-    static constexpr const char* PY_UDF_SUFFIX = ".py.zip";
-    static constexpr FuncType UDF_TYPE_UNKNOWN = TFunctionBinaryType::BUILTIN;
-    static constexpr FuncType UDF_TYPE_JAVA = TFunctionBinaryType::SRJAR;
-    static constexpr FuncType UDF_TYPE_PYTHON = TFunctionBinaryType::PYTHON;
+        using UserFunctionCacheEntryPtr = std::shared_ptr<UserFunctionCacheEntry>;
+        // local_dir is the directory which contain cached library.
+        UserFunctionCache();
+        ~UserFunctionCache();
 
-    using UserFunctionCacheEntryPtr = std::shared_ptr<UserFunctionCacheEntry>;
-    // local_dir is the directory which contain cached library.
-    UserFunctionCache();
-    ~UserFunctionCache();
+        // initialize this cache, call this function before others
+        Status init(const std::string& local_path);
 
-    // initialize this cache, call this function before others
-    Status init(const std::string& local_path);
+        static UserFunctionCache* instance();
 
-    static UserFunctionCache* instance();
+        struct FunctionCacheDesc
+        {
+            FunctionCacheDesc(int64_t fid_, const std::string& url_, const std::string& checksum_,
+                              FuncType function_type_, const TCloudConfiguration& cloud_configuration_)
+                : fid(fid_), url(url_), checksum(checksum_), function_type(function_type_),
+                  cloud_configuration(cloud_configuration_)
+            {
+            }
 
-    struct FunctionCacheDesc {
-        FunctionCacheDesc(int64_t fid_, const std::string& url_, const std::string& checksum_, FuncType function_type_)
-                : fid(fid_), url(url_), checksum(checksum_), function_type(function_type_) {}
-        int64_t fid;
-        const std::string& url;
-        const std::string& checksum;
-        FuncType function_type;
-    };
-    Status get_libpath(const FunctionCacheDesc& desc, std::string* libpath) {
-        return get_libpath(desc.fid, desc.url, desc.checksum, desc.function_type, libpath);
-    }
-    Status get_libpath(int64_t fid, const std::string& url, const std::string& checksum, FuncType function_type,
-                       std::string* libpath);
-    StatusOr<std::any> load_cacheable_java_udf(
-            const FunctionCacheDesc& desc, const std::function<StatusOr<std::any>(const std::string& entry)>& loader) {
-        return load_cacheable_java_udf(desc.fid, desc.url, desc.checksum, desc.function_type, loader);
-    }
-    StatusOr<std::any> load_cacheable_java_udf(
+            int64_t fid;
+            const std::string& url;
+            const std::string& checksum;
+            FuncType function_type;
+            TCloudConfiguration cloud_configuration;
+        };
+
+        Status get_libpath(const FunctionCacheDesc& desc, std::string* libpath)
+        {
+            return get_libpath(desc.fid, desc.url, desc.checksum, desc.function_type, libpath,
+                               desc.cloud_configuration);
+        }
+
+        Status get_libpath(int64_t fid, const std::string& url, const std::string& checksum, FuncType function_type,
+                           std::string* libpath, const TCloudConfiguration& cloud_configuration);
+
+        StatusOr<std::any> load_cacheable_java_udf(
+            const FunctionCacheDesc& desc, const std::function<StatusOr<std::any>(const std::string& entry)>& loader)
+        {
+            return load_cacheable_java_udf(desc.fid, desc.url, desc.checksum, desc.function_type, loader,
+                                           desc.cloud_configuration);
+        }
+
+        StatusOr<std::any> load_cacheable_java_udf(
             int64_t fid, const std::string& url, const std::string& checksum, FuncType function_type,
-            const std::function<StatusOr<std::any>(const std::string& entry)>& loader);
+            const std::function<StatusOr<std::any>(const std::string& entry)>& loader,
+            const TCloudConfiguration& cloud_configuration);
 
-private:
-    FuncType _get_function_type(const std::string& url);
-    Status _load_cached_lib();
-    Status _load_entry_from_lib(const std::string& dir, const std::string& file);
-    template <class Loader>
-    Status _get_cache_entry(int64_t fid, const std::string& url, const std::string& checksum, FuncType function_type,
-                            UserFunctionCacheEntryPtr* output_entry, Loader&& loader);
-    template <class Loader>
-    Status _load_cache_entry(const std::string& url, UserFunctionCacheEntryPtr& entry, Loader&& loader);
-    Status _download_lib(const std::string& url, UserFunctionCacheEntryPtr& entry);
-    template <class Loader>
-    Status _load_cache_entry_internal(const std::string& url, UserFunctionCacheEntryPtr& entry, Loader&& loader);
-    std::string _make_lib_file(int64_t function_id, const std::string& checksum, const std::string& shuffix);
-    void _destroy_cache_entry(UserFunctionCacheEntryPtr& entry);
-    Status _reset_cache_dir();
-    Status _remove_all_lib_file();
+    private:
+        FuncType _get_function_type(const std::string& url);
+        Status _load_cached_lib();
+        Status _load_entry_from_lib(const std::string& dir, const std::string& file,
+                                    TCloudConfiguration& cloud_configuration);
+        template <class Loader>
+        Status _get_cache_entry(int64_t fid, const std::string& url, const std::string& checksum,
+                                FuncType function_type,
+                                UserFunctionCacheEntryPtr* output_entry, Loader&& loader,
+                                const TCloudConfiguration& cloud_configuration);
+        template <class Loader>
+        Status _load_cache_entry(const std::string& url, UserFunctionCacheEntryPtr& entry, Loader&& loader,
+                                 const TCloudConfiguration& cloud_configuration);
+        Status _download_lib(const std::string& url, UserFunctionCacheEntryPtr& entry,
+                             const TCloudConfiguration& cloud_configuration);
+        template <class Loader>
+        Status _load_cache_entry_internal(const std::string& url, UserFunctionCacheEntryPtr& entry, Loader&& loader);
+        std::string _make_lib_file(int64_t function_id, const std::string& checksum, const std::string& shuffix);
+        void _destroy_cache_entry(UserFunctionCacheEntryPtr& entry);
+        Status _reset_cache_dir();
+        Status _remove_all_lib_file();
 
-private:
-    std::string _lib_dir;
-    void* _current_process_handle = nullptr;
+    private:
+        std::string _lib_dir;
+        void* _current_process_handle = nullptr;
 
-    std::mutex _cache_lock;
-    std::unordered_map<int64_t, std::shared_ptr<UserFunctionCacheEntry>> _entry_map;
-};
+        std::mutex _cache_lock;
+        std::unordered_map<int64_t, std::shared_ptr<UserFunctionCacheEntry>> _entry_map;
 
+        TCloudConfiguration _cloud_configuration;
+    };
 } // namespace starrocks
