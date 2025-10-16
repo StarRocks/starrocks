@@ -224,6 +224,49 @@ public class CreateRoutineLoadStmtTest {
     }
 
     @Test
+    public void testPrecedingFilterStmt() throws Exception {
+        {
+            String sql = "CREATE ROUTINE LOAD job ON tbl " +
+                    "COLUMNS TERMINATED BY ';', " +
+                    "ROWS TERMINATED BY '\n', " +
+                    "COLUMNS(`a`, `b`, `c`=1), " +
+                    "TEMPORARY PARTITION(`p1`, `p2`), " +
+                    "PRECEDING FILTER a = 1 " +
+                    "PROPERTIES (\"desired_concurrent_number\"=\"3\") " +
+                    "FROM KAFKA\n"
+                    + "(\n"
+                    + "\"kafka_broker_list\" = \"kafkahost1:9092,kafkahost2:9092\",\n"
+                    + "\"kafka_topic\" = \"topictest\"\n"
+                    + ");";
+            List<StatementBase> stmts = com.starrocks.sql.parser.SqlParser.parse(sql, 32);
+            CreateRoutineLoadStmt createRoutineLoadStmt = (CreateRoutineLoadStmt)stmts.get(0);
+            CreateRoutineLoadAnalyzer.analyze(createRoutineLoadStmt, connectContext);
+            ImportWhereStmt precedingFilter = createRoutineLoadStmt.getRoutineLoadDesc().getPrecedingFilter();
+            Assertions.assertFalse(precedingFilter.isContainSubquery());
+        }
+
+        {
+            String sql = "CREATE ROUTINE LOAD job ON tbl " +
+                    "COLUMNS TERMINATED BY ';', " +
+                    "ROWS TERMINATED BY '\n', " +
+                    "COLUMNS(`a`, `b`, `c`=1), " +
+                    "TEMPORARY PARTITION(`p1`, `p2`), " +
+                    "PRECEDING FILTER a in (SELECT 1) " +
+                    "PROPERTIES (\"desired_concurrent_number\"=\"3\") " +
+                    "FROM KAFKA (\"kafka_topic\" = \"my_topic\")";
+            List<StatementBase> stmts = com.starrocks.sql.parser.SqlParser.parse(sql, 32);
+            CreateRoutineLoadStmt createRoutineLoadStmt = (CreateRoutineLoadStmt)stmts.get(0);
+            try {
+                CreateRoutineLoadAnalyzer.analyze(createRoutineLoadStmt, connectContext);
+            } catch (Exception e) {
+                Assertions.assertTrue(e.getMessage().contains("the preceding filter cannot contain subqueries"));
+                return;
+            }
+            Assertions.fail();
+        }
+    }
+
+    @Test
     public void testLoadPropertiesContexts() {
         String sql = "CREATE ROUTINE LOAD testdb.routine_name ON table1"
                 + " PROPERTIES( \"desired_concurrent_number\"=\"3\",\n"

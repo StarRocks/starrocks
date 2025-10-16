@@ -290,10 +290,6 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         return conjuncts;
     }
 
-    public List<Expr> getPrecedingFilterConjuncts() {
-        return precedingFilterConjuncts;
-    }
-
     public void addConjuncts(List<Expr> conjuncts) {
         if (conjuncts == null) {
             return;
