@@ -10,7 +10,7 @@ shell: curl -s -u root: "${url}/proc_profile" | grep -c "View"
 -- Test 3: Test /proc_profile/file endpoint with a valid filename (if profiles exist)
 -- Get a profile filename from the main page and test accessing it
 shell: curl -s -u root: "${url}/proc_profile" | grep -o 'filename=[^"]*\.tar\.gz' | head -1 | cut -d'=' -f2 > profile_file.txt
-shell: curl -s -u root: "${url}/proc_profile/file?filename=$(cat profile_file.txt)" | wc -l || echo "empty"
+shell: if [ $(curl -s -u root: "${url}/proc_profile/file?filename=$(cat profile_file.txt)" | wc -l) -gt 0 ]; then echo "exist"; else echo "empty"; fi
 shell: rm profile_file.txt
 
 -- Test 4: Test /proc_profile/file endpoint with invalid filename (should return error)

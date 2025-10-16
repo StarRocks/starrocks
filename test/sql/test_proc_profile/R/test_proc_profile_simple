@@ -14,10 +14,10 @@ shell: curl -s -u root: "${url}/proc_profile" | grep -o 'filename=[^"]*\.tar\.gz
 0
 
 -- !result
-shell: curl -s -u root: "${url}/proc_profile/file?filename=$(cat profile_file.txt)" | wc -l || echo "empty"
+shell: if [ $(curl -s -u root: "${url}/proc_profile/file?filename=$(cat profile_file.txt)" | wc -l) -gt 0 ]; then echo "exist"; else echo "empty"; fi
 -- result:
 0
-40938
+exist
 -- !result
 shell: rm profile_file.txt
 -- result:
