@@ -237,7 +237,7 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
         }
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(mvName.getDb(), mvName.getTbl());
         if (table == null) {
-            throw new SemanticException("Table %s is not found", mvName);
+            throw new SemanticException("Materialized view %s is not found", mvName);
         }
         if (!table.isMaterializedView()) {
             throw new SemanticException("The specified table [" + mvName + "] is not a view");
