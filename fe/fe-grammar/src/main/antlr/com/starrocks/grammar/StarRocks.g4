@@ -269,6 +269,7 @@ statement
     | dropDataCacheRuleStatement
     | clearDataCacheRulesStatement
     | dataCacheSelectStatement
+    | refreshCacheStatsStatement
 
     // Export Statement
     | exportStatement
@@ -2031,6 +2032,10 @@ clearDataCacheRulesStatement
 
 dataCacheSelectStatement
     : CACHE SELECT selectItem (',' selectItem)* FROM qualifiedName (WHERE where=expression)? properties?
+    ;
+
+refreshCacheStatsStatement
+    : REFRESH CACHE STATS FOR TABLE qualifiedName (partitionNames | tabletList)?
     ;
 
 // ------------------------------------------- Export Statement --------------------------------------------------------
