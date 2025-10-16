@@ -28,7 +28,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.List;
-import java.util.Set;
 
 /*
  * When a top-n operator follows after a 2 phase aggregation, and the top-n order by columns do not depend
