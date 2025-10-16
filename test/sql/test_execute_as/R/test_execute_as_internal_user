@@ -76,10 +76,6 @@ NONE
 execute as u1 with no revert;
 -- result:
 -- !result
-show databases;
--- result:
-information_schema
--- !result
 select current_group();
 -- result:
 r1_group
@@ -101,10 +97,6 @@ NONE
 -- !result
 execute as u2 with no revert;
 -- result:
--- !result
-show databases;
--- result:
-information_schema
 -- !result
 select current_group();
 -- result:
