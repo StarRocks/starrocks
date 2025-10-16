@@ -18,7 +18,6 @@ import com.starrocks.utframe.StarRocksAssert;
 
 public class TPCDSTestUtil {
     public static void prepareTables(StarRocksAssert starRocksAssert) throws Exception {
-        System.out.println("current db " + starRocksAssert.getCtx().getDatabase());
         starRocksAssert.withTable("CREATE TABLE `call_center` (\n" +
                 "  `cc_call_center_sk` int(11) NOT NULL COMMENT \"\",\n" +
                 "  `cc_call_center_id` char(16) NOT NULL COMMENT \"\",\n" +
