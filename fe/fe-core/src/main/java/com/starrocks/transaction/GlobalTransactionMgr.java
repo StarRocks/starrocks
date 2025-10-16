@@ -599,7 +599,13 @@ public class GlobalTransactionMgr implements MemoryTrackable {
      */
     public void finishTransaction(long dbId, long transactionId, Set<Long> errorReplicaIds) throws StarRocksException {
         DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);
-        dbTransactionMgr.finishTransaction(transactionId, errorReplicaIds);
+        dbTransactionMgr.finishTransaction(transactionId, errorReplicaIds, 0L);
+    }
+
+    public void finishTransaction(long dbId, long transactionId, Set<Long> errorReplicaIds, long lockTimeoutMs)
+            throws StarRocksException {
+        DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);
+        dbTransactionMgr.finishTransaction(transactionId, errorReplicaIds, lockTimeoutMs);
     }
 
     public void finishTransactionBatch(long dbId, TransactionStateBatch stateBatch, Set<Long> errorReplicaIds)

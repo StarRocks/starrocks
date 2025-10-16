@@ -558,6 +558,10 @@ public class TransactionState implements Writable, GsonPreProcessable {
         return this.publishVersionTime;
     }
 
+    public long getPublishVersionFinishTime() {
+        return this.publishVersionFinishTime;
+    }
+
     public boolean hasSendTask() {
         return this.hasSendTask;
     }
