@@ -5402,4 +5402,6 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Unit: -
 - Is mutable: Yes
 - Description: For `error_urls` debugging, whether to allow operators to choose between using original hostnames from FE heartbeat or forcing resolution to IP addresses based on their environment needs.
+  - `true`: Resolve hostnames to IPs.
+  - `false` (Default): Keeps the original hostname in the error URL.
 - Introduced in: -
