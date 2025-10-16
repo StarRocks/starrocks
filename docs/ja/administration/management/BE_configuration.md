@@ -2142,3 +2142,12 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 可変: いいえ
 - 説明: ビットマップ関数の入力値の最大長。
 - 導入バージョン: -
+
+##### enable_resolve_hostname_to_ip_in_load_error_url
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 可変: はい
+- 説明: `error_urls` デバッグのために、オペレーターがFEハートビートからの元のホスト名を使用するか、環境要件に基づいてIPアドレスへの解決を強制するかを選択できるようにするかどうか。
+- 導入バージョン: -
