@@ -678,6 +678,12 @@ public:
             return Status::IOError(fmt::format("fail to get space info of path {}: {}", path, e.what()));
         }
     }
+
+    // directly return size, TEST only
+    StatusOr<std::pair<size_t, size_t>> get_cache_stats(const std::string& path, int64_t offset,
+                                                        int64_t size) override {
+        return std::make_pair(size, size);
+    }
 };
 
 // Default Posix FileSystem

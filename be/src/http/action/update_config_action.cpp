@@ -58,6 +58,7 @@
 #include "runtime/load_channel_mgr.h"
 #include "storage/compaction_manager.h"
 #include "storage/lake/compaction_scheduler.h"
+#include "storage/lake/tablet_cache_stats_manager.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/update_manager.h"
 #include "storage/load_spill_block_manager.h"
@@ -289,6 +290,14 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
         });
         _config_callback.emplace("starlet_star_cache_mem_size_bytes", [&]() -> Status {
             update_staros_starcache();
+            return Status::OK();
+        });
+        _config_callback.emplace("tablet_cache_stats_max_threads", [&]() -> Status {
+            auto tablet_manager = _exec_env->lake_tablet_manager();
+            if (tablet_manager != nullptr) {
+                return tablet_manager->tablet_cache_stats_mgr()->update_max_threads(
+                        config::tablet_cache_stats_max_threads);
+            }
             return Status::OK();
         });
 #endif

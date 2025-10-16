@@ -32,6 +32,8 @@ import com.starrocks.proto.DeleteTxnLogRequest;
 import com.starrocks.proto.DeleteTxnLogResponse;
 import com.starrocks.proto.DropTableRequest;
 import com.starrocks.proto.DropTableResponse;
+import com.starrocks.proto.GetTabletCacheStatsRequest;
+import com.starrocks.proto.GetTabletCacheStatsResponse;
 import com.starrocks.proto.LockTabletMetadataRequest;
 import com.starrocks.proto.LockTabletMetadataResponse;
 import com.starrocks.proto.PublishLogVersionBatchRequest;
@@ -72,6 +74,7 @@ public interface LakeService {
     long TIMEOUT_ABORT_COMPACTION = 5 * MILLIS_PER_SECOND;
     long TIMEOUT_VACUUM = MILLIS_PER_HOUR;
     long TIMEOUT_VACUUM_FULL = MILLIS_PER_HOUR * 24;
+    long TIMEOUT_GET_TABLET_CACHE_STATS = 3 * MILLIS_PER_MINUTE;
 
     @ProtobufRPC(serviceName = "LakeService", methodName = "publish_version", onceTalkTimeout = TIMEOUT_PUBLISH_VERSION)
     Future<PublishVersionResponse> publishVersion(PublishVersionRequest request);
@@ -130,5 +133,9 @@ public interface LakeService {
 
     @ProtobufRPC(serviceName = "LakeService", methodName = "vacuum_full", onceTalkTimeout = TIMEOUT_VACUUM_FULL)
     Future<VacuumFullResponse> vacuumFull(VacuumFullRequest request);
+
+    @ProtobufRPC(serviceName = "LakeService", methodName = "get_tablet_cache_stats",
+            onceTalkTimeout = TIMEOUT_GET_TABLET_CACHE_STATS)
+    Future<GetTabletCacheStatsResponse> getTabletCacheStats(GetTabletCacheStatsRequest request);
 }
 

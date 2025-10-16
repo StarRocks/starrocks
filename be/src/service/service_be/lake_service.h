@@ -109,6 +109,11 @@ public:
                               ::starrocks::GetTabletMetadatasResponse* response,
                               ::google::protobuf::Closure* done) override;
 
+    void get_tablet_cache_stats(::google::protobuf::RpcController* controller,
+                                const ::starrocks::GetTabletCacheStatsRequest* request,
+                                ::starrocks::GetTabletCacheStatsResponse* response,
+                                ::google::protobuf::Closure* done) override;
+
 private:
     void _submit_publish_log_version_task(const int64_t* tablet_ids, size_t tablet_size,
                                           std::span<const TxnInfoPB> txn_infos, const int64_t* log_versions,

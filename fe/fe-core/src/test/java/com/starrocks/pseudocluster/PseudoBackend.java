@@ -43,6 +43,8 @@ import com.starrocks.proto.DropTableRequest;
 import com.starrocks.proto.DropTableResponse;
 import com.starrocks.proto.ExecuteCommandRequestPB;
 import com.starrocks.proto.ExecuteCommandResultPB;
+import com.starrocks.proto.GetTabletCacheStatsRequest;
+import com.starrocks.proto.GetTabletCacheStatsResponse;
 import com.starrocks.proto.LockTabletMetadataRequest;
 import com.starrocks.proto.LockTabletMetadataResponse;
 import com.starrocks.proto.PCancelPlanFragmentRequest;
@@ -1211,6 +1213,11 @@ public class PseudoBackend {
 
         @Override
         public Future<VacuumFullResponse> vacuumFull(VacuumFullRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public Future<GetTabletCacheStatsResponse> getTabletCacheStats(GetTabletCacheStatsRequest request) {
             return CompletableFuture.completedFuture(null);
         }
     }

@@ -32,6 +32,7 @@
 #include "storage/lake/join_path.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/schema_change.h"
+#include "storage/lake/tablet_cache_stats_manager.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/test_util.h"
@@ -3044,6 +3045,55 @@ TEST_F(LakeServiceTest, test_get_tablet_metadatas) {
         ASSERT_EQ(TStatusCode::CANCELLED, tablet_metadatas.status().status_code());
         ASSERT_TRUE(MatchPattern(tablet_metadatas.status().error_msgs(0),
                                  "*get tablet metadatas task has been cancelled*"));
+    }
+}
+
+TEST_F(LakeServiceTest, test_get_tablet_cache_stats) {
+    {
+        brpc::Controller cntl;
+        GetTabletCacheStatsRequest request;
+        GetTabletCacheStatsResponse response;
+        _lake_service.get_tablet_cache_stats(&cntl, &request, &response, nullptr);
+        ASSERT_TRUE(cntl.Failed());
+        ASSERT_EQ("missing tablet info", cntl.ErrorText());
+    }
+
+    // normal
+    {
+        brpc::Controller cntl;
+        GetTabletCacheStatsRequest request;
+        GetTabletCacheStatsResponse response;
+        auto meta = request.add_tablets();
+        meta->set_tablet_id(_tablet_id);
+        meta->set_version(1);
+        _lake_service.get_tablet_cache_stats(&cntl, &request, &response, nullptr);
+        ASSERT_EQ(response.status().status_code(), 0);
+        ASSERT_EQ(response.cache_stats_size(), 1);
+    }
+
+    // tablet not exist
+    {
+        brpc::Controller cntl;
+        GetTabletCacheStatsRequest request;
+        GetTabletCacheStatsResponse response;
+        auto meta = request.add_tablets();
+        meta->set_tablet_id(_tablet_id + 10086);
+        meta->set_version(1);
+        _lake_service.get_tablet_cache_stats(&cntl, &request, &response, nullptr);
+        ASSERT_FALSE(response.status().status_code() == 0);
+    }
+
+    {
+        auto cache_stats_mgr = _tablet_mgr->tablet_cache_stats_mgr();
+        cache_stats_mgr->stop();
+        brpc::Controller cntl;
+        GetTabletCacheStatsRequest request;
+        GetTabletCacheStatsResponse response;
+        auto meta = request.add_tablets();
+        meta->set_tablet_id(_tablet_id);
+        meta->set_version(1);
+        _lake_service.get_tablet_cache_stats(&cntl, &request, &response, nullptr);
+        ASSERT_FALSE(response.status().status_code() == 0);
     }
 }
 

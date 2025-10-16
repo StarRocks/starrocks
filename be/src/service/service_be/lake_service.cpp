@@ -34,6 +34,7 @@
 #include "storage/lake/compaction_task.h"
 #include "storage/lake/options.h"
 #include "storage/lake/tablet.h"
+#include "storage/lake/tablet_cache_stats_manager.h"
 #include "storage/lake/transactions.h"
 #include "storage/lake/update_manager.h"
 #include "storage/lake/vacuum.h"
@@ -1487,6 +1488,64 @@ void LakeServiceImpl::get_tablet_metadatas(::google::protobuf::RpcController* co
         LOG(WARNING) << "Get tablet metadatas failed for " << failed_count << " tablets, the first " << messages.size()
                      << " tablets: " << JoinStrings(messages, "; ");
     }
+}
+
+void LakeServiceImpl::get_tablet_cache_stats(::google::protobuf::RpcController* controller,
+                                             const ::starrocks::GetTabletCacheStatsRequest* request,
+                                             ::starrocks::GetTabletCacheStatsResponse* response,
+                                             ::google::protobuf::Closure* done) {
+    brpc::ClosureGuard guard(done);
+#ifdef USE_STAROS
+    auto cntl = static_cast<brpc::Controller*>(controller);
+    if (request->tablets_size() == 0) {
+        cntl->SetFailed("missing tablet info");
+        return;
+    }
+
+    auto cache_stats_mgr = _tablet_mgr->tablet_cache_stats_mgr();
+    auto thread_pool = cache_stats_mgr->thread_pool();
+    auto latch = BThreadCountDownLatch(request->tablets_size());
+    bthread::Mutex response_mtx;
+    for (auto& tablet : request->tablets()) {
+        int64_t tablet_id = tablet.tablet_id();
+        int64_t version = tablet.version();
+        auto task = std::make_shared<CancellableRunnable>(
+                [&, tablet_id, version] {
+                    DeferOp defer([&] { latch.count_down(); });
+                    auto ctx = cache_stats_mgr->get_tablet_cache_stats(tablet_id, version);
+                    auto result = ctx->get();
+                    std::lock_guard l(response_mtx);
+                    if (!result.ok()) {
+                        result.to_protobuf(response->mutable_status());
+                    } else {
+                        auto cache_stats = response->add_cache_stats();
+                        cache_stats->set_tablet_id(ctx->tablet_id);
+                        cache_stats->set_version(ctx->tablet_version);
+                        cache_stats->set_cached_bytes(ctx->cached_bytes);
+                        cache_stats->set_total_bytes(ctx->total_bytes);
+                    }
+                },
+                [&] {
+                    Status st = Status::Cancelled("get tablet cache stats task has been cancelled");
+                    LOG(WARNING) << st;
+                    std::lock_guard l(response_mtx);
+                    st.to_protobuf(response->mutable_status());
+                    latch.count_down();
+                });
+        auto st = thread_pool->submit(std::move(task));
+        if (!st.ok()) {
+            LOG(WARNING) << "Fail to submit cache stats task: " << st;
+            std::lock_guard l(response_mtx);
+            st.to_protobuf(response->mutable_status());
+            latch.count_down();
+        }
+    }
+    latch.wait();
+#else
+    Status st = Status::NotSupported("get tablet cache stats not supported");
+    st.to_protobuf(response->mutable_status());
+    return;
+#endif
 }
 
 } // namespace starrocks

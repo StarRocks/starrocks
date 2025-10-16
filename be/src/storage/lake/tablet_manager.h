@@ -52,6 +52,7 @@ using TabletAndRowsets = std::tuple<std::shared_ptr<Tablet>, std::vector<BaseRow
 class CompactionScheduler;
 class Metacache;
 class VersionedTablet;
+class TabletCacheStatsManager;
 
 class TabletManager {
     friend class Tablet;
@@ -229,6 +230,10 @@ public:
     // only for TEST purpose
     void TEST_set_global_schema_cache(int64_t index_id, TabletSchemaPtr schema);
 
+#ifdef USE_STAROS
+    TabletCacheStatsManager* tablet_cache_stats_mgr() { return _tablet_cache_stats_manager.get(); }
+#endif
+
     // update cache size of the segment with the given key, optionally provide the segment address hint.
     // If segment_addr_hint is provided and it's non-zero, the cache size will be only updated when the
     // instance address matches the address provided by the segment_addr_hint. This is used to prevent
@@ -283,6 +288,10 @@ private:
     std::unique_ptr<Metacache> _metacache;
     std::unique_ptr<CompactionScheduler> _compaction_scheduler;
     UpdateManager* _update_mgr = nullptr;
+
+#ifdef USE_STAROS
+    std::unique_ptr<TabletCacheStatsManager> _tablet_cache_stats_manager;
+#endif
 
     std::shared_mutex _meta_lock;
     std::unordered_map<int64_t, int64_t> _tablet_in_writing_size;

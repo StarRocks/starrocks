@@ -452,6 +452,22 @@ TEST_P(StarletFileSystemTest, test_drop_cache) {
     config::lake_clear_corrupted_cache_data = old;
 }
 
+TEST_P(StarletFileSystemTest, test_get_cache_stats) {
+    std::string test_type = GetParam();
+    if (test_type == "s3") {
+        return;
+    }
+    auto uri = StarletPath("cache_stats.dat");
+    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(uri));
+    ASSIGN_OR_ABORT(auto wf, fs->new_writable_file(uri));
+    ASSERT_OK(wf->append("hello"));
+    ASSERT_OK(wf->append(" world!"));
+    ASSERT_OK(wf->close());
+    auto s = fs->get_cache_stats(uri, 0 /* offset */, 11 /* size */);
+    ASSERT_TRUE(s.ok());
+    ASSERT_EQ((*s).second, 11);
+}
+
 INSTANTIATE_TEST_CASE_P(StarletFileSystem, StarletFileSystemTest,
                         ::testing::Values(std::string("s3"), std::string("cachefs")));
 

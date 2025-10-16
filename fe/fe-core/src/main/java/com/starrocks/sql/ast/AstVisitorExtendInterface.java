@@ -384,6 +384,10 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
+    default R visitRefreshCacheStatsStatement(RefreshCacheStatsStatement statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
     // --------------------------------------- Export Statement --------------------------------------------------------
 
     default R visitExportStatement(ExportStmt statement, C context) {

@@ -2165,6 +2165,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：在存算分离集群中，RPC 请求的最大并发数。当达到此阈值时，新请求会被拒绝。将此项设置为 `0` 表示对并发不做限制。
 - 引入版本：-
 
+##### tablet_cache_stats_max_threads
+
+- 默认值: 4
+- 类型: Int32
+- 单位: -
+- 是否可变: Yes
+- 描述: 存算分离集群中，获取 Tablet 缓存信息的线程数量。
+- 引入版本: v4.0
+
 ##### query_max_memory_limit_percent
 
 - 默认值：90

@@ -285,8 +285,11 @@ import com.starrocks.sql.ast.RecoverTableStmt;
 import com.starrocks.sql.ast.RefreshConnectionsStmt;
 import com.starrocks.sql.ast.RefreshDictionaryStmt;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
+import com.starrocks.sql.ast.RefreshPartitionCacheStatsStatement;
 import com.starrocks.sql.ast.RefreshSchemeClause;
+import com.starrocks.sql.ast.RefreshTableCacheStatsStatement;
 import com.starrocks.sql.ast.RefreshTableStmt;
+import com.starrocks.sql.ast.RefreshTabletCacheStatsStatement;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.ReorderColumnsClause;
 import com.starrocks.sql.ast.ReplacePartitionClause;
@@ -570,6 +573,8 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.StringWriter;
 import java.math.BigDecimal;
@@ -602,6 +607,7 @@ import static java.lang.String.format;
 import static java.util.stream.Collectors.toList;
 
 public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<ParseNode> {
+    private static final Logger LOG = LogManager.getLogger(AstBuilder.class);
     private final long sqlMode;
 
     private boolean caseInsensitive;
@@ -4191,6 +4197,24 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         }
 
         return new DataCacheSelectStatement(insertStmt, properties, createPos(ctx));
+    }
+
+    @Override
+    public ParseNode visitRefreshCacheStatsStatement(
+            com.starrocks.sql.parser.StarRocksParser.RefreshCacheStatsStatementContext ctx) {
+        QualifiedName qualifiedName = getQualifiedName(ctx.qualifiedName());
+        TableName tableName = qualifiedNameToTableName(qualifiedName);
+        if (ctx.partitionNames() != null) {
+            PartitionNames partitionNames = (PartitionNames) visit(ctx.partitionNames());
+            List<String> pnames = partitionNames.getPartitionNames();
+            return new RefreshPartitionCacheStatsStatement(tableName, pnames, createPos(ctx));
+        } else if (ctx.tabletList() != null) {
+            TabletList tabletList = (TabletList) visit(ctx.tabletList());
+            List<Long> tabletIds = tabletList.getTabletIds();
+            return new RefreshTabletCacheStatsStatement(tableName, tabletIds, createPos(ctx));
+        } else {
+            return new RefreshTableCacheStatsStatement(tableName, createPos(ctx));
+        }
     }
 
     // ----------------------------------------------- Export Statement ------------------------------------------------

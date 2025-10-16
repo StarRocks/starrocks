@@ -32,6 +32,7 @@ import com.starrocks.sql.ast.DataCacheSelectStatement;
 import com.starrocks.sql.ast.DropDataCacheRuleStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.RefreshCacheStatsStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.TableRelation;
@@ -167,6 +168,18 @@ public class DataCacheStmtAnalyzer {
             }
             statement.setTTLSeconds(ttlSeconds);
 
+            return null;
+        }
+
+        @Override
+        public Void visitRefreshCacheStatsStatement(RefreshCacheStatsStatement statement, ConnectContext context) {
+            statement.getTableName().normalization(context);
+            if (!CatalogMgr.isInternalCatalog(statement.getTableName().getCatalog())) {
+                throw new SemanticException("Refresh cache stats only supported in internal catalog.");
+            }
+            if (RunMode.isSharedNothingMode()) {
+                throw new SemanticException("Refresh cache stats only supported in shared-data cluster.");
+            }
             return null;
         }
     }

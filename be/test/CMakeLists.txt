@@ -502,6 +502,7 @@ SET(DW_TEST_FILES
     ./storage/lake/lake_persistent_index_test.cpp
     ./storage/lake/lake_primary_key_consistency_test.cpp
     ./storage/lake/lake_scan_node_test.cpp
+    ./storage/lake/tablet_cache_stats_manager_test.cpp
     ./storage/lake/metacache_test.cpp
     ./storage/lake/meta_file_test.cpp
     ./storage/lake/partial_update_test.cpp

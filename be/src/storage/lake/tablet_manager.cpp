@@ -39,6 +39,7 @@
 #include "storage/lake/metacache.h"
 #include "storage/lake/options.h"
 #include "storage/lake/tablet.h"
+#include "storage/lake/tablet_cache_stats_manager.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/txn_log.h"
 #include "storage/lake/update_manager.h"
@@ -78,6 +79,10 @@ TabletManager::TabletManager(std::shared_ptr<LocationProvider> location_provider
           _compaction_scheduler(std::make_unique<CompactionScheduler>(this)),
           _update_mgr(update_mgr) {
     _update_mgr->set_tablet_mgr(this);
+#ifdef USE_STAROS
+    _tablet_cache_stats_manager = std::make_unique<TabletCacheStatsManager>(this);
+    _tablet_cache_stats_manager->init();
+#endif
 }
 
 TabletManager::TabletManager(std::shared_ptr<LocationProvider> location_provider, int64_t cache_capacity)
@@ -1372,6 +1377,11 @@ void TabletManager::get_tablets_basic_info(int64_t table_id, int64_t partition_i
 
 void TabletManager::stop() {
     _compaction_scheduler->stop();
+#ifdef USE_STAROS
+    if (_tablet_cache_stats_manager) {
+        _tablet_cache_stats_manager->stop();
+    }
+#endif
 }
 
 StatusOr<TabletAndRowsets> TabletManager::capture_tablet_and_rowsets(int64_t tablet_id, int64_t from_version,

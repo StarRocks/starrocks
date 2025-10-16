@@ -34,6 +34,7 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.datacache.DataCacheMgr;
 import com.starrocks.datacache.DataCacheSelectExecutor;
 import com.starrocks.datacache.DataCacheSelectMetrics;
+import com.starrocks.lake.CacheStatsExecutor;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
@@ -127,6 +128,7 @@ import com.starrocks.sql.ast.PauseRoutineLoadStmt;
 import com.starrocks.sql.ast.RecoverDbStmt;
 import com.starrocks.sql.ast.RecoverPartitionStmt;
 import com.starrocks.sql.ast.RecoverTableStmt;
+import com.starrocks.sql.ast.RefreshCacheStatsStatement;
 import com.starrocks.sql.ast.RefreshDictionaryStmt;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshTableStmt;
@@ -1202,6 +1204,15 @@ public class DDLStmtExecutor {
             }
 
             return metrics.getShowResultSet(statement.isVerbose());
+        }
+
+        @Override
+        public ShowResultSet visitRefreshCacheStatsStatement(RefreshCacheStatsStatement statement, ConnectContext context) {
+            try {
+                return CacheStatsExecutor.execute(statement, context);
+            } catch (Exception e) {
+                throw new RuntimeException(e.getMessage());
+            }
         }
 
         //=========================================== Dictionary Statement ==================================================
