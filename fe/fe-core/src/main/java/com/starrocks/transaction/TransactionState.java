@@ -484,6 +484,10 @@ public class TransactionState implements Writable {
         return this.publishVersionTime;
     }
 
+    public long getPublishVersionFinishTime() {
+        return this.publishVersionFinishTime;
+    }
+
     public boolean hasSendTask() {
         return this.hasSendTask;
     }

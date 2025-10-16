@@ -43,6 +43,8 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.FrontendDaemon;
@@ -330,8 +332,21 @@ public class PublishVersionDaemon extends FrontendDaemon {
             }
 
             if (shouldFinishTxn) {
-                globalTransactionMgr.finishTransaction(transactionState.getDbId(), transactionState.getTransactionId(),
-                        publishErrorReplicaIds);
+                try {
+                    // Attempt to finish the transaction with a lock timeout. If it fails, it will be retried in the next cycle.
+                    // This approach prevents blocking subsequent transactions due to the current one.
+                    globalTransactionMgr.finishTransaction(transactionState.getDbId(),
+                            transactionState.getTransactionId(), publishErrorReplicaIds,
+                            Config.finish_transaction_default_lock_timeout_ms);
+                } catch (ErrorReportException exception) {
+                    if (exception.getErrorCode() == ErrorCode.ERR_LOCK_ERROR) {
+                        LOG.warn("Fail to get lock to finish transaction {}, error: {}. Will retry later",
+                                transactionState.getTransactionId(), exception.getMessage());
+                        continue;
+                    } else {
+                        throw exception;
+                    }
+                }
                 if (transactionState.getTransactionStatus() != TransactionStatus.VISIBLE) {
                     transactionState.updateSendTaskTime();
                     LOG.debug("publish version for transaction {} failed, has {} error replicas during publish",
