@@ -590,6 +590,20 @@ public:
         return to_status((*fs_st)->drop_cache(pair.first, 0 /* offset */, -1 /* size */));
     }
 
+    StatusOr<std::pair<size_t, size_t>> get_cache_stats(const std::string& path, int64_t offset,
+                                                        int64_t size) override {
+        ASSIGN_OR_RETURN(auto pair, parse_starlet_uri(path));
+        auto fs_st = get_shard_filesystem(pair.second);
+        if (!fs_st.ok()) {
+            return to_status(fs_st.status());
+        }
+        auto cache_stats_or = (*fs_st)->get_cache_stats(pair.first, offset, size);
+        if (!cache_stats_or.ok()) {
+            return to_status(cache_stats_or.status());
+        }
+        return std::make_pair((*cache_stats_or).cached_bytes, (*cache_stats_or).total_bytes);
+    }
+
     Status delete_files(std::span<const std::string> paths) override {
         using FsPtr = std::shared_ptr<staros::starlet::fslib::FileSystem>;
         using PathList = std::vector<std::string>;

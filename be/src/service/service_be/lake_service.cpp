@@ -33,6 +33,7 @@
 #include "storage/lake/compaction_scheduler.h"
 #include "storage/lake/compaction_task.h"
 #include "storage/lake/tablet.h"
+#include "storage/lake/tablet_cache_stats_manager.h"
 #include "storage/lake/transactions.h"
 #include "storage/lake/update_manager.h"
 #include "storage/lake/vacuum.h"
@@ -1370,6 +1371,46 @@ void LakeServiceImpl::vacuum_full(::google::protobuf::RpcController* controller,
     }
 
     latch.wait();
+}
+
+void LakeServiceImpl::get_tablet_cache_stats(::google::protobuf::RpcController* controller,
+                                             const ::starrocks::GetTabletCacheStatsRequest* request,
+                                             ::starrocks::GetTabletCacheStatsResponse* response,
+                                             ::google::protobuf::Closure* done) {
+    brpc::ClosureGuard guard(done);
+#ifdef USE_STAROS
+    auto cntl = static_cast<brpc::Controller*>(controller);
+    if (request->tablets_size() == 0) {
+        cntl->SetFailed("missing tablet info");
+        return;
+    }
+
+    auto cache_stats_mgr = _tablet_mgr->cache_stats_mgr();
+    std::vector<std::shared_ptr<lake::TabletCacheStatsContext>> ctxs;
+    for (auto& tablet : request->tablets()) {
+        ctxs.push_back(cache_stats_mgr->submit_get_tablet_cache_stats(tablet.tablet_id(), tablet.version()));
+    }
+    Status st = Status::OK();
+    for (auto& ctx : ctxs) {
+        auto result = ctx->get();
+        if (!result.ok()) {
+            st.update(result);
+            break;
+        } else {
+            auto cache_stats = response->add_cache_stats();
+            cache_stats->set_tablet_id(ctx->tablet_id);
+            cache_stats->set_version(ctx->tablet_version);
+            cache_stats->set_cached_bytes(ctx->cached_bytes);
+            cache_stats->set_total_bytes(ctx->total_bytes);
+        }
+    }
+    st.to_protobuf(response->mutable_status());
+    return;
+#else
+    Status st = Status::NotSupported("get tablet cache stats not supported");
+    st.to_protobuf(response->mutable_status());
+    return;
+#endif
 }
 
 } // namespace starrocks
