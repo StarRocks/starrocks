@@ -1632,6 +1632,7 @@ build_libdivide() {
 
 # pprof
 build_pprof() {
+    check_if_archieve_exist $PPROF_SOURCE
     mkdir -p $TP_INSTALL_DIR/flamegraph
     cp $TP_SOURCE_DIR/$PPROF_SOURCE $TP_INSTALL_DIR/flamegraph/
     chmod +x $TP_INSTALL_DIR/flamegraph/pprof
@@ -1748,13 +1749,12 @@ declare -a all_packages=(
     libxml2
     azure
     libdivide
-    pprof
     flamegraph
 )
 
 # Machine specific packages
 if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
-    all_packages+=(breakpad libdeflate tenann)
+    all_packages+=(breakpad libdeflate tenann pprof)
 fi
 
 # Initialize packages array - if none specified, build all

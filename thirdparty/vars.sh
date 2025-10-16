@@ -476,12 +476,6 @@ LIBDIVIDE_NAME="libdivide-v5.2.0.tar.gz"
 LIBDIVIDE_SOURCE="libdivide-v5.2.0"
 LIBDIVIDE_MD5SUM="4ba77777192c295d6de2b86d88f3239a"
 
-# pprof
-PPROF_DOWNLOAD="https://github.com/murphyatwork/pprof/releases/download/20251014/pprof-linux-amd64.zip"
-PPROF_NAME="pprof.zip"
-PPROF_SOURCE="pprof"
-PPROF_MD5SUM="98f892dfc7925533bbd98ab927b4ca6b"
-
 # flamegraph
 FLAMEGRAPH_DOWNLOAD="https://github.com/murphyatwork/FlameGraph/archive/refs/tags/20251015.tar.gz"
 FLAMEGRAPH_NAME="FlameGraph-20251015.tar.gz"
