@@ -561,6 +561,9 @@ public class ConnectContext {
     }
 
     public void modifySystemVariable(SystemVariable setVar, boolean onlySetSessionVar) throws DdlException {
+        if (!globalStateMgr.getVariableMgr().containsVariable(setVar.getVariable())) {
+            return;
+        }
         globalStateMgr.getVariableMgr().setSystemVariable(sessionVariable, setVar, onlySetSessionVar);
         if (!SetType.GLOBAL.equals(setVar.getType())
                 && globalStateMgr.getVariableMgr().shouldForwardToLeader(setVar.getVariable())) {

@@ -278,6 +278,7 @@ public class VariableMgr {
     public void checkSystemVariableExist(SystemVariable setVar) throws DdlException {
         VarContext ctx = getVarContext(setVar.getVariable());
         if (ctx == null) {
+            // NOTE: findSimilarVarNames uses fuzzy search, which is slow
             ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_SYSTEM_VARIABLE, setVar.getVariable(),
                     findSimilarVarNames(setVar.getVariable()));
         }
