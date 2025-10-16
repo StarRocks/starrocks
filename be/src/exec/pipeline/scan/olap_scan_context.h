@@ -45,39 +45,6 @@ using OlapScanContextPtr = std::shared_ptr<OlapScanContext>;
 class OlapScanContextFactory;
 using OlapScanContextFactoryPtr = std::shared_ptr<OlapScanContextFactory>;
 
-// struct GlobalLateMaterilizationCtx {
-//     struct SegmentInfo {
-//         SegmentPtr segment;
-//         std::shared_ptr<FileSystem> fs;
-//     };
-//     using SegmentInfoPtr = std::shared_ptr<SegmentInfo>;
-//     GlobalLateMaterilizationCtx() = default;
-//     ~GlobalLateMaterilizationCtx();
-
-//     DISALLOW_COPY_AND_MOVE(GlobalLateMaterilizationCtx);
-
-//     uint32_t register_segment(SegmentInfo segment) {
-//         int32_t id = _next_id++;
-//         _segments.insert({id, std::move(segment)});
-//         return id;
-//     }
-//     SegmentInfo get_segment(uint32_t id) const {
-//         CHECK(_segments.contains(id)) << "segment id not exists: " << id;
-//         return _segments.at(id);
-//     }
-
-//     void add_captured_tablet_rowsets(std::vector<std::vector<RowsetSharedPtr>> rowsets);
-
-//     std::atomic<uint32_t> _next_id{0};
-//     phmap::parallel_flat_hash_map<uint32_t, SegmentInfo, StdHash<uint32_t>, std::equal_to<uint32_t>,
-//                                   std::allocator<std::pair<uint32_t, SegmentInfo>>, 5, std::shared_mutex, true>
-//             _segments;
-
-//     std::mutex _mu;
-//     std::vector<std::unique_ptr<MultiRowsetReleaseGuard>> _rowset_release_guards;
-
-// };
-
 class ConcurrentJitRewriter {
 public:
     ConcurrentJitRewriter(int32_t dop) : _dop(dop), _barrier(), _errors(0), _id(0) {}
@@ -151,7 +118,6 @@ public:
 
     Status capture_tablet_rowsets(const std::vector<TInternalScanRange*>& olap_scan_ranges);
     const std::vector<TabletSharedPtr>& tablets() const { return _tablets; }
-    std::vector<TabletSharedPtr>* mutable_tablets() { return &_tablets; }
     const std::vector<std::vector<RowsetSharedPtr>>& tablet_rowsets() const {
         return _rowset_release_guard.tablet_rowsets();
     };

@@ -44,7 +44,6 @@
 #include "column/column.h"
 #include "column/column_viewer.h"
 #include "column/const_column.h"
-#include "column/datum.h"
 #include "common/logging.h"
 #include "common/status.h"
 #include "exec/es/es_query_builder.h"

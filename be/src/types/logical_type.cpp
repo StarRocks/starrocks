@@ -157,7 +157,6 @@ const char* logical_type_to_string(LogicalType type) {
     case TYPE_VARIANT:
         return "VARIANT";
     }
-
     return "";
 }
 
@@ -198,6 +197,7 @@ TPrimitiveType::type to_thrift(LogicalType ltype) {
         return TPrimitiveType::INVALID_TYPE;
     case TYPE_NULL:
         return TPrimitiveType::NULL_TYPE;
+
 #define M(thrift_name)       \
     case TYPE_##thrift_name: \
         return TPrimitiveType::thrift_name;

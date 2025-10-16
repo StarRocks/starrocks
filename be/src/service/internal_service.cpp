@@ -555,9 +555,9 @@ void PInternalServiceImplBase<T>::_cancel_plan_fragment(google::protobuf::RpcCon
     bool cancel_query_ctx = tid.hi == 0 && tid.lo == 0;
     if (cancel_query_ctx) {
         DCHECK(request->has_query_id());
-        // LOG(INFO) << "cancel query ctx, query_id=" << print_id(request->query_id()) << ", reason: " << reason_string;
+        LOG(INFO) << "cancel query ctx, query_id=" << print_id(request->query_id()) << ", reason: " << reason_string;
     } else {
-        // LOG(INFO) << "cancel fragment, fragment_instance_id=" << print_id(tid) << ", reason: " << reason_string;
+        LOG(INFO) << "cancel fragment, fragment_instance_id=" << print_id(tid) << ", reason: " << reason_string;
     }
 
     if (request->has_is_pipeline() && request->is_pipeline()) {

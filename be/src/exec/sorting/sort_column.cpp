@@ -234,7 +234,6 @@ public:
 
     void use_german_string(bool flag) { _use_german_string = flag; }
 
-
 private:
     const std::atomic<bool>& _cancel;
     const SortDesc& _sort_desc;

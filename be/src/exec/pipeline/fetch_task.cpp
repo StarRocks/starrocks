@@ -60,8 +60,6 @@ Status FetchTask::_submit_local_task(RuntimeState* state) {
 }
 
 Status FetchTask::_submit_remote_task(RuntimeState* state) {
-    // @TODO support submit local task
-    // build submit request
     const auto source_id = _ctx->source_node_id;
     const auto& request_chunk = _ctx->request_chunk;
 
@@ -139,7 +137,6 @@ Status FetchTask::_submit_remote_task(RuntimeState* state) {
     });
 
     closure->cntl.Reset();
-    // @TODO set state
     closure->cntl.set_timeout_ms(state->query_options().query_timeout * 1000);
 
     PLookUpRequest request;
@@ -151,7 +148,6 @@ Status FetchTask::_submit_remote_task(RuntimeState* state) {
     request.set_request_tuple_id(_ctx->request_tuple_id);
     {
         SCOPED_TIMER(_ctx->processor->_serialize_timer);
-        // @TODO
         size_t max_serialize_size = 0;
         for (const auto& column: request_chunk->columns()) {
             max_serialize_size += serde::ColumnArraySerde::max_serialized_size(*column);

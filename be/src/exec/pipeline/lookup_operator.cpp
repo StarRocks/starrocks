@@ -77,7 +77,6 @@ private:
     // collect input columns into one chunk
     Status _collect_input_columns(RuntimeState* state, const ChunkPtr& request_chunk);
     
-    // @TODO bind profile to task?
     StatusOr<LookUpTaskPtr> _create_task(const LookUpTaskContextPtr& ctx);
 
     LookUpTaskContextPtr _ctx;
@@ -104,10 +103,7 @@ Status LookUpProcessor::_collect_input_columns(RuntimeState* state, const ChunkP
     auto slot_desc = state->desc_tbl().get_slot_descriptor(row_pos_desc->get_row_source_slot_id());
     // row source column from fetch node won't be nullable 
     auto row_source_col = ColumnHelper::create_column(slot_desc->type(), false);
-    DLOG(INFO) << "LookUpProcessor _collect_input_columns, append source node id column, slot_id: " << slot_desc->id() << ", column: " << row_source_col->get_name();
     request_chunk->append_column(std::move(row_source_col), slot_desc->id());
-    // add source node id
-    DLOG(INFO) << "LookUpProcessor _collect_input_columns, request_chunk: " << request_chunk->debug_columns();
 
     for (auto& request_ctx : _ctx->request_ctxs) {
         RETURN_IF_ERROR(request_ctx->collect_input_columns(request_chunk));
@@ -128,7 +124,6 @@ StatusOr<LookUpTaskPtr> LookUpProcessor::_create_task(const LookUpTaskContextPtr
 }
 
 Status LookUpProcessor::process(RuntimeState* state) {
-    // SCOPED_TIMER(_parent->_process_time);
     Status status;
     DeferOp op([&]() {
         for (auto& request_ctx : _ctx->request_ctxs) {
@@ -237,18 +232,15 @@ Status LookUpOperator::_try_to_trigger_io_task(RuntimeState* state) {
     for (int32_t i = 0; i < _max_io_tasks; i++) {
         auto processor = _processors[i];
 
-        // @TODO create task
         auto lookup_task_ctx = std::make_shared<LookUpTaskContext>();
         bool is_running = processor->is_running();
         if (!is_running && _dispatcher->try_get(_driver_sequence, config::max_lookup_batch_request, lookup_task_ctx.get())) {
-            // @TODO
             lookup_task_ctx->row_source_slot_id = _row_pos_descs.at(lookup_task_ctx->request_tuple_id)->get_row_source_slot_id();
             lookup_task_ctx->lookup_ref_slot_ids = _row_pos_descs.at(lookup_task_ctx->request_tuple_id)->get_lookup_ref_slot_ids();
             lookup_task_ctx->fetch_ref_slot_ids = _row_pos_descs.at(lookup_task_ctx->request_tuple_id)->get_fetch_ref_slot_ids();
             lookup_task_ctx->profile = _unique_metrics.get();
             lookup_task_ctx->parent = this;
             processor->set_ctx(lookup_task_ctx);
-            // @TODO create task
             COUNTER_UPDATE(_submit_io_task_counter, 1);
             workgroup::ScanTask task;
             task.workgroup = state->fragment_ctx()->workgroup();
@@ -282,7 +274,6 @@ Status LookUpOperator::_try_to_trigger_io_task(RuntimeState* state) {
             VLOG_ROW << "[GLM] LookUpOperator::submit_io_task, num_running_io_tasks: " << _num_running_io_tasks << ", "
                      << (void*)this << ", dispatcher: " << (void*)_dispatcher.get() << ", idx: " << i;
             processor->set_running(true);
-            // @TODO choose executor
             task.workgroup->executors()->scan_executor()->submit(std::move(task));
         }
     }

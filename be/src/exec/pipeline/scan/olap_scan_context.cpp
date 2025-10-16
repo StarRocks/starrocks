@@ -14,13 +14,10 @@
 
 #include "exec/pipeline/scan/olap_scan_context.h"
 
-#include <memory>
-#include <vector>
 
 #include "exec/olap_scan_node.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exprs/runtime_filter_bank.h"
-#include "storage/rowset/rowset.h"
 #include "storage/tablet.h"
 
 namespace starrocks::pipeline {

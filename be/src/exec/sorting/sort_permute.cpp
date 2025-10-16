@@ -32,7 +32,6 @@
 #include "common/status.h"
 #include "exec/sorting/sorting.h"
 #include "gutil/casts.h"
-#include "gutil/integral_types.h"
 #include "gutil/strings/fastmem.h"
 
 namespace starrocks {
@@ -208,7 +207,6 @@ public:
     }
 
     Status do_visit(JsonColumn* dst) { return generic_visit(dst); }
-
 
 private:
     template <class COL_TYPE>
