@@ -23,7 +23,7 @@ namespace starrocks {
 constexpr double kDefaultTemperature = 0.7;
 constexpr int kDefaultMaxTokens = 1024;
 constexpr double kDefaultTopP = 1.0;
-const std::string kDefaultEndpoint = "https://api.openai.com/v1/completions";
+const std::string kDefaultEndpoint = "https://api.openai.com/v1/chat/completions";
 constexpr int kDefaultTimeout = 60000;
 
 struct ModelConfig {
