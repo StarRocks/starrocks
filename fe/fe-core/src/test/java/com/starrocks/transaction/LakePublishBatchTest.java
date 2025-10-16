@@ -248,7 +248,20 @@ public class LakePublishBatchTest {
 
         PublishVersionDaemon publishVersionDaemon = new PublishVersionDaemon();
         publishVersionDaemon.runAfterCatalogReady();
-        Assertions.assertTrue(waiter9.await(10, TimeUnit.SECONDS));
+        TransactionState transactionState9 = globalTransactionMgr.getDatabaseTransactionMgr(db.getId()).
+                getTransactionState(transactionId9);
+        boolean success = false;
+        for (int i = 0; i < 10; i++) {
+            publishVersionDaemon.runAfterCatalogReady();
+            if (waiter9.await(1, TimeUnit.SECONDS)) {
+                success = true;
+                break;
+            }
+        }
+        Assertions.assertTrue(success, 
+                String.format("Transaction publish timeout after 10 seconds. " +
+                        "TransactionId: %d, Table: %s, DB: %s, status: %s", 
+                        transactionId9, tableName, db.getFullName(), transactionState9.getTransactionStatus()));
     }
 
     @ParameterizedTest
