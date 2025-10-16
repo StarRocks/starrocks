@@ -264,7 +264,11 @@ public class IcebergPartitionUtils {
             int width = extractTransformParam(partitionField.transform().toString());
             Type partitionType = table.getColumn(partitionColumn).getType();
             if (partitionType.isBinaryType()) {
-                partitionValue = new String(Base64.getDecoder().decode(partitionValue));
+                try {
+                    partitionValue = new String(Base64.getDecoder().decode(partitionValue));
+                } catch (Exception e) {
+                    throw new StarRocksConnectorException("Invalid base64 partition value: %s", partitionValue, e);
+                }
             }
             String fn = FeConstants.ICEBERG_TRANSFORM_EXPRESSION_PREFIX + "truncate";
             return String.format("%s(%s, %d) = '%s'", fn, partitionCol, width, partitionValue);
