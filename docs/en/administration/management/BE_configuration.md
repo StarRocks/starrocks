@@ -5401,5 +5401,5 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description:  Allows operators to choose between using original hostnames from FE heartbeat or forcing resolution to IP addresses based on their environment needs for error_urls debugging
+- Description: For `error_urls` debugging, whether to allow operators to choose between using original hostnames from FE heartbeat or forcing resolution to IP addresses based on their environment needs.
 - Introduced in: -
