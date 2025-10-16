@@ -281,6 +281,10 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         physicalPartitionIndexMap.put(partitionId, indexId, index);
     }
 
+    protected Table<Long, Long, MaterializedIndex> getPhysicalPartitionIndexMap() {
+        return physicalPartitionIndexMap;
+    }
+
     public void updatePartitionTabletMeta(Database db, LakeTable table, Partition partition) throws DdlException {
         Collection<PhysicalPartition> physicalPartitions;
         Locker locker = new Locker();

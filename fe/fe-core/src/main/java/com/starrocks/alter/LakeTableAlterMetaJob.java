@@ -14,20 +14,26 @@
 
 package com.starrocks.alter;
 
+import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.TabletMetadataUpdateAgentTask;
 import com.starrocks.task.TabletMetadataUpdateAgentTaskFactory;
 import com.starrocks.thrift.TTabletMetaType;
+import com.starrocks.warehouse.Warehouse;
 
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.List;
 import java.util.Set;
 
 public class LakeTableAlterMetaJob extends LakeTableAlterMetaJobBase {
@@ -71,6 +77,41 @@ public class LakeTableAlterMetaJob extends LakeTableAlterMetaJobBase {
             table.getTableProperty().modifyTableProperties(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE,
                     String.valueOf(persistentIndexType));
             table.getTableProperty().buildPersistentIndexType();
+        }
+    }
+
+    @Override
+    protected void getInfo(List<List<Comparable>> infos) {
+        String progress = FeConstants.NULL_STRING;
+        if (jobState == JobState.RUNNING && getBatchTask() != null) {
+            progress = getBatchTask().getFinishedTaskNum() + "/" + getBatchTask().getTaskNum();
+        }
+
+        for (MaterializedIndex index : getPhysicalPartitionIndexMap().values()) {
+            List<Comparable> info = Lists.newArrayList();
+            info.add(jobId);
+            info.add(tableName);
+            info.add(TimeUtils.longToTimeString(createTimeMs));
+            info.add(TimeUtils.longToTimeString(finishedTimeMs));
+            // here we just use index id as index name
+            info.add(index.getId());
+            info.add(index.getId());
+            info.add(index.getId());
+
+            // just set null
+            info.add("null"); // schema version and schema hash
+            info.add(getWatershedTxnId());
+            info.add(jobState.name());
+            info.add(errMsg);
+            info.add(progress);
+            info.add(timeoutMs / 1000);
+            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseAllowNull(warehouseId);
+            if (warehouse == null) {
+                info.add("null");
+            } else {
+                info.add(warehouse.getName());
+            }
+            infos.add(info);
         }
     }
 
