@@ -283,8 +283,8 @@ public class PaimonMetadata implements ConnectorMetadata {
         PaimonTable paimonTable = (PaimonTable) table;
         long latestSnapshotId = -1L;
         try {
-            if (paimonTable.getNativeTable().latestSnapshotId().isPresent()) {
-                latestSnapshotId = paimonTable.getNativeTable().latestSnapshotId().getAsLong();
+            if (paimonTable.getNativeTable().latestSnapshot().isPresent()) {
+                latestSnapshotId = paimonTable.getNativeTable().latestSnapshot().get().id();
             }
         } catch (Exception e) {
             // System table does not have snapshotId, ignore it.
@@ -305,7 +305,7 @@ public class PaimonMetadata implements ConnectorMetadata {
             }
             InnerTableScan scan = (InnerTableScan) readBuilder.newScan();
             PaimonMetricRegistry paimonMetricRegistry = new PaimonMetricRegistry();
-            List<Split> splits = scan.withMetricsRegistry(paimonMetricRegistry).plan().splits();
+            List<Split> splits = scan.withMetricRegistry(paimonMetricRegistry).plan().splits();
             traceScanMetrics(paimonMetricRegistry, splits, table.getCatalogTableName(), predicates);
 
             PaimonSplitsInfo paimonSplitsInfo = new PaimonSplitsInfo(predicates, splits);
