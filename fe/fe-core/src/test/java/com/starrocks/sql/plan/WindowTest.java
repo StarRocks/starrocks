@@ -1705,4 +1705,54 @@ public class WindowTest extends PlanTestBase {
         execPlan.getTopFragment().getPlanRoot().collect(AnalyticEvalNode.class, analyticNodes);
         Assertions.assertFalse(analyticNodes.isEmpty());
     }
+
+    @Test
+    public void testLeadLagUsingArrayAsParameterType() throws Exception {
+
+        String sql = "select  v1, v2," +
+                " lead(a1) over(partition by v1 order by v2),\n" +
+                " lag(a1) over(partition by v1 order by v2),\n" +
+                " lead(a1 ignore nulls) over(partition by v1 order by v2),\n" +
+                " lag(a1 ignore nulls) over(partition by v1 order by v2),\n" +
+                " first_value(a1) over(partition by v1 order by v2),\n" +
+                " last_value(a1) over(partition by v1 order by v2),\n" +
+                " first_value(a1 ignore nulls) over(partition by v1 order by v2),\n" +
+                " last_value(a1 ignore nulls) over(partition by v1 order by v2)\n" +
+                "from s1;";
+        String plan = getVerboseExplain(sql);
+        Assertions.assertTrue(plan.contains("  4:ANALYTIC\n" +
+                "  |  functions: [, first_value[([3: a1, ARRAY<VARCHAR(65533)>, true]); " +
+                "args: INVALID_TYPE; result: ARRAY<VARCHAR>; args nullable: true; result nullable: true], ], " +
+                "[, last_value[([3: a1, ARRAY<VARCHAR(65533)>, true]); args: INVALID_TYPE; result: ARRAY<VARCHAR>; " +
+                "args nullable: true; result nullable: true], ], " +
+                "[, first_value[([3: a1, ARRAY<VARCHAR(65533)>, true]); args: INVALID_TYPE; result: ARRAY<VARCHAR>; " +
+                "args nullable: true; result nullable: true], ], [, last_value[([3: a1, ARRAY<VARCHAR(65533)>, " +
+                "true]); args: INVALID_TYPE; result: ARRAY<VARCHAR>; args nullable: true; " +
+                "result nullable: true], ]\n" +
+                "  |  partition by: [1: v1, BIGINT, true]\n" +
+                "  |  order by: [2: v2, INT, true] ASC\n" +
+                "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  3:ANALYTIC\n" +
+                "  |  functions: [, lag[([3: a1, ARRAY<VARCHAR(65533)>, true], 1, NULL); args: INVALID_TYPE;" +
+                " result: ARRAY<VARCHAR>; args nullable: true; result nullable: true], ], [, lag[([3: a1, " +
+                "ARRAY<VARCHAR(65533)>, true], 1, NULL); args: INVALID_TYPE; result: ARRAY<VARCHAR>; " +
+                "args nullable: true; result nullable: true], ]\n" +
+                "  |  partition by: [1: v1, BIGINT, true]\n" +
+                "  |  order by: [2: v2, INT, true] ASC\n" +
+                "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  2:ANALYTIC\n" +
+                "  |  functions: [, lead[([3: a1, ARRAY<VARCHAR(65533)>, true], 1, NULL); args:" +
+                " INVALID_TYPE; result: ARRAY<VARCHAR>; args nullable: true; result nullable: true], ]," +
+                " [, lead[([3: a1, ARRAY<VARCHAR(65533)>, true], 1, NULL); args: INVALID_TYPE; result:" +
+                " ARRAY<VARCHAR>; args nullable: true; result nullable: true], ]\n" +
+                "  |  partition by: [1: v1, BIGINT, true]\n" +
+                "  |  order by: [2: v2, INT, true] ASC\n" +
+                "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n"));
+    }
 }
