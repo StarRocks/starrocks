@@ -65,7 +65,7 @@ public class ProcProfileCollector extends FrontendDaemon {
         deleteExpiredFiles();
     }
 
-    public String collectMemProfile() {
+    private void collectMemProfile() {
         String fileName = MEM_FILE_NAME_PREFIX + currentTimeString() + ".html";
         AsyncProfiler profiler = AsyncProfiler.getInstance();
         try {
@@ -80,14 +80,13 @@ public class ProcProfileCollector extends FrontendDaemon {
 
         try {
             compressFile(fileName);
-            return fileName + ".tar.gz";
         } catch (IOException e) {
             checkAndLog(() -> LOG.warn("compress memory file {} failed, reason: {}", fileName, e.getMessage()));
             throw new RuntimeException("Failed to compress memory profile", e);
         }
     }
 
-    public String collectCPUProfile() {
+    private void collectCPUProfile() {
         String fileName = CPU_FILE_NAME_PREFIX + currentTimeString() + ".html";
         AsyncProfiler profiler = AsyncProfiler.getInstance();
         try {
@@ -101,7 +100,6 @@ public class ProcProfileCollector extends FrontendDaemon {
 
         try {
             compressFile(fileName);
-            return fileName + ".tar.gz";
         } catch (IOException e) {
             checkAndLog(() -> LOG.warn("compress file {} failed, reason: {}", fileName, e.getMessage()));
             throw new RuntimeException("Failed to compress CPU profile", e);
