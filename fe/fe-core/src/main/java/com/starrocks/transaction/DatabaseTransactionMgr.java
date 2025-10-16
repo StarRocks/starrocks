@@ -53,6 +53,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.DuplicatedRequestException;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
@@ -1015,12 +1016,8 @@ public class DatabaseTransactionMgr {
         return true;
     }
 
-<<<<<<< HEAD
-    public void finishTransaction(long transactionId, Set<Long> errorReplicaIds) throws UserException {
-=======
     public void finishTransaction(long transactionId, Set<Long> errorReplicaIds, long lockTimeoutMs)
-            throws StarRocksException {
->>>>>>> 450477ac7b ([Enhancement] finishTransaction with table lock timeout (#63981))
+            throws UserException {
         TransactionState transactionState = getTransactionState(transactionId);
         // add all commit errors and publish errors to a single set
         if (errorReplicaIds == null) {
@@ -1059,7 +1056,7 @@ public class DatabaseTransactionMgr {
             if (!locker.tryLockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.WRITE, lockTimeoutMs,
                     TimeUnit.MILLISECONDS)) {
                 finishSpan.end();
-                throw new StarRocksException(ERR_LOCK_ERROR,
+                throw ErrorReportException.report(ERR_LOCK_ERROR,
                         "Failed to acquire lock on database " + db.getId() + ", tables: " + tableIdList + " within " +
                                 lockTimeoutMs + " ms");
             }

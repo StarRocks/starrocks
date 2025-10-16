@@ -48,6 +48,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
@@ -62,18 +63,13 @@ import com.starrocks.replication.ReplicationTxnCommitAttachment;
 import com.starrocks.server.GlobalStateMgr;
 import mockit.Mock;
 import mockit.MockUp;
-<<<<<<< HEAD
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
-=======
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
->>>>>>> 450477ac7b ([Enhancement] finishTransaction with table lock timeout (#63981))
+import org.junit.rules.ExpectedException;
 
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
@@ -128,16 +124,12 @@ public class DatabaseTransactionMgrTest {
         lableToTxnId = addTransactionToTransactionMgr();
     }
 
-<<<<<<< HEAD
-    public void prepareCommittedTransaction() throws UserException {
-=======
-    @AfterEach
+    @After
     public void tearDown() {
         Config.enable_metric_calculator = origin_enable_metric_calculator_value;
     }
 
-    public void prepareCommittedTransaction() throws StarRocksException {
->>>>>>> 450477ac7b ([Enhancement] finishTransaction with table lock timeout (#63981))
+    public void prepareCommittedTransaction() throws UserException {
         long transactionId1 = masterTransMgr
                 .beginTransaction(GlobalStateMgrTestUtil.testDbId1,
                         Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
@@ -791,7 +783,7 @@ public class DatabaseTransactionMgrTest {
 
         latchLock.await();
         // now the locker is held by the lockThread
-        StarRocksException exception = Assertions.assertThrows(StarRocksException.class,
+        ErrorReportException exception = Assertions.assertThrows(ErrorReportException.class,
                 () -> masterTransMgr.finishTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId, null, 1000L));
         Assertions.assertEquals(ErrorCode.ERR_LOCK_ERROR, exception.getErrorCode());
         latchUnlock.countDown();
