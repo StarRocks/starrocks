@@ -98,6 +98,7 @@ CMakeLists.txt
 .claude
 CLAUDE.md
 .clangd
+.cursor/
 
 
 !build-mac/CMakeLists.txt
