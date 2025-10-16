@@ -35,9 +35,6 @@ public class ConnectorProperties {
     }
 
     public boolean enableGetTableStatsFromExternalMetadata() {
-        // For Iceberg and DeltaLake, we don't get table stats from metadata by default.
-        boolean defaultValue = connectorType != ConnectorType.ICEBERG && connectorType != ConnectorType.DELTALAKE;
-        return PropertyUtil.propertyAsBoolean(properties, ConnectorProperties.ENABLE_GET_STATS_FROM_EXTERNAL_METADATA,
-                defaultValue);
+        return PropertyUtil.propertyAsBoolean(properties, ConnectorProperties.ENABLE_GET_STATS_FROM_EXTERNAL_METADATA, true);
     }
 }
