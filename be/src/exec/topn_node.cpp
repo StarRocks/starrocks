@@ -400,9 +400,9 @@ pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderC
     if (is_partition_topn) {
         operators_source_with_sort =
                 _decompose_to_pipeline<LocalPartitionTopnContextFactory, LocalPartitionTopnSinkOperatorFactory,
-                                       LocalPartitionTopnSourceOperatorFactory>(
-                        context, is_partition_topn, is_partition_skewed, need_merge, enable_parallel_merge,
-                        is_per_pipeline);
+                                       LocalPartitionTopnSourceOperatorFactory>(context, is_partition_topn,
+                                                                                is_partition_skewed, need_merge,
+                                                                                enable_parallel_merge, is_per_pipeline);
     } else {
         if (runtime_state()->enable_spill() && runtime_state()->enable_sort_spill() && _limit < 0) {
             if (enable_parallel_merge) {
