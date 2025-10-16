@@ -1164,8 +1164,15 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         return info != null && asyncDeleteForTables.get(info) != null;
     }
 
-
-
+    @VisibleForTesting
+    synchronized boolean isDeletingTableDone(long id) {
+        RecycleTableInfo info = getRecycleTableInfo(id);
+        if (info == null) {
+            return false;
+        }
+        CompletableFuture<Boolean> future = asyncDeleteForTables.get(info);
+        return future != null && future.isDone();
+    }
 
     public static class RecycleDatabaseInfo implements Writable {
         @SerializedName("d")
