@@ -1554,7 +1554,7 @@ public class MaterializedViewAnalyzer {
             Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(context, statement.getMvName().getCatalog(),
                     statement.getMvName().getDb(), statement.getMvName().getTbl());
             if (table == null) {
-                throw new SemanticException("Table %s is not found", mvName);
+                throw new SemanticException("Materialized view %s is not found", mvName);
             }
             if (!(table instanceof MaterializedView)) {
                 throw new SemanticException(mvName.getTbl() + " is not async materialized view", mvName.getPos());
