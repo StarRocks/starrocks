@@ -564,12 +564,15 @@ Status EngineStorageMigrationTask::_finish_primary_key_migration(const TabletSha
         }
 
         // clear index cache
-        auto manager = StorageEngine::instance()->update_manager();
-        auto& index_cache = manager->index_cache();
-        auto index_entry = index_cache.get_or_create(_tablet_id);
-        index_entry->update_expire_time(MonotonicMillis() + manager->get_cache_expire_ms());
-        index_entry->value().unload();
-        index_cache.release(index_entry);
+        {
+            std::lock_guard lg(*tablet.updates()->get_index_lock());
+            auto manager = StorageEngine::instance()->update_manager();
+            auto& index_cache = manager->index_cache();
+            auto index_entry = index_cache.get_or_create(_tablet_id);
+            index_entry->update_expire_time(MonotonicMillis() + manager->get_cache_expire_ms());
+            index_entry->value().unload();
+            index_cache.release(index_entry);
+        }
 
         // clear delvector and dcg cache
         manager->clear_cached_del_vec_by_tablet_id(tablet->tablet_id());
