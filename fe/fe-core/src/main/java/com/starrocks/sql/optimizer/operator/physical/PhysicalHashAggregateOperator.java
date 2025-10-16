@@ -274,7 +274,7 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
         PhysicalHashAggregateOperator that = (PhysicalHashAggregateOperator) o;
         return type == that.type && Objects.equals(aggregations, that.aggregations) &&
                 Objects.equals(groupBys, that.groupBys) && Objects.equals(partitionByColumns, that.partitionByColumns) &&
-                topNLocalAgg == that.topNLocalAgg;;
+                topNLocalAgg == that.topNLocalAgg;
     }
 
     @Override
