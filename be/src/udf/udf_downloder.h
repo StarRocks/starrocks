@@ -14,20 +14,26 @@
 
 #pragma once
 
+#include <memory>
+#include <mutex>
 #include <string>
+#include <fs/fs.h>
 
 #include "common/status.h"
 
 namespace starrocks {
 
-class DownloadUtil {
+class udf_downloder {
+
 public:
-    static Status download(const std::string& url, const std::string& target_file,
-                           const std::string& expected_checksum);
+    void do_download(const std::string& string, const std::string& local_path);
+
+    Status download_remote_file_2_local(const std::string& remotePath, std::string& localPath);
 
 private:
-    static Status get_real_url(const std::string& url, std::string* real_url);
+    Status udf_downloder::setup_local_file_path(const std::string& local_path);
 
-    static Status get_java_udf_url(const std::string& url, std::string* real_url);
+    Status do_download(const std::string& remotePath, std::string& localPath);
 };
-} // namespace starrocks
+
+}

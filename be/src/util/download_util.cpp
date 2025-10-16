@@ -19,6 +19,7 @@
 #include "fmt/format.h"
 #include "gutil/strings/substitute.h"
 #include "http/http_client.h"
+#include "udf/udf_downloder.h"
 #include "util/defer_op.h"
 #include "util/md5.h"
 #include "util/uuid_generator.h"
@@ -46,10 +47,11 @@ Status DownloadUtil::download(const std::string& url, const std::string& target_
         return Status::InternalError(
                 fmt::format("fail to open tmp file when downloading file from {}. error = {}", url, errmsg));
     }
-
+    std::string real_url;
+    RETURN_IF_ERROR(get_real_url(url, &real_url));
     Md5Digest digest;
     HttpClient client;
-    RETURN_IF_ERROR(client.init(url));
+    RETURN_IF_ERROR(client.init(real_url));
     Status status;
 
     auto download_cb = [&status, &tmp_file, fp, &digest, &url](const void* data, size_t length) {
@@ -82,5 +84,36 @@ Status DownloadUtil::download(const std::string& url, const std::string& target_
 
     success = true;
     return Status::OK();
+}
+
+Status DownloadUtil::get_real_url(const std::string& url, std::string* real_url) {
+    if (url.find("s3") == std::string::npos || url.find("hdfs") == std::string::npos) {
+         return get_java_udf_url(url, real_url);
+    }
+    *real_url = url;
+    return Status::OK();
+}
+
+Status DownloadUtil::get_java_udf_url(const std::string& url, std::string* real_url) {
+    std::string fileName;
+    std::size_t pos = url.find_last_of('/');
+    if (pos == std::string::npos) {
+        fileName = url;
+    } else {
+        fileName = url.substr(pos + 1);
+    }
+    const char* starrocks_home = std::getenv("STARROCKS_HOME");
+    std::string target_path = std::string(starrocks_home) + "/plugins/java_udf";
+    std::string target_url = std::string("file://") + target_path + "/" + fileName;
+    udf_downloder downloader;
+    Status status = downloader.download_remote_file_2_local(url, target_url);
+    if (status.ok()) {
+        *real_url = target_url;
+        return Status::OK();
+    } else {
+        LOG(ERROR) << "Failed to download remote file " << status.to_string();
+        return Status::RuntimeError(
+            " Failed to download remote file on " + url);
+    }
 }
 } // namespace starrocks
