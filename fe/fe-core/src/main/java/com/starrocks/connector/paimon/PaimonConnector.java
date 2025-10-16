@@ -214,8 +214,8 @@ public class PaimonConnector implements Connector {
                     if (Strings.isNullOrEmpty(ramUser)) {
                         String qualifiedUser = ConnectContext.get().getQualifiedUser();
                         String user = ConnectContext.get().getCurrentUserIdentity().getUser();
-                        throw new StarRocksConnectorException("Failed to find a valid RAM user from {} and {}.",
-                                qualifiedUser, user);
+                        throw new StarRocksConnectorException("Failed to find a valid RAM user from %s(%s). " +
+                                "Please check your user properties.", qualifiedUser, user);
                     } else {
                         catalogKey = this.catalogName + "-" + ramUser;
                         this.paimonOptions.set(DLF_AUTH_USER_NAME, ramUser);

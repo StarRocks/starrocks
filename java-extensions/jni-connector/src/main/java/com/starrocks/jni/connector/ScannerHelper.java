@@ -21,13 +21,17 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Function;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
+
 public class ScannerHelper {
     static final String FS_OPTIONS_KV_SEPARATOR = "\u0001";
     static final String FS_OPTIONS_PROP_SEPARATOR = "\u0002";
+    private static final Base64.Decoder BASE64_DECODER = Base64.getUrlDecoder();
 
     public static ClassLoader createChildFirstClassLoader(List<File> preloadFiles, String module) {
         URL[] jars = preloadFiles.stream().map(f -> {
@@ -68,6 +72,15 @@ public class ScannerHelper {
             } else {
                 errorHandler.apply(prop);
             }
+        }
+    }
+
+    public static <T> T decodeStringToObject(String encodedStr) {
+        final byte[] bytes = BASE64_DECODER.decode(encodedStr.getBytes(UTF_8));
+        try {
+            return InstantiationUtil.deserializeObject(bytes, ScannerHelper.class.getClassLoader());
+        } catch (Exception e) {
+            throw new RuntimeException(e);
         }
     }
 

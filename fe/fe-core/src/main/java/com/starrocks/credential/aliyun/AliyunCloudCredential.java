@@ -26,7 +26,6 @@ import com.staros.proto.OSSFileStoreInfo;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudCredential;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.s3a.Constants;
 import org.apache.hadoop.fs.s3a.S3AFileSystem;
 
 import java.util.HashMap;
@@ -34,6 +33,12 @@ import java.util.Map;
 
 
 public class AliyunCloudCredential implements CloudCredential {
+
+    public static final String FS_OSS_ACCESS_KEY = "fs.oss.accessKeyId";
+    public static final String FS_OSS_SECRET_KEY = "fs.oss.accessKeySecret";
+    public static final String FS_OSS_SECURITY_TOKEN = "fs.oss.securityToken";
+    public static final String FS_OSS_ENDPOINT = "fs.oss.endpoint";
+    public static final String FS_OSS_IMPL = "fs.oss.impl";
 
     private final String accessKey;
     private final String secretKey;
@@ -104,12 +109,21 @@ public class AliyunCloudCredential implements CloudCredential {
 
     @Override
     public void applyToConfiguration(Configuration configuration) {
-        if (Strings.isNullOrEmpty(configuration.get("fs.oss.impl"))) {
-            configuration.set("fs.oss.impl", S3AFileSystem.class.getName());
+        if (Strings.isNullOrEmpty(configuration.get(FS_OSS_IMPL))) {
+            configuration.set(FS_OSS_IMPL, S3AFileSystem.class.getName());
         }
-        configuration.set(Constants.ACCESS_KEY, accessKey);
-        configuration.set(Constants.SECRET_KEY, secretKey);
-        configuration.set(Constants.ENDPOINT, endpoint);
+        if (Strings.isNullOrEmpty(configuration.get(FS_OSS_ENDPOINT))) {
+            configuration.set(FS_OSS_ENDPOINT, endpoint);
+        }
+        if (Strings.isNullOrEmpty(configuration.get(FS_OSS_ACCESS_KEY))) {
+            configuration.set(FS_OSS_ACCESS_KEY, accessKey);
+        }
+        if (Strings.isNullOrEmpty(configuration.get(FS_OSS_SECRET_KEY))) {
+            configuration.set(FS_OSS_SECRET_KEY, secretKey);
+        }
+        if (Strings.isNullOrEmpty(configuration.get(FS_OSS_SECURITY_TOKEN))) {
+            configuration.set(FS_OSS_SECURITY_TOKEN, stsToken);
+        }
     }
 
     @Override

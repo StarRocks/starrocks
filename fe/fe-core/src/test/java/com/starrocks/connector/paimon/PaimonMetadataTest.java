@@ -152,14 +152,14 @@ public class PaimonMetadataTest {
         writer.writeInt(1, 5555);
         writer.complete();
         List<DataFileMeta> meta1 = new ArrayList<>();
-        meta1.add(new DataFileMeta("file1", 100, 200, EMPTY_MIN_KEY, EMPTY_MAX_KEY, EMPTY_STATS, null,
-                1, 1, 1, DUMMY_LEVEL, 0L, null, null, null, null));
-        meta1.add(new DataFileMeta("file2", 100, 300, EMPTY_MIN_KEY, EMPTY_MAX_KEY, EMPTY_STATS, null,
-                1, 1, 1, DUMMY_LEVEL, 0L, null, null, null, null));
+        meta1.add(DataFileMeta.create("file1", 100, 200, EMPTY_MIN_KEY, EMPTY_MAX_KEY, EMPTY_STATS, EMPTY_STATS,
+                1, 1, 1, DUMMY_LEVEL, null, null, null, null, null, null));
+        meta1.add(DataFileMeta.create("file2", 100, 300, EMPTY_MIN_KEY, EMPTY_MAX_KEY, EMPTY_STATS, EMPTY_STATS,
+                1, 1, 1, DUMMY_LEVEL, null, null, null, null, null, null));
 
         List<DataFileMeta> meta2 = new ArrayList<>();
-        meta2.add(new DataFileMeta("file3", 100, 400, EMPTY_MIN_KEY, EMPTY_MAX_KEY, EMPTY_STATS, null,
-                1, 1, 1, DUMMY_LEVEL, 0L, null, null, null, null));
+        meta2.add(DataFileMeta.create("file3", 100, 400, EMPTY_MIN_KEY, EMPTY_MAX_KEY, EMPTY_STATS, EMPTY_STATS,
+                1, 1, 1, DUMMY_LEVEL, null, null, null, null, null, null));
         this.splits.add(DataSplit.builder().withSnapshot(1L).withPartition(row1).withBucket(1)
                 .withBucketPath("dummy").withDataFiles(meta1).isStreaming(false).build());
         this.splits.add(DataSplit.builder().withSnapshot(1L).withPartition(row2).withBucket(1)

@@ -13,8 +13,8 @@
 
     <properties>
         <java-extensions.home>${basedir}/../</java-extensions.home>
-        <paimon.version>1-ali-12.4</paimon.version>
-        <dlf.sdk.version>1-ali-12.4</dlf.sdk.version>
+        <paimon.version>1-ali-16.2</paimon.version>
+        <dlf.sdk.version>1-ali-16.2</dlf.sdk.version>
     </properties>
 
     <dependencies>

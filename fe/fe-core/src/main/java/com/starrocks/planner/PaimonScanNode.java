@@ -37,6 +37,7 @@ import com.starrocks.connector.paimon.PaimonSplitsInfo;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
+import com.starrocks.credential.aliyun.AliyunCloudCredential;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
@@ -431,7 +432,7 @@ public class PaimonScanNode extends ScanNode {
                         File dataTokenFile = new File(dataTokenPath);
 
                         if (dataTokenFile.exists()) {
-                            Map<String, String> options = ((DlfPaimonFileIO) ((DataTable) paimonTable.getNativeTable()).fileIO())
+                            Map<String, String> options = ((DlfPaimonFileIO) paimonTable.getNativeTable().fileIO())
                                     .dlsFileSystemOptions(false);
                             cloudConfiguration = CloudConfigurationFactory.buildDlfConfigurationForStorage(
                                     DlfUtil.setDataToken(dataTokenFile), options);
@@ -444,13 +445,13 @@ public class PaimonScanNode extends ScanNode {
                     RESTToken token = fileIO.validToken();
                     Map<String, String> properties = new HashMap<>();
                     properties.put(CloudConfigurationConstants.ALIYUN_OSS_ACCESS_KEY,
-                            token.token().get("fs.oss.accessKeyId"));
+                            token.token().get(AliyunCloudCredential.FS_OSS_ACCESS_KEY));
                     properties.put(CloudConfigurationConstants.ALIYUN_OSS_SECRET_KEY,
-                            token.token().get("fs.oss.accessKeySecret"));
+                            token.token().get(AliyunCloudCredential.FS_OSS_SECRET_KEY));
                     properties.put(CloudConfigurationConstants.ALIYUN_OSS_STS_TOKEN,
-                            token.token().get("fs.oss.securityToken"));
+                            token.token().get(AliyunCloudCredential.FS_OSS_SECURITY_TOKEN));
                     properties.put(CloudConfigurationConstants.ALIYUN_OSS_ENDPOINT,
-                            token.token().get("fs.oss.endpoint"));
+                            token.token().get(AliyunCloudCredential.FS_OSS_ENDPOINT));
                     cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
                 }
             } catch (Exception e) {

@@ -29,6 +29,7 @@ import org.apache.paimon.reader.RecordReaderIterator;
 import org.apache.paimon.table.Table;
 import org.apache.paimon.table.source.ReadBuilder;
 import org.apache.paimon.table.source.Split;
+import org.apache.paimon.types.DataField;
 import org.apache.paimon.types.DataType;
 import org.apache.paimon.types.RowType;
 import org.apache.paimon.utils.InternalRowUtils;
@@ -37,6 +38,7 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public class PaimonSplitScanner extends ConnectorScanner {
 
@@ -53,7 +55,7 @@ public class PaimonSplitScanner extends ConnectorScanner {
     private final ClassLoader classLoader;
     private final String[] nestedFields;
 
-    private String timeZone;
+    private final String timeZone;
 
     public PaimonSplitScanner(int fetchSize, Map<String, String> params) {
         this.fetchSize = fetchSize;
@@ -67,7 +69,7 @@ public class PaimonSplitScanner extends ConnectorScanner {
     }
 
     private void parseRequiredTypes() {
-        List<String> fieldNames = PaimonScannerUtils.fieldNames(table.rowType());
+        List<String> fieldNames = fieldNames(table.rowType());
         requiredTypes = new ColumnType[requiredFields.length];
         logicalTypes = new DataType[requiredFields.length];
         for (int i = 0; i < requiredFields.length; i++) {
@@ -97,20 +99,27 @@ public class PaimonSplitScanner extends ConnectorScanner {
     private void initReader() throws IOException {
         ReadBuilder readBuilder = table.newReadBuilder();
         RowType rowType = table.rowType();
-        List<String> fieldNames = PaimonScannerUtils.fieldNames(rowType);
+        List<String> fieldNames = fieldNames(rowType);
         int[] projected = Arrays.stream(requiredFields).mapToInt(fieldNames::indexOf).toArray();
         readBuilder.withProjection(projected);
-        List<Predicate> predicates = PaimonScannerUtils.decodeStringToObject(predicateInfo);
+        List<Predicate> predicates = ScannerHelper.decodeStringToObject(predicateInfo);
         readBuilder.withFilter(predicates);
-        Split split = PaimonScannerUtils.decodeStringToObject(splitInfo);
+        Split split = ScannerHelper.decodeStringToObject(splitInfo);
         RecordReader<InternalRow> reader = readBuilder.newRead().executeFilter().createReader(split);
         iterator = new RecordReaderIterator<>(reader);
+    }
+
+
+    private List<String> fieldNames(RowType rowType) {
+        return rowType.getFields().stream()
+                .map(DataField::name)
+                .collect(Collectors.toList());
     }
 
     @Override
     public void open() throws IOException {
         try (ThreadContextClassLoader ignored = new ThreadContextClassLoader(classLoader)) {
-            table = PaimonScannerUtils.decodeStringToObject(encodedTable);
+            table = ScannerHelper.decodeStringToObject(encodedTable);
             parseRequiredTypes();
             initOffHeapTableWriter(requiredTypes, requiredFields, fetchSize);
             initReader();

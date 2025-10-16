@@ -76,13 +76,13 @@ public abstract class ConnectorScanner {
      * @param requiredFields columns names to scan
      * @param fetchSize      number of rows
      */
-    protected void initOffHeapTableWriter(ColumnType[] requiredTypes, String[] requiredFields, int fetchSize) {
+    public void initOffHeapTableWriter(ColumnType[] requiredTypes, String[] requiredFields, int fetchSize) {
         this.tableSize = fetchSize;
         this.types = requiredTypes;
         this.fields = requiredFields;
     }
 
-    protected void appendData(int index, ColumnValue value) {
+    public void appendData(int index, ColumnValue value) {
         offHeapTable.appendData(index, value);
     }
 

@@ -14,6 +14,7 @@
 
 package com.starrocks.paimon.reader;
 
+import com.starrocks.jni.connector.ScannerHelper;
 import com.starrocks.utils.loader.ThreadContextClassLoader;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -38,7 +39,7 @@ public class PaimonWriter {
     public PaimonWriter(Map<String, String> params) {
         String encodedTable = params.get("native_table");
         this.classLoader = this.getClass().getClassLoader();
-        Table table = PaimonScannerUtils.decodeStringToObject(encodedTable);
+        Table table = ScannerHelper.decodeStringToObject(encodedTable);
 
         // todo: delete it when we support bucket level shuffle
         table.copy(new HashMap<String, String>() {
