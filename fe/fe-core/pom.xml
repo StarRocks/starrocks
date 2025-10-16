@@ -39,7 +39,7 @@ under the License.
         <maven.compiler.release>17</maven.compiler.release>
         <starrocks.home>${basedir}/../../</starrocks.home>
         <fe_ut_parallel>${env.FE_UT_PARALLEL}</fe_ut_parallel>
-        <jacoco.version>0.8.8</jacoco.version>
+        <jacoco.version>0.8.12</jacoco.version>
         <jprotobuf-precompile-plugin.version>2.2.12</jprotobuf-precompile-plugin.version>
         <python>python</python>
         
@@ -907,6 +907,14 @@ under the License.
             <artifactId>zero-allocation-hashing</artifactId>
             <version>0.16</version>
         </dependency>
+
+        <dependency>
+            <groupId>org.jacoco</groupId>
+            <artifactId>org.jacoco.agent</artifactId>
+            <version>${jacoco.version}</version>
+            <classifier>runtime</classifier>
+            <scope>runtime</scope>
+        </dependency>
     </dependencies>
 
     <build>
@@ -936,21 +944,39 @@ under the License.
                 <artifactId>jacoco-maven-plugin</artifactId>
                 <version>${jacoco.version}</version>
                 <executions>
+
                     <execution>
-                        <id>default-prepare-agent</id>
+                        <id>instrument</id>
+                        <phase>process-classes</phase>
                         <goals>
-                            <goal>prepare-agent</goal>
+                            <goal>instrument</goal>
                         </goals>
                         <configuration>
-                            <propertyName>jacocoArgLine</propertyName>
+                            <includes>
+                                <include>com/starrocks/**</include>
+                            </includes>
+                            <excludes>
+                                <exclude>com/starrocks/proto/**</exclude>
+                            </excludes>
+                            <append>true</append>
                         </configuration>
                     </execution>
+
                     <execution>
                         <id>default-report</id>
                         <goals>
                             <goal>report</goal>
                         </goals>
                     </execution>
+
+                    <execution>
+                        <id>restore</id>
+                        <phase>prepare-package</phase>
+                        <goals>
+                            <goal>restore-instrumented-classes</goal>
+                        </goals>
+                    </execution>
+
                     <execution>
                         <id>default-check</id>
                         <goals>
@@ -1012,7 +1038,7 @@ under the License.
                         ${async.profiler.arg}
                         -Xmx4096m
                         -XX:TieredStopAtLevel=1 -XX:CICompilerCount=1 -XX:-BackgroundCompilation -XX:+UseSerialGC
-                        -Duser.timezone=Asia/Shanghai @{jacocoArgLine}
+                        -Duser.timezone=Asia/Shanghai
                     </argLine>
                     <!-- Set maven to use independent class loading to avoid unit test failure due to the early shutdown of the JVM -->
                     <useSystemClassLoader>false</useSystemClassLoader>
