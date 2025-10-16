@@ -58,8 +58,13 @@ subprojects {
         set("hikaricp.version", "3.4.5")
         set("hive-apache.version", "3.1.2-22")
         set("hudi.version", "1.0.2")
+<<<<<<< HEAD
         set("iceberg.version", "1.9.0")
         set("io.netty.version", "4.1.125.Final")
+=======
+        set("iceberg.version", "1.10.0")
+        set("io.netty.version", "4.1.128.Final")
+>>>>>>> b136568241 ([BugFix] Fix Netty security vulnerabilities (#64142))
         set("jackson.version", "2.15.2")
         set("jetty.version", "9.4.57.v20241219")
         set("jprotobuf-starrocks.version", "1.0.0")
