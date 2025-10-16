@@ -866,10 +866,10 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/split_order_by"),
                         null, TExplainLevel.NORMAL);
-        Assertions.assertTrue(replayPair.second.contains("21:MERGING-EXCHANGE"), replayPair.second);
-        Assertions.assertTrue(replayPair.second.contains("20:TOP-N"), replayPair.second);
-        Assertions.assertTrue(replayPair.second.contains("15:MERGING-EXCHANGE"), replayPair.second);
-        Assertions.assertTrue(replayPair.second.contains("14:TOP-N"), replayPair.second);
+        Assertions.assertTrue(replayPair.second.contains("22:MERGING-EXCHANGE"), replayPair.second);
+        Assertions.assertTrue(replayPair.second.contains("21:TOP-N"), replayPair.second);
+        Assertions.assertTrue(replayPair.second.contains("16:MERGING-EXCHANGE"), replayPair.second);
+        Assertions.assertTrue(replayPair.second.contains("15:TOP-N"), replayPair.second);
 
     }
 
