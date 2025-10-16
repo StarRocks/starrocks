@@ -343,7 +343,7 @@ StatusOr<TabletMetadataPtr> TabletManager::load_tablet_metadata(const string& me
     ProtobufFile file(metadata_location, fs);
     auto s = file.load(metadata.get(), fill_cache);
     if (!s.ok()) {
-        if (s.is_corruption() && config::lake_clear_corrupted_cache) {
+        if (s.is_corruption() && config::lake_clear_corrupted_cache_meta) {
             auto drop_status = drop_local_cache(metadata_location);
             if (!drop_status.ok()) {
                 LOG(WARNING) << "clear corrupted cache for " << metadata_location << " failed, "
