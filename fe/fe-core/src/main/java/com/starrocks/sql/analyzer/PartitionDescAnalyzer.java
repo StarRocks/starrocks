@@ -86,7 +86,8 @@ public class PartitionDescAnalyzer {
     /**
      * Main analyze method that handles both column definitions and properties
      */
-    public static void analyze(PartitionDesc partitionDesc, List<ColumnDef> columnDefs, Map<String, String> otherProperties)
+    public static void analyze(PartitionDesc partitionDesc, List<ColumnDef> columnDefs,
+            Map<String, String> otherProperties)
             throws AnalysisException {
         if (partitionDesc instanceof ListPartitionDesc) {
             analyzeListPartitionDesc((ListPartitionDesc) partitionDesc, columnDefs, otherProperties);
@@ -95,11 +96,13 @@ public class PartitionDescAnalyzer {
         } else if (partitionDesc instanceof ExpressionPartitionDesc) {
             analyzeExpressionPartitionDesc((ExpressionPartitionDesc) partitionDesc, columnDefs, otherProperties);
         } else if (partitionDesc instanceof SingleItemListPartitionDesc) {
-            analyzeSingleItemListPartitionDesc((SingleItemListPartitionDesc) partitionDesc, columnDefs, otherProperties);
+            analyzeSingleItemListPartitionDesc((SingleItemListPartitionDesc) partitionDesc, columnDefs,
+                    otherProperties);
         } else if (partitionDesc instanceof MultiItemListPartitionDesc) {
             analyzeMultiItemListPartitionDesc((MultiItemListPartitionDesc) partitionDesc, columnDefs, otherProperties);
         } else {
-            throw new AnalysisException("Unsupported partition description type: " + partitionDesc.getClass().getSimpleName());
+            throw new AnalysisException(
+                    "Unsupported partition description type: " + partitionDesc.getClass().getSimpleName());
         }
     }
 
@@ -120,10 +123,11 @@ public class PartitionDescAnalyzer {
     }
 
     /**
-     * Analyze SingleRangePartitionDesc with partition column number and table properties
+     * Analyze SingleRangePartitionDesc with partition column number and table
+     * properties
      */
     public static void analyzeSingleRangePartitionDesc(SingleRangePartitionDesc desc, int partColNum,
-                                                       Map<String, String> tableProperties) throws AnalysisException {
+            Map<String, String> tableProperties) throws AnalysisException {
         FeNameFormat.checkPartitionName(desc.getPartitionName());
         desc.getPartitionKeyDesc().analyze(partColNum);
 
@@ -172,7 +176,7 @@ public class PartitionDescAnalyzer {
     }
 
     public static void analyzeSingleRangePartitionDescWithExistsTable(SingleRangePartitionDesc singleRangePartitionDesc,
-                                                                      PartitionInfo partitionInfo) {
+            PartitionInfo partitionInfo) {
         if (partitionInfo.getType() == PartitionType.EXPR_RANGE && partitionInfo.isAutomaticPartition()) {
             throw new SemanticException("Currently, you cannot manually add a single range partition to " +
                     "a table that is automatically partition");
@@ -180,9 +184,8 @@ public class PartitionDescAnalyzer {
     }
 
     public static void analyzeMultiRangePartitionDescWithExistsTable(MultiRangePartitionDesc multiRangePartitionDesc,
-                                                                     PartitionInfo partitionInfo,
-                                                                     Map<ColumnId, Column> idToColumn) {
-
+            PartitionInfo partitionInfo,
+            Map<ColumnId, Column> idToColumn) {
 
         List<Column> partitionColumns = partitionInfo.getPartitionColumns(idToColumn);
         if (partitionColumns.size() != 1) {
@@ -190,7 +193,8 @@ public class PartitionDescAnalyzer {
         }
 
         if (partitionInfo.getType() == PartitionType.EXPR_RANGE && partitionInfo.isAutomaticPartition()) {
-            // If the current partition type is == EXPR_RANGE, it must be an automatic partition now
+            // If the current partition type is == EXPR_RANGE, it must be an automatic
+            // partition now
             String descGranularity = multiRangePartitionDesc.getTimeUnit();
 
             if (multiRangePartitionDesc.getStep() > 1) {
@@ -299,7 +303,8 @@ public class PartitionDescAnalyzer {
                 }
                 break;
             case WEEK:
-                standardBeginTime = partitionBeginDateTime.with(TemporalAdjusters.previousOrSame(DayOfWeek.of(dayOfWeek)));
+                standardBeginTime = partitionBeginDateTime
+                        .with(TemporalAdjusters.previousOrSame(DayOfWeek.of(dayOfWeek)));
                 standardEndTime = partitionEndDateTime.with(TemporalAdjusters.previousOrSame(DayOfWeek.of(dayOfWeek)));
                 if (standardBeginTime.equals(standardEndTime)) {
                     standardEndTime = standardEndTime.plusWeeks(partitionStep);
@@ -327,7 +332,8 @@ public class PartitionDescAnalyzer {
         }
         if (!(standardBeginTime.equals(partitionBeginDateTime) && standardEndTime.equals(partitionEndDateTime))) {
             DateTimeFormatter outputDateFormat = partitionColumnType.isDate()
-                    ? DateUtils.DATE_FORMATTER_UNIX : DateUtils.DATE_TIME_FORMATTER_UNIX;
+                    ? DateUtils.DATE_FORMATTER_UNIX
+                    : DateUtils.DATE_TIME_FORMATTER_UNIX;
 
             String msg = "Batch build partition range [" +
                     partitionBeginDateTime.format(outputDateFormat) + "," +
@@ -344,7 +350,7 @@ public class PartitionDescAnalyzer {
     // Analyze methods for different partition types
 
     public static void analyzeListPartitionDesc(ListPartitionDesc desc, List<ColumnDef> columnDefs,
-                                                Map<String, String> tableProperties) throws AnalysisException {
+            Map<String, String> tableProperties) throws AnalysisException {
         // analyze partition columns
         List<ColumnDef> columnDefList = analyzeListPartitionColumns(desc, columnDefs);
         // analyze partition expr
@@ -353,12 +359,13 @@ public class PartitionDescAnalyzer {
         analyzeSingleListPartitions(desc, tableProperties, columnDefList);
         // analyze multi list partition
         analyzeMultiListPartitions(desc, tableProperties, columnDefList);
-        // list partition values should not contain NULL partition value if this column is not nullable.
+        // list partition values should not contain NULL partition value if this column
+        // is not nullable.
         postAnalyzeListPartitionColumns(desc, columnDefList);
     }
 
     public static void analyzeRangePartitionDesc(RangePartitionDesc desc, List<ColumnDef> columnDefs,
-                                                 Map<String, String> otherProperties) throws AnalysisException {
+            Map<String, String> otherProperties) throws AnalysisException {
         if (desc.getPartitionColNames() == null || desc.getPartitionColNames().isEmpty()) {
             throw new AnalysisException("No partition columns.");
         }
@@ -402,7 +409,8 @@ public class PartitionDescAnalyzer {
             for (MultiRangePartitionDesc multiRangePartitionDesc : desc.getMultiRangePartitionDescs()) {
                 TimestampArithmeticExpr.TimeUnit timeUnit = TimestampArithmeticExpr.TimeUnit
                         .fromName(multiRangePartitionDesc.getTimeUnit());
-                if (timeUnit == TimestampArithmeticExpr.TimeUnit.HOUR && firstPartitionColumn.getType() != Type.DATETIME) {
+                if (timeUnit == TimestampArithmeticExpr.TimeUnit.HOUR
+                        && firstPartitionColumn.getType() != Type.DATETIME) {
                     throw new AnalysisException("Batch build partition for hour interval only supports " +
                             "partition column as DATETIME type");
                 }
@@ -441,8 +449,8 @@ public class PartitionDescAnalyzer {
         }
     }
 
-    public static void analyzeExpressionPartitionDesc(ExpressionPartitionDesc desc, List<ColumnDef> columnDefs, Map<String,
-            String> otherProperties) throws AnalysisException {
+    public static void analyzeExpressionPartitionDesc(ExpressionPartitionDesc desc, List<ColumnDef> columnDefs,
+            Map<String, String> otherProperties) throws AnalysisException {
         boolean hasExprAnalyze = false;
         SlotRef slotRef;
         RangePartitionDesc rangePartitionDesc = desc.getRangePartitionDesc();
@@ -463,7 +471,8 @@ public class PartitionDescAnalyzer {
                 }
             } else {
                 // for partition by range expr table
-                // The type of the partition field may be different from the type after the expression
+                // The type of the partition field may be different from the type after the
+                // expression
                 if (expr instanceof CastExpr) {
                     slotRef = AnalyzerUtils.getSlotRefFromCast(expr);
                     // Set partition type from cast target type
@@ -513,8 +522,9 @@ public class PartitionDescAnalyzer {
         }
     }
 
-    public static void analyzeSingleItemListPartitionDesc(SingleItemListPartitionDesc desc, List<ColumnDef> columnDefList,
-                                                          Map<String, String> tableProperties) throws AnalysisException {
+    public static void analyzeSingleItemListPartitionDesc(SingleItemListPartitionDesc desc,
+            List<ColumnDef> columnDefList,
+            Map<String, String> tableProperties) throws AnalysisException {
         FeNameFormat.checkPartitionName(desc.getPartitionName());
         analyzeSinglePartitionProperties(desc, tableProperties, null);
 
@@ -526,14 +536,15 @@ public class PartitionDescAnalyzer {
     }
 
     public static void analyzeMultiItemListPartitionDesc(MultiItemListPartitionDesc desc, List<ColumnDef> columnDefList,
-                                                         Map<String, String> tableProperties) throws AnalysisException {
+            Map<String, String> tableProperties) throws AnalysisException {
         FeNameFormat.checkPartitionName(desc.getPartitionName());
         analyzeMultiItemValues(desc, columnDefList.size());
         analyzeSinglePartitionProperties(desc, tableProperties, null);
         desc.setColumnDefList(columnDefList);
     }
 
-    private static void analyzeMultiItemValues(MultiItemListPartitionDesc desc, int partitionColSize) throws AnalysisException {
+    private static void analyzeMultiItemValues(MultiItemListPartitionDesc desc, int partitionColSize)
+            throws AnalysisException {
         for (List<String> values : desc.getMultiValues()) {
             if (values.size() != partitionColSize) {
                 throw new AnalysisException(
@@ -581,7 +592,8 @@ public class PartitionDescAnalyzer {
         return partitionColumns;
     }
 
-    private static void analyzeListPartitionExprs(ListPartitionDesc desc, List<ColumnDef> columnDefs) throws AnalysisException {
+    private static void analyzeListPartitionExprs(ListPartitionDesc desc, List<ColumnDef> columnDefs)
+            throws AnalysisException {
         if (desc.getPartitionExprs() == null) {
             return;
         }
@@ -589,6 +601,12 @@ public class PartitionDescAnalyzer {
                 .flatMap(e -> e.collectAllSlotRefs().stream())
                 .map(SlotRef::getColumnName)
                 .collect(Collectors.toList());
+        
+        // Check that partition expression contains at least one column reference
+        if (slotRefs == null || slotRefs.isEmpty()) {
+            throw new AnalysisException("The partition expr should base on key column");
+        }
+        
         for (ColumnDef columnDef : columnDefs) {
             if (slotRefs.contains(columnDef.getName()) && !columnDef.isKey()
                     && columnDef.getAggregateType() != AggregateType.NONE) {
@@ -598,7 +616,7 @@ public class PartitionDescAnalyzer {
     }
 
     private static void analyzeSingleListPartitions(ListPartitionDesc desc, Map<String, String> tableProperties,
-                                                    List<ColumnDef> columnDefList) throws AnalysisException {
+            List<ColumnDef> columnDefList) throws AnalysisException {
         List<LiteralExpr> allLiteralExprValues = Lists.newArrayList();
         Set<String> singListPartitionName = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         for (SingleItemListPartitionDesc singleDesc : desc.getSingleListPartitionDescs()) {
@@ -613,7 +631,7 @@ public class PartitionDescAnalyzer {
     }
 
     private static void analyzeMultiListPartitions(ListPartitionDesc desc, Map<String, String> tableProperties,
-                                                   List<ColumnDef> columnDefList) throws AnalysisException {
+            List<ColumnDef> columnDefList) throws AnalysisException {
         Set<String> multiListPartitionName = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         List<List<LiteralExpr>> allMultiLiteralExprValues = Lists.newArrayList();
         for (MultiItemListPartitionDesc multiDesc : desc.getMultiListPartitionDescs()) {
@@ -629,7 +647,8 @@ public class PartitionDescAnalyzer {
 
     private static void postAnalyzeListPartitionColumns(ListPartitionDesc desc, List<ColumnDef> columnDefs)
             throws AnalysisException {
-        // list partition values should not contain NULL partition value if this column is not nullable.
+        // list partition values should not contain NULL partition value if this column
+        // is not nullable.
         int partitionColSize = columnDefs.size();
         for (int i = 0; i < columnDefs.size(); i++) {
             ColumnDef columnDef = columnDefs.get(i);
@@ -696,10 +715,11 @@ public class PartitionDescAnalyzer {
     }
 
     /**
-     * Analyze SinglePartitionDesc properties - moved from SinglePartitionDesc.analyzeProperties
+     * Analyze SinglePartitionDesc properties - moved from
+     * SinglePartitionDesc.analyzeProperties
      */
     public static void analyzeSinglePartitionProperties(SinglePartitionDesc desc, Map<String, String> tableProperties,
-                                                        PartitionKeyDesc partitionKeyDesc) throws AnalysisException {
+            PartitionKeyDesc partitionKeyDesc) throws AnalysisException {
         Map<String, String> partitionAndTableProperties = Maps.newHashMap();
         // The priority of the partition attribute is higher than that of the table
         if (tableProperties != null) {
@@ -761,8 +781,8 @@ public class PartitionDescAnalyzer {
 
         if (desc.getProperties() != null) {
             // check unknown properties
-            Sets.SetView<String> intersection =
-                    Sets.intersection(partitionAndTableProperties.keySet(), desc.getProperties().keySet());
+            Sets.SetView<String> intersection = Sets.intersection(partitionAndTableProperties.keySet(),
+                    desc.getProperties().keySet());
             if (!intersection.isEmpty()) {
                 Map<String, String> unknownProperties = Maps.newHashMap();
                 intersection.stream().forEach(x -> unknownProperties.put(x, desc.getProperties().get(x)));
