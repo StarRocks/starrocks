@@ -1,0 +1,45 @@
+-- name: test_create_table_with_list_partition
+
+create table orders (
+    order_id bigint NOT NULL,
+    merchant_id int NOT NULL,
+    dt datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '',
+    user_id int NOT NULL,
+    good_id int NOT NULL,
+    good_name string NOT NULL,
+    price int NOT NULL,
+    cnt int NOT NULL,
+    revenue int NOT NULL,
+    state tinyint NOT NULL
+)
+PRIMARY KEY (order_id,merchant_id,dt)
+PARTITION BY day('dt')
+distributed by hash(merchant_id)
+order by (`dt`,`merchant_id`)
+PROPERTIES (
+    "enable_persistent_index" = "true",
+    "replication_num" = "1"
+);
+
+
+create table orders2 (
+    order_id bigint NOT NULL,
+    merchant_id int NOT NULL,
+    dt datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '',
+    user_id int NOT NULL,
+    good_id int NOT NULL,
+    good_name string NOT NULL,
+    price int NOT NULL,
+    cnt int NOT NULL,
+    revenue int NOT NULL,
+    state tinyint NOT NULL
+)
+PRIMARY KEY (order_id,merchant_id,dt)
+PARTITION BY day(`dt`)
+distributed by hash(merchant_id)
+order by (`dt`,`merchant_id`)
+PROPERTIES (
+    "enable_persistent_index" = "true",
+    "replication_num" = "1"
+);
+
