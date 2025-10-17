@@ -193,14 +193,7 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
                 }
             }
         }
-        // fill reserved column
-        // if (_param.reserved_field_slots != nullptr) {
-        //     for (const auto* slot : *_param.reserved_field_slots) {
-        //         SlotId slot_id = slot->id();
-        //         LOG(INFO) << "read reserved field slot: " << slot->col_name() << ", id: " << slot_id;
-        //         RETURN_IF_ERROR(_column_readers[slot_id]->read_range(r, &chunk_filter, active_chunk->get_column_by_slot_id(slot_id)));
-        //     }
-        // }
+
         // we really have predicate to run round by round
         if (!_dict_column_indices.empty() || !_left_no_dict_filter_conjuncts_by_slot.empty()) {
             has_filter = true;
@@ -378,7 +371,7 @@ Status GroupReader::_create_column_readers() {
         }
     }
 
-    if (!_param.reserved_field_slots->empty()) {
+    if (_param.reserved_field_slots != nullptr && !_param.reserved_field_slots->empty()) {
         for (const auto* slot : *_param.reserved_field_slots) {
             if (slot->col_name() == HdfsScanner::ICEBERG_ROW_ID) {
                 _column_readers.emplace(slot->id(), std::make_unique<IcebergRowIdReader>(_row_group_first_row_id));

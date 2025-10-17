@@ -608,20 +608,15 @@ Status IcebergV3LookUpTask::process(RuntimeState* state, const ChunkPtr& request
     }
     DLOG(INFO) << "IcebergV3LookUpTask fill response, result_chunk: " << result_chunk->debug_columns();
 
-    // Collect slots to fill response, excluding row_id columns
+    // Collect slots to fill response, excluding lookup ref columns
     auto tuple_desc = state->desc_tbl().get_tuple_descriptor(_ctx->request_tuple_id);
     std::vector<SlotDescriptor*> slots;
-    {
-        [[maybe_unused]] std::ostringstream oss;
-        oss << "IcebergV3LookUpTask fill response, slots: ";
-        for (const auto& slot : tuple_desc->slots()) {
-            if (slot->id() == _ctx->lookup_ref_slot_ids[0] || slot->id() == _ctx->lookup_ref_slot_ids[1]) {
-                continue;
-            }
-            slots.emplace_back(slot);
-            oss << slot->id() << ", ";
+
+    for (const auto& slot : tuple_desc->slots()) {
+        if (slot->id() == _ctx->lookup_ref_slot_ids[0] || slot->id() == _ctx->lookup_ref_slot_ids[1]) {
+            continue;
         }
-        DLOG(INFO) << oss.str();
+        slots.emplace_back(slot);
     }
     {
         SCOPED_TIMER(_ctx->parent->_fill_response_timer);
