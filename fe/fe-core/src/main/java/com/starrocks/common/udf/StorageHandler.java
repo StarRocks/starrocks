@@ -18,6 +18,6 @@ import java.io.File;
 
 public interface StorageHandler {
 
-    void getObject(String remotePath, File localFile) throws Exception;
+    void getObject(String remotePath, String localPath) throws Exception;
 
 }
