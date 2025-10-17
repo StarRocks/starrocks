@@ -100,3 +100,7 @@ displayed_sidebar: docs
 - SHOW DATA DISTRIBUTION 现不再合并具有相同桶序列号的所有物化索引的统计信息，仅在物化索引级别显示数据分布。[#59656](https://github.com/StarRocks/starrocks/pull/59656)
 - 自动分桶表的默认桶大小从 4GB 调整为 1GB，以提升性能和资源利用率。[#63168](https://github.com/StarRocks/starrocks/pull/63168)
 - 系统根据对应会话变量和 INSERT 语句的列数确定部分更新模式。[#62091](https://github.com/StarRocks/starrocks/pull/62091)
+- 完善 fe_tablet_schedules 系统表。[#62073](https://github.com/StarRocks/starrocks/pull/62073) [#59813](https://github.com/StarRocks/starrocks/pull/59813)
+  - 改名更改: `TABLET_STATUS` 改为 `SCHEDULE_REASON`, `CLONE_SRC` 改为 `SRC_BE_ID`, `CLONE_DEST` 改为 `DEST_BE_ID`。
+  - 列类型更改：`CREATE_TIME`, `SCHEDULE_TIME` 列类型从 `DOUBLE` 改为 `DATETIME`。
+- 一些 FE metrics 增加了 `is_leader` label。[#63004](https://github.com/StarRocks/starrocks/pull/63004)
