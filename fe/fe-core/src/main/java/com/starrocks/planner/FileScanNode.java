@@ -297,7 +297,7 @@ public class FileScanNode extends LoadScanNode {
             String path = filePaths.get(0);
             if (fileScanType == TFileScanType.LOAD) {
                 THdfsProperties hdfsProperties = new THdfsProperties();
-                HdfsUtil.getTProperties(path, brokerDesc, hdfsProperties);
+                HdfsUtil.getTProperties(path, brokerDesc.getProperties(), hdfsProperties);
                 params.setHdfs_properties(hdfsProperties);
             } else {
                 // FILES_INSERT, FILES_QUERY
@@ -503,7 +503,7 @@ public class FileScanNode extends LoadScanNode {
                     if (brokerDesc.hasBroker()) {
                         BrokerUtil.parseFile(path, brokerDesc, fileStatuses);
                     } else {
-                        HdfsUtil.parseFile(path, brokerDesc, fileStatuses);
+                        HdfsUtil.parseFile(path, brokerDesc.getProperties(), fileStatuses);
                     }
                 }
                 fileStatusesList.add(fileStatuses);

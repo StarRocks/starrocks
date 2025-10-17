@@ -23,7 +23,6 @@ import com.starrocks.persist.Storage;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.server.StorageVolumeMgr;
-import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.staros.StarMgrServer;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
@@ -143,7 +142,7 @@ public class RestoreClusterSnapshotMgr {
         if (snapshotImagePath.endsWith("/meta")) {
             String pathPattern = snapshotImagePath + "/image/" + ClusterSnapshotMgr.AUTOMATED_NAME_PREFIX + '*';
             List<FileStatus> fileStatusList = HdfsUtil.listFileMeta(pathPattern,
-                    new BrokerDesc(clusterSnapshot.getStorageVolume().getProperties()), false);
+                    clusterSnapshot.getStorageVolume().getProperties(), false);
             if (fileStatusList.isEmpty() || fileStatusList.get(0).isFile()) {
                 throw new StarRocksException("No cluster snapshot found in path " + pathPattern);
             }
