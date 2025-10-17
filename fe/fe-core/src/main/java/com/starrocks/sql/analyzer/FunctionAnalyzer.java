@@ -956,6 +956,19 @@ public class FunctionAnalyzer {
                 argumentTypes[1] = Type.BOOLEAN;
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_IDENTICAL);
             }
+        } else if (FunctionSet.ICEBERG_TRANSFORM_BUCKET.equalsIgnoreCase(fnName) ||
+                FunctionSet.ICEBERG_TRANSFORM_TRUNCATE.equalsIgnoreCase(fnName)) {
+            Preconditions.checkState(argumentTypes.length == 2);
+            Type[] args = new Type[] {argumentTypes[0], Type.INT};
+            fn = Expr.getBuiltinFunction(fnName, args, Function.CompareMode.IS_IDENTICAL);
+            if (args[0].isDecimalV3()) {
+                fn.setArgsType(args);
+            }
+            if (FunctionSet.ICEBERG_TRANSFORM_TRUNCATE.equalsIgnoreCase(fnName)) {
+                fn.setRetType(args[0]);
+            } else {
+                fn.setRetType(Type.INT);
+            }
         }
         // add new argument types
         Arrays.stream(argumentTypes).forEach(newArgumentTypes::add);
