@@ -285,7 +285,7 @@ public class VariableMgr {
     }
 
     public boolean containsVariable(String name) {
-        return ctxByVarName.containsKey(name);
+        return ctxByVarName.containsKey(name) || aliases.containsKey(name);
     }
 
     // Entry of handling SetVarStmt
