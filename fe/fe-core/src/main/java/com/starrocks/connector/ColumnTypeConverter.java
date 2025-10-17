@@ -489,6 +489,94 @@ public class ColumnTypeConverter {
         return ScalarType.createType(primitiveType);
     }
 
+    public static Type fromFlussType(org.apache.fluss.types.DataType type) {
+        return type.accept(FlussTypeToSRTypeVisitor.INSTANCE);
+    }
+
+    private static class FlussTypeToSRTypeVisitor extends org.apache.fluss.types.DataTypeDefaultVisitor<Type> {
+        private static final FlussTypeToSRTypeVisitor INSTANCE = new FlussTypeToSRTypeVisitor();
+
+        @Override
+        public Type visit(org.apache.fluss.types.CharType charType) {
+            return ScalarType.createCharType(charType.getLength());
+        }
+
+        @Override
+        public Type visit(org.apache.fluss.types.StringType stringType) {
+            return ScalarType.createDefaultCatalogString();
+        }
+
+        @Override
+        public Type visit(org.apache.fluss.types.BooleanType booleanType) {
+            return ScalarType.createType(PrimitiveType.BOOLEAN);
+        }
+
+        @Override
+        public Type visit(org.apache.fluss.types.BinaryType binaryType) {
+            return ScalarType.createType(PrimitiveType.VARBINARY);
+        }
+
+        @Override
+        public Type visit(org.apache.fluss.types.DecimalType decimalType) {
+            return ScalarType.createUnifiedDecimalType(decimalType.getPrecision(), decimalType.getScale());
+        }
+
+        @Override
+        public Type visit(org.apache.fluss.types.TinyIntType tinyIntType) {
+            return ScalarType.createType(PrimitiveType.TINYINT);
+        }
+
+        @Override
+        public Type visit(org.apache.fluss.types.SmallIntType smallIntType) {
+            return ScalarType.createType(PrimitiveType.SMALLINT);
+        }
+
+        @Override
+        public Type visit(org.apache.fluss.types.IntType intType) {
+            return ScalarType.createType(PrimitiveType.INT);
+        }
+
+        @Override
+        public Type visit(org.apache.fluss.types.BigIntType bigIntType) {
+            return ScalarType.createType(PrimitiveType.BIGINT);
+        }
+
+        @Override
+        public Type visit(org.apache.fluss.types.FloatType floatType) {
+            return ScalarType.createType(PrimitiveType.FLOAT);
+        }
+
+        @Override
+        public Type visit(org.apache.fluss.types.DoubleType doubleType) {
+            return ScalarType.createType(PrimitiveType.DOUBLE);
+        }
+
+        @Override
+        public Type visit(org.apache.fluss.types.DateType dateType) {
+            return ScalarType.createType(PrimitiveType.DATE);
+        }
+
+        @Override
+        public Type visit(org.apache.fluss.types.TimeType timeType) {
+            return ScalarType.createType(PrimitiveType.TIME);
+        }
+
+        @Override
+        public Type visit(org.apache.fluss.types.TimestampType timestampType) {
+            return ScalarType.createType(PrimitiveType.DATETIME);
+        }
+
+        @Override
+        public Type visit(org.apache.fluss.types.LocalZonedTimestampType localZonedTimestampType) {
+            return ScalarType.createType(PrimitiveType.DATETIME);
+        }
+
+        @Override
+        protected Type defaultMethod(org.apache.fluss.types.DataType dataType) {
+            return ScalarType.createType(PrimitiveType.UNKNOWN_TYPE);
+        }
+    }
+
     public static Type fromPaimonType(org.apache.paimon.types.DataType type) {
         return type.accept(PaimonToHiveTypeVisitor.INSTANCE);
     }

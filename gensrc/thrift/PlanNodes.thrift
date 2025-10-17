@@ -449,6 +449,12 @@ struct THdfsScanRange {
 
     // paimon split info for org.apache.paimon.table.source.DataSplit.serialize
     39: optional binary paimon_split_info_binary
+
+    // whether to use JNI scanner to read data of paimon table
+    40: optional bool use_fluss_jni_reader
+
+    // fluss split info
+    41: optional string fluss_split_info
 }
 
 struct TBinlogScanRange {

@@ -17,6 +17,7 @@ package com.starrocks.sql;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.AnalyticWindow;
+import com.starrocks.catalog.FlussTable;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.IcebergTable;
@@ -45,6 +46,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperato
 import com.starrocks.sql.optimizer.operator.physical.PhysicalEsScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalExceptOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalFilterOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalFlussScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHudiScanOperator;
@@ -258,6 +260,22 @@ public class Explain {
             PhysicalPaimonScanOperator scan = (PhysicalPaimonScanOperator) optExpression.getOp();
             StringBuilder sb = new StringBuilder("- Paimon-SCAN [")
                     .append(scan.getTable().getCatalogTableName())
+                    .append("]")
+                    .append(buildOutputColumns(scan,
+                            "[" + scan.getOutputColumns().stream().map(new ExpressionPrinter()::print)
+                                    .collect(Collectors.joining(", ")) + "]"))
+                    .append("\n");
+            buildCostEstimate(sb, optExpression, context.step);
+            buildCommonProperty(sb, scan, context.step);
+            return new OperatorStr(sb.toString(), context.step, Collections.emptyList());
+        }
+
+        @Override
+        public OperatorStr visitPhysicalFlussScan(OptExpression optExpression,
+                                                  OperatorPrinter.ExplainContext context) {
+            PhysicalFlussScanOperator scan = (PhysicalFlussScanOperator) optExpression.getOp();
+            StringBuilder sb = new StringBuilder("- Fluss-SCAN [")
+                    .append(((FlussTable) scan.getTable()).getTableName())
                     .append("]")
                     .append(buildOutputColumns(scan,
                             "[" + scan.getOutputColumns().stream().map(new ExpressionPrinter()::print)

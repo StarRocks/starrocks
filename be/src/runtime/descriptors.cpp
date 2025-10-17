@@ -370,6 +370,20 @@ const std::vector<std::string>& PaimonTableDescriptor::get_bucket_keys() const {
     }
 }
 
+FlussTableDescriptor::FlussTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool)
+        : HiveTableDescriptor(tdesc, pool) {
+    _table_conf = tdesc.flussTable.table_conf;
+    _time_zone = tdesc.flussTable.time_zone;
+}
+
+const std::string& FlussTableDescriptor::get_table_conf() const {
+    return _table_conf;
+}
+
+const std::string& FlussTableDescriptor::get_time_zone() const {
+    return _time_zone;
+}
+
 OdpsTableDescriptor::OdpsTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool)
         : HiveTableDescriptor(tdesc, pool) {
     _columns = tdesc.hdfsTable.columns;
@@ -752,6 +766,10 @@ Status DescriptorTbl::create(RuntimeState* state, ObjectPool* pool, const TDescr
         }
         case TTableType::PAIMON_TABLE: {
             desc = pool->add(new PaimonTableDescriptor(tdesc, pool));
+            break;
+        }
+        case TTableType::FLUSS_TABLE: {
+            desc = pool->add(new FlussTableDescriptor(tdesc, pool));
             break;
         }
         case TTableType::JDBC_TABLE: {

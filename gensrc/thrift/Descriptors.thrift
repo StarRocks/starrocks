@@ -591,6 +591,14 @@ struct TPaimonTable {
     8: optional list<string> bucket_keys
 }
 
+struct TFlussTable {
+    // fluss table conf
+    1: optional string table_conf
+
+    // timezone
+    2: optional string time_zone
+}
+
 struct TDeltaLakeTable {
     // table location
     1: optional string location
@@ -658,6 +666,9 @@ struct TTableDescriptor {
 
   // Paimon Table schema
   36: optional TPaimonTable paimonTable
+
+  // Fluss Table schema
+  37: optional TFlussTable flussTable
 }
 
 struct TDescriptorTable {

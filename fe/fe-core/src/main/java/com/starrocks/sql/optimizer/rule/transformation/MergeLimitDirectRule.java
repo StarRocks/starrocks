@@ -40,6 +40,7 @@ public class MergeLimitDirectRule extends TransformationRule {
             .add(OperatorType.LOGICAL_DELTALAKE_SCAN)
             .add(OperatorType.LOGICAL_FILE_SCAN)
             .add(OperatorType.LOGICAL_PAIMON_SCAN)
+            .add(OperatorType.LOGICAL_FLUSS_SCAN)
             .add(OperatorType.LOGICAL_ODPS_SCAN)
             .add(OperatorType.LOGICAL_KUDU_SCAN)
             .add(OperatorType.LOGICAL_SCHEMA_SCAN)

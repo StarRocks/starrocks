@@ -27,6 +27,7 @@ import com.starrocks.sql.optimizer.rule.implementation.EsScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.ExceptImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.FileScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.FilterImplementationRule;
+import com.starrocks.sql.optimizer.rule.implementation.FlussScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.HashAggImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.HashJoinImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.HiveScanImplementationRule;
@@ -181,6 +182,7 @@ public class RuleSet {
             new HudiScanImplementationRule(),
             new DeltaLakeScanImplementationRule(),
             new PaimonScanImplementationRule(),
+            new FlussScanImplementationRule(),
             new OdpsScanImplementationRule(),
             new IcebergMetadataScanImplementationRule(),
             new KuduScanImplementationRule(),
@@ -404,7 +406,6 @@ public class RuleSet {
     public static final Rule FINE_GRAINED_RANGE_PREDICATE_RULES =
             new CombinationRule(RuleType.GP_FINE_GRAINED_RANGE_PREDICATE, ImmutableList.of(
                     FineGrainedRangePredicateRule.INSTANCE,
-                    FineGrainedRangePredicateRule.PROJECTION_INSTANCE));
 
     public static final Rule ELIMINATE_OP_WITH_CONSTANT_RULES =
             new CombinationRule(RuleType.GP_ELIMINATE_OP_WITH_CONSTANT, ImmutableList.of(

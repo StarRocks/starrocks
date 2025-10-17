@@ -469,6 +469,11 @@ public class LogicalPlanPrinter {
             return visitScanCommon(optExpression, step, "PAIMON SCAN");
         }
 
+        @Override
+        public OperatorStr visitPhysicalFlussScan(OptExpression optExpression, Integer step) {
+            return visitScanCommon(optExpression, step, "FLUSS SCAN");
+        }
+
         public OperatorStr visitPhysicalProject(OptExpression optExpression, Integer step) {
             return visit(optExpression.getInputs().get(0), step);
         }

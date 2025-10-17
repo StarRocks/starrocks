@@ -58,7 +58,8 @@ public class PushDownPredicateScanRule extends TransformationRule {
             OperatorType.LOGICAL_META_SCAN,
             OperatorType.LOGICAL_BINLOG_SCAN,
             OperatorType.LOGICAL_VIEW_SCAN,
-            OperatorType.LOGICAL_TABLE_FUNCTION_TABLE_SCAN
+            OperatorType.LOGICAL_TABLE_FUNCTION_TABLE_SCAN,
+            OperatorType.LOGICAL_FLUSS_SCAN
     );
 
     public PushDownPredicateScanRule() {

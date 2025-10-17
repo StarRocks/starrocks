@@ -153,7 +153,7 @@ final_java_opt="$final_java_opt -Djdk.lang.processReaperUseDefaultStackSize=true
 export LIBHDFS_OPTS=$final_java_opt
 # Prevent JVM from handling any internally or externally generated signals.
 # Otherwise, JVM will overwrite the signal handlers for SIGINT and SIGTERM.
-export LIBHDFS_OPTS="$LIBHDFS_OPTS -Xrs"
+export LIBHDFS_OPTS="$LIBHDFS_OPTS --add-opens=java.base/java.nio=ALL-UNNAMED -Xrs"
 
 # HADOOP_CLASSPATH defined in $STARROCKS_HOME/conf/hadoop_env.sh
 # put $STARROCKS_HOME/conf ahead of $HADOOP_CLASSPATH so that custom config can replace the config in $HADOOP_CLASSPATH

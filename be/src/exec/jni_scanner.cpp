@@ -561,6 +561,23 @@ std::unique_ptr<JniScanner> create_paimon_jni_scanner(const JniScanner::CreateOp
     return std::make_unique<JniScanner>(scanner_factory_class, jni_scanner_params);
 }
 
+// ---------------fluss jni scanner------------------
+std::unique_ptr<JniScanner> create_fluss_jni_scanner(const JniScanner::CreateOptions& options) {
+    const auto& scan_range = *(options.scan_range);
+    const HiveTableDescriptor* hive_table = options.hive_table;
+    const auto* fluss_table = dynamic_cast<const FlussTableDescriptor*>(hive_table);
+
+    std::map<std::string, std::string> jni_scanner_params;
+    jni_scanner_params["split_info"] = scan_range.fluss_split_info;
+    jni_scanner_params["db_name"] = fluss_table->database();
+    jni_scanner_params["table_name"] = fluss_table->name();
+    jni_scanner_params["table_conf"] = fluss_table->get_table_conf();
+    jni_scanner_params["time_zone"] = fluss_table->get_time_zone();
+
+    std::string scanner_factory_class = "com/starrocks/fluss/reader/FlussSplitScannerFactory";
+    return std::make_unique<JniScanner>(scanner_factory_class, jni_scanner_params);
+}
+
 // -------------hudi jni scanner---------------------
 std::unique_ptr<JniScanner> create_hudi_jni_scanner(const JniScanner::CreateOptions& options) {
     const auto& scan_range = *(options.scan_range);

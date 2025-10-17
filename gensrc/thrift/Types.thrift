@@ -416,6 +416,7 @@ enum TTableType {
     HUDI_TABLE,
     JDBC_TABLE,
     PAIMON_TABLE,
+    FLUSS_TABLE,
     VIEW = 20,
     MATERIALIZED_VIEW,
     FILE_TABLE,

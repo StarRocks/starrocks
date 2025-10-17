@@ -44,6 +44,8 @@ under the License.
         <paimon.version>1-ali-16.2</paimon.version>
         <dlf.sdk.version>1-ali-16.2</dlf.sdk.version>
         <bennett.iceberg.version>2.8.0</bennett.iceberg.version>
+        <fluss.version>jdk8-0.8-sr-SNAPSHOT</fluss.version>
+        <flink.version>1.20.1</flink.version>
         <python>python</python>
     </properties>
 
@@ -703,6 +705,47 @@ under the License.
             <groupId>org.apache.iceberg</groupId>
             <artifactId>bennett-iceberg-plugin</artifactId>
             <version>${bennett.iceberg.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.fluss</groupId>
+            <artifactId>fluss-client</artifactId>
+            <version>${fluss.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.fluss</groupId>
+            <artifactId>fluss-common</artifactId>
+            <version>${fluss.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.fluss</groupId>
+            <artifactId>fluss-lake-paimon</artifactId>
+            <version>${fluss.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.fluss</groupId>
+            <artifactId>fluss-flink-common</artifactId>
+            <version>${fluss.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-core</artifactId>
+            <version>${flink.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-table-common</artifactId>
+            <version>${flink.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.xerial.snappy</groupId>
+            <artifactId>snappy-java</artifactId>
         </dependency>
 
         <dependency>

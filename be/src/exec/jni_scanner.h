@@ -117,6 +117,7 @@ private:
 };
 
 std::unique_ptr<JniScanner> create_paimon_jni_scanner(const JniScanner::CreateOptions& options);
+std::unique_ptr<JniScanner> create_fluss_jni_scanner(const JniScanner::CreateOptions& options);
 std::unique_ptr<JniScanner> create_hudi_jni_scanner(const JniScanner::CreateOptions& options);
 std::unique_ptr<JniScanner> create_odps_jni_scanner(const JniScanner::CreateOptions& options);
 std::unique_ptr<JniScanner> create_kudu_jni_scanner(const JniScanner::CreateOptions& options);
