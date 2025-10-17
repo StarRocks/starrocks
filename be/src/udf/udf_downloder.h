@@ -29,7 +29,7 @@ public:
     static Status download_remote_file_2_local(const std::string& remotePath, std::string& localPath);
 
 private:
-    Status udf_downloder::setup_local_file_path(const std::string& local_path);
+    Status setup_local_file_path(const std::string& local_path);
 
     Status do_download(const std::string& remotePath, std::string& localPath);
 
