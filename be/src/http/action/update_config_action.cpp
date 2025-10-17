@@ -262,6 +262,10 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             update_staros_starcache();
             return Status::OK();
         });
+        _config_callback.emplace("starlet_tablet_meta_size_bytes", [&]() -> Status {
+            update_staros_starcache();
+            return Status::OK();
+        });
         _config_callback.emplace("starlet_enable_cache_stat", [&]() -> Status {
             update_staros_starcache();
             return Status::OK();
