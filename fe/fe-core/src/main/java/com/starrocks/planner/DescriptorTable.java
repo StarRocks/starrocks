@@ -92,7 +92,6 @@ public class DescriptorTable {
         if (null == d.getSlot(slotId.asInt())) {
             d.addSlot(result);
         }
-        // @TODO this may replace the old one
         slotDescs.put(result.getId(), result);
         return result;
     }

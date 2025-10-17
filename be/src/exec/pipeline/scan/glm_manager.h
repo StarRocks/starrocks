@@ -23,7 +23,9 @@
 
 namespace starrocks::pipeline {
 
-// global late materialization context
+// GlobalLateMaterilizationContext is used to describe the context information required
+// for global late materialization.
+// Each data source needs to have its own implementation.
 class GlobalLateMaterilizationContext {
 public:
     virtual ~GlobalLateMaterilizationContext() = default;

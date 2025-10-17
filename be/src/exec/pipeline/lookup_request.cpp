@@ -32,6 +32,8 @@
 
 namespace starrocks::pipeline {
 
+// Copy the prepared request columns into the execution chunk so the local
+// lookup operator can execute without additional marshaling.
 Status LocalLookUpRequestContext::collect_input_columns(ChunkPtr chunk) {
     // put all related columns into chunk, include source_id column and other related columns
     size_t num_rows = fetch_ctx->request_chunk->num_rows();
@@ -62,6 +64,7 @@ void LocalLookUpRequestContext::callback(const Status& status) {
     fetch_ctx->unit->finished_request_num++;
 }
 
+// Deserialize remote request payload into a reusable chunk for processing.
 Status RemoteLookUpRequestContext::collect_input_columns(ChunkPtr chunk) {
     request_chunk = std::make_shared<Chunk>();
     for (size_t i = 0; i < request->request_columns_size(); i++) {
@@ -87,6 +90,7 @@ Status RemoteLookUpRequestContext::collect_input_columns(ChunkPtr chunk) {
     return Status::OK();
 }
 
+// Serialize the result subset and write it back to the RPC response attachment.
 StatusOr<size_t> RemoteLookUpRequestContext::fill_response(const ChunkPtr& result_chunk, SlotId source_id_slot,
                                                            const std::vector<SlotDescriptor*>& slots,
                                                            size_t start_offset) {
@@ -145,6 +149,8 @@ StatusOr<ChunkPtr> LookUpTask::_sort_chunk(RuntimeState* state, const ChunkPtr& 
     return sorted_chunk;
 }
 
+// Derives row-id ranges for the incoming batch and records duplicates so
+// downstream data can be replicated to match request cardinality.
 StatusOr<ChunkPtr> IcebergV3LookUpTask::_calculate_row_id_range(
         RuntimeState* state, const ChunkPtr& request_chunk,
         phmap::flat_hash_map<int32_t, std::shared_ptr<SparseRange<int64_t>>>* row_id_ranges,
@@ -507,6 +513,8 @@ TExpr IcebergV3LookUpTask::create_row_id_filter_expr(SlotId slot_id, const Spars
     return expr;
 }
 
+// Scans the Iceberg storage engine for the calculated row-id ranges and
+// accumulates the resulting columns.
 StatusOr<ChunkPtr> IcebergV3LookUpTask::_get_data_from_storage(
         RuntimeState* state, const std::vector<SlotDescriptor*>& slots,
         const phmap::flat_hash_map<int32_t, std::shared_ptr<SparseRange<int64_t>>>& row_id_ranges) {
@@ -577,6 +585,8 @@ StatusOr<ChunkPtr> IcebergV3LookUpTask::_get_data_from_storage(
     return result_chunk;
 }
 
+// Executes the Iceberg lookup: build row-id ranges, fetch data, reorder to the
+// original request layout, and feed responses back to each waiting context.
 Status IcebergV3LookUpTask::process(RuntimeState* state, const ChunkPtr& request_chunk) {
     DLOG(INFO) << "IcebergV3LookUpTask process, request_ctxs size: " << _ctx->request_ctxs.size();
     if (_ctx->request_ctxs.empty()) {

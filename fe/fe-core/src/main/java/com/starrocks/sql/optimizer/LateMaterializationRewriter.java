@@ -63,6 +63,10 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+// Rewrites a PhysicalPlan so columns are materialized lazily. The rewriter
+// discovers which scan outputs can stay deferred, tracks where they must be
+// fetched, and injects the necessary fetch / lookup operators while keeping
+// projections and logical properties consistent.
 public class LateMaterializationRewriter {
     private static final Logger LOG = LogManager.getLogger(LateMaterializationRewriter.class);
 
@@ -154,6 +158,8 @@ public class LateMaterializationRewriter {
                 || op instanceof PhysicalLimitOperator;
     }
 
+    // Moves fetch points as far up the operator path as allowed by data
+    // filtering semantics to minimize redundant materialization.
     private void adjustFetchPositions(CollectorContext context) {
         if (context.needLookupSources.isEmpty()) {
             return;
@@ -175,7 +181,6 @@ public class LateMaterializationRewriter {
             }
             // iterate paths, try to push fetch
             for (int i = 0; i < paths.size(); i++) {
-                // PhysicalOperator operator = paths.get(i);
                 IdentifyOperator operator = paths.get(i);
                 if (context.fetchPositions.contains(operator, scanOperator)) {
                     // we should check if we can push
@@ -207,6 +212,9 @@ public class LateMaterializationRewriter {
         }
     }
 
+    // IdentifyOperator is used to uniquely identify an Operator.
+    // It is introduced because during the rewriting process, we may change the member variables of the Operator,
+    // which will cause the original hash method result to change.
     private static class IdentifyOperator {
         PhysicalOperator physicalOperator;
         int hashCode;
@@ -305,6 +313,8 @@ public class LateMaterializationRewriter {
 
     // Traverse the PlanTree from bottom to top,
     // find all the columns that can be lazy read and where they need to be materialized
+    // Bottom-up traversal that identifies lazy columns and records where they
+    // first need to be materialized for correctness.
     public static class ColumnCollector extends OptExpressionVisitor<OptExpression, CollectorContext> {
         private OptimizerContext optimizerContext;
 
@@ -736,7 +746,6 @@ public class LateMaterializationRewriter {
                     }
                 }));
 
-                // Map<PhysicalOlapScanOperator, Set<ColumnRefOperator>> map1 = collectorContext.fetchPositions.row(op);
                 Map<IdentifyOperator, Set<ColumnRefOperator>> map1 = collectorContext.fetchPositions.row(identifyOperator);
 
                 projection.getColumnRefMap().entrySet().removeIf(entry -> {
@@ -811,7 +820,6 @@ public class LateMaterializationRewriter {
                 columns.forEach((op, columnRefs) -> {
                     PhysicalScanOperator scanOperator = (PhysicalScanOperator) op.get();
                     Table table = scanOperator.getTable();
-                    // @TODO need a better name
                     ColumnRefOperator rowIdColumnRef = context.rowIdColumns.get(op);
                     rowIdToTables.put(rowIdColumnRef, table);
                     List<ColumnRefOperator> fetchRefColumns = context.rowIdRefColumns.get(op);
