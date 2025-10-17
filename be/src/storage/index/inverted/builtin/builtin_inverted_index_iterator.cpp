@@ -74,7 +74,7 @@ Status BuiltinInvertedIndexIterator::_wildcard_query(const Slice* search_query, 
 
     if (first_wildcard_pos != 0) {
         Slice prefix_s(search_query->data, first_wildcard_pos);
-        std::string next_prefix = std::move(get_next_prefix(prefix_s));
+        std::string next_prefix = get_next_prefix(prefix_s);
         Slice next_prefix_s(next_prefix);
 
         auto seek = [&](const Slice& bound) -> StatusOr<std::pair<rowid_t, std::string>> {
