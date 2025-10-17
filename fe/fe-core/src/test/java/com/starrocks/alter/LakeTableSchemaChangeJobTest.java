@@ -602,9 +602,13 @@ public class LakeTableSchemaChangeJobTest {
 
         schemaChangeJob.run();
         Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob.getJobState());
+        long timeoutMs = 10 * 60 * 1000L;
+        long deadline = System.currentTimeMillis() + timeoutMs;
         while (numPublishRetry.get() < 2) {
             schemaChangeJob.run();
             Thread.sleep(100);
+            Assertions.assertTrue(System.currentTimeMillis() < deadline,
+                    () -> String.format("publish does not retry before timeout, job state: %s", schemaChangeJob.getJobState()));
         }
 
         new MockUp<LakeTableSchemaChangeJob>() {
@@ -614,10 +618,14 @@ public class LakeTableSchemaChangeJobTest {
             }
         };
 
+        deadline = System.currentTimeMillis() + timeoutMs;
         while (schemaChangeJob.getJobState() != AlterJobV2.JobState.FINISHED
                 || table.getState() != OlapTable.OlapTableState.NORMAL) {
             schemaChangeJob.run();
             Thread.sleep(100);
+            Assertions.assertTrue(System.currentTimeMillis() < deadline,
+                    () -> String.format("publish does not finish before timeout, job state: %s, table state: %s",
+                            schemaChangeJob.getJobState(), table.getState()));
         }
         Assertions.assertEquals(2, table.getBaseSchema().size());
         Assertions.assertEquals("c0", table.getBaseSchema().get(0).getName());
