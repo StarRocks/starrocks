@@ -381,6 +381,9 @@ public class StmtExecutor {
         // Add some import variables in profile
         SessionVariable variables = context.getSessionVariable();
         if (variables != null) {
+            // Add SQL dialect as a separate info string
+            summaryProfile.addInfoString(ProfileManager.SQL_DIALECT, variables.getSqlDialect());
+
             StringBuilder sb = new StringBuilder();
             sb.append(SessionVariable.PARALLEL_FRAGMENT_EXEC_INSTANCE_NUM).append("=")
                     .append(variables.getParallelExecInstanceNum()).append(",");

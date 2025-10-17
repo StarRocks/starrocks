@@ -3945,4 +3945,7 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "The threshold to flatten compound predicate from deep tree to a balanced tree to " +
             "avoid stack over flow")
     public static int compound_predicate_flatten_threshold = 512;
+
+    @ConfField
+    public static int ui_queries_sql_statement_max_length = Integer.MAX_VALUE;
 }

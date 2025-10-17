@@ -35,6 +35,7 @@
 package com.starrocks.http.action;
 
 import com.google.common.base.Strings;
+import com.starrocks.common.Config;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
@@ -118,7 +119,15 @@ public class QueryAction extends WebBaseAction {
                     continue;
                 }
                 buffer.append("<td>");
-                buffer.append(row.get(i));
+                if (columnHeaders.get(i).equals(ProfileManager.SQL_STATEMENT)) {
+                    String statement = row.get(i);
+                    if (statement != null && statement.length() > Config.ui_queries_sql_statement_max_length) {
+                        statement = statement.substring(0, Math.max(Config.ui_queries_sql_statement_max_length, 0)) + " ...";
+                    }
+                    buffer.append(statement);
+                } else {
+                    buffer.append(row.get(i));
+                }
                 buffer.append("</td>");
             }
 
