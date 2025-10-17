@@ -915,20 +915,60 @@ build_bitshuffle() {
 
     cd "bitshuffle-$BITSHUFFLE_VERSION"
 
-    # Build static library manually; include bundled LZ4 headers and sources
-    local BSHUF_CFLAGS="$CFLAGS -I./src -I./lz4"
-    "$CC" $BSHUF_CFLAGS -c src/bitshuffle.c -o bitshuffle.o
-    "$CC" $BSHUF_CFLAGS -c src/bitshuffle_core.c -o bitshuffle_core.o
-    "$CC" $BSHUF_CFLAGS -c src/iochain.c -o iochain.o
+    # This library has significant optimizations when built with NEON on ARM.
+    # We build it twice: once with default flags and once with NEON flags,
+    # and use some linker tricks to suffix the NEON symbols with '_neon'.
+    local machine_type="$(uname -m)"
+    local arches="default"
 
-    "$AR" rcs libbitshuffle.a *.o
+    # On ARM64, also build NEON version
+    if [[ "${machine_type}" == "arm64" ]]; then
+        arches="default neon"
+    fi
+
+    local to_link=""
+    for arch in $arches ; do
+        local arch_flag=""
+        if [[ "$arch" == "neon" ]]; then
+            arch_flag="-march=armv8-a+crc"
+        fi
+
+        local tmp_obj="bitshuffle_${arch}_tmp.o"
+        local dst_obj="bitshuffle_${arch}.o"
+
+        # Compile with architecture-specific flags
+        local BSHUF_CFLAGS="-I./src -I./lz4 -I$INSTALL_DIR/include/lz4 -std=c99 -O3 -DNDEBUG -fPIC"
+        "$CC" $BSHUF_CFLAGS $arch_flag -c src/bitshuffle_core.c -o bitshuffle_core.o
+        "$CC" $BSHUF_CFLAGS $arch_flag -c src/bitshuffle.c -o bitshuffle.o
+        "$CC" $BSHUF_CFLAGS $arch_flag -c src/iochain.c -o iochain.o
+
+        # Merge the object files together to produce a combined .o file
+        ld -r -o "$tmp_obj" bitshuffle_core.o bitshuffle.o iochain.o
+
+        # For the NEON version, suffix the symbols
+        if [[ "$arch" == "neon" ]]; then
+            # Create a mapping file with '<old_sym> <suffixed_sym>' on each line
+            nm -gU "$tmp_obj" | awk '{print $3, $3"_neon"}' | grep -v '^$' > renames.txt
+
+            # Use llvm-objcopy to rename symbols (macOS doesn't have GNU objcopy)
+            "$HOMEBREW_PREFIX/opt/llvm/bin/llvm-objcopy" --redefine-syms=renames.txt "$tmp_obj" "$dst_obj"
+        else
+            mv "$tmp_obj" "$dst_obj"
+        fi
+
+        to_link="$to_link $dst_obj"
+    done
+
+    # Create the static library with all versions
+    rm -f libbitshuffle.a
+    "$AR" rcs libbitshuffle.a $to_link
 
     # Install
     mkdir -p "$INSTALL_DIR"/{lib,include/bitshuffle}
     cp libbitshuffle.a "$INSTALL_DIR/lib/"
     cp src/*.h "$INSTALL_DIR/include/bitshuffle/"
 
-    log_success "bitshuffle built successfully"
+    log_success "bitshuffle built successfully (architectures: $arches)"
 }
 
 # datasketches (header-only install)
