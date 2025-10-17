@@ -56,3 +56,9 @@ STARCACHE_DOWNLOAD="https://cdn-thirdparty.starrocks.com/starcache/v3.5-rc4/star
 STARCACHE_NAME="starcache.tar.gz"
 STARCACHE_SOURCE="starcache"
 STARCACHE_MD5SUM="996aef75dbbf1b1f231bb95f4402fc59"
+
+# pprof
+PPROF_DOWNLOAD="https://github.com/murphyatwork/pprof/releases/download/20251014/pprof-linux-amd64.zip"
+PPROF_NAME="pprof.zip"
+PPROF_SOURCE="pprof"
+PPROF_MD5SUM="98f892dfc7925533bbd98ab927b4ca6b"

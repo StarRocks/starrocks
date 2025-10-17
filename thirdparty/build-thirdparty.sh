@@ -1630,6 +1630,24 @@ build_libdivide() {
     cp libdivide.h $TP_INSTALL_DIR/include/
 }
 
+# pprof
+build_pprof() {
+    check_if_archieve_exist $PPROF_SOURCE
+    mkdir -p $TP_INSTALL_DIR/flamegraph
+    cp $TP_SOURCE_DIR/$PPROF_SOURCE $TP_INSTALL_DIR/flamegraph/
+    chmod +x $TP_INSTALL_DIR/flamegraph/pprof
+}
+
+# flamegraph
+build_flamegraph() {
+    check_if_source_exist $FLAMEGRAPH_SOURCE
+    mkdir -p $TP_INSTALL_DIR/flamegraph
+    cp -r $TP_SOURCE_DIR/$FLAMEGRAPH_SOURCE/stackcollapse-perf.pl $TP_INSTALL_DIR/flamegraph/
+    cp -r $TP_SOURCE_DIR/$FLAMEGRAPH_SOURCE/stackcollapse-go.pl $TP_INSTALL_DIR/flamegraph/
+    cp -r $TP_SOURCE_DIR/$FLAMEGRAPH_SOURCE/flamegraph.pl $TP_INSTALL_DIR/flamegraph/
+    chmod +x $TP_INSTALL_DIR/flamegraph/*.pl
+}
+
 # restore cxxflags/cppflags/cflags to default one
 restore_compile_flags() {
     # c preprocessor flags
@@ -1731,11 +1749,12 @@ declare -a all_packages=(
     libxml2
     azure
     libdivide
+    flamegraph
 )
 
 # Machine specific packages
 if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
-    all_packages+=(breakpad libdeflate tenann)
+    all_packages+=(breakpad libdeflate tenann pprof)
 fi
 
 # Initialize packages array - if none specified, build all
