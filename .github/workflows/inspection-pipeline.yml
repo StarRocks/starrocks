@@ -595,7 +595,6 @@ jobs:
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull
 
       - name: save unstable cases
-        if: always() && (github.event_name == 'schedule' || (github.event_name != 'schedule' && env.BRANCH != 'main'))
         run: |
           cd ci-tool && source lib/init.sh
           ./bin/save_unstable_cases.sh
