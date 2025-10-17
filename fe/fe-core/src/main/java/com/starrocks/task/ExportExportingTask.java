@@ -240,13 +240,13 @@ public class ExportExportingTask extends PriorityLeaderTask {
                 try {
                     // check export file exist
                     if (!job.getBrokerDesc().hasBroker()) {
-                        if (HdfsUtil.checkPathExist(exportedFile, job.getBrokerDesc())) {
+                        if (HdfsUtil.checkPathExist(exportedFile, job.getBrokerDesc().getProperties())) {
                             failMsg = exportedFile + " already exist";
                             LOG.warn("move {} to {} fail. job id: {}, retry: {}, msg: {}",
                                     exportedTempFile, exportedFile, job.getId(), i, failMsg);
                             break;
                         }
-                        if (!HdfsUtil.checkPathExist(exportedTempFile, job.getBrokerDesc())) {
+                        if (!HdfsUtil.checkPathExist(exportedTempFile, job.getBrokerDesc().getProperties())) {
                             failMsg = exportedFile + " temp file not exist";
                             LOG.warn("move {} to {} fail. job id: {}, retry: {}, msg: {}",
                                     exportedTempFile, exportedFile, job.getId(), i, failMsg);
@@ -270,7 +270,7 @@ public class ExportExportingTask extends PriorityLeaderTask {
                     // move
                     int timeoutMs = Math.min(Math.max(1, getLeftTimeSecond()), 3600) * 1000;
                     if (!job.getBrokerDesc().hasBroker()) {
-                        HdfsUtil.rename(exportedTempFile, exportedFile, job.getBrokerDesc(), timeoutMs);
+                        HdfsUtil.rename(exportedTempFile, exportedFile, job.getBrokerDesc().getProperties(), timeoutMs);
                     } else {
                         BrokerUtil.rename(exportedTempFile, exportedFile, job.getBrokerDesc(), timeoutMs);
                     }

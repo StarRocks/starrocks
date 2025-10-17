@@ -428,7 +428,7 @@ public class OutFileClause implements ParseNode {
                 sinkOptions.setHdfs_write_buffer_size_kb(Config.hdfs_write_buffer_size_kb);
                 THdfsProperties hdfsProperties = new THdfsProperties();
                 try {
-                    HdfsUtil.getTProperties(filePath, brokerDesc, hdfsProperties);
+                    HdfsUtil.getTProperties(filePath, brokerDesc.getProperties(), hdfsProperties);
                 } catch (StarRocksException e) {
                     throw new SemanticException(e.getMessage());
                 }
