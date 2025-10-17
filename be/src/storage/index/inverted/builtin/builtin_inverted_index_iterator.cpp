@@ -161,6 +161,35 @@ Status BuiltinInvertedIndexIterator::read_from_inverted_index(const std::string&
         RETURN_IF_ERROR(_wildcard_query(search_query, bit_map));
         break;
     }
+    case InvertedIndexQueryType::MATCH_ALL_QUERY:
+    case InvertedIndexQueryType::MATCH_ANY_QUERY: {
+        std::string search_query_str = search_query->to_string();
+        std::istringstream iss(search_query_str);
+        std::string cur_predicate;
+        bool first = true;
+        while (iss >> cur_predicate) {
+            Slice s(cur_predicate);
+            roaring::Roaring roaring;
+            if (cur_predicate.find('%') != std::string::npos) {
+                RETURN_IF_ERROR(_wildcard_query(&s, &roaring));
+            } else {
+                RETURN_IF_ERROR(_equal_query(&s, &roaring));
+            }
+
+            if (first) {
+                *bit_map = std::move(roaring);
+                first = false;
+            } else if (query_type == InvertedIndexQueryType::MATCH_ALL_QUERY) {
+                *bit_map &= roaring;
+            } else if (query_type == InvertedIndexQueryType::MATCH_ANY_QUERY) {
+                *bit_map |= roaring;
+            } else {
+                DCHECK(false) << "do not support query type";
+            }
+            cur_predicate.clear();
+        }
+        break;
+    }
     default:
         return Status::InvalidArgument("do not support query type");
     }
