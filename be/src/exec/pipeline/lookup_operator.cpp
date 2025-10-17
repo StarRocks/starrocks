@@ -89,8 +89,8 @@ private:
 };
 
 void LookUpProcessor::close() {
-    // update parent counter
 }
+
 // collect all input columns into one chunk
 Status LookUpProcessor::_collect_input_columns(RuntimeState* state, const ChunkPtr& request_chunk) {
     DCHECK(_parent->_row_pos_descs.contains(_ctx->request_tuple_id))
@@ -153,13 +153,11 @@ LookUpOperator::LookUpOperator(OperatorFactory* factory, int32_t id, int32_t pla
     for (int32_t i = 0; i < _max_io_tasks; i++) {
         _processors.emplace_back(std::make_shared<LookUpProcessor>(this));
     }
-    // @TODO create multiple runtime_profile
 }
 
 Status LookUpOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
     _query_ctx = state->query_ctx()->get_shared_ptr();
-    // init counter
     _init_counter(state);
     _dispatcher->attach_query_ctx(state->query_ctx());
     _dispatcher->attach_observer(state, observer());

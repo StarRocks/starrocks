@@ -44,7 +44,6 @@
 namespace starrocks::pipeline {
 
 Status FetchProcessor::prepare(RuntimeState* state, RuntimeProfile* runtime_profile) {
-    // @TODO we can move this to fetch_node prepare
     if (auto opt = get_backend_id(); opt.has_value()) {
         _local_be_id = opt.value();
     } else {
