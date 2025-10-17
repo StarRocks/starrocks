@@ -43,24 +43,16 @@ class AesParameterExtractor {
 public:
     // Structure to hold extracted parameters for a specific row
     struct RowParameters {
-        AesMode mode;
-        const unsigned char* key_data;
-        int key_len;
-        const char* iv_data;
-        int iv_len;
-        const unsigned char* aad_data;
-        uint32_t aad_len;
-        bool is_valid;
+        AesMode mode{AES_128_ECB};
+        const unsigned char* key_data{nullptr};
+        int key_len{0};
+        const char* iv_data{nullptr};
+        int iv_len{0};
+        const unsigned char* aad_data{nullptr};
+        uint32_t aad_len{0};
+        bool is_valid{true};
 
-        RowParameters()
-                : mode(AES_128_ECB),
-                  key_data(nullptr),
-                  key_len(0),
-                  iv_data(nullptr),
-                  iv_len(0),
-                  aad_data(nullptr),
-                  aad_len(0),
-                  is_valid(true) {}
+        RowParameters() = default;
     };
 
     // Constructor: initialize column viewers and cache constant parameters
@@ -71,14 +63,7 @@ public:
               mode_viewer_(columns[3]),
               mode_is_const_(columns[3]->is_constant()),
               key_is_const_(columns[1]->is_constant()),
-              iv_is_const_(columns[2]->is_constant()),
-              mode_const_is_null_(false),
-              key_const_is_null_(false),
-              cached_mode_(AES_128_ECB),
-              cached_key_data_(nullptr),
-              cached_key_len_(0),
-              cached_iv_data_(nullptr),
-              cached_iv_len_(0) {
+              iv_is_const_(columns[2]->is_constant()) {
         // Check if 5th parameter (AAD for GCM mode) exists
         if (columns.size() >= 5) {
             aad_viewer_.emplace(columns[4]);
@@ -195,15 +180,15 @@ private:
     bool iv_is_const_;
 
     // Constant column null flags (true if constant column is NULL)
-    bool mode_const_is_null_;
-    bool key_const_is_null_;
+    bool mode_const_is_null_{false};
+    bool key_const_is_null_{false};
 
     // Cached constant values
-    AesMode cached_mode_;
-    const unsigned char* cached_key_data_;
-    int cached_key_len_;
-    const char* cached_iv_data_;
-    int cached_iv_len_;
+    AesMode cached_mode_{AES_128_ECB};
+    const unsigned char* cached_key_data_{nullptr};
+    int cached_key_len_{0};
+    const char* cached_iv_data_{nullptr};
+    int cached_iv_len_{0};
 };
 
 // 4/5-parameter version: aes_encrypt(data, key, iv, mode, [aad])
