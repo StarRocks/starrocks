@@ -261,6 +261,22 @@ public class InsertPlanner {
         }
     }
 
+<<<<<<< HEAD
+=======
+    public void refreshExternalTable(QueryStatement queryStatement, ConnectContext session) {
+        SessionVariable currentVariable = (SessionVariable) session.getSessionVariable();
+        if (currentVariable.isEnableInsertSelectExternalAutoRefresh()) {
+            Map<TableName, Table> tables = AnalyzerUtils.collectAllTableWithAlias(queryStatement);
+            for (Map.Entry<TableName, Table> t : tables.entrySet()) {
+                if (t.getValue().isExternalTableWithFileSystem()) {
+                    session.getGlobalStateMgr().getMetadataMgr().refreshTable(t.getKey().getCatalog(),
+                            t.getKey().getDb(), t.getValue(), new ArrayList<>(), false);
+                }
+            }
+        }
+    }
+
+>>>>>>> 1d7cfeca7a ([BugFix] fix insert select auto refresh bug (#64121))
     public ExecPlan plan(InsertStmt insertStmt, ConnectContext session) {
         QueryRelation queryRelation = insertStmt.getQueryStatement().getQueryRelation();
         List<ColumnRefOperator> outputColumns = new ArrayList<>();
