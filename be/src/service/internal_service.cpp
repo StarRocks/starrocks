@@ -352,6 +352,7 @@ void PInternalServiceImplBase<T>::_exec_batch_plan_fragments(google::protobuf::R
 
     auto& common_request = t_batch_requests->common_param;
     auto& unique_requests = t_batch_requests->unique_param_per_instance;
+    LOG(INFO) << "exec plan batch plan_fragments:" << common_request.params.query_id;
 
     if (unique_requests.empty()) {
         Status::OK().to_protobuf(response->mutable_status());

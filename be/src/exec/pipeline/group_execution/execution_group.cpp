@@ -84,7 +84,7 @@ void ExecutionGroup::prepare_active_drivers_parallel(RuntimeState* state, std::a
                     auto mem_tracker = runtime_state->instance_mem_tracker();
                     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker);
                     // do the thread-safe prepare operation
-                    Status status = driver->prepare_operators_local_state(runtime_state);
+                    Status status = driver->prepare_local_state(runtime_state);
 
                     if (!status.ok()) {
                         std::shared_ptr<Status> expected = nullptr;
@@ -98,7 +98,7 @@ void ExecutionGroup::prepare_active_drivers_parallel(RuntimeState* state, std::a
                 });
 
         if (!submitted) {
-            Status status = driver->prepare_operators_local_state(state);
+            Status status = driver->prepare_local_state(state);
             if (!status.ok()) {
                 std::shared_ptr<Status> expected = nullptr;
                 first_error.compare_exchange_strong(expected, std::make_shared<Status>(status));
@@ -114,7 +114,7 @@ void ExecutionGroup::prepare_active_drivers_parallel(RuntimeState* state, std::a
 
 Status ExecutionGroup::prepare_active_drivers_sequentially(RuntimeState* state) {
     for_each_active_driver(_pipelines, [&](const DriverPtr& driver) {
-        RETURN_IF_ERROR(driver->prepare_operators_local_state(state));
+        RETURN_IF_ERROR(driver->prepare_local_state(state));
         return Status::OK();
     });
     return Status::OK();

@@ -260,7 +260,7 @@ public:
     DriverAcct& driver_acct() { return _driver_acct; }
     DriverState driver_state() const { return _state; }
 
-    Status prepare_operators_local_state(RuntimeState* runtime_state);
+    Status prepare_local_state(RuntimeState* runtime_state);
 
     void increment_schedule_times();
 
@@ -682,6 +682,9 @@ protected:
     MonotonicStopWatch* _pending_finish_timer_sw = nullptr;
 
     RuntimeProfile::HighWaterMarkCounter* _peak_driver_queue_size_counter = nullptr;
+
+private:
+    void prepare_profile();
 };
 
 } // namespace pipeline
