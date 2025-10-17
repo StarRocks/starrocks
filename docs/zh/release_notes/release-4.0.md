@@ -102,5 +102,5 @@ displayed_sidebar: docs
 - 系统根据对应会话变量和 INSERT 语句的列数确定部分更新模式。[#62091](https://github.com/StarRocks/starrocks/pull/62091)
 - 优化 Information Schema 中的 `fe_tablet_schedules` 视图。[#62073](https://github.com/StarRocks/starrocks/pull/62073) [#59813](https://github.com/StarRocks/starrocks/pull/59813)
   - `TABLET_STATUS` 列更名为 `SCHEDULE_REASON`，`CLONE_SRC` 列更名为 `SRC_BE_ID`，`CLONE_DEST` 列更名为 `DEST_BE_ID`。
-  - `CREATE_TIME` 和 `SCHEDULE_TIME` 列类型从 `DOUBLE` 改为 `DATETIME`。
+  - `CREATE_TIME`、`SCHEDULE_TIME` 和 `FINISH_TIME` 列类型从 `DOUBLE` 改为 `DATETIME`。
 - 一些 FE 指标增加了 `is_leader` 标签。[#63004](https://github.com/StarRocks/starrocks/pull/63004)
