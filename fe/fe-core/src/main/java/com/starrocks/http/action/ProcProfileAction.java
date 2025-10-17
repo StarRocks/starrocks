@@ -84,10 +84,7 @@ public class ProcProfileAction extends WebBaseAction {
         }
 
         File[] files = dir.listFiles();
-        if (files == null) {
-            return profileFiles;
-        }
-
+        assert files != null;
         for (File file : files) {
             if (file.isFile() && file.getName().endsWith(".tar.gz")) {
                 String fileName = file.getName();

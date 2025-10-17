@@ -54,26 +54,13 @@ public class ProcProfileFileAction extends WebBaseAction {
     @Override
     public void executeGet(BaseRequest request, BaseResponse response) {
         String filename = request.getSingleParameter("filename");
-
-        if (Strings.isNullOrEmpty(filename)) {
-            LOG.error("Missing filename parameter");
-            writeResponse(request, response, HttpResponseStatus.BAD_REQUEST);
-            return;
-        }
-
-        // Validate filename security
-        if (!isValidFilename(filename)) {
-            LOG.error("Invalid filename: {}", filename);
-            writeResponse(request, response, HttpResponseStatus.FORBIDDEN);
-            return;
-        }
-
         String profileLogDir = Config.sys_log_dir + "/proc_profile";
         File profileFile = new File(profileLogDir, filename);
 
-        if (!profileFile.exists() || !profileFile.isFile()) {
-            LOG.error("Profile file not found: {}", profileFile.getAbsolutePath());
-            writeResponse(request, response, HttpResponseStatus.NOT_FOUND);
+        if (Strings.isNullOrEmpty(filename) || !isValidFilename(filename) || !profileFile.exists()
+                || !profileFile.isFile()) {
+            LOG.error("invalid filename: {}", filename);
+            writeResponse(request, response, HttpResponseStatus.BAD_REQUEST);
             return;
         }
 
@@ -96,31 +83,13 @@ public class ProcProfileFileAction extends WebBaseAction {
     }
 
     private boolean isValidFilename(String filename) {
-        if (Strings.isNullOrEmpty(filename)) {
-            return false;
-        }
-
-        // Check for directory traversal attempts
-        if (filename.contains("..") || filename.contains("/") || filename.contains("\\")) {
-            return false;
-        }
-
-        // Check for dangerous characters
-        if (INSECURE_FILENAME.matcher(filename).matches()) {
-            return false;
-        }
-
-        // Must be a valid profile file
-        if (!filename.endsWith(".tar.gz")) {
-            return false;
-        }
-
-        // Must start with known prefixes
-        if (!filename.startsWith(CPU_FILE_NAME_PREFIX) && !filename.startsWith(MEM_FILE_NAME_PREFIX)) {
-            return false;
-        }
-
-        return true;
+        return !Strings.isNullOrEmpty(filename)
+                && !filename.contains("..")
+                && !filename.contains("/")
+                && !filename.contains("\\")
+                && !INSECURE_FILENAME.matcher(filename).matches()
+                && filename.endsWith(".tar.gz")
+                && (filename.startsWith(CPU_FILE_NAME_PREFIX) || filename.startsWith(MEM_FILE_NAME_PREFIX));
     }
 
     private String extractHtmlFromTarGz(File tarGzFile) throws IOException {
@@ -129,7 +98,7 @@ public class ProcProfileFileAction extends WebBaseAction {
                 TarArchiveInputStream tis = new TarArchiveInputStream(gzis)) {
 
             TarArchiveEntry entry;
-            while ((entry = tis.getNextTarEntry()) != null) {
+            while ((entry = tis.getNextEntry()) != null) {
                 if (!entry.isDirectory() && entry.getName().endsWith(".html")) {
                     // Found the HTML file, read its content
                     ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -138,7 +107,7 @@ public class ProcProfileFileAction extends WebBaseAction {
                     while ((len = tis.read(buffer)) > 0) {
                         baos.write(buffer, 0, len);
                     }
-                    return baos.toString(StandardCharsets.UTF_8.name());
+                    return baos.toString(StandardCharsets.UTF_8);
                 }
             }
         }
