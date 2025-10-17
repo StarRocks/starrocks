@@ -350,13 +350,13 @@ void encodeOpImpl(ColumnPtr col, const void* data, int idx, std::string* buff, c
     }
 
     if constexpr (type == TYPE_VARCHAR) {
-        encode_slice(static_cast<const RunTimeTypeTraits<type>::CppType*>(data)[idx], buff, is_last);
+        encode_slice(static_cast<const typename RunTimeTypeTraits<type>::CppType*>(data)[idx], buff, is_last);
     } else if constexpr (type == TYPE_DATE) {
         encode_integral(static_cast<const int32_t*>(data)[idx], buff);
     } else if constexpr (type == TYPE_DATETIME) {
         encode_integral(static_cast<const int64_t*>(data)[idx], buff);
     } else {
-        encode_integral(static_cast<const RunTimeTypeTraits<type>::CppType*>(data)[idx], buff);
+        encode_integral(static_cast<const typename RunTimeTypeTraits<type>::CppType*>(data)[idx], buff);
     }
 }
 
