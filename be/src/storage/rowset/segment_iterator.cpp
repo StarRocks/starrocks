@@ -2529,7 +2529,7 @@ Status SegmentIterator::_apply_inverted_index() {
         }
     }
 
-    for (auto* iter : _inverted_index_iterators) {
+    for (auto* iter : _inverted_index_ctx->inverted_index_iterators) {
         if (iter != nullptr) {
             RETURN_IF_ERROR(iter->close());
         }
