@@ -266,11 +266,12 @@ public class InsertPlanner {
     public void refreshExternalTable(QueryStatement queryStatement, ConnectContext session) {
         SessionVariable currentVariable = (SessionVariable) session.getSessionVariable();
         if (currentVariable.isEnableInsertSelectExternalAutoRefresh()) {
-            List<Table> tables = new ArrayList<>();
-            AnalyzerUtils.collectSpecifyExternalTables(queryStatement, tables, Table::isExternalTableWithFileSystem);
-            for (Table table : tables) {
-                session.getGlobalStateMgr().getMetadataMgr().refreshTable(table.getCatalogName(),
-                        table.getCatalogDBName(), table, new ArrayList<>(), false);
+            Map<TableName, Table> tables = AnalyzerUtils.collectAllTableWithAlias(queryStatement);
+            for (Map.Entry<TableName, Table> t : tables.entrySet()) {
+                if (t.getValue().isExternalTableWithFileSystem()) {
+                    session.getGlobalStateMgr().getMetadataMgr().refreshTable(t.getKey().getCatalog(),
+                            t.getKey().getDb(), t.getValue(), new ArrayList<>(), false);
+                }
             }
         }
     }
