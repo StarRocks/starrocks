@@ -97,16 +97,16 @@ Status DownloadUtil::get_real_url(const std::string& url, std::string* real_url)
 }
 
 Status DownloadUtil::get_java_udf_url(const std::string& url, std::string* real_url) {
-    std::string fileName;
+    std::string file_name;
     std::size_t pos = url.find_last_of('/');
     if (pos == std::string::npos) {
-        fileName = url;
+        file_name = url;
     } else {
-        fileName = url.substr(pos + 1);
+        file_name = url.substr(pos + 1);
     }
     const char* starrocks_home = std::getenv("STARROCKS_HOME");
     std::string target_path = std::string(starrocks_home) + "/plugins/java_udf";
-    std::string target_url = std::string("file://") + target_path + "/" + fileName;
+    std::string target_url = std::string("file://") + target_path + "/" + file_name;
     udf_downloder downloader;
     Status status = downloader.download_remote_file_2_local(url, target_url);
     if (status.ok()) {

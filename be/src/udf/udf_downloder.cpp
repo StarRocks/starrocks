@@ -18,20 +18,22 @@
 
 namespace starrocks {
 
+
 Status udf_downloder::download_remote_file_2_local(const std::string& remotePath, std::string& localPath) {
-    RETURN_IF_ERROR(setup_local_file_path(localPath));
-    LOG(INFO) << "Downloading udf file from" << remotePath;
-    RETURN_IF_ERROR(udf_downloder::do_download(remotePath, localPath));
-    LOG(INFO) << "Successfully downloaded udf file " << remotePath << " to " << localPath;
+    auto mtx = get_mutex_for_path(localPath);
+    std::lock_guard<std::mutex> lock(*mtx);
+    udf_downloder downloader;
+    RETURN_IF_ERROR(downloader.setup_local_file_path(localPath));
+    LOG(INFO) << "Downloading udf file from " << remotePath;
+    RETURN_IF_ERROR(downloader.do_download(remotePath, localPath));
+    LOG(INFO) << "Successfully downloaded udf file from " << remotePath << " to " << localPath;
     return Status::OK();
 }
 
 Status udf_downloder::setup_local_file_path(const std::string& local_path) {
-    Status status = FileSystem::Default()->path_exists(local_path);
-    if (status.ok()) {
-        auto ret = FileSystem::Default()->delete_file(local_path);
-        LOG(INFO) << "Removed existing file: " << local_path;
-    }
+    RETURN_IF_ERROR(FileSystem::Default()->path_exists(local_path));
+    RETURN_IF_ERROR(FileSystem::Default()->delete_file(local_path));
+    LOG(INFO) << "Removed existing file " << local_path;
     std::string dir_path = local_path.substr(0, local_path.find_last_of('/'));
     if (!dir_path.empty()) {
         RETURN_IF_ERROR(FileSystem::Default()->create_dir(dir_path));
