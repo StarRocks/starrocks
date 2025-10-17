@@ -47,7 +47,7 @@ testherbavro	CREATE ROUTINE LOAD test_show_create_routine_load.testherbavro on h
  COLUMNS TERMINATED BY '\t',
 COLUMNS (advertiser_id, advertiser_ad_type, advertiser_ad_width, advertiser_currency_type),
 PARTITIONS (p1, p2, p3),
-WHERE `advertiser_id` > -10
+WHERE advertiser_id > -10
 PROPERTIES
 (
 "desired_concurrent_number"="1",
