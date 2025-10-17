@@ -83,3 +83,19 @@ displayed_sidebar: docs
   - CREATE ANALYZE FULL TABLE で IF NOT EXISTS キーワードをサポート。[#59789](https://github.com/StarRocks/starrocks/pull/59789)
   - SELECT で EXCLUDE 句をサポート。[#57411](https://github.com/StarRocks/starrocks/pull/57411/files)
   - 集約関数で FILTER 句をサポートし、条件付き集約の可読性と実行効率を向上。[#58937](https://github.com/StarRocks/starrocks/pull/58937)
+
+### 動作変更
+
+- マテリアライズドビューのパラメータ `auto_partition_refresh_number` のロジックを調整し、自動リフレッシュか手動リフレッシュかにかかわらず、リフレッシュ対象のパーティション数を制限します。[#62301](https://github.com/StarRocks/starrocks/pull/62301)
+- Flat JSON がデフォルトで有効化されました。[#62097](https://github.com/StarRocks/starrocks/pull/62097)
+- システム変数 `enable_materialized_view_agg_pushdown_rewrite` のデフォルト値が `true` に設定され、マテリアライズドビューのクエリ書き換えにおける集計プッシュダウンがデフォルトで有効化されました。[#60976](https://github.com/StarRocks/starrocks/pull/60976)
+- `information_schema.materialized_views` 内のいくつかの列の型を変更し、対応するデータとの整合性を高めました。[#60054](https://github.com/StarRocks/starrocks/pull/60054)
+- `split_part` 関数は区切り文字が一致しない場合に NULL を返すように変更。[#56967](https://github.com/StarRocks/starrocks/pull/56967)
+- CTAS/CREATE MATERIALIZED VIEW で固定長 CHAR を STRING に置き換え、誤った列長推論によるマテリアライズドビュー更新失敗を回避。[#63114](https://github.com/StarRocks/starrocks/pull/63114) [#63114](https://github.com/StarRocks/starrocks/pull/63114) [#62476](https://github.com/StarRocks/starrocks/pull/62476)
+- データキャッシュ関連の構成が簡素化されました。[#61640](https://github.com/StarRocks/starrocks/issues/61640)
+  - `datacache_mem_size` および `datacache_disk_size` が有効になりました。
+  - `storage_page_cache_limit`、`block_cache_mem_size`、`block_cache_disk_size` は非推奨となりました。
+- Hive および Iceberg のメタデータキャッシュに使用するメモリリソースを制限する新しいカタログプロパティを追加（Hive 用 `remote_file_cache_memory_ratio`、Iceberg 用 `iceberg_data_file_cache_memory_usage_ratio` および `iceberg_delete_file_cache_memory_usage_ratio`）。デフォルト値を `0.1`（10%）に設定。メタデータキャッシュの TTL を24時間に調整。[#63459](https://github.com/StarRocks/starrocks/pull/63459) [#63373](https://github.com/StarRocks/starrocks/pull/63373) [#61966](https://github.com/StarRocks/starrocks/pull/61966) [#62288](https://github.com/StarRocks/starrocks/pull/62288)
+- SHOW DATA DISTRIBUTION は、同じバケットシーケンス番号を持つすべてのマテリアライズドインデックスの統計情報を統合しなくなりました。マテリアライズドインデックスレベルでのデータ分散のみを表示します。[#59656](https://github.com/StarRocks/starrocks/pull/59656)
+- 自動バケットテーブルのデフォルトバケットサイズを4GBから1GBに変更し、パフォーマンスとリソース利用率を改善しました。[#63168](https://github.com/StarRocks/starrocks/pull/63168)
+- システムは対応するセッション変数と INSERT 文の列数に基づいて部分更新モードを決定します。[#62091](https://github.com/StarRocks/starrocks/pull/62091)

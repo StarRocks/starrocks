@@ -84,3 +84,19 @@ displayed_sidebar: docs
   - CREATE ANALYZE FULL TABLE 支持 IF NOT EXISTS 关键字。[#59789](https://github.com/StarRocks/starrocks/pull/59789)
   - SELECT 支持 EXCLUDE 子句。[#57411](https://github.com/StarRocks/starrocks/pull/57411/files)
   - 聚合函数支持 FILTER 子句，提升条件聚合的可读性和执行效率。[#58937](https://github.com/StarRocks/starrocks/pull/58937)
+
+### 行为变更
+
+- 调整物化视图参数 `auto_partition_refresh_number` 的逻辑，无论自动刷新还是手动刷新，均限制需刷新分区的数量。[#62301](https://github.com/StarRocks/starrocks/pull/62301)
+- 默认启用 Flat JSON。[#62097](https://github.com/StarRocks/starrocks/pull/62097)
+- 系统变量 `enable_materialized_view_agg_pushdown_rewrite` 的默认值设为 `true`，表示默认启用物化视图查询改写中的聚合下推功能。[#60976](https://github.com/StarRocks/starrocks/pull/60976)
+- 将 `information_schema.materialized_views` 中部分列的类型调整为更符合对应数据的类型。[#60054](https://github.com/StarRocks/starrocks/pull/60054)
+- 当分隔符不匹配时，`split_part` 函数返回 NULL。[#56967](https://github.com/StarRocks/starrocks/pull/56967)
+- 在 CTAS/CREATE MATERIALIZED VIEW 中使用 STRING 替代固定长度 CHAR，避免推断错误的列长度导致物化视图刷新失败。[#63114](https://github.com/StarRocks/starrocks/pull/63114) [#63114](https://github.com/StarRocks/starrocks/pull/63114) [#62476](https://github.com/StarRocks/starrocks/pull/62476)
+- 简化了 Data Cache 相关配置。[#61640](https://github.com/StarRocks/starrocks/issues/61640)
+  - `datacache_mem_size` 和 `datacache_disk_size` 现已生效。
+  - `storage_page_cache_limit`、`block_cache_mem_size`、`block_cache_disk_size` 已弃用。
+- 新增 Catalog 属性（Hive 的 `remote_file_cache_memory_ratio`，Iceberg 的 `iceberg_data_file_cache_memory_usage_ratio` 和 `iceberg_delete_file_cache_memory_usage_ratio`），用于限制 Hive 和 Iceberg 元数据缓存的内存资源，默认值设为 `0.1`（10%），并将元数据缓存 TTL 调整为24小时。[#63459](https://github.com/StarRocks/starrocks/pull/63459) [#63373](https://github.com/StarRocks/starrocks/pull/63373) [#61966](https://github.com/StarRocks/starrocks/pull/61966) [#62288](https://github.com/StarRocks/starrocks/pull/62288)
+- SHOW DATA DISTRIBUTION 现不再合并具有相同桶序列号的所有物化索引的统计信息，仅在物化索引级别显示数据分布。[#59656](https://github.com/StarRocks/starrocks/pull/59656)
+- 自动分桶表的默认桶大小从 4GB 调整为 1GB，以提升性能和资源利用率。[#63168](https://github.com/StarRocks/starrocks/pull/63168)
+- 系统根据对应会话变量和 INSERT 语句的列数确定部分更新模式。[#62091](https://github.com/StarRocks/starrocks/pull/62091)

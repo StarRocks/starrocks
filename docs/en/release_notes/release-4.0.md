@@ -83,3 +83,19 @@ Release date: October 17, 2025
   - Supports IF NOT EXISTS keywords in CREATE ANALYZE FULL TABLE. [#59789](https://github.com/StarRocks/starrocks/pull/59789)
   - Supports EXCLUDE clauses in SELECT.  [#57411](https://github.com/StarRocks/starrocks/pull/57411/files)
   - Supports FILTER clauses in aggregate functions, improving readability and execution efficiency of conditional aggregations. [#58937](https://github.com/StarRocks/starrocks/pull/58937)
+
+### Behavior Changes
+
+- Adjust the logic of the materialized view parameter `auto_partition_refresh_number` to limit the number of partitions to refresh regardless of auto refresh or manual refresh. [#62301](https://github.com/StarRocks/starrocks/pull/62301)
+- Flat JSON is enabled by default. [#62097](https://github.com/StarRocks/starrocks/pull/62097)
+- The default value of the system variable `enable_materialized_view_agg_pushdown_rewrite` is set to `true`, indicating that aggregation pushdown for materialized view query rewrite is enabled by default. [#60976](https://github.com/StarRocks/starrocks/pull/60976)
+- Changed the type of some columns in `information_schema.materialized_views` to better align with the corresponding data. [#60054](https://github.com/StarRocks/starrocks/pull/60054)
+- The `split_part` function returns NULL when the delimiter is not matched. [#56967](https://github.com/StarRocks/starrocks/pull/56967)
+- Use STRING to replace fixed-length CHAR in CTAS/CREATE MATERIALIZED VIEW to avoid deducing the wrong column length, which may cause materialized view refresh failures. [#63114](https://github.com/StarRocks/starrocks/pull/63114) [#62476](https://github.com/StarRocks/starrocks/pull/62476)
+- Data Cache-related configurations are simplified. [#61640](https://github.com/StarRocks/starrocks/issues/61640)
+  - `datacache_mem_size` and `datacache_disk_size` are now effective.
+  - `storage_page_cache_limit`, `block_cache_mem_size`, `block_cache_disk_size` are deprecated.
+- Added new catalog properties (`remote_file_cache_memory_ratio` for Hive, and `iceberg_data_file_cache_memory_usage_ratio` and `iceberg_delete_file_cache_memory_usage_ratio` for Iceberg) to limit the memory resources used for Hive and Iceberg metadata cache, and set the default values to `0.1` (10%). Adjust the metadata cache TTL to 24 hours. [#63459](https://github.com/StarRocks/starrocks/pull/63459) [#63373](https://github.com/StarRocks/starrocks/pull/63373) [#61966](https://github.com/StarRocks/starrocks/pull/61966) [#62288](https://github.com/StarRocks/starrocks/pull/62288)
+- SHOW DATA DISTRIBUTION now will not merge the statistics of all materialized indexes with the same bucket sequence number. It only shows data distribution at the materialized index level. [#59656](https://github.com/StarRocks/starrocks/pull/59656)
+- The default bucket size for automatic bucket tables is changed from 4GB to 1GB to improve performance and resource utilization. [#63168](https://github.com/StarRocks/starrocks/pull/63168)
+-  The system determines the Partial Update mode based on the corresponding session variable and the number of columns in the INSERT statement. [#62091](https://github.com/StarRocks/starrocks/pull/62091)
