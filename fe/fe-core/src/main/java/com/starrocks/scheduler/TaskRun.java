@@ -313,6 +313,8 @@ public class TaskRun implements Comparable<TaskRun> {
             } catch (DdlException e) {
                 // not session variable
                 taskRunContextProperties.put(key, properties.get(key));
+                // FIXME: it's too hack, don't pollute the session when setting variables
+                runCtx.getState().resetError();
             }
         }
         // set warehouse
