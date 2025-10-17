@@ -884,8 +884,16 @@ vectorized_functions = [
     [110112, "json_contains", False, False, "BOOLEAN", ["JSON", "JSON"], "JsonFunctions::json_contains"],
 
     # aes and base64 function
-    [120100, "aes_encrypt", False, False, "VARCHAR", ["VARCHAR", "VARCHAR"], "EncryptionFunctions::aes_encrypt"],
-    [120110, "aes_decrypt", False, False, "VARCHAR", ["VARCHAR", "VARCHAR"], "EncryptionFunctions::aes_decrypt"],
+        # aes_encrypt: 4-parameter version (data, key, iv, mode)
+    # Note: FE's ExpressionAnalyzer converts 2/3 params to 4 params automatically
+    [120101, "aes_encrypt", False, False, "VARCHAR", ["VARCHAR", "VARCHAR", "VARCHAR", "VARCHAR"], "EncryptionFunctions::aes_encrypt_with_mode"],
+    # aes_encrypt: 5-parameter version (data, key, iv, mode, aad) for GCM mode
+    [120102, "aes_encrypt", False, False, "VARCHAR", ["VARCHAR", "VARCHAR", "VARCHAR", "VARCHAR", "VARCHAR"], "EncryptionFunctions::aes_encrypt_with_mode"],
+    # aes_decrypt: 4-parameter version (data, key, iv, mode)
+    # Note: FE's ExpressionAnalyzer converts 2/3 params to 4 params automatically
+    [120111, "aes_decrypt", False, False, "VARCHAR", ["VARCHAR", "VARCHAR", "VARCHAR", "VARCHAR"], "EncryptionFunctions::aes_decrypt_with_mode"],
+    # aes_decrypt: 5-parameter version (data, key, iv, mode, aad) for GCM mode
+    [120112, "aes_decrypt", False, False, "VARCHAR", ["VARCHAR", "VARCHAR", "VARCHAR", "VARCHAR", "VARCHAR"], "EncryptionFunctions::aes_decrypt_with_mode"],
     [120120, "from_base64", False, False, "VARCHAR", ["VARCHAR"], "EncryptionFunctions::from_base64"],
     [120121, "base64_decode_binary", False, False, "VARBINARY", ["VARCHAR"], "EncryptionFunctions::from_base64"],
     [120122, "base64_decode_string", False, False, "VARCHAR", ["VARCHAR"], "EncryptionFunctions::from_base64"],

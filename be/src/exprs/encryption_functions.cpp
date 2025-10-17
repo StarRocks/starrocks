@@ -14,6 +14,8 @@
 
 #include "exprs/encryption_functions.h"
 
+#include <optional>
+
 #include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
@@ -25,67 +27,295 @@
 
 namespace starrocks {
 
-StatusOr<ColumnPtr> EncryptionFunctions::aes_encrypt(FunctionContext* ctx, const Columns& columns) {
-    auto src_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
-    auto key_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
+// Macro to check if essential columns (data, key, mode) are only_null
+// Returns the first only_null column if any, otherwise continues execution
+// Usage: CHECK_AES_ESSENTIAL_COLUMNS_NULL(columns)
+#define CHECK_AES_ESSENTIAL_COLUMNS_NULL(cols)                                                            \
+    do {                                                                                                  \
+        if ((cols)[0]->only_null() || (cols)[1]->only_null() || (cols)[3]->only_null()) {                 \
+            return (cols)[0]->only_null() ? (cols)[0] : ((cols)[1]->only_null() ? (cols)[1] : (cols)[3]); \
+        }                                                                                                 \
+    } while (0)
+
+// Helper class to extract and cache AES parameters from columns
+// This eliminates code duplication between encrypt and decrypt functions
+class AesParameterExtractor {
+public:
+    // Structure to hold extracted parameters for a specific row
+    struct RowParameters {
+        AesMode mode;
+        const unsigned char* key_data;
+        int key_len;
+        const char* iv_data;
+        int iv_len;
+        const unsigned char* aad_data;
+        uint32_t aad_len;
+        bool is_valid;
+
+        RowParameters()
+                : mode(AES_128_ECB),
+                  key_data(nullptr),
+                  key_len(0),
+                  iv_data(nullptr),
+                  iv_len(0),
+                  aad_data(nullptr),
+                  aad_len(0),
+                  is_valid(true) {}
+    };
+
+    // Constructor: initialize column viewers and cache constant parameters
+    explicit AesParameterExtractor(const Columns& columns)
+            : src_viewer_(columns[0]),
+              key_viewer_(columns[1]),
+              iv_viewer_(columns[2]),
+              mode_viewer_(columns[3]),
+              mode_is_const_(columns[3]->is_constant()),
+              key_is_const_(columns[1]->is_constant()),
+              iv_is_const_(columns[2]->is_constant()),
+              mode_const_is_null_(false),
+              key_const_is_null_(false),
+              cached_mode_(AES_128_ECB),
+              cached_key_data_(nullptr),
+              cached_key_len_(0),
+              cached_iv_data_(nullptr),
+              cached_iv_len_(0) {
+        // Check if 5th parameter (AAD for GCM mode) exists
+        if (columns.size() >= 5) {
+            aad_viewer_.emplace(columns[4]);
+        }
+
+        // Cache constant mode
+        if (mode_is_const_) {
+            if (mode_viewer_.is_null(0)) {
+                mode_const_is_null_ = true;
+            } else {
+                auto mode_value = mode_viewer_.value(0);
+                std::string mode_str(mode_value.data, mode_value.size);
+                cached_mode_ = AesUtil::get_mode_from_string(mode_str);
+            }
+        }
+
+        // Cache constant key
+        if (key_is_const_) {
+            if (key_viewer_.is_null(0)) {
+                key_const_is_null_ = true;
+            } else {
+                auto key_value = key_viewer_.value(0);
+                cached_key_data_ = (const unsigned char*)key_value.data;
+                cached_key_len_ = key_value.size;
+            }
+        }
+
+        // Cache constant iv
+        if (iv_is_const_ && !iv_viewer_.is_null(0)) {
+            auto iv_value = iv_viewer_.value(0);
+            cached_iv_data_ = iv_value.data;
+            cached_iv_len_ = iv_value.size;
+        }
+    }
+
+    // Extract parameters for a specific row
+    RowParameters extract(int row) {
+        RowParameters params;
+
+        // Check for null values in required columns (src, key, mode are always required)
+        // For constant columns, use cached null flag; for non-constant columns, check each row
+        bool src_is_null = src_viewer_.is_null(row);
+        bool key_is_null = key_is_const_ ? key_const_is_null_ : key_viewer_.is_null(row);
+        bool mode_is_null = mode_is_const_ ? mode_const_is_null_ : mode_viewer_.is_null(row);
+
+        if (src_is_null || key_is_null || mode_is_null) {
+            params.is_valid = false;
+            return params;
+        }
+
+        // Extract mode first (use cached value if constant)
+        if (mode_is_const_) {
+            params.mode = cached_mode_;
+        } else {
+            auto mode_value = mode_viewer_.value(row);
+            std::string mode_str(mode_value.data, mode_value.size);
+            params.mode = AesUtil::get_mode_from_string(mode_str);
+        }
+
+        // Check if IV is required for this mode
+        // ECB mode does not require IV, other modes do
+        bool iv_is_null = iv_is_const_ ? (cached_iv_data_ == nullptr) : iv_viewer_.is_null(row);
+        if (!AesUtil::is_ecb_mode(params.mode) && iv_is_null) {
+            // Non-ECB mode requires IV, but IV is NULL
+            params.is_valid = false;
+            return params;
+        }
+
+        // Extract key (use cached value if constant)
+        if (key_is_const_) {
+            params.key_data = cached_key_data_;
+            params.key_len = cached_key_len_;
+        } else {
+            auto key_value = key_viewer_.value(row);
+            params.key_data = (const unsigned char*)key_value.data;
+            params.key_len = key_value.size;
+        }
+
+        // Extract iv (use cached value if constant)
+        if (iv_is_const_) {
+            params.iv_data = cached_iv_data_;
+            params.iv_len = cached_iv_len_;
+        } else {
+            if (!iv_viewer_.is_null(row)) {
+                auto iv_value = iv_viewer_.value(row);
+                params.iv_data = iv_value.data;
+                params.iv_len = iv_value.size;
+            }
+        }
+
+        // Extract AAD (only for GCM mode)
+        if (aad_viewer_.has_value() && !aad_viewer_->is_null(row)) {
+            auto aad_value = aad_viewer_->value(row);
+            params.aad_data = (const unsigned char*)aad_value.data;
+            params.aad_len = aad_value.size;
+        }
+
+        return params;
+    }
+
+    // Get source data viewer (for accessing source data in main loop)
+    const ColumnViewer<TYPE_VARCHAR>& src_viewer() const { return src_viewer_; }
+
+private:
+    ColumnViewer<TYPE_VARCHAR> src_viewer_;
+    ColumnViewer<TYPE_VARCHAR> key_viewer_;
+    ColumnViewer<TYPE_VARCHAR> iv_viewer_;
+    ColumnViewer<TYPE_VARCHAR> mode_viewer_;
+    std::optional<ColumnViewer<TYPE_VARCHAR>> aad_viewer_;
+
+    // Constant column flags
+    bool mode_is_const_;
+    bool key_is_const_;
+    bool iv_is_const_;
+
+    // Constant column null flags (true if constant column is NULL)
+    bool mode_const_is_null_;
+    bool key_const_is_null_;
+
+    // Cached constant values
+    AesMode cached_mode_;
+    const unsigned char* cached_key_data_;
+    int cached_key_len_;
+    const char* cached_iv_data_;
+    int cached_iv_len_;
+};
+
+// 4/5-parameter version: aes_encrypt(data, key, iv, mode, [aad])
+// Parameters: data, key, iv, mode, [aad]
+// - iv can be NULL for ECB mode
+// - aad is optional and only used for GCM mode
+StatusOr<ColumnPtr> EncryptionFunctions::aes_encrypt_with_mode(FunctionContext* ctx, const Columns& columns) {
+    // Check only essential columns (data, key, mode) for only_null
+    // IV and AAD are checked later based on the encryption mode
+    CHECK_AES_ESSENTIAL_COLUMNS_NULL(columns);
+
+    // Use parameter extractor to handle all parameter extraction and caching
+    AesParameterExtractor extractor(columns);
 
     const int size = columns[0]->size();
     ColumnBuilder<TYPE_VARCHAR> result(size);
+
     for (int row = 0; row < size; ++row) {
-        if (src_viewer.is_null(row) || key_viewer.is_null(row)) {
+        // Extract parameters for current row
+        auto params = extractor.extract(row);
+        if (!params.is_valid) {
             result.append_null();
             continue;
         }
 
-        auto src_value = src_viewer.value(row);
-        int cipher_len = src_value.size + 16;
-        char p[cipher_len];
+        auto src_value = extractor.src_viewer().value(row);
 
-        auto key_value = key_viewer.value(row);
-        int len = AesUtil::encrypt(AES_128_ECB, (unsigned char*)src_value.data, src_value.size,
-                                   (unsigned char*)key_value.data, key_value.size, nullptr, true, (unsigned char*)p);
+        // Calculate output buffer size precisely
+        // GCM mode: IV (12 bytes) + plaintext + tag (16 bytes)
+        // Stream modes (CTR/CFB/OFB): no padding, same as plaintext
+        // Block modes (ECB/CBC): may need one block padding (16 bytes max)
+        int cipher_len;
+        if (AesUtil::is_gcm_mode(params.mode)) {
+            // GCM output format: [IV][Ciphertext][TAG]
+            cipher_len = src_value.size + 12 + AesUtil::GCM_TAG_SIZE;
+        } else if (params.mode >= AES_128_CFB && params.mode <= AES_256_OFB) {
+            // Stream modes: CFB, OFB (no padding needed)
+            cipher_len = src_value.size;
+        } else if (params.mode >= AES_128_CTR && params.mode <= AES_256_CTR) {
+            // CTR mode (no padding needed)
+            cipher_len = src_value.size;
+        } else {
+            // Block modes: ECB, CBC (may need padding, max one block = 16 bytes)
+            cipher_len = src_value.size + 16;
+        }
+
+        // Use stack allocation (VLA - Variable Length Array)
+        char encrypt_buf[cipher_len];
+
+        int len = AesUtil::encrypt_ex(params.mode, (unsigned char*)src_value.data, src_value.size, params.key_data,
+                                      params.key_len, params.iv_data, params.iv_len, true, (unsigned char*)encrypt_buf,
+                                      params.aad_data, params.aad_len);
+
         if (len < 0) {
             result.append_null();
             continue;
         }
 
-        result.append(Slice(p, len));
+        result.append(Slice(encrypt_buf, len));
     }
 
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-StatusOr<ColumnPtr> EncryptionFunctions::aes_decrypt(FunctionContext* ctx, const Columns& columns) {
-    auto src_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
-    auto key_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
+// 4/5-parameter version: aes_decrypt(data, key, iv, mode, [aad])
+// Parameters: data, key, iv, mode, [aad]
+// - iv can be NULL for ECB mode
+// - aad is optional and only used for GCM mode
+StatusOr<ColumnPtr> EncryptionFunctions::aes_decrypt_with_mode(FunctionContext* ctx, const Columns& columns) {
+    // Check only essential columns (data, key, mode) for only_null
+    // IV and AAD are checked later based on the encryption mode
+    CHECK_AES_ESSENTIAL_COLUMNS_NULL(columns);
+
+    // Use parameter extractor to handle all parameter extraction and caching
+    AesParameterExtractor extractor(columns);
 
     const int size = columns[0]->size();
     ColumnBuilder<TYPE_VARCHAR> result(size);
+
     for (int row = 0; row < size; ++row) {
-        if (src_viewer.is_null(row) || key_viewer.is_null(row)) {
+        // Extract parameters for current row
+        auto params = extractor.extract(row);
+        if (!params.is_valid) {
             result.append_null();
             continue;
         }
 
-        auto src_value = src_viewer.value(row);
-        auto key_value = key_viewer.value(row);
-        if (src_value.size == 0 || key_value.size == 0) {
+        auto src_value = extractor.src_viewer().value(row);
+
+        // Additional validation for decryption
+        if (src_value.size == 0 || params.key_len == 0) {
             result.append_null();
             continue;
         }
 
+        // Calculate output buffer size for decryption
+        // Decrypted plaintext will never exceed ciphertext size
         int cipher_len = src_value.size;
-        char p[cipher_len];
 
-        int len = AesUtil::decrypt(AES_128_ECB, (unsigned char*)src_value.data, src_value.size,
-                                   (unsigned char*)key_value.data, key_value.size, nullptr, true, (unsigned char*)p);
+        // Use stack allocation (VLA - Variable Length Array)
+        char decrypt_buf[cipher_len];
+
+        int len = AesUtil::decrypt_ex(params.mode, (unsigned char*)src_value.data, src_value.size, params.key_data,
+                                      params.key_len, params.iv_data, params.iv_len, true, (unsigned char*)decrypt_buf,
+                                      params.aad_data, params.aad_len);
 
         if (len < 0) {
             result.append_null();
             continue;
         }
 
-        result.append(Slice(p, len));
+        result.append(Slice(decrypt_buf, len));
     }
 
     return result.build(ColumnHelper::is_all_const(columns));
