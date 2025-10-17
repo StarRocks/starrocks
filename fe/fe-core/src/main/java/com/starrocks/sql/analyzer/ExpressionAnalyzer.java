@@ -1013,8 +1013,25 @@ public class ExpressionAnalyzer {
                 ExprId exprId = analyzeState.getNextNondeterministicId();
                 node.setNondeterministicId(exprId);
             }
-            Type[] argumentTypes = node.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
             String fnName = node.getFnName().getFunction();
+
+            // Handle AES encryption functions parameter conversion
+            // Convert 2/3 parameter calls to 4 parameter calls before function resolution
+            if (FunctionSet.AES_ENCRYPT.equalsIgnoreCase(fnName) ||
+                    FunctionSet.AES_DECRYPT.equalsIgnoreCase(fnName)) {
+                int paramCount = node.getChildren().size();
+                if (paramCount == 2) {
+                    // 2 params: (data, key) -> (data, key, NULL, 'AES_128_ECB')
+                    node.addChild(new NullLiteral());
+                    node.addChild(new StringLiteral("AES_128_ECB"));
+                } else if (paramCount == 3) {
+                    // 3 params: (data, key, iv) -> (data, key, iv, 'AES_128_ECB')
+                    node.addChild(new StringLiteral("AES_128_ECB"));
+                }
+                // 4 or 5 params: no conversion needed
+            }
+
+            Type[] argumentTypes = node.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
             // check fn & throw exception direct if analyze failed
             checkFunction(fnName, node, argumentTypes);
             // get function by function expression and argument types
