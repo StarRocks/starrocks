@@ -47,7 +47,7 @@ under the License.
         <async.profiler.enabled>${env.ASYNC_PROFILER_ENABLED:-true}</async.profiler.enabled>
         <async.profiler.lib>${env.STARROCKS_HOME}/build-support/libasyncProfiler.so</async.profiler.lib>
         <async.profiler.output>${env.STARROCKS_HOME}/output/fe/log/proc_profile/prof-%t-%p.html</async.profiler.output>
-        <async.profiler.arg>-agentpath:${async.profiler.lib}=start,event=cpu,file=${async.profiler.output}</async.profiler.arg>
+        <async.profiler.arg></async.profiler.arg>
     </properties>
 
     <profiles>
@@ -100,7 +100,19 @@ under the License.
             </properties>
         </profile>
         <profile>
-            <id>async-profiler</id>
+            <id>async-profiler-enabled</id>
+            <activation>
+                <property>
+                    <name>env.ASYNC_PROFILER_ENABLED</name>
+                    <value>true</value>
+                </property>
+            </activation>
+            <properties>
+                <async.profiler.arg>-agentpath:${async.profiler.lib}=start,event=cpu,file=${async.profiler.output}</async.profiler.arg>
+            </properties>
+        </profile>
+        <profile>
+            <id>async-profiler-disabled</id>
             <activation>
                 <property>
                     <name>env.ASYNC_PROFILER_ENABLED</name>
