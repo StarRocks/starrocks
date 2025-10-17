@@ -348,6 +348,7 @@ public abstract class AlterJobV2 implements Writable {
                 return lakePublishVersion();
             };
             publishVersionFuture = GlobalStateMgr.getCurrentState().getLakeAlterPublishExecutor().submit(task);
+            LOG.info("submit publish task for job: {}", jobId);
             return false;
         } else {
             if (publishVersionFuture.isDone()) {
@@ -355,6 +356,8 @@ public abstract class AlterJobV2 implements Writable {
                     return publishVersionFuture.get();
                 } catch (InterruptedException | ExecutionException e) {
                     return false;
+                } finally {
+                    publishVersionFuture = null;
                 }
             } else {
                 return false;
