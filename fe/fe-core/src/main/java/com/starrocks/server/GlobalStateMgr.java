@@ -305,7 +305,7 @@ public class GlobalStateMgr {
      * Alter Job Manager
      */
     private final AlterJobMgr alterJobMgr;
-    private final ThreadPoolExecutor lakeAlterPublishExecutor;
+    private final ThreadPoolExecutor lakeAlterJobPublishExecutor;
 
     private final PortConnectivityChecker portConnectivityChecker;
 
@@ -664,8 +664,8 @@ public class GlobalStateMgr {
                 new SchemaChangeHandler(),
                 new MaterializedViewHandler(),
                 new SystemHandler());
-        this.lakeAlterPublishExecutor = ThreadPoolManager.newDaemonCacheThreadPool(
-                Config.lake_publish_version_max_threads, "alter-publish", false);
+        this.lakeAlterJobPublishExecutor = ThreadPoolManager.newDaemonCacheThreadPool(
+                Config.lake_publish_version_max_threads, "alter-publish-job", false);
 
         this.load = new Load();
         this.streamLoadMgr = new StreamLoadMgr();
@@ -2219,8 +2219,8 @@ public class GlobalStateMgr {
         return alterJobMgr;
     }
 
-    public ThreadPoolExecutor getLakeAlterPublishExecutor() {
-        return lakeAlterPublishExecutor;
+    public ThreadPoolExecutor getLakeAlterJobPublishExecutor() {
+        return lakeAlterJobPublishExecutor;
     }
 
     public SchemaChangeHandler getSchemaChangeHandler() {

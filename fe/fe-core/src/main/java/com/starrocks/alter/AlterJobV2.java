@@ -124,7 +124,7 @@ public abstract class AlterJobV2 implements Writable {
 
     protected Span span;
 
-    protected Future<Boolean> publishVersionFuture = null;
+    protected Future<Boolean> publishVersionJobFuture = null;
 
     public AlterJobV2(long jobId, JobType jobType, long dbId, long tableId, String tableName, long timeoutMs) {
         this.jobId = jobId;
@@ -354,16 +354,16 @@ public abstract class AlterJobV2 implements Writable {
     }
 
     protected boolean publishVersion() {
-        if (publishVersionFuture == null) {
+        if (publishVersionJobFuture == null) {
             Callable<Boolean> task = () -> {
                 return lakePublishVersion();
             };
-            publishVersionFuture = GlobalStateMgr.getCurrentState().getLakeAlterPublishExecutor().submit(task);
+            publishVersionJobFuture = GlobalStateMgr.getCurrentState().getLakeAlterJobPublishExecutor().submit(task);
             return false;
         } else {
-            if (publishVersionFuture.isDone()) {
+            if (publishVersionJobFuture.isDone()) {
                 try {
-                    return publishVersionFuture.get();
+                    return publishVersionJobFuture.get();
                 } catch (InterruptedException | ExecutionException e) {
                     return false;
                 }
