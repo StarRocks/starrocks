@@ -99,3 +99,7 @@ Release date: October 17, 2025
 - SHOW DATA DISTRIBUTION now will not merge the statistics of all materialized indexes with the same bucket sequence number. It only shows data distribution at the materialized index level. [#59656](https://github.com/StarRocks/starrocks/pull/59656)
 - The default bucket size for automatic bucket tables is changed from 4GB to 1GB to improve performance and resource utilization. [#63168](https://github.com/StarRocks/starrocks/pull/63168)
 -  The system determines the Partial Update mode based on the corresponding session variable and the number of columns in the INSERT statement. [#62091](https://github.com/StarRocks/starrocks/pull/62091)
+- Optimized the `fe_tablet_schedules` view in the Information Schema. [#62073](https://github.com/StarRocks/starrocks/pull/62073) [#59813](https://github.com/StarRocks/starrocks/pull/59813)
+  - Renamed the `TABLET_STATUS` column to `SCHEDULE_REASON`, the `CLONE_SRC` column to `SRC_BE_ID`, and the `CLONE_DEST` column to `DEST_BE_ID`.
+  - The data types of the `CREATE_TIME` and `SCHEDULE_TIME` columns have been changed from `DOUBLE` to `DATETIME`.
+- The `is_leader` label has been added to some FE metrics. [#63004](https://github.com/StarRocks/starrocks/pull/63004)
