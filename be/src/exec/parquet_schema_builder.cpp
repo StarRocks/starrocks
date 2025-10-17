@@ -175,12 +175,16 @@ static Status get_parquet_type_from_list(const ::parquet::schema::NodePtr& node,
     DCHECK(node->logical_type()->is_list());
 
     auto group_node = std::static_pointer_cast<::parquet::schema::GroupNode>(node);
-    DCHECK(group_node->field_count() == 1);
-    DCHECK(!group_node->is_repeated());
+    if (group_node->field_count() != 1) {
+        return Status::NotSupported(fmt::format("list 1st level group {} must have exactly one child, but got {}",
+                                                group_node->name(), group_node->field_count()));
+    }
 
     // 2nd level.
     auto list_node = group_node->field(0);
-    DCHECK(list_node->is_repeated());
+    if (!list_node->is_repeated()) {
+        return Status::NotSupported(fmt::format("list 2nd level node {} is not repeated", list_node->name()));
+    }
 
     if (list_node->is_group()) {
         auto list_group_node = std::static_pointer_cast<::parquet::schema::GroupNode>(list_node);
@@ -232,7 +236,8 @@ static Status get_parquet_type_from_list(const ::parquet::schema::NodePtr& node,
                 return Status::OK();
             }
         } else {
-            return Status::NotSupported("group must have at least one child");
+            return Status::NotSupported(
+                    fmt::format("list 2nd level group {} must have at least one child", list_group_node->name()));
         }
     } else {
         // 2-level encoding
