@@ -42,6 +42,12 @@ under the License.
         <jacoco.version>0.8.8</jacoco.version>
         <jprotobuf-precompile-plugin.version>2.2.12</jprotobuf-precompile-plugin.version>
         <python>python</python>
+        
+        <!-- async-profiler in UT -->
+        <async.profiler.enabled>${env.ASYNC_PROFILER_ENABLED:-true}</async.profiler.enabled>
+        <async.profiler.lib>${env.STARROCKS_HOME}/build-support/libasyncProfiler.so</async.profiler.lib>
+        <async.profiler.output>${env.STARROCKS_HOME}/output/fe/log/proc_profile/prof-%t-%p.html</async.profiler.output>
+        <async.profiler.arg>-agentpath:${async.profiler.lib}=start,event=cpu,file=${async.profiler.output}</async.profiler.arg>
     </properties>
 
     <profiles>
@@ -91,6 +97,18 @@ under the License.
             </activation>
             <properties>
                 <python>${env.PYTHON}</python>
+            </properties>
+        </profile>
+        <profile>
+            <id>async-profiler</id>
+            <activation>
+                <property>
+                    <name>env.ASYNC_PROFILER_ENABLED</name>
+                    <value>false</value>
+                </property>
+            </activation>
+            <properties>
+                <async.profiler.arg></async.profiler.arg>
             </properties>
         </profile>
     </profiles>
@@ -991,6 +1009,7 @@ under the License.
                     <reuseForks>false</reuseForks>
                     <argLine>
                         -javaagent:${settings.localRepository}/com/github/hazendaz/jmockit/jmockit/1.49.4/jmockit-1.49.4.jar
+                        ${async.profiler.arg}
                         -Xmx4096m
                         -XX:TieredStopAtLevel=1 -XX:CICompilerCount=1 -XX:-BackgroundCompilation -XX:+UseSerialGC
                         -Duser.timezone=Asia/Shanghai @{jacocoArgLine}
