@@ -30,7 +30,7 @@ from sqlalchemy.testing.assertions import AssertsCompiledSQL
 from sqlalchemy import Table, Integer, MetaData, select
 from sqlalchemy import schema, type_coerce, and_, cast
 
-from sqlalchemy.testing import fixtures
+from sqlalchemy.testing import fixtures, config
 from sqlalchemy.testing.schema import Column
 from sqlalchemy import testing, literal
 from sqlalchemy.testing.assertions import eq_
@@ -46,10 +46,9 @@ from test.unit import test_utils
 logger = logging.getLogger(__name__)
 
 
-class SRAssertsCompiledSQLMixin():
+class SRAssertsCompiledSQLMixin:
     def assert_compile_normalized(self, clause, expected, **kw):
         """Compile and compare SQL using normalize_sql for format-independent comparison."""
-        from sqlalchemy.testing import config
 
         dialect = kw.get('dialect')
         if dialect is None:
@@ -91,7 +90,7 @@ class CompileTest(fixtures.TestBase, AssertsCompiledSQL, SRAssertsCompiledSQLMix
     def test_create_primary_key_table(self):
         m = MetaData()
         tbl = Table(
-            'btable', m, Column("id", INTEGER, primary_key=True),
+            'btable', m, Column("id", INTEGER, primary_key=True, autoincrement=False), # primary key must be specified autoincrement=False if not wanted to be auto generated
             starrocks_primary_key="id",
             starrocks_distributed_by="HASH(id)",
             starrocks_properties={"replication_num": "3"}
@@ -417,7 +416,7 @@ class CTETest(_CTETest):
     def test_delete_scalar_subq_round_trip(self, connection):
         pass
 
-    @testing.skip('starrocks', 'Does not support resursive CTE')
+    @testing.skip('starrocks', 'Does not support recursive CTE')
     def test_select_recursive_round_trip(self, connection):
         pass
 

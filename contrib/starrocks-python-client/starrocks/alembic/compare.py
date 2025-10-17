@@ -1275,7 +1275,7 @@ def compare_starrocks_column_autoincrement(
             f"conn_col.autoincrement: {conn_col.autoincrement}, "
             f"metadata_col.autoincrement: {metadata_col.autoincrement}. "
             f"No ALTER statement will be generated automatically, "
-            f"Because we can't inpsect the column's autoincrement currently."
+            f"Because we can't inspect the column's autoincrement currently."
         )
     return None
 
