@@ -75,6 +75,7 @@ public class ProfileManager implements MemoryTrackable {
     public static final String QUERY_TYPE = "Query Type";
     public static final String QUERY_STATE = "Query State";
     public static final String SQL_STATEMENT = "Sql Statement";
+    public static final String SQL_DIALECT = "Sql Dialect";
     public static final String USER = "User";
     public static final String DEFAULT_DB = "Default Db";
     public static final String VARIABLES = "Variables";
@@ -89,7 +90,7 @@ public class ProfileManager implements MemoryTrackable {
 
     public static final ArrayList<String> PROFILE_HEADERS = new ArrayList<>(
             Arrays.asList(QUERY_ID, USER, DEFAULT_DB, SQL_STATEMENT, QUERY_TYPE,
-                    START_TIME, END_TIME, TOTAL_TIME, QUERY_STATE, WAREHOUSE_CNGROUP));
+                    START_TIME, END_TIME, TOTAL_TIME, QUERY_STATE, WAREHOUSE_CNGROUP, SQL_DIALECT));
 
     public static class ProfileElement {
         public Map<String, String> infoStrings = Maps.newHashMap();
