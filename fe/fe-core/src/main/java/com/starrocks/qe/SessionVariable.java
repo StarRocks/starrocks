@@ -952,6 +952,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_DROP_TABLE_CHECK_MV_DEPENDENCY = "enable_drop_table_check_mv_dependency";
 
+    public static final String ENABLE_INSERT_SELECT_EXTERNAL_AUTO_REFRESH = "enable_insert_select_external_auto_refresh";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -1943,6 +1945,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_DROP_TABLE_CHECK_MV_DEPENDENCY)
     public boolean enableDropTableCheckMvDependency = false;
+
+    @VarAttr(name = ENABLE_INSERT_SELECT_EXTERNAL_AUTO_REFRESH)
+    private boolean enableInsertSelectExternalAutoRefresh = true;
 
     public int getCboPruneJsonSubfieldDepth() {
         return cboPruneJsonSubfieldDepth;
@@ -5279,6 +5284,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableJSONV2DictOpt(boolean value) {
         this.cboJSONV2DictOpt = value;
+    }
+
+    public boolean isEnableInsertSelectExternalAutoRefresh() {
+        return enableInsertSelectExternalAutoRefresh;
+    }
+
+    public void setEnableInsertSelectExternalAutoRefresh(boolean enableInsertSelectExternalAutoRefresh) {
+        this.enableInsertSelectExternalAutoRefresh = enableInsertSelectExternalAutoRefresh;
     }
 
     // Serialize to thrift object
