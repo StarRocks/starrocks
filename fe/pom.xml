@@ -87,6 +87,7 @@ under the License.
         <commons-beanutils.version>1.11.0</commons-beanutils.version>
         <hbase.version>2.6.2</hbase.version>
         <async-profiler.version>4.0</async-profiler.version>
+        <maven.surefire.plugin.version>3.2.5</maven.surefire.plugin.version>
     </properties>
 
     <profiles>
