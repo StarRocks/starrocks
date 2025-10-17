@@ -291,7 +291,23 @@ public class ConnectProcessor {
         } else if (parsedStmt == null) {
             // invalid sql, record the original statement to avoid audit log can't replay
             // but redact sensitive credentials first
+<<<<<<< HEAD
             ctx.getAuditEventBuilder().setStmt(SqlCredentialRedactor.redact(origStmt));
+=======
+            if (Config.enable_sql_desensitize_in_log) {
+                return "this is a desensitized invalid sql";
+            }
+            return SqlCredentialRedactor.redact(origStmt);
+        } else if (AuditEncryptionChecker.needEncrypt(parsedStmt)) {
+            return SqlCredentialRedactor.redact(origStmt);
+        } else if (Config.enable_sql_desensitize_in_log) {
+            // Some information like username, password in the stmt should not be printed.
+            return AstToSQLBuilder.toSQL(parsedStmt, FormatOptions.allEnable()
+                            .setColumnSimplifyTableName(false)
+                            .setHideCredential(needEncrypt)
+                            .setEnableDigest(Config.enable_sql_desensitize_in_log))
+                    .orElse("this is a desensitized sql");
+>>>>>>> 4622db4700 ([Enhancement] Preserve SQL comments in audit logs when encryption is required (#63298))
         } else {
             ctx.getAuditEventBuilder().setStmt(LogUtil.removeLineSeparator(origStmt));
         }
