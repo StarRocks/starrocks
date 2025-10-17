@@ -20,7 +20,10 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.common.Config;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.qe.QueryDetail;
+import com.starrocks.qe.QueryDetailQueue;
 import com.starrocks.scheduler.mv.MVPCTBasedRefreshProcessor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.expression.DateLiteral;
@@ -377,5 +380,67 @@ public class PartitionBasedMvRefreshTest extends MVTestBase {
         starRocksAssert.dropTable("join_base_t1");
         starRocksAssert.dropTable("join_base_t2");
         starRocksAssert.dropMaterializedView("join_mv1");
+    }
+
+    @Test
+    public void testMVRefreshQueryDetailRecords() throws Exception {
+        // Enable query detail collection
+        boolean originalConfig = Config.enable_collect_query_detail_info;
+        Config.enable_collect_query_detail_info = true;
+
+        try {
+            String sql = "create materialized view test_mv_query_detail \n" +
+                    "refresh async \n" +
+                    "as " +
+                    " select k1, count(*) as cnt from t1 group by k1;";
+
+            starRocksAssert.withMaterializedView(sql,
+                    () -> {
+                        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+                        MaterializedView mv = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                .getTable(testDb.getFullName(), "test_mv_query_detail"));
+
+                        // Get initial query detail count
+                        long startTime = System.currentTimeMillis();
+                        refreshMVRange("test_mv_query_detail", true);
+                        // Get query details after MV refresh
+                        List<QueryDetail> queryDetails = QueryDetailQueue.getQueryDetailsAfterTime(startTime - 1000);
+
+                        // Filter for MV-related query details
+                        List<QueryDetail> mvQueryDetails = queryDetails.stream()
+                                .filter(detail -> detail.getQuerySource() == QueryDetail.QuerySource.MV)
+                                .toList();
+
+                        Assertions.assertTrue(mvQueryDetails.size() >= 2,
+                                "Expected at least 2 MV query detail records (RUNNING and FINISHED), but got " +
+                                        mvQueryDetails.size());
+
+                        // Find RUNNING and FINISHED records
+                        QueryDetail runningDetail = null;
+                        QueryDetail finishedDetail = null;
+
+                        for (QueryDetail detail : mvQueryDetails) {
+                            if (detail.getState() == QueryDetail.QueryMemState.RUNNING) {
+                                runningDetail = detail;
+                            } else if (detail.getState() == QueryDetail.QueryMemState.FINISHED) {
+                                finishedDetail = detail;
+                            }
+                        }
+
+                        Assertions.assertNotNull(runningDetail);
+                        Assertions.assertNotNull(finishedDetail);
+
+                        // Verify both records have the same queryId
+                        Assertions.assertEquals(runningDetail.getQueryId(), finishedDetail.getQueryId(),
+                                "RUNNING and FINISHED records should have the same queryId");
+                        // Verify both records have the same SQL
+                        Assertions.assertEquals(runningDetail.getSql(), finishedDetail.getSql(),
+                                "RUNNING and FINISHED records should have the same SQL");
+
+                    });
+        } finally {
+            // Restore original config
+            Config.enable_collect_query_detail_info = originalConfig;
+        }
     }
 }
