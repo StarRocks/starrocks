@@ -264,6 +264,6 @@ public class PaimonConnector implements Connector {
 
     @Override
     public void shutdown() {
-        GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor().unRegisterPaimonCatalog(catalogName);
+        GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor().unRegisterPaimonCatalog(catalogName + "-");
     }
 }
