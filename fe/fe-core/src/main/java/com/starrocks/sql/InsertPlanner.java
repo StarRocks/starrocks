@@ -187,6 +187,24 @@ public class InsertPlanner {
         return GenColumnDependency.PARTIALLY_DEPEND_ON_TARGET_COLUMNS;
     }
 
+    private static boolean checkIfUseColumnUpsertMode(ConnectContext session,
+                                                      InsertStmt insertStmt,
+                                                      OlapTable olapTable) {
+        String sessionPartialUpdateMode = session.getSessionVariable().getPartialUpdateMode();
+        List<String> targetColumnNames = insertStmt.getTargetColumnNames();
+        int insertColumnCount = targetColumnNames != null ? targetColumnNames.size() :
+                olapTable.getBaseSchemaWithoutGeneratedColumn().size();
+        int totalColumnCount = olapTable.getBaseSchemaWithoutGeneratedColumn().size();
+        // use COLUMN_UPSERT_MODE when explicitly set to column mode
+        if (sessionPartialUpdateMode.equalsIgnoreCase("column")) {
+            return true;
+        } else if (sessionPartialUpdateMode.equalsIgnoreCase("auto")) {
+            // @see com.starrocks.sql.analyzer.UpdateAnalyzer#checkIfUsePartialUpdate
+            return insertColumnCount <= 3 && insertColumnCount < totalColumnCount * 0.3;
+        }
+        return false;
+    }
+
     private void inferOutputSchemaForPartialUpdate(InsertStmt insertStmt) {
         outputBaseSchema = new ArrayList<>();
         outputFullSchema = new ArrayList<>();
@@ -400,7 +418,11 @@ public class InsertPlanner {
                         forceReplicatedStorage ? true : olapTable.enableReplicatedStorage(),
                         nullExprInAutoIncrement, enableAutomaticPartition, session.getCurrentWarehouseId());
                 if (insertStmt.usePartialUpdate()) {
-                    ((OlapTableSink) dataSink).setPartialUpdateMode(TPartialUpdateMode.AUTO_MODE);
+                    TPartialUpdateMode partialUpdateMode = TPartialUpdateMode.AUTO_MODE;
+                    if (checkIfUseColumnUpsertMode(session, insertStmt, olapTable)) {
+                        partialUpdateMode = TPartialUpdateMode.COLUMN_UPSERT_MODE;
+                    }
+                    ((OlapTableSink) dataSink).setPartialUpdateMode(partialUpdateMode);
                     if (insertStmt.autoIncrementPartialUpdate()) {
                         ((OlapTableSink) dataSink).setMissAutoIncrementColumn();
                     }
