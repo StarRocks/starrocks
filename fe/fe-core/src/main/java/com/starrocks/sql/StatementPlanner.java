@@ -107,9 +107,18 @@ public class StatementPlanner {
         return plan(stmt, session, TResultSinkType.MYSQL_PROTOCAL);
     }
 
+    private static void reconfigureSessionVariablesIfOnlyBeOfHighEnd(ConnectContext context) {
+        if (GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().isOnlyBeOfHighEnd()) {
+            context.getSessionVariable().setEnableParallelMerge(false);
+            context.getSessionVariable().setEnableGroupExecution(false);
+            context.getSessionVariable().setEnablePerBucketComputeOptimize(false);
+        }
+    }
+
     public static ExecPlan plan(StatementBase stmt, ConnectContext session,
                                 TResultSinkType resultSinkType) {
         if (stmt instanceof QueryStatement) {
+            reconfigureSessionVariablesIfOnlyBeOfHighEnd(session);
             OptimizerTraceUtil.logQueryStatement("after parse:\n%s", (QueryStatement) stmt);
         } else if (stmt instanceof DmlStmt) {
             try {
