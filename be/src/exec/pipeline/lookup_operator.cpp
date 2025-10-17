@@ -76,7 +76,7 @@ public:
 private:
     // collect input columns into one chunk
     Status _collect_input_columns(RuntimeState* state, const ChunkPtr& request_chunk);
-    
+
     StatusOr<LookUpTaskPtr> _create_task(const LookUpTaskContextPtr& ctx);
 
     LookUpTaskContextPtr _ctx;
@@ -93,15 +93,16 @@ void LookUpProcessor::close() {
 }
 // collect all input columns into one chunk
 Status LookUpProcessor::_collect_input_columns(RuntimeState* state, const ChunkPtr& request_chunk) {
-    DCHECK(_parent->_row_pos_descs.contains(_ctx->request_tuple_id)) << "missing request tuple id: " << _ctx->request_tuple_id;
+    DCHECK(_parent->_row_pos_descs.contains(_ctx->request_tuple_id))
+            << "missing request tuple id: " << _ctx->request_tuple_id;
     auto row_pos_desc = _parent->_row_pos_descs.at(_ctx->request_tuple_id);
-    for (const auto& slot_id: row_pos_desc->get_fetch_ref_slot_ids()) {
+    for (const auto& slot_id : row_pos_desc->get_fetch_ref_slot_ids()) {
         auto slot_desc = state->desc_tbl().get_slot_descriptor(slot_id);
         auto col = ColumnHelper::create_column(slot_desc->type(), slot_desc->is_nullable());
         request_chunk->append_column(std::move(col), slot_desc->id());
     }
     auto slot_desc = state->desc_tbl().get_slot_descriptor(row_pos_desc->get_row_source_slot_id());
-    // row source column from fetch node won't be nullable 
+    // row source column from fetch node won't be nullable
     auto row_source_col = ColumnHelper::create_column(slot_desc->type(), false);
     request_chunk->append_column(std::move(row_source_col), slot_desc->id());
 
@@ -115,11 +116,11 @@ StatusOr<LookUpTaskPtr> LookUpProcessor::_create_task(const LookUpTaskContextPtr
     auto tuple_id = ctx->request_tuple_id;
     auto row_pos_desc = _parent->_row_pos_descs.at(tuple_id);
     switch (row_pos_desc->type()) {
-        case RowPositionDescriptor::Type::ICEBERG_V3: {
-            return std::make_shared<IcebergV3LookUpTask>(ctx);
-        }
-        default:
-            return Status::InternalError("unknown row position descriptor type: " + std::to_string(row_pos_desc->type()));
+    case RowPositionDescriptor::Type::ICEBERG_V3: {
+        return std::make_shared<IcebergV3LookUpTask>(ctx);
+    }
+    default:
+        return Status::InternalError("unknown row position descriptor type: " + std::to_string(row_pos_desc->type()));
     }
 }
 
@@ -133,7 +134,7 @@ Status LookUpProcessor::process(RuntimeState* state) {
     auto request_chunk = std::make_shared<Chunk>();
     RETURN_IF_ERROR(status = _collect_input_columns(state, request_chunk));
     auto st = _create_task(_ctx);
-    if(!st.ok()) {
+    if (!st.ok()) {
         status = st.status();
         return status;
     }
@@ -234,10 +235,14 @@ Status LookUpOperator::_try_to_trigger_io_task(RuntimeState* state) {
 
         auto lookup_task_ctx = std::make_shared<LookUpTaskContext>();
         bool is_running = processor->is_running();
-        if (!is_running && _dispatcher->try_get(_driver_sequence, config::max_lookup_batch_request, lookup_task_ctx.get())) {
-            lookup_task_ctx->row_source_slot_id = _row_pos_descs.at(lookup_task_ctx->request_tuple_id)->get_row_source_slot_id();
-            lookup_task_ctx->lookup_ref_slot_ids = _row_pos_descs.at(lookup_task_ctx->request_tuple_id)->get_lookup_ref_slot_ids();
-            lookup_task_ctx->fetch_ref_slot_ids = _row_pos_descs.at(lookup_task_ctx->request_tuple_id)->get_fetch_ref_slot_ids();
+        if (!is_running &&
+            _dispatcher->try_get(_driver_sequence, config::max_lookup_batch_request, lookup_task_ctx.get())) {
+            lookup_task_ctx->row_source_slot_id =
+                    _row_pos_descs.at(lookup_task_ctx->request_tuple_id)->get_row_source_slot_id();
+            lookup_task_ctx->lookup_ref_slot_ids =
+                    _row_pos_descs.at(lookup_task_ctx->request_tuple_id)->get_lookup_ref_slot_ids();
+            lookup_task_ctx->fetch_ref_slot_ids =
+                    _row_pos_descs.at(lookup_task_ctx->request_tuple_id)->get_fetch_ref_slot_ids();
             lookup_task_ctx->profile = _unique_metrics.get();
             lookup_task_ctx->parent = this;
             processor->set_ctx(lookup_task_ctx);

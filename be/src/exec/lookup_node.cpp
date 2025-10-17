@@ -47,7 +47,8 @@ Status LookUpNode::init(const TPlanNode& tnode, RuntimeState* state) {
     for (const auto& [tuple_id, row_pos_desc] : _row_pos_descs) {
         tuple_ids.emplace_back(tuple_id);
     }
-    _dispatcher = state->exec_env()->lookup_dispatcher_mgr()->create_dispatcher(state, state->query_id(), id(), tuple_ids);
+    _dispatcher =
+            state->exec_env()->lookup_dispatcher_mgr()->create_dispatcher(state, state->query_id(), id(), tuple_ids);
 
     return Status::OK();
 }
@@ -69,8 +70,8 @@ void LookUpNode::close(RuntimeState* state) {
 
 pipeline::OpFactories LookUpNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     int32_t max_io_tasks = context->degree_of_parallelism();
-    auto lookup_op = std::make_shared<pipeline::LookUpOperatorFactory>(context->next_operator_id(), id(), _row_pos_descs,
-                                                                       _dispatcher, max_io_tasks);
+    auto lookup_op = std::make_shared<pipeline::LookUpOperatorFactory>(context->next_operator_id(), id(),
+                                                                       _row_pos_descs, _dispatcher, max_io_tasks);
 
     lookup_op->set_degree_of_parallelism(1);
     return OpFactories{std::move(lookup_op)};

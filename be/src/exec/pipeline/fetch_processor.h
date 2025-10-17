@@ -23,13 +23,13 @@
 #include "column/vectorized_fwd.h"
 #include "common/global_types.h"
 #include "exec/pipeline/fetch_sink_operator.h"
+#include "exec/pipeline/fetch_task.h"
 #include "exec/pipeline/lookup_request.h"
 #include "exec/sorting/sort_permute.h"
 #include "runtime/descriptors.h"
 #include "util/bthreads/bthread_shared_mutex.h"
 #include "util/phmap/phmap.h"
 #include "util/raw_container.h"
-#include "exec/pipeline/fetch_task.h"
 
 namespace starrocks::pipeline {
 
@@ -71,7 +71,8 @@ private:
     Status _fetch_data(RuntimeState* state, BatchUnitPtr& unit);
     StatusOr<ChunkPtr> _build_request_chunk(RuntimeState* state, const BatchUnitPtr& unit);
 
-    StatusOr<FetchTaskPtr> _create_fetch_task(TupleId request_tuple_id, const RowPositionDescriptor* row_pos_desc, BatchUnitPtr unit, int32_t source_id, const ChunkPtr& request_chunk);
+    StatusOr<FetchTaskPtr> _create_fetch_task(TupleId request_tuple_id, const RowPositionDescriptor* row_pos_desc,
+                                              BatchUnitPtr unit, int32_t source_id, const ChunkPtr& request_chunk);
 
     Status _gen_fetch_tasks(RuntimeState* state, const ChunkPtr& row_id_chunk, BatchUnitPtr& unit);
     Status _submit_fetch_tasks(RuntimeState* state, const BatchUnitPtr& unit);

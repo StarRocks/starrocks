@@ -45,7 +45,8 @@ bool FetchSinkOperator::is_finished() const {
 }
 
 Status FetchSinkOperator::set_finishing(RuntimeState* state) {
-    DLOG(INFO) << "[GLM] FetchSinkOperator::set_finishing, processor: " << (void*)_processor.get() << ", " << (void*)this;
+    DLOG(INFO) << "[GLM] FetchSinkOperator::set_finishing, processor: " << (void*)_processor.get() << ", "
+               << (void*)this;
     return _processor->set_sink_finishing(state);
 }
 

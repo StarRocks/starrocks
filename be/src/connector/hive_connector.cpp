@@ -25,10 +25,10 @@
 #include "exec/hdfs_scanner/hdfs_scanner_partition.h"
 #include "exec/hdfs_scanner/hdfs_scanner_text.h"
 #include "exec/hdfs_scanner/jni_scanner.h"
+#include "exec/pipeline/query_context.h"
+#include "exec/pipeline/scan/glm_manager.h"
 #include "exprs/expr.h"
 #include "storage/chunk_helper.h"
-#include "exec/pipeline/scan/glm_manager.h"
-#include "exec/pipeline/query_context.h"
 
 namespace starrocks::connector {
 
@@ -231,12 +231,14 @@ void HiveDataSource::_init_global_late_materialization_context(RuntimeState* sta
 
     if (will_be_lazy_read) {
         auto glm_ctx_mgr = state->query_ctx()->global_late_materialization_ctx_mgr();
-        pipeline::IcebergGlobalLateMaterilizationContext* glm_ctx = static_cast<pipeline::IcebergGlobalLateMaterilizationContext*>(
-            glm_ctx_mgr->get_or_create_ctx(row_source_slot_id, [&]() {
-                auto ctx = state->query_ctx()->object_pool()->add(new pipeline::IcebergGlobalLateMaterilizationContext());
-                ctx->hdfs_scan_node = _provider->_hdfs_scan_node;
-                return ctx;
-            }));
+        pipeline::IcebergGlobalLateMaterilizationContext* glm_ctx =
+                static_cast<pipeline::IcebergGlobalLateMaterilizationContext*>(
+                        glm_ctx_mgr->get_or_create_ctx(row_source_slot_id, [&]() {
+                            auto ctx = state->query_ctx()->object_pool()->add(
+                                    new pipeline::IcebergGlobalLateMaterilizationContext());
+                            ctx->hdfs_scan_node = _provider->_hdfs_scan_node;
+                            return ctx;
+                        }));
         _scan_range_id = glm_ctx->assign_scan_range_id(_scan_range);
     }
 }

@@ -22,6 +22,7 @@
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/scan/connector_scan_operator.h"
+#include "exec/pipeline/scan/glm_manager.h"
 #include "exec/spill/query_spill_manager.h"
 #include "exec/workgroup/work_group.h"
 #include "runtime/client_cache.h"
@@ -33,7 +34,6 @@
 #include "util/defer_op.h"
 #include "util/thread.h"
 #include "util/thrift_rpc_helper.h"
-#include "exec/pipeline/scan/glm_manager.h"
 
 namespace starrocks::pipeline {
 

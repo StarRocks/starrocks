@@ -39,7 +39,8 @@ public:
 
     const THdfsScanRange& get_hdfs_scan_range(int32_t scan_range_id) const {
         std::shared_lock lock(_mutex);
-        DCHECK(scan_range_id < hdfs_scan_ranges.size()) << "scan_range_id: " << scan_range_id << ", size: " << hdfs_scan_ranges.size();
+        DCHECK(scan_range_id < hdfs_scan_ranges.size())
+                << "scan_range_id: " << scan_range_id << ", size: " << hdfs_scan_ranges.size();
         return hdfs_scan_ranges[scan_range_id];
     }
 
@@ -54,15 +55,13 @@ class GlobalLateMaterilizationContextMgr {
 public:
     void add_ctx(int32_t row_source_slot_id, GlobalLateMaterilizationContext* ctx);
     GlobalLateMaterilizationContext* get_ctx(int32_t row_source_slot_id) const;
-    GlobalLateMaterilizationContext* get_or_create_ctx(int32_t row_source_slot_id,
-            const std::function<GlobalLateMaterilizationContext*()>& ctor_func);
+    GlobalLateMaterilizationContext* get_or_create_ctx(
+            int32_t row_source_slot_id, const std::function<GlobalLateMaterilizationContext*()>& ctor_func);
 
     using MutexType = std::shared_mutex;
-    using ContextMap =
-            phmap::parallel_flat_hash_map<int32_t, GlobalLateMaterilizationContext*, phmap::Hash<int32_t>, phmap::EqualTo<int32_t>,
-                                          phmap::Allocator<int32_t>, 4, MutexType>;
+    using ContextMap = phmap::parallel_flat_hash_map<int32_t, GlobalLateMaterilizationContext*, phmap::Hash<int32_t>,
+                                                     phmap::EqualTo<int32_t>, phmap::Allocator<int32_t>, 4, MutexType>;
 
     ContextMap _ctx_map;
-
 };
-}
+} // namespace starrocks::pipeline

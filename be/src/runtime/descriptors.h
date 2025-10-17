@@ -575,26 +575,24 @@ private:
 // used to describe row position, only used in global late materialization
 class RowPositionDescriptor {
 public:
-    enum Type: uint8_t {
+    enum Type : uint8_t {
         ICEBERG_V3 = 0,
     };
-    RowPositionDescriptor(Type type, SlotId row_source_slot_id, std::vector<SlotId> fetch_ref_slot_ids, std::vector<SlotId> lookup_ref_slot_ids):
-        _type(type), _row_source_slot_id(row_source_slot_id), _fetch_ref_slot_ids(std::move(fetch_ref_slot_ids)), _lookup_ref_slot_ids(std::move(lookup_ref_slot_ids)) {}
+    RowPositionDescriptor(Type type, SlotId row_source_slot_id, std::vector<SlotId> fetch_ref_slot_ids,
+                          std::vector<SlotId> lookup_ref_slot_ids)
+            : _type(type),
+              _row_source_slot_id(row_source_slot_id),
+              _fetch_ref_slot_ids(std::move(fetch_ref_slot_ids)),
+              _lookup_ref_slot_ids(std::move(lookup_ref_slot_ids)) {}
 
     virtual ~RowPositionDescriptor() = default;
 
     Type type() const { return _type; }
 
-    SlotId get_row_source_slot_id() const {
-        return _row_source_slot_id;
-    }
+    SlotId get_row_source_slot_id() const { return _row_source_slot_id; }
 
-    const std::vector<SlotId>& get_fetch_ref_slot_ids() const {
-        return _fetch_ref_slot_ids;
-    }
-    const std::vector<SlotId>& get_lookup_ref_slot_ids() const {
-        return _lookup_ref_slot_ids;
-    }
+    const std::vector<SlotId>& get_fetch_ref_slot_ids() const { return _fetch_ref_slot_ids; }
+    const std::vector<SlotId>& get_lookup_ref_slot_ids() const { return _lookup_ref_slot_ids; }
     std::string debug_string() const;
 
     static RowPositionDescriptor* from_thrift(const TRowPositionDescriptor& t_desc, ObjectPool* pool);
@@ -606,10 +604,12 @@ protected:
     std::vector<SlotId> _lookup_ref_slot_ids;
 };
 
-class IcebergV3RowPositionDescriptor: public RowPositionDescriptor {
+class IcebergV3RowPositionDescriptor : public RowPositionDescriptor {
 public:
-    IcebergV3RowPositionDescriptor(SlotId row_source_slot_id, std::vector<SlotId> fetch_ref_slot_ids, std::vector<SlotId> lookup_ref_slot_ids):
-        RowPositionDescriptor(ICEBERG_V3, row_source_slot_id, std::move(fetch_ref_slot_ids), std::move(lookup_ref_slot_ids)) {}
+    IcebergV3RowPositionDescriptor(SlotId row_source_slot_id, std::vector<SlotId> fetch_ref_slot_ids,
+                                   std::vector<SlotId> lookup_ref_slot_ids)
+            : RowPositionDescriptor(ICEBERG_V3, row_source_slot_id, std::move(fetch_ref_slot_ids),
+                                    std::move(lookup_ref_slot_ids)) {}
     ~IcebergV3RowPositionDescriptor() override = default;
 };
 

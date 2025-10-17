@@ -30,31 +30,33 @@ namespace starrocks::pipeline {
 class LookUpRequestContext {
 public:
     virtual ~LookUpRequestContext() = default;
-    
+
     virtual TupleId request_tuple_id() const = 0;
     virtual Status collect_input_columns(ChunkPtr chunk) = 0;
-    virtual StatusOr<size_t> fill_response(const ChunkPtr& result_chunk, SlotId source_id_slot, const std::vector<SlotDescriptor*>& slots, size_t start_offset) = 0;
+    virtual StatusOr<size_t> fill_response(const ChunkPtr& result_chunk, SlotId source_id_slot,
+                                           const std::vector<SlotDescriptor*>& slots, size_t start_offset) = 0;
     virtual void callback(const Status& status) = 0;
 
     int64_t receive_ts = 0;
 };
 using LookUpRequestContextPtr = std::shared_ptr<LookUpRequestContext>;
 
-class LocalLookUpRequestContext final: public LookUpRequestContext {
+class LocalLookUpRequestContext final : public LookUpRequestContext {
 public:
     LocalLookUpRequestContext(FetchTaskContextPtr ctx) : fetch_ctx(std::move(ctx)) {}
     ~LocalLookUpRequestContext() override = default;
 
     TupleId request_tuple_id() const override { return fetch_ctx->request_tuple_id; }
     Status collect_input_columns(ChunkPtr chunk) override;
-    StatusOr<size_t> fill_response(const ChunkPtr& result_chunk, SlotId source_id_slot, const std::vector<SlotDescriptor*>& slots, size_t start_offset) override;
-    void callback(const Status &status) override;
+    StatusOr<size_t> fill_response(const ChunkPtr& result_chunk, SlotId source_id_slot,
+                                   const std::vector<SlotDescriptor*>& slots, size_t start_offset) override;
+    void callback(const Status& status) override;
 
     FetchTaskContextPtr fetch_ctx;
 };
 using LocalLookUpRequestContextPtr = std::shared_ptr<LocalLookUpRequestContext>;
 
-class RemoteLookUpRequestContext final: public LookUpRequestContext {
+class RemoteLookUpRequestContext final : public LookUpRequestContext {
 public:
     RemoteLookUpRequestContext(::google::protobuf::RpcController* cntl, const PLookUpRequest* request,
                                PLookUpResponse* response, ::google::protobuf::Closure* done)
@@ -63,8 +65,9 @@ public:
 
     TupleId request_tuple_id() const override { return request->request_tuple_id(); }
     Status collect_input_columns(ChunkPtr chunk) override;
-    StatusOr<size_t> fill_response(const ChunkPtr& result_chunk, SlotId source_id_slot, const std::vector<SlotDescriptor*>& slots, size_t start_offset) override;
-    void callback(const Status &status) override;
+    StatusOr<size_t> fill_response(const ChunkPtr& result_chunk, SlotId source_id_slot,
+                                   const std::vector<SlotDescriptor*>& slots, size_t start_offset) override;
+    void callback(const Status& status) override;
 
     ::google::protobuf::RpcController* cntl = nullptr;
     const PLookUpRequest* request = nullptr;
@@ -111,16 +114,18 @@ public:
     ~IcebergV3LookUpTask() override = default;
 
     Status process(RuntimeState* state, const ChunkPtr& request_chunk) override;
-private:
-    StatusOr<ChunkPtr> _calculate_row_id_range(RuntimeState* state, const ChunkPtr& request_chunk,
-        phmap::flat_hash_map<int32_t, std::shared_ptr<SparseRange<int64_t>>>* row_id_ranges,
-        Buffer<uint32_t>* replicated_offsets);
 
-    StatusOr<ChunkPtr> _get_data_from_storage(RuntimeState* state, const std::vector<SlotDescriptor*>& slots,
-        const phmap::flat_hash_map<int32_t, std::shared_ptr<SparseRange<int64_t>>>& row_id_ranges);
+private:
+    StatusOr<ChunkPtr> _calculate_row_id_range(
+            RuntimeState* state, const ChunkPtr& request_chunk,
+            phmap::flat_hash_map<int32_t, std::shared_ptr<SparseRange<int64_t>>>* row_id_ranges,
+            Buffer<uint32_t>* replicated_offsets);
+
+    StatusOr<ChunkPtr> _get_data_from_storage(
+            RuntimeState* state, const std::vector<SlotDescriptor*>& slots,
+            const phmap::flat_hash_map<int32_t, std::shared_ptr<SparseRange<int64_t>>>& row_id_ranges);
 
     TExpr create_row_id_filter_expr(SlotId slot_id, const SparseRange<int64_t>& row_id_range);
 };
-
 
 } // namespace starrocks::pipeline

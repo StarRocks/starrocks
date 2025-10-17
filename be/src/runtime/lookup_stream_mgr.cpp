@@ -25,8 +25,8 @@
 
 namespace starrocks {
 
-LookUpDispatcher::LookUpDispatcher(RuntimeState* state, const TUniqueId& query_id,
-                                                PlanNodeId lookup_node_id, const std::vector<TupleId>& request_tuple_ids)
+LookUpDispatcher::LookUpDispatcher(RuntimeState* state, const TUniqueId& query_id, PlanNodeId lookup_node_id,
+                                   const std::vector<TupleId>& request_tuple_ids)
         : _state(state), _query_id(query_id), _lookup_node_id(lookup_node_id) {
     for (const auto& tuple_id : request_tuple_ids) {
         DLOG(INFO) << "create request queue for tuple_id: " << tuple_id;
@@ -46,10 +46,9 @@ Status LookUpDispatcher::add_request(const pipeline::LookUpRequestContextPtr& ct
     auto request_tuple_id = ctx->request_tuple_id();
     DCHECK(_request_queues.contains(request_tuple_id)) << "missing tuple_id: " << request_tuple_id;
     _request_queues.at(request_tuple_id)->enqueue(std::move(ctx));
-    DLOG(INFO) << "[GLM] add request to LookUpDispatcher, " 
-             << ", query id: " << print_id(_query_id) << ", target node id: " << _lookup_node_id
-             << ", tuple id: " << request_tuple_id
-             << ", dispacher: " << (void*)this;
+    DLOG(INFO) << "[GLM] add request to LookUpDispatcher, "
+               << ", query id: " << print_id(_query_id) << ", target node id: " << _lookup_node_id
+               << ", tuple id: " << request_tuple_id << ", dispacher: " << (void*)this;
     return Status::OK();
 }
 
@@ -71,10 +70,8 @@ bool LookUpDispatcher::try_get(int32_t driver_sequence, size_t max_num, pipeline
             ctx->request_ctxs.resize(num);
             ctx->request_tuple_id = target_tuple_id;
             DLOG(INFO) << "[GLM] try_get LookUpDispatcher, queue size: " << max_cnt
-                     << ", query id: " << print_id(_query_id)
-                     << ", target node id: " << _lookup_node_id
-                     << ", tuple id: " << target_tuple_id
-                     << ", dispacher: " << (void*)this;
+                       << ", query id: " << print_id(_query_id) << ", target node id: " << _lookup_node_id
+                       << ", tuple id: " << target_tuple_id << ", dispacher: " << (void*)this;
             return true;
         }
     }
@@ -91,12 +88,13 @@ bool LookUpDispatcher::has_data(int32_t driver_sequence) const {
 }
 
 std::shared_ptr<LookUpDispatcher> LookUpDispatcherMgr::create_dispatcher(RuntimeState* state, const TUniqueId& query_id,
-                                                                         PlanNodeId target_node_id, const std::vector<SlotId>& source_id_slots) {
+                                                                         PlanNodeId target_node_id,
+                                                                         const std::vector<SlotId>& source_id_slots) {
     DispatcherKey key{query_id, target_node_id};
-    auto [_, created] =
-            _dispatcher_map.try_emplace(key, std::make_shared<LookUpDispatcher>(state, query_id, target_node_id, source_id_slots));
+    auto [_, created] = _dispatcher_map.try_emplace(
+            key, std::make_shared<LookUpDispatcher>(state, query_id, target_node_id, source_id_slots));
     DLOG_IF(INFO, created) << "[GLM] create LookUpDispatcher for query_id=" << print_id(query_id)
-                << ", target_node_id=" << target_node_id;
+                           << ", target_node_id=" << target_node_id;
     return _dispatcher_map.at(key);
 }
 
@@ -118,7 +116,7 @@ void LookUpDispatcherMgr::remove_dispatcher(const TUniqueId& query_id, PlanNodeI
     if (_dispatcher_map.contains(key)) {
         _dispatcher_map.erase(key);
         DLOG(INFO) << "[GLM] remove LookUpDispatcher for query_id=" << print_id(query_id)
-                 << ", target_node_id=" << target_node_id;
+                   << ", target_node_id=" << target_node_id;
     }
 }
 

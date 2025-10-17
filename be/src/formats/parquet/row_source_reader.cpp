@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "formats/parquet/row_source_reader.h"
+
 #include "column/column.h"
 
 namespace starrocks::parquet {
@@ -25,4 +26,4 @@ Status RowSourceReader::read_range(const Range<uint64_t>& range, const Filter* f
     return Status::OK();
 }
 
-}
+} // namespace starrocks::parquet
