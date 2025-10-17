@@ -563,10 +563,10 @@ Status EngineStorageMigrationTask::_finish_primary_key_migration(const TabletSha
             break;
         }
 
+        auto manager = StorageEngine::instance()->update_manager();
         // clear index cache
         {
-            std::lock_guard lg(*tablet.updates()->get_index_lock());
-            auto manager = StorageEngine::instance()->update_manager();
+            std::lock_guard lg(*tablet->updates()->get_index_lock());
             auto& index_cache = manager->index_cache();
             auto index_entry = index_cache.get_or_create(_tablet_id);
             index_entry->update_expire_time(MonotonicMillis() + manager->get_cache_expire_ms());
