@@ -95,11 +95,12 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         this.delegate = delegate;
         this.icebergProperties = icebergProperties;
         boolean enableCache = icebergProperties.isEnableIcebergMetadataCache();
+        boolean enableTableCache = icebergProperties.isEnableIcebergTableCache();
         this.databases = newCacheBuilder(icebergProperties.getIcebergMetaCacheTtlSec(), NEVER_CACHE,
                 enableCache ? DEFAULT_CACHE_NUM : NEVER_CACHE).build();
         this.tables = newCacheBuilder(icebergProperties.getIcebergMetaCacheTtlSec(),
                 icebergProperties.getIcebergTableCacheRefreshIntervalSec(),
-                enableCache ? DEFAULT_CACHE_NUM : NEVER_CACHE)
+                enableTableCache ? DEFAULT_CACHE_NUM : NEVER_CACHE)
                 .removalListener((RemovalNotification<IcebergTableCacheKey, Table> n) -> {
                     LOG.debug("iceberg table cache removal: {}.{}, cause={}, evicted={}",
                             n.getKey().icebergTableName.dbName, n.getKey().icebergTableName.tableName,
