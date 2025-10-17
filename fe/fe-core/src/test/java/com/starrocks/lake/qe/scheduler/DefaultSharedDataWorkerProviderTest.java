@@ -55,6 +55,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
@@ -162,6 +163,12 @@ public class DefaultSharedDataWorkerProviderTest {
             }
         }
         return availList;
+    }
+
+    private ComputeNode createTestComputeNode(long id, String host, int port) {
+        ComputeNode node = new ComputeNode(id, host, port);
+        node.setAlive(true);
+        return node;
     }
 
     @Test
@@ -587,6 +594,160 @@ public class DefaultSharedDataWorkerProviderTest {
                     new NormalBackendSelector(scanNode, scanLocations, assignment, providerNoAvailNode, false);
             Assertions.assertThrows(NonRecoverableException.class, selector::computeScanRangeAssignment);
         }
+    }
+
+    @Test
+    public void testNormalBackendSelectorWithBackupNodeSelection() throws StarRocksException {
+        // Test the new backup node selection functionality in shared-data mode
+        HostBlacklist blockList = SimpleScheduler.getHostBlacklist();
+        blockList.clear();
+
+        // Create a custom WorkerProvider that allows backup node selection
+        ImmutableMap<Long, ComputeNode> allNodes = ImmutableMap.<Long, ComputeNode>builder()
+                .put(1L, createTestComputeNode(1L, "host1", 9030))
+                .put(2L, createTestComputeNode(2L, "host2", 9030))
+                .put(3L, createTestComputeNode(3L, "host3", 9030))
+                .put(4L, createTestComputeNode(4L, "host4", 9030))
+                .build();
+
+        // Make nodes 1 and 2 unavailable, nodes 3 and 4 available
+        ImmutableMap<Long, ComputeNode> availableNodes = ImmutableMap.of(
+                3L, allNodes.get(3L),
+                4L, allNodes.get(4L)
+        );
+
+        // Create a mock WorkerProvider that supports backup node selection
+        WorkerProvider backupWorkerProvider = new DefaultSharedDataWorkerProvider(allNodes, availableNodes,
+                WarehouseManager.DEFAULT_RESOURCE) {
+            @Override
+            public long selectBackupWorker(long workerId) {
+                // Map unavailable nodes to available backup nodes
+                if (workerId == 1L) {
+                    return 3L;
+                }
+                if (workerId == 2L) {
+                    return 4L;
+                }
+                return -1L;
+            }
+        };
+
+        int bucketNum = 2;
+        OlapScanNode scanNode = newOlapScanNode(1, bucketNum);
+
+        // Create scan locations where some replicas are on unavailable nodes
+        List<TScanRangeLocations> scanLocations = new ArrayList<>();
+
+        // First scan range: replicas on nodes 1 and 2 (both unavailable)
+        TScanRangeLocations locations1 = new TScanRangeLocations();
+        TInternalScanRange internalRange1 = new TInternalScanRange();
+        internalRange1.setRow_count(100);
+        locations1.setScan_range(new TScanRange().setInternal_scan_range(internalRange1));
+
+        TScanRangeLocation loc1a = new TScanRangeLocation();
+        loc1a.setBackend_id(1L); // Unavailable
+
+        TScanRangeLocation loc1b = new TScanRangeLocation();
+        loc1b.setBackend_id(2L); // Unavailable
+
+        locations1.addToLocations(loc1a);
+        locations1.addToLocations(loc1b);
+        scanLocations.add(locations1);
+
+        // Second scan range: replicas on nodes 3 and 4 (both available)
+        TScanRangeLocations locations2 = new TScanRangeLocations();
+        TInternalScanRange internalRange2 = new TInternalScanRange();
+        internalRange2.setRow_count(200);
+        locations2.setScan_range(new TScanRange().setInternal_scan_range(internalRange2));
+
+        TScanRangeLocation loc2a = new TScanRangeLocation();
+        loc2a.setBackend_id(3L); // Available
+
+        TScanRangeLocation loc2b = new TScanRangeLocation();
+        loc2b.setBackend_id(4L); // Available
+
+        locations2.addToLocations(loc2a);
+        locations2.addToLocations(loc2b);
+        scanLocations.add(locations2);
+
+        FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
+        NormalBackendSelector selector =
+                new NormalBackendSelector(scanNode, scanLocations, assignment, backupWorkerProvider, false);
+
+        // This should succeed with backup node selection
+        ExceptionChecker.expectThrowsNoException(selector::computeScanRangeAssignment);
+
+        // Check that assignments were made
+        Assertions.assertFalse(assignment.isEmpty());
+
+        // Check that backup nodes (3 and 4) were selected
+        boolean node3Selected = false;
+        boolean node4Selected = false;
+        for (long nodeId : assignment.keySet()) {
+            if (nodeId == 3L) {
+                node3Selected = true;
+            }
+            if (nodeId == 4L) {
+                node4Selected = true;
+            }
+        }
+
+        // At least one of the backup nodes should be selected
+        Assertions.assertTrue(node3Selected || node4Selected);
+    }
+
+    @Test
+    public void testNormalBackendSelectorWithNoBackupAvailable() {
+        // Test case where all replicas are unavailable and no backup is available
+        HostBlacklist blockList = SimpleScheduler.getHostBlacklist();
+        blockList.clear();
+
+        // Create a custom WorkerProvider that allows backup node selection
+        ImmutableMap<Long, ComputeNode> allNodes = ImmutableMap.<Long, ComputeNode>builder()
+                .put(1L, createTestComputeNode(1L, "host1", 9030))
+                .put(2L, createTestComputeNode(2L, "host2", 9030))
+                .build();
+
+        // No available nodes
+        ImmutableMap<Long, ComputeNode> availableNodes = ImmutableMap.of();
+
+        // Create a mock WorkerProvider that supports backup node selection but returns no backup
+        WorkerProvider noBackupWorkerProvider = new DefaultSharedDataWorkerProvider(allNodes, availableNodes,
+                WarehouseManager.DEFAULT_RESOURCE) {
+            @Override
+            public long selectBackupWorker(long workerId) {
+                // No backup available
+                return -1L;
+            }
+        };
+
+        int bucketNum = 1;
+        OlapScanNode scanNode = newOlapScanNode(1, bucketNum);
+
+        // Create scan locations where all replicas are on unavailable nodes
+        List<TScanRangeLocations> scanLocations = new ArrayList<>();
+
+        TScanRangeLocations locations1 = new TScanRangeLocations();
+        TInternalScanRange internalRange1 = new TInternalScanRange();
+        internalRange1.setRow_count(100);
+        locations1.setScan_range(new TScanRange().setInternal_scan_range(internalRange1));
+
+        TScanRangeLocation loc1a = new TScanRangeLocation();
+        loc1a.setBackend_id(1L); // Unavailable
+
+        TScanRangeLocation loc1b = new TScanRangeLocation();
+        loc1b.setBackend_id(2L); // Unavailable
+
+        locations1.addToLocations(loc1a);
+        locations1.addToLocations(loc1b);
+        scanLocations.add(locations1);
+
+        FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
+        NormalBackendSelector selector =
+                new NormalBackendSelector(scanNode, scanLocations, assignment, noBackupWorkerProvider, false);
+
+        // This should throw an exception since no backup nodes are available
+        Assertions.assertThrows(NonRecoverableException.class, selector::computeScanRangeAssignment);
     }
 
     @Test
