@@ -19,7 +19,7 @@
 namespace starrocks {
 
 std::mutex udf_downloder::_map_mutex;
-std::unordered_map<std::string, std::shared_ptr<std::mutex>> _path_mutexes;
+std::unordered_map<std::string, std::shared_ptr<std::mutex>> udf_downloder::_path_mutexes;
 
 Status udf_downloder::download_remote_file_2_local(const std::string& remotePath, std::string& localPath) {
     auto mtx = get_mutex_for_path(localPath);
