@@ -2253,4 +2253,18 @@ public class SystemInfoServiceEditLogTest {
         Assertions.assertEquals(DiskInfo.DiskState.ONLINE, followerDisk1.getState());
         Assertions.assertEquals(DiskInfo.DiskState.ONLINE, followerDisk3.getState());
     }
+
+    @Test
+    public void testReplayDropBackendNotExit() {
+        DropBackendInfo dropBackendInfo = new DropBackendInfo(10000);
+        // should not throw any exception
+        followerSystemInfoService.replayDropBackend(dropBackendInfo);
+    }
+
+    @Test
+    public void testReplayDropComputeNodeNotExit() {
+        DropComputeNodeLog dropComputeNodeInfo = new DropComputeNodeLog(10000);
+        // should not throw any exception
+        followerSystemInfoService.replayDropComputeNode(dropComputeNodeInfo);
+    }
 }
