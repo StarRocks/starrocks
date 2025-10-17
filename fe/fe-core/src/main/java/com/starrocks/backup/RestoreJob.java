@@ -1368,7 +1368,7 @@ public class RestoreJob extends AbstractJob {
                     } else {
                         BrokerDesc brokerDesc = new BrokerDesc(repo.getStorage().getProperties());
                         try {
-                            HdfsUtil.getTProperties(repo.getLocation(), brokerDesc, hdfsProperties);
+                            HdfsUtil.getTProperties(repo.getLocation(), brokerDesc.getProperties(), hdfsProperties);
                         } catch (StarRocksException e) {
                             status = new Status(ErrCode.COMMON_ERROR,
                                     "Get properties from " + repo.getLocation() + " error.");

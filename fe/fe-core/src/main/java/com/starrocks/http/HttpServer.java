@@ -41,6 +41,8 @@ import com.starrocks.http.action.BackendAction;
 import com.starrocks.http.action.HaAction;
 import com.starrocks.http.action.IndexAction;
 import com.starrocks.http.action.LogAction;
+import com.starrocks.http.action.ProcProfileAction;
+import com.starrocks.http.action.ProcProfileFileAction;
 import com.starrocks.http.action.QueryAction;
 import com.starrocks.http.action.QueryProfileAction;
 import com.starrocks.http.action.SessionAction;
@@ -241,6 +243,10 @@ public class HttpServer {
         ExecuteSqlAction.registerAction(controller);
         BackendActionV2.registerAction(controller);
         ComputeNodeActionV2.registerAction(controller);
+
+        // proc profile actions
+        ProcProfileAction.registerAction(controller);
+        ProcProfileFileAction.registerAction(controller);
 
         // meta service action
         ImageAction.registerAction(controller);

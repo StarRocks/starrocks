@@ -291,7 +291,8 @@ public class AggStateCombinatorTest extends MVTestBase {
                 "c26 varbinary,\n" +
                 "c27 map<varchar(1048576),varchar(1048576)>,\n" +
                 "c28 struct<col1 array<varchar(1048576)>>,\n" +
-                "c29 array<varchar(100)>";
+                "c29 array<varchar(100)>,\n" +
+                "c30 variant";
         String[] splits = define.split(",\n");
         for (String colType : splits) {
             String[] parts = colType.split(" ");
@@ -775,23 +776,23 @@ public class AggStateCombinatorTest extends MVTestBase {
             PlanTestBase.assertContains(plan, "  1:Project\n" +
                     "  |  output columns:\n" +
                     "  |  1 <-> [1: k1, DATE, true]\n" +
-                    "  |  32 <-> multi_distinct_sum_state[([8: c6, DOUBLE, true]); args: DOUBLE; " +
+                    "  |  33 <-> multi_distinct_sum_state[([8: c6, DOUBLE, true]); args: DOUBLE; " +
                     "result: VARBINARY; args nullable: true; result nullable: true]\n" +
-                    "  |  33 <-> multi_distinct_sum_state[([9: c7, FLOAT, true]); args: FLOAT; " +
+                    "  |  34 <-> multi_distinct_sum_state[([9: c7, FLOAT, true]); args: FLOAT; " +
                     "result: VARBINARY; args nullable: true; result nullable: true]\n" +
-                    "  |  34 <-> multi_distinct_sum_state[([2: c0, BOOLEAN, true]); args: BOOLEAN; " +
+                    "  |  35 <-> multi_distinct_sum_state[([2: c0, BOOLEAN, true]); args: BOOLEAN; " +
                     "result: VARBINARY; args nullable: true; result nullable: true]\n" +
-                    "  |  35 <-> multi_distinct_sum_state[([3: c1, TINYINT, true]); args: TINYINT; " +
+                    "  |  36 <-> multi_distinct_sum_state[([3: c1, TINYINT, true]); args: TINYINT; " +
                     "result: VARBINARY; args nullable: true; result nullable: true]\n" +
-                    "  |  36 <-> multi_distinct_sum_state[([4: c2, SMALLINT, true]); args: SMALLINT; " +
+                    "  |  37 <-> multi_distinct_sum_state[([4: c2, SMALLINT, true]); args: SMALLINT; " +
                     "result: VARBINARY; args nullable: true; result nullable: true]\n" +
-                    "  |  37 <-> multi_distinct_sum_state[([5: c3, INT, true]); args: INT; " +
+                    "  |  38 <-> multi_distinct_sum_state[([5: c3, INT, true]); args: INT; " +
                     "result: VARBINARY; args nullable: true; result nullable: true]\n" +
-                    "  |  38 <-> multi_distinct_sum_state[([6: c4, BIGINT, true]); args: BIGINT; " +
+                    "  |  39 <-> multi_distinct_sum_state[([6: c4, BIGINT, true]); args: BIGINT; " +
                     "result: VARBINARY; args nullable: true; result nullable: true]\n" +
-                    "  |  39 <-> multi_distinct_sum_state[([7: c5, LARGEINT, true]); args: LARGEINT; " +
+                    "  |  40 <-> multi_distinct_sum_state[([7: c5, LARGEINT, true]); args: LARGEINT; " +
                     "result: VARBINARY; args nullable: true; result nullable: true]\n" +
-                    "  |  40 <-> multi_distinct_sum_state[([10: c8, DECIMAL64(10,2), true]); args: DECIMAL64; " +
+                    "  |  41 <-> multi_distinct_sum_state[([10: c8, DECIMAL64(10,2), true]); args: DECIMAL64; " +
                     "result: VARBINARY; args nullable: true; result nullable: true]\n" +
                     "  |  cardinality: 1");
             PlanTestBase.assertContains(plan, "  0:OlapScanNode\n" +
@@ -914,7 +915,7 @@ public class AggStateCombinatorTest extends MVTestBase {
         {
             String sql1 = "select k1, " + Joiner.on(", ").join(stateColumns) + " from t1;";
             String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql1);
-            PlanTestBase.assertContains(plan, "32 <-> array_agg_state[([26: c24, VARCHAR, true]); args: VARCHAR; " +
+            PlanTestBase.assertContains(plan, "33 <-> array_agg_state[([26: c24, VARCHAR, true]); args: VARCHAR; " +
                     "result: struct<col1 array<varchar(100)>>; args nullable: true; result nullable: true]");
             PlanTestBase.assertContains(plan, "  0:OlapScanNode\n" +
                     "     table: t1, rollup: t1");
