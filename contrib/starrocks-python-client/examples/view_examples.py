@@ -166,8 +166,11 @@ def example_orm_usage():
                 users.c.name,
                 orders.c.amount.label("total_amount"),
                 orders.c.id.count().label("order_count")
-            ).select_from(users.join(orders, users.c.id == orders.c.user_id))
-            .group_by(users.c.id, users.c.name)
+            ).select_from(
+                users.join(orders, users.c.id == orders.c.user_id)
+            ).group_by(
+                users.c.id, users.c.name
+            )
             
             return cls.create_materialized_view(metadata, selectable)
     

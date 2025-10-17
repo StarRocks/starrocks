@@ -218,7 +218,7 @@ class TestCreateTableCompiler:
             CREATE TABLE generated_col_tbl(
                 k1 INTEGER,
                 k2 VARCHAR(50),
-                k3 INTEGER AS left(k2, 10)
+                k3 INTEGER AS (left(k2, 10))
             )
             DISTRIBUTED BY HASH(k1)
         """
