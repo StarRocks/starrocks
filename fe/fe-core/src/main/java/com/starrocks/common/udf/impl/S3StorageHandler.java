@@ -50,13 +50,13 @@ public class S3StorageHandler implements StorageHandler {
                 .build();
     }
 
-    public void getObject(String s3FilePath, File localFile) {
+    public void getObject(String s3FilePath, String localPath) {
         try {
             URI uri = URI.create(s3FilePath);
             String bucket = uri.getHost();
             String key = uri.getPath().startsWith("/") ? uri.getPath().substring(1) : uri.getPath();
             s3Client.getObject(
-                    GetObjectRequest.builder().bucket(bucket).key(key).build(), localFile.toPath());
+                    GetObjectRequest.builder().bucket(bucket).key(key).build(), new File(localPath).toPath());
             if (LOG.isDebugEnabled()) {
                 LOG.debug("get S3 file success for " + s3FilePath);
             }

@@ -96,14 +96,14 @@ public class CreateFunctionAnalyzer {
         returnType.analyze();
     }
 
-    private String getRealUrl(String url) {
+    private String getRealUrl(String url) throws IOException {
         if (!url.startsWith("http://") && !url.startsWith("file://")) {
             return getJUdfUrl(url);
         }
         return url;
     }
 
-    private String getJUdfUrl(String url) {
+    private String getJUdfUrl(String url) throws IOException {
         String fileName = url.substring(url.lastIndexOf("/") + 1);
         StorageVolume sv = GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getDefaultStorageVolume();
         if (sv == null) {
@@ -130,8 +130,8 @@ public class CreateFunctionAnalyzer {
         if (Strings.isNullOrEmpty(objectFile)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "No 'object_file' in properties");
         }
-        objectFile = getRealUrl(objectFile);
         try {
+            objectFile = getRealUrl(objectFile);
             URL url = new URL(objectFile);
             URLConnection urlConnection = url.openConnection();
             InputStream inputStream = urlConnection.getInputStream();
