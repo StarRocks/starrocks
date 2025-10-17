@@ -88,8 +88,7 @@ private:
     LookUpOperator* _parent = nullptr;
 };
 
-void LookUpProcessor::close() {
-}
+void LookUpProcessor::close() {}
 
 // collect all input columns into one chunk
 Status LookUpProcessor::_collect_input_columns(RuntimeState* state, const ChunkPtr& request_chunk) {
