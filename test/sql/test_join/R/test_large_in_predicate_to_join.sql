@@ -884,6 +884,20 @@ order by t.id;
 4	4000	dog	Category D	pending	68.7
 5	5000	elephant	Category E	active	94.1
 -- !result
+set enable_query_cache=true;
+-- result:
+-- !result
+select dim_id, count(dim_id) from t_dimension where dim_id in (1,2,3,4,5) group by dim_id order by dim_id;
+-- result:
+1	1
+2	1
+3	1
+4	1
+5	1
+-- !result
+set enable_query_cache=false;
+-- result:
+-- !result
 set large_in_predicate_threshold=100000;
 -- result:
 -- !result

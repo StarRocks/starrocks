@@ -99,4 +99,5 @@ public class AnalyzePredicateTest {
         analyzeSuccess("select * from test.tall where concat(ta, '_suffix') in ('a_suffix','b_suffix')");
         connectContext.getSessionVariable().setLargeInPredicateThreshold(100000);
     }
+
 }

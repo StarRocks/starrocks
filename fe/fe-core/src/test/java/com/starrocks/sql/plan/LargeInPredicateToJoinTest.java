@@ -14,11 +14,29 @@
 
 package com.starrocks.sql.plan;
 
+import com.google.common.collect.Lists;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.ExceptionChecker;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.LargeInPredicate;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.common.LargeInPredicateException;
+import com.starrocks.sql.optimizer.operator.logical.LogicalRawValuesOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalRawValuesOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LargeInPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 
 public class LargeInPredicateToJoinTest extends PlanTestBase {
 
@@ -304,5 +322,185 @@ public class LargeInPredicateToJoinTest extends PlanTestBase {
                 "     cardinality: 1\n" +
                 "     probe runtime filters:\n" +
                 "     - filter_id = 0, probe_expr = (1: v1)");
+    }
+
+    @Test
+    public void testPrint() throws Exception {
+        String sql = "select * from t0 where v1 in (1, 2, 3, 4)";
+        String plan = getLogicalFragmentPlan(sql);
+        assertContains(plan, "RAW_VALUES(constantType=BIGINT, count=4, sample=1, 2, 3, 4)");
+    }
+
+    @Test
+    public void testRawValuesOperatorMethods() {
+        List<ColumnRefOperator> columnRefs1 = Lists.newArrayList(
+                new ColumnRefOperator(1, Type.BIGINT, "const_value", true)
+        );
+        List<ColumnRefOperator> columnRefs2 = Lists.newArrayList(
+                new ColumnRefOperator(2, Type.BIGINT, "const_value", true)
+        );
+        
+        Type intType = Type.BIGINT;
+        Type stringType = Type.VARCHAR;
+        String rawText1 = "1, 2, 3, 4";
+        String rawText2 = "5, 6, 7, 8";
+        String longRawText = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25";
+        
+        List<Object> rawConstants1 = Lists.newArrayList(1L, 2L, 3L, 4L);
+        List<Object> rawConstants2 = Lists.newArrayList(5L, 6L, 7L, 8L);
+        List<Object> stringConstants = Lists.newArrayList("a", "b", "c", "d");
+        
+        // Test LogicalRawValuesOperator
+        LogicalRawValuesOperator logical1 = new LogicalRawValuesOperator(columnRefs1, intType, rawText1, rawConstants1, 4);
+        LogicalRawValuesOperator logical2 = new LogicalRawValuesOperator(columnRefs1, intType, rawText1, rawConstants1, 4);
+        LogicalRawValuesOperator logical3 = new LogicalRawValuesOperator(columnRefs2, intType, rawText2, rawConstants2, 4);
+        LogicalRawValuesOperator logical4 = new LogicalRawValuesOperator(columnRefs1, stringType, rawText1, stringConstants, 4);
+        LogicalRawValuesOperator logicalLong = new LogicalRawValuesOperator(columnRefs1, intType, longRawText, rawConstants1, 4);
+        
+        // Test equals method
+        assertEquals(logical1, logical2);
+        assertNotEquals(logical1, logical3);
+        assertNotEquals(logical1, logical4);
+        assertNotEquals(null, logical1);
+        assertNotEquals("not an operator", logical1);
+        assertEquals(logical1, logical1); // self equality
+        
+        // Test hashCode method
+        assertEquals(logical1.hashCode(), logical2.hashCode());
+        assertNotEquals(logical1.hashCode(), logical3.hashCode());
+        
+        // Test toString method
+        String toString1 = logical1.toString();
+        assertContains(toString1, "LogicalRawValues");
+        assertContains(toString1, "constantType=BIGINT");
+        assertContains(toString1, "count=4");
+        
+        // Test long text truncation in toString
+        String toStringLong = logicalLong.toString();
+        assertContains(toStringLong, "...");
+        
+        // Test PhysicalRawValuesOperator
+        PhysicalRawValuesOperator physical1 = new PhysicalRawValuesOperator(columnRefs1, intType, rawText1, rawConstants1, 4);
+        PhysicalRawValuesOperator physical2 = new PhysicalRawValuesOperator(columnRefs1, intType, rawText1, rawConstants1, 4);
+        PhysicalRawValuesOperator physical3 = new PhysicalRawValuesOperator(columnRefs2, intType, rawText2, rawConstants2, 4);
+        PhysicalRawValuesOperator physical4 = new PhysicalRawValuesOperator(
+                columnRefs1, stringType, rawText1, stringConstants, 4);
+        PhysicalRawValuesOperator physicalLong = new PhysicalRawValuesOperator(
+                columnRefs1, intType, longRawText, rawConstants1, 4);
+        
+        // Test equals method for PhysicalRawValuesOperator
+        assertEquals(physical1, physical2);
+        assertNotEquals(physical1, physical3);
+        assertNotEquals(physical1, physical4);
+        assertNotEquals(null, physical1);
+        assertNotEquals("not an operator", physical1);
+        assertEquals(physical1, physical1); // self equality
+        
+        // Test hashCode method for PhysicalRawValuesOperator
+        assertEquals(physical1.hashCode(), physical2.hashCode());
+        assertNotEquals(physical1.hashCode(), physical3.hashCode());
+        
+        // Test toString method for PhysicalRawValuesOperator
+        String physicalToString1 = physical1.toString();
+        assertContains(physicalToString1, "PhysicalRawValues");
+        assertContains(physicalToString1, "constantType=BIGINT");
+        assertContains(physicalToString1, "count=4");
+        
+        // Test long text truncation in toString for PhysicalRawValuesOperator
+        String physicalToStringLong = physicalLong.toString();
+        assertContains(physicalToStringLong, "...");
+        
+        // Test getter methods coverage
+        assertEquals(columnRefs1, logical1.getColumnRefSet());
+        assertEquals(intType, logical1.getConstantType());
+        assertEquals(rawText1, logical1.getRawText());
+        assertEquals(rawConstants1, logical1.getRawConstantList());
+        assertEquals(4, logical1.getConstantCount());
+        
+        assertEquals(intType, physical1.getConstantType());
+        assertEquals(rawText1, physical1.getRawText());
+        assertEquals(rawConstants1, physical1.getRawConstantList());
+        assertEquals(4, physical1.getConstantCount());
+        assertEquals(columnRefs1, physical1.getColumnRefSet());
+    }
+
+    @Test
+    public void testLargeInPredicateMethods() {
+
+        Type intType = Type.BIGINT;
+        Type stringType = Type.VARCHAR;
+        String rawText1 = "1, 2, 3, 4";
+        String rawText2 = "5, 6, 7, 8";
+        List<Object> rawConstants1 = Lists.newArrayList(1L, 2L, 3L, 4L);
+        List<Object> rawConstants2 = Lists.newArrayList(5L, 6L, 7L, 8L);
+        List<Object> stringConstants = Lists.newArrayList("a", "b", "c", "d");
+        
+        SlotRef slotRef1 = new SlotRef(null, "v1");
+        SlotRef slotRef2 = new SlotRef(null, "v2");
+        List<Expr> inList1 = Lists.newArrayList(new IntLiteral(1L, Type.BIGINT));
+        List<Expr> inList2 = Lists.newArrayList(new IntLiteral(2L, Type.BIGINT));
+        List<Expr> stringInList = Lists.newArrayList(new StringLiteral("a"));
+
+        LargeInPredicate largeIn1 = new LargeInPredicate(slotRef1, rawText1, rawConstants1, 4, false, inList1, null);
+        LargeInPredicate largeIn2 = new LargeInPredicate(slotRef1, rawText1, rawConstants1, 4, false, inList1, null);
+        LargeInPredicate largeIn3 = new LargeInPredicate(slotRef2, rawText2, rawConstants2, 4, false, inList2, null);
+        LargeInPredicate largeIn4 = new LargeInPredicate(slotRef1, rawText1, stringConstants, 4, true, stringInList, null);
+
+        // Test LargeInPredicate equals method
+        assertEquals(largeIn1, largeIn2);
+        assertNotEquals(largeIn1, largeIn3);
+        assertNotEquals(largeIn1, largeIn4);
+        assertNotEquals(null, largeIn1);
+        assertNotEquals("not a predicate", largeIn1);
+        assertEquals(largeIn1, largeIn1);
+
+        // Test LargeInPredicate hashCode method
+        assertEquals(largeIn1.hashCode(), largeIn2.hashCode());
+        assertNotEquals(largeIn1.hashCode(), largeIn3.hashCode());
+
+        // Test LargeInPredicate toString method
+        String largeInToString1 = largeIn1.toString();
+        assertContains(largeInToString1, "LargeInPredicate");
+
+        // Test LargeInPredicate getter methods
+        assertEquals(rawText1, largeIn1.getRawText());
+        assertEquals(rawConstants1, largeIn1.getRawConstantList());
+        assertEquals(4, largeIn1.getConstantCount());
+        assertEquals(4, largeIn1.getInElementNum());
+
+        // Test LargeInPredicateOperator by directly creating instances
+        ColumnRefOperator columnRef1 = new ColumnRefOperator(1, Type.BIGINT, "v1", true);
+        ColumnRefOperator columnRef2 = new ColumnRefOperator(2, Type.BIGINT, "v2", true);
+        
+        List<ScalarOperator> children1 = Lists.newArrayList(columnRef1);
+        List<ScalarOperator> children2 = Lists.newArrayList(columnRef2);
+        
+        LargeInPredicateOperator largeInOp1 = new LargeInPredicateOperator(rawText1, rawConstants1, 4, false, intType, children1);
+        LargeInPredicateOperator largeInOp2 = new LargeInPredicateOperator(rawText1, rawConstants1, 4, false, intType, children1);
+        LargeInPredicateOperator largeInOp3 = new LargeInPredicateOperator(rawText2, rawConstants2, 4, false, intType, children2);
+        LargeInPredicateOperator largeInOp4 = new LargeInPredicateOperator(
+                rawText1, stringConstants, 4, true, stringType, children1);
+
+        // Test LargeInPredicateOperator equals method
+        assertEquals(largeInOp1, largeInOp2);
+        assertNotEquals(largeInOp1, largeInOp3);
+        assertNotEquals(largeInOp1, largeInOp4);
+        assertNotEquals(null, largeInOp1);
+        assertEquals(largeInOp1, largeInOp1);
+
+        // Test LargeInPredicateOperator hashCode method
+        assertEquals(largeInOp1.hashCode(), largeInOp2.hashCode());
+        assertNotEquals(largeInOp1.hashCode(), largeInOp3.hashCode());
+
+        // Test LargeInPredicateOperator toString method
+        String largeInOpToString1 = largeInOp1.toString();
+        assertContains(largeInOpToString1, "v1 IN");
+
+        // Test LargeInPredicateOperator getter methods
+        assertEquals(rawText1, largeInOp1.getRawText());
+        assertEquals(rawConstants1, largeInOp1.getRawConstantList());
+        assertEquals(4, largeInOp1.getConstantCount());
+        assertEquals(intType, largeInOp1.getConstantType());
+        assertFalse(largeInOp1.isNotIn());
     }
 }

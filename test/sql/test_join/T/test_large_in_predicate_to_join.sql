@@ -525,4 +525,9 @@ where t.int_col in (1000, 2000, 3000, 4000, 5000)
   and l.status in ('active', 'pending', 'inactive', 'completed')
 order by t.id;
 
+-- Test 59: Test query cache
+set enable_query_cache=true;
+select dim_id, count(dim_id) from t_dimension where dim_id in (1,2,3,4,5) group by dim_id order by dim_id;
+set enable_query_cache=false;
+
 set large_in_predicate_threshold=100000;

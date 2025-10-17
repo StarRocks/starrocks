@@ -367,7 +367,6 @@ public class ConnectProcessor {
             QueryAttemptResult attemptResult = runWithParserStageRetry(originStmt);
             allStatementsAreSet = attemptResult.allStatementsAreSet;
             if (attemptResult.shouldTerminate) {
-                // Cleanup is handled uniformly in finally block
                 return;
             }
         } catch (AnalysisException e) {
