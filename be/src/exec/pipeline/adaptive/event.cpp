@@ -138,7 +138,7 @@ void CollectStatsSourceInitializeEvent::process(RuntimeState* state) {
             auto task_fn = [&driver, runtime_state = state, &pending_tasks, &completion_mutex, &completion_cv,
                             &first_error]() {
                 SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(runtime_state->instance_mem_tracker());
-                Status st = driver->prepare_operators_local_state(runtime_state);
+                Status st = driver->prepare_local_state(runtime_state);
                 if (!st.ok()) {
                     auto error_ptr = std::make_shared<Status>(std::move(st));
                     std::shared_ptr<Status> expected = nullptr;

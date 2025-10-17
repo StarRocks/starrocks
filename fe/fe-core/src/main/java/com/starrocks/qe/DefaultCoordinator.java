@@ -677,7 +677,7 @@ public class DefaultCoordinator extends Coordinator {
 
     private void maybeChangeScheduler() {
         if (executionDAG.getWorkerNum() == 1 && jobSpec.supportSingleNodeParallelSchedule() &&
-                scheduler instanceof AllAtOnceExecutionSchedule) {
+                scheduler instanceof AllAtOnceExecutionSchedule && !isLoadType()) {
             scheduler = new SingleNodeSchedule();
         }
     }
