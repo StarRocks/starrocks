@@ -455,7 +455,7 @@ public class LateMaterializationRewriter {
             IdentifyOperator identifyOperator = new IdentifyOperator(scanOperator);
 
             IcebergTable scanTable = (IcebergTable) scanOperator.getTable();
-            if (scanTable.getFormatVersion() >= 3) {
+            if (scanTable.getFormatVersion() >= 3 && scanTable.isParquetFormat()) {
                 Map<ColumnRefOperator, Column> columnRefOperatorColumnMap = scanOperator.getColRefToColumnMetaMap();
                 for (ColumnRefOperator columnRefOperator : columnRefOperatorColumnMap.keySet()) {
                     context.columnSources.put(columnRefOperator, identifyOperator);

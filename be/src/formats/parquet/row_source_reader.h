@@ -30,12 +30,12 @@ public:
 
     void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
                                  ColumnIOTypeFlags types, bool active) override {}
-                                 
+
     void select_offset_index(const SparseRange<uint64_t>& range, const uint64_t rg_first_row) override {}
 
     StatusOr<bool> row_group_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
-                                              CompoundNodeType pred_relation,
-                                              const uint64_t rg_first_row, const uint64_t rg_num_rows) const override {
+                                             CompoundNodeType pred_relation, const uint64_t rg_first_row,
+                                             const uint64_t rg_num_rows) const override {
         return Status::NotSupported("RowSourceReader::row_group_zone_map_filter");
     }
 
@@ -45,8 +45,7 @@ public:
         return Status::NotSupported("RowSourceReader::page_index_zone_map_filter");
     }
 
-
 private:
     int32_t _node_id = 0;
 };
-}
+} // namespace starrocks::parquet

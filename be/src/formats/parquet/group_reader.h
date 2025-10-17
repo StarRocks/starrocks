@@ -123,7 +123,6 @@ public:
                 int64_t row_group_first_row, int64_t row_group_first_row_id);
     ~GroupReader();
 
-
     // init used to init column reader, and devide active/lazy
     // then we can use inited column collect io range.
     Status init();

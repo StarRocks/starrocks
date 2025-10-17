@@ -22,6 +22,7 @@
 #include "bthread/mutex.h"
 #include "column/vectorized_fwd.h"
 #include "common/global_types.h"
+#include "exec/pipeline/lookup_request.h"
 #include "exec/pipeline/schedule/observer.h"
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/internal_service.pb.h"
@@ -32,13 +33,13 @@
 #include "util/phmap/phmap.h"
 #include "util/phmap/phmap_base.h"
 #include "util/phmap/phmap_utils.h"
-#include "exec/pipeline/lookup_request.h"
 
 namespace starrocks {
 
 class LookUpDispatcher {
 public:
-    LookUpDispatcher(RuntimeState* state, const TUniqueId& query_id, PlanNodeId lookup_node_id, const std::vector<TupleId>& request_tuple_ids);
+    LookUpDispatcher(RuntimeState* state, const TUniqueId& query_id, PlanNodeId lookup_node_id,
+                     const std::vector<TupleId>& request_tuple_ids);
 
     ~LookUpDispatcher() = default;
 
@@ -74,7 +75,6 @@ private:
     typedef phmap::flat_hash_map<TupleId, RequestsQueuePtr> RequestQueueMap;
     RequestQueueMap _request_queues;
 
-
     std::weak_ptr<pipeline::QueryContext> _query_ctx;
     pipeline::Observable _observable;
 };
@@ -86,7 +86,8 @@ public:
     LookUpDispatcherMgr() = default;
     ~LookUpDispatcherMgr() = default;
 
-    LookUpDispatcherPtr create_dispatcher(RuntimeState* state, const TUniqueId& query_id, PlanNodeId target_node_id, const std::vector<TupleId>& request_tuple_ids);
+    LookUpDispatcherPtr create_dispatcher(RuntimeState* state, const TUniqueId& query_id, PlanNodeId target_node_id,
+                                          const std::vector<TupleId>& request_tuple_ids);
 
     StatusOr<LookUpDispatcherPtr> get_dispatcher(const TUniqueId& query_id, PlanNodeId target_node_id);
     void remove_dispatcher(const TUniqueId& query_id, PlanNodeId target_node_id);

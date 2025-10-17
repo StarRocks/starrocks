@@ -32,10 +32,9 @@
 #include "formats/parquet/iceberg_row_id_reader.h"
 #include "formats/parquet/metadata.h"
 #include "formats/parquet/predicate_filter_evaluator.h"
+#include "formats/parquet/row_source_reader.h"
 #include "formats/parquet/scalar_column_reader.h"
 #include "formats/parquet/schema.h"
-#include "formats/parquet/iceberg_row_id_reader.h"
-#include "formats/parquet/row_source_reader.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/types.h"
 #include "simd/simd.h"
@@ -474,13 +473,14 @@ void GroupReader::_process_columns_and_conjunct_ctxs() {
 
     bool has_reserved_field_filter = false;
     if (_param.reserved_field_slots != nullptr) {
-        for (auto* slot: *_param.reserved_field_slots) {
+        for (auto* slot : *_param.reserved_field_slots) {
             SlotId slot_id = slot->id();
             if (conjunct_ctxs_by_slot.find(slot_id) != conjunct_ctxs_by_slot.end()) {
                 for (ExprContext* ctx : conjunct_ctxs_by_slot.at(slot_id)) {
                     DLOG(INFO) << "append reserved field slot conjunct ctx: " << ctx->root()->debug_string()
-                              << ", id: " << slot_id;
-                    if (_left_no_dict_filter_conjuncts_by_slot.find(slot_id) == _left_no_dict_filter_conjuncts_by_slot.end()) {
+                               << ", id: " << slot_id;
+                    if (_left_no_dict_filter_conjuncts_by_slot.find(slot_id) ==
+                        _left_no_dict_filter_conjuncts_by_slot.end()) {
                         _left_no_dict_filter_conjuncts_by_slot.insert({slot_id, std::vector<ExprContext*>{ctx}});
                     } else {
                         _left_no_dict_filter_conjuncts_by_slot[slot_id].emplace_back(ctx);
@@ -498,7 +498,7 @@ void GroupReader::_process_columns_and_conjunct_ctxs() {
         col_cost.insert({col_idx, flat_size});
         all_cost += flat_size;
     }
-    
+
     _column_read_order_ctx =
             std::make_unique<ColumnReadOrderCtx>(_active_column_indices, all_cost, std::move(col_cost));
 

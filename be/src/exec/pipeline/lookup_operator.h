@@ -104,7 +104,8 @@ public:
 
 class LookUpOperatorFactory final : public SourceOperatorFactory {
 public:
-    LookUpOperatorFactory(int32_t id, int32_t plan_node_id, phmap::flat_hash_map<TupleId, RowPositionDescriptor*> row_pos_descs,
+    LookUpOperatorFactory(int32_t id, int32_t plan_node_id,
+                          phmap::flat_hash_map<TupleId, RowPositionDescriptor*> row_pos_descs,
                           std::shared_ptr<LookUpDispatcher> dispatcher, int32_t max_io_tasks);
 
     ~LookUpOperatorFactory() override = default;

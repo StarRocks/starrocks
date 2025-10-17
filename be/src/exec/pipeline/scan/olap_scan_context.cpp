@@ -14,7 +14,6 @@
 
 #include "exec/pipeline/scan/olap_scan_context.h"
 
-
 #include "exec/olap_scan_node.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exprs/runtime_filter_bank.h"
