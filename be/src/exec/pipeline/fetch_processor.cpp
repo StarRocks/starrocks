@@ -133,6 +133,8 @@ Status FetchProcessor::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     return Status::OK();
 }
 
+// Builds a consolidated request chunk and expands it into concrete fetch tasks
+// for every tuple descriptor and source id referenced in the batch.
 Status FetchProcessor::_fetch_data(RuntimeState* state, BatchUnitPtr& unit) {
     DCHECK(!unit->input_chunks.empty()) << "input chunk should not be empty";
     // generate request chunk
@@ -145,6 +147,9 @@ Status FetchProcessor::_fetch_data(RuntimeState* state, BatchUnitPtr& unit) {
     return Status::OK();
 }
 
+// Concatenates buffered chunks column-wise so each slot has a dense
+// representation covering the entire batch. Also appends a synthetic position
+// column used later to restore row ordering.
 StatusOr<ChunkPtr> FetchProcessor::_build_request_chunk(RuntimeState* state, const BatchUnitPtr& unit) {
     SCOPED_TIMER(_build_row_id_chunk_timer);
 
@@ -188,6 +193,9 @@ StatusOr<ChunkPtr> FetchProcessor::_build_request_chunk(RuntimeState* state, con
     return chunk;
 }
 
+// Constructs a fetch task wrapper for the batch slice belonging to a specific
+// tuple descriptor and data source. Each task runs asynchronously and writes
+// results back into its context for `_build_output_chunk` to merge.
 StatusOr<FetchTaskPtr> FetchProcessor::_create_fetch_task(TupleId request_tuple_id,
                                                           const RowPositionDescriptor* row_pos_desc, BatchUnitPtr unit,
                                                           int32_t source_id, const ChunkPtr& request_chunk) {
@@ -207,6 +215,8 @@ StatusOr<FetchTaskPtr> FetchProcessor::_create_fetch_task(TupleId request_tuple_
     }
 }
 
+// Splits the request chunk by tuple / source id, records null-only segments,
+// and materializes per-source fetch tasks that can be dispatched independently.
 Status FetchProcessor::_gen_fetch_tasks(RuntimeState* state, const ChunkPtr& request_chunk, BatchUnitPtr& unit) {
     SCOPED_TIMER(_gen_fetch_tasks_timer);
     DLOG(INFO) << "gen fetch tasks, request chunk: " << request_chunk->debug_columns();
@@ -389,6 +399,10 @@ StatusOr<ChunkPtr> FetchProcessor::pull_chunk(RuntimeState* state) {
     return chunk;
 }
 
+// Reassembles fetched columns into the original chunk layout. It merges task
+// results, fills null placeholders for missing rows, restores ordering, and
+// appends lookup reference slots so that each input chunk becomes a complete
+// row set for the downstream consumer.
 Status FetchProcessor::_build_output_chunk(RuntimeState* state, const BatchUnitPtr& unit) {
     SCOPED_TIMER(_build_output_chunk_timer);
     const auto& all_fetch_tasks = unit->fetch_tasks;

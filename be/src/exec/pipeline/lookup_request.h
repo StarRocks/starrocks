@@ -23,10 +23,10 @@
 
 namespace starrocks::pipeline {
 
-// concepts
-// 1. LookUpRequestCtx: used to describe a single lookup request
-// 2. LookUpTaskContext: used to describe a lookup task, which may contain multiple lookup requests
-// 3. LookUpTask: used to process a lookup task, each data source should implement LookUpTask by itself
+// Describes the lifecycle of a single lookup request, regardless of whether
+// it is served locally or remotely. Implementations collect the columns needed
+// for the request, populate response columns, and notify the caller once the
+// fetch finishes.
 class LookUpRequestContext {
 public:
     virtual ~LookUpRequestContext() = default;
@@ -96,6 +96,9 @@ using LookUpTaskContextPtr = std::shared_ptr<LookUpTaskContext>;
 class LookUpTask;
 using LookUpTaskPtr = std::shared_ptr<LookUpTask>;
 
+// Groups lookup requests that share the same tuple descriptor and executes
+// them as a batch. Each concrete data source provides its own task that knows
+// how to process the request chunk and fill responses for its contexts.
 class LookUpTask {
 public:
     LookUpTask(LookUpTaskContextPtr ctx) : _ctx(std::move(ctx)) {}
@@ -108,6 +111,10 @@ protected:
     LookUpTaskContextPtr _ctx;
 };
 
+// Handles lookup batches against Iceberg v3 tables. The task expands the
+// incoming position metadata into row-id ranges, reads the matching rows from
+// storage, reorders them to the original request order, and forwards the data
+// back to every pending request context.
 class IcebergV3LookUpTask final : public LookUpTask {
 public:
     IcebergV3LookUpTask(LookUpTaskContextPtr ctx) : LookUpTask(std::move(ctx)) {}

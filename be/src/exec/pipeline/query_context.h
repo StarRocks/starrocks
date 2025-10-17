@@ -48,7 +48,6 @@ using std::chrono::steady_clock;
 using std::chrono::duration_cast;
 
 struct ConnectorScanOperatorMemShareArbitrator;
-struct GlobalLateMaterilizationCtx;
 class GlobalLateMaterilizationContextMgr;
 
 // The context for all fragment of one query in one BE

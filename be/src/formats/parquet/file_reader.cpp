@@ -167,7 +167,6 @@ Status FileReader::_build_split_tasks() {
 bool FileReader::_filter_group(const GroupReaderPtr& group_reader) {
     bool& filtered = group_reader->get_is_group_filtered();
     filtered = false;
-
     auto visitor = PredicateFilterEvaluator{_scanner_ctx->predicate_tree, group_reader.get(),
                                             _scanner_ctx->parquet_page_index_enable,
                                             _scanner_ctx->parquet_bloom_filter_enable};
