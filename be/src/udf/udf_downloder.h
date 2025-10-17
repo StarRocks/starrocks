@@ -37,15 +37,6 @@ private:
 
     static std::mutex _map_mutex;
 
-    static std::shared_ptr<std::mutex> get_mutex_for_path(const std::string& localPath) {
-        std::lock_guard<std::mutex> map_lock(_map_mutex);
-        auto iter = _path_mutexes.find(localPath);
-        if (iter == _path_mutexes.end()) {
-            auto mtx = std::make_shared<std::mutex>();
-            _path_mutexes.emplace(localPath, mtx);
-            return mtx;
-        }
-        return iter->second;
-    }
+    static std::shared_ptr<std::mutex> get_mutex_for_path(const std::string& localPath);
 };
 }

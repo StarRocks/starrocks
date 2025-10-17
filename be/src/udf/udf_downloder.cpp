@@ -59,4 +59,15 @@ Status udf_downloder::do_download(const std::string& remotePath, std::string& lo
         return Status::OK();
 }
 
+std::shared_ptr<std::mutex> udf_downloder::get_mutex_for_path(const std::string& localPath) {
+    std::lock_guard<std::mutex> map_lock(_map_mutex);
+    auto iter = _path_mutexes.find(localPath);
+    if (iter == _path_mutexes.end()) {
+        auto mtx = std::make_shared<std::mutex>();
+        _path_mutexes.emplace(localPath, mtx);
+        return mtx;
+    }
+    return iter->second;
+}
+
 }
