@@ -556,7 +556,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         LOG.info("Finished log erase tables: {}", StringUtils.join(tableIds, ","));
     }
 
-    private List<RecycleTableInfo> removeTableFromRecycleBin(List<Long> tableIds) {
+    List<RecycleTableInfo> removeTableFromRecycleBin(List<Long> tableIds) {
         List<RecycleTableInfo> removedTableInfos = Lists.newArrayListWithCapacity(tableIds.size());
         for (Long tableId : tableIds) {
             Map<Long, RecycleTableInfo> column = idToTableInfo.column(tableId);
@@ -1164,8 +1164,15 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         return info != null && asyncDeleteForTables.get(info) != null;
     }
 
-
-
+    @VisibleForTesting
+    synchronized boolean isDeletingTableDone(long id) {
+        RecycleTableInfo info = getRecycleTableInfo(id);
+        if (info == null) {
+            return true;
+        }
+        CompletableFuture<Boolean> future = asyncDeleteForTables.get(info);
+        return future != null && future.isDone();
+    }
 
     public static class RecycleDatabaseInfo implements Writable {
         @SerializedName("d")
