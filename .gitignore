@@ -90,8 +90,6 @@ be/tags
 build/
 cmake-build-debug/
 CMakeLists.txt
-<<<<<<< HEAD
-=======
 .claude
 CLAUDE.md
 .clangd
@@ -108,4 +106,3 @@ build-mac/CMakeFiles/
 build-mac/build.ninja
 build-mac/build_version.cc
 build-mac/cmake_install.cmake
->>>>>>> b136568241 ([BugFix] Fix Netty security vulnerabilities (#64142))
