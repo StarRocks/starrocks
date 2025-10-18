@@ -211,10 +211,10 @@ SASL_SOURCE=cyrus-sasl-2.1.28
 SASL_MD5SUM="7dcf3919b3085a1d09576438171bda91"
 
 # kerberos MIT
-KRB5_DOWNLOAD="https://kerberos.org/dist/krb5/1.19/krb5-1.19.4.tar.gz"
-KRB5_NAME=krb5-1.19.4.tar.gz
-KRB5_SOURCE=krb5-1.19.4
-KRB5_MD5SUM="ef76083e58f8c49066180642d7c2814a"
+KRB5_DOWNLOAD="https://kerberos.org/dist/krb5/1.21/krb5-1.21.3.tar.gz"
+KRB5_NAME=krb5-1.21.3.tar.gz
+KRB5_SOURCE=krb5-1.21.3
+KRB5_MD5SUM="beb34d1dfc72ba0571ce72bed03e06eb"
 
 # librdkafka
 LIBRDKAFKA_DOWNLOAD="https://github.com/confluentinc/librdkafka/archive/refs/tags/v2.11.0.tar.gz"
