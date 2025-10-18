@@ -14,8 +14,6 @@
 
 package com.starrocks.common.udf;
 
-import java.io.File;
-
 public interface StorageHandler {
 
     void getObject(String remotePath, String localPath) throws Exception;
