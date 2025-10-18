@@ -23,6 +23,7 @@
 #include "exec/pipeline/pipeline_driver_queue.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/workgroup/work_group_fwd.h"
+#include "mem_tracker_manager.h"
 #include "pipeline_executor_set_manager.h"
 #include "runtime/mem_tracker.h"
 #include "storage/olap_define.h"
@@ -114,11 +115,11 @@ using RunningQueryTokenPtr = std::unique_ptr<RunningQueryToken>;
 class WorkGroup : public std::enable_shared_from_this<WorkGroup> {
 public:
     WorkGroup(std::string name, int64_t id, int64_t version, size_t cpu_weight, double memory_limit, size_t concurrency,
-              double spill_mem_limit_threshold, WorkGroupType type);
+              double spill_mem_limit_threshold, WorkGroupType type, std::string mem_pool);
     explicit WorkGroup(const TWorkGroup& twg);
     ~WorkGroup() = default;
 
-    void init();
+    void init(std::shared_ptr<MemTracker>& parent_mem_tracker);
 
     TWorkGroup to_thrift() const;
     TWorkGroup to_thrift_verbose() const;
@@ -128,6 +129,7 @@ public:
     void copy_metrics(const WorkGroup& rhs);
 
     MemTracker* mem_tracker() { return _mem_tracker.get(); }
+
     std::shared_ptr<MemTracker> grab_mem_tracker() { return _mem_tracker; }
     const MemTracker* mem_tracker() const { return _mem_tracker.get(); }
     MemTracker* connector_scan_mem_tracker() { return _connector_scan_mem_tracker.get(); }
@@ -137,7 +139,7 @@ public:
     const std::string& name() const { return _name; }
     size_t cpu_weight() const { return _cpu_weight; }
     size_t exclusive_cpu_cores() const { return _exclusive_cpu_cores; }
-    size_t mem_limit() const { return _memory_limit; }
+    double mem_limit() const { return _memory_limit; }
     int64_t mem_limit_bytes() const { return _memory_limit_bytes; }
 
     int64_t mem_consumption_bytes() const { return _mem_tracker == nullptr ? 0L : _mem_tracker->consumption(); }
@@ -198,7 +200,7 @@ public:
     int64_t big_query_scan_rows_limit() const { return _big_query_scan_rows_limit; }
     void incr_cpu_runtime_ns(int64_t delta_ns) { _cpu_runtime_ns += delta_ns; }
     int64_t cpu_runtime_ns() const { return _cpu_runtime_ns; }
-
+    std::string mem_pool() const { return _mem_pool; }
     void set_shared_executors(PipelineExecutorSet* executors) { _executors = executors; }
     void set_exclusive_executors(std::unique_ptr<PipelineExecutorSet> executors) {
         _exclusive_executors = std::move(executors);
@@ -212,6 +214,7 @@ public:
     static constexpr int64 DEFAULT_MV_WG_ID = 1;
     static constexpr int64 DEFAULT_VERSION = 0;
     static constexpr int64 DEFAULT_MV_VERSION = 1;
+    inline static std::string DEFAULT_MEM_POOL{"default_mem_pool"};
 
     // Yield scan io task when maximum time in nano-seconds has spent in current execution round.
     static constexpr int64_t YIELD_MAX_TIME_SPENT = 100'000'000L;
@@ -240,7 +243,9 @@ private:
     double _spill_mem_limit_threshold = 1.0;
     int64_t _spill_mem_limit_bytes = -1;
 
+    std::string _mem_pool;
     std::shared_ptr<MemTracker> _mem_tracker = nullptr;
+    std::shared_ptr<MemTracker> _shared_mem_tracker = nullptr;
     std::shared_ptr<MemTracker> _connector_scan_mem_tracker = nullptr;
 
     WorkGroupDriverSchedEntity _driver_sched_entity;
@@ -330,7 +335,7 @@ private:
     std::list<int128_t> _workgroup_expired_versions;
 
     std::atomic<size_t> _sum_cpu_weight = 0;
-
+    MemTrackerManager _shared_mem_tracker_manager;
     std::once_flag init_metrics_once_flag;
     std::unordered_map<std::string, WorkGroupMetricsPtr> _wg_metrics;
 };
