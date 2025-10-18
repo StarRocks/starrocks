@@ -23,12 +23,9 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.UUIDUtil;
-<<<<<<< HEAD
-=======
 import com.starrocks.qe.QueryDetail;
 import com.starrocks.qe.QueryDetailQueue;
 import com.starrocks.scheduler.mv.MVPCTBasedRefreshProcessor;
->>>>>>> a3fc16308c ([BugFix] add both RUNNING & FINISHED query detail for MV refresh (#64191))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
@@ -390,7 +387,6 @@ public class PartitionBasedMvRefreshTest extends MVTestBase {
         starRocksAssert.dropMaterializedView("join_mv1");
     }
 
-<<<<<<< HEAD
     private static File newFolder(File root, String... subDirs) throws IOException {
         String subFolder = String.join("/", subDirs);
         File result = new File(root, subFolder);
@@ -398,7 +394,8 @@ public class PartitionBasedMvRefreshTest extends MVTestBase {
             throw new IOException("Couldn't create folders " + root);
         }
         return result;
-=======
+    }
+
     @Test
     public void testMVRefreshQueryDetailRecords() throws Exception {
         // Enable query detail collection
@@ -459,6 +456,5 @@ public class PartitionBasedMvRefreshTest extends MVTestBase {
             // Restore original config
             Config.enable_collect_query_detail_info = originalConfig;
         }
->>>>>>> a3fc16308c ([BugFix] add both RUNNING & FINISHED query detail for MV refresh (#64191))
     }
 }
