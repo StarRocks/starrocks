@@ -1261,6 +1261,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         ctx.setStmtId(STMT_ID_GENERATOR.incrementAndGet());
         logger.info("[QueryId:{}] start to refresh mv in DML", ctx.getQueryId());
         try {
+            executor.addRunningQueryDetail(insertStmt);
             executor.handleDMLStmtWithProfile(execPlan, insertStmt);
         } catch (Exception e) {
             logger.warn("[QueryId:{}] refresh mv {} failed in DML", ctx.getQueryId(), e);
@@ -1268,6 +1269,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         } finally {
             logger.info("[QueryId:{}] finished to refresh mv in DML", ctx.getQueryId());
             auditAfterExec(mvContext, executor.getParsedStmt(), executor.getQueryStatisticsForAuditLog());
+            executor.addFinishedQueryDetail();
         }
     }
 
