@@ -14,6 +14,7 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.collect.ImmutableList;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -46,6 +47,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
@@ -142,12 +144,31 @@ public class CatalogRecycleBinLakeTableTest {
 
     private static void waitTableToBeDone(CatalogRecycleBin recycleBin, long id, long time) {
         while (recycleBin.isDeletingTable(id)) {
-            recycleBin.eraseTable(time);
+            if (recycleBin.isDeletingTableDone(id)) {
+                recycleBin.eraseTable(time);
+            }
             try {
                 Thread.sleep(100);
             } catch (Exception ignore) {
             }
         }
+    }
+
+    private static void waitAllTablesToBeDone(CatalogRecycleBin recycleBin, List<Long> ids, long time) {
+        ids.forEach(x -> Assertions.assertTrue(recycleBin.isDeletingTable(x)));
+        long doingCount = ids.size();
+        // Note that the eraseTable() will add new async delete tasks if the deletion failed but retryable.
+        // In case of multiple tables in the recycle bin, we must wait until all tables are done before calling
+        // the eraseTable(). Otherwise the completed retryable tables will be added into the async delete tasks again.
+        while (doingCount > 0) {
+            doingCount = ids.stream().filter(x -> !recycleBin.isDeletingTableDone(x)).count();
+            try {
+                Thread.sleep(100);
+            } catch (Exception ignore) {
+                // nothing to do
+            }
+        }
+        recycleBin.eraseTable(time);
     }
 
     private static void waitPartitionToBeDone(CatalogRecycleBin recycleBin, long id, long time) {
@@ -376,11 +397,23 @@ public class CatalogRecycleBinLakeTableTest {
         // Now the retry interval has reached
         long delay = Math.max(Config.catalog_trash_expire_second * 1000, CatalogRecycleBin.getMinEraseLatency()) + 1;
         recycleBin.eraseTable(System.currentTimeMillis() + delay);
-        waitTableToBeDone(recycleBin, table1.getId(), System.currentTimeMillis() + delay);
-        waitTableToBeDone(recycleBin, table2.getId(), System.currentTimeMillis() + delay);
+
+        List<Long> tableIds = ImmutableList.of(table1.getId(), table2.getId());
+        // both tables should be submitted for deletion, the future is saved in asyncDeleteForTables
+        Assertions.assertTrue(recycleBin.isDeletingTable(table1.getId()));
+        Assertions.assertTrue(recycleBin.isDeletingTable(table2.getId()));
+        // must wait all tables done and then do the cleanup with eraseTable()
+        waitAllTablesToBeDone(recycleBin, tableIds, System.currentTimeMillis() + delay);
+
         Assertions.assertThrows(DdlException.class, () -> recoverDatabase(connectContext, recoverDbSql));
         Assertions.assertNotNull(recycleBin.getTable(db.getId(), table1.getId()));
         Assertions.assertNotNull(recycleBin.getTable(db.getId(), table2.getId()));
+
+        // NOTE: the tables are still in recycle bin because the deletion failed, may affect other cases running
+        // after this one, so here we clear them directly from RecycleBin.
+        recycleBin.removeTableFromRecycleBin(tableIds);
+        Assertions.assertNull(recycleBin.getTable(db.getId(), table1.getId()));
+        Assertions.assertNull(recycleBin.getTable(db.getId(), table2.getId()));
     }
 
     @Test
