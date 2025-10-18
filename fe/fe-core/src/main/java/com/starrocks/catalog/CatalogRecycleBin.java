@@ -1073,7 +1073,6 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         return info != null && asyncDeleteForTables.get(info) != null;
     }
 
-<<<<<<< HEAD
     @Override
     public void write(DataOutput out) throws IOException {
         int count = idToDatabase.size();
@@ -1106,7 +1105,8 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
             out.writeLong(entry.getKey());
             out.writeLong(entry.getValue());
         }
-=======
+    }
+
     @VisibleForTesting
     synchronized boolean isDeletingTableDone(long id) {
         RecycleTableInfo info = getRecycleTableInfo(id);
@@ -1115,7 +1115,6 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         }
         CompletableFuture<Boolean> future = asyncDeleteForTables.get(info);
         return future != null && future.isDone();
->>>>>>> dd2ded9cc9 ([UT] fix unstable FE UT CatalogRecycleBinLakeTableTest.testRecycleLakeDatabase (#64145))
     }
 
     public static class RecycleDatabaseInfo implements Writable {
