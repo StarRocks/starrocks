@@ -17,6 +17,7 @@ package com.starrocks.connector.paimon;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
@@ -404,5 +405,38 @@ public class PaimonPredicateConverterTest {
         CastOperator cast99 = new CastOperator(com.starrocks.type.DecimalType.DEFAULT_DECIMAL128, F7);
         result = CONVERTER.convert(new BinaryPredicateOperator(BinaryType.EQ, cast99, d));
         Assertions.assertNull(result);
+    }
+
+    @Test
+    public void testOrWithFunction() {
+        //    (f0 = 44 and case when f0 = 44 then 'test')
+        // OR (f0 <= 46 and case when f0 = 44 then 'test')
+        // OR(f0 <= 30 and case when f0 = 44 then 'test')
+        // return f0 = 44 OR f0 <= 46 OR f0 <= 20
+        BinaryPredicateOperator op2 = new BinaryPredicateOperator(
+                BinaryType.EQ, F0, ConstantOperator.createInt(44));
+        CaseWhenOperator caseWhenOperator = new CaseWhenOperator(IntegerType.INT, op2, null,
+                Lists.newArrayList(op2, ConstantOperator.createVarchar("test")));
+        ScalarOperator op20 = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND, op2,
+                caseWhenOperator.clone());
+
+        BinaryPredicateOperator op12 = new BinaryPredicateOperator(
+                BinaryType.LE, F0, ConstantOperator.createInt(46));
+        ScalarOperator op21 = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND, op12,
+                caseWhenOperator.clone());
+
+        BinaryPredicateOperator op13 = new BinaryPredicateOperator(
+                BinaryType.LE, F0, ConstantOperator.createInt(20));
+        ScalarOperator op22 = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND, op13,
+                caseWhenOperator.clone());
+
+        CompoundPredicateOperator compoundPredicateOperator =
+                new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR, op20, op21);
+        CompoundPredicateOperator compoundPredicateOperator1 =
+                new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR, compoundPredicateOperator,
+                        op22);
+        CompoundPredicate convert = (CompoundPredicate) CONVERTER.convert(compoundPredicateOperator1);
+        Assertions.assertTrue(
+                "Or([Or([Equal(f0, 44), LessOrEqual(f0, 46)]), LessOrEqual(f0, 20)])".equals(convert.toString()));
     }
 }

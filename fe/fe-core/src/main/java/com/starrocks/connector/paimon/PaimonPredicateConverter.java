@@ -109,6 +109,11 @@ public class PaimonPredicateConverter extends ScalarOperatorVisitor<Predicate, V
             if (left != null && right != null) {
                 return (op == CompoundPredicateOperator.CompoundType.OR) ? PredicateBuilder.or(left, right) :
                         PredicateBuilder.and(left, right);
+            } else if (left != null && op == CompoundPredicateOperator.CompoundType.AND) {
+                //if op=and, return the predicates that are not null.
+                return left;
+            } else if (right != null && op == CompoundPredicateOperator.CompoundType.AND) {
+                return right;
             }
         }
         return null;
