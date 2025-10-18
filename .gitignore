@@ -90,22 +90,3 @@ be/tags
 build/
 cmake-build-debug/
 CMakeLists.txt
-<<<<<<< HEAD
-=======
-.claude
-CLAUDE.md
-.clangd
-.cursor/
-
-
-!build-mac/CMakeLists.txt
-# build-mac generated files
-build-mac/.ninja_deps
-build-mac/.ninja_lock
-build-mac/.ninja_log
-build-mac/CMakeCache.txt
-build-mac/CMakeFiles/
-build-mac/build.ninja
-build-mac/build_version.cc
-build-mac/cmake_install.cmake
->>>>>>> b136568241 ([BugFix] Fix Netty security vulnerabilities (#64142))
