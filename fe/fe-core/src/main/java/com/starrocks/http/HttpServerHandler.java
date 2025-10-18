@@ -197,10 +197,11 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
 
     private BaseAction getAction(BaseRequest request) {
         String uri = request.getRequest().uri();
+        String baseUri = uri.split("\\?")[0];
         // ignore this request, which is a default request from client's browser.
-        if (uri.endsWith("/favicon.ico")) {
+        if (baseUri.endsWith("/favicon.ico")) {
             return NotFoundAction.getNotFoundAction();
-        } else if (uri.equals("/")) {
+        } else if (baseUri.equals("/")) {
             return new IndexAction(controller);
         }
 
