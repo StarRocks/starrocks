@@ -31,10 +31,10 @@ public class UDFDownloader {
 
     private static final Logger LOG = LogManager.getLogger(UDFDownloader.class);
 
-    private static final ConcurrentHashMap<String, Object> pathLocks = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<String, Object> LOCK = new ConcurrentHashMap<>();
 
     private static Object getLockForPath(String path) {
-        return pathLocks.computeIfAbsent(path, k -> new Object());
+        return LOCK.computeIfAbsent(path, k -> new Object());
     }
 
     public static void download2Local(StorageVolume sv, String remotePath, String localPath) throws IOException {
