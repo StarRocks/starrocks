@@ -388,6 +388,8 @@ public:
 
     bool rowset_check_file_existence() const;
 
+    std::shared_timed_mutex* get_index_lock() { return &_index_lock; }
+
 private:
     friend class Tablet;
     friend class PrimaryIndex;
@@ -511,10 +513,13 @@ private:
 
     bool compaction_running() { return _compaction_running; }
 
+<<<<<<< HEAD
     std::shared_timed_mutex* get_index_lock() { return &_index_lock; }
 
     StatusOr<ExtraFileSize> _get_extra_file_size() const;
 
+=======
+>>>>>>> 60d5b6d0e7 ([BugFix] Resolve issues with tablet migration and pk index lookup concurrency (#64164))
     bool _use_light_apply_compaction(Rowset* rowset);
 
     Status _light_apply_compaction_commit(const EditVersion& version, Rowset* output_rowset, PrimaryIndex* index,
