@@ -69,12 +69,12 @@ public:
 
     // Extended encryption function, supports IV string and AAD (for GCM mode)
     static int encrypt_ex(AesMode mode, const unsigned char* source, uint32_t source_length, const unsigned char* key,
-                          uint32_t key_length, const char* iv_str, int iv_input_length, bool padding,
+                          uint32_t key_length, const char* iv_str, uint32_t iv_input_length, bool padding,
                           unsigned char* encrypt, const unsigned char* aad = nullptr, uint32_t aad_length = 0);
 
     // Extended decryption function, supports IV string and AAD (for GCM mode)
     static int decrypt_ex(AesMode mode, const unsigned char* encrypt, uint32_t encrypt_length, const unsigned char* key,
-                          uint32_t key_length, const char* iv_str, int iv_input_length, bool padding,
+                          uint32_t key_length, const char* iv_str, uint32_t iv_input_length, bool padding,
                           unsigned char* decrypt_content, const unsigned char* aad = nullptr, uint32_t aad_length = 0);
 
     // Get AES mode from string

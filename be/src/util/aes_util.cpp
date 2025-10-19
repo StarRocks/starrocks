@@ -226,7 +226,7 @@ static int do_gcm_encrypt(EVP_CIPHER_CTX* cipher_ctx, const EVP_CIPHER* cipher, 
 
 // Extended encryption function, supports IV string and AAD
 int AesUtil::encrypt_ex(AesMode mode, const unsigned char* source, uint32_t source_length, const unsigned char* key,
-                        uint32_t key_length, const char* iv_str, int iv_input_length, bool padding,
+                        uint32_t key_length, const char* iv_str, uint32_t iv_input_length, bool padding,
                         unsigned char* encrypt, const unsigned char* aad, uint32_t aad_length) {
     const EVP_CIPHER* cipher = get_evp_type(mode);
     if (cipher == nullptr) {
@@ -245,8 +245,9 @@ int AesUtil::encrypt_ex(AesMode mode, const unsigned char* source, uint32_t sour
 
     if (iv_length > 0) {
         if (iv_str != nullptr && iv_input_length > 0) {
-            int copy_len = std::min(iv_input_length, iv_length);
+            int copy_len = std::min((int)iv_input_length, iv_length);
             std::memcpy(init_vec, iv_str, copy_len);
+
         } else {
             // Use default IV
             int copy_len = std::min((int)iv_default.size(), iv_length);
@@ -363,7 +364,7 @@ static int do_gcm_decrypt(EVP_CIPHER_CTX* cipher_ctx, const EVP_CIPHER* cipher, 
 
 // Extended decryption function, supports IV string and AAD
 int AesUtil::decrypt_ex(AesMode mode, const unsigned char* encrypt, uint32_t encrypt_length, const unsigned char* key,
-                        uint32_t key_length, const char* iv_str, int iv_input_length, bool padding,
+                        uint32_t key_length, const char* iv_str, uint32_t iv_input_length, bool padding,
                         unsigned char* decrypt_content, const unsigned char* aad, uint32_t aad_length) {
     const EVP_CIPHER* cipher = get_evp_type(mode);
     if (cipher == nullptr) {
@@ -382,8 +383,9 @@ int AesUtil::decrypt_ex(AesMode mode, const unsigned char* encrypt, uint32_t enc
 
     if (iv_length > 0) {
         if (iv_str != nullptr && iv_input_length > 0) {
-            int copy_len = std::min(iv_input_length, iv_length);
+            int copy_len = std::min((int)iv_input_length, iv_length);
             std::memcpy(init_vec, iv_str, copy_len);
+
         } else {
             // Use default IV
             int copy_len = std::min((int)iv_default.size(), iv_length);

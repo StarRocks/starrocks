@@ -45,9 +45,9 @@ public:
     struct RowParameters {
         AesMode mode{AES_128_ECB};
         const unsigned char* key_data{nullptr};
-        int key_len{0};
+        uint32_t key_len{0};
         const char* iv_data{nullptr};
-        int iv_len{0};
+        uint32_t iv_len{0};
         const unsigned char* aad_data{nullptr};
         uint32_t aad_len{0};
         bool is_valid{true};
@@ -67,6 +67,7 @@ public:
         // Check if 5th parameter (AAD for GCM mode) exists
         if (columns.size() >= 5) {
             aad_viewer_.emplace(columns[4]);
+            aad_is_const_ = columns[4]->is_constant();
         }
 
         // Cache constant mode
@@ -92,10 +93,25 @@ public:
         }
 
         // Cache constant iv
-        if (iv_is_const_ && !iv_viewer_.is_null(0)) {
-            auto iv_value = iv_viewer_.value(0);
-            cached_iv_data_ = iv_value.data;
-            cached_iv_len_ = iv_value.size;
+        if (iv_is_const_) {
+            if (iv_viewer_.is_null(0)) {
+                iv_const_is_null_ = true;
+            } else {
+                auto iv_value = iv_viewer_.value(0);
+                cached_iv_data_ = iv_value.data;
+                cached_iv_len_ = iv_value.size;
+            }
+        }
+
+        // Cache constant aad
+        if (aad_is_const_ && aad_viewer_.has_value()) {
+            if (aad_viewer_->is_null(0)) {
+                aad_const_is_null_ = true;
+            } else {
+                auto aad_value = aad_viewer_->value(0);
+                cached_aad_data_ = (const unsigned char*)aad_value.data;
+                cached_aad_len_ = aad_value.size;
+            }
         }
     }
 
@@ -125,7 +141,7 @@ public:
 
         // Check if IV is required for this mode
         // ECB mode does not require IV, other modes do
-        bool iv_is_null = iv_is_const_ ? (cached_iv_data_ == nullptr) : iv_viewer_.is_null(row);
+        bool iv_is_null = iv_is_const_ ? iv_const_is_null_ : iv_viewer_.is_null(row);
         if (!AesUtil::is_ecb_mode(params.mode) && iv_is_null) {
             // Non-ECB mode requires IV, but IV is NULL
             params.is_valid = false;
@@ -154,11 +170,19 @@ public:
             }
         }
 
-        // Extract AAD (only for GCM mode)
-        if (aad_viewer_.has_value() && !aad_viewer_->is_null(row)) {
-            auto aad_value = aad_viewer_->value(row);
-            params.aad_data = (const unsigned char*)aad_value.data;
-            params.aad_len = aad_value.size;
+        // Extract AAD (only for GCM mode, use cached value if constant)
+        if (aad_viewer_.has_value()) {
+            bool aad_is_null = aad_is_const_ ? aad_const_is_null_ : aad_viewer_->is_null(row);
+            if (!aad_is_null) {
+                if (aad_is_const_) {
+                    params.aad_data = cached_aad_data_;
+                    params.aad_len = cached_aad_len_;
+                } else {
+                    auto aad_value = aad_viewer_->value(row);
+                    params.aad_data = (const unsigned char*)aad_value.data;
+                    params.aad_len = aad_value.size;
+                }
+            }
         }
 
         return params;
@@ -178,17 +202,22 @@ private:
     bool mode_is_const_;
     bool key_is_const_;
     bool iv_is_const_;
+    bool aad_is_const_;
 
     // Constant column null flags (true if constant column is NULL)
-    bool mode_const_is_null_{false};
-    bool key_const_is_null_{false};
+    bool mode_const_is_null_;
+    bool key_const_is_null_;
+    bool iv_const_is_null_;
+    bool aad_const_is_null_;
 
     // Cached constant values
     AesMode cached_mode_{AES_128_ECB};
     const unsigned char* cached_key_data_{nullptr};
-    int cached_key_len_{0};
+    uint32_t cached_key_len_{0};
     const char* cached_iv_data_{nullptr};
-    int cached_iv_len_{0};
+    uint32_t cached_iv_len_{0};
+    const unsigned char* cached_aad_data_{nullptr};
+    uint32_t cached_aad_len_{0};
 };
 
 // 4/5-parameter version: aes_encrypt(data, key, iv, mode, [aad])
