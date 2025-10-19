@@ -26,16 +26,17 @@ Status udf_downloder::download_remote_file_2_local(const std::string& remotePath
     std::lock_guard<std::mutex> lock(*mtx);
     udf_downloder downloader;
     RETURN_IF_ERROR(downloader.setup_local_file_path(localPath));
-    LOG(INFO) << "Downloading udf file from " << remotePath;
+    LOG(INFO) << fmt::format("Downloading udf file from {}", remotePath);
     RETURN_IF_ERROR(downloader.do_download(remotePath, localPath));
-    LOG(INFO) << "Successfully downloaded udf file from " << remotePath << " to " << localPath;
+    LOG(INFO) << fmt::format("Successfully downloaded udf file from {} to {}", remotePath, localPath);
+
     return Status::OK();
 }
 
 Status udf_downloder::setup_local_file_path(const std::string& local_path) {
     RETURN_IF_ERROR(FileSystem::Default()->path_exists(local_path));
     RETURN_IF_ERROR(FileSystem::Default()->delete_file(local_path));
-    LOG(INFO) << "Removed existing file " << local_path;
+    LOG(INFO) << fmt::format("Removed existing file:{}", local_path);
     std::string dir_path = local_path.substr(0, local_path.find_last_of('/'));
     if (!dir_path.empty()) {
         RETURN_IF_ERROR(FileSystem::Default()->create_dir(dir_path));
@@ -46,14 +47,15 @@ Status udf_downloder::setup_local_file_path(const std::string& local_path) {
 Status udf_downloder::do_download(const std::string& remotePath, std::string& localPath) {
         ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(remotePath));
         if (!fs) {
-            return Status::NotFound("No matching filesystem available for " + remotePath);
+            return Status::NotFound(  fmt::format("No matching filesystem available for {}", remotePath));
         }
         std::unique_ptr<WritableFile> local_writable_file;
         ASSIGN_OR_RETURN(auto remoteFile, fs->new_sequential_file(remotePath));
         ASSIGN_OR_RETURN(local_writable_file, FileSystem::Default()->new_writable_file(localPath));
         auto res = fs::copy(remoteFile.get(), local_writable_file.get(), 1024 * 1024);
         if (!res.ok()) {
-            return Status::RuntimeError("Failed to download file from " + remotePath + " to " + localPath);
+            return Status::RuntimeError(fmt::format("Failed to download file from {} to {}", remotePath, localPath)
+                );
         }
         RETURN_IF_ERROR(local_writable_file->close());
         return Status::OK();
