@@ -33,6 +33,7 @@ import com.starrocks.sql.ast.TableSampleClause;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.ast.expression.ArrayExpr;
+import com.starrocks.sql.ast.expression.CaseExpr;
 import com.starrocks.sql.ast.expression.CompoundPredicate;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FieldReference;
@@ -147,7 +148,24 @@ public class AST2SQLVisitor extends AST2StringVisitor {
             sqlBuilder.append("DISTINCT ");
         }
 
-        sqlBuilder.append(Joiner.on(", ").join(visitSelectItemList(stmt)));
+        // Increase indent level BEFORE visiting select items
+        // This ensures nested expressions (like CASE) have correct indent context
+        options.increaseIndent();
+        
+        // Format SELECT items: each column on a new line
+        List<String> selectItems = visitSelectItemList(stmt);
+        if (!selectItems.isEmpty()) {
+            for (int i = 0; i < selectItems.size(); i++) {
+                if (i > 0) {
+                    sqlBuilder.append(",");
+                }
+                sqlBuilder.append(options.indent());
+                sqlBuilder.append(selectItems.get(i));
+            }
+        }
+        
+        // Decrease indent level after all select items
+        options.decreaseIndent();
 
         String fromClause = visit(stmt.getRelation());
         if (fromClause != null) {
@@ -262,7 +280,68 @@ public class AST2SQLVisitor extends AST2StringVisitor {
                             relation.getColumnOutputNames().stream().map(c -> "`" + c + "`").collect(toList())))
                     .append(")");
         }
-        sqlBuilder.append(" AS (").append(visit(relation.getCteQueryStatement())).append(") ");
+        
+        // Format CTE definition with proper indentation
+        sqlBuilder.append(" AS (");
+        
+        // Increase indent level for the CTE query
+        options.increaseIndent();
+        
+        // Add newline and indent before the query
+        sqlBuilder.append(options.indent());
+        
+        // Visit the CTE query statement (it will use the increased indent level)
+        sqlBuilder.append(visit(relation.getCteQueryStatement()));
+        
+        // Restore indent level
+        options.decreaseIndent();
+        
+        // Add closing parenthesis on new line with proper indent
+        sqlBuilder.append(options.newLine());
+        sqlBuilder.append(")");
+        
+        return sqlBuilder.toString();
+    }
+
+    @Override
+    public String visitQueryStatement(com.starrocks.sql.ast.QueryStatement stmt, Void context) {
+        StringBuilder sqlBuilder = new StringBuilder();
+        com.starrocks.sql.ast.QueryRelation queryRelation = stmt.getQueryRelation();
+
+        // Format WITH clause with proper line breaks
+        if (queryRelation.hasWithClause()) {
+            sqlBuilder.append("WITH ");
+            java.util.List<CTERelation> cteRelations = queryRelation.getCteRelations();
+            
+            // Format multiple CTEs with comma and newline
+            for (int i = 0; i < cteRelations.size(); i++) {
+                if (i > 0) {
+                    sqlBuilder.append(",");
+                    sqlBuilder.append(options.newLine());
+                }
+                sqlBuilder.append(visit(cteRelations.get(i)));
+            }
+            
+            // Add newline before main query
+            sqlBuilder.append(options.newLine());
+        }
+
+        // Main query
+        sqlBuilder.append(visit(queryRelation));
+
+        // ORDER BY clause
+        if (queryRelation.hasOrderByClause()) {
+            java.util.List<com.starrocks.sql.ast.OrderByElement> sortClause = queryRelation.getOrderBy();
+            String orderByStr = Joiner.on(", ").join(
+                    sortClause.stream().map(this::visit).collect(java.util.stream.Collectors.toList()));
+            sqlBuilder.append(" ORDER BY ").append(orderByStr).append(" ");
+        }
+
+        // LIMIT clause
+        if (queryRelation.getLimit() != null) {
+            sqlBuilder.append(visit(queryRelation.getLimit()));
+        }
+        
         return sqlBuilder.toString();
     }
 
@@ -527,5 +606,43 @@ public class AST2SQLVisitor extends AST2StringVisitor {
         }
         sb.append(" ? ");
         return sb.toString();
+    }
+
+
+    @Override
+    public String visitCaseWhenExpr(CaseExpr node, Void context) {
+        boolean hasCaseExpr = node.hasCaseExpr();
+        boolean hasElseExpr = node.hasElseExpr();
+        StringBuilder output = new StringBuilder("CASE");
+        
+        // Increase indent level for WHEN/ELSE clauses
+        options.increaseIndent();
+        
+        int childIdx = 0;
+        if (hasCaseExpr) {
+            output.append(" ").append(printWithParentheses(node.getChild(childIdx++)));
+        }
+        
+        // Format each WHEN clause on a new line with proper absolute indentation
+        while (childIdx + 2 <= node.getChildren().size()) {
+            output.append(options.indent()).append("WHEN ");
+            output.append(printWithParentheses(node.getChild(childIdx++)));
+            output.append(" THEN ");
+            output.append(printWithParentheses(node.getChild(childIdx++)));
+        }
+        
+        // Format ELSE clause on a new line with same indentation as WHEN
+        if (hasElseExpr) {
+            output.append(options.indent()).append("ELSE ");
+            output.append(printWithParentheses(node.getChild(node.getChildren().size() - 1)));
+        }
+        
+        // Restore indent level
+        options.decreaseIndent();
+        
+        // Format END on a new line (same level as CASE)
+        output.append(options.indent()).append("END");
+        
+        return output.toString();
     }
 }
