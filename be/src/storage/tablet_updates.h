@@ -394,6 +394,8 @@ public:
 
     bool rowset_check_file_existence() const;
 
+    std::shared_timed_mutex* get_index_lock() { return &_index_lock; }
+
 private:
     friend class Tablet;
     friend class PrimaryIndex;
@@ -519,8 +521,6 @@ private:
     bool is_apply_stop() { return _apply_stopped.load(); }
 
     bool compaction_running() { return _compaction_running; }
-
-    std::shared_timed_mutex* get_index_lock() { return &_index_lock; }
 
     bool _use_light_apply_compaction(Rowset* rowset);
 
