@@ -1383,13 +1383,17 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                     estimateColumnStatistic = StatisticsEstimateUtils.unionColumnStatistic(
                             estimateColumnStatistics.get(outputIdx), estimateRowCount,
                             childStatistics.getColumnStatistic(childOutputColumn), childStatistics.getOutputRowCount());
+                    // set new estimate column statistic
+                    estimateColumnStatistics.set(outputIdx, estimateColumnStatistic);
+                    estimateRowCount += childStatistics.getOutputRowCount();
                 } else {
+                    // For Iceberg equality delete rewrite, use only the first child's statistics
+                    // The first child represents the whole table's cardinality (with predicates applied)
+                    // The division between branches is runtime-dependent and doesn't affect overall estimates
                     estimateColumnStatistic = estimateColumnStatistics.get(outputIdx);
+                    estimateColumnStatistics.set(outputIdx, estimateColumnStatistic);
+                    // Don't add child row counts - keep the first child's row count as the union result
                 }
-
-                // set new estimate column statistic
-                estimateColumnStatistics.set(outputIdx, estimateColumnStatistic);
-                estimateRowCount += childStatistics.getOutputRowCount();
             }
             builder.addColumnStatistic(outputColumnRef.get(outputIdx), estimateColumnStatistics.get(outputIdx));
             builder.setOutputRowCount(estimateRowCount);
