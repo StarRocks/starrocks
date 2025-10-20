@@ -44,10 +44,10 @@ under the License.
         <python>python</python>
         
         <!-- async-profiler in UT -->
-        <async.profiler.enabled>${env.ASYNC_PROFILER_ENABLED:-true}</async.profiler.enabled>
+        <async.profiler.enabled>${env.ASYNC_PROFILER_ENABLED:-false}</async.profiler.enabled>
         <async.profiler.lib>${env.STARROCKS_HOME}/build-support/libasyncProfiler.so</async.profiler.lib>
         <async.profiler.output>${env.STARROCKS_HOME}/output/fe/log/proc_profile/prof-%t-%p.html</async.profiler.output>
-        <async.profiler.arg>-agentpath:${async.profiler.lib}=start,event=cpu,file=${async.profiler.output}</async.profiler.arg>
+        <async.profiler.arg></async.profiler.arg>
     </properties>
 
     <profiles>
@@ -100,15 +100,15 @@ under the License.
             </properties>
         </profile>
         <profile>
-            <id>async-profiler</id>
+            <id>async-profiler-enabled</id>
             <activation>
                 <property>
                     <name>env.ASYNC_PROFILER_ENABLED</name>
-                    <value>false</value>
+                    <value>true</value>
                 </property>
             </activation>
             <properties>
-                <async.profiler.arg></async.profiler.arg>
+                <async.profiler.arg>-agentpath:${async.profiler.lib}=start,event=cpu,file=${async.profiler.output}</async.profiler.arg>
             </properties>
         </profile>
     </profiles>
@@ -1042,6 +1042,7 @@ under the License.
                 <configuration>
                     <!-->set larger, eg, 3, to reduce the time or running FE unit tests<-->
                     <forkCount>${fe_ut_parallel}</forkCount>
+                    <forkNode implementation="org.apache.maven.plugin.surefire.extensions.SurefireForkNodeFactory"/>
                     <!-->not reuse forked jvm, so that each unit test will run in separate jvm. to avoid singleton confict<-->
                     <reuseForks>false</reuseForks>
                     <argLine>

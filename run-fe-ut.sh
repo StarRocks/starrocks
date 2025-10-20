@@ -80,7 +80,7 @@ TEST_NAME=*
 FILTER_TEST=""
 COVERAGE=0
 DUMPCASE=0
-ENABLE_PROFILER=1
+ENABLE_PROFILER=0
 PARALLEL=${FE_UT_PARALLEL:-4}
 while true; do
     case "$1" in
@@ -114,13 +114,26 @@ mkdir -p build/compile
 export FE_UT_PARALLEL=$PARALLEL
 echo "Unit test parallel is: $FE_UT_PARALLEL"
 
-# Set ASYNC_PROFILER_ENABLED based on --enable-profiler parameter
+# Set ASYNC_PROFILER_ENABLED based on --enable-profiler parameter and platform detection
 if [ "${ENABLE_PROFILER}" = "1" ]; then
-    export ASYNC_PROFILER_ENABLED=true
-    echo "Async-profiler is enabled"
+    # Check if we're on Linux platform
+    if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+        # Check if async profiler library exists
+        ASYNC_PROFILER_LIB="${STARROCKS_HOME}/build-support/libasyncProfiler.so"
+        if [ -f "$ASYNC_PROFILER_LIB" ]; then
+            export ASYNC_PROFILER_ENABLED=true
+            echo "Async-profiler is enabled (Linux platform, library found)"
+        else
+            export ASYNC_PROFILER_ENABLED=false
+            echo "Async-profiler is disabled (Linux platform, but library not found: $ASYNC_PROFILER_LIB)"
+        fi
+    else
+        export ASYNC_PROFILER_ENABLED=false
+        echo "Async-profiler is disabled (non-Linux platform: $OSTYPE)"
+    fi
 else
     export ASYNC_PROFILER_ENABLED=false
-    echo "Async-profiler is disabled"
+    echo "Async-profiler is disabled (explicitly disabled)"
 fi
 
 if [ -d "./mocked" ]; then
@@ -160,6 +173,6 @@ else
         fi
 
         # set trimStackTrace to false to show full stack when debugging specified class or case
-        ${MVN_CMD} verify -DfailIfNoTests=false -DtrimStackTrace=false -D test="$TEST_NAME" -T $PARALLEL
+        ${MVN_CMD} verify -DfailIfNoTests=false -Dsurefire.failIfNoSpecifiedTests=false -DtrimStackTrace=false -D test="$TEST_NAME" -T $PARALLEL
     fi
 fi
