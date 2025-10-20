@@ -163,6 +163,7 @@ class FloatTest(_LiteralRoundTripFixture2, fixtures.TestBase):
             [15.7563],
             filter_=lambda n: n is not None and round(n, 5) or None,
         )
+<<<<<<< HEAD
 #
 #
 # class HasIndexRevised():
@@ -182,3 +183,236 @@ class FloatTest(_LiteralRoundTripFixture2, fixtures.TestBase):
 # monkeypatch = MonkeyPatch()
 #
 # monkeypatch.setattr("")
+=======
+
+
+class StarRocksReflectionTest(fixtures.TestBase):
+    __only_on__ = "starrocks"
+
+    # @testing.combinations(True, False, argnames="primary_key")
+    def test_default_reflection(self, connection, metadata):
+        tn = "test_starrocks_reflection"
+        Table(
+            tn,
+            metadata,
+            Column("id", Integer),
+            Column("data", VARCHAR(10)),
+        )
+        metadata.create_all(connection)
+
+        reflected_meta = MetaData()
+        reflected_meta.reflect(connection, only=[tn])
+        reflected_table = reflected_meta.tables[tn]
+        
+        eq_(reflected_table.name, tn)
+        eq_(reflected_table.schema, None)
+        eq_(len(reflected_table.columns), 2)
+        eq_(reflected_table.comment, "")
+        eq_(set(reflected_table.columns.keys()), {"id", "data"})
+        assert isinstance(reflected_table.columns["id"].type, Integer)
+        assert isinstance(reflected_table.columns["data"].type, VARCHAR)
+        eq_(reflected_table.columns["data"].type.length, 10)
+        for c in ["id", "data"]:
+            eq_(reflected_table.columns[c].comment, "")
+            eq_(reflected_table.columns[c].nullable, True)
+            eq_(reflected_table.columns[c].default, None)
+            eq_(reflected_table.columns[c].autoincrement, None)
+        eq_(reflected_table.dialect_options["starrocks"]["comment"], "")
+        eq_(reflected_table.dialect_options["starrocks"]["distribution"], "RANDOM")
+        eq_(reflected_table.dialect_options["starrocks"]["engine"], "OLAP")
+        eq_(reflected_table.dialect_options["starrocks"]["key_desc"], "DUPLICATE KEY(`id`, `data`)")
+        eq_(reflected_table.dialect_options["starrocks"]["order_by"], "`id`, `data`")
+        eq_(reflected_table.dialect_options["starrocks"]["partition_by"], "")
+        assert ("compression", "LZ4") in reflected_table.dialect_options["starrocks"]["properties"]
+
+    def test_comment_reflection(self, connection, metadata):
+        tn = "test_starrocks_reflection_comment"
+
+        connection.execute(text(f"DROP TABLE IF EXISTS {tn}"))
+        create_table_sql = dedent(f"""
+            CREATE TABLE {tn} (
+                id INT COMMENT 'This is id column',
+                data VARCHAR(10) COMMENT 'This is data column'
+            )
+            COMMENT 'This is a test table'
+        """).strip()
+        connection.execute(text(create_table_sql))
+
+        reflected_meta = MetaData()
+        reflected_meta.reflect(connection, only=[tn])
+        reflected_table = reflected_meta.tables[tn]
+
+        eq_(reflected_table.comment, "This is a test table")
+        eq_(reflected_table.columns["id"].comment, "This is id column")
+        eq_(reflected_table.columns["data"].comment, "This is data column")
+
+    def test_view_comment_reflection(self, connection, metadata):
+        vn = "test_starrocks_reflection_view_comment"
+
+        connection.execute(text(f"DROP VIEW IF EXISTS {vn}"))
+        create_table_sql = dedent(f"""
+            CREATE VIEW {vn} (
+                id COMMENT 'This is id column',
+                data COMMENT 'This is data column'
+            )
+            COMMENT 'This is a test view'
+            AS SELECT 1 AS id, 'data' AS data
+        """).strip()
+        connection.execute(text(create_table_sql))
+
+        reflected_meta = MetaData()
+        reflected_meta.reflect(connection, only=[vn], views=True)
+        reflected_table = reflected_meta.tables[vn]
+
+        eq_(reflected_table.comment, "This is a test view")
+        eq_(reflected_table.columns["id"].comment, "This is id column")
+        eq_(reflected_table.columns["data"].comment, "This is data column")
+
+    @testing.combinations(["id"], ["id", "data"], argnames="key_columns")
+    @testing.combinations("PRIMARY", "DUPLICATE", "UNIQUE", argnames="key_type")
+    def test_key_and_distribution_reflection(self, connection, metadata, key_type, key_columns):
+        tn = "test_starrocks_reflection_key"
+        connection.execute(text(f"DROP TABLE IF EXISTS {tn}"))
+        create_table_sql = dedent(f"""
+            CREATE TABLE {tn} (
+                id INT,
+                data VARCHAR(10),
+                something_else DATETIME
+            )
+            {key_type} KEY ({', '.join(key_columns)})
+            DISTRIBUTED BY HASH(id)
+        """).strip()
+        connection.execute(text(create_table_sql))
+
+        reflected_meta = MetaData()
+        reflected_meta.reflect(connection, only=[tn])
+        reflected_table = reflected_meta.tables[tn]
+
+        if key_type == "PRIMARY":
+            for c in key_columns:
+                eq_(reflected_table.columns[c].nullable, False)
+        eq_(reflected_table.dialect_options["starrocks"]["key_desc"], f"{key_type} KEY({', '.join([f'`{c}`' for c in key_columns])})")
+        eq_(reflected_table.dialect_options["starrocks"]["distribution"], "HASH(`id`)")
+
+    @testing.combinations(["id"], ["id", "data"], argnames="partition_by")
+    def test_partition_by_columns_reflection(self, connection, metadata, partition_by):
+        tn = "test_starrocks_reflection_partition_by_columns"
+        connection.execute(text(f"DROP TABLE IF EXISTS {tn}"))
+        create_table_sql = dedent(f"""
+            CREATE TABLE {tn} (
+                id INT,
+                data VARCHAR(10),
+                something_else DATETIME
+            )
+            PARTITION BY ({', '.join(partition_by)})
+        """).strip()
+        connection.execute(text(create_table_sql))
+
+        reflected_meta = MetaData()
+        reflected_meta.reflect(connection, only=[tn])
+        reflected_table = reflected_meta.tables[tn]
+
+        eq_(reflected_table.dialect_options["starrocks"]["partition_by"], ', '.join([f'`{c}`' for c in partition_by]))
+
+    def test_expression_partitioning_reflection(self, connection, metadata):
+        tn = "test_starrocks_reflection_expression_partitioning"
+        connection.execute(text(f"DROP TABLE IF EXISTS {tn}"))
+        create_table_sql = dedent(f"""
+            CREATE TABLE {tn} (
+                event_day DATETIME NOT NULL,
+                data VARCHAR(10)
+            )
+            PARTITION BY date_trunc('month', event_day)
+        """).strip()
+        connection.execute(text(create_table_sql))
+
+        reflected_meta = MetaData()
+        reflected_meta.reflect(connection, only=[tn])
+        reflected_table = reflected_meta.tables[tn]
+
+        eq_(reflected_table.dialect_options["starrocks"]["partition_by"], "`event_day`")
+
+    @testing.combinations(["id"], ["id", "data"], argnames="order_by")
+    def test_order_by_reflection(self, connection, metadata, order_by):
+        tn = "test_starrocks_reflection_order_by"
+        connection.execute(text(f"DROP TABLE IF EXISTS {tn}"))
+        create_table_sql = dedent(f"""
+            CREATE TABLE {tn} (
+                id INT,
+                data VARCHAR(10),
+                something_else DATETIME
+            )
+            ORDER BY ({', '.join(order_by)})
+        """).strip()
+        connection.execute(text(create_table_sql))
+
+        reflected_meta = MetaData()
+        reflected_meta.reflect(connection, only=[tn])
+        reflected_table = reflected_meta.tables[tn]
+
+        eq_(reflected_table.dialect_options["starrocks"]["order_by"], ', '.join([f'`{c}`' for c in order_by]))
+
+    def test_nullable_column_reflection(self, connection, metadata):
+        tn = "test_starrocks_reflection_nullable"
+        connection.execute(text(f"DROP TABLE IF EXISTS {tn}"))
+        create_table_sql = dedent(f"""
+            CREATE TABLE {tn} (
+                id INT NOT NULL,
+                data VARCHAR(10) NULL,
+                something_else DATETIME
+            )
+        """).strip()
+        connection.execute(text(create_table_sql))
+
+        reflected_meta = MetaData()
+        reflected_meta.reflect(connection, only=[tn])
+        reflected_table = reflected_meta.tables[tn]
+
+        eq_(reflected_table.columns["id"].nullable, False)
+        eq_(reflected_table.columns["data"].nullable, True)
+
+    def test_generated_columns_reflection(self, connection, metadata):
+        tn = "test_starrocks_reflection_generated"
+        connection.execute(text(f"DROP TABLE IF EXISTS {tn}"))
+        create_table_sql = dedent(f"""
+            CREATE TABLE {tn} (
+                id INT,
+                data JSON,
+                generated_column BIGINT AS (id + 1),
+                generated_json TEXT AS get_json_string(`data`, '$.some_key') COMMENT 'generated from json'
+            )
+        """).strip()
+        connection.execute(text(create_table_sql))
+
+        reflected_meta = MetaData()
+        reflected_meta.reflect(connection, only=[tn])
+        reflected_table = reflected_meta.tables[tn]
+
+        eq_(reflected_table.columns["generated_column"].computed.sqltext.text, "id + 1")
+        eq_(reflected_table.columns["generated_json"].computed.sqltext.text, "get_json_string(`data`, '$.some_key')")
+
+    def test_reflect_server_default_not_as_computed(self, connection, metadata):
+        tn = "test_server_default_reflection"
+        connection.execute(text(f"DROP TABLE IF EXISTS {tn}"))
+        create_table_sql = dedent(f"""
+            CREATE TABLE {tn} (
+                id INT,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                generated_col BIGINT AS (id + 1)
+            )
+            PRIMARY KEY(id)
+            DISTRIBUTED BY HASH(id);
+        """)
+        connection.execute(text(create_table_sql))
+
+        reflected_meta = MetaData()
+        reflected_meta.reflect(bind=connection, only=[tn])
+        reflected_table = reflected_meta.tables[tn]
+
+        created_at_col = reflected_table.columns["created_at"]
+        eq_(created_at_col.server_default.arg.text, "CURRENT_TIMESTAMP")
+        eq_(created_at_col.computed, None)
+
+        generated_col = reflected_table.columns["generated_col"]
+        eq_(generated_col.computed.sqltext.text, "id + 1")
+>>>>>>> bd8bc4d924 ([BugFix](starrocks-python-client) Correct reflection of server_default and generated columns (#61795))

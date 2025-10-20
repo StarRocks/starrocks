@@ -397,6 +397,7 @@ class StarRocksTableDefinitionParser(object):
         if issubclass(col_type, (ENUM, SET)):
             type_args = _strip_values(type_args)
 
+<<<<<<< HEAD
             if issubclass(col_type, SET) and "" in type_args:
                 type_kw["retrieve_as_bitwise"] = True
 
@@ -452,6 +453,31 @@ class StarRocksTableDefinitionParser(object):
         :param columns: A sequence of DESCRIBE or SHOW COLUMNS 6-tuples.
           SHOW FULL COLUMNS FROM rows must be rearranged for use with
           this function.
+=======
+    def _parse_column(self, column: _DecodingRow) -> dict:
+        """
+        Parse column from information_schema.columns table.
+        It returns dictionary with column informations expected by sqlalchemy.
+        """
+        col_data = {
+            "name": column["COLUMN_NAME"],
+            "type": self._parse_column_type(column=column),
+            "nullable": column["IS_NULLABLE"] == "YES",
+            "default": column["COLUMN_DEFAULT"],
+            "autoincrement": None,  # TODO: This is not specified
+            "comment": column["COLUMN_COMMENT"],
+        }
+
+        generation_expression = column.get("GENERATION_EXPRESSION")
+        if generation_expression:
+            col_data["computed"] = {
+                "sqltext": generation_expression
+            }
+
+        return col_data
+
+    def _get_key_columns(self, columns: list[_DecodingRow]) -> list[str]:
+>>>>>>> bd8bc4d924 ([BugFix](starrocks-python-client) Correct reflection of server_default and generated columns (#61795))
         """
 
         buffer = []
