@@ -63,7 +63,12 @@ public:
               mode_viewer_(columns[3]),
               mode_is_const_(columns[3]->is_constant()),
               key_is_const_(columns[1]->is_constant()),
-              iv_is_const_(columns[2]->is_constant()) {
+              iv_is_const_(columns[2]->is_constant()),
+              aad_is_const_(false),
+              mode_const_is_null_(false),
+              key_const_is_null_(false),
+              iv_const_is_null_(false),
+              aad_const_is_null_(false) {
         // Check if 5th parameter (AAD for GCM mode) exists
         if (columns.size() >= 5) {
             aad_viewer_.emplace(columns[4]);
@@ -235,6 +240,9 @@ StatusOr<ColumnPtr> EncryptionFunctions::aes_encrypt_with_mode(FunctionContext* 
     const int size = columns[0]->size();
     ColumnBuilder<TYPE_VARCHAR> result(size);
 
+    // Reuse buffer across all rows to reduce memory allocation overhead
+    std::vector<unsigned char> encrypt_buf;
+
     for (int row = 0; row < size; ++row) {
         // Extract parameters for current row
         auto params = extractor.extract(row);
@@ -264,11 +272,13 @@ StatusOr<ColumnPtr> EncryptionFunctions::aes_encrypt_with_mode(FunctionContext* 
             cipher_len = src_value.size + 16;
         }
 
-        // Use stack allocation (VLA - Variable Length Array)
-        char encrypt_buf[cipher_len];
+        // Resize buffer only if needed (vector will grow but not shrink)
+        if (encrypt_buf.size() < static_cast<size_t>(cipher_len)) {
+            encrypt_buf.resize(cipher_len);
+        }
 
         int len = AesUtil::encrypt_ex(params.mode, (unsigned char*)src_value.data, src_value.size, params.key_data,
-                                      params.key_len, params.iv_data, params.iv_len, true, (unsigned char*)encrypt_buf,
+                                      params.key_len, params.iv_data, params.iv_len, true, encrypt_buf.data(),
                                       params.aad_data, params.aad_len);
 
         if (len < 0) {
@@ -276,7 +286,7 @@ StatusOr<ColumnPtr> EncryptionFunctions::aes_encrypt_with_mode(FunctionContext* 
             continue;
         }
 
-        result.append(Slice(encrypt_buf, len));
+        result.append(Slice(reinterpret_cast<char*>(encrypt_buf.data()), len));
     }
 
     return result.build(ColumnHelper::is_all_const(columns));
@@ -296,6 +306,9 @@ StatusOr<ColumnPtr> EncryptionFunctions::aes_decrypt_with_mode(FunctionContext* 
 
     const int size = columns[0]->size();
     ColumnBuilder<TYPE_VARCHAR> result(size);
+
+    // Reuse buffer across all rows to reduce memory allocation overhead
+    std::vector<unsigned char> decrypt_buf;
 
     for (int row = 0; row < size; ++row) {
         // Extract parameters for current row
@@ -317,11 +330,13 @@ StatusOr<ColumnPtr> EncryptionFunctions::aes_decrypt_with_mode(FunctionContext* 
         // Decrypted plaintext will never exceed ciphertext size
         int cipher_len = src_value.size;
 
-        // Use stack allocation (VLA - Variable Length Array)
-        char decrypt_buf[cipher_len];
+        // Resize buffer only if needed (vector will grow but not shrink)
+        if (decrypt_buf.size() < static_cast<size_t>(cipher_len)) {
+            decrypt_buf.resize(cipher_len);
+        }
 
         int len = AesUtil::decrypt_ex(params.mode, (unsigned char*)src_value.data, src_value.size, params.key_data,
-                                      params.key_len, params.iv_data, params.iv_len, true, (unsigned char*)decrypt_buf,
+                                      params.key_len, params.iv_data, params.iv_len, true, decrypt_buf.data(),
                                       params.aad_data, params.aad_len);
 
         if (len < 0) {
@@ -329,7 +344,7 @@ StatusOr<ColumnPtr> EncryptionFunctions::aes_decrypt_with_mode(FunctionContext* 
             continue;
         }
 
-        result.append(Slice(decrypt_buf, len));
+        result.append(Slice(reinterpret_cast<char*>(decrypt_buf.data()), len));
     }
 
     return result.build(ColumnHelper::is_all_const(columns));
