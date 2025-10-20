@@ -589,13 +589,8 @@ public class PartitionDescAnalyzer {
                 .map(SlotRef::getColumnName)
                 .collect(Collectors.toList());
         
-        // Check that partition expression contains at least one column reference
-        if (slotRefs == null || slotRefs.isEmpty()) {
-            throw new AnalysisException("The partition expr should base on key column");
-        }
-        
         for (ColumnDef columnDef : columnDefs) {
-            if (slotRefs.contains(columnDef.getName()) && !columnDef.isKey()
+            if ((slotRefs.isEmpty() || slotRefs.contains(columnDef.getName())) && !columnDef.isKey()
                     && columnDef.getAggregateType() != AggregateType.NONE) {
                 throw new AnalysisException("The partition expr should base on key column");
             }
