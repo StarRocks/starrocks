@@ -18,6 +18,7 @@ import com.google.common.collect.HashMultimap;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.tvr.TvrVersionRange;
+import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.PredicateSearchKey;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -120,8 +121,14 @@ public class IcebergStatisticProvider {
                 }
             }
 
+            GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder()
+                    .setTableVersionRange(version)
+                    .setPredicate(predicate)
+                    .setEnableColumnStats(true)
+                    .build();
+
             PredicateSearchKey key = PredicateSearchKey.of(icebergTable.getCatalogDBName(),
-                    icebergTable.getCatalogTableName(), version, predicate);
+                    icebergTable.getCatalogTableName(), params);
             IcebergFileStats icebergFileStats;
             if (!icebergFileStatistics.containsKey(key)) {
                 icebergFileStats = new IcebergFileStats(1);

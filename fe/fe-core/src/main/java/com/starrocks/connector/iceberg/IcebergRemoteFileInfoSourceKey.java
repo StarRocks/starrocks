@@ -14,10 +14,9 @@
 
 package com.starrocks.connector.iceberg;
 
-import com.starrocks.common.tvr.TvrVersionRange;
+import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.PredicateSearchKey;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.Objects;
 
@@ -27,23 +26,26 @@ public class IcebergRemoteFileInfoSourceKey extends PredicateSearchKey {
 
     private IcebergRemoteFileInfoSourceKey(String databaseName,
                                            String tableName,
-                                           TvrVersionRange tvrVersionRange,
-                                           ScalarOperator predicate,
+                                           GetRemoteFilesParams params,
                                            long morId,
                                            IcebergMORParams icebergMORParams) {
-        super(databaseName, tableName, tvrVersionRange, predicate);
+        super(databaseName, tableName, params);
         this.morId = morId;
         this.icebergMORParams = icebergMORParams;
     }
 
     public static IcebergRemoteFileInfoSourceKey of(String databaseName,
                                                     String tableName,
-                                                    TvrVersionRange tvrVersionRange,
-                                                    ScalarOperator predicate,
+                                                    GetRemoteFilesParams params,
                                                     long morId,
                                                     IcebergMORParams icebergMORParams) {
-        predicate = predicate == null ? ConstantOperator.TRUE : predicate;
-        return new IcebergRemoteFileInfoSourceKey(databaseName, tableName, tvrVersionRange, predicate, morId, icebergMORParams);
+        if (params.getPredicate() == null) {
+            GetRemoteFilesParams copy = params.copy();
+            copy.setPredicate(ConstantOperator.TRUE);
+            params = copy;
+        }
+
+        return new IcebergRemoteFileInfoSourceKey(databaseName, tableName, params, morId, icebergMORParams);
     }
 
     @Override

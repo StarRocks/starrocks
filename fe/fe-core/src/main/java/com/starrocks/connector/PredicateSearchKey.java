@@ -14,9 +14,7 @@
 
 package com.starrocks.connector;
 
-import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
-import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.Objects;
@@ -24,26 +22,16 @@ import java.util.Objects;
 public class PredicateSearchKey {
     private final String databaseName;
     private final String tableName;
-    private final TvrVersionRange version;
-    private final ScalarOperator predicate;
+    private final GetRemoteFilesParams params;
 
-    public static PredicateSearchKey of(String databaseName, String tableName,
-                                        long snapshotId, ScalarOperator predicate) {
-        return of(databaseName, tableName, TvrTableSnapshot.of(snapshotId), predicate);
+    public static PredicateSearchKey of(String databaseName, String tableName, GetRemoteFilesParams params) {
+        return of(databaseName, tableName, params);
     }
 
-    public static PredicateSearchKey of(String databaseName, String tableName,
-                                        TvrVersionRange tvrVersionRange,
-                                        ScalarOperator predicate) {
-        return new PredicateSearchKey(databaseName, tableName, tvrVersionRange,
-                predicate == null ? ConstantOperator.TRUE : predicate);
-    }
-
-    public PredicateSearchKey(String databaseName, String tableName, TvrVersionRange version, ScalarOperator predicate) {
+    public PredicateSearchKey(String databaseName, String tableName, GetRemoteFilesParams params) {
         this.databaseName = databaseName;
         this.tableName = tableName;
-        this.version = version;
-        this.predicate = predicate;
+        this.params = params;
     }
 
     public String getDatabaseName() {
@@ -55,7 +43,15 @@ public class PredicateSearchKey {
     }
 
     public TvrVersionRange getVersion() {
-        return version;
+        return params.getTableVersionRange();
+    }
+
+    public ScalarOperator getPredicate() {
+        return params.getPredicate();
+    }
+
+    public GetRemoteFilesParams getParams() {
+        return params;
     }
 
     @Override
@@ -68,23 +64,25 @@ public class PredicateSearchKey {
             return false;
         }
         PredicateSearchKey that = (PredicateSearchKey) o;
-        return Objects.equals(version, that.version) &&
+        return Objects.equals(getVersion(), that.getVersion()) &&
                 Objects.equals(databaseName, that.databaseName) &&
                 Objects.equals(tableName, that.tableName) &&
-                predicate.equivalent(that.predicate);
+                getPredicate().equivalent(that.getPredicate()) &&
+                params.isEnableColumnStats() == that.params.isEnableColumnStats();
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(databaseName, tableName, version, predicate);
+        return Objects.hash(databaseName, tableName, params);
     }
 
     @Override
     public String toString() {
         return "Filter{" + "databaseName='" + databaseName + '\'' +
                 ", tableName='" + tableName + '\'' +
-                ", version=" + version +
-                ", predicate=" + predicate +
+                ", version=" + getVersion() +
+                ", predicate=" + getPredicate() +
+                ", enableColumnStats=" + params.isEnableColumnStats() +
                 '}';
     }
 }
