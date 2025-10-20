@@ -99,3 +99,7 @@ displayed_sidebar: docs
 - SHOW DATA DISTRIBUTION は、同じバケットシーケンス番号を持つすべてのマテリアライズドインデックスの統計情報を統合しなくなりました。マテリアライズドインデックスレベルでのデータ分散のみを表示します。[#59656](https://github.com/StarRocks/starrocks/pull/59656)
 - 自動バケットテーブルのデフォルトバケットサイズを4GBから1GBに変更し、パフォーマンスとリソース利用率を改善しました。[#63168](https://github.com/StarRocks/starrocks/pull/63168)
 - システムは対応するセッション変数と INSERT 文の列数に基づいて部分更新モードを決定します。[#62091](https://github.com/StarRocks/starrocks/pull/62091)
+- Information Schema 内の `fe_tablet_schedules` ビューを最適化しました。[#62073](https://github.com/StarRocks/starrocks/pull/62073) [#59813](https://github.com/StarRocks/starrocks/pull/59813)
+  - `TABLET_STATUS` 列を `SCHEDULE_REASON` に、`CLONE_SRC` 列を `SRC_BE_ID` に、`CLONE_DEST` 列を `DEST_BE_ID` に名称変更しました。
+  - `CREATE_TIME`、`SCHEDULE_TIME` および `FINISH_TIME` 列のデータ型を `DOUBLE` から `DATETIME` に変更しました。
+- 一部の FE メトリクスに `is_leader` ラベルを追加しました。[#63004](https://github.com/StarRocks/starrocks/pull/63004)
