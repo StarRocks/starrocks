@@ -3,6 +3,8 @@ displayed_sidebar: docs
 ---
 
 import Tip from '../../../../_assets/commonMarkdown/quickstart-routine-load-tip.mdx';
+import WarehouseExample from '../../../../_assets/sql-reference/sql-statements/loading_unloading/routine_load/_routine_load_warehouse_example.mdx';
+import WarehouseProperty from '../../../../_assets/sql-reference/sql-statements/loading_unloading/routine_load/_routine_load_warehouse_property.mdx';
 
 # CREATE ROUTINE LOAD
 
@@ -12,10 +14,10 @@ Routine Load can continuously consume messages from Apache Kafka® and load data
 
 This topic describes the syntax, parameters, and examples of the CREATE ROUTINE LOAD statement.
 
-> **NOTE**
->
-> - For information about the application scenarios, principles, and basic operations of Routine Load, see [Load data using Routine Load](../../../../loading/Loading_intro.md).
+:::note
+- For information about the application scenarios, principles, and basic operations of Routine Load, see [Load data using Routine Load](../../../../loading/Loading_intro.md).
 > - You can load data into StarRocks tables only as a user who has the INSERT privilege on those StarRocks tables. If you do not have the INSERT privilege, follow the instructions provided in [GRANT](../../account-management/GRANT.md) to grant the INSERT privilege to the user that you use to connect to your StarRocks cluster.
+:::
 
 ## Syntax
 
@@ -60,11 +62,11 @@ Optional. The properties of the data. Syntax:
 
 The column separator for CSV-formatted data. The default column separator is `\t` (Tab). For example, you can use `COLUMNS TERMINATED BY ","` to specify the column separator as a comma.
 
-> **Note**
->
-> - Ensure that the column separator specified here is the same as the column separator in the data to be ingested.
-> - You can use a UTF-8 string, such as a comma (,), tab, or pipe (|), whose length does not exceed 50 bytes as a text delimiter.
-> - Null values are denoted by using `\N`. For example, a data record consists of three columns, and the data record holds data in the first and third columns but does not hold data in the second column. In this situation, you need to use `\N` in the second column to denote a null value. This means the record must be compiled as `a,\N,b` instead of `a,,b`. `a,,b` denotes that the second column of the record holds an empty string.
+:::tip
+- Ensure that the column separator specified here is the same as the column separator in the data to be ingested.
+- You can use a UTF-8 string, such as a comma (,), tab, or pipe (|), whose length does not exceed 50 bytes as a text delimiter.
+- Null values are denoted by using `\N`. For example, a data record consists of three columns, and the data record holds data in the first and third columns but does not hold data in the second column. In this situation, you need to use `\N` in the second column to denote a null value. This means the record must be compiled as `a,\N,b` instead of `a,,b`. `a,,b` denotes that the second column of the record holds an empty string.
+:::
 
 `ROWS TERMINATED BY`
 
@@ -82,9 +84,9 @@ The mapping between the columns in the source data and the columns in the StarRo
 
 The filter condition. Only data that meets the filter condition can be loaded into StarRocks. For example, if you only want to ingest rows whose `col1` value is greater than `100` and `col2` value is equal to `1000`, you can use `WHERE col1 > 100 and col2 = 1000`.
 
-> **NOTE**
->
-> The columns specified in the filter condition can be source columns or derived columns.
+:::note
+The columns specified in the filter condition can be source columns or derived columns.
+:::
 
 `PARTITION`
 
@@ -105,31 +107,110 @@ Required. The properties of the load job. Syntax:
 ```SQL
 PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 ```
+<WarehouseProperty />
 
-| **Property**              | **Required** | **Description**                                              |
-| ------------------------- | ------------ | ------------------------------------------------------------ |
-| desired_concurrent_number | No           | The expected task parallelism of a single Routine Load job. Default value: `3`. The actual task parallelism is determined by the minimum value of the multiple parameters: `min(alive_be_number, partition_number, desired_concurrent_number, max_routine_load_task_concurrent_num)`. <ul><li>`alive_be_number`: the number of alive BE nodes.</li><li>`partition_number`: the number of partitions to be consumed.</li><li>`desired_concurrent_number`: the expected task parallelism of a single Routine Load  job. Default value: `3`.</li><li>`max_routine_load_task_concurrent_num`: the default maximum task parallelism of a Routine Load job, which is `5`. See [FE dynamic parameter](../../../../administration/management/FE_configuration.md#configure-fe-dynamic-parameters).</li></ul>The maximum actual task parallelism is determined by either the number of alive BE nodes or the number of partitions to be consumed.|
-| max_batch_interval        | No           | The scheduling interval for a task, that is, how often a task is executed. Unit: seconds. Value range: `5` ~ `60`. Default value: `10`. It is recommended to set a value larger than `10`. If the scheduling is shorter than 10 seconds, too many tablet versions are generated due to an excessively high loading frequency. |
-| max_batch_rows            | No           | This property is only used to define the window of error detection. The window is the number of rows of data consumed by a single Routine Load task. The value is `10 * max_batch_rows`. The default value is `10 * 200000 = 2000000`. The Routine Load task detects error data in the error detection window. Error data refers to data that StarRocks cannot parse, such as invalid JSON-formatted data. |
-| max_error_number          | No           | The maximum number of error data rows allowed within an error detection window. If the number of error data rows exceeds this value, the load job will pause. You can execute [SHOW ROUTINE LOAD](SHOW_ROUTINE_LOAD.md)  and view the error logs by using `ErrorLogUrls`. After that, you can correct the error in Kafka according to the error logs. The default value is `0`, which means error rows are not allowed. <br />**NOTE** <br /> <ul><li>The last batch of tasks will **succeed** before the load job pauses when there are too many error data rows. That is, the qualified data will be loaded, and the unqualified data will be filtered. If you don't want to filter too many unqualified data rows, set parameter `max_filter_ratio`. </li><li>Error data rows do not include data rows that are filtered out by the WHERE clause.</li><li>This parameter, along with the next parameter `max_filter_ratio`, controls the maximum number of error data records. When `max_filter_ratio` is not set, the value of this parameter takes effect. When `max_filter_ratio` is set, the load job pauses as soon as the number of error data record reaches either the threshold set by this parameter or the `max_filter_ratio` parameter.</li></ul>|
-|max_filter_ratio|No|The maximum error tolerance of the load job. The error tolerance is the maximum percentage of data records that can be filtered out due to inadequate data quality in all data records requested by the load job. Valid values: `0` to `1`. Default value: `1` (That means it won't actually take effect).<br/>We recommend that you set it to `0`. This way, if unqualified data records are detected, the load job pauses, thereby ensuring data correctness.<br/>If you want to ignore unqualified data records, you can set this parameter to a value greater than `0`. This way, the load job can succeed even if the data file contains unqualified data records.  <br/>**NOTE**<br/><ul><li>The last batch of tasks will **fail** when there are too many error data rows larger than `max_filter_ratio`. It's a bit **different** with the effect of `max_error_number`.</li><li>Unqualified data records do not include data records that are filtered out by the WHERE clause.</li><li>This parameter, along with the last parameter `max_error_number`, controls the maximum number of error data records. When this parameter is not set (It works the same as setting `max_filter_ratio = 1`), the value of the `max_error_number` parameter takes effect. When this parameter is set, the load job pauses as soon as the number of error data records reaches either the threshold set by this parameter or the `max_error_number` parameter.</li></ul>|
-| strict_mode               | No           | Specifies whether to enable the [strict mode](../../../../loading/load_concept/strict_mode.md). Valid values: `true` and `false`. Default value: `false`. When the strict mode is enabled, if the value for a column in the loaded data is `NULL` but the target table does not allow a `NULL` value for this column, the data row will be filtered out. |
-| log_rejected_record_num | No | Specifies the maximum number of unqualified data rows that can be logged. This parameter is supported from v3.1 onwards. Valid values: `0`, `-1`, and any non-zero positive integer. Default value: `0`.<ul><li>The value `0` specifies that data rows that are filtered out will not be logged.</li><li>The value `-1` specifies that all data rows that are filtered out will be logged.</li><li>A non-zero positive integer such as `n` specifies that up to `n` data rows that are filtered out can be logged on each BE.</li></ul>You can access all the unqualified data rows that are filtered out in the load job by navigating to the path returned in the `REJECTED_RECORD_PATH` field from the query against the `information_schema.loads` view. |
-| timezone                  | No           | The time zone used by the load job. Default value: `Asia/Shanghai`. The value of this parameter affects the results returned by functions such as strftime(), alignment_timestamp(), and from_unixtime(). The time zone specified by this parameter is a session-level time zone. For more information, see [Configure a time zone](../../../../administration/management/timezone.md). |
-| partial_update | No | Whether to use partial updates. Valid values: `TRUE` and `FALSE`. Default value: `FALSE`, indicating to disable this feature. |
-| merge_condition           | No           | Specifies the name of the column you want to use as the condition to determine whether to update data. Data will be updated only when the value of the data to be loaded into this column is greater than or equal to the current value of this column. **NOTE**<br />Only Primary Key tables support conditional updates. The column that you specify cannot be a primary key column. |
-| format                    | No           | The format of the data to be loaded. Valid values: `CSV`, `JSON`, and `Avro` (supported since v3.0.1). Default value: `CSV`. |
-| trim_space                | No           | Specifies whether to remove spaces preceding and following column separators from the data file when the data file is in CSV format. Type: BOOLEAN. Default value: `false`.<br />For some databases, spaces are added to column separators when you export data as a CSV-formatted data file. Such spaces are called leading spaces or trailing spaces depending on their locations. By setting the `trim_space` parameter, you can enable StarRocks to remove such unnecessary spaces during data loading.<br />Note that StarRocks does not remove the spaces (including leading spaces and trailing spaces) within a field wrapped in a pair of `enclose`-specified characters. For example, the following field values use pipe (<code class="language-text">&#124;</code>) as the column separator and double quotation marks (`"`) as the `enclose`-specified character: <code class="language-text">&#124; "Love StarRocks" &#124;</code>. If you set `trim_space` to `true`, StarRocks processes the preceding field values as <code class="language-text">&#124;"Love StarRocks"&#124;</code>. |
-| enclose                   | No           | Specifies the character that is used to wrap the field values in the data file according to [RFC4180](https://www.rfc-editor.org/rfc/rfc4180) when the data file is in CSV format. Type: single-byte character. Default value: `NONE`. The most prevalent characters are single quotation mark (`'`) and double quotation mark (`"`).<br />All special characters (including row separators and column separators) wrapped by using the `enclose`-specified character are considered normal symbols. StarRocks can do more than RFC4180 as it allows you to specify any single-byte character as the `enclose`-specified character.<br />If a field value contains an `enclose`-specified character, you can use the same character to escape that `enclose`-specified character. For example, you set `enclose` to `"`, and a field value is `a "quoted" c`. In this case, you can enter the field value as `"a ""quoted"" c"` into the data file. |
-| escape                    | No           | Specifies the character that is used to escape various special characters, such as row separators, column separators, escape characters, and `enclose`-specified characters, which are then considered by StarRocks to be common characters and are parsed as part of the field values in which they reside. Type: single-byte character. Default value: `NONE`. The most prevalent character is slash (`\`), which must be written as double slashes (`\\`) in SQL statements.<br />**NOTE**<br />The character specified by `escape` is applied to both inside and outside of each pair of `enclose`-specified characters.<br />Two examples are as follows:<br /><ul><li>When you set `enclose` to `"` and `escape` to `\`, StarRocks parses `"say \"Hello world\""` into `say "Hello world"`.</li><li>Assume that the column separator is comma (`,`). When you set `escape` to `\`, StarRocks parses `a, b\, c` into two separate field values: `a` and `b, c`.</li></ul> |
-| strip_outer_array         | No           | Specifies whether to strip the outermost array structure of the JSON-formatted data. Valid values: `true` and `false`. Default value: `false`. In real-world business scenarios, JSON-formatted data may have an outermost array structure as indicated by a pair of square brackets `[]`. In this situation, we recommend that you set this parameter to `true`, so StarRocks removes the outermost square brackets `[]` and loads each inner array as a separate data record. If you set this parameter to `false`, StarRocks parses the entire JSON-formatted data into one array and loads the array as a single data record. Use the JSON-formatted data `[{"category" : 1, "author" : 2}, {"category" : 3, "author" : 4} ]` as an example. If you set this parameter to `true`, `{"category" : 1, "author" : 2}` and `{"category" : 3, "author" : 4}` are parsed as two separate data records and are loaded into two StarRocks data rows. |
-| jsonpaths                 | No           | The names of the fields that you want to load from JSON-formatted data. The value of this parameter is a valid JsonPath expression. For more information, see [StarRocks table contains derived columns whose values are generated by using expressions](#starrocks-table-contains-derived-columns-whose-values-are-generated-by-using-expressions)) in this topic. |
-| json_root                 | No           | The root element of the JSON-formatted data to load. StarRocks extracts the elements of the root node through `json_root` for parsing. By default, the value of this parameter is empty, indicating that all JSON-formatted data will be loaded. For more information, see [Specify the root element of the JSON-formatted data to be loaded](#specify-the-root-element-of-the-json-formatted-data-to-be-loaded) in this topic. |
-| task_consume_second | No | The maximum time for each Routine Load task within the specified Routine Load job to consume data. Unit: second. Unlike the [FE dynamic parameters](../../../../administration/management/FE_configuration.md) `routine_load_task_consume_second` (which applies to all Routine Load jobs within the cluster), this parameter is specific to an individual Routine Load job, which is more flexible. This parameter is supported since v3.1.0.<ul> <li>When `task_consume_second` and `task_timeout_second` are not configured, StarRocks uses the FE dynamic parameters `routine_load_task_consume_second` and `routine_load_task_timeout_second` to control the load behavior.</li> <li>When only `task_consume_second` is configured, the default value for `task_timeout_second` is calculated as `task_consume_second` * 4.</li> <li>When only `task_timeout_second` is configured, the default value for `task_consume_second` is calculated as `task_timeout_second`/4.</li> </ul> |
-|task_timeout_second|No|The timeout duration for each Routine Load task within the specified Routine Load job. Unit: second. Unlike the [FE dynamic parameter](../../../../administration/management/FE_configuration.md) `routine_load_task_timeout_second` (which applies to all Routine Load jobs within the cluster), this parameter is specific to an individual Routine Load job, which is more flexible. This parameter is supported since v3.1.0. <ul> <li>When `task_consume_second` and `task_timeout_second` are not configured, StarRocks uses the FE dynamic parameters `routine_load_task_consume_second` and `routine_load_task_timeout_second` to control the load behavior.</li> <li>When only `task_timeout_second` is configured, the default value for `task_consume_second` is calculated as `task_timeout_second`/4.</li> <li>When only `task_consume_second` is configured, the default value for `task_timeout_second` is calculated as `task_consume_second` * 4.</li> </ul>|
-| pause_on_fatal_parse_error          | NO | Specifies whether to automatically pause the job upon encountering unrecoverable data parsing errors. Valid values: `true` and `false`. Default value: `false`. This parameter is supported since v3.3.12/v3.4.2. <br />Such parsing errors are typically caused by illegal data formats, such as:<ul><li>Importing a JSON array without setting `strip_outer_array`.</li><li>Importing JSON data, but the Kafka message contains illegal JSON, such as `abcd`.</li></ul> |
+#### `desired_concurrent_number`
 
-### `data_source`, `data_source_properties`
+**Required**: No\
+**Description**:  The expected task parallelism of a single Routine Load job. Default value: `3`. The actual task parallelism is determined by the minimum value of the multiple parameters: `min(alive_be_number, partition_number, desired_concurrent_number, max_routine_load_task_concurrent_num)`. <ul><li>`alive_be_number`: the number of alive BE nodes.</li><li>`partition_number`: the number of partitions to be consumed.</li><li>`desired_concurrent_number`: the expected task parallelism of a single Routine Load  job. Default value: `3`.</li><li>`max_routine_load_task_concurrent_num`: the default maximum task parallelism of a Routine Load job, which is `5`. See [FE dynamic parameter](../../../../administration/management/FE_configuration.md#configure-fe-dynamic-parameters).</li></ul>The maximum actual task parallelism is determined by either the number of alive BE nodes or the number of partitions to be consumed.<br/>
+
+####  `max_batch_interval`
+
+**Required**: No\
+**Description**:  The scheduling interval for a task, that is, how often a task is executed. Unit: seconds. Value range: `5` ~ `60`. Default value: `10`. It is recommended to set a value larger than `10`. If the scheduling is shorter than 10 seconds, too many tablet versions are generated due to an excessively high loading frequency. 
+
+#### `max_batch_rows`
+
+**Required**: No\
+**Description**:  This property is only used to define the window of error detection. The window is the number of rows of data consumed by a single Routine Load task. The value is `10 * max_batch_rows`. The default value is `10 * 200000 = 2000000`. The Routine Load task detects error data in the error detection window. Error data refers to data that StarRocks cannot parse, such as invalid JSON-formatted data. 
+
+#### `max_error_number`
+
+**Required**: No\
+**Description**:  The maximum number of error data rows allowed within an error detection window. If the number of error data rows exceeds this value, the load job will pause. You can execute [SHOW ROUTINE LOAD](SHOW_ROUTINE_LOAD.md)  and view the error logs by using `ErrorLogUrls`. After that, you can correct the error in Kafka according to the error logs. The default value is `0`, which means error rows are not allowed. <br />**NOTE** <br /> <ul><li>The last batch of tasks will **succeed** before the load job pauses when there are too many error data rows. That is, the qualified data will be loaded, and the unqualified data will be filtered. If you don't want to filter too many unqualified data rows, set parameter `max_filter_ratio`. </li><li>Error data rows do not include data rows that are filtered out by the WHERE clause.</li><li>This parameter, along with the next parameter `max_filter_ratio`, controls the maximum number of error data records. When `max_filter_ratio` is not set, the value of this parameter takes effect. When `max_filter_ratio` is set, the load job pauses as soon as the number of error data record reaches either the threshold set by this parameter or the `max_filter_ratio` parameter.</li></ul>
+
+#### `max_filter_ratio`
+
+**Required**: No\
+**Description**: The maximum error tolerance of the load job. The error tolerance is the maximum percentage of data records that can be filtered out due to inadequate data quality in all data records requested by the load job. Valid values: `0` to `1`. Default value: `1` (That means it won't actually take effect).<br/>We recommend that you set it to `0`. This way, if unqualified data records are detected, the load job pauses, thereby ensuring data correctness.<br/>If you want to ignore unqualified data records, you can set this parameter to a value greater than `0`. This way, the load job can succeed even if the data file contains unqualified data records.  <br/>**NOTE**<br/><ul><li>The last batch of tasks will **fail** when there are too many error data rows larger than `max_filter_ratio`. It's a bit **different** with the effect of `max_error_number`.</li><li>Unqualified data records do not include data records that are filtered out by the WHERE clause.</li><li>This parameter, along with the last parameter `max_error_number`, controls the maximum number of error data records. When this parameter is not set (It works the same as setting `max_filter_ratio = 1`), the value of the `max_error_number` parameter takes effect. When this parameter is set, the load job pauses as soon as the number of error data records reaches either the threshold set by this parameter or the `max_error_number` parameter.</li></ul>
+
+#### `strict_mode`      
+
+**Required**: No\
+**Description**:  Specifies whether to enable the [strict mode](../../../../loading/load_concept/strict_mode.md). Valid values: `true` and `false`. Default value: `false`. When the strict mode is enabled, if the value for a column in the loaded data is `NULL` but the target table does not allow a `NULL` value for this column, the data row will be filtered out. 
+
+#### `log_rejected_record_num`
+
+**Required**: No\
+**Description**:  Specifies the maximum number of unqualified data rows that can be logged. This parameter is supported from v3.1 onwards. Valid values: `0`, `-1`, and any non-zero positive integer. Default value: `0`.<ul><li>The value `0` specifies that data rows that are filtered out will not be logged.</li><li>The value `-1` specifies that all data rows that are filtered out will be logged.</li><li>A non-zero positive integer such as `n` specifies that up to `n` data rows that are filtered out can be logged on each BE.</li></ul>You can access all the unqualified data rows that are filtered out in the load job by navigating to the path returned in the `REJECTED_RECORD_PATH` field from the query against the `information_schema.loads` view. 
+
+#### `timezone`    
+
+**Required**: No\
+**Description**:  The time zone used by the load job. Default value: `Asia/Shanghai`. The value of this parameter affects the results returned by functions such as strftime(), alignment_timestamp(), and from_unixtime(). The time zone specified by this parameter is a session-level time zone. For more information, see [Configure a time zone](../../../../administration/management/timezone.md). 
+
+#### `partial_update`
+
+**Required**: No\
+**Description**:  Whether to use partial updates. Valid values: `TRUE` and `FALSE`. Default value: `FALSE`, indicating to disable this feature. 
+
+#### `merge_condition`
+
+**Required**: No\
+**Description**:  Specifies the name of the column you want to use as the condition to determine whether to update data. Data will be updated only when the value of the data to be loaded into this column is greater than or equal to the current value of this column. **NOTE**<br />Only Primary Key tables support conditional updates. The column that you specify cannot be a primary key column. 
+
+#### `format`
+
+**Required**: No\
+**Description**:  The format of the data to be loaded. Valid values: `CSV`, `JSON`, and `Avro` (supported since v3.0.1). Default value: `CSV`. 
+
+#### `trim_space`
+
+**Required**: No\
+**Description**:  Specifies whether to remove spaces preceding and following column separators from the data file when the data file is in CSV format. Type: BOOLEAN. Default value: `false`.<br />For some databases, spaces are added to column separators when you export data as a CSV-formatted data file. Such spaces are called leading spaces or trailing spaces depending on their locations. By setting the `trim_space` parameter, you can enable StarRocks to remove such unnecessary spaces during data loading.<br />Note that StarRocks does not remove the spaces (including leading spaces and trailing spaces) within a field wrapped in a pair of `enclose`-specified characters. For example, the following field values use pipe (<code class="language-text">&#124;</code>) as the column separator and double quotation marks (`"`) as the `enclose`-specified character: <code class="language-text">&#124; "Love StarRocks" &#124;</code>. If you set `trim_space` to `true`, StarRocks processes the preceding field values as <code class="language-text">&#124;"Love StarRocks"&#124;</code>. 
+
+#### `enclose`     
+
+**Required**: No\
+**Description**:  Specifies the character that is used to wrap the field values in the data file according to [RFC4180](https://www.rfc-editor.org/rfc/rfc4180) when the data file is in CSV format. Type: single-byte character. Default value: `NONE`. The most prevalent characters are single quotation mark (`'`) and double quotation mark (`"`).<br />All special characters (including row separators and column separators) wrapped by using the `enclose`-specified character are considered normal symbols. StarRocks can do more than RFC4180 as it allows you to specify any single-byte character as the `enclose`-specified character.<br />If a field value contains an `enclose`-specified character, you can use the same character to escape that `enclose`-specified character. For example, you set `enclose` to `"`, and a field value is `a "quoted" c`. In this case, you can enter the field value as `"a ""quoted"" c"` into the data file. 
+
+#### `escape`
+
+**Required**: No\
+**Description**:  Specifies the character that is used to escape various special characters, such as row separators, column separators, escape characters, and `enclose`-specified characters, which are then considered by StarRocks to be common characters and are parsed as part of the field values in which they reside. Type: single-byte character. Default value: `NONE`. The most prevalent character is slash (`\`), which must be written as double slashes (`\\`) in SQL statements.<br />**NOTE**<br />The character specified by `escape` is applied to both inside and outside of each pair of `enclose`-specified characters.<br />Two examples are as follows:<br /><ul><li>When you set `enclose` to `"` and `escape` to `\`, StarRocks parses `"say \"Hello world\""` into `say "Hello world"`.</li><li>Assume that the column separator is comma (`,`). When you set `escape` to `\`, StarRocks parses `a, b\, c` into two separate field values: `a` and `b, c`.</li></ul> 
+
+#### `strip_outer_array`
+
+**Required**: No\
+**Description**:  Specifies whether to strip the outermost array structure of the JSON-formatted data. Valid values: `true` and `false`. Default value: `false`. In real-world business scenarios, JSON-formatted data may have an outermost array structure as indicated by a pair of square brackets `[]`. In this situation, we recommend that you set this parameter to `true`, so StarRocks removes the outermost square brackets `[]` and loads each inner array as a separate data record. If you set this parameter to `false`, StarRocks parses the entire JSON-formatted data into one array and loads the array as a single data record. Use the JSON-formatted data `[{"category" : 1, "author" : 2}, {"category" : 3, "author" : 4} ]` as an example. If you set this parameter to `true`, `{"category" : 1, "author" : 2}` and `{"category" : 3, "author" : 4}` are parsed as two separate data records and are loaded into two StarRocks data rows. 
+
+#### `jsonpaths`  
+
+**Required**: No\
+**Description**:  The names of the fields that you want to load from JSON-formatted data. The value of this parameter is a valid JsonPath expression. For more information, see [StarRocks table contains derived columns whose values are generated by using expressions](#starrocks-table-contains-derived-columns-whose-values-are-generated-by-using-expressions)) in this topic. 
+
+#### `json_root`
+
+**Required**: No\
+**Description**:  The root element of the JSON-formatted data to load. StarRocks extracts the elements of the root node through `json_root` for parsing. By default, the value of this parameter is empty, indicating that all JSON-formatted data will be loaded. For more information, see [Specify the root element of the JSON-formatted data to be loaded](#specify-the-root-element-of-the-json-formatted-data-to-be-loaded) in this topic. 
+
+#### `task_consume_second`
+
+**Required**: No\
+**Description**:  The maximum time for each Routine Load task within the specified Routine Load job to consume data. Unit: second. Unlike the [FE dynamic parameters](../../../../administration/management/FE_configuration.md) `routine_load_task_consume_second` (which applies to all Routine Load jobs within the cluster), this parameter is specific to an individual Routine Load job, which is more flexible. This parameter is supported since v3.1.0.<ul> <li>When `task_consume_second` and `task_timeout_second` are not configured, StarRocks uses the FE dynamic parameters `routine_load_task_consume_second` and `routine_load_task_timeout_second` to control the load behavior.</li> <li>When only `task_consume_second` is configured, the default value for `task_timeout_second` is calculated as `task_consume_second` * 4.</li> <li>When only `task_timeout_second` is configured, the default value for `task_consume_second` is calculated as `task_timeout_second`/4.</li> </ul> 
+
+#### `task_timeout_second`
+
+**Required**: No\
+**Description**: The timeout duration for each Routine Load task within the specified Routine Load job. Unit: second. Unlike the [FE dynamic parameter](../../../../administration/management/FE_configuration.md) `routine_load_task_timeout_second` (which applies to all Routine Load jobs within the cluster), this parameter is specific to an individual Routine Load job, which is more flexible. This parameter is supported since v3.1.0. <ul> <li>When `task_consume_second` and `task_timeout_second` are not configured, StarRocks uses the FE dynamic parameters `routine_load_task_consume_second` and `routine_load_task_timeout_second` to control the load behavior.</li> <li>When only `task_timeout_second` is configured, the default value for `task_consume_second` is calculated as `task_timeout_second`/4.</li> <li>When only `task_consume_second` is configured, the default value for `task_timeout_second` is calculated as `task_consume_second` * 4.</li> </ul>
+
+#### `pause_on_fatal_parse_error`
+
+**Required**: No\
+**Description**:  Specifies whether to automatically pause the job upon encountering unrecoverable data parsing errors. Valid values: `true` and `false`. Default value: `false`. This parameter is supported since v3.3.12/v3.4.2. <br />Such parsing errors are typically caused by illegal data formats, such as:<ul><li>Importing a JSON array without setting `strip_outer_array`.</li><li>Importing JSON data, but the Kafka message contains illegal JSON, such as `abcd`.</li></ul> 
+
+
+#### `data_source`, `data_source_properties`
 
 Required. The data source and relevant properties.
 
@@ -146,22 +227,44 @@ Required. The source of the data you want to load. Valid value: `KAFKA`.
 
 The properties of the data source.
 
-| Property          | Required | Description                                                  |
-| ----------------- | -------- | ------------------------------------------------------------ |
-| kafka_broker_list | Yes      | Kafka's broker connection information. The format is `<kafka_broker_ip>:<broker_ port>`. Multiple brokers are separated by commas (,). The default port used by Kafka brokers is `9092`. Example:`"kafka_broker_list" = ""xxx.xx.xxx.xx:9092,xxx.xx.xxx.xx:9092"`. |
-| kafka_topic       | Yes      | The  Kafka topic to be consumed. A Routine Load job can only consume messages from one topic. |
-| kafka_partitions  | No       | The Kafka partitions to be consumed, for example, `"kafka_partitions" = "0, 1, 2, 3"`. If this property is not specified, all partitions are consumed by default. |
-| kafka_offsets     | No       | The starting offset from which to consume data in a Kafka partition as specified in `kafka_partitions`. If this property is not specified, the Routine Load job consumes data starting from the latest offsets in `kafka_partitions`. Valid values:<ul><li>A specific offset: consumes data starting from a specific offset.</li><li>`OFFSET_BEGINNING`: consumes data starting from the earliest offset possible.</li><li>`OFFSET_END`: consumes data starting from the latest offset.</li></ul> Multiple starting offsets are separated by commas (,), for example, `"kafka_offsets" = "1000, OFFSET_BEGINNING, OFFSET_END, 2000"`.|
-| property.kafka_default_offsets| No| The default starting offset for all consumer partitions. The supported values for this property are same as those for the `kafka_offsets` property.|
-| confluent.schema.registry.url|No |The URL of the Schema Registry where the Avro schema is registered. StarRocks retrieves the Avro schema by using this URL. The format is as follows:<br />`confluent.schema.registry.url = http[s]://[<schema-registry-api-key>:<schema-registry-api-secret>@]<hostname or ip address>[:<port>]`|
+#### `kafka_broker_list`
 
-#### More data source-related properties
+**Required**: Yes\
+**Description**:  Kafka's broker connection information. The format is `<kafka_broker_ip>:<broker_ port>`. Multiple brokers are separated by commas (,). The default port used by Kafka brokers is `9092`. Example:`"kafka_broker_list" = ""xxx.xx.xxx.xx:9092,xxx.xx.xxx.xx:9092"`. 
+
+#### `kafka_topic`
+
+**Required**: Yes\
+**Description**:  The  Kafka topic to be consumed. A Routine Load job can only consume messages from one topic. 
+
+#### `kafka_partitions`
+
+**Required**: No\
+**Description**:  The Kafka partitions to be consumed, for example, `"kafka_partitions" = "0, 1, 2, 3"`. If this property is not specified, all partitions are consumed by default. 
+
+#### `kafka_offsets`
+
+**Required**: No\
+**Description**:  The starting offset from which to consume data in a Kafka partition as specified in `kafka_partitions`. If this property is not specified, the Routine Load job consumes data starting from the latest offsets in `kafka_partitions`. Valid values:<ul><li>A specific offset: consumes data starting from a specific offset.</li><li>`OFFSET_BEGINNING`: consumes data starting from the earliest offset possible.</li><li>`OFFSET_END`: consumes data starting from the latest offset.</li></ul> Multiple starting offsets are separated by commas (,), for example, `"kafka_offsets" = "1000, OFFSET_BEGINNING, OFFSET_END, 2000"`.
+
+#### `property.kafka_default_offsets`
+
+**Required**: No\
+**Description**:  The default starting offset for all consumer partitions. The supported values for this property are same as those for the `kafka_offsets` property.
+
+#### `confluent.schema.registry.url`
+
+**Required**: No\
+**Description**: The URL of the Schema Registry where the Avro schema is registered. StarRocks retrieves the Avro schema by using this URL. The format is as follows:<br />`confluent.schema.registry.url = http[s]://[<schema-registry-api-key>:<schema-registry-api-secret>@]<hostname or ip address>[:<port>]`
+
+
+### More data source-related properties
 
 You can specify additional data source (Kafka) related properties, which are equivalent to using the Kafka command line `--property`. For more supported properties, see the properties for a Kafka consumer client in [librdkafka configuration properties](https://github.com/confluentinc/librdkafka/blob/master/CONFIGURATION.md).
 
-> **NOTE**
->
-> If the value of a property is a file name, add the keyword `FILE:` preceding the file name. For information about how to create a file, see [CREATE FILE](../../cluster-management/file/CREATE_FILE.md).
+:::note
+If the value of a property is a file name, add the keyword `FILE:` preceding the file name. For information about how to create a file, see [CREATE FILE](../../cluster-management/file/CREATE_FILE.md).
+:::
 
 - **Specify the default initial offset for all the partitions to be consumed**
 
@@ -263,9 +366,9 @@ For more examples, see [Configure column mapping](#configure-column-mapping).
 
 ### Configure column mapping for loading JSON-formatted or Avro-formatted data
 
-> **NOTE**
->
-> Since v3.0.1, StarRocks supports loading Avro data by using Routine Load. When you load JSON or Avro data, the configuration for column mapping and transformation is the same. Therefore, in this section, JSON data is used as an example to introduce the configuration.
+:::note
+Since v3.0.1, StarRocks supports loading Avro data by using Routine Load. When you load JSON or Avro data, the configuration for column mapping and transformation is the same. Therefore, in this section, JSON data is used as an example to introduce the configuration.
+:::
 
 If the keys of the JSON-formatted data have the same names as the columns of the StarRocks table, you can load the JSON-formatted data by using the simple mode. In simple mode, you do not need to specify the `jsonpaths` parameter. This mode requires that the JSON-formatted data must be an object as indicated by curly brackets `{}`, such as `{"category": 1, "author": 2, "price": "3"}`. In this example, `category`, `author`, and `price` are key names, and these keys can be mapped one on one by name to the columns `category`, `author`, and `price` of the StarRocks table. For examples, please see [simple mode](#starrocks-table-column-names-consistent-with-json-key-names).
 
@@ -279,6 +382,8 @@ If the keys of the JSON-formatted data have different names than the columns of 
 For examples, see [StarRocks table contains derived columns whose values are generated by using expressions](#starrocks-table-contains-derived-columns-whose-values-are-generated-by-using-expressions).
 
 ## Examples
+
+<WarehouseExample />
 
 ### Load  CSV-formatted data
 
@@ -340,9 +445,9 @@ Note that the actual task parallelism is determined by the minimum value among t
 min(alive_be_number, partition_number, desired_concurrent_number, max_routine_load_task_concurrent_num)
 ```
 
-> **Note**
->
-> The maximum actual task parallelism is either the number of alive BE nodes or the number of partitions to be consumed.
+:::note
+The maximum actual task parallelism is either the number of alive BE nodes or the number of partitions to be consumed.
+:::
 
 Therefore, when the number of alive BE nodes and the number of partitions to be consumed are greater than the values of the other two parameters `max_routine_load_task_concurrent_num` and `desired_concurrent_number`, you can increase the values of the other two parameters to increase the actual task parallelism.
 
@@ -530,7 +635,9 @@ For example, the following JSON-formatted data exists in the Kafka topic `ordert
 {"commodity_id": "3", "customer_name": "Antoine de Saint-Exupéry","country": "France","pay_time": 1589191487,"price": 895}
 ```
 
-> **Note** Each JSON object must be in one Kafka message. Otherwise, an error that indicates a failure in parsing JSON-formatted data occurs.
+:::note
+Each JSON object must be in one Kafka message. Otherwise, an error that indicates a failure in parsing JSON-formatted data occurs.
+:::
 
 **Target database and table**
 
@@ -564,10 +671,10 @@ FROM KAFKA
 );
 ```
 
-> **Note**
->
-> - If the outermost layer of the JSON-formatted data is an array structure, you need to set `"strip_outer_array"="true"` in `PROPERTIES` to strip the outermost array structure. Additionally, when you need to specify `jsonpaths`, the root element of the entire JSON-formatted data is the flattened JSON object because the outermost array structure of the JSON-formatted data is stripped.
-> - You can use `json_root` to specify the root element of the JSON-formatted data.
+:::note
+- If the outermost layer of the JSON-formatted data is an array structure, you need to set `"strip_outer_array"="true"` in `PROPERTIES` to strip the outermost array structure. Additionally, when you need to specify `jsonpaths`, the root element of the entire JSON-formatted data is the flattened JSON object because the outermost array structure of the JSON-formatted data is stripped.
+- You can use `json_root` to specify the root element of the JSON-formatted data.
+:::
 
 #### StarRocks table contains derived columns whose values are generated by using expressions
 
@@ -620,10 +727,10 @@ FROM KAFKA
 );
 ```
 
-> **Note**
->
-> - If the outermost layer of the JSON data is an array structure, you need to set `"strip_outer_array"="true"` in the `PROPERTIES` to strip the outermost array structure. Additionally, when you need to specify `jsonpaths`, the root element of the entire JSON data is the flattened JSON object because the outermost array structure of the JSON data is stripped.
-> - You can use `json_root` to specify the root element of the JSON-formatted data.
+:::note
+- If the outermost layer of the JSON data is an array structure, you need to set `"strip_outer_array"="true"` in the `PROPERTIES` to strip the outermost array structure. Additionally, when you need to specify `jsonpaths`, the root element of the entire JSON data is the flattened JSON object because the outermost array structure of the JSON data is stripped.
+- You can use `json_root` to specify the root element of the JSON-formatted data.
+:::
 
 #### StarRocks table contains derived column whose values are generated by using CASE expression
 
