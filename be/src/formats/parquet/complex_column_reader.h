@@ -255,8 +255,8 @@ class VariantColumnReader final : public ColumnReader {
 public:
     // Constructor that accepts pre-built ScalarColumnReader objects
     explicit VariantColumnReader(const ParquetField* parquet_field,
-                                std::unique_ptr<ScalarColumnReader>&& metadata_reader,
-                                std::unique_ptr<ScalarColumnReader>&& value_reader)
+                                 std::unique_ptr<ScalarColumnReader>&& metadata_reader,
+                                 std::unique_ptr<ScalarColumnReader>&& value_reader)
             : ColumnReader(parquet_field),
               _metadata_reader(std::move(metadata_reader)),
               _value_reader(std::move(value_reader)) {
