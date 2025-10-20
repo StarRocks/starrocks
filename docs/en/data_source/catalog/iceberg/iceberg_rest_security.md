@@ -26,7 +26,7 @@ By integrating Iceberg REST Catalog with StarRocks, secure access and unified pe
 
 ## Usage
 
-### Step 1. Sett up JWT authentication
+### Step 1. Set up JWT authentication
 
 In StarRocks, configure a **[JWT-based Security Integration](../../../administration/user_privs/authentication/security_integration.md#create-a-security-integration-with-jwt)** or [create a user with JWT authentication](https://docs.starrocks.io/en/docs/administration/user_privs/authentication/jwt_authentication/).
 
