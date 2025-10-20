@@ -25,7 +25,7 @@ public class PredicateSearchKey {
     private final GetRemoteFilesParams params;
 
     public static PredicateSearchKey of(String databaseName, String tableName, GetRemoteFilesParams params) {
-        return of(databaseName, tableName, params);
+        return new PredicateSearchKey(databaseName, tableName, params);
     }
 
     public PredicateSearchKey(String databaseName, String tableName, GetRemoteFilesParams params) {
