@@ -113,11 +113,10 @@ void ExecutionGroup::prepare_active_drivers_parallel(RuntimeState* state, std::a
 }
 
 Status ExecutionGroup::prepare_active_drivers_sequentially(RuntimeState* state) {
-    for_each_active_driver(_pipelines, [&](const DriverPtr& driver) {
+    return for_each_active_driver(_pipelines, [&](const DriverPtr& driver) {
         RETURN_IF_ERROR(driver->prepare_local_state(state));
         return Status::OK();
     });
-    return Status::OK();
 }
 
 Status NormalExecutionGroup::prepare_drivers(RuntimeState* state) {
