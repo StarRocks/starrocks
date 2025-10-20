@@ -1,0 +1,71 @@
+-- name: test_iceberg_collect_stats
+create external catalog iceberg_collect_stats_${uuid0} PROPERTIES (
+    "type"="iceberg",
+    "iceberg.catalog.type"="hive", 
+    "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+);
+
+create database iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0} properties (
+    "location" = "oss://${oss_bucket}/iceberg_collect_stats_${uuid0}/test_iceberg_partition_transform/${uuid0}"
+);
+
+create table iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t1 (
+    c1 int,
+    c2 bigint,
+    c3 date,
+    c4 decimal(10,3)
+) partition by c1,c2,c3,c4;
+
+insert into iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t1 values(1, 2, '2022-01-01', 10.23);
+[UC] analyze table iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t1;
+function: assert_explain_costs_contains('select * from iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t1', 'cardinality=1')
+drop table iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t1 force;
+
+create table iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t2 (
+    c1 int,
+    c2 bigint,
+    c3 date
+) partition by truncate(c1, 50), bucket(c2, 10), year(c3);
+
+insert into iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t2 values(1,2,'2022-01-01'), (49,38,'2022-12-12');
+[UC] analyze table iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t2;
+function: assert_explain_costs_contains('select * from iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t2', 'cardinality=2')
+drop table iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t2 force;
+
+create table iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t3 (
+    c1 date,
+    c2 date,
+    c3 date,
+    c4 datetime
+) partition by year(c1), month(c2), day(c3), hour(c4);
+insert into iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t3 values('2022-01-01', '2022-01-01' ,'2022-01-01', '2022-01-01 12:13:14'), ('2022-01-02', '2022-01-02' ,'2022-01-01', '2022-01-01 12:15:14'), ('2022-01-03', '2022-01-03' ,'2022-01-01', '2022-01-01 12:17:14');
+[UC] analyze table iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t3;
+function: assert_explain_costs_contains('select * from iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t3', 'cardinality=3')
+drop table iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t3 force;
+
+create table iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t4 (
+    c1 varchar(100)
+) partition by truncate(c1, 1);
+insert into iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t4 values('测试1'), ('测试2'),('测试3');
+[UC] analyze table iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t4;
+function: assert_explain_costs_contains('select * from iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t4', 'cardinality: 3')
+drop table iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t4 force;
+
+create table iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t5 (
+    c1 varbinary(100)
+) partition by truncate(c1, 1);
+insert into iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t5 values('abc'), ('edf');
+[UC] analyze table iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t5;
+function: assert_explain_costs_contains('select * from iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t5', 'cardinality: 2')
+drop table iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t5 force;
+
+
+drop database iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0};
+drop catalog iceberg_collect_stats_${uuid0};
+
+
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/iceberg_collect_stats_${uuid0}/test_iceberg_partition_transform/${uuid0} >/dev/null || echo "exit 0" >/dev/null
