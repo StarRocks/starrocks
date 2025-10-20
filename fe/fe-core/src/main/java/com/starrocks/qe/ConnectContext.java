@@ -817,7 +817,11 @@ public class ConnectContext {
     }
 
     public String getDatabase() {
-        return currentDb;
+        if (GlobalVariable.enableTableNameCaseInsensitive && currentDb != null) {
+            return currentDb.toLowerCase();
+        } else {
+            return currentDb;
+        }
     }
 
     public void setDatabase(String db) {
@@ -1020,7 +1024,7 @@ public class ConnectContext {
             // throw exception if the current warehouse is not exist.
             if (!warehouseManager.warehouseExists(this.getCurrentWarehouseName())) {
                 String errMsg = String.format("Current connection's warehouse(%s) does not exist, please " +
-                                "set to another warehouse.", this.getCurrentWarehouseName());
+                        "set to another warehouse.", this.getCurrentWarehouseName());
                 this.resetComputeResource();
                 throw new RuntimeException(errMsg);
             }
@@ -1045,6 +1049,7 @@ public class ConnectContext {
      * Get the name of the current compute resource.
      * During the execution of a statement, the compute resource should be fixed.
      * NOTE: this method will not acquire compute resource if it is not set.
+     *
      * @return: the name of the current compute resource, or empty string if not set.
      */
     public String getCurrentComputeResourceName() {
