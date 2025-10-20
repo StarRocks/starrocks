@@ -41,6 +41,7 @@ public class PseudoClusterAlterTest {
     }
 
     @Test
+    @Timeout(60)
     public void testAlterTableSimple() throws Exception {
         PseudoCluster cluster = PseudoCluster.getInstance();
         AlterHandler handler = GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler();
@@ -51,7 +52,8 @@ public class PseudoClusterAlterTest {
         cluster.runSqls("test", createTableSql, insertSql, insertSql, insertSql);
         // after introducing light schema change, add/drop column will not trigger schema change task, so change to add index
         cluster.runSql("test", "alter table " + table + " add index age_bitmap(age) using bitmap");
-        while (true) {
+        StopWatch watch = StopWatch.createStarted();
+        while (watch.getTime(TimeUnit.SECONDS) < 60) {
             long num = handler.getAlterJobV2Num(AlterJobV2.JobState.FINISHED);
             if (num == expectAlterFinishNumber) {
                 break;
@@ -62,6 +64,7 @@ public class PseudoClusterAlterTest {
     }
 
     @Test
+    @Timeout(60)
     public void testAlterTableWithTaskFailure() throws Exception {
         // test alter should success even experienced 1 task failure, failed task should be retried
         PseudoCluster cluster = PseudoCluster.getInstance();
@@ -73,7 +76,8 @@ public class PseudoClusterAlterTest {
         String insertSql = PseudoCluster.buildInsertSql("test", table);
         cluster.runSqls("test", createTableSql, insertSql, insertSql, insertSql);
         cluster.runSql("test", "alter table " + table + " add index age_bitmap(age) using bitmap");
-        while (true) {
+        StopWatch watch = StopWatch.createStarted();
+        while (watch.getTime(TimeUnit.SECONDS) < 60) {
             long num = handler.getAlterJobV2Num(AlterJobV2.JobState.FINISHED);
             if (num == expectAlterFinishNumber) {
                 break;
