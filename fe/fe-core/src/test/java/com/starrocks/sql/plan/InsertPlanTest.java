@@ -1253,7 +1253,7 @@ public class InsertPlanTest extends PlanTestBase {
         try {
             getDataSink("INSERT INTO tc properties (\"" + MERGE_CONDITION + "\" = \"v4\") select 1,2,3");
             Assertions.fail("Conditional update use nonexistent column.");
-        } catch (StarRocksException e) {
+        } catch (SemanticException e) {
             // ignore.
         }
     }
