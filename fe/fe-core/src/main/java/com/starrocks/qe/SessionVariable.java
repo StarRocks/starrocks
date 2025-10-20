@@ -393,6 +393,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_JSON_V2_REWRITE = "cbo_json_v2_rewrite";
     public static final String CBO_JSON_V2_DICT_OPT = "cbo_json_v2_dict_opt";
 
+    public static final String CBO_DISABLED_RULES = "cbo_disabled_rules";
+
     public static final String CBO_PUSH_DOWN_DISTINCT_BELOW_WINDOW = "cbo_push_down_distinct_below_window";
     public static final String CBO_PUSH_DOWN_AGGREGATE = "cbo_push_down_aggregate";
     public static final String CBO_PUSH_DOWN_GROUPINGSET = "cbo_push_down_groupingset";
@@ -1114,6 +1116,20 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // Default sqlMode is ONLY_FULL_GROUP_BY
     @VariableMgr.VarAttr(name = SQL_MODE_STORAGE_NAME, alias = SQL_MODE, show = SQL_MODE)
     private long sqlMode = 32L;
+    
+    /**
+     * Comma-separated list of optimizer rule types to disable
+     * 
+     * This is used to temporarily disable specific optimizer rules when they cause query errors,
+     * allowing queries to complete successfully while the rule bug is being fixed.
+     * 
+     * Supports TF_ (Transformation rules) and GP_ (Group combination rules) rule types.
+     * 
+     * Example:
+     *   SET cbo_disabled_rules = 'TF_JOIN_COMMUTATIVITY,GP_PRUNE_COLUMNS';
+     */
+    @VariableMgr.VarAttr(name = CBO_DISABLED_RULES)
+    private String cboDisabledRules = "";
 
     // The specified resource group of this session
     @VariableMgr.VarAttr(name = RESOURCE_GROUP, flag = VariableMgr.SESSION_ONLY)
@@ -3215,6 +3231,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setSqlMode(long sqlMode) {
         this.sqlMode = sqlMode;
+    }
+    
+    public String getCboDisabledRules() {
+        return cboDisabledRules;
+    }
+    
+    public void setCboDisabledRules(String rulesStr) {
+        this.cboDisabledRules = rulesStr;
     }
 
     public long getSqlSelectLimit() {
