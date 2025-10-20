@@ -148,11 +148,12 @@ public class AST2SQLVisitor extends AST2StringVisitor {
             sqlBuilder.append("DISTINCT ");
         }
 
-        List<String> selectItems = visitSelectItemList(stmt);
         if (options.isEnablePrettyFormat()) {
             // Pretty format: each column on a new line with proper indentation
+            // Increase indent BEFORE visiting items so nested expressions get correct indent
             options.increaseIndent();
             try {
+                List<String> selectItems = visitSelectItemList(stmt);
                 if (!selectItems.isEmpty()) {
                     for (int i = 0; i < selectItems.size(); i++) {
                         if (i > 0) {
@@ -167,6 +168,7 @@ public class AST2SQLVisitor extends AST2StringVisitor {
             }
         } else {
             // Default format: comma-separated on same line
+            List<String> selectItems = visitSelectItemList(stmt);
             sqlBuilder.append(Joiner.on(", ").join(selectItems));
         }
 
@@ -299,7 +301,7 @@ public class AST2SQLVisitor extends AST2StringVisitor {
         } else {
             // Default format: inline
             sqlBuilder.append(visit(relation.getCteQueryStatement()));
-            sqlBuilder.append(")");
+            sqlBuilder.append(") ");
         }
         
         return sqlBuilder.toString();
