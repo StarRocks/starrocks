@@ -27,6 +27,14 @@ namespace starrocks {
 class TimeFunctions {
 public:
     /**
+     * Timeszone of now.
+     * @param: []
+     * @paramType columns: []
+     * @return ConstColumn A ConstColumn holding a String Value object.
+     */
+    DEFINE_VECTORIZED_FN(current_timezone);
+
+    /**
      * Timestamp of now.
      * @param: []
      * @paramType columns: []
