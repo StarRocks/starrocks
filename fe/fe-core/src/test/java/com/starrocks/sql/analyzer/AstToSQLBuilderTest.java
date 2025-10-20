@@ -17,6 +17,8 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.formatter.AST2SQLVisitor;
+import com.starrocks.sql.formatter.FormatOptions;
 import com.starrocks.sql.parser.SqlParser;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -26,6 +28,16 @@ public class AstToSQLBuilderTest {
     @BeforeAll
     public static void beforeClass() throws Exception {
         AnalyzeTestUtil.init();
+    }
+    
+    // Helper method to format SQL with pretty format enabled
+    private static String toPrettySQL(StatementBase stmt) {
+        return AST2SQLVisitor.withOptions(
+                FormatOptions.allEnable()
+                        .setColumnSimplifyTableName(false)
+                        .setEnableDigest(false)
+                        .setEnablePrettyFormat(true))
+                .visit(stmt);
     }
 
     @Test
@@ -37,7 +49,7 @@ public class AstToSQLBuilderTest {
             StatementBase stmt = SqlParser.parseSingleStatement(sql, SqlModeHelper.MODE_DEFAULT);
             Assertions.assertEquals(
                     "CREATE PIPE IF NOT EXISTS pipe1 PROPERTIES(\"auto_ingest\" = \"true\") AS INSERT INTO `t0` (`v1`,`v2`) " +
-                            "SELECT \n  *\nFROM FILES(\"aws.s3.access_key\" = \"***\", \"aws.s3.region\" = \"us-west-1\", " +
+                            "SELECT *\nFROM FILES(\"aws.s3.access_key\" = \"***\", \"aws.s3.region\" = \"us-west-1\", " +
                             "\"aws.s3.secret_key\" = \"***\", \"format\" = \"parquet\", \"path\" = \"s3://xxx/zzz\")",
                     AstToSQLBuilder.toSQL(stmt));
         }
@@ -49,7 +61,7 @@ public class AstToSQLBuilderTest {
             StatementBase stmt = SqlParser.parseSingleStatement(sql, SqlModeHelper.MODE_DEFAULT);
             Assertions.assertEquals(
                     "CREATE OR REPLACE PIPE pipe1 AS INSERT INTO `t0` (`v1`,`v2`) " +
-                            "SELECT \n  *\nFROM FILES(\"aws.s3.access_key\" = \"***\", \"aws.s3.region\" = \"us-west-1\", " +
+                            "SELECT *\nFROM FILES(\"aws.s3.access_key\" = \"***\", \"aws.s3.region\" = \"us-west-1\", " +
                             "\"aws.s3.secret_key\" = \"***\", \"format\" = \"parquet\", \"path\" = \"s3://xxx/zzz\")",
                     AstToSQLBuilder.toSQL(stmt));
         }
@@ -63,7 +75,7 @@ public class AstToSQLBuilderTest {
         StatementBase stmt = SqlParser.parseSingleStatement(sql, SqlModeHelper.MODE_DEFAULT);
         Assertions.assertEquals(
                 "INSERT INTO `t0` (`v1`,`v2`) " +
-                        "SELECT \n  *\nFROM FILES(\"aws.s3.access_key\" = \"***\", \"aws.s3.region\" = \"us-west-1\", " +
+                        "SELECT *\nFROM FILES(\"aws.s3.access_key\" = \"***\", \"aws.s3.region\" = \"us-west-1\", " +
                         "\"aws.s3.secret_key\" = \"***\", \"format\" = \"parquet\", \"path\" = \"s3://xxx/zzz\")",
                 AstToSQLBuilder.toSQL(stmt));
     }
@@ -71,12 +83,12 @@ public class AstToSQLBuilderTest {
     public void testSelectStarExcludeToSQL() throws Exception {
         String sql = "SELECT * EXCLUDE (name, email) FROM test_exclude;";
         StatementBase stmt = SqlParser.parseSingleStatement(sql, SqlModeHelper.MODE_DEFAULT);
-        Assertions.assertEquals("SELECT \n  * EXCLUDE ( \"name\",\"email\" ) \nFROM `test_exclude`",
+        Assertions.assertEquals("SELECT * EXCLUDE ( \"name\",\"email\" ) \nFROM `test_exclude`",
                 AstToSQLBuilder.toSQL(stmt));
         
         sql = "SELECT test_exclude.* EXCLUDE (name) FROM test_exclude";
         stmt = SqlParser.parseSingleStatement(sql, SqlModeHelper.MODE_DEFAULT);
-        Assertions.assertEquals("SELECT \n  test_exclude.* EXCLUDE ( \"name\" ) \nFROM `test_exclude`",
+        Assertions.assertEquals("SELECT test_exclude.* EXCLUDE ( \"name\" ) \nFROM `test_exclude`",
                 AstToSQLBuilder.toSQL(stmt));
     }
 
@@ -84,12 +96,12 @@ public class AstToSQLBuilderTest {
     public void testFunctionTable() {
         String sql = "SELECT * from tarray, unnest(v3) as t(x)";
         StatementBase stmt = SqlParser.parseSingleStatement(sql, SqlModeHelper.MODE_DEFAULT);
-        Assertions.assertEquals("SELECT \n  *\nFROM `tarray` , unnest(`v3`) t(`x`) ",
+        Assertions.assertEquals("SELECT *\nFROM `tarray` , unnest(`v3`) t(`x`) ",
                 AstToSQLBuilder.toSQL(stmt));
 
         sql = "SELECT * from t0, generate_series(v1, v2, 1) as t(x)";
         stmt = SqlParser.parseSingleStatement(sql, SqlModeHelper.MODE_DEFAULT);
-        Assertions.assertEquals("SELECT \n  *\nFROM `t0` , generate_series(`v1`,`v2`,1) t(`x`) ",
+        Assertions.assertEquals("SELECT *\nFROM `t0` , generate_series(`v1`,`v2`,1) t(`x`) ",
                 AstToSQLBuilder.toSQL(stmt));
     }
 
@@ -105,7 +117,7 @@ public class AstToSQLBuilderTest {
                 "    ELSE 'high'\n" +
                 "  END\n" +
                 "FROM `t0`";
-        Assertions.assertEquals(expected, AstToSQLBuilder.toSQL(stmt));
+        Assertions.assertEquals(expected, toPrettySQL(stmt));
     }
 
     @Test
@@ -129,7 +141,7 @@ public class AstToSQLBuilderTest {
                 "SELECT \n" +
                 "  *\n" +
                 "FROM `cte1` INNER JOIN `cte2` ON `cte1`.`v1` = `cte2`.`v1`";
-        Assertions.assertEquals(expected, AstToSQLBuilder.toSQL(stmt));
+        Assertions.assertEquals(expected, toPrettySQL(stmt));
     }
 
     @Test
@@ -184,6 +196,6 @@ public class AstToSQLBuilderTest {
                 "  `cte02`.`priority`\n" +
                 "FROM `cte02`\n" +
                 "WHERE `cte02`.`priority` IS NOT NULL";
-        Assertions.assertEquals(expected, AstToSQLBuilder.toSQL(stmt));
+        Assertions.assertEquals(expected, toPrettySQL(stmt));
     }
 }

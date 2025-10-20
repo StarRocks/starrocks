@@ -148,24 +148,26 @@ public class AST2SQLVisitor extends AST2StringVisitor {
             sqlBuilder.append("DISTINCT ");
         }
 
-        // Increase indent level BEFORE visiting select items
-        // This ensures nested expressions (like CASE) have correct indent context
-        options.increaseIndent();
-        try {
-            // Format SELECT items: each column on a new line
-            List<String> selectItems = visitSelectItemList(stmt);
-            if (!selectItems.isEmpty()) {
-                for (int i = 0; i < selectItems.size(); i++) {
-                    if (i > 0) {
-                        sqlBuilder.append(",");
+        List<String> selectItems = visitSelectItemList(stmt);
+        if (options.isEnablePrettyFormat()) {
+            // Pretty format: each column on a new line with proper indentation
+            options.increaseIndent();
+            try {
+                if (!selectItems.isEmpty()) {
+                    for (int i = 0; i < selectItems.size(); i++) {
+                        if (i > 0) {
+                            sqlBuilder.append(",");
+                        }
+                        sqlBuilder.append(options.indent());
+                        sqlBuilder.append(selectItems.get(i));
                     }
-                    sqlBuilder.append(options.indent());
-                    sqlBuilder.append(selectItems.get(i));
                 }
+            } finally {
+                options.decreaseIndent();
             }
-        } finally {
-            // Decrease indent level after all select items
-            options.decreaseIndent();
+        } else {
+            // Default format: comma-separated on same line
+            sqlBuilder.append(Joiner.on(", ").join(selectItems));
         }
 
         String fromClause = visit(stmt.getRelation());
@@ -282,30 +284,35 @@ public class AST2SQLVisitor extends AST2StringVisitor {
                     .append(")");
         }
         
-        // Format CTE definition with proper indentation
         sqlBuilder.append(" AS (");
         
-        // Increase indent level for the CTE query
-        options.increaseIndent();
-        try {
-            // Add newline and indent before the query
-            sqlBuilder.append(options.indent());
-            
-            // Visit the CTE query statement (it will use the increased indent level)
+        if (options.isEnablePrettyFormat()) {
+            // Pretty format: CTE definition with proper indentation
+            options.increaseIndent();
+            try {
+                sqlBuilder.append(options.indent());
+                sqlBuilder.append(visit(relation.getCteQueryStatement()));
+            } finally {
+                options.decreaseIndent();
+            }
+            sqlBuilder.append(options.indent()).append(")");
+        } else {
+            // Default format: inline
             sqlBuilder.append(visit(relation.getCteQueryStatement()));
-        } finally {
-            // Restore indent level
-            options.decreaseIndent();
+            sqlBuilder.append(")");
         }
-        
-        // Add closing parenthesis on new line with proper indent
-        sqlBuilder.append(options.indent()).append(")");
         
         return sqlBuilder.toString();
     }
 
     @Override
     public String visitQueryStatement(com.starrocks.sql.ast.QueryStatement stmt, Void context) {
+        // Only override if pretty format is enabled
+        if (!options.isEnablePrettyFormat()) {
+            return super.visitQueryStatement(stmt, context);
+        }
+        
+        // Pretty format implementation
         StringBuilder sqlBuilder = new StringBuilder();
         com.starrocks.sql.ast.QueryRelation queryRelation = stmt.getQueryRelation();
 
@@ -314,7 +321,6 @@ public class AST2SQLVisitor extends AST2StringVisitor {
             sqlBuilder.append("WITH ");
             java.util.List<CTERelation> cteRelations = queryRelation.getCteRelations();
             
-            // Format multiple CTEs with comma and newline
             for (int i = 0; i < cteRelations.size(); i++) {
                 if (i > 0) {
                     sqlBuilder.append(",");
@@ -322,8 +328,6 @@ public class AST2SQLVisitor extends AST2StringVisitor {
                 }
                 sqlBuilder.append(visit(cteRelations.get(i)));
             }
-            
-            // Add newline before main query
             sqlBuilder.append(options.newLine());
         }
 
@@ -612,19 +616,23 @@ public class AST2SQLVisitor extends AST2StringVisitor {
 
     @Override
     public String visitCaseWhenExpr(CaseExpr node, Void context) {
+        // Only override if pretty format is enabled  
+        if (!options.isEnablePrettyFormat()) {
+            return super.visitCaseWhenExpr(node, context);
+        }
+        
+        // Pretty format implementation
         boolean hasCaseExpr = node.hasCaseExpr();
         boolean hasElseExpr = node.hasElseExpr();
         StringBuilder output = new StringBuilder("CASE");
         
-        // Increase indent level for WHEN/ELSE clauses
+        int childIdx = 0;
+        if (hasCaseExpr) {
+            output.append(" ").append(printWithParentheses(node.getChild(childIdx++)));
+        }
+        
         options.increaseIndent();
         try {
-            int childIdx = 0;
-            if (hasCaseExpr) {
-                output.append(" ").append(printWithParentheses(node.getChild(childIdx++)));
-            }
-            
-            // Format each WHEN clause on a new line with proper absolute indentation
             while (childIdx + 2 <= node.getChildren().size()) {
                 output.append(options.indent()).append("WHEN ");
                 output.append(printWithParentheses(node.getChild(childIdx++)));
@@ -632,17 +640,13 @@ public class AST2SQLVisitor extends AST2StringVisitor {
                 output.append(printWithParentheses(node.getChild(childIdx++)));
             }
             
-            // Format ELSE clause on a new line with same indentation as WHEN
             if (hasElseExpr) {
                 output.append(options.indent()).append("ELSE ");
                 output.append(printWithParentheses(node.getChild(node.getChildren().size() - 1)));
             }
         } finally {
-            // Restore indent level
             options.decreaseIndent();
         }
-        
-        // Format END on a new line (same level as CASE)
         output.append(options.indent()).append("END");
         
         return output.toString();
