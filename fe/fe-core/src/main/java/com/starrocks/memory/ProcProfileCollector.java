@@ -15,6 +15,7 @@
 package com.starrocks.memory;
 
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.FrontendDaemon;
 import one.profiler.AsyncProfiler;
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
@@ -51,6 +52,9 @@ public class ProcProfileCollector extends FrontendDaemon {
 
     @Override
     protected void runAfterCatalogReady() {
+        if (FeConstants.runningUnitTest) {
+            return;
+        }
         File file = new File(profileLogDir);
         file.mkdirs();
 
