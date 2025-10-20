@@ -294,13 +294,8 @@ public class PaimonMetadata implements ConnectorMetadata {
             }
             InnerTableScan scan = (InnerTableScan) readBuilder.newScan();
             PaimonMetricRegistry paimonMetricRegistry = new PaimonMetricRegistry();
-<<<<<<< HEAD
-            List<Split> splits = scan.withMetricsRegistry(paimonMetricRegistry).plan().splits();
-            traceScanMetrics(paimonMetricRegistry, splits, ((PaimonTable) table).getTableName(), predicates);
-=======
             List<Split> splits = scan.withMetricRegistry(paimonMetricRegistry).plan().splits();
-            traceScanMetrics(paimonMetricRegistry, splits, table.getCatalogTableName(), predicates);
->>>>>>> f64c2189ec ([BugFix] Upgrade paimon to 1.2.0 to fix CVE-2024-47561 (#64193))
+            traceScanMetrics(paimonMetricRegistry, splits, ((PaimonTable) table).getTableName(), predicates);
 
             PaimonSplitsInfo paimonSplitsInfo = new PaimonSplitsInfo(predicates, splits);
             paimonSplits.put(filter, paimonSplitsInfo);
