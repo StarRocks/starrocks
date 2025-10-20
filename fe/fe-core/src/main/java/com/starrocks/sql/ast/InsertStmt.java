@@ -271,9 +271,6 @@ public class InsertStmt extends DmlStmt {
         return targetColumnNames;
     }
 
-    public boolean useMergingCondition() {
-        return this.properties.containsKey(MERGE_CONDITION);
-    }
     public String getMergingCondition() {
         return this.properties.get(MERGE_CONDITION);
     }

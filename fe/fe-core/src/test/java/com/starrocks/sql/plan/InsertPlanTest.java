@@ -21,6 +21,7 @@ import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.OlapTableSink;
@@ -1248,5 +1249,12 @@ public class InsertPlanTest extends PlanTestBase {
         TDataSink tDataSink = ((OlapTableSink) sink).toThrift();
         String mergeCondition = tDataSink.getOlap_table_sink().getMerge_condition();
         Assertions.assertEquals("v3", mergeCondition);
+
+        try {
+            getDataSink("INSERT INTO tc properties (\"" + MERGE_CONDITION + "\" = \"v4\") select 1,2,3");
+            Assertions.fail("Conditional update use nonexistent column.");
+        } catch (StarRocksException e) {
+            // ignore.
+        }
     }
 }
