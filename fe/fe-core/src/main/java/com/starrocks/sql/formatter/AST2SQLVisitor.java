@@ -151,21 +151,22 @@ public class AST2SQLVisitor extends AST2StringVisitor {
         // Increase indent level BEFORE visiting select items
         // This ensures nested expressions (like CASE) have correct indent context
         options.increaseIndent();
-        
-        // Format SELECT items: each column on a new line
-        List<String> selectItems = visitSelectItemList(stmt);
-        if (!selectItems.isEmpty()) {
-            for (int i = 0; i < selectItems.size(); i++) {
-                if (i > 0) {
-                    sqlBuilder.append(",");
+        try {
+            // Format SELECT items: each column on a new line
+            List<String> selectItems = visitSelectItemList(stmt);
+            if (!selectItems.isEmpty()) {
+                for (int i = 0; i < selectItems.size(); i++) {
+                    if (i > 0) {
+                        sqlBuilder.append(",");
+                    }
+                    sqlBuilder.append(options.indent());
+                    sqlBuilder.append(selectItems.get(i));
                 }
-                sqlBuilder.append(options.indent());
-                sqlBuilder.append(selectItems.get(i));
             }
+        } finally {
+            // Decrease indent level after all select items
+            options.decreaseIndent();
         }
-        
-        // Decrease indent level after all select items
-        options.decreaseIndent();
 
         String fromClause = visit(stmt.getRelation());
         if (fromClause != null) {
@@ -286,19 +287,19 @@ public class AST2SQLVisitor extends AST2StringVisitor {
         
         // Increase indent level for the CTE query
         options.increaseIndent();
-        
-        // Add newline and indent before the query
-        sqlBuilder.append(options.indent());
-        
-        // Visit the CTE query statement (it will use the increased indent level)
-        sqlBuilder.append(visit(relation.getCteQueryStatement()));
-        
-        // Restore indent level
-        options.decreaseIndent();
+        try {
+            // Add newline and indent before the query
+            sqlBuilder.append(options.indent());
+            
+            // Visit the CTE query statement (it will use the increased indent level)
+            sqlBuilder.append(visit(relation.getCteQueryStatement()));
+        } finally {
+            // Restore indent level
+            options.decreaseIndent();
+        }
         
         // Add closing parenthesis on new line with proper indent
-        sqlBuilder.append(options.newLine());
-        sqlBuilder.append(")");
+        sqlBuilder.append(options.indent()).append(")");
         
         return sqlBuilder.toString();
     }
@@ -617,28 +618,29 @@ public class AST2SQLVisitor extends AST2StringVisitor {
         
         // Increase indent level for WHEN/ELSE clauses
         options.increaseIndent();
-        
-        int childIdx = 0;
-        if (hasCaseExpr) {
-            output.append(" ").append(printWithParentheses(node.getChild(childIdx++)));
+        try {
+            int childIdx = 0;
+            if (hasCaseExpr) {
+                output.append(" ").append(printWithParentheses(node.getChild(childIdx++)));
+            }
+            
+            // Format each WHEN clause on a new line with proper absolute indentation
+            while (childIdx + 2 <= node.getChildren().size()) {
+                output.append(options.indent()).append("WHEN ");
+                output.append(printWithParentheses(node.getChild(childIdx++)));
+                output.append(" THEN ");
+                output.append(printWithParentheses(node.getChild(childIdx++)));
+            }
+            
+            // Format ELSE clause on a new line with same indentation as WHEN
+            if (hasElseExpr) {
+                output.append(options.indent()).append("ELSE ");
+                output.append(printWithParentheses(node.getChild(node.getChildren().size() - 1)));
+            }
+        } finally {
+            // Restore indent level
+            options.decreaseIndent();
         }
-        
-        // Format each WHEN clause on a new line with proper absolute indentation
-        while (childIdx + 2 <= node.getChildren().size()) {
-            output.append(options.indent()).append("WHEN ");
-            output.append(printWithParentheses(node.getChild(childIdx++)));
-            output.append(" THEN ");
-            output.append(printWithParentheses(node.getChild(childIdx++)));
-        }
-        
-        // Format ELSE clause on a new line with same indentation as WHEN
-        if (hasElseExpr) {
-            output.append(options.indent()).append("ELSE ");
-            output.append(printWithParentheses(node.getChild(node.getChildren().size() - 1)));
-        }
-        
-        // Restore indent level
-        options.decreaseIndent();
         
         // Format END on a new line (same level as CASE)
         output.append(options.indent()).append("END");
