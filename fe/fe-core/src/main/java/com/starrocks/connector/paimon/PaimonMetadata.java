@@ -273,8 +273,8 @@ public class PaimonMetadata implements ConnectorMetadata {
         PaimonTable paimonTable = (PaimonTable) table;
         long latestSnapshotId = -1L;
         try {
-            if (paimonTable.getNativeTable().latestSnapshotId().isPresent()) {
-                latestSnapshotId = paimonTable.getNativeTable().latestSnapshotId().getAsLong();
+            if (paimonTable.getNativeTable().latestSnapshot().isPresent()) {
+                latestSnapshotId = paimonTable.getNativeTable().latestSnapshot().get().id();
             }
         } catch (Exception e) {
             // System table does not have snapshotId, ignore it.
@@ -294,8 +294,13 @@ public class PaimonMetadata implements ConnectorMetadata {
             }
             InnerTableScan scan = (InnerTableScan) readBuilder.newScan();
             PaimonMetricRegistry paimonMetricRegistry = new PaimonMetricRegistry();
+<<<<<<< HEAD
             List<Split> splits = scan.withMetricsRegistry(paimonMetricRegistry).plan().splits();
             traceScanMetrics(paimonMetricRegistry, splits, ((PaimonTable) table).getTableName(), predicates);
+=======
+            List<Split> splits = scan.withMetricRegistry(paimonMetricRegistry).plan().splits();
+            traceScanMetrics(paimonMetricRegistry, splits, table.getCatalogTableName(), predicates);
+>>>>>>> f64c2189ec ([BugFix] Upgrade paimon to 1.2.0 to fix CVE-2024-47561 (#64193))
 
             PaimonSplitsInfo paimonSplitsInfo = new PaimonSplitsInfo(predicates, splits);
             paimonSplits.put(filter, paimonSplitsInfo);
