@@ -160,6 +160,6 @@ else
         fi
 
         # set trimStackTrace to false to show full stack when debugging specified class or case
-        ${MVN_CMD} test -DfailIfNoTests=false -DtrimStackTrace=false -D test="$TEST_NAME" -T $PARALLEL
+        ${MVN_CMD} verify -DfailIfNoTests=false -DtrimStackTrace=false -D test="$TEST_NAME" -T $PARALLEL
     fi
 fi
