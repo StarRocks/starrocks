@@ -30,14 +30,14 @@ public class OptimizerFactory {
 
     @VisibleForTesting
     public static OptimizerContext mockContext(ConnectContext context, ColumnRefFactory columnRefFactory) {
-        return mockContext(context, columnRefFactory, OptimizerOptions.defaultOpt());
+        return mockContext(context, columnRefFactory, new OptimizerOptions());
     }
 
     @VisibleForTesting
     public static OptimizerContext mockContext(ColumnRefFactory columnRefFactory) {
         OptimizerContext oc = new OptimizerContext(new ConnectContext());
         oc.setColumnRefFactory(columnRefFactory);
-        oc.setOptimizerOptions(OptimizerOptions.defaultOpt());
+        oc.setOptimizerOptions(new OptimizerOptions());
         return oc;
     }
 
@@ -51,7 +51,7 @@ public class OptimizerFactory {
     }
 
     public static OptimizerContext initContext(ConnectContext context, ColumnRefFactory columnRefFactory) {
-        return initContext(context, columnRefFactory, OptimizerOptions.defaultOpt());
+        return initContext(context, columnRefFactory, new OptimizerOptions());
     }
 
     public static Optimizer create(OptimizerContext context) {
