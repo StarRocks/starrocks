@@ -666,6 +666,12 @@ public class ScalarOperatorFunctionsTest {
     }
 
     @Test
+    public void current_timezone() {
+        assertEquals("Asia/Shanghai",
+                ScalarOperatorFunctions.current_timezone().getVarchar());
+    }
+
+    @Test
     public void fromUnixTime() throws AnalysisException {
         assertEquals("1970-01-01 08:00:10",
                 ScalarOperatorFunctions.fromUnixTime(O_BI_10).getVarchar());
