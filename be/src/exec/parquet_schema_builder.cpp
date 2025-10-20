@@ -19,13 +19,15 @@
 
 namespace starrocks {
 
-constexpr int VARIANT_UNSHREDDING_FIELD_COUNT = 2;
-constexpr int VARIANT_SHREDDING_COUNT = 3;
+static constexpr int VARIANT_UNSHREDDING_FIELD_COUNT = 2;
+static constexpr int VARIANT_SHREDDING_COUNT = 3;
 
 static Status get_parquet_type_from_group(const ::parquet::schema::NodePtr& node, TypeDescriptor* type_desc);
 static Status get_parquet_type_from_primitive(const ::parquet::schema::NodePtr& node, TypeDescriptor* type_desc);
 static Status get_parquet_type_from_list(const ::parquet::schema::NodePtr& node, TypeDescriptor* type_desc);
 static Status get_parquet_type_from_map(const ::parquet::schema::NodePtr& node, TypeDescriptor* type_desc);
+static bool is_variant_type(const ::parquet::schema::NodePtr& node);
+static Status get_parquet_variant_type(const ::parquet::schema::NodePtr& node, TypeDescriptor* type_desc);
 static Status try_to_infer_struct_type(const ::parquet::schema::NodePtr& node, TypeDescriptor* type_desc);
 
 Status get_parquet_type(const ::parquet::schema::NodePtr& node, TypeDescriptor* type_desc) {
@@ -123,6 +125,8 @@ static Status get_parquet_type_from_group(const ::parquet::schema::NodePtr& node
         return get_parquet_type_from_list(node, type_desc);
     } else if (logical_type->is_map()) {
         return get_parquet_type_from_map(node, type_desc);
+    } else if (is_variant_type(node)) { // TODO: replace with parquet variant logical type when it is supported
+        return get_parquet_variant_type(node, type_desc);
     }
 
     auto st = try_to_infer_struct_type(node, type_desc);
@@ -132,6 +136,62 @@ static Status get_parquet_type_from_group(const ::parquet::schema::NodePtr& node
 
     // Treat unsupported types as VARCHAR.
     *type_desc = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+    return Status::OK();
+}
+
+static bool is_variant_type(const parquet::schema::NodePtr& node) {
+    DCHECK(node->is_group());
+
+    const auto group_node = std::static_pointer_cast<::parquet::schema::GroupNode>(node);
+    int field_count = group_node->field_count();
+    if (field_count != VARIANT_UNSHREDDING_FIELD_COUNT && field_count != VARIANT_SHREDDING_COUNT) {
+        return false;
+    }
+
+    int metadata_field_index = -1;
+    int value_field_index = -1;
+    TypeDescriptor metadata_type_desc;
+    TypeDescriptor value_type_desc;
+    for (auto i = 0; i < group_node->field_count(); ++i) {
+        const auto& field = group_node->field(i);
+        TypeDescriptor child_type_desc;
+        auto field_type_status = get_parquet_type(field, &child_type_desc);
+        if (!field_type_status.ok()) {
+            return false;
+        }
+
+        if (field->name() == "metadata") {
+            metadata_field_index = i;
+            metadata_type_desc = child_type_desc;
+        } else if (field->name() == "value") {
+            value_field_index = i;
+            value_type_desc = child_type_desc;
+        } else if (field->name() == "typed_value") {
+        } else {
+            return false;
+        }
+    }
+
+    if (metadata_field_index == -1 || value_field_index == -1) {
+        return false;
+    }
+
+    return metadata_type_desc.type == TYPE_VARBINARY && value_type_desc.type == TYPE_VARBINARY;
+}
+
+static Status get_parquet_variant_type(const ::parquet::schema::NodePtr& node, TypeDescriptor* type_desc) {
+    DCHECK(node->is_group());
+
+    const auto group_node = std::static_pointer_cast<::parquet::schema::GroupNode>(node);
+    const int field_count = group_node->field_count();
+    if (field_count != VARIANT_UNSHREDDING_FIELD_COUNT && field_count != VARIANT_SHREDDING_COUNT) {
+        return Status::InvalidArgument("Not a variant type");
+    }
+    if (field_count == VARIANT_SHREDDING_COUNT) {
+        return Status::NotSupported("shredded variant type is not supported yet");
+    }
+
+    *type_desc = TypeDescriptor::create_variant_type();
     return Status::OK();
 }
 
@@ -336,32 +396,6 @@ static Status try_to_infer_struct_type(const ::parquet::schema::NodePtr& node, T
         field_names.emplace_back(field->name());
         auto& field_type_desc = field_types.emplace_back();
         RETURN_IF_ERROR(get_parquet_type(field, &field_type_desc));
-    }
-
-    // Check if the group is a variant type
-    // TODO: replace with parquet variant logical type when it is supported
-    if (field_count == VARIANT_UNSHREDDING_FIELD_COUNT || field_count == VARIANT_SHREDDING_COUNT) {
-        int metadata_index = -1;
-        int value_index = -1;
-        for (size_t i = 0; i < field_names.size(); ++i) {
-            if (field_names[i] == "value") {
-                value_index = i;
-            } else if (field_names[i] == "metadata") {
-                metadata_index = i;
-            }
-        }
-        // The variant type must have both 'metadata' and 'value' fields
-        if (metadata_index == -1 || value_index == -1) {
-            *type_desc = TypeDescriptor::create_struct_type(field_names, field_types);
-            return Status::OK();
-        }
-
-        const auto& metadata_type = field_types[metadata_index];
-        const auto& value_type = field_types[value_index];
-        if (metadata_type.type == value_type.type && metadata_type.type == TYPE_VARBINARY) {
-            *type_desc = TypeDescriptor::create_variant_type();
-            return Status::OK();
-        }
     }
 
     *type_desc = TypeDescriptor::create_struct_type(field_names, field_types);
