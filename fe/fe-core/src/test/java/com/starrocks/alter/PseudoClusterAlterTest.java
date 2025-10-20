@@ -17,10 +17,14 @@ package com.starrocks.alter;
 import com.starrocks.common.Config;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.server.GlobalStateMgr;
+import org.apache.commons.lang3.time.StopWatch;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
+
+import java.util.concurrent.TimeUnit;
 
 public class PseudoClusterAlterTest {
     @BeforeAll
@@ -83,6 +87,7 @@ public class PseudoClusterAlterTest {
     private volatile Exception errorInConcurrentInsert = null;
 
     @Test
+    @Timeout(60)
     public void testAlterTableWithConcurrentInsert() throws Exception {
         PseudoCluster cluster = PseudoCluster.getInstance();
         AlterHandler handler = GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler();
@@ -110,7 +115,8 @@ public class PseudoClusterAlterTest {
         });
         concurrentInsertThread.start();
         cluster.runSql("test", "alter table " + table + " add index age_bitmap(age) using bitmap");
-        while (true) {
+        StopWatch watch = StopWatch.createStarted();
+        while (watch.getTime(TimeUnit.SECONDS) < 60) {
             long num = handler.getAlterJobV2Num(AlterJobV2.JobState.FINISHED);
             if (num == expectAlterFinishNumber) {
                 break;
@@ -118,6 +124,7 @@ public class PseudoClusterAlterTest {
             System.out.println("wait alter job to finish...");
             Thread.sleep(2000);
         }
+        Assertions.assertTrue(watch.getTime(TimeUnit.SECONDS) >= 60, "wait for alter timeout");
         stopConcurrentInsert = true;
         concurrentInsertThread.join();
         if (errorInConcurrentInsert != null) {
