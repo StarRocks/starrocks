@@ -11,6 +11,6 @@ scan:
     # kudu required
     - "**/kudu-client-1.17.1.jar"
     # paimon required
-    - "**/paimon-bundle-1.0.1.jar"
+    - "**/paimon-bundle-1.2.0.jar"
     # aws sdk bundle
     - "**/bundle-2.29.52.jar"
