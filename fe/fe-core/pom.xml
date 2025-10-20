@@ -44,7 +44,7 @@ under the License.
         <python>python</python>
         
         <!-- async-profiler in UT -->
-        <async.profiler.enabled>${env.ASYNC_PROFILER_ENABLED:-true}</async.profiler.enabled>
+        <async.profiler.enabled>${env.ASYNC_PROFILER_ENABLED:-false}</async.profiler.enabled>
         <async.profiler.lib>${env.STARROCKS_HOME}/build-support/libasyncProfiler.so</async.profiler.lib>
         <async.profiler.output>${env.STARROCKS_HOME}/output/fe/log/proc_profile/prof-%t-%p.html</async.profiler.output>
         <async.profiler.arg></async.profiler.arg>
@@ -109,18 +109,6 @@ under the License.
             </activation>
             <properties>
                 <async.profiler.arg>-agentpath:${async.profiler.lib}=start,event=cpu,file=${async.profiler.output}</async.profiler.arg>
-            </properties>
-        </profile>
-        <profile>
-            <id>async-profiler-disabled</id>
-            <activation>
-                <property>
-                    <name>env.ASYNC_PROFILER_ENABLED</name>
-                    <value>false</value>
-                </property>
-            </activation>
-            <properties>
-                <async.profiler.arg></async.profiler.arg>
             </properties>
         </profile>
     </profiles>
