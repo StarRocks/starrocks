@@ -63,12 +63,7 @@ public:
               mode_viewer_(columns[3]),
               mode_is_const_(columns[3]->is_constant()),
               key_is_const_(columns[1]->is_constant()),
-              iv_is_const_(columns[2]->is_constant()),
-              aad_is_const_(false),
-              mode_const_is_null_(false),
-              key_const_is_null_(false),
-              iv_const_is_null_(false),
-              aad_const_is_null_(false) {
+              iv_is_const_(columns[2]->is_constant()) {
         // Check if 5th parameter (AAD for GCM mode) exists
         if (columns.size() >= 5) {
             aad_viewer_.emplace(columns[4]);
@@ -207,13 +202,13 @@ private:
     bool mode_is_const_;
     bool key_is_const_;
     bool iv_is_const_;
-    bool aad_is_const_;
+    bool aad_is_const_ = false;
 
     // Constant column null flags (true if constant column is NULL)
-    bool mode_const_is_null_;
-    bool key_const_is_null_;
-    bool iv_const_is_null_;
-    bool aad_const_is_null_;
+    bool mode_const_is_null_ = false;
+    bool key_const_is_null_ = false;
+    bool iv_const_is_null_ = false;
+    bool aad_const_is_null_ = false;
 
     // Cached constant values
     AesMode cached_mode_{AES_128_ECB};
