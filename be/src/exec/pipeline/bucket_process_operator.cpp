@@ -49,6 +49,11 @@ Status BucketProcessSinkOperator::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
+Status BucketProcessSinkOperator::prepare_local_state(RuntimeState* state) {
+    RETURN_IF_ERROR(Operator::prepare_local_state(state));
+    return _ctx->sink->prepare_local_state(state);
+}
+
 void BucketProcessSinkOperator::close(RuntimeState* state) {
     _ctx->sink->close(state);
 }
@@ -115,6 +120,12 @@ Status BucketProcessSourceOperator::prepare(RuntimeState* state) {
     _ctx->attach_source_observer(state, observer());
     return _ctx->source->prepare(state);
 }
+
+Status BucketProcessSourceOperator::prepare_local_state(RuntimeState* state) {
+    RETURN_IF_ERROR(Operator::prepare_local_state(state));
+    return _ctx->source->prepare_local_state(state);
+}
+
 // case 1: has_output() is true then call pull_chunk to pull chunk
 // case 2: has_output() is false (empty bucket) then to reset state
 bool BucketProcessSourceOperator::has_output() const {

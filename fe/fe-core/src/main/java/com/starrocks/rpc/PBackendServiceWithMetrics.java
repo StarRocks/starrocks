@@ -155,10 +155,4 @@ public class PBackendServiceWithMetrics implements PBackendService {
         increaseMetrics();
         return pBackendService.updateTransactionState(request);
     }
-
-    @Override
-    public Future<PExecBatchPlanFragmentsResult> execSingleNodePlanFragments(PExecBatchPlanFragmentsRequest request) {
-        increaseMetrics();
-        return pBackendService.execSingleNodePlanFragments(request);
-    }
 }
