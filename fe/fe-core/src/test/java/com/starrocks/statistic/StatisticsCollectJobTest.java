@@ -1243,7 +1243,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
     }
 
     @Test
-    public void testExternalFullStatisticsBuildCollectSQLWithException1() {
+    public void testExternalFullStatisticsBuildCollectSQLWithBucketTransform() {
         // test partition transform is bucket
         Database database =
                 connectContext.getGlobalStateMgr().getMetadataMgr()
@@ -1261,9 +1261,34 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         StatsConstants.ScheduleType.ONCE,
                         Maps.newHashMap());
 
-        Throwable exception = assertThrows(StarRocksConnectorException.class, () -> collectJob.buildCollectSQLList(1));
-        assertThat(exception.getMessage(),
-                containsString("Partition transform BUCKET not supported to analyze, table: t0_bucket"));
+        List<List<String>> collectSqlList = collectJob.buildCollectSQLList(1);
+        // First partition is ts_bucket=0 in mock metadata; spec uses bucket(ts, 10)
+        assertContains(collectSqlList.get(0).toString(),
+                "__iceberg_transform_bucket(`ts`, 10) = 0");
+    }
+
+    @Test
+    public void testExternalFullStatisticsBuildCollectSQLWithTruncateTransform() {
+        // test partition transform is truncate
+        Database database =
+                connectContext.getGlobalStateMgr().getMetadataMgr()
+                        .getDb(connectContext, "iceberg0", "partitioned_transforms_db");
+        Table table =
+                connectContext.getGlobalStateMgr().getMetadataMgr()
+                        .getTable(connectContext, "iceberg0", "partitioned_transforms_db",
+                                "t0_truncate");
+        ExternalFullStatisticsCollectJob collectJob = (ExternalFullStatisticsCollectJob)
+                StatisticsCollectJobFactory.buildExternalStatisticsCollectJob("iceberg0",
+                        database,
+                        table, null,
+                        Lists.newArrayList("id", "data", "ts"),
+                        StatsConstants.AnalyzeType.FULL,
+                        StatsConstants.ScheduleType.ONCE,
+                        Maps.newHashMap());
+
+        List<List<String>> collectSqlList = collectJob.buildCollectSQLList(1);
+        assertContains(collectSqlList.get(0).toString(),
+                "__iceberg_transform_truncate(`data`, 5) = 'aaaaa'");
     }
 
     @Test
