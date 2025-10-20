@@ -1018,7 +1018,9 @@ under the License.
                         ${async.profiler.arg}
                         -Xmx4096m
                         -XX:TieredStopAtLevel=1 -XX:CICompilerCount=1 -XX:-BackgroundCompilation -XX:+UseSerialGC
-                        -Duser.timezone=Asia/Shanghai @{jacocoArgLine}
+                        -Duser.timezone=Asia/Shanghai
+                        -Dstarrocks.running.unittest=true
+                        @{jacocoArgLine}
                     </argLine>
                     <!-- Set maven to use independent class loading to avoid unit test failure due to the early shutdown of the JVM -->
                     <useSystemClassLoader>false</useSystemClassLoader>
