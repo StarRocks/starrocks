@@ -1995,7 +1995,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private long columnViewConcatBytesLimit = 4294967296L;
 
     @VarAttr(name = ENABLE_DEFER_PROJECT_AFTER_TOPN)
-    private boolean enableDeferProjectAfterTopN = false;
+    private boolean enableDeferProjectAfterTopN = true;
 
     @VarAttr(name = ENABLE_DESENSITIZE_EXPLAIN)
     private boolean enableDesensitizeExplain = false;
