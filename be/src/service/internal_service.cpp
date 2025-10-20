@@ -352,7 +352,12 @@ void PInternalServiceImplBase<T>::_exec_batch_plan_fragments(google::protobuf::R
 
     auto& common_request = t_batch_requests->common_param;
     auto& unique_requests = t_batch_requests->unique_param_per_instance;
-    LOG(INFO) << "exec plan batch plan_fragments:" << common_request.params.query_id;
+    std::string instances_id;
+    for (const auto& unique_request : unique_requests) {
+        instances_id.append(print_id(unique_request.params.fragment_instance_id) + " ");
+    }
+    VLOG(1) << "exec plan batch plan_fragments:, query id=" << print_id(common_request.params.query_id)
+            << ", instance id:" << instances_id;
 
     if (unique_requests.empty()) {
         Status::OK().to_protobuf(response->mutable_status());
@@ -360,6 +365,8 @@ void PInternalServiceImplBase<T>::_exec_batch_plan_fragments(google::protobuf::R
     }
 
     SignalTimerGuard guard(config::pipeline_prepare_timeout_guard_ms);
+
+    // prepare query context and desc table first
     pipeline::FragmentExecutor fragment_executor;
     Status status = fragment_executor.prepare_global_state(_exec_env, common_request);
     if (!status.ok()) {
@@ -367,6 +374,7 @@ void PInternalServiceImplBase<T>::_exec_batch_plan_fragments(google::protobuf::R
         return;
     }
 
+    // prepare fragment instance in parallel
     std::vector<PromiseStatusSharedPtr> promise_statuses;
     std::vector<pipeline::FragmentExecutor> fragment_executors(unique_requests.size());
     for (int i = 0; i < unique_requests.size(); ++i) {
@@ -391,6 +399,12 @@ void PInternalServiceImplBase<T>::_exec_batch_plan_fragments(google::protobuf::R
         if (!status.ok()) {
             break;
         }
+    }
+
+    // prepare_global_state is success when reach here, so we must count down once
+    pipeline::QueryContext* query_context = _exec_env->query_context_mgr()->get(common_request.params.query_id).get();
+    if (query_context != nullptr) {
+        query_context->count_down_fragments();
     }
 
     status.to_protobuf(response->mutable_status());

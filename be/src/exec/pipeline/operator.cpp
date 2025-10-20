@@ -113,7 +113,9 @@ void Operator::set_prepare_time(int64_t cost_ns) {
 }
 
 void Operator::set_local_prepare_time(int64_t cost_ns) {
-    COUNTER_SET(_local_prepare_timer, cost_ns);
+    if (_local_prepare_timer != nullptr) {
+        COUNTER_SET(_local_prepare_timer, cost_ns);
+    }
 }
 
 void Operator::set_precondition_ready(RuntimeState* state) {

@@ -41,6 +41,14 @@ Status MultilaneOperator::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
+Status MultilaneOperator::prepare_local_state(RuntimeState* state) {
+    RETURN_IF_ERROR(pipeline::Operator::prepare_local_state(state));
+    for (auto& lane : _lanes) {
+        RETURN_IF_ERROR(lane.processor->prepare_local_state(state));
+    }
+    return Status::OK();
+}
+
 void MultilaneOperator::close(RuntimeState* state) {
     for (auto& lane : _lanes) {
         lane.processor->close(state);
@@ -148,19 +156,19 @@ Status MultilaneOperator::_finish(starrocks::RuntimeState* state,
     return status;
 }
 Status MultilaneOperator::set_finishing(starrocks::RuntimeState* state) {
-    return _finish(
-            state, [](pipeline::OperatorPtr & op, RuntimeState * state) -> auto { return op->set_finishing(state); });
+    return _finish(state,
+                   [](pipeline::OperatorPtr& op, RuntimeState* state) -> auto { return op->set_finishing(state); });
 }
 Status MultilaneOperator::set_finished(RuntimeState* state) {
     _passthrough_chunk = nullptr;
-    return _finish(
-            state, [](pipeline::OperatorPtr & op, RuntimeState * state) -> auto { return op->set_finished(state); });
+    return _finish(state,
+                   [](pipeline::OperatorPtr& op, RuntimeState* state) -> auto { return op->set_finished(state); });
 }
 
 Status MultilaneOperator::set_cancelled(RuntimeState* state) {
     _passthrough_chunk = nullptr;
-    return _finish(
-            state, [](pipeline::OperatorPtr & op, RuntimeState * state) -> auto { return op->set_cancelled(state); });
+    return _finish(state,
+                   [](pipeline::OperatorPtr& op, RuntimeState* state) -> auto { return op->set_cancelled(state); });
 }
 
 Status MultilaneOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {

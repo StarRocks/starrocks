@@ -378,24 +378,14 @@ public class Deployer {
                 return cachedResult;
             }
 
-            try {
-                PExecBatchPlanFragmentsResult batchResult = batchFuture.get();
+            PExecBatchPlanFragmentsResult batchResult = batchFuture.get();
 
-                PExecPlanFragmentResult singleResult = new PExecPlanFragmentResult();
-                singleResult.status = batchResult.status;
+            PExecPlanFragmentResult singleResult = new PExecPlanFragmentResult();
+            singleResult.status = batchResult.status;
 
-                cachedResult = singleResult;
+            cachedResult = singleResult;
 
-                return cachedResult;
-
-            } catch (Exception e) {
-                // if any exception thrown, cache Status::OK since we only care about the first error
-                PExecPlanFragmentResult singleResult = new PExecPlanFragmentResult();
-                StatusPB statusPB = new StatusPB();
-                statusPB.statusCode = TStatusCode.OK.getValue();
-                singleResult.setStatus(statusPB);
-                throw e;
-            }
+            return cachedResult;
         }
 
         @Override
@@ -405,24 +395,14 @@ public class Deployer {
                 return cachedResult;
             }
 
-            try {
-                PExecBatchPlanFragmentsResult batchResult = batchFuture.get(timeout, unit);
+            PExecBatchPlanFragmentsResult batchResult = batchFuture.get(timeout, unit);
 
-                PExecPlanFragmentResult singleResult = new PExecPlanFragmentResult();
-                singleResult.status = batchResult.status;
+            PExecPlanFragmentResult singleResult = new PExecPlanFragmentResult();
+            singleResult.status = batchResult.status;
 
-                cachedResult = singleResult;
+            cachedResult = singleResult;
 
-                return cachedResult;
-
-            } catch (Exception e) {
-                // if any exception thrown, cache Status::OK since we only care about the first error
-                PExecPlanFragmentResult singleResult = new PExecPlanFragmentResult();
-                StatusPB statusPB = new StatusPB();
-                statusPB.statusCode = TStatusCode.OK.getValue();
-                singleResult.setStatus(statusPB);
-                throw e;
-            }
+            return cachedResult;
         }
     }
 
