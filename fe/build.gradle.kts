@@ -68,7 +68,7 @@ subprojects {
         set("log4j.version", "2.19.0")
         set("nimbusds.version", "9.37.2")
         set("odps.version", "0.48.7-public")
-        set("paimon.version", "1.0.1")
+        set("paimon.version", "1.2.0")
         set("parquet.version", "1.15.2")
         set("protobuf-java.version", "3.25.5")
         set("puppycrawl.version", "10.21.1")
