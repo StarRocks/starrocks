@@ -661,13 +661,15 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
         variant_column = down_cast<VariantColumn*>(dst.get());
     }
 
-    ColumnPtr metadata_col = BinaryColumn::create();
-    ColumnPtr value_col = BinaryColumn::create();
+    ColumnPtr metadata_col = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    ColumnPtr value_col = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
     RETURN_IF_ERROR(_metadata_reader->read_range(range, filter, metadata_col));
     RETURN_IF_ERROR(_value_reader->read_range(range, filter, value_col));
 
-    const auto* metadata_column = down_cast<BinaryColumn*>(metadata_col.get());
-    const auto* value_column = down_cast<BinaryColumn*>(value_col.get());
+    auto* metadata_nullable = down_cast<NullableColumn*>(metadata_col.get());
+    auto* value_nullable = down_cast<NullableColumn*>(value_col.get());
+    const auto* metadata_column = down_cast<const BinaryColumn*>(metadata_nullable->data_column().get());
+    const auto* value_column = down_cast<const BinaryColumn*>(value_nullable->data_column().get());
 
     // Get definition levels to determine which variant groups are null
     level_t* def_levels = nullptr;
@@ -713,8 +715,7 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
             variant_column->append_nulls(to_fill);
         }
     } else {
-        return Status::InternalError(
-                        "Variant column requires definition levels for null value determination");
+        return Status::InternalError("Variant column requires definition levels for null value determination");
     }
 
     // Handle nullable column null flags
