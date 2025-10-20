@@ -338,10 +338,12 @@ public class TaskRun implements Comparable<TaskRun> {
                 key = key.substring(PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX.length());
             }
             String value = entry.getValue();
+            boolean set = false;
             try {
-                runCtx.modifySystemVariable(new SystemVariable(key, new StringLiteral(value)), true);
-            } catch (DdlException e) {
-                // not session variable
+                set = (runCtx.modifySystemVariable(new SystemVariable(key, new StringLiteral(value)), true));
+            } catch (DdlException ignored) {
+            }
+            if (!set) {
                 taskRunContextProperties.put(key, properties.get(key));
                 // FIXME: it's too hack, don't pollute the session when setting variables
                 runCtx.getState().resetError();
