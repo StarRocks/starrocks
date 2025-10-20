@@ -1,0 +1,86 @@
+-- name: test_parallel__prepare
+-- create a single tablet table
+CREATE TABLE single_row_data (
+    dim1 STRING,    
+    dim2 STRING,    
+    dim3 STRING,    
+    dim4 STRING,    
+    sales INT,      
+    quantity INT,  
+    cost INT       
+) DUPLICATE KEY(dim1) 
+DISTRIBUTED BY HASH(dim1) BUCKETS 1 
+PROPERTIES('replication_num' = '1');
+
+INSERT INTO single_row_data VALUES ('华东', '上海', '浦东店', '电器部', 1000, 50, 600);
+set enable_gather_fragment_locality_optimization=true;
+set enable_per_bucket_optimize = true;
+set enable_tablet_internal_parallel=false;
+-- this will trigger per bucket optimize
+SELECT          dim1, dim2, dim3, dim4,         SUM(sales) as total_sales,         SUM(quantity) as total_qty,         SUM(cost) as total_cost,         COUNT(*) as record_count     FROM single_row_data     GROUP BY dim1, dim2, dim3, dim4;
+
+set enable_query_cache=true;
+SELECT          dim1, dim2, dim3, dim4,         SUM(sales) as total_sales,         SUM(quantity) as total_qty,         SUM(cost) as total_cost,         COUNT(*) as record_count     FROM single_row_data     GROUP BY dim1, dim2, dim3, dim4;
+
+set enable_tablet_internal_parallel=true;
+set enable_query_cache=false;
+WITH 
+level1_4dims AS (
+    SELECT 
+        dim1, dim2, dim3, dim4,
+        SUM(sales) as total_sales,
+        SUM(quantity) as total_qty,
+        SUM(cost) as total_cost,
+        COUNT(*) as record_count
+    FROM single_row_data
+    GROUP BY dim1, dim2, dim3, dim4
+),
+level2_3dims AS (
+    SELECT 
+        dim1, dim2, dim3,
+        SUM(total_sales) as total_sales,
+        SUM(total_qty) as total_qty,
+        SUM(total_cost) as total_cost,
+        SUM(record_count) as record_count,
+        AVG(total_sales) as avg_sales
+    FROM level1_4dims
+    GROUP BY dim1, dim2, dim3
+),
+level3_2dims AS (
+    SELECT 
+        dim1, dim2,
+        SUM(total_sales) as total_sales,
+        SUM(total_qty) as total_qty,
+        SUM(total_cost) as total_cost,
+        SUM(record_count) as record_count,
+        AVG(avg_sales) as avg_sales,
+        MAX(total_sales) as max_sales
+    FROM level2_3dims
+    GROUP BY dim1, dim2
+),
+level4_1dim AS (
+    SELECT 
+        dim1,
+        SUM(total_sales) as total_sales,
+        SUM(total_qty) as total_qty,
+        SUM(total_cost) as total_cost,
+        SUM(record_count) as record_count,
+        AVG(avg_sales) as avg_sales,
+        MAX(max_sales) as max_sales,
+        MIN(total_sales) as min_sales
+    FROM level3_2dims
+    GROUP BY dim1
+),
+level5_global AS (
+    SELECT 
+        SUM(total_sales) as global_sales,
+        SUM(total_qty) as global_qty,
+        SUM(total_cost) as global_cost,
+        SUM(record_count) as global_count,
+        AVG(avg_sales) as global_avg_sales,
+        MAX(max_sales) as global_max_sales,
+        MIN(min_sales) as global_min_sales
+    FROM level4_1dim
+)
+SELECT * FROM level5_global;
+set enable_gather_fragment_locality_optimization=false;

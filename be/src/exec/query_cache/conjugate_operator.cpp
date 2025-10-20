@@ -50,6 +50,13 @@ Status ConjugateOperator::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
+Status ConjugateOperator::prepare_local_state(RuntimeState* state) {
+    RETURN_IF_ERROR(Operator::prepare_local_state(state));
+    RETURN_IF_ERROR(_source_op->prepare_local_state(state));
+    RETURN_IF_ERROR(_sink_op->prepare_local_state(state));
+    return Status::OK();
+}
+
 void ConjugateOperator::close(RuntimeState* state) {
     _sink_op->close(state);
     _source_op->close(state);
