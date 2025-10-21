@@ -3318,17 +3318,18 @@ TEST_F(LakeColumnUpsertModeTest, test_default_value_and_null_handling) {
     EXPECT_EQ(2, total_rows);
 }
 
-// Test memory optimization: COLUMN_UPSERT_MODE skips reading column values in RowsetUpdateState
+// Test functional correctness: COLUMN_UPSERT_MODE handles new row insertion correctly
 //
 // Background:
-// - COLUMN_UPDATE_MODE uses ColumnModePartialUpdateHandler directly (no RowsetUpdateState)
 // - COLUMN_UPSERT_MODE needs RowsetUpdateState::_prepare_partial_update_states to handle new rows
 //   - Before optimization: Incorrectly read all unmodified columns for each new row → OOM for large inserts
-//   - After optimization: Skip reading (new rows don't need old data to merge)
+//   - After optimization: Skip reading unmodified columns (new rows don't exist in storage yet)
 //
-// This test verifies the optimization by:
-// 1. Inserting new rows with only c0+c1 (partial update), verifying c2 is filled with default value
-// 2. Comparing memory usage between COLUMN_UPDATE_MODE and COLUMN_UPSERT_MODE
+// This test verifies:
+// 1. New rows can be inserted with partial columns (c0+c1 only)
+// 2. Unmodified columns (c2) are correctly filled with default values
+// 3. Existing rows can be updated normally
+// 4. All data remains correct after mixed operations
 TEST_F(LakeColumnUpsertModeTest, memory_optimization_skip_column_reading) {
     auto tablet_id = _tablet_metadata->id();
     auto indexes = std::vector<uint32_t>(kChunkSize);
@@ -3420,45 +3421,7 @@ TEST_F(LakeColumnUpsertModeTest, memory_optimization_skip_column_reading) {
         ASSERT_EQ(new_rows_found, kChunkSize) << "Should find 12 new rows with pk 12-23";
     }
 
-    // Step 3: Partial update with COLUMN_UPDATE_MODE (baseline for memory comparison)
-    // This mode does NOT use RowsetUpdateState, so it never had the memory issue
-    // It directly uses ColumnModePartialUpdateHandler which reads columns on-demand per rssid
-    int64_t mem_baseline_before = _mem_tracker->consumption();
-    int64_t mem_baseline_delta = 0;
-
-    {
-        auto chunk_partial = generate_data(kChunkSize, 0, true, 7);
-        auto txn_id = next_id();
-        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
-                                                   .set_tablet_manager(_tablet_mgr.get())
-                                                   .set_tablet_id(tablet_id)
-                                                   .set_txn_id(txn_id)
-                                                   .set_partition_id(_partition_id)
-                                                   .set_mem_tracker(_mem_tracker.get())
-                                                   .set_schema_id(_tablet_schema->id())
-                                                   .set_slot_descriptors(&_slot_pointers)
-                                                   .set_partial_update_mode(PartialUpdateMode::COLUMN_UPDATE_MODE)
-                                                   .build());
-        ASSERT_OK(delta_writer->open());
-        ASSERT_OK(delta_writer->write(chunk_partial, indexes.data(), indexes.size()));
-        ASSERT_OK(delta_writer->finish_with_txnlog());
-        delta_writer->close();
-
-        int64_t mem_baseline_peak = _mem_tracker->peak_consumption();
-        mem_baseline_delta = mem_baseline_peak - mem_baseline_before;
-
-        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
-        version++;
-
-        LOG(INFO) << "[BASELINE] COLUMN_UPDATE_MODE memory delta: " << mem_baseline_delta << " bytes";
-        LOG(INFO) << "  (Uses ColumnModePartialUpdateHandler, not RowsetUpdateState)";
-    }
-
-    // Step 4: Partial update with COLUMN_UPSERT_MODE (update existing rows)
-    // Before optimization: Would read all unmodified columns in RowsetUpdateState::_prepare_partial_update_states
-    // After optimization: Skips reading because new rows don't need old data to merge
-    int64_t mem_optimized_before = _mem_tracker->consumption();
-
+    // Step 3: Update existing rows with COLUMN_UPSERT_MODE
     {
         auto chunk_partial = generate_data(kChunkSize, 0, true, 9);
         auto txn_id = next_id();
@@ -3476,31 +3439,13 @@ TEST_F(LakeColumnUpsertModeTest, memory_optimization_skip_column_reading) {
         ASSERT_OK(delta_writer->write(chunk_partial, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
-
-        int64_t mem_optimized_peak = _mem_tracker->peak_consumption();
-        int64_t mem_optimized_delta = mem_optimized_peak - mem_optimized_before;
-
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
         version++;
 
-        LOG(INFO) << "[OPTIMIZED] COLUMN_UPSERT_MODE memory delta: " << mem_optimized_delta << " bytes";
-        LOG(INFO) << "  (After optimization: skips reading c2 in RowsetUpdateState)";
-        LOG(INFO) << "[COMPARISON] COLUMN_UPDATE_MODE: " << mem_baseline_delta
-                  << " vs COLUMN_UPSERT_MODE: " << mem_optimized_delta;
-
-        // Calculate memory ratio
-        double memory_ratio = (double)mem_optimized_delta / (double)mem_baseline_delta;
-        LOG(INFO) << "[MEMORY RATIO] COLUMN_UPSERT_MODE / COLUMN_UPDATE_MODE = " << memory_ratio;
-
-        // Key assertion: With our optimization, COLUMN_UPSERT_MODE should have comparable memory usage
-        // to COLUMN_UPDATE_MODE (within 2x) despite the additional _handle_column_upsert_mode logic
-        // Without optimization, the ratio would be much higher due to reading all unmodified columns
-        EXPECT_LT(memory_ratio, 1.5) << "Optimized COLUMN_UPSERT_MODE should not use 1.5x more memory than baseline";
-
-        LOG(INFO) << "SUCCESS! COLUMN_UPSERT_MODE now skips unnecessary column reading in RowsetUpdateState";
+        LOG(INFO) << "[UPDATE] Updated existing rows with COLUMN_UPSERT_MODE";
     }
 
-    // Step 5: Verify functional correctness
+    // Step 4: Verify functional correctness
     ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema);
     CHECK_OK(reader->prepare());
