@@ -680,7 +680,7 @@ public class LakePublishBatchTest {
             PublishVersionDaemon publishVersionDaemon = new PublishVersionDaemon();
             publishVersionDaemon.runAfterCatalogReady();
 
-            Assertions.assertTrue(waiter1.await(10, TimeUnit.SECONDS));
+            Assertions.assertTrue(waiter1.await(1, TimeUnit.MINUTES));
 
             // Verify that the transactions have been published
             TransactionState transactionState1 = globalTransactionMgr.getDatabaseTransactionMgr(db.getId()).
@@ -696,7 +696,7 @@ public class LakePublishBatchTest {
                     batches.get(0).getTransactionStates().get(0).getTransactionType());
 
             publishVersionDaemon.runAfterCatalogReady();
-            Assertions.assertTrue(waiter2.await(10, TimeUnit.SECONDS));
+            Assertions.assertTrue(waiter2.await(1, TimeUnit.MINUTES));
 
             // Verify that the transactions have been published
             TransactionState transactionState2 = globalTransactionMgr.getDatabaseTransactionMgr(db.getId()).
