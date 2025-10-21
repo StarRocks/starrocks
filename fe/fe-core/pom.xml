@@ -822,6 +822,13 @@ under the License.
             <groupId>software.amazon.awssdk</groupId>
             <artifactId>bundle</artifactId>
         </dependency>
+        
+        <!-- https://mvnrepository.com/artifact/com.google.api-client/google-api-client/2.8.1 -->
+        <dependency>
+            <groupId>com.google.api-client</groupId>
+            <artifactId>google-api-client</artifactId>
+            <version>2.8.1</version>
+        </dependency>
     </dependencies>
 
     <build>
