@@ -4296,7 +4296,19 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         locker.lockDatabase(db.getId(), LockType.WRITE);
         try {
             OlapTable olapTable = (OlapTable) getTable(db.getId(), tableId);
-            if (opCode == OperationType.OP_SET_FORBIDDEN_GLOBAL_DICT) {
+            if (opCode == OperationType.OP_MODIFY_DEFAULT_BUCKET_NUM) {
+                if (olapTable != null &&
+                        olapTable.getDefaultDistributionInfo() instanceof com.starrocks.catalog.HashDistributionInfo) {
+                    String bucketNumStr = properties.get("default_bucket_num");
+                    if (bucketNumStr != null) {
+                        int bucketNum = Integer.parseInt(bucketNumStr);
+                        ((com.starrocks.catalog.HashDistributionInfo) olapTable.getDefaultDistributionInfo())
+                                .setBucketNum(bucketNum);
+                        LOG.info("Replay OP_MODIFY_DEFAULT_BUCKET_NUM: set table {} default bucket num to {}",
+                                tableId, bucketNum);
+                    }
+                }
+            } else if (opCode == OperationType.OP_SET_FORBIDDEN_GLOBAL_DICT) {
                 String enAble = properties.get(PropertyAnalyzer.ENABLE_LOW_CARD_DICT_TYPE);
                 Preconditions.checkState(enAble != null);
                 if (olapTable != null) {

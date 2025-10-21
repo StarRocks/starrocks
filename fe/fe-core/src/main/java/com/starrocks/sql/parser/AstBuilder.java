@@ -167,6 +167,7 @@ import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.AlterTableAutoIncrementClause;
 import com.starrocks.sql.ast.AlterTableClause;
 import com.starrocks.sql.ast.AlterTableCommentClause;
+import com.starrocks.sql.ast.AlterTableModifyDefaultBucketsClause;
 import com.starrocks.sql.ast.AlterTableOperationClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterUserStmt;
@@ -8550,7 +8551,24 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
+<<<<<<< HEAD
     public ParseNode visitRefreshSchemeDesc(StarRocksParser.RefreshSchemeDescContext context) {
+=======
+    public ParseNode visitAlterModifyDefaultBuckets(
+            com.starrocks.sql.parser.StarRocksParser.AlterModifyDefaultBucketsContext context) {
+        NodePosition pos = createPos(context);
+        int buckets = Integer.parseInt(context.INTEGER_VALUE().getText());
+        List<Identifier> identifierList = visit(
+                context.identifierList().identifier(), Identifier.class);
+        List<String> columnNames = identifierList.stream()
+                .map(Identifier::getValue)
+                .collect(toList());
+        return new AlterTableModifyDefaultBucketsClause(columnNames, buckets, pos);
+    }
+
+    @Override
+    public ParseNode visitRefreshSchemeDesc(com.starrocks.sql.parser.StarRocksParser.RefreshSchemeDescContext context) {
+>>>>>>> 14b4b70e1a ([Enhancement] Add ALTER TABLE MODIFY DEFAULT BUCKETS support (#63795))
         LocalDateTime startTime = LocalDateTime.now();
         IntervalLiteral intervalLiteral = null;
         NodePosition pos = createPos(context);
