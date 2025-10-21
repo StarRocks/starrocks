@@ -14,19 +14,12 @@
 
 package com.starrocks.qe.scheduler;
 
-import com.google.api.client.util.Lists;
-import com.starrocks.common.StarRocksException;
 import com.starrocks.proto.PExecBatchPlanFragmentsResult;
-import com.starrocks.proto.StatusPB;
 import com.starrocks.qe.DefaultCoordinator;
-import com.starrocks.qe.scheduler.dag.ExecutionDAG;
-import com.starrocks.qe.scheduler.dag.FragmentInstanceExecState;
-import com.starrocks.qe.scheduler.slot.DeployState;
 import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.rpc.PExecBatchPlanFragmentsRequest;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.thrift.TNetworkAddress;
-import com.starrocks.thrift.TStatusCode;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.AfterAll;
@@ -34,11 +27,8 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
-import java.util.Collections;
-import java.util.List;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.starrocks.utframe.MockedBackend.MockPBackendService;
 
@@ -59,7 +49,7 @@ public class SingleNodeScheduleTest extends SchedulerTestBase {
     @Test
     public void testBasicSingleNodeSchedule() throws Exception {
         AtomicBoolean usedBatchInterface = new AtomicBoolean(false);
-        
+
         setBackendService(address -> new MockPBackendService() {
             @Override
             public Future<PExecBatchPlanFragmentsResult> execBatchPlanFragmentsAsync(
@@ -74,7 +64,7 @@ public class SingleNodeScheduleTest extends SchedulerTestBase {
 
         Assertions.assertTrue(coordinator.getExecStatus().ok());
 
-        Assertions.assertTrue(usedBatchInterface.get(), 
+        Assertions.assertTrue(usedBatchInterface.get(),
                 "single node scheduler should call execBatchPlanFragmentsAsync");
     }
 
@@ -82,15 +72,15 @@ public class SingleNodeScheduleTest extends SchedulerTestBase {
     public void testThrowRpcException() throws Exception {
         new MockUp<BackendServiceClient>() {
             @Mock
-            Future<PExecBatchPlanFragmentsResult> execBatchPlanFragmentsAsync(
-                    TNetworkAddress address, byte[] serializedRequest, String protocol) throws RpcException {
+            Future<PExecBatchPlanFragmentsResult> execBatchPlanFragmentsAsync(TNetworkAddress address,
+                                                                              byte[] serializedRequest, String protocol)
+                    throws RpcException {
                 throw new RpcException("test rpc exeception");
             }
         };
 
         String sql = "select * from lineitem l join orders o on l.l_orderkey = o.o_orderkey";
-        Assertions.assertThrows(RpcException.class, () -> startScheduling(sql),
-                " should throw RpcException for retry");
+        Assertions.assertThrows(RpcException.class, () -> startScheduling(sql), " should throw RpcException for retry");
     }
 
 }
