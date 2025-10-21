@@ -154,7 +154,8 @@ public class MetadataViewer {
                                 --count;
                                 List<String> row = Lists.newArrayList();
 
-                                ReplicaStatus status = Replica.computeReplicaStatus(replica, infoService, visibleVersion, schemaHash);
+                                ReplicaStatus status = Replica.computeReplicaStatus(replica, infoService,
+                                                                                    visibleVersion, schemaHash);
 
                                 if (filterReplica(status, statusFilter, op)) {
                                     continue;

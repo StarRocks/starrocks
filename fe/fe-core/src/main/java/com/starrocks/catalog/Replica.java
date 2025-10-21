@@ -52,7 +52,8 @@ public class Replica implements Writable {
 
     public static final int DEPRECATED_PROP_SCHEMA_HASH = 0;
 
-    public static ReplicaStatus computeReplicaStatus(Replica replica, SystemInfoService infoService, long visibleVersion, int schemaHash) {
+    public static ReplicaStatus computeReplicaStatus(Replica replica, SystemInfoService infoService,
+                                                     long visibleVersion, int schemaHash) {
         ReplicaStatus status = ReplicaStatus.OK;
         Backend be = infoService.getBackend(replica.getBackendId());
         if (be == null || !be.isAvailable() || replica.isBad()) {
