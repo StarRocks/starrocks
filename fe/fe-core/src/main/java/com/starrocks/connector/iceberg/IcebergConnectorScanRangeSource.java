@@ -362,6 +362,11 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
                     file.nullValueCounts(), file.valueCounts(), slots);
             hdfsScanRange.setMin_max_values(tExprMinMaxValueMap);
         }
+
+        if (task.file() != null && task.file().firstRowId() != null) {
+            hdfsScanRange.setFirst_row_id(task.file().firstRowId());
+        }
+
         return hdfsScanRange;
     }
 

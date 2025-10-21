@@ -20,7 +20,10 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.common.Config;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.qe.QueryDetail;
+import com.starrocks.qe.QueryDetailQueue;
 import com.starrocks.scheduler.mv.MVPCTBasedRefreshProcessor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.expression.DateLiteral;
@@ -37,8 +40,6 @@ import org.junit.jupiter.api.MethodOrderer.MethodName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
 
-import java.io.File;
-import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -188,8 +189,8 @@ public class PartitionBasedMvRefreshTest extends MVTestBase {
                     ")" +
                     "as " +
                     " select * from t1 union all select * from t2;";
-        List<Integer> t1PartitionNums = ImmutableList.of(0, 0, 0, 0, 1, 1, 1);
-        List<Integer> t2PartitionNums = ImmutableList.of(1, 1, 1, 1, 1, 0, 0);
+        List<Integer> t1PartitionNums = ImmutableList.of(1, 1, 1, 0, 0, 0, 0);
+        List<Integer> t2PartitionNums = ImmutableList.of(0, 0, 1, 1, 1, 1, 1);
         testRefreshUnionAllWithDefaultRefreshNumber(sql, t1PartitionNums, t2PartitionNums);
     }
 
@@ -204,8 +205,8 @@ public class PartitionBasedMvRefreshTest extends MVTestBase {
                     ")" +
                     "as " +
                     " select * from t2 union all select * from t1;";
-        List<Integer> t1PartitionNums = ImmutableList.of(0, 0, 0, 0, 1, 1, 1);
-        List<Integer> t2PartitionNums = ImmutableList.of(1, 1, 1, 1, 1, 0, 0);
+        List<Integer> t1PartitionNums = ImmutableList.of(1, 1, 1, 0, 0, 0, 0);
+        List<Integer> t2PartitionNums = ImmutableList.of(0, 0, 1, 1, 1, 1, 1);
         testRefreshUnionAllWithDefaultRefreshNumber(sql, t1PartitionNums, t2PartitionNums);
     }
 
@@ -271,7 +272,7 @@ public class PartitionBasedMvRefreshTest extends MVTestBase {
 
                         Task task = TaskBuilder.buildMvTask(mv, testDb.getFullName());
                         int mvRefreshTimes = 3;
-                        List<Integer> t1PartitionNums = ImmutableList.of(0, 0, 1);
+                        List<Integer> t1PartitionNums = ImmutableList.of(1, 0, 0);
                         List<Integer> t2PartitionNums = ImmutableList.of(1, 1, 1);
                         TaskRun taskRun = null;
                         for (int i = 0; i < mvRefreshTimes; i++) {
@@ -381,12 +382,65 @@ public class PartitionBasedMvRefreshTest extends MVTestBase {
         starRocksAssert.dropMaterializedView("join_mv1");
     }
 
-    private static File newFolder(File root, String... subDirs) throws IOException {
-        String subFolder = String.join("/", subDirs);
-        File result = new File(root, subFolder);
-        if (!result.mkdirs()) {
-            throw new IOException("Couldn't create folders " + root);
+    @Test
+    public void testMVRefreshQueryDetailRecords() throws Exception {
+        // Enable query detail collection
+        boolean originalConfig = Config.enable_collect_query_detail_info;
+        Config.enable_collect_query_detail_info = true;
+
+        try {
+            String sql = "create materialized view test_mv_query_detail \n" +
+                    "refresh async \n" +
+                    "as " +
+                    " select k1, count(*) as cnt from t1 group by k1;";
+
+            starRocksAssert.withMaterializedView(sql,
+                    () -> {
+                        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+                        MaterializedView mv = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                .getTable(testDb.getFullName(), "test_mv_query_detail"));
+
+                        // Get initial query detail count
+                        long startTime = System.currentTimeMillis();
+                        refreshMVRange("test_mv_query_detail", true);
+                        // Get query details after MV refresh
+                        List<QueryDetail> queryDetails = QueryDetailQueue.getQueryDetailsAfterTime(startTime - 1000);
+
+                        // Filter for MV-related query details
+                        List<QueryDetail> mvQueryDetails = queryDetails.stream()
+                                .filter(detail -> detail.getQuerySource() == QueryDetail.QuerySource.MV)
+                                .toList();
+
+                        Assertions.assertTrue(mvQueryDetails.size() >= 2,
+                                "Expected at least 2 MV query detail records (RUNNING and FINISHED), but got " +
+                                        mvQueryDetails.size());
+
+                        // Find RUNNING and FINISHED records
+                        QueryDetail runningDetail = null;
+                        QueryDetail finishedDetail = null;
+
+                        for (QueryDetail detail : mvQueryDetails) {
+                            if (detail.getState() == QueryDetail.QueryMemState.RUNNING) {
+                                runningDetail = detail;
+                            } else if (detail.getState() == QueryDetail.QueryMemState.FINISHED) {
+                                finishedDetail = detail;
+                            }
+                        }
+
+                        Assertions.assertNotNull(runningDetail);
+                        Assertions.assertNotNull(finishedDetail);
+
+                        // Verify both records have the same queryId
+                        Assertions.assertEquals(runningDetail.getQueryId(), finishedDetail.getQueryId(),
+                                "RUNNING and FINISHED records should have the same queryId");
+                        // Verify both records have the same SQL
+                        Assertions.assertEquals(runningDetail.getSql(), finishedDetail.getSql(),
+                                "RUNNING and FINISHED records should have the same SQL");
+
+                    });
+        } finally {
+            // Restore original config
+            Config.enable_collect_query_detail_info = originalConfig;
         }
-        return result;
     }
 }

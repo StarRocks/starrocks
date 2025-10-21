@@ -21,6 +21,7 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.alter.AlterMVJobExecutor;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.authorization.PrivilegeException;
@@ -31,6 +32,7 @@ import com.starrocks.catalog.UserIdentity;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.LogUtil;
@@ -39,6 +41,7 @@ import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.load.loadv2.InsertLoadJob;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
@@ -196,6 +199,36 @@ public class TaskRun implements Comparable<TaskRun> {
         return isKilled;
     }
 
+    /**
+     * Get the execute timeout in seconds.
+     */
+    public int getExecuteTimeoutS() {
+        // if `query_timeout`/`insert_timeout` is set in the execute option, use it
+        int defaultTimeoutS = Config.task_runs_timeout_second;
+        if (properties != null) {
+            for (Map.Entry<String, String> entry : properties.entrySet()) {
+                if (entry.getKey().equalsIgnoreCase(SessionVariable.QUERY_TIMEOUT)
+                        || entry.getKey().equalsIgnoreCase(SessionVariable.INSERT_TIMEOUT)) {
+                    try {
+                        int timeout = Integer.parseInt(entry.getValue());
+                        if (timeout > 0) {
+                            defaultTimeoutS = Math.max(timeout, defaultTimeoutS);
+                        }
+                    } catch (NumberFormatException e) {
+                        LOG.warn("invalid timeout value: {}, task run:{}", entry.getValue(), this);
+                    }
+                }
+            }
+        }
+        // The timeout of task run should not be longer than the ttl of task runs and task
+        return Math.min(Math.min(defaultTimeoutS, Config.task_runs_ttl_second), Config.task_ttl_second);
+    }
+
+    @VisibleForTesting
+    public void setStatus(TaskRunStatus status) {
+        this.status = status;
+    }
+
     public Map<String, String> refreshTaskProperties(ConnectContext ctx) {
         Map<String, String> newProperties = Maps.newHashMap();
         if (task.getSource() != Constants.TaskSource.MV) {
@@ -319,11 +352,15 @@ public class TaskRun implements Comparable<TaskRun> {
                 key = key.substring(PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX.length());
             }
             String value = entry.getValue();
+            boolean set = false;
             try {
-                runCtx.modifySystemVariable(new SystemVariable(key, new StringLiteral(value)), true);
-            } catch (DdlException e) {
-                // not session variable
+                set = (runCtx.modifySystemVariable(new SystemVariable(key, new StringLiteral(value)), true));
+            } catch (DdlException ignored) {
+            }
+            if (!set) {
                 taskRunContextProperties.put(key, properties.get(key));
+                // FIXME: it's too hack, don't pollute the session when setting variables
+                runCtx.getState().resetError();
             }
         }
         // set warehouse
@@ -365,6 +402,39 @@ public class TaskRun implements Comparable<TaskRun> {
     }
 
     public Constants.TaskRunState executeTaskRun() throws Exception {
+        try {
+            Constants.TaskRunState result = doExecuteTaskRun();
+            // clear the fail count
+            if (result != null && result.isSuccessState()) {
+                task.resetConsecutiveFailCount();
+            }
+            return result;
+        } catch (Exception e) {
+            task.incConsecutiveFailCount();
+            LOG.warn("Failed to execute task run, task_id: {}, task_run_id: {}, failCount:{}",
+                    taskId, taskRunId, task.getConsecutiveFailCount(), e);
+            if (Constants.TaskSource.MV.equals(task.getSource()) && Config.max_task_consecutive_fail_count > 0 &&
+                    task.getConsecutiveFailCount() >= Config.max_task_consecutive_fail_count) {
+                LOG.warn("Task {} has failed {} times continuously, so we disable it",
+                        task.getName(), task.getConsecutiveFailCount());
+                TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+                taskManager.suspendTask(task);
+                String mvName = "";
+                MaterializedView mv = TaskBuilder.getMvFromTask(task);
+                if (mv != null) {
+                    // If the task is an mv task, inactive the mv
+                    AlterMVJobExecutor.inactiveForConsecutiveFailures(mv);
+                    mvName = mv.getName();
+                }
+                throw new StarRocksException(String.format("Task %s has continuously failed %d times " +
+                                "and has been suspended. If you want active it again, try `ALTER MATERIALIZED VIEW %s ACTIVE`.",
+                        task.getName(), task.getConsecutiveFailCount(), mvName), e);
+            }
+            throw e;
+        }
+    }
+
+    private Constants.TaskRunState doExecuteTaskRun() throws Exception {
         TaskRunContext taskRunContext = buildTaskRunContext();
 
         // prepare to execute task run, move it here so that we can catch the exception and set the status

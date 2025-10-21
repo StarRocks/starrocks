@@ -2,13 +2,13 @@
 displayed_sidebar: docs
 ---
 
-import BEConfigMethod from '../../_assets/commonMarkdown/BE_config_method.md'
+import BEConfigMethod from '../../_assets/commonMarkdown/BE_config_method.mdx'
 
-import CNConfigMethod from '../../_assets/commonMarkdown/CN_config_method.md'
+import CNConfigMethod from '../../_assets/commonMarkdown/CN_config_method.mdx'
 
-import PostBEConfig from '../../_assets/commonMarkdown/BE_dynamic_note.md'
+import PostBEConfig from '../../_assets/commonMarkdown/BE_dynamic_note.mdx'
 
-import StaticBEConfigNote from '../../_assets/commonMarkdown/StaticBE_config_note.md'
+import StaticBEConfigNote from '../../_assets/commonMarkdown/StaticBE_config_note.mdx'
 
 # BE 設定
 
@@ -986,7 +986,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### enable_pk_parallel_execution
 
-- デフォルト: false
+- デフォルト: true
 - タイプ: Boolean
 - 単位: -
 - 可変: はい
@@ -1952,40 +1952,40 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: 単一ディスクにキャッシュできるデータの最大量。パーセンテージ (例: `80%`) または物理的な制限 (例: `2T`、`500G`) として設定できます。たとえば、2 つのディスクを使用し、`datacache_disk_size` パラメータの値を `21474836480` (20 GB) に設定した場合、これらの 2 つのディスクに最大 40 GB のデータをキャッシュできます。デフォルト値は `0` で、これはメモリのみがデータをキャッシュするために使用されることを示します。
 - 導入バージョン: -
 
-##### datacache_auto_adjust_enable
+##### enable_datacache_disk_auto_adjust
 
-- デフォルト: false
+- デフォルト: true
 - タイプ: Boolean
 - 単位: -
 - 可変: はい
-- 説明: Data Cache ディスク容量の自動スケーリングを有効にするかどうか。これを有効にすると、システムは現在のディスク使用率に基づいてキャッシュ容量を動的に調整します。
+- 説明: Data Cache ディスク容量の自動スケーリングを有効にするかどうか。これを有効にすると、システムは現在のディスク使用率に基づいてキャッシュ容量を動的に調整します。この項目はバージョン4.0以降、`datacache_auto_adjust_enable` から `enable_datacache_disk_auto_adjust` に名称変更されました。
 - 導入バージョン: v3.3.0
 
-##### datacache_disk_high_level
+##### disk_high_level
 
 - デフォルト: 90
 - タイプ: Int
 - 単位: -
 - 可変: はい
-- 説明: キャッシュ容量の自動スケーリングをトリガーするディスク使用率 (パーセンテージ) の上限。この値を超えると、システムは Data Cache からキャッシュデータを自動的に削除します。v3.4.0 以降、デフォルト値は `80` から `90` に変更されました。
+- 説明: キャッシュ容量の自動スケーリングをトリガーするディスク使用率 (パーセンテージ) の上限。この値を超えると、システムは Data Cache からキャッシュデータを自動的に削除します。v3.4.0 以降、デフォルト値は `80` から `90` に変更されました。この項目はバージョン4.0以降、`datacache_disk_high_level` から `disk_high_level` に名称変更されました。
 - 導入バージョン: v3.3.0
 
-##### datacache_disk_safe_level
+##### disk_safe_level
 
 - デフォルト: 80
 - タイプ: Int
 - 単位: -
 - 可変: はい
-- 説明: Data Cache のディスク使用率 (パーセンテージ) の安全レベル。Data Cache が自動スケーリングを実行する際、システムはディスク使用率をこの値にできるだけ近づけることを目標にキャッシュ容量を調整します。v3.4.0 以降、デフォルト値は `70` から `80` に変更されました。
+- 説明: Data Cache のディスク使用率 (パーセンテージ) の安全レベル。Data Cache が自動スケーリングを実行する際、システムはディスク使用率をこの値にできるだけ近づけることを目標にキャッシュ容量を調整します。v3.4.0 以降、デフォルト値は `70` から `80` に変更されました。この項目はバージョン4.0以降、`datacache_disk_safe_level` から `disk_safe_level` に名称変更されました。
 - 導入バージョン: v3.3.0
 
-##### datacache_disk_low_level
+##### disk_low_level
 
 - デフォルト: 60
 - タイプ: Int
 - 単位: -
 - 可変: はい
-- 説明: キャッシュ容量の自動スケーリングをトリガーするディスク使用率 (パーセンテージ) の下限。ディスク使用率が `datacache_disk_idle_seconds_for_expansion` で指定された期間を超えてこの値を下回り、Data Cache に割り当てられたスペースが完全に利用される場合、システムは上限を増やしてキャッシュ容量を自動的に拡張します。
+- 説明: キャッシュ容量の自動スケーリングをトリガーするディスク使用率 (パーセンテージ) の下限。ディスク使用率が `datacache_disk_idle_seconds_for_expansion` で指定された期間を超えてこの値を下回り、Data Cache に割り当てられたスペースが完全に利用される場合、システムは上限を増やしてキャッシュ容量を自動的に拡張します。この項目はバージョン4.0以降、`datacache_disk_low_level` から `disk_low_level` に名称変更されました。
 - 導入バージョン: v3.3.0
 
 ##### datacache_disk_adjust_interval_seconds
@@ -2023,15 +2023,6 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 可変: いいえ
 - 説明: Data Cache の効率を最適化するために Block Buffer を有効にするかどうか。Block Buffer が有効な場合、システムは Data Cache から Block データを読み取り、一時バッファにキャッシュし、頻繁なキャッシュ読み取りによる余分なオーバーヘッドを削減します。
 - 導入バージョン: v3.2.0
-
-##### datacache_tiered_cache_enable
-
-- デフォルト: false 
-- タイプ: Boolean
-- 単位: -
-- 可変: いいえ
-- 説明: Data Cache の階層型キャッシュモードを有効にするかどうか。階層型キャッシュモードが有効な場合、Data Cache はメモリとディスクの 2 層のキャッシュで構成されます。ディスクデータがホットデータになると、自動的にメモリキャッシュにロードされ、メモリキャッシュ内のデータがコールドになると、自動的にディスクにフラッシュされます。階層型キャッシュモードが有効でない場合、Data Cache に設定されたメモリとディスクは 2 つの独立したキャッシュスペースを形成し、異なるタイプのデータをキャッシュし、データの流れはありません。
-- 導入バージョン: v3.2.5
 
 ##### datacache_eviction_policy
 
@@ -2080,12 +2071,30 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### lake_enable_vertical_compaction_fill_data_cache
 
-- デフォルト: false
+- デフォルト: true
 - タイプ: Boolean
 - 単位: -
 - 可変: はい
 - 説明: 共有データクラスタでコンパクションタスクがローカルディスクにデータをキャッシュすることを許可するかどうか。
 - 導入バージョン: v3.1.7, v3.2.3
+
+##### lake_clear_corrupted_cache_meta
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 可変: はい
+- 説明: 共有データクラスタにおいて、システムが破損したメタデータキャッシュをクリアすることを許可するかどうか。
+- 導入バージョン: v3.3
+
+##### lake_clear_corrupted_cache_data
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 可変: はい
+- 説明: 共有データクラスタにおいて、システムが破損したデータキャッシュをクリアすることを許可するかどうか。
+- 導入バージョン: v3.4
 
 ### その他
 

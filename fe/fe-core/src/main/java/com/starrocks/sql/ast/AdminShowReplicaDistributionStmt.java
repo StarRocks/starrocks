@@ -15,18 +15,18 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.sql.ast.expression.TableRef;
+import com.starrocks.sql.ast.expression.TableRefPersist;
 import com.starrocks.sql.parser.NodePosition;
 
 // ADMIN SHOW REPLICA DISTRIBUTION FROM db1.tbl1 PARTITION(p1, p2);
 public class AdminShowReplicaDistributionStmt extends ShowStmt {
-    private final TableRef tblRef;
+    private final TableRefPersist tblRef;
 
-    public AdminShowReplicaDistributionStmt(TableRef tblRef) {
+    public AdminShowReplicaDistributionStmt(TableRefPersist tblRef) {
         this(tblRef, NodePosition.ZERO);
     }
 
-    public AdminShowReplicaDistributionStmt(TableRef tblRef, NodePosition pos) {
+    public AdminShowReplicaDistributionStmt(TableRefPersist tblRef, NodePosition pos) {
         super(pos);
         this.tblRef = tblRef;
     }

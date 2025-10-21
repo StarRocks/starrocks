@@ -439,6 +439,8 @@ struct THdfsScanRange {
 
     // mapping transformed bucket id, used to schedule scan range
     36: optional i32 bucket_id;
+
+    37: optional i64 first_row_id;
 }
 
 struct TBinlogScanRange {

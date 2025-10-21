@@ -2,13 +2,13 @@
 displayed_sidebar: docs
 ---
 
-import BEConfigMethod from '../../_assets/commonMarkdown/BE_config_method.md'
+import BEConfigMethod from '../../_assets/commonMarkdown/BE_config_method.mdx'
 
-import CNConfigMethod from '../../_assets/commonMarkdown/CN_config_method.md'
+import CNConfigMethod from '../../_assets/commonMarkdown/CN_config_method.mdx'
 
-import PostBEConfig from '../../_assets/commonMarkdown/BE_dynamic_note.md'
+import PostBEConfig from '../../_assets/commonMarkdown/BE_dynamic_note.mdx'
 
-import StaticBEConfigNote from '../../_assets/commonMarkdown/StaticBE_config_note.md'
+import StaticBEConfigNote from '../../_assets/commonMarkdown/StaticBE_config_note.mdx'
 
 # BE Configuration
 
@@ -277,7 +277,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 -->
 
 <!--
-##### enable_auto_adjust_pagecache
+##### enable_datacache_mem_auto_adjust
 
 - Default: true
 - Type: Boolean
@@ -310,7 +310,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 -->
 
 <!--
-##### pagecache_adjust_period
+##### datacache_mem_adjust_period
 
 - Default: 20
 - Type: Int
@@ -321,7 +321,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 -->
 
 <!--
-##### auto_adjust_pagecache_interval_seconds
+##### datacache_mem_adjust_interval_seconds
 
 - Default: 10
 - Type: Int
@@ -1271,7 +1271,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### enable_pk_parallel_execution
 
-- Default: false
+- Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
@@ -4070,40 +4070,40 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: The maximum amount of data that can be cached on a single disk. You can set it as a percentage (for example, `80%`) or a physical limit (for example, `2T`, `500G`). For example, if you use two disks and set the value of the `datacache_disk_size` parameter as `21474836480` (20 GB), a maximum of 40 GB data can be cached on these two disks. The default value is `0`, which indicates that only memory is used to cache data.
 - Introduced in: -
 
-##### datacache_auto_adjust_enable
+##### enable_datacache_disk_auto_adjust
 
-- Default: false
+- Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether to enable Automatic Scaling for Data Cache disk capacity. When it is enabled, the system dynamically adjusts the cache capacity based on the current disk usage rate.
+- Description: Whether to enable Automatic Scaling for Data Cache disk capacity. When it is enabled, the system dynamically adjusts the cache capacity based on the current disk usage rate. This item is renamed from `datacache_auto_adjust_enable` to `enable_datacache_disk_auto_adjust` from v4.0 onwards.
 - Introduced in: v3.3.0
 
-##### datacache_disk_high_level
+##### disk_high_level
 
 - Default: 90
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The upper limit of disk usage (in percentage) that triggers the automatic scaling up of the cache capacity. When the disk usage exceeds this value, the system automatically evicts cache data from the Data Cache. From v3.4.0 onwards, the default value is changed from `80` to `90`.
+- Description: The upper limit of disk usage (in percentage) that triggers the automatic scaling up of the cache capacity. When the disk usage exceeds this value, the system automatically evicts cache data from the Data Cache. From v3.4.0 onwards, the default value is changed from `80` to `90`. This item is renamed from `datacache_disk_high_level` to `disk_high_level` from v4.0 onwards.
 - Introduced in: v3.3.0
 
-##### datacache_disk_safe_level
+##### disk_safe_level
 
 - Default: 80
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The safe level of disk usage (in percentage) for Data Cache. When Data Cache performs automatic scaling, the system adjusts the cache capacity with the goal of maintaining disk usage as close to this value as possible. From v3.4.0 onwards, the default value is changed from `70` to `80`.
+- Description: The safe level of disk usage (in percentage) for Data Cache. When Data Cache performs automatic scaling, the system adjusts the cache capacity with the goal of maintaining disk usage as close to this value as possible. From v3.4.0 onwards, the default value is changed from `70` to `80`. This item is renamed from `datacache_disk_safe_level` to `disk_safe_level` from v4.0 onwards.
 - Introduced in: v3.3.0
 
-##### datacache_disk_low_level
+##### disk_low_level
 
 - Default: 60
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The lower limit of disk usage (in percentage) that triggers the automatic scaling down of the cache capacity. When the disk usage remains below this value for the period specified in `datacache_disk_idle_seconds_for_expansion`, and the space allocated for Data Cache is fully utilized, the system will automatically expand the cache capacity by increasing the upper limit.
+- Description: The lower limit of disk usage (in percentage) that triggers the automatic scaling down of the cache capacity. When the disk usage remains below this value for the period specified in `datacache_disk_idle_seconds_for_expansion`, and the space allocated for Data Cache is fully utilized, the system will automatically expand the cache capacity by increasing the upper limit. This item is renamed from `datacache_disk_low_level` to `disk_low_level` from v4.0 onwards.
 - Introduced in: v3.3.0
 
 ##### datacache_disk_adjust_interval_seconds
@@ -4141,15 +4141,6 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Is mutable: No
 - Description: Whether to enable Block Buffer to optimize Data Cache efficiency. When Block Buffer is enabled, the system reads the Block data from the Data Cache and caches it in a temporary buffer, thus reducing the extra overhead caused by frequent cache reads.
 - Introduced in: v3.2.0
-
-##### datacache_tiered_cache_enable
-
-- Default: false 
-- Type: Boolean
-- Unit: -
-- Is mutable: No
-- Description: Whether to enable tiered cache mode for Data Cache. When tiered cache mode is enabled, Data Cache is configured with two layers of caching, memory and disk. When disk data becomes hot data, it is automatically loaded into the memory cache, and when the data in the memory cache becomes cold, it is automatically flushed to disk. When tiered cache mode is not enabled, the memory and disk configured for Data Cache form two separate cache spaces and cache different types of data, with no data flow between them.
-- Introduced in: v3.2.5
 
 ##### datacache_eviction_policy
 
@@ -4263,20 +4254,9 @@ When this value is set to less than `0`, the system uses the product of its abso
 <!--
 ##### datacache_max_flying_memory_mb
 
-- Default: 256
+- Default: 2
 - Type: Int
 - Unit: MB
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### datacache_adaptor_enable
-
-- Default: true
-- Type: Boolean
-- Unit: -
 - Is mutable: No
 - Description:
 - Introduced in: -
@@ -4305,17 +4285,6 @@ When this value is set to less than `0`, the system uses the product of its abso
 -->
 
 <!--
-##### datacache_engine
-
-- Default: Empty string
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
 ##### report_datacache_metrics_interval_ms
 
 - Default: 60000
@@ -4329,7 +4298,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 <!--
 ##### block_cache_enable
 
-- Default: false
+- Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: No
@@ -4349,39 +4318,6 @@ When this value is set to less than `0`, the system uses the product of its abso
 -->
 
 <!--
-##### block_cache_disk_path
-
-- Default: `${STARROCKS_HOME}/block_cache/`
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### block_cache_meta_path
-
-- Default: `${STARROCKS_HOME}/block_cache/`
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### block_cache_block_size
-
-- Default: 262144
-- Type: Int
-- Unit:
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
 ##### block_cache_mem_size
 
 - Default: 2147483648
@@ -4393,43 +4329,10 @@ When this value is set to less than `0`, the system uses the product of its abso
 -->
 
 <!--
-##### block_cache_max_concurrent_inserts
-
-- Default: 1500000
-- Type: Int
-- Unit:
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### block_cache_checksum_enable
+##### datacache_direct_io_enable
 
 - Default: false
 - Type: Boolean
-- Unit: -
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### block_cache_direct_io_enable
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### block_cache_engine
-
-- Default: Empty string
-- Type: String
 - Unit: -
 - Is mutable: No
 - Description:
@@ -4761,6 +4664,24 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Is mutable: Yes
 - Description: Whether to allow vertical compaction tasks to cache data on local disks in a shared-data cluster.
 - Introduced in: v3.1.7, v3.2.3
+
+##### lake_clear_corrupted_cache_meta
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to allow the system to clear the corrupted metadata cache in a shared-data cluster.
+- Introduced in: v3.3
+
+##### lake_clear_corrupted_cache_data
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to allow the system to clear the corrupted data cache in a shared-data cluster.
+- Introduced in: v3.4
 
 <!--
 ##### dictionary_cache_refresh_timeout_ms

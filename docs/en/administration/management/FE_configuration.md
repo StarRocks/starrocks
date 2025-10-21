@@ -2,13 +2,13 @@
 displayed_sidebar: docs
 ---
 
-import FEConfigMethod from '../../_assets/commonMarkdown/FE_config_method.md'
+import FEConfigMethod from '../../_assets/commonMarkdown/FE_config_method.mdx'
 
-import AdminSetFrontendNote from '../../_assets/commonMarkdown/FE_config_note.md'
+import AdminSetFrontendNote from '../../_assets/commonMarkdown/FE_config_note.mdx'
 
-import StaticFEConfigNote from '../../_assets/commonMarkdown/StaticFE_config_note.md'
+import StaticFEConfigNote from '../../_assets/commonMarkdown/StaticFE_config_note.mdx'
 
-import EditionSpecificFEItem from '../../_assets/commonMarkdown/Edition_Specific_FE_Item.md'
+import EditionSpecificFEItem from '../../_assets/commonMarkdown/Edition_Specific_FE_Item.mdx'
 
 # FE Configuration
 
@@ -2142,6 +2142,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The default timeout duration for a prepared transaction.
 - Introduced in: -
 
+##### finish_transaction_default_lock_timeout_ms
+
+- Default: 1000
+- Type: Int
+- Unit: MilliSeconds
+- Is mutable: Yes
+- Description: The default timeout for acquiring the db and table lock during finishing transaction.
+- Introduced in: v4.0.0, v3.5.8
+
 ##### spark_dpp_version
 
 - Default: 1.0.0
@@ -3330,7 +3339,6 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: Whether to use the Service Account that is bound to your Compute Engine.
 - Introduced in: v3.5.1
 
-<!--
 ##### starmgr_grpc_timeout_seconds
 
 - Default: 5
@@ -3339,7 +3347,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Is mutable: Yes
 - Description:
 - Introduced in: -
--->
+
+##### starmgr_grpc_server_max_worker_threads
+
+- Default: 1024
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of worker threads that are used by the grpc server in the FE starmgr module.
+- Introduced in: v4.0.0, v3.5.8
 
 ##### lake_compaction_score_selector_min_score
 
@@ -3837,6 +3853,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The maximum number of jobs that can wait in a report queue. The report is about disk, task, and tablet information of BEs. If too many report jobs are piling up in a queue, OOM will occur.
 - Introduced in: -
 
+##### enable_collect_tablet_num_in_show_proc_backend_disk_path
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable the collection of tablet numbers for each disk in the `SHOW PROC /BACKENDS/{id}` command
+- Introduced in: v4.0.1, v3.5.8
+
 ##### enable_metric_calculator
 
 - Default: true
@@ -4247,6 +4272,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The time interval at which the cached metadata of Hive external tables is updated.
 - Introduced in: -
 
+<!--
 ##### hive_meta_cache_ttl_s
 
 - Default: 3600 * 24
@@ -4255,11 +4281,12 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Is mutable: No
 - Description: The amount of time after which the cached metadata of Hive external tables expires.
 - Introduced in: -
+-->
 
 <!--
 ##### remote_file_cache_ttl_s
 
-- Default: 3600 * 36
+- Default: 3600 * 24
 - Type: Long
 - Unit: Seconds
 - Is mutable: No

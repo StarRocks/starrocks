@@ -560,12 +560,16 @@ public class ConnectContext {
         return accessControlContext;
     }
 
-    public void modifySystemVariable(SystemVariable setVar, boolean onlySetSessionVar) throws DdlException {
+    public boolean modifySystemVariable(SystemVariable setVar, boolean onlySetSessionVar) throws DdlException {
+        if (!globalStateMgr.getVariableMgr().containsVariable(setVar.getVariable())) {
+            return false;
+        }
         globalStateMgr.getVariableMgr().setSystemVariable(sessionVariable, setVar, onlySetSessionVar);
         if (!SetType.GLOBAL.equals(setVar.getType())
                 && globalStateMgr.getVariableMgr().shouldForwardToLeader(setVar.getVariable())) {
             modifiedSessionVariables.put(setVar.getVariable(), setVar);
         }
+        return true;
     }
 
     public void modifyUserVariable(UserVariable userVariable) {

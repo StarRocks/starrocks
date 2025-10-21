@@ -53,7 +53,6 @@ import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
 import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
 import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
 import com.starrocks.sql.ast.ShowColumnStmt;
-import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowCreateExternalCatalogStmt;
 import com.starrocks.sql.ast.ShowCreateRoutineLoadStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
@@ -321,14 +320,6 @@ public class ShowStmtAnalyzer {
         }
 
         @Override
-        public Void visitShowCreateDbStatement(ShowCreateDbStmt node, ConnectContext context) {
-            String dbName = node.getDb();
-            dbName = getDatabaseName(dbName, context);
-            node.setDb(dbName);
-            return null;
-        }
-
-        @Override
         public Void visitShowDataStatement(ShowDataStmt node, ConnectContext context) {
             String dbName = node.getDbName();
             dbName = getDatabaseName(dbName, context);
@@ -338,9 +329,10 @@ public class ShowStmtAnalyzer {
 
         @Override
         public Void visitShowDataDistributionStatement(ShowDataDistributionStmt node, ConnectContext context) {
-            String dbName = node.getDbName();
-            dbName = getDatabaseName(dbName, context);
-            node.setDbName(dbName);
+            String db = context.getDatabase();
+            if (Strings.isNullOrEmpty(db)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
+            }
             return null;
         }
 

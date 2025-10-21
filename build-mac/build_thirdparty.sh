@@ -125,6 +125,8 @@ export CFLAGS="-march=armv8-a -O3"
 export CXXFLAGS="-march=armv8-a -O3 -stdlib=libc++"
 export LDFLAGS="-L$OPENSSL_ROOT_DIR/lib"
 export CPPFLAGS="-I$OPENSSL_ROOT_DIR/include"
+# Add Homebrew bin directories to PATH for Bison and other tools
+export PATH="$HOMEBREW_PREFIX/opt/bison/bin:$HOMEBREW_PREFIX/bin:$PATH"
 
 log_info "Starting StarRocks macOS third-party build"
 log_info "Root directory: $ROOT_DIR"
@@ -159,6 +161,7 @@ install_homebrew_deps() {
         "cmake"
         "ninja"
         "ccache"
+        "bison"
 
         # SSL and crypto
         "openssl@3"
@@ -174,7 +177,7 @@ install_homebrew_deps() {
 
         # Other libraries
         "icu4c"
-        "curl"
+        "xsimd"
     )
 
     for dep in "${homebrew_deps[@]}"; do
@@ -197,17 +200,67 @@ install_homebrew_deps() {
 GFLAGS_VERSION="2.2.2"
 GLOG_VERSION="0.7.1"
 PROTOBUF_VERSION="3.14.0"
+THRIFT_VERSION="0.20.0"
 LEVELDB_VERSION="1.20"
 BRPC_VERSION="1.9.0"
 ROCKSDB_VERSION="6.22.1"
 BITSHUFFLE_VERSION="0.5.1"
 VECTORSCAN_VERSION="5.4.12"
 VELOCYPACK_VERSION="XYZ1.0"
+ASYNC_PROFILER_VERSION="4.1"
+
+# Thrift
+THRIFT_DOWNLOAD="http://archive.apache.org/dist/thrift/0.20.0/thrift-0.20.0.tar.gz"
+THRIFT_NAME="thrift-0.20.0.tar.gz"
+THRIFT_SOURCE="thrift-0.20.0"
+THRIFT_MD5SUM="aadebde599e1f5235acd3c730721b873"
+
+# datasketches-cpp
+DATASKETCHES_VERSION="4.0.0"
+DATASKETCHES_DOWNLOAD="https://github.com/apache/datasketches-cpp/archive/refs/tags/${DATASKETCHES_VERSION}.tar.gz"
+DATASKETCHES_NAME="datasketches-cpp-${DATASKETCHES_VERSION}.tar.gz"
+DATASKETCHES_SOURCE="datasketches-cpp-${DATASKETCHES_VERSION}"
 
 # RYU (build from source; pinned commit snapshot)
 RYU_DOWNLOAD="https://github.com/ulfjack/ryu/archive/aa31ca9361d21b1a00ee054aac49c87d07e74abc.zip"
 RYU_NAME="ryu-aa31ca9361d21b1a00ee054aac49c87d07e74abc.zip"
 RYU_SOURCE="ryu-aa31ca9361d21b1a00ee054aac49c87d07e74abc"
+
+# icu
+ICU_DOWNLOAD="https://github.com/unicode-org/icu/releases/download/release-76-1/icu4c-76_1-src.zip"
+ICU_NAME="icu4c-76_1-src.zip"
+ICU_SOURCE="icu"
+ICU_MD5SUM="f5f5c827d94af8445766c7023aca7f6b"
+
+# libdivide
+LIBDIVIDE_DOWNLOAD="https://github.com/ridiculousfish/libdivide/archive/refs/tags/v5.2.0.tar.gz"
+LIBDIVIDE_NAME="libdivide-v5.2.0.tar.gz"
+LIBDIVIDE_SOURCE="libdivide-5.2.0"
+LIBDIVIDE_MD5SUM="4ba77777192c295d6de2b86d88f3239a"
+
+# CROARINGBITMAP
+CROARINGBITMAP_DOWNLOAD="https://github.com/RoaringBitmap/CRoaring/archive/refs/tags/v4.2.1.tar.gz"
+CROARINGBITMAP_NAME=CRoaring-4.2.1.tar.gz
+CROARINGBITMAP_SOURCE=CRoaring-4.2.1
+CROARINGBITMAP_MD5SUM="00667266a60709978368cf867fb3a3aa"
+
+# curl
+CURL_DOWNLOAD="https://curl.se/download/curl-8.16.0.tar.gz"
+CURL_NAME=curl-8.16.0.tar.gz
+CURL_SOURCE=curl-8.16.0
+CURL_MD5SUM="533e8a3b1228d5945a6a512537bea4c7"
+
+# simdutf
+SIMDUTF_DOWNLOAD="https://github.com/simdutf/simdutf/archive/refs/tags/v5.2.8.tar.gz"
+SIMDUTF_NAME="simdutf-5.2.8.tar.gz"
+SIMDUTF_SOURCE="simdutf-5.2.8"
+SIMDUTF_MD5SUM="731c78ab5a10c6073942dc93d5c4b04c"
+
+# async-profiler
+ASYNC_PROFILER_DOWNLOAD="https://github.com/async-profiler/async-profiler/releases/download/v4.1/async-profiler-4.1-macos.zip"
+ASYNC_PROFILER_NAME="async-profiler-4.1-macos.zip"
+ASYNC_PROFILER_SOURCE="async-profiler-4.1-macos"
+
 
 download_source() {
     local name="$1"
@@ -306,6 +359,7 @@ build_glog() {
 
     local src_dir="$THIRDPARTY_DIR/src"
     local build_dir="$THIRDPARTY_DIR/build/glog"
+    local PATCHED_MARK="patched_mark"
 
     download_source "glog" "$GLOG_VERSION" \
         "https://github.com/google/glog/archive/v$GLOG_VERSION.tar.gz" \
@@ -319,6 +373,17 @@ build_glog() {
     fi
 
     cd "glog-$GLOG_VERSION"
+
+    # Apply glog-0.7.1 patches
+    if [[ ! -f "$PATCHED_MARK" && "$GLOG_VERSION" == "0.7.1" ]]; then
+        log_info "Applying glog-0.7.1 patches..."
+        patch -p1 < "$THIRDPARTY_DIR/patches/glog-0.7.1.patch"
+        patch -p1 < "$THIRDPARTY_DIR/patches/glog-0.7.1-add-handler-after-output-log.patch"
+        patch -p1 < "$THIRDPARTY_DIR/patches/glog-0.7.1-lwp.patch"
+        touch "$PATCHED_MARK"
+        log_success "glog patches applied successfully"
+    fi
+
     mkdir -p build && cd build
 
     cmake .. \
@@ -327,6 +392,7 @@ build_glog() {
         -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
         -DBUILD_SHARED_LIBS=OFF \
         -DWITH_GFLAGS=ON \
+        -DGFLAGS_NAMESPACE=gflags \
         -DWITH_GTEST=OFF \
         -DCMAKE_POLICY_VERSION_MINIMUM=3.5
 
@@ -439,6 +505,132 @@ build_protobuf() {
     log_success "protobuf built successfully"
 }
 
+build_thrift() {
+    # Check if already built
+    if [[ -f "$INSTALL_DIR/lib/libthrift.a" && -f "$INSTALL_DIR/lib/libthriftnb.a" && -f "$INSTALL_DIR/include/thrift/Thrift.h" ]]; then
+        log_success "thrift already built, skipping"
+        return 0
+    fi
+
+    log_info "Building thrift $THRIFT_VERSION..."
+
+    local src_dir="$THIRDPARTY_DIR/src"
+    local build_dir="$THIRDPARTY_DIR/build/thrift"
+
+    download_source "thrift" "$THRIFT_VERSION" \
+        "$THRIFT_DOWNLOAD" \
+        "$THRIFT_NAME"
+
+    mkdir -p "$build_dir"
+    cd "$build_dir"
+
+    if [[ ! -d "$THRIFT_SOURCE" ]]; then
+        tar -xzf "$src_dir/$THRIFT_NAME"
+    fi
+
+    cd "$THRIFT_SOURCE"
+
+    # Run bootstrap if configure doesn't exist
+    if [[ ! -f configure ]]; then
+        ./bootstrap.sh
+    fi
+
+    # Generate hash memory shim for macOS libc++ compatibility
+    local shim_src="$build_dir/hash_memory_impl.cc"
+    cat > "$shim_src" <<'EOF'
+#ifndef _LIBCPP_HAS_NO_HASH_MEMORY
+#define _LIBCPP_HAS_NO_HASH_MEMORY 1
+#endif
+#include <cstddef>
+namespace std { namespace __1 {
+[[gnu::pure]] size_t
+__hash_memory(const void* __ptr, size_t __size) noexcept
+{
+    // Compatible with old libc++ implementation
+    size_t h = 0;
+    const unsigned char* p = static_cast<const unsigned char*>(__ptr);
+    for (size_t i = 0; i < __size; ++i)
+        h = h * 31 + p[i];
+    return h;
+}
+} }
+EOF
+
+    local shim_obj="$build_dir/hash_memory_shim.o"
+    $CXX $CXXFLAGS -c "$shim_src" -o "$shim_obj"
+
+    # Configure for macOS ARM64 with static libraries
+    ./configure LDFLAGS="-L${INSTALL_DIR}/lib -L${OPENSSL_ROOT_DIR}/lib" \
+        LIBS="-lssl -lcrypto -ldl $shim_obj" \
+        CPPFLAGS="-DTHRIFT_STATIC_DEFINE $CPPFLAGS" \
+        --prefix="$INSTALL_DIR" \
+        --docdir="$INSTALL_DIR/doc" \
+        --enable-static \
+        --disable-shared \
+        --disable-tests \
+        --disable-tutorial \
+        --without-qt4 \
+        --without-qt5 \
+        --without-csharp \
+        --without-erlang \
+        --without-nodejs \
+        --without-lua \
+        --without-perl \
+        --without-php \
+        --without-php_extension \
+        --without-dart \
+        --without-ruby \
+        --without-haskell \
+        --without-go \
+        --without-haxe \
+        --without-d \
+        --without-python \
+        --without-java \
+        --without-rs \
+        --with-cpp \
+        --with-libevent="$INSTALL_DIR" \
+        --with-boost="$HOMEBREW_PREFIX" \
+        CXXFLAGS="$CXXFLAGS -DUSE_BOOST_THREAD"
+
+    # Fix naming issue for macOS
+    if [[ -f compiler/cpp/thrifty.hh ]]; then
+        mv compiler/cpp/thrifty.hh compiler/cpp/thrifty.h
+    fi
+
+    make -j"$PARALLEL_JOBS" CXXFLAGS="$CXXFLAGS -Wno-error" CFLAGS="$CFLAGS -Wno-error"
+    make install || echo "make install failed, manually installing binaries"
+
+    # Manual installation if make install fails
+    if [[ -f "compiler/cpp/thrift" ]]; then
+        cp compiler/cpp/thrift "$INSTALL_DIR/bin/"
+        log_success "Manually installed thrift binary"
+    fi
+
+    # Copy any library files that were built
+    if [[ -f "lib/cpp/.libs/libthrift.a" ]]; then
+        cp lib/cpp/.libs/libthrift.a "$INSTALL_DIR/lib/"
+        log_success "Manually installed libthrift.a"
+    fi
+
+    if [[ -f "lib/cpp/.libs/libthriftnb.a" ]]; then
+        cp lib/cpp/.libs/libthriftnb.a "$INSTALL_DIR/lib/"
+        log_success "Manually installed libthriftnb.a"
+    fi
+
+    # Verify libraries were created
+    if [[ ! -f "$INSTALL_DIR/lib/libthrift.a" ]]; then
+        log_error "libthrift.a not found after build"
+        return 1
+    fi
+
+    if [[ ! -f "$INSTALL_DIR/lib/libthriftnb.a" ]]; then
+        log_error "libthriftnb.a not found after build"
+        return 1
+    fi
+
+    log_success "thrift built successfully"
+}
+
 build_leveldb() {
     # Check if already built
     if [[ -f "$INSTALL_DIR/lib/libleveldb.a" && -f "$INSTALL_DIR/include/leveldb/db.h" ]]; then
@@ -517,6 +709,7 @@ build_brpc() {
 
     local src_dir="$THIRDPARTY_DIR/src"
     local build_dir="$THIRDPARTY_DIR/build/brpc"
+    local PATCHED_MARK="patched_mark"
 
     download_source "brpc" "$BRPC_VERSION" \
         "https://github.com/apache/brpc/archive/$BRPC_VERSION.tar.gz" \
@@ -530,9 +723,27 @@ build_brpc() {
     fi
 
     cd "brpc-$BRPC_VERSION"
+
+    # Apply brpc-1.9.0 patches
+    if [[ ! -f "$PATCHED_MARK" && "$BRPC_VERSION" == "1.9.0" ]]; then
+        log_info "Applying brpc-1.9.0 patches..."
+        # Apply config_brpc.sh patch
+        if [[ -f "$THIRDPARTY_DIR/patches/brpc-1.9.0.patch" ]]; then
+            patch -p1 < "$THIRDPARTY_DIR/patches/brpc-1.9.0.patch" || true
+            log_info "Patched config_brpc.sh"
+        fi
+        
+        # Force C++17 in CMakeLists.txt using sed for robustness
+        log_info "Forcing C++17 in CMakeLists.txt..."
+        sed -i '' 's/set(CMAKE_CXX_STANDARD_REQUIRED ON)/set(CMAKE_CXX_STANDARD_REQUIRED ON)\n\n# Force C++17 for glog 0.7.1 compatibility on macOS\nset(CMAKE_CXX_STANDARD 17)\nset(CMAKE_CXX_STANDARD_REQUIRED ON)/' CMakeLists.txt
+        
+        touch "$PATCHED_MARK"
+        log_success "brpc patches applied successfully"
+    fi
+
     mkdir -p build && cd build
 
-    # Use our compiled protobuf-3.14.0
+    # Use our compiled protobuf-3.14.0 and glog-0.7.1
     export PKG_CONFIG_PATH="$INSTALL_DIR/lib/pkgconfig:$PKG_CONFIG_PATH"
     export PROTOBUF_ROOT="$INSTALL_DIR"
 
@@ -545,6 +756,9 @@ build_brpc() {
         -DBRPC_WITH_GLOG=ON \
         -DWITH_THRIFT=OFF \
         -DProtobuf_DIR="$INSTALL_DIR/lib/cmake/protobuf" \
+        -Dglog_DIR="$INSTALL_DIR/lib/cmake/glog" \
+        -DGLOG_INCLUDE_PATH="$INSTALL_DIR/include" \
+        -DGLOG_LIB="$INSTALL_DIR/lib/libglog.a" \
         -DCMAKE_POLICY_VERSION_MINIMUM=3.5
 
     make -j"$PARALLEL_JOBS"
@@ -581,8 +795,23 @@ build_rocksdb() {
 
     cd "rocksdb-$ROCKSDB_VERSION"
 
-    # No source patch required on macOS now that warnings-as-errors is disabled
-    # and shared libraries/tests are turned off for RocksDB.
+    # Apply RocksDB metadata header patch for macOS libc++ compatibility
+    local patch_file="$THIRDPARTY_DIR/patches/rocksdb-6.22.1-metadata-header.patch"
+    if [[ -f "$patch_file" ]]; then
+        # Check if patch is already applied by looking for our marker comment
+        if ! grep -q "The metadata that describes a SST file" include/rocksdb/metadata.h 2>/dev/null; then
+            log_info "Applying RocksDB metadata header patch..."
+            if patch -p1 --forward --batch < "$patch_file" >/dev/null; then
+                log_success "RocksDB metadata patch applied successfully"
+            else
+                log_warn "RocksDB metadata patch could not be applied (maybe already applied). Proceeding."
+            fi
+        else
+            log_success "RocksDB metadata patch already applied, skipping"
+        fi
+    else
+        log_warn "RocksDB metadata patch not found at $patch_file"
+    fi
 
     mkdir -p build && cd build
 
@@ -686,21 +915,131 @@ build_bitshuffle() {
 
     cd "bitshuffle-$BITSHUFFLE_VERSION"
 
-    # Build static library manually; include bundled LZ4 headers and sources
-    local BSHUF_CFLAGS="$CFLAGS -I./src -I./lz4"
-    "$CC" $BSHUF_CFLAGS -c src/bitshuffle.c -o bitshuffle.o
-    "$CC" $BSHUF_CFLAGS -c src/bitshuffle_core.c -o bitshuffle_core.o
-    "$CC" $BSHUF_CFLAGS -c src/iochain.c -o iochain.o
-    "$CC" $BSHUF_CFLAGS -c lz4/lz4.c -o lz4.o
+    # This library has significant optimizations when built with NEON on ARM.
+    # We build it twice: once with default flags and once with NEON flags,
+    # and use some linker tricks to suffix the NEON symbols with '_neon'.
+    local machine_type="$(uname -m)"
+    local arches="default"
 
-    "$AR" rcs libbitshuffle.a *.o
+    # On ARM64, also build NEON version
+    if [[ "${machine_type}" == "arm64" ]]; then
+        arches="default neon"
+    fi
+
+    local to_link=""
+    for arch in $arches ; do
+        local arch_flag=""
+        if [[ "$arch" == "neon" ]]; then
+            arch_flag="-march=armv8-a+crc"
+        fi
+
+        local tmp_obj="bitshuffle_${arch}_tmp.o"
+        local dst_obj="bitshuffle_${arch}.o"
+
+        # Compile with architecture-specific flags
+        local BSHUF_CFLAGS="-I./src -I./lz4 -I$INSTALL_DIR/include/lz4 -std=c99 -O3 -DNDEBUG -fPIC"
+        "$CC" $BSHUF_CFLAGS $arch_flag -c src/bitshuffle_core.c -o bitshuffle_core.o
+        "$CC" $BSHUF_CFLAGS $arch_flag -c src/bitshuffle.c -o bitshuffle.o
+        "$CC" $BSHUF_CFLAGS $arch_flag -c src/iochain.c -o iochain.o
+
+        # Merge the object files together to produce a combined .o file
+        ld -r -o "$tmp_obj" bitshuffle_core.o bitshuffle.o iochain.o
+
+        # For the NEON version, suffix the symbols
+        if [[ "$arch" == "neon" ]]; then
+            # Create a mapping file with '<old_sym> <suffixed_sym>' on each line
+            nm -gU "$tmp_obj" | awk '{print $3, $3"_neon"}' | grep -v '^$' > renames.txt
+
+            # Use llvm-objcopy to rename symbols (macOS doesn't have GNU objcopy)
+            "$HOMEBREW_PREFIX/opt/llvm/bin/llvm-objcopy" --redefine-syms=renames.txt "$tmp_obj" "$dst_obj"
+        else
+            mv "$tmp_obj" "$dst_obj"
+        fi
+
+        to_link="$to_link $dst_obj"
+    done
+
+    # Create the static library with all versions
+    rm -f libbitshuffle.a
+    "$AR" rcs libbitshuffle.a $to_link
 
     # Install
     mkdir -p "$INSTALL_DIR"/{lib,include/bitshuffle}
     cp libbitshuffle.a "$INSTALL_DIR/lib/"
     cp src/*.h "$INSTALL_DIR/include/bitshuffle/"
 
-    log_success "bitshuffle built successfully"
+    log_success "bitshuffle built successfully (architectures: $arches)"
+}
+
+# datasketches (header-only install)
+build_datasketches() {
+    # Check if already installed (pick one representative header)
+    if [[ -d "$INSTALL_DIR/include/datasketches" && -f "$INSTALL_DIR/include/datasketches/hll.hpp" ]]; then
+        log_success "datasketches already installed, skipping"
+        return 0
+    fi
+
+    log_info "Installing datasketches ${DATASKETCHES_VERSION} headers..."
+
+    local src_dir="$THIRDPARTY_DIR/src"
+    local build_dir="$THIRDPARTY_DIR/build/datasketches"
+
+    download_source "datasketches-cpp" "$DATASKETCHES_VERSION" \
+        "$DATASKETCHES_DOWNLOAD" \
+        "$DATASKETCHES_NAME"
+
+    mkdir -p "$build_dir"
+    cd "$build_dir"
+
+    if [[ ! -d "$DATASKETCHES_SOURCE" ]]; then
+        tar -xzf "$src_dir/$DATASKETCHES_NAME"
+    fi
+
+    # Copy public headers into a flat include/datasketches directory, matching Linux build layout
+    mkdir -p "$INSTALL_DIR/include/datasketches"
+    cp -r "$DATASKETCHES_SOURCE"/common/include/* "$INSTALL_DIR/include/datasketches/" || true
+    cp -r "$DATASKETCHES_SOURCE"/cpc/include/* "$INSTALL_DIR/include/datasketches/" || true
+    cp -r "$DATASKETCHES_SOURCE"/fi/include/* "$INSTALL_DIR/include/datasketches/" || true
+    cp -r "$DATASKETCHES_SOURCE"/hll/include/* "$INSTALL_DIR/include/datasketches/" || true
+    cp -r "$DATASKETCHES_SOURCE"/kll/include/* "$INSTALL_DIR/include/datasketches/" || true
+    cp -r "$DATASKETCHES_SOURCE"/quantiles/include/* "$INSTALL_DIR/include/datasketches/" || true
+    cp -r "$DATASKETCHES_SOURCE"/req/include/* "$INSTALL_DIR/include/datasketches/" || true
+    cp -r "$DATASKETCHES_SOURCE"/sampling/include/* "$INSTALL_DIR/include/datasketches/" || true
+    cp -r "$DATASKETCHES_SOURCE"/theta/include/* "$INSTALL_DIR/include/datasketches/" || true
+    cp -r "$DATASKETCHES_SOURCE"/tuple/include/* "$INSTALL_DIR/include/datasketches/" || true
+
+    log_success "datasketches headers installed"
+}
+
+# async-profiler distribution copy
+build_async_profiler() {
+    if [[ -d "$INSTALL_DIR/async-profiler/bin" && -d "$INSTALL_DIR/async-profiler/lib" ]]; then
+        log_success "async-profiler already installed, skipping"
+        return 0
+    fi
+
+    log_info "Installing async-profiler ${ASYNC_PROFILER_VERSION} for macOS..."
+
+    local src_dir="$THIRDPARTY_DIR/src"
+    local build_dir="$THIRDPARTY_DIR/build/async-profiler"
+
+    download_source "async-profiler" "$ASYNC_PROFILER_VERSION" \
+        "$ASYNC_PROFILER_DOWNLOAD" \
+        "$ASYNC_PROFILER_NAME"
+
+    mkdir -p "$build_dir"
+    cd "$build_dir"
+
+    if [[ ! -d "$ASYNC_PROFILER_SOURCE" ]]; then
+        unzip -q "$src_dir/$ASYNC_PROFILER_NAME"
+    fi
+
+    mkdir -p "$INSTALL_DIR/async-profiler"
+    rm -rf "$INSTALL_DIR/async-profiler/bin" "$INSTALL_DIR/async-profiler/lib"
+    cp -R "$ASYNC_PROFILER_SOURCE/bin" "$INSTALL_DIR/async-profiler/"
+    cp -R "$ASYNC_PROFILER_SOURCE/lib" "$INSTALL_DIR/async-profiler/"
+
+    log_success "async-profiler installed successfully"
 }
 
 # Build ryu from source and install into $INSTALL_DIR
@@ -754,6 +1093,85 @@ build_ryu() {
     fi
 
     log_success "ryu built successfully"
+}
+
+build_libdivide() {
+    # Check if already built
+    if [[ -f "$INSTALL_DIR/include/libdivide.h" ]]; then
+        log_success "libdivide already built, skipping"
+        return 0
+    fi
+
+    log_info "Building libdivide..."
+
+    local src_dir="$THIRDPARTY_DIR/src"
+    local build_dir="$THIRDPARTY_DIR/build/libdivide"
+
+    download_source "libdivide" "v5.2.0" \
+        "$LIBDIVIDE_DOWNLOAD" \
+        "$LIBDIVIDE_NAME"
+
+    mkdir -p "$build_dir"
+    cd "$build_dir"
+
+    if [[ ! -d "$LIBDIVIDE_SOURCE" ]]; then
+        tar -xzf "$src_dir/$LIBDIVIDE_NAME"
+    fi
+
+    cd "$LIBDIVIDE_SOURCE"
+
+    # libdivide is header-only, just copy the header
+    cp libdivide.h "$INSTALL_DIR/include/"
+
+    log_success "libdivide built successfully"
+}
+
+build_icu() {
+    # Check if already built
+    if [[ -f "$INSTALL_DIR/lib/libicuuc.a" && -f "$INSTALL_DIR/include/unicode/ucasemap.h" ]]; then
+        log_success "icu already built, skipping"
+        return 0
+    fi
+
+    log_info "Building icu..."
+
+    local src_dir="$THIRDPARTY_DIR/src"
+    local build_dir="$THIRDPARTY_DIR/build/icu"
+
+    download_source "icu" "76-1" \
+        "$ICU_DOWNLOAD" \
+        "$ICU_NAME"
+
+    mkdir -p "$build_dir"
+    cd "$build_dir"
+
+    if [[ ! -d "$ICU_SOURCE" ]]; then
+        unzip -q "$src_dir/$ICU_NAME"
+    fi
+
+    cd "$ICU_SOURCE/source"
+
+    # Fix line endings for shell scripts
+    sed -i '' 's/\r$//' ./runConfigureICU
+    sed -i '' 's/\r$//' ./config.*
+    sed -i '' 's/\r$//' ./configure
+    sed -i '' 's/\r$//' ./mkinstalldirs
+
+    # Clear compile flags to use ICU defaults
+    unset CPPFLAGS
+    unset CXXFLAGS
+    unset CFLAGS
+
+    # Use a subshell to prevent environment variable leakage
+    (
+        export CFLAGS="-O3 -fno-omit-frame-pointer -fPIC"
+        export CXXFLAGS="-O3 -fno-omit-frame-pointer -fPIC"
+        ./runConfigureICU macOS --prefix="$INSTALL_DIR" --enable-static --disable-shared
+        make -j"$PARALLEL_JOBS"
+        make install
+    )
+
+    log_success "icu built successfully"
 }
 
 
@@ -870,6 +1288,311 @@ EOF
     log_success "vectorscan built successfully"
 }
 
+build_curl() {
+    # Check if already built
+    if [[ -f "$INSTALL_DIR/lib/libcurl.a" && -f "$INSTALL_DIR/include/curl/curl.h" ]]; then
+        log_success "curl already built, skipping"
+        return 0
+    fi
+
+    log_info "Building curl $CURL_SOURCE..."
+
+    local src_dir="$THIRDPARTY_DIR/src"
+    local build_dir="$THIRDPARTY_DIR/build/curl"
+
+    download_source "curl" "$CURL_SOURCE" \
+        "$CURL_DOWNLOAD" \
+        "$CURL_NAME"
+
+    mkdir -p "$build_dir"
+    cd "$build_dir"
+
+    if [[ ! -d "$CURL_SOURCE" ]]; then
+        tar -xzf "$src_dir/$CURL_NAME"
+    fi
+
+    cd "$CURL_SOURCE"
+
+    # Configure curl with minimal dependencies to avoid complex linking issues
+    # Use similar configuration as Linux build but adapted for macOS
+    LDFLAGS="-L${INSTALL_DIR}/lib -L${OPENSSL_ROOT_DIR}/lib" LIBS="-lssl -lcrypto -ldl" \
+    ./configure --prefix="$INSTALL_DIR" --disable-shared --enable-static \
+    --without-librtmp --with-ssl="${OPENSSL_ROOT_DIR}" --without-libidn2 --without-libgsasl \
+    --disable-ldap --enable-ipv6 --without-brotli \
+    --disable-ftp --disable-ftps --disable-file --disable-dict --disable-telnet \
+    --disable-tftp --disable-pop3 --disable-pop3s --disable-imap --disable-imaps \
+    --disable-smb --disable-smtp --disable-smtps --disable-gopher --disable-mqtt \
+    --disable-rtsp --disable-rtsp --disable-ldap --disable-ldaps --disable-unix-sockets \
+    --without-zstd --without-brotli --without-libidn --without-libssh2 \
+    --without-nghttp2 --without-nghttp3 --without-ngtcp2 \
+    --without-libpsl \
+    --with-pic --enable-optimize --disable-debug --enable-http
+
+    make -j"$PARALLEL_JOBS"
+    make install
+
+    # Verify installation
+    if [[ ! -f "$INSTALL_DIR/lib/libcurl.a" ]]; then
+        log_error "curl static library not found after build"
+        return 1
+    fi
+
+    if [[ ! -f "$INSTALL_DIR/include/curl/curl.h" ]]; then
+        log_error "curl headers not found after build"
+        return 1
+    fi
+
+    log_success "curl built successfully"
+}
+
+build_simdutf() {
+    # Check if already built
+    if [[ -f "$INSTALL_DIR/lib/libsimdutf.a" && -f "$INSTALL_DIR/include/simdutf.h" ]]; then
+        log_success "simdutf already built, skipping"
+        return 0
+    fi
+
+    log_info "Building simdutf $SIMDUTF_SOURCE..."
+
+    local src_dir="$THIRDPARTY_DIR/src"
+    local build_dir="$THIRDPARTY_DIR/build/simdutf"
+
+    download_source "simdutf" "$SIMDUTF_SOURCE" \
+        "$SIMDUTF_DOWNLOAD" \
+        "$SIMDUTF_NAME"
+
+    mkdir -p "$build_dir"
+    cd "$build_dir"
+
+    if [[ ! -d "$SIMDUTF_SOURCE" ]]; then
+        tar -xzf "$src_dir/$SIMDUTF_NAME"
+    fi
+
+    cd "$SIMDUTF_SOURCE"
+    mkdir -p build && cd build
+
+    cmake .. \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" \
+        -DCMAKE_INSTALL_LIBDIR=lib \
+        -DSIMDUTF_TESTS=OFF \
+        -DSIMDUTF_TOOLS=OFF \
+        -DSIMDUTF_ICONV=OFF \
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+        -DBUILD_SHARED_LIBS=OFF
+
+    make -j"$PARALLEL_JOBS"
+    make install
+
+    log_success "simdutf built successfully"
+}
+
+build_croaringbitmap() {
+    # Check if already built
+    if [[ -f "$INSTALL_DIR/lib/libroaring.a" && -f "$INSTALL_DIR/include/roaring/roaring.h" ]]; then
+        log_success "croaringbitmap already built, skipping"
+        return 0
+    fi
+
+    log_info "Building croaringbitmap..."
+
+    local src_dir="$THIRDPARTY_DIR/src"
+    local build_dir="$THIRDPARTY_DIR/build/croaringbitmap"
+
+    download_source "croaringbitmap" "v4.2.1" \
+        "$CROARINGBITMAP_DOWNLOAD" \
+        "$CROARINGBITMAP_NAME"
+
+    mkdir -p "$build_dir"
+    cd "$build_dir"
+
+    if [[ ! -d "$CROARINGBITMAP_SOURCE" ]]; then
+        tar -xzf "$src_dir/$CROARINGBITMAP_NAME"
+    fi
+
+    cd "$CROARINGBITMAP_SOURCE"
+
+    # Pre-download CPM.cmake to avoid network issues during build
+    local cpm_dir="$CROARINGBITMAP_SOURCE/cmake"
+    mkdir -p "$cpm_dir"
+    if [[ ! -f "$cpm_dir/CPM.cmake" ]]; then
+        log_info "Downloading CPM.cmake for offline build..."
+        if curl -fL -o "$cpm_dir/CPM.cmake" "https://github.com/cpm-cmake/CPM.cmake/releases/download/v0.38.6/CPM.cmake" 2>/dev/null; then
+            log_success "CPM.cmake downloaded successfully"
+        else
+            log_warn "Failed to download CPM.cmake, will try to build without it"
+        fi
+    fi
+
+    mkdir -p build && cd build
+
+    # Configure AVX support for macOS ARM64
+    local FORCE_AVX=FALSE
+    # avx2 is not supported by aarch64
+    if [[ "$(uname -m)" != "arm64" ]]; then
+        # Only enable AVX on non-ARM64 architectures
+        FORCE_AVX=ON
+    fi
+
+    # Try to build with CPM first, fallback to simple build if it fails
+    if ! cmake .. \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" \
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+        -DROARING_BUILD_STATIC=ON \
+        -DENABLE_ROARING_TESTS=OFF \
+        -DROARING_DISABLE_NATIVE=ON \
+        -DFORCE_AVX=$FORCE_AVX \
+        -DROARING_DISABLE_AVX512=ON \
+        -DCMAKE_INSTALL_LIBDIR=lib \
+        -DCMAKE_C_FLAGS="${CFLAGS} -Wno-error" \
+        -DCMAKE_CXX_FLAGS="${CXXFLAGS} -D_LIBCPP_HAS_NO_HASH_MEMORY=1 -Wno-error" \
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5; then
+
+        log_warn "CMake configuration failed, trying simple build without CPM..."
+
+        # Fallback: Simple manual build without CPM
+        cd ..
+
+        # Create a simple build without external dependencies
+        if [[ -f "src/roaring.c" && -f "include/roaring/roaring.h" ]]; then
+            log_info "Building roaring bitmap manually..."
+
+            # Debug: Show directory structure
+            log_info "Source directory structure:"
+            ls -la src/ 2>/dev/null || log_warn "src directory not found"
+            ls -la include/ 2>/dev/null || log_warn "include directory not found"
+
+            # Build directly from source
+            mkdir -p "$INSTALL_DIR/include/roaring"
+            mkdir -p "$INSTALL_DIR/lib"
+
+            # Copy headers
+            cp -r include/roaring/* "$INSTALL_DIR/include/roaring/"
+
+            # Compile the static library manually with proper include paths
+            local object_files=()
+            local include_flags="-I./include -I./src"
+
+            # List source files to be compiled
+            log_info "Compiling source files:"
+            for src_file in src/*.c; do
+                if [[ -f "$src_file" ]]; then
+                    log_info "  Found source file: $src_file"
+                    local obj_file="$build_dir/$(basename "$src_file" .c).o"
+                    log_info "  Compiling: $src_file -> $obj_file"
+                    if "$CC" $CFLAGS $include_flags -c "$src_file" -o "$obj_file" 2>&1; then
+                        object_files+=("$obj_file")
+                        log_info "  ✓ Successfully compiled $src_file"
+                    else
+                        log_warn "  ✗ Failed to compile $src_file"
+                    fi
+                fi
+            done
+
+            # Also compile any additional source files in subdirectories
+            for src_file in src/*/*.c; do
+                if [[ -f "$src_file" ]]; then
+                    log_info "  Found source file: $src_file"
+                    local obj_file="$build_dir/$(basename "$src_file" .c).o"
+                    log_info "  Compiling: $src_file -> $obj_file"
+                    if "$CC" $CFLAGS $include_flags -c "$src_file" -o "$obj_file" 2>&1; then
+                        object_files+=("$obj_file")
+                        log_info "  ✓ Successfully compiled $src_file"
+                    else
+                        log_warn "  ✗ Failed to compile $src_file"
+                    fi
+                fi
+            done
+
+            log_info "Total object files compiled: ${#object_files[@]}"
+
+            # Create the static library
+            if [[ ${#object_files[@]} -gt 0 ]]; then
+                log_info "Creating static library with ${#object_files[@]} object files..."
+                "${AR:-ar}" rcs "$INSTALL_DIR/lib/libroaring.a" "${object_files[@]}"
+                "${RANLIB:-ranlib}" "$INSTALL_DIR/lib/libroaring.a" 2>/dev/null || true
+                log_info "Static library created: $INSTALL_DIR/lib/libroaring.a"
+                ls -la "$INSTALL_DIR/lib/libroaring.a" 2>/dev/null || log_error "Library file not found"
+            else
+                log_error "No object files were compiled successfully"
+                return 1
+            fi
+
+            # Inject libc++ hash memory shim for macOS compatibility
+            local shim_src="$build_dir/hash_memory_impl.cc"
+            cat > "$shim_src" <<'EOF'
+#ifndef _LIBCPP_HAS_NO_HASH_MEMORY
+#define _LIBCPP_HAS_NO_HASH_MEMORY 1
+#endif
+#include <cstddef>
+namespace std { namespace __1 {
+[[gnu::pure]] size_t
+__hash_memory(const void* __ptr, size_t __size) noexcept
+{
+    size_t h = 0;
+    const unsigned char* p = static_cast<const unsigned char*>(__ptr);
+    for (size_t i = 0; i < __size; ++i)
+        h = h * 31 + p[i];
+    return h;
+}
+} }
+EOF
+            local shim_obj="$build_dir/hash_memory_shim.o"
+            $CXX $CXXFLAGS -c "$shim_src" -o "$shim_obj"
+            ( cd "$INSTALL_DIR/lib" && ar rcs libroaring.a "$shim_obj" && ranlib libroaring.a 2>/dev/null || true )
+            log_success "Injected hash_memory shim into libroaring.a"
+
+            # Verify installation
+            if [[ -f "$INSTALL_DIR/lib/libroaring.a" && -f "$INSTALL_DIR/include/roaring/roaring.h" ]]; then
+                log_success "Manual build completed successfully"
+            else
+                log_error "Manual build verification failed"
+                return 1
+            fi
+
+        else
+            log_error "Cannot find required source files for manual build"
+            log_info "Looking for: src/roaring.c and include/roaring/roaring.h"
+            ls -la src/roaring.c 2>/dev/null || log_info "src/roaring.c not found"
+            ls -la include/roaring/roaring.h 2>/dev/null || log_info "include/roaring/roaring.h not found"
+            return 1
+        fi
+    else
+        # CMake succeeded, continue with normal build
+        make -j"$PARALLEL_JOBS"
+        make install
+
+        # Inject libc++ hash memory shim for macOS compatibility if needed
+        if [[ -f "$INSTALL_DIR/lib/libroaring.a" ]]; then
+            local shim_src="$build_dir/hash_memory_impl.cc"
+            cat > "$shim_src" <<'EOF'
+#ifndef _LIBCPP_HAS_NO_HASH_MEMORY
+#define _LIBCPP_HAS_NO_HASH_MEMORY 1
+#endif
+#include <cstddef>
+namespace std { namespace __1 {
+[[gnu::pure]] size_t
+__hash_memory(const void* __ptr, size_t __size) noexcept
+{
+    size_t h = 0;
+    const unsigned char* p = static_cast<const unsigned char*>(__ptr);
+    for (size_t i = 0; i < __size; ++i)
+        h = h * 31 + p[i];
+    return h;
+}
+} }
+EOF
+            local shim_obj="$build_dir/hash_memory_shim.o"
+            $CXX $CXXFLAGS -c "$shim_src" -o "$shim_obj"
+            ( cd "$INSTALL_DIR/lib" && ar rcs libroaring.a "$shim_obj" && ranlib libroaring.a 2>/dev/null || true )
+            log_success "Injected hash_memory shim into libroaring.a"
+        fi
+    fi
+
+    log_success "croaringbitmap built successfully"
+}
+
 build_source_deps() {
     log_info "Building source dependencies..."
 
@@ -877,8 +1600,16 @@ build_source_deps() {
     build_gflags
     build_glog
     build_protobuf
+    build_thrift
     build_leveldb
+    build_datasketches
     build_ryu
+    build_libdivide
+    build_icu
+    build_croaringbitmap
+    build_curl
+    build_simdutf
+    build_async_profiler
 
     # Layer 2: Libraries that depend on Layer 1
     build_brpc
@@ -898,6 +1629,10 @@ build_source_deps() {
     ln -sf ../lib/librocksdb.a "$INSTALL_DIR/lib64/librocksdb.a" 2>/dev/null || true
     ln -sf ../lib/libhs.a "$INSTALL_DIR/lib64/libhs.a" 2>/dev/null || true
     ln -sf ../lib/libryu.a "$INSTALL_DIR/lib64/libryu.a" 2>/dev/null || true
+    ln -sf ../lib/libicuuc.a "$INSTALL_DIR/lib64/libicuuc.a" 2>/dev/null || true
+    ln -sf ../lib/libicui18n.a "$INSTALL_DIR/lib64/libicui18n.a" 2>/dev/null || true
+    ln -sf ../lib/libroaring.a "$INSTALL_DIR/lib64/libroaring.a" 2>/dev/null || true
+    ln -sf ../lib/libcurl.a "$INSTALL_DIR/lib64/libcurl.a" 2>/dev/null || true
 
     log_success "All source dependencies built successfully"
 }
@@ -929,6 +1664,9 @@ main() {
         "libhs.a"
         "libhs_runtime.a"
         "libryu.a"
+        "libicuuc.a"
+        "libicui18n.a"
+        "libroaring.a"
     )
 
     local missing_libs=()

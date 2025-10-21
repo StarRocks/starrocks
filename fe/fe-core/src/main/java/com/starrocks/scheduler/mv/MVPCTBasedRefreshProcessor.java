@@ -159,11 +159,6 @@ public final class MVPCTBasedRefreshProcessor extends BaseMVRefreshProcessor {
             updatePCTMeta(mvExecPlan, pctMVToRefreshedPartitions, pctRefTableRefreshPartitions);
         }
 
-        // do not generate next task run if the current task run is killed
-        if (mvContext.hasNextBatchPartition() && !mvContext.getTaskRun().isKilled()) {
-            generateNextTaskRun();
-        }
-
         return Constants.TaskRunState.SUCCESS;
     }
 
@@ -216,6 +211,7 @@ public final class MVPCTBasedRefreshProcessor extends BaseMVRefreshProcessor {
 
             // Generate insert stmt's exec plan, make thread local ctx existed
             try (ConnectContext.ScopeGuard guard = ctx.bindScope(); Timer ignored = Tracers.watchScope("MVRefreshPlanner")) {
+                ctx.getSessionVariable().setEnableInsertSelectExternalAutoRefresh(false); //already refreshed before
                 execPlan = StatementPlanner.planInsertStmt(locker, insertStmt, ctx);
             }
         } finally {
@@ -248,7 +244,12 @@ public final class MVPCTBasedRefreshProcessor extends BaseMVRefreshProcessor {
         return insertStmt;
     }
 
-    private void generateNextTaskRun() {
+    @Override
+    public void generateNextTaskRunIfNeeded() {
+        if (!mvContext.hasNextBatchPartition() || mvContext.getTaskRun().isKilled()) {
+            return;
+        }
+
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
         Map<String, String> properties = mvContext.getProperties();
         long mvId = Long.parseLong(properties.get(MV_ID));

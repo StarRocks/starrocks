@@ -235,14 +235,32 @@ public class AlterJobMgr {
                     Lists.newArrayList(MaterializedViewAnalyzer.getBaseTableInfos(mvQueryStatement, !isReplay));
             materializedView.setBaseTableInfos(baseTableInfos);
             materializedView.fixRelationship();
+            // resume the mv scheduler
+            TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+            Task task = taskManager.getTask(materializedView);
+            if (task == null) {
+                throw new SemanticException("Can not find running task for materialized view [%s]", materializedView.getName());
+            }
+            taskManager.resumeTask(task);
         } else if (AlterMaterializedViewStatusClause.INACTIVE.equalsIgnoreCase(status)) {
             materializedView.setInactiveAndReason(reason);
             // clear running & pending task runs since the mv has been inactive
             final TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
             Task currentTask = taskManager.getTask(TaskBuilder.getMvTaskName(materializedView.getId()));
+            // suspend the inactive mv's task
             if (currentTask != null) {
                 TaskRunManager taskRunManager = taskManager.getTaskRunManager();
-                taskRunManager.killTaskRun(currentTask.getId(), true);
+                if (!taskRunManager.tryTaskRunLock()) {
+                    throw new SemanticException("Failed to acquire task run lock when altering " +
+                            "mv status:" + materializedView.getName());
+                }
+                try {
+                    taskRunManager.killTaskRun(currentTask.getId(), true);
+                } finally {
+                    taskRunManager.taskRunUnlock();
+                }
+                // suspend the task to avoid scheduling new task runs
+                taskManager.suspendTask(currentTask);
             }
         }
     }

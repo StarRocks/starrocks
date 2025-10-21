@@ -1,0 +1,130 @@
+-- name: test_iceberg_collect_stats
+create external catalog iceberg_collect_stats_${uuid0} PROPERTIES (
+    "type"="iceberg",
+    "iceberg.catalog.type"="hive", 
+    "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+);
+-- result:
+-- !result
+create database iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0} properties (
+    "location" = "oss://${oss_bucket}/iceberg_collect_stats_${uuid0}/test_iceberg_partition_transform/${uuid0}"
+);
+-- result:
+-- !result
+create table iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t1 (
+    c1 int,
+    c2 bigint,
+    c3 date,
+    c4 decimal(10,3)
+) partition by c1,c2,c3,c4;
+-- result:
+-- !result
+insert into iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t1 values(1, 2, '2022-01-01', 10.23);
+-- result:
+-- !result
+[UC] analyze table iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t1;
+-- result:
+iceberg_collect_stats_d5e9d38ec7144c578e456e16e1134134.iceberg_collect_stats_db_d5e9d38ec7144c578e456e16e1134134.t1	analyze	status	OK
+-- !result
+function: assert_explain_costs_contains('select * from iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t1', 'cardinality=1')
+-- result:
+None
+-- !result
+drop table iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t1 force;
+-- result:
+-- !result
+create table iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t2 (
+    c1 int,
+    c2 bigint,
+    c3 date
+) partition by truncate(c1, 50), bucket(c2, 10), year(c3);
+-- result:
+-- !result
+insert into iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t2 values(1,2,'2022-01-01'), (49,38,'2022-12-12');
+-- result:
+-- !result
+[UC] analyze table iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t2;
+-- result:
+iceberg_collect_stats_d5e9d38ec7144c578e456e16e1134134.iceberg_collect_stats_db_d5e9d38ec7144c578e456e16e1134134.t2	analyze	status	OK
+-- !result
+function: assert_explain_costs_contains('select * from iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t2', 'cardinality=2')
+-- result:
+None
+-- !result
+drop table iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t2 force;
+-- result:
+-- !result
+create table iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t3 (
+    c1 date,
+    c2 date,
+    c3 date,
+    c4 datetime
+) partition by year(c1), month(c2), day(c3), hour(c4);
+-- result:
+-- !result
+insert into iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t3 values('2022-01-01', '2022-01-01' ,'2022-01-01', '2022-01-01 12:13:14'), ('2022-01-02', '2022-01-02' ,'2022-01-01', '2022-01-01 12:15:14'), ('2022-01-03', '2022-01-03' ,'2022-01-01', '2022-01-01 12:17:14');
+-- result:
+-- !result
+[UC] analyze table iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t3;
+-- result:
+iceberg_collect_stats_d5e9d38ec7144c578e456e16e1134134.iceberg_collect_stats_db_d5e9d38ec7144c578e456e16e1134134.t3	analyze	status	OK
+-- !result
+function: assert_explain_costs_contains('select * from iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t3', 'cardinality=3')
+-- result:
+None
+-- !result
+drop table iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t3 force;
+-- result:
+-- !result
+create table iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t4 (
+    c1 varchar(100)
+) partition by truncate(c1, 1);
+-- result:
+-- !result
+insert into iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t4 values('测试1'), ('测试2'),('测试3');
+-- result:
+-- !result
+[UC] analyze table iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t4;
+-- result:
+iceberg_collect_stats_d5e9d38ec7144c578e456e16e1134134.iceberg_collect_stats_db_d5e9d38ec7144c578e456e16e1134134.t4	analyze	status	OK
+-- !result
+function: assert_explain_costs_contains('select * from iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t4', 'cardinality: 3')
+-- result:
+None
+-- !result
+drop table iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t4 force;
+-- result:
+-- !result
+create table iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t5 (
+    c1 varbinary(100)
+) partition by truncate(c1, 1);
+-- result:
+-- !result
+insert into iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t5 values('abc'), ('edf');
+-- result:
+-- !result
+[UC] analyze table iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t5;
+-- result:
+iceberg_collect_stats_d5e9d38ec7144c578e456e16e1134134.iceberg_collect_stats_db_d5e9d38ec7144c578e456e16e1134134.t5	analyze	status	OK
+-- !result
+function: assert_explain_costs_contains('select * from iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t5', 'cardinality: 2')
+-- result:
+None
+-- !result
+drop table iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t5 force;
+-- result:
+-- !result
+drop database iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0};
+-- result:
+-- !result
+drop catalog iceberg_collect_stats_${uuid0};
+-- result:
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/iceberg_collect_stats_${uuid0}/test_iceberg_partition_transform/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result

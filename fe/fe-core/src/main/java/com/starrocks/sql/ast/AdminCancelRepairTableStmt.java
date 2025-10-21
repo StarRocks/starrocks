@@ -16,7 +16,7 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
-import com.starrocks.sql.ast.expression.TableRef;
+import com.starrocks.sql.ast.expression.TableRefPersist;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -24,14 +24,14 @@ import java.util.List;
 // ADMIN CANCEL REPAIR TABLE example_db.example_table PARTITION(p1);
 public class AdminCancelRepairTableStmt extends DdlStmt {
 
-    private final TableRef tblRef;
+    private final TableRefPersist tblRef;
     private final List<String> partitions = Lists.newArrayList();
 
-    public AdminCancelRepairTableStmt(TableRef tblRef) {
+    public AdminCancelRepairTableStmt(TableRefPersist tblRef) {
         this(tblRef, NodePosition.ZERO);
     }
 
-    public AdminCancelRepairTableStmt(TableRef tblRef, NodePosition pos) {
+    public AdminCancelRepairTableStmt(TableRefPersist tblRef, NodePosition pos) {
         super(pos);
         this.tblRef = tblRef;
     }

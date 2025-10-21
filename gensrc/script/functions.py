@@ -565,6 +565,7 @@ vectorized_functions = [
     [50262, 'to_iso8601', True, False, 'VARCHAR', ['DATETIME'], 'TimeFunctions::datetime_to_iso8601'],
     [50263, 'to_iso8601', True, False, 'VARCHAR', ['DATE'], 'TimeFunctions::date_to_iso8601'],
     [50250, 'time_to_sec', True, False, 'BIGINT', ['TIME'], 'TimeFunctions::time_to_sec'],
+    [50251, 'sec_to_time', True, False, 'TIME', ['BIGINT'], 'TimeFunctions::sec_to_time'],
 
     # unix timestamp extended version to int64
     # be sure to put before int32 version, so fe will find signature in order.
@@ -615,7 +616,8 @@ vectorized_functions = [
     [50310, 'dayname', True, False, 'VARCHAR', ['DATETIME'], 'TimeFunctions::day_name'],
     [50311, 'monthname', True, False, 'VARCHAR', ['DATETIME'], 'TimeFunctions::month_name'],
     [50320, 'convert_tz', True, False, 'DATETIME', ['DATETIME', 'VARCHAR', 'VARCHAR'], 'TimeFunctions::convert_tz',
-     'TimeFunctions::convert_tz_prepare', 'TimeFunctions::convert_tz_close'],
+    'TimeFunctions::convert_tz_prepare', 'TimeFunctions::convert_tz_close'],
+    [50321, 'current_timezone', True, False, 'VARCHAR', [], 'TimeFunctions::current_timezone'],
     [50330, 'utc_timestamp', True, False, 'DATETIME', [], 'TimeFunctions::utc_timestamp'],
     [50331, 'utc_time', True, False, 'TIME', [], 'TimeFunctions::utc_time'],
     [50340, 'date_trunc', True, False, 'DATETIME', ['VARCHAR', 'DATETIME'], 'TimeFunctions::datetime_trunc',
@@ -1437,5 +1439,8 @@ vectorized_functions = [
     [181001, 'equiwidth_bucket', True, False, 'BIGINT', ['BIGINT', 'BIGINT', 'BIGINT', 'BIGINT'], 'UtilityFunctions::equiwidth_bucket'],
 
     # gin functions
-    [190000, 'tokenize', True, False, 'ARRAY_VARCHAR', ['VARCHAR', 'VARCHAR'], 'GinFunctions::tokenize', 'GinFunctions::tokenize_prepare', 'GinFunctions::tokenize_close']
+    [190000, 'tokenize', True, False, 'ARRAY_VARCHAR', ['VARCHAR', 'VARCHAR'], 'GinFunctions::tokenize', 'GinFunctions::tokenize_prepare', 'GinFunctions::tokenize_close'],
+
+    # ai functions
+    [200000, 'ai_query', True, False, 'VARCHAR', ['VARCHAR', 'JSON'], "AiFunctions::ai_query"]
 ]

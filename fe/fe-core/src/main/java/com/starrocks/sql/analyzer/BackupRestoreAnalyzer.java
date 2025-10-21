@@ -41,7 +41,7 @@ import com.starrocks.sql.ast.ShowBackupStmt;
 import com.starrocks.sql.ast.ShowRestoreStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.expression.TableName;
-import com.starrocks.sql.ast.expression.TableRef;
+import com.starrocks.sql.ast.expression.TableRefPersist;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -109,8 +109,8 @@ public class BackupRestoreAnalyzer {
             boolean allMV = backupStmt.allMV();
             boolean allView = backupStmt.allView();
 
-            Map<String, TableRef> tblPartsMap = Maps.newTreeMap();
-            List<TableRef> tableRefs = backupStmt.getTableRefs();
+            Map<String, TableRefPersist> tblPartsMap = Maps.newTreeMap();
+            List<TableRefPersist> tableRefs = backupStmt.getTableRefs();
             // There are several cases:
             // 1. Backup all table/mv/view without `ON` clause.
             // 2. Backup all table if specify `ALL` for table.
@@ -137,14 +137,14 @@ public class BackupRestoreAnalyzer {
                     }
 
                     TableName tableName = new TableName(dbName, tbl.getName());
-                    TableRef tableRef = new TableRef(tableName, null, null);
+                    TableRefPersist tableRef = new TableRefPersist(tableName, null, null);
                     tableRefs.add(tableRef);
                 }
             }
 
-            Map<Long, TableRef> tableIdToTableRefMap = Maps.newHashMap();
+            Map<Long, TableRefPersist> tableIdToTableRefMap = Maps.newHashMap();
             Map<String, MaterializedView> mvNameMVMap = Maps.newHashMap();
-            for (TableRef tableRef : tableRefs) {
+            for (TableRefPersist tableRef : tableRefs) {
                 analyzeTableRef(tableRef, dbName, database, tblPartsMap, context.getCurrentCatalog(),
                         mvNameMVMap, tableIdToTableRefMap);
                 if (tableRef.hasExplicitAlias()) {
@@ -167,8 +167,8 @@ public class BackupRestoreAnalyzer {
                 }
 
                 // reorder the tableRefs to ensure ref tables of materialized views are ahead of the materialized view
-                Map<String, TableRef> newTableRefs = reorderTableRefsWithMaterializedView(database, tblPartsMap, mvNameMVMap,
-                        tableIdToTableRefMap);
+                Map<String, TableRefPersist> newTableRefs =
+                        reorderTableRefsWithMaterializedView(database, tblPartsMap, mvNameMVMap, tableIdToTableRefMap);
                 tableRefs.clear();
                 tableRefs.addAll(newTableRefs.values());
             } else {
@@ -226,12 +226,13 @@ public class BackupRestoreAnalyzer {
             }
         }
 
-        private Map<String, TableRef> reorderTableRefsWithMaterializedView(Database database,
-                                                                           Map<String, TableRef> tblPartsMap,
-                                                                           Map<String, MaterializedView> mvPartsMap,
-                                                                           Map<Long, TableRef> tableIdToTableRefMap) {
-            Map<String, TableRef> orderedTableNameRefMap = Maps.newLinkedHashMap();
-            for (Map.Entry<String, TableRef> e : tblPartsMap.entrySet()) {
+        private Map<String, TableRefPersist> reorderTableRefsWithMaterializedView(
+                Database database,
+                Map<String, TableRefPersist> tblPartsMap,
+                Map<String, MaterializedView> mvPartsMap,
+                Map<Long, TableRefPersist> tableIdToTableRefMap) {
+            Map<String, TableRefPersist> orderedTableNameRefMap = Maps.newLinkedHashMap();
+            for (Map.Entry<String, TableRefPersist> e : tblPartsMap.entrySet()) {
                 collectTableRefAndDependencies(database, e.getKey(), e.getValue(), mvPartsMap, tableIdToTableRefMap,
                         orderedTableNameRefMap);
             }
@@ -240,10 +241,10 @@ public class BackupRestoreAnalyzer {
 
         private void collectTableRefAndDependencies(Database database,
                                                     String tableName,
-                                                    TableRef tableRef,
+                                                    TableRefPersist tableRef,
                                                     Map<String, MaterializedView> mvPartsMap,
-                                                    Map<Long, TableRef> tableIdToTableRefMap,
-                                                    Map<String, TableRef> result) {
+                                                    Map<Long, TableRefPersist> tableIdToTableRefMap,
+                                                    Map<String, TableRefPersist> result) {
             // table is already collected.
             if (result.containsKey(tableName)) {
                 return;
@@ -308,10 +309,10 @@ public class BackupRestoreAnalyzer {
 
         @Override
         public Void visitRestoreStatement(RestoreStmt restoreStmt, ConnectContext context) {
-            List<TableRef> tableRefs = restoreStmt.getTableRefs();
+            List<TableRefPersist> tableRefs = restoreStmt.getTableRefs();
             Set<String> aliasSet = Sets.newHashSet();
-            Map<String, TableRef> tblPartsMap = Maps.newTreeMap();
-            for (TableRef tableRef : tableRefs) {
+            Map<String, TableRefPersist> tblPartsMap = Maps.newTreeMap();
+            for (TableRefPersist tableRef : tableRefs) {
                 TableName tableName = tableRef.getName();
 
                 if (!tblPartsMap.containsKey(tableName.getTbl())) {
@@ -323,7 +324,7 @@ public class BackupRestoreAnalyzer {
                 aliasSet.add(tableRef.getName().getTbl());
             }
 
-            for (TableRef tblRef : tableRefs) {
+            for (TableRefPersist tblRef : tableRefs) {
                 if (tblRef.hasExplicitAlias() && !aliasSet.add(tblRef.getExplicitAlias())) {
                     throw new SemanticException("Duplicated alias name: " + tblRef.getExplicitAlias(), tblRef.getPos());
                 }
@@ -445,10 +446,10 @@ public class BackupRestoreAnalyzer {
         }
     }
 
-    public static void analyzeTableRef(TableRef tableRef, String dbName, Database db,
-                                       Map<String, TableRef> tblPartsMap, String catalog,
+    public static void analyzeTableRef(TableRefPersist tableRef, String dbName, Database db,
+                                       Map<String, TableRefPersist> tblPartsMap, String catalog,
                                        Map<String, MaterializedView> tblMaterializedViewMap,
-                                       Map<Long, TableRef> tableIdToTableRefMap) {
+                                       Map<Long, TableRefPersist> tableIdToTableRefMap) {
         TableName tableName = tableRef.getName();
         tableName.setCatalog(catalog);
         tableName.setDb(dbName);

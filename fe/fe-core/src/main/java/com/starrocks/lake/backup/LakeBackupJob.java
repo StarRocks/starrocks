@@ -37,7 +37,7 @@ import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
-import com.starrocks.sql.ast.expression.TableRef;
+import com.starrocks.sql.ast.expression.TableRefPersist;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.THdfsProperties;
@@ -66,7 +66,7 @@ public class LakeBackupJob extends BackupJob {
     public LakeBackupJob() {
     }
 
-    public LakeBackupJob(String label, long dbId, String dbName, List<TableRef> tableRefs, long timeoutMs,
+    public LakeBackupJob(String label, long dbId, String dbName, List<TableRefPersist> tableRefs, long timeoutMs,
                          GlobalStateMgr globalStateMgr, long repoId) {
         super(label, dbId, dbName, tableRefs, timeoutMs, globalStateMgr, repoId);
         this.type = JobType.LAKE_BACKUP;
@@ -74,7 +74,7 @@ public class LakeBackupJob extends BackupJob {
 
     @Override
     protected void checkBackupTables(Database db) {
-        for (TableRef tableRef : tableRefs) {
+        for (TableRefPersist tableRef : tableRefs) {
             String tblName = tableRef.getName().getTbl();
             Table tbl = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tblName);
             if (tbl == null) {

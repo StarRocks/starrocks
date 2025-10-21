@@ -288,8 +288,8 @@ public class PaimonMetadata implements ConnectorMetadata {
         if (start.isEmpty() && end.isEmpty()) {
             long snapshotId = -1L;
             try {
-                if (paimonTable.getNativeTable().latestSnapshotId().isPresent()) {
-                    snapshotId = paimonTable.getNativeTable().latestSnapshotId().getAsLong();
+                if (paimonTable.getNativeTable().latestSnapshot().isPresent()) {
+                    snapshotId = paimonTable.getNativeTable().latestSnapshot().get().id();
                 }
             } catch (Exception e) {
                 // System table does not have snapshotId, ignore it.
@@ -372,7 +372,7 @@ public class PaimonMetadata implements ConnectorMetadata {
                         throw new StarRocksConnectorException("%s does not include branch: %s",
                                 table.fullName(), refName.split(":")[1]);
                     }
-                    snapshotId = paimonTable.latestSnapshotId().isPresent() ? paimonTable.latestSnapshotId().getAsLong() : -1L;
+                    snapshotId = paimonTable.latestSnapshot().isPresent() ? paimonTable.latestSnapshot().get().id() : -1L;
                 } else {
                     //if tag, format like tag:t_1, return the snapshot that the tag referenced
                     TagManager tagManager =  ((DataTable) table).tagManager();
@@ -441,7 +441,7 @@ public class PaimonMetadata implements ConnectorMetadata {
             }
             InnerTableScan scan = (InnerTableScan) readBuilder.newScan();
             PaimonMetricRegistry paimonMetricRegistry = new PaimonMetricRegistry();
-            List<Split> splits = scan.withMetricsRegistry(paimonMetricRegistry).plan().splits();
+            List<Split> splits = scan.withMetricRegistry(paimonMetricRegistry).plan().splits();
             traceScanMetrics(paimonMetricRegistry, splits, table.getCatalogTableName(), predicates);
 
             PaimonSplitsInfo paimonSplitsInfo = new PaimonSplitsInfo(predicates, splits);

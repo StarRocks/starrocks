@@ -695,6 +695,11 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createDatetime(newDateTime);
     }
 
+    @ConstantFunction(name = "current_timezone", argTypes = {}, returnType = VARCHAR)
+    public static ConstantOperator current_timezone() {
+        return ConstantOperator.createVarchar(TimeUtils.getTimeZone().getID());
+    }
+
     @ConstantFunction(name = "unix_timestamp", argTypes = {}, returnType = BIGINT)
     public static ConstantOperator unixTimestampNow() {
         return unixTimestamp(now());
@@ -1061,6 +1066,11 @@ public class ScalarOperatorFunctions {
     /**
      * Arithmetic function
      */
+
+    @ConstantFunction(name = "add", argTypes = {TINYINT, TINYINT}, returnType = TINYINT, isMonotonic = true)
+    public static ConstantOperator addTinyInt(ConstantOperator first, ConstantOperator second) {
+        return ConstantOperator.createTinyInt((byte) Math.addExact(first.getTinyInt(), second.getTinyInt()));
+    }
     @ConstantFunction(name = "add", argTypes = {SMALLINT, SMALLINT}, returnType = SMALLINT, isMonotonic = true)
     public static ConstantOperator addSmallInt(ConstantOperator first, ConstantOperator second) {
         return ConstantOperator.createSmallInt((short) Math.addExact(first.getSmallint(), second.getSmallint()));

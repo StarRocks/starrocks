@@ -260,6 +260,7 @@ import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.PartitionRangeDesc;
+import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.PartitionRenameClause;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.PauseRoutineLoadStmt;
@@ -397,6 +398,7 @@ import com.starrocks.sql.ast.SyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.SyncStmt;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableFunctionRelation;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TableSampleClause;
@@ -472,7 +474,7 @@ import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.SubfieldExpr;
 import com.starrocks.sql.ast.expression.Subquery;
 import com.starrocks.sql.ast.expression.TableName;
-import com.starrocks.sql.ast.expression.TableRef;
+import com.starrocks.sql.ast.expression.TableRefPersist;
 import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
 import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.sql.ast.expression.UserVariableExpr;
@@ -677,19 +679,19 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     public ParseNode visitUseCatalogStatement(com.starrocks.sql.parser.StarRocksParser.UseCatalogStatementContext context) {
         StringLiteral literal = (StringLiteral) visit(context.string());
         String catalogParts = literal.getValue();
-        
+
         // Parse and validate catalog name from the string literal
         if (catalogParts == null || catalogParts.trim().isEmpty()) {
             throw new ParsingException("You have an error in your SQL. The correct syntax is: USE 'CATALOG catalog_name'.",
                     createPos(context));
         }
-        
+
         String[] splitParts = catalogParts.split("\\s+");
         if (splitParts.length != 2 || !splitParts[0].equalsIgnoreCase("CATALOG")) {
             throw new ParsingException("You have an error in your SQL. The correct syntax is: USE 'CATALOG catalog_name'.",
                     createPos(context));
         }
-        
+
         String catalogName = normalizeName(splitParts[1]);
         return new UseCatalogStmt(catalogName, createPos(context));
     }
@@ -773,7 +775,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     @Override
     public ParseNode visitShowCreateDbStatement(com.starrocks.sql.parser.StarRocksParser.ShowCreateDbStatementContext context) {
         String dbName = ((Identifier) visit(context.identifier())).getValue();
-        return new ShowCreateDbStmt(dbName, createPos(context));
+        return new ShowCreateDbStmt(normalizeName(dbName), createPos(context));
     }
 
     @Override
@@ -787,7 +789,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     @Override
     public ParseNode visitRecoverDbStmt(com.starrocks.sql.parser.StarRocksParser.RecoverDbStmtContext context) {
         String dbName = ((Identifier) visit(context.identifier())).getValue();
-        return new RecoverDbStmt(dbName, createPos(context));
+        return new RecoverDbStmt(normalizeName(dbName), createPos(context));
     }
 
     @Override
@@ -808,14 +810,15 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         Token start = context.qualifiedName().start;
         Token stop = context.qualifiedName().stop;
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
-        TableName targetTableName = qualifiedNameToTableName(qualifiedName);
-        PartitionNames partitionNames = null;
+
+        PartitionRef partitionRef = null;
         if (context.partitionNames() != null) {
             stop = context.partitionNames().stop;
-            partitionNames = (PartitionNames) visit(context.partitionNames());
+            PartitionNames partitionNames = (PartitionNames) visit(context.partitionNames());
+            partitionRef = new PartitionRef(partitionNames.getPartitionNames(), partitionNames.isTemp(), partitionNames.getPos());
         }
-        return new ShowDataDistributionStmt(new TableRef(targetTableName, null,
-                partitionNames, createPos(start, stop)),
+
+        return new ShowDataDistributionStmt(new TableRef(normalizeName(qualifiedName), partitionRef, createPos(start, stop)),
                 createPos(context));
     }
 
@@ -1382,7 +1385,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             partitionNames = (PartitionNames) visit(context.partitionNames());
         }
         NodePosition pos = createPos(start, stop);
-        return new TruncateTableStmt(new TableRef(targetTableName, null, partitionNames, pos));
+        return new TruncateTableStmt(new TableRefPersist(targetTableName, null, partitionNames, pos));
     }
 
     @Override
@@ -2361,7 +2364,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             com.starrocks.sql.parser.StarRocksParser.CreateExternalCatalogStatementContext context) {
         boolean ifNotExists = context.IF() != null;
         Identifier identifier = (Identifier) visit(context.identifierOrString());
-        String catalogName = identifier.getValue();
+        String catalogName = normalizeName(identifier.getValue());
         String comment = null;
         if (context.comment() != null) {
             comment = ((StringLiteral) visit(context.comment())).getStringValue();
@@ -2390,7 +2393,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     public ParseNode visitShowCreateExternalCatalogStatement(
             com.starrocks.sql.parser.StarRocksParser.ShowCreateExternalCatalogStatementContext context) {
         Identifier identifier = (Identifier) visit(context.catalogName);
-        String catalogName = identifier.getValue();
+        String catalogName = normalizeName(identifier.getValue());
         return new ShowCreateExternalCatalogStmt(catalogName, createPos(context));
     }
 
@@ -2406,7 +2409,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
     @Override
     public ParseNode visitAlterCatalogStatement(com.starrocks.sql.parser.StarRocksParser.AlterCatalogStatementContext context) {
-        String catalogName = ((Identifier) visit(context.catalogName)).getValue();
+        String catalogName = normalizeName(((Identifier) visit(context.catalogName)).getValue());
         AlterClause alterClause = (AlterClause) visit(context.modifyPropertiesClause());
         return new AlterCatalogStmt(catalogName, alterClause, createPos(context));
     }
@@ -2736,7 +2739,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             stop = context.partitionNames().stop;
             partitionNames = (PartitionNames) visit(context.partitionNames());
         }
-        return new AdminShowReplicaDistributionStmt(new TableRef(targetTableName, null,
+        return new AdminShowReplicaDistributionStmt(new TableRefPersist(targetTableName, null,
                 partitionNames, createPos(start, stop)),
                 createPos(context));
     }
@@ -2755,7 +2758,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             partitionNames = (PartitionNames) visit(context.partitionNames());
         }
         return new AdminShowReplicaStatusStmt(
-                new TableRef(targetTableName, null, partitionNames, createPos(start, stop)),
+                new TableRefPersist(targetTableName, null, partitionNames, createPos(start, stop)),
                 where,
                 createPos(context));
     }
@@ -2772,7 +2775,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             stop = context.partitionNames().stop;
             partitionNames = (PartitionNames) visit(context.partitionNames());
         }
-        return new AdminRepairTableStmt(new TableRef(targetTableName, null, partitionNames, createPos(start, stop)),
+        return new AdminRepairTableStmt(new TableRefPersist(targetTableName, null, partitionNames, createPos(start, stop)),
                 createPos(context));
     }
 
@@ -2789,7 +2792,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             partitionNames = (PartitionNames) visit(context.partitionNames());
         }
         return new AdminCancelRepairTableStmt(
-                new TableRef(targetTableName, null, partitionNames, createPos(start, stop)),
+                new TableRefPersist(targetTableName, null, partitionNames, createPos(start, stop)),
                 createPos(context));
     }
 
@@ -3772,7 +3775,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         if (partitionNamesContext != null) {
             partitionNames = (PartitionNames) visit(partitionNamesContext);
         }
-        return new TableRef(tableName, alias, partitionNames, position);
+        return new TableRefPersist(tableName, alias, partitionNames, position);
     }
 
     private ParseNode parseBackupRestoreStatement(ParserRuleContext context) {
@@ -3827,10 +3830,10 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
         boolean withOnClause = false;
 
-        List<TableRef> tblRefs = new ArrayList<>();
-        List<TableRef> mvRefs = new ArrayList<>();
-        List<TableRef> viewRefs = new ArrayList<>();
-        List<TableRef> mixTblRefs = new ArrayList<>();
+        List<TableRefPersist> tblRefs = new ArrayList<>();
+        List<TableRefPersist> mvRefs = new ArrayList<>();
+        List<TableRefPersist> viewRefs = new ArrayList<>();
+        List<TableRefPersist> mixTblRefs = new ArrayList<>();
         List<FunctionRef> fnRefs = new ArrayList<>();
         Set<BackupObjectType> allMarker = Sets.newHashSet();
 
@@ -3901,7 +3904,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                     continue;
                 }
 
-                mvRefs.add((TableRef) getTableRef(backupRestoreObjectDescContext.qualifiedName(),
+                mvRefs.add((TableRefPersist) getTableRef(backupRestoreObjectDescContext.qualifiedName(),
                         null, alias, createPos(backupRestoreObjectDescContext)));
             } else if (specifiedView) {
                 if (backupRestoreObjectDescContext.ALL() != null) {
@@ -3909,7 +3912,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                     continue;
                 }
 
-                viewRefs.add((TableRef) getTableRef(backupRestoreObjectDescContext.qualifiedName(),
+                viewRefs.add((TableRefPersist) getTableRef(backupRestoreObjectDescContext.qualifiedName(),
                         null, alias, createPos(backupRestoreObjectDescContext)));
             } else if (specifiedTable) {
                 if (backupRestoreObjectDescContext.ALL() != null) {
@@ -3917,11 +3920,12 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                     continue;
                 }
 
-                tblRefs.add((TableRef) getTableRef(backupRestoreObjectDescContext.backupRestoreTableDesc().qualifiedName(),
+                tblRefs.add((TableRefPersist) getTableRef(backupRestoreObjectDescContext.backupRestoreTableDesc().qualifiedName(),
                         backupRestoreObjectDescContext.backupRestoreTableDesc().partitionNames(),
                         alias, createPos(backupRestoreObjectDescContext)));
             } else {
-                mixTblRefs.add((TableRef) getTableRef(backupRestoreObjectDescContext.backupRestoreTableDesc().qualifiedName(),
+                mixTblRefs.add((TableRefPersist) getTableRef(
+                        backupRestoreObjectDescContext.backupRestoreTableDesc().qualifiedName(),
                         backupRestoreObjectDescContext.backupRestoreTableDesc().partitionNames(),
                         alias, createPos(backupRestoreObjectDescContext)));
             }
@@ -4245,7 +4249,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             stop = context.tableDesc().partitionNames().stop;
             partitionNames = (PartitionNames) visit(context.tableDesc().partitionNames());
         }
-        TableRef tableRef = new TableRef(tableName, null, partitionNames, createPos(start, stop));
+        TableRefPersist tableRef = new TableRefPersist(tableName, null, partitionNames, createPos(start, stop));
 
         StringLiteral stringLiteral = (StringLiteral) visit(context.string());
         // properties
@@ -4770,7 +4774,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
     @Override
     public ParseNode visitDropBackendClause(com.starrocks.sql.parser.StarRocksParser.DropBackendClauseContext context) {
-        String whName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+        String whName = "";
         String cngroupName = "";
         if (context.warehouseName != null) {
             Identifier identifier = (Identifier) visit(context.identifierOrString().get(0));
@@ -4832,7 +4836,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
     @Override
     public ParseNode visitDropComputeNodeClause(com.starrocks.sql.parser.StarRocksParser.DropComputeNodeClauseContext context) {
-        String whName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+        String whName = "";
         String cngroupName = "";
         if (context.warehouseName != null) {
             Identifier identifier = (Identifier) visit(context.identifierOrString().get(0));
@@ -9539,6 +9543,15 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
     private String normalizeName(String name) {
         return caseInsensitive && name != null ? name.toLowerCase() : name;
+    }
+
+    private QualifiedName normalizeName(QualifiedName qualifiedName) {
+        List<String> parts = new ArrayList<>();
+        for (String part : qualifiedName.getParts()) {
+            parts.add(normalizeName(part));
+        }
+
+        return QualifiedName.of(parts, qualifiedName.getPos());
     }
 
     public static IndexDef.IndexType getIndexType(com.starrocks.sql.parser.StarRocksParser.IndexTypeContext indexTypeContext) {

@@ -412,7 +412,7 @@ CONF_Bool(enable_event_based_compaction_framework, "true");
 CONF_Bool(enable_size_tiered_compaction_strategy, "true");
 CONF_mBool(enable_pk_size_tiered_compaction_strategy, "true");
 // Enable parallel execution within tablet for primary key tables.
-CONF_mBool(enable_pk_parallel_execution, "false");
+CONF_mBool(enable_pk_parallel_execution, "true");
 // The minimum threshold of data size for enabling pk parallel execution.
 // Default is 300MB.
 CONF_mInt64(pk_parallel_execution_threshold_bytes, "314572800");
@@ -875,10 +875,19 @@ CONF_mInt32(tablet_max_pending_versions, "1000");
 // NOTE: it will be deleted.
 CONF_mBool(enable_bitmap_union_disk_format_with_set, "false");
 
-// pipeline poller timeout guard
+// pipeline poller timeout guard. Suggested Value: 500
 CONF_mInt64(pipeline_poller_timeout_guard_ms, "-1");
-// pipeline fragment prepare timeout guard
+// pipeline fragment prepare timeout guard. Suggested Value: 1000
 CONF_mInt64(pipeline_prepare_timeout_guard_ms, "-1");
+// pipeline process timeout guard. Suggested Value: 5000
+CONF_mInt64(pipeline_process_timeout_guard_ms, "-1");
+// pipeline scan timeout guard. Suggested Value: 10000
+CONF_mInt64(pipeline_scan_timeout_guard_ms, "-1");
+// pipeline runtime filter worker timeout guard. Suggested Value: 2000
+CONF_mInt64(pipeline_rf_worker_timeout_guard_ms, "-1");
+// pipeline datastream timeout guard. Suggested Value: 2000
+CONF_mInt64(pipeline_datastream_timeout_guard_ms, "-1");
+
 // whether to enable large column detection in the pipeline execution framework.
 CONF_mBool(pipeline_enable_large_column_checker, "false");
 
@@ -1187,7 +1196,10 @@ CONF_mInt32(lake_pk_index_sst_max_compaction_versions, "100");
 // When the ratio of cumulative level to base level is greater than this config, use base merge.
 CONF_mDouble(lake_pk_index_cumulative_base_compaction_ratio, "0.1");
 CONF_Int32(lake_pk_index_block_cache_limit_percent, "10");
-CONF_mBool(lake_clear_corrupted_cache, "true");
+// clear *.meta cache for lake table
+CONF_mBool(lake_clear_corrupted_cache_meta, "true");
+// clear *.data cache for lake table
+CONF_mBool(lake_clear_corrupted_cache_data, "false");
 // The maximum number of files which need to rebuilt in cloud native pk index.
 // If files which need to rebuilt larger than this, we will flush memtable immediately.
 CONF_mInt32(cloud_native_pk_index_rebuild_files_threshold, "50");
@@ -1748,4 +1760,9 @@ CONF_mInt64(split_exchanger_buffer_chunk_num, "1000");
 // when to split hashmap/hashset into two level hashmap/hashset, negative number means use default value
 CONF_mInt64(two_level_memory_threshold, "-1");
 
+CONF_Int32(llm_max_queue_size, "4096");
+
+CONF_Int32(llm_max_concurrent_queries, "8");
+
+CONF_Int32(llm_cache_size, "131072");
 } // namespace starrocks::config

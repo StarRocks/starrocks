@@ -107,6 +107,7 @@ CREATE EXTERNAL CATALOG <catalog_name>
 PROPERTIES
 (
     "type" = "iceberg",
+    [SecurityParams],
     MetastoreParams,
     StorageCredentialParams,
     MetadataRelatedParams
@@ -131,6 +132,20 @@ Iceberg catalog 的描述。此参数是可选的。
 #### type
 
 数据源的类型。将值设置为 `iceberg`。
+
+#### SecurityParams
+
+关于 StarRocks 如何管理 Catalog 数据访问的参数。
+
+有关管理 Iceberg REST Catalog 数据访问的详细说明，请参阅[Iceberg REST Catalog 的安全设置](./iceberg_rest_security.md)。
+
+##### catalog.access.control
+
+数据访问控制策略。有效值：
+
+- `native`（默认）：使用 StarRocks 内置的数据访问控制系统。
+- `allowall`：所有数据访问检查均委托给 Catalog 本身处理。
+- `ranger`：数据访问检查委托给 Apache Ranger 处理。
 
 #### MetastoreParams
 
@@ -781,8 +796,10 @@ Google GCS 的 `StorageCredentialParams`：
 | :-------------------------------------------- | :-------------------- | :----------------------------------------------------------- |
 | enable_iceberg_metadata_cache                 | true                  | 是否缓存 Iceberg 相关的元数据，包括表缓存、分区名称缓存以及 Manifest 中的数据文件缓存和删除数据文件缓存。 |
 | iceberg_manifest_cache_with_column_statistics | false                 | 是否缓存列的统计信息。                  |
-| iceberg_manifest_cache_max_num                | 100000                | 可以缓存的 Manifest 文件的最大数量。     |
 | refresh_iceberg_manifest_min_length           | 2 * 1024 * 1024       | 触发数据文件缓存刷新的最小 Manifest 文件长度。 |
+| iceberg_data_file_cache_memory_usage_ratio    | 0.1                   | Data File Manifest 缓存的最大内存使用率。从 v3.5.6 版本开始支持。 |
+| iceberg_delete_file_cache_memory_usage_ratio  | 0.1                   | Delete File Manifest 缓存的最大内存使用率。从 v3.5.6 版本开始支持。 |
+| iceberg_table_cache_refresh_interval_sec      | 60                    | 触发 Iceberg 表缓存异步刷新操作的时间间隔（单位：秒）。从 v3.5.7 版本开始支持。 |
 
 从 v3.4 起，StarRocks 在没有主动触发收集 Iceberg 表统计信息的情况下，可以通过设置以下参数读取 Iceberg 的元数据来获取 Iceberg 表的统计信息。
 

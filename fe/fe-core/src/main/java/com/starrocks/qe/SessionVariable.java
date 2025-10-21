@@ -339,6 +339,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     // --------  New planner session variables start --------
     public static final String NEW_PLANER_AGG_STAGE = "new_planner_agg_stage";
+    public static final String ENABLE_COST_BASED_MULTI_STAGE_AGG = "enable_cost_based_multi_stage_agg";
     public static final String BROADCAST_ROW_LIMIT = "broadcast_row_limit";
     public static final String BROADCAST_RIGHT_TABLE_SCALE_FACTOR =
             "broadcast_right_table_scale_factor";
@@ -454,6 +455,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_HASH_JOIN_RANGE_DIRECT_MAPPING_OPT = "enable_hash_join_range_direct_mapping_opt";
     public static final String ENABLE_HASH_JOIN_LINEAR_CHAINED_OPT = "enable_hash_join_linear_chained_opt";
+    public static final String ENABLE_HASH_JOIN_SERIALIZE_FIXED_SIZE_STRING = "enable_hash_join_serialize_fixed_size_string";
 
     public static final String ENABLE_PIPELINE_LEVEL_MULTI_PARTITIONED_RF =
             "enable_pipeline_level_multi_partitioned_rf";
@@ -958,6 +960,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_DESENSITIZE_EXPLAIN = "enable_desensitize_explain";
 
     public static final String ENABLE_FULL_SORT_USE_GERMAN_STRING = "enable_full_sort_use_german_string";
+
+    public static final String ENABLE_INSERT_SELECT_EXTERNAL_AUTO_REFRESH = "enable_insert_select_external_auto_refresh";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -1575,6 +1579,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = NEW_PLANER_AGG_STAGE)
     private int newPlannerAggStage = SessionVariableConstants.AggregationStage.AUTO.ordinal();
 
+    @VariableMgr.VarAttr(name = ENABLE_COST_BASED_MULTI_STAGE_AGG)
+    private boolean enableCostBasedMultiStageAgg = true;
+
     @VariableMgr.VarAttr(name = TRANSMISSION_COMPRESSION_TYPE)
     private String transmissionCompressionType = "AUTO";
 
@@ -1645,6 +1652,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_HASH_JOIN_LINEAR_CHAINED_OPT)
     private boolean enableHashJoinLinearChainedOpt = true;
+
+    @VarAttr(name = ENABLE_HASH_JOIN_SERIALIZE_FIXED_SIZE_STRING)
+    private boolean enableHashJoinSerializeFixedSizeString = true;
 
     @VarAttr(name = ENABLE_PIPELINE_LEVEL_MULTI_PARTITIONED_RF)
     private boolean enablePipelineLevelMultiPartitionedRf = false;
@@ -1964,6 +1974,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_FULL_SORT_USE_GERMAN_STRING)
     private boolean enableFullSortUseGermanString = true;
+
+    @VarAttr(name = ENABLE_INSERT_SELECT_EXTERNAL_AUTO_REFRESH)
+    private boolean enableInsertSelectExternalAutoRefresh = true;
 
     public int getCboPruneJsonSubfieldDepth() {
         return cboPruneJsonSubfieldDepth;
@@ -3678,6 +3691,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.newPlannerAggStage = stage;
     }
 
+    public boolean isEnableCostBasedMultiStageAgg() {
+        return newPlannerAggStage == SessionVariableConstants.AggregationStage.AUTO.ordinal() &&  enableCostBasedMultiStageAgg;
+    }
+
     public void setMaxTransformReorderJoins(int maxReorderNodeUseExhaustive) {
         this.cboMaxReorderNodeUseExhaustive = maxReorderNodeUseExhaustive;
     }
@@ -5335,6 +5352,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public boolean isEnableFullSortUseGermanString() {
         return this.enableFullSortUseGermanString;
     }
+
+    public boolean isEnableInsertSelectExternalAutoRefresh() {
+        return enableInsertSelectExternalAutoRefresh;
+    }
+
+    public void setEnableInsertSelectExternalAutoRefresh(boolean enableInsertSelectExternalAutoRefresh) {
+        this.enableInsertSelectExternalAutoRefresh = enableInsertSelectExternalAutoRefresh;
+    }
+
     // Serialize to thrift object
     // used for rest api
     public TQueryOptions toThrift() {
@@ -5496,6 +5522,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setColumn_view_concat_bytes_limit(columnViewConcatRowsLimit);
         tResult.setEnable_hash_join_range_direct_mapping_opt(enableHashJoinRangeDirectMappingOpt);
         tResult.setEnable_hash_join_linear_chained_opt(enableHashJoinLinearChainedOpt);
+        tResult.setEnable_hash_join_serialize_fixed_size_string(enableHashJoinSerializeFixedSizeString);
 
         return tResult;
     }

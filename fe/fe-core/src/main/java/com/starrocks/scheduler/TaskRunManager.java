@@ -28,6 +28,7 @@ import com.starrocks.scheduler.history.TaskRunHistory;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.server.GlobalStateMgr;
+import org.apache.arrow.util.VisibleForTesting;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -58,6 +59,11 @@ public class TaskRunManager implements MemoryTrackable {
         this.taskRunScheduler = taskRunScheduler;
     }
 
+    public SubmitResult submitTaskRun(TaskRun taskRun) {
+        return submitTaskRun(taskRun, taskRun.getExecuteOption());
+    }
+
+    @VisibleForTesting
     public SubmitResult submitTaskRun(TaskRun taskRun, ExecuteOption option) {
         LOG.info("submit task run:{}", taskRun);
 
@@ -87,8 +93,12 @@ public class TaskRunManager implements MemoryTrackable {
         return new SubmitResult(queryId, SubmitResult.SubmitStatus.SUBMITTED, taskRun.getFuture());
     }
 
-    public boolean killTaskRun(Long taskId, boolean force) {
-        TaskRun taskRun = taskRunScheduler.getRunningTaskRun(taskId);
+    /**
+     * Kill the running task run. If force is true, it will always clear the task run from task run scheduler whether it's
+     * canceled or not so can trigger the pending task runs as soon as possible.
+     * NOTE: This method is not thread safe, the caller should ensure the thread safety.
+     */
+    public boolean killRunningTaskRun(TaskRun taskRun, boolean force) {
         if (taskRun == null) {
             return false;
         }
@@ -101,15 +111,6 @@ public class TaskRunManager implements MemoryTrackable {
             if (future != null && !future.completeExceptionally(new RuntimeException("TaskRun killed"))) {
                 LOG.warn("failed to complete future for task run: {}", taskRun);
             }
-
-            // mark pending tasks as failed
-            Set<TaskRun> pendingTaskRuns = taskRunScheduler.getPendingTaskRunsByTaskId(taskId);
-            if (CollectionUtils.isNotEmpty(pendingTaskRuns)) {
-                for (TaskRun pendingTaskRun : pendingTaskRuns) {
-                    taskRunScheduler.removePendingTaskRun(pendingTaskRun, Constants.TaskRunState.FAILED);
-                }
-            }
-
             // kill the task run
             ConnectContext runCtx = taskRun.getRunCtx();
             if (runCtx != null) {
@@ -124,6 +125,38 @@ public class TaskRunManager implements MemoryTrackable {
                 taskRunScheduler.removeRunningTask(taskRun.getTaskId());
             }
         }
+    }
+
+    /**
+     * Kill all pending task runs of the input task id.
+     * NOTE: This method is not thread safe, the caller should ensure the thread safety.
+     */
+    public void killPendingTaskRuns(Long taskId) {
+        // mark pending tasks as failed
+        Set<TaskRun> pendingTaskRuns = taskRunScheduler.getPendingTaskRunsByTaskId(taskId);
+        if (CollectionUtils.isNotEmpty(pendingTaskRuns)) {
+            for (TaskRun pendingTaskRun : pendingTaskRuns) {
+                taskRunScheduler.removePendingTaskRun(pendingTaskRun, Constants.TaskRunState.FAILED);
+            }
+        }
+    }
+
+    /**
+     * Kill all task runs of the input task id, including pending and running task runs.
+     * @param taskId task id
+     * @param force whether to force kill the running task run, if true, it will always clear the task run from task run no
+     *              matter the task is cancelled or not.
+     * NOTE: This method is not thread safe, caller should take lock if necessary.
+     */
+    public boolean killTaskRun(Long taskId, boolean force) {
+        // kill all pending task runs of the task id
+        killPendingTaskRuns(taskId);
+        // kill the running task run
+        TaskRun taskRun = taskRunScheduler.getRunningTaskRun(taskId);
+        if (taskRun == null) {
+            return false;
+        }
+        return killRunningTaskRun(taskRun, force);
     }
 
     // At present, only the manual and automatic tasks of the materialized view have different priorities.

@@ -21,7 +21,7 @@ import com.starrocks.planner.PlanNodeId;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.JoinOperator;
-import com.starrocks.sql.ast.expression.TableRef;
+import com.starrocks.sql.ast.expression.TableRefPersist;
 import com.starrocks.sql.optimizer.operator.stream.IMTInfo;
 import com.starrocks.thrift.TEqJoinCondition;
 import com.starrocks.thrift.TExplainLevel;
@@ -38,7 +38,7 @@ public class StreamJoinNode extends JoinNode {
     // TODO: support bi-stream join
     private IMTInfo rightIMT;
 
-    public StreamJoinNode(PlanNodeId id, PlanNode outer, PlanNode inner, TableRef innerRef, List<Expr> eqJoinConjuncts,
+    public StreamJoinNode(PlanNodeId id, PlanNode outer, PlanNode inner, TableRefPersist innerRef, List<Expr> eqJoinConjuncts,
                           List<Expr> otherJoinConjuncts) {
         super("StreamJoin", id, outer, inner, JoinOperator.INNER_JOIN, eqJoinConjuncts, otherJoinConjuncts);
     }

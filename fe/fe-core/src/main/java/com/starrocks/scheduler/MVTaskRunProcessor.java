@@ -187,6 +187,13 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
                 Preconditions.checkState(mv != null);
                 mvMetricsEntity = MaterializedViewMetricsRegistry.getInstance().getMetricsEntity(mv.getMvId());
                 this.taskRunState = retryProcessTaskRun(context);
+                if (this.taskRunState == Constants.TaskRunState.SUCCESS) {
+                    logger.info("Refresh materialized view {} finished successfully.", mv.getName());
+                    // if success, try to generate next task run
+                    mvRefreshProcessor.generateNextTaskRunIfNeeded();
+                } else {
+                    logger.warn("Refresh materialized view {} failed with state: {}.", mv.getName(), taskRunState);
+                }
                 // update metrics
                 mvMetricsEntity.increaseRefreshJobStatus(taskRunState);
                 connectContext.getState().setOk();
@@ -290,10 +297,10 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
         ctx.setStmtId(STMT_ID_GENERATOR.incrementAndGet());
         // Add running query detail for MV refresh
         ctx.setQuerySource(QueryDetail.QuerySource.MV);
-        executor.addRunningQueryDetail(insertStmt);
 
         logger.info("[QueryId:{}] start to refresh mv in DML", ctx.getQueryId());
         try {
+            executor.addRunningQueryDetail(insertStmt);
             executor.handleDMLStmtWithProfile(execPlan, insertStmt);
         } catch (Exception e) {
             logger.warn("[QueryId:{}] refresh mv {} failed in DML", ctx.getQueryId(), e);
@@ -301,6 +308,7 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
         } finally {
             logger.info("[QueryId:{}] finished to refresh mv in DML", ctx.getQueryId());
             auditAfterExec(mvTaskRunContext, executor.getParsedStmt(), executor.getQueryStatisticsForAuditLog());
+            executor.addFinishedQueryDetail();
         }
     }
 
