@@ -8,8 +8,8 @@ set -e
 # Configuration
 BASE_BRANCH=${1:-"HEAD~1"}  # Default to previous commit, can be overridden
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-OUTPUT_FILE=${2:-"${PROJECT_ROOT}/target/jacoco-includes.txt"}
-PROPERTIES_FILE=${3:-"${PROJECT_ROOT}/target/jacoco-includes.properties"}
+OUTPUT_FILE=${2:-"${PROJECT_ROOT}/fe/fe-core/target/jacoco-includes.txt"}
+PROPERTIES_FILE=${3:-"${PROJECT_ROOT}/fe/fe-core/target/jacoco-includes.properties"}
 
 # Create output directory if it doesn't exist
 mkdir -p "$(dirname "$OUTPUT_FILE")"
@@ -18,7 +18,7 @@ mkdir -p "$(dirname "$OUTPUT_FILE")"
 echo "Generating JaCoCo includes based on git diff from $BASE_BRANCH..."
 
 # Get changed Java files in src/main/java
-CHANGED_FILES=$(git diff --name-only "$BASE_BRANCH" -- "src/main/java/**/*.java" 2>/dev/null || echo "")
+CHANGED_FILES=$(git diff --name-only "$BASE_BRANCH" -- "fe/fe-core/src/main/java/**/*.java" 2>/dev/null || echo "")
 
 if [ -z "$CHANGED_FILES" ]; then
     echo "No changed Java files found. Using default includes."

@@ -1168,7 +1168,7 @@ under the License.
                                     <equals arg1="${env.JACOCO_DIFF_ENABLED}" arg2="true"/>
                                 </condition>
                                 <exec executable="bash" dir="${project.basedir}" failonerror="false">
-                                    <arg value="scripts/generate-jacoco-includes.sh"/>
+                                    <arg value="../../build-support/generate-jacoco-includes.sh"/>
                                     <arg value="${jacoco.base.branch}"/>
                                     <arg value="target/jacoco-includes.txt"/>
                                     <arg value="target/jacoco-includes.properties"/>
