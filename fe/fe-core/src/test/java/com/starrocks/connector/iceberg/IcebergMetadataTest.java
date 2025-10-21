@@ -171,7 +171,10 @@ public class IcebergMetadataTest extends TableTestBase {
     public static final Map<String, String> DEFAULT_CONFIG = new HashMap<>();
     public static ConnectContext connectContext;
 
-    public static GetRemoteFilesParams emptyParams = GetRemoteFilesParams.newBuilder().build();
+    public static GetRemoteFilesParams emptyParams = GetRemoteFilesParams.newBuilder()
+            .setTableVersionRange(TvrTableSnapshot.of((long) 1))
+            .setPredicate(ConstantOperator.TRUE)
+            .build();
 
     static {
         DEFAULT_CONFIG.put(HIVE_METASTORE_URIS, "thrift://188.122.12.1:8732"); // non-exist ip, prevent to connect local service
@@ -1119,7 +1122,8 @@ public class IcebergMetadataTest extends TableTestBase {
         Assertions.assertEquals(3, ((IcebergRemoteFileInfo) res.get(0)).getFileScanTask().file().recordCount());
 
         PredicateSearchKey filter = PredicateSearchKey.of("db", "table", emptyParams);
-        Assertions.assertEquals("Filter{databaseName='db', tableName='table', version=Snapshot@(1), predicate=true}",
+        Assertions.assertEquals(
+                "Filter{databaseName='db', tableName='table', version=Snapshot@(1), predicate=true, enableColumnStats=false}",
                 filter.toString());
     }
 
@@ -1402,8 +1406,8 @@ public class IcebergMetadataTest extends TableTestBase {
         PredicateSearchKey newFilter = PredicateSearchKey.of("db", "table", newCallParams);
         Assertions.assertEquals(filter, newFilter);
 
-        Assertions.assertEquals(newFilter, PredicateSearchKey.of("db", "table", callParams));
-        Assertions.assertNotEquals(newFilter, PredicateSearchKey.of("db", "table", newCallParams));
+        Assertions.assertEquals(newFilter, PredicateSearchKey.of("db", "table", newCallParams));
+        Assertions.assertNotEquals(newFilter, PredicateSearchKey.of("db", "table", emptyParams));
     }
 
     @Test
