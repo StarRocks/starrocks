@@ -434,14 +434,14 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
         if (db == null) {
             throw new AlterCancelException("database id: " + dbId + " does not exist");
         }
+        OlapTable targetTable = checkAndGetTable(db, tableId);
+
         Locker locker = new Locker();
-        if (!locker.lockDatabaseAndCheckExist(db, LockType.READ)) {
+        if (!locker.lockTableAndCheckDbExist(db, targetTable.getId(), LockType.READ)) {
             throw new AlterCancelException("insert overwrite commit failed because locking db: " + dbId + " failed");
         }
-
         try {
             dbName = db.getFullName();
-            OlapTable targetTable = checkAndGetTable(db, tableId);
             if (getTmpPartitionIds().stream().anyMatch(id -> targetTable.getPartition(id) == null)) {
                 throw new AlterCancelException("partitions changed during insert");
             }
@@ -478,7 +478,7 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
             tableColumnNames = targetTable.getBaseSchema().stream().filter(column -> !column.isGeneratedColumn())
                         .map(col -> ParseUtil.backquote(col.getName())).collect(Collectors.toList());
         } finally {
-            locker.unLockDatabase(db.getId(), LockType.READ);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), targetTable.getId(), LockType.READ);
         }
 
         final List<String> finalTableColumnNames = tableColumnNames;
@@ -755,31 +755,37 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
     }
 
     private void cancelInternal() {
+        try {
+            doCancelInternal();
+        } catch (Exception e) {
+            LOG.warn("exception when cancel merge partition job.", e);
+        }
+    }
+
+    private void doCancelInternal() throws Exception {
         // remove temp partitions, and set state to NORMAL
         Database db = null;
         Locker locker = new Locker();
         try {
             db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
-            if (db == null) {
+            if (db == null || !db.isExist()) {
                 throw new AlterCancelException("database id:" + dbId + " does not exist");
             }
-
-            if (!locker.lockDatabaseAndCheckExist(db, LockType.WRITE)) {
-                throw new AlterCancelException("insert overwrite commit failed because locking db:" + dbId + " failed");
-            }
-
         } catch (Exception e) {
             LOG.warn("get and write lock database failed when cancel job: {}", jobId, e);
             return;
         }
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        if (table == null) {
+            throw new AlterCancelException("table:" + tableId + " does not exist in database:" + db.getFullName());
+        }
+        Preconditions.checkState(table instanceof OlapTable);
+        OlapTable targetTable = (OlapTable) table;
 
+        if (!locker.lockTableAndCheckDbExist(db, table.getId(), LockType.WRITE)) {
+            throw new AlterCancelException("insert overwrite commit failed because locking db:" + dbId + " failed");
+        }
         try {
-            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
-            if (table == null) {
-                throw new AlterCancelException("table:" + tableId + " does not exist in database:" + db.getFullName());
-            }
-            Preconditions.checkState(table instanceof OlapTable);
-            OlapTable targetTable = (OlapTable) table;
             Set<Tablet> sourceTablets = Sets.newHashSet();
             if (getTmpPartitionIds() != null) {
                 for (long pid : getTmpPartitionIds()) {
@@ -805,7 +811,7 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
         } catch (Exception e) {
             LOG.warn("exception when cancel merge partition job.", e);
         } finally {
-            locker.unLockDatabase(db.getId(), LockType.WRITE);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.WRITE);
         }
     }
 

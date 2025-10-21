@@ -191,19 +191,19 @@ public class MetaRecoveryDaemon extends FrontendDaemon {
                 LOG.warn("recover partition version failed, db is null, versionInfo: {}", version);
                 continue;
             }
+            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(database.getId(), version.getTableId());
+            if (table == null) {
+                LOG.warn("recover partition version failed, table is null, versionInfo: {}", version);
+                continue;
+            }
+            if (!table.isOlapTableOrMaterializedView()) {
+                LOG.warn("recover partition version failed, table is not OLAP table, versionInfo: {}", version);
+                continue;
+            }
             Locker locker = new Locker();
-            locker.lockDatabase(database.getId(), LockType.WRITE);
+            locker.lockTableWithIntensiveDbLock(database.getId(), table.getId(), LockType.WRITE);
             try {
-                Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
-                            .getTable(database.getId(), version.getTableId());
-                if (table == null) {
-                    LOG.warn("recover partition version failed, table is null, versionInfo: {}", version);
-                    continue;
-                }
-                if (!table.isOlapTableOrMaterializedView()) {
-                    LOG.warn("recover partition version failed, table is not OLAP table, versionInfo: {}", version);
-                    continue;
-                }
                 PhysicalPartition physicalPartition = table.getPhysicalPartition(version.getPartitionId());
                 if (physicalPartition == null) {
                     LOG.warn("recover partition version failed, partition is null, versionInfo: {}", version);
@@ -244,7 +244,7 @@ public class MetaRecoveryDaemon extends FrontendDaemon {
                 removeUnRecoveredPartitions(new UnRecoveredPartition(database.getFullName(),
                         table.getName(), partition.getName(), physicalPartition.getId(), null));
             } finally {
-                locker.unLockDatabase(database.getId(), LockType.WRITE);
+                locker.unLockTableWithIntensiveDbLock(database.getId(), table.getId(), LockType.WRITE);
             }
         }
     }
