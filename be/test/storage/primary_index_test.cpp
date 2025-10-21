@@ -51,7 +51,7 @@ void test_pk_dump(PrimaryIndex* pk_index, const std::map<std::string, uint64_t>&
     {
         // read primary index dump
         ASSERT_TRUE(PrimaryKeyDump::deserialize_pkcol_pkindex_from_meta(
-                            kPrimaryIndexDumpFile, dump_pb, [&](const starrocks::Chunk& chunk) {},
+                            kPrimaryIndexDumpFile, dump_pb, [&](uint32_t segment_id, const starrocks::Chunk& chunk) {},
                             [&](const std::string& filename, const starrocks::PartialKVsPB& kvs) {
                                 for (int i = 0; i < kvs.keys_size(); i++) {
                                     auto search =
