@@ -40,7 +40,7 @@ show tablet from lineitem where State="ALTER";
 
 The time spent on the alteration operation relates to the data volume. In general, the alteration can be completed in minutes. We recommend that you stop loading data into StarRocks while you are altering tables because data loading lowers the speed at which alteration completes.
 
-## This error "get partition detail failed: org.apache.doris.common.DdlException: get hive partition meta data failed: java.net.UnknownHostException:hadooptest" occurs when I query the external tables of Apache Hive
+## This error "get hive partition meta data failed: java.net.UnknownHostException:hadooptest" occurs when I query the external tables of Apache Hive
 
 This error occurs when the metadata of Apache Hive partitions cannot be obtained. To solve this problem, copy **core-sit.xml** and **hdfs-site.xml** to the **fe.conf** file and the **be.conf** file.
 
