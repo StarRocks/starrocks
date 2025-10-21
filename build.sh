@@ -322,66 +322,9 @@ fi
 # Handle incremental gcov: detect changed files
 GCOV_INCREMENTAL_FILES=""
 if [[ "${WITH_GCOV_INCREMENTAL}" == "ON" ]]; then
-    echo "Detecting changed files for incremental coverage..."
-    
-    # Check if we're in a git repository
-    if ! git rev-parse --git-dir > /dev/null 2>&1; then
-        echo "Warning: Not in a git repository, falling back to full coverage"
-        WITH_GCOV=ON
-        WITH_GCOV_INCREMENTAL=OFF
-    else
-        # Try to find base branch for comparison
-        BASE_BRANCH=""
-        if git show-ref --verify --quiet refs/heads/main; then
-            BASE_BRANCH="main"
-        else
-            BASE_BRANCH="HEAD~1"
-        fi
-        
-        echo "Using base branch: $BASE_BRANCH"
-        
-        # Get changed C++ files in be/ directory
-        CHANGED_FILES=$(git diff --name-only $BASE_BRANCH...HEAD 2>/dev/null | grep -E '^be/.*\.(cpp|cc|h|hpp)$' || true)
-        
-        if [[ -z "$CHANGED_FILES" ]]; then
-            echo "No changed C++ files detected, falling back to full coverage"
-            WITH_GCOV=ON
-            WITH_GCOV_INCREMENTAL=OFF
-        else
-            # Count changed files
-            FILE_COUNT=$(echo "$CHANGED_FILES" | wc -l)
-            echo "Found $FILE_COUNT changed C++ files"
-            
-            # If too many files changed, fall back to full coverage
-            if [[ $FILE_COUNT -gt 1000 ]]; then
-                echo "Too many files changed ($FILE_COUNT), falling back to full coverage"
-                WITH_GCOV=ON
-                WITH_GCOV_INCREMENTAL=OFF
-            else
-                # Convert to CMake-friendly format (relative to be/ directory)
-                GCOV_INCREMENTAL_FILES=$(echo "$CHANGED_FILES" | sed 's|^be/||' | tr '\n' ';')
-                echo "Incremental coverage will instrument $FILE_COUNT files"
-                echo "Changed files: $(echo "$CHANGED_FILES" | tr '\n' ' ')"
-                
-                # Write debug information to file
-                GCOV_DEBUG_FILE="${STARROCKS_HOME}/.gcov_incremental_debug.txt"
-                cat > "$GCOV_DEBUG_FILE" << EOF
-# GCOV Incremental Coverage Debug Information
-# Generated on: $(date)
-# Base branch: $BASE_BRANCH
-# Git command: git diff --name-only $BASE_BRANCH...HEAD
-# File count: $FILE_COUNT
-
-# Changed C++ files (relative to be/ directory):
-$(echo "$CHANGED_FILES" | sed 's|^be/||')
-
-# CMake format (semicolon-separated):
-$GCOV_INCREMENTAL_FILES
-EOF
-                echo "Debug information written to: $GCOV_DEBUG_FILE"
-            fi
-        fi
-    fi
+    # Source the common incremental file detection script
+    source ${STARROCKS_HOME}/build-support/detect_incremental_files.sh
+    detect_incremental_files "build"
 fi
 
 if [ ${CLEAN} -eq 1 ] && [ ${BUILD_BE} -eq 0 ] && [ ${BUILD_FORMAT_LIB} -eq 0 ] && [ ${BUILD_FE} -eq 0 ] && [ ${BUILD_SPARK_DPP} -eq 0 ] && [ ${BUILD_HIVE_UDF} -eq 0 ]; then
