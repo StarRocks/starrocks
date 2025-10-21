@@ -421,10 +421,8 @@
                     "id": "integrations/other_integrations/datadog_support"
                 },
                 {
-                    "type": "link",
-                    "label": "DBT",
-                    "description": "Modeling and transformation with DBT",
-                    "href": "https://github.com/StarRocks/dbt-starrocks/blob/main/README.md"
+                    "type": "doc",
+                    "id": "integrations/dbt"
                 }
             ]
         },
