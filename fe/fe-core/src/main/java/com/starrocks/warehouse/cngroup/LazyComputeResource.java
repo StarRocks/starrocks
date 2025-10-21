@@ -20,17 +20,24 @@ import com.starrocks.qe.ConnectContext;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.concurrent.atomic.AtomicBoolean;
+
 /**
  * Introduce lazy loading for ComputeResource to avoid unnecessary computation and ensure that compute resources
  * are acquired after the query queue scheduling is completed.
- *
- * @param warehouseId the id of the warehouse
- * @param lazy the lazy supplier of ComputeResource
  */
-public record LazyComputeResource(long warehouseId, Supplier<ComputeResource> lazy) implements ComputeResource {
+public class LazyComputeResource implements ComputeResource {
     private static final Logger LOG = LogManager.getLogger(LazyComputeResource.class);
 
-    public LazyComputeResource(long warehouseId, Supplier<ComputeResource> lazy) {
+    private final long warehouseId;
+    private final Supplier<ComputeResource> lazy;
+    /**
+     * Thread-safe flag to track whether the compute resource has been materialized.
+     * Uses AtomicBoolean to ensure proper memory visibility and atomicity across threads.
+     */
+    private final AtomicBoolean initialized = new AtomicBoolean(false);
+
+    private LazyComputeResource(long warehouseId, Supplier<ComputeResource> lazy) {
         this.warehouseId = warehouseId;
         this.lazy = Suppliers.memoize(lazy);
     }
@@ -44,7 +51,14 @@ public record LazyComputeResource(long warehouseId, Supplier<ComputeResource> la
             String queryId = ConnectContext.get() != null ? ConnectContext.get().getQueryId().toString() : "N/A";
             LOG.debug("Materializing ComputeResource in LazyComputeResource, queryId: {}", queryId);
         }
-        return lazy.get();
+
+        ComputeResource result = lazy.get();
+        initialized.set(true);
+        return result;
+    }
+
+    public boolean isInitialized() {
+        return initialized.get();
     }
 
     @Override
@@ -55,5 +69,12 @@ public record LazyComputeResource(long warehouseId, Supplier<ComputeResource> la
     @Override
     public long getWorkerGroupId() {
         return get().getWorkerGroupId();
+    }
+
+    @Override
+    public String toString() {
+        return "{warehouseId=" + warehouseId +
+                ", computeResource=" + (isInitialized() ? get().toString() : "not initialized") +
+                "}";
     }
 }
