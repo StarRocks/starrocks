@@ -798,16 +798,15 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitAdminRepairTableStatement(AdminRepairTableStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getTabletChecker().repairTable(stmt);
+                GlobalStateMgr.getCurrentState().getTabletChecker().repairTable(context, stmt);
             });
             return null;
         }
 
         @Override
-        public ShowResultSet visitAdminCancelRepairTableStatement(AdminCancelRepairTableStmt stmt,
-                                                                  ConnectContext context) {
+        public ShowResultSet visitAdminCancelRepairTableStatement(AdminCancelRepairTableStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getTabletChecker().cancelRepairTable(stmt);
+                GlobalStateMgr.getCurrentState().getTabletChecker().cancelRepairTable(context, stmt);
             });
             return null;
         }

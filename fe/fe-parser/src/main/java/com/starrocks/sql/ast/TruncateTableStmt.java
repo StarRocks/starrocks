@@ -12,24 +12,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+
 package com.starrocks.sql.ast;
 
-import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.parser.NodePosition;
 
-// ADMIN SHOW REPLICA STATUS FROM example_db.example_table;
-public class AdminShowReplicaStatusStmt extends ShowStmt {
-    private final TableRef tblRef;
-    private final Expr where;
+// TRUNCATE TABLE tbl [PARTITION(p1, p2, ...)]
+public class TruncateTableStmt extends DdlStmt {
 
-    public AdminShowReplicaStatusStmt(TableRef tblRef, Expr where) {
-        this(tblRef, where, NodePosition.ZERO);
+    private final TableRef tblRef;
+
+    public TruncateTableStmt(TableRef tblRef) {
+        this(tblRef, NodePosition.ZERO);
     }
 
-    public AdminShowReplicaStatusStmt(TableRef tblRef, Expr where, NodePosition pos) {
+    public TruncateTableStmt(TableRef tblRef, NodePosition pos) {
         super(pos);
         this.tblRef = tblRef;
-        this.where = where;
+    }
+
+    public TableRef getTblRef() {
+        return tblRef;
     }
 
     public String getDbName() {
@@ -40,16 +43,8 @@ public class AdminShowReplicaStatusStmt extends ShowStmt {
         return tblRef.getTableName();
     }
 
-    public Expr getWhere() {
-        return where;
-    }
-
-    public PartitionRef getPartitionRef() {
-        return tblRef.getPartitionDef();
-    }
-
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitAdminShowReplicaStatusStatement(this, context);
+        return visitor.visitTruncateTableStatement(this, context);
     }
 }

@@ -128,6 +128,7 @@ import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.PauseRoutineLoadStmt;
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.Property;
+import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RecoverDbStmt;
 import com.starrocks.sql.ast.RecoverPartitionStmt;
@@ -223,6 +224,7 @@ import com.starrocks.sql.ast.ShowWhiteListStmt;
 import com.starrocks.sql.ast.StopRoutineLoadStmt;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.SyncStmt;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.TaskName;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.UninstallPluginStmt;
@@ -706,7 +708,9 @@ public class RedirectStatusTest {
 
     @Test
     public void testAdminShowReplicaStatusStmt() {
-        AdminShowReplicaStatusStmt stmt = new AdminShowReplicaStatusStmt(null, null);
+        QualifiedName qualifiedName = QualifiedName.of(Lists.newArrayList("test_table"));
+        TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
+        AdminShowReplicaStatusStmt stmt = new AdminShowReplicaStatusStmt(tableRef, null, NodePosition.ZERO);
         Assertions.assertEquals(RedirectStatus.NO_FORWARD, RedirectStatus.getRedirectStatus(stmt));
     }
 
@@ -1405,13 +1409,17 @@ public class RedirectStatusTest {
 
     @Test
     public void testAdminRepairTableStmt() {
-        AdminRepairTableStmt stmt = new AdminRepairTableStmt(null, NodePosition.ZERO);
+        QualifiedName qualifiedName = QualifiedName.of(Lists.newArrayList("test_table"));
+        TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
+        AdminRepairTableStmt stmt = new AdminRepairTableStmt(tableRef, NodePosition.ZERO);
         Assertions.assertEquals(RedirectStatus.FORWARD_WITH_SYNC, RedirectStatus.getRedirectStatus(stmt));
     }
 
     @Test
     public void testAdminCancelRepairTableStmt() {
-        AdminCancelRepairTableStmt stmt = new AdminCancelRepairTableStmt(null, null);
+        QualifiedName qualifiedName = QualifiedName.of(Lists.newArrayList("test_table"));
+        TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
+        AdminCancelRepairTableStmt stmt = new AdminCancelRepairTableStmt(tableRef, NodePosition.ZERO);
         Assertions.assertEquals(RedirectStatus.FORWARD_WITH_SYNC, RedirectStatus.getRedirectStatus(stmt));
     }
 
@@ -1522,7 +1530,10 @@ public class RedirectStatusTest {
 
     @Test
     public void testTruncateTableStmt() {
-        TruncateTableStmt stmt = new TruncateTableStmt(null, null);
+        // Create a valid TableRef for testing
+        QualifiedName qualifiedName = QualifiedName.of(Lists.newArrayList("test_db", "test_table"));
+        TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
+        TruncateTableStmt stmt = new TruncateTableStmt(tableRef);
         Assertions.assertEquals(RedirectStatus.FORWARD_WITH_SYNC, RedirectStatus.getRedirectStatus(stmt));
     }
 
@@ -1992,7 +2003,9 @@ public class RedirectStatusTest {
 
     @Test
     public void testAdminShowReplicaDistributionStmtCoverage() {
-        AdminShowReplicaDistributionStmt stmt = new AdminShowReplicaDistributionStmt(null, null);
+        QualifiedName qualifiedName = QualifiedName.of(Lists.newArrayList("test_table"));
+        TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
+        AdminShowReplicaDistributionStmt stmt = new AdminShowReplicaDistributionStmt(tableRef, NodePosition.ZERO);
         ConnectContext ctx = new ConnectContext();
         ctx.setThreadLocalInfo();
         Assertions.assertEquals(RedirectStatus.NO_FORWARD, RedirectStatus.getRedirectStatus(stmt));

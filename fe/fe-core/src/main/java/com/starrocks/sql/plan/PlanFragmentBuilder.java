@@ -2756,7 +2756,7 @@ public class PlanFragmentBuilder {
 
             NestLoopJoinNode joinNode = new NestLoopJoinNode(context.getNextNodeId(),
                     leftFragment.getPlanRoot(), rightFragment.getPlanRoot(),
-                    null, node.getJoinType(), Lists.newArrayList(), joinOnConjuncts);
+                    node.getJoinType(), Lists.newArrayList(), joinOnConjuncts);
             joinNode.setCommonSlotMap(commonSubExprMap);
 
             joinNode.setLimit(node.getLimit());
