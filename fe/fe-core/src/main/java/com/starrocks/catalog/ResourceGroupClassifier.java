@@ -18,6 +18,7 @@ import com.google.common.collect.ImmutableSet;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.FeNameFormat;
 import com.starrocks.thrift.TQueryType;
 import org.apache.commons.collections.CollectionUtils;
 
@@ -30,7 +31,7 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 public class ResourceGroupClassifier {
-    public static final Pattern USER_PATTERN = Pattern.compile("^\\w{1,64}/?[.\\w-]{0,63}$");
+    public static final Pattern USER_PATTERN = FeNameFormat.MYSQL_USER_NAME_PATTERN;
     public static final Pattern USE_ROLE_PATTERN = Pattern.compile("^\\w+$");
     public static final ImmutableSet<String> SUPPORTED_QUERY_TYPES =
             ImmutableSet.of(QueryType.SELECT.name(), QueryType.INSERT.name());
