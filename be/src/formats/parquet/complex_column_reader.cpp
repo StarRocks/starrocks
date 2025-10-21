@@ -675,7 +675,7 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
     level_t* def_levels = nullptr;
     level_t* rep_levels = nullptr;
     size_t num_levels = 0;
-    _metadata_reader->get_levels(&def_levels, &rep_levels, &num_levels);
+    _value_reader->get_levels(&def_levels, &rep_levels, &num_levels);
     // Use definition levels to determine null values
     const LevelInfo level_info = get_column_parquet_field()->level_info;
 
