@@ -4542,10 +4542,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                         "\"replication_num\" = \"1\",\n" +
                         "\"storage_medium\" = \"HDD\"\n" +
                         ")\n" +
-                        "AS SELECT `t1`.`c_1_0`, `t1`.`c_1_1`, `t1`.`c_1_2`, `t1`.`c_1_3`, `t1`.`c_1_4`, `t1`.`c_1_5`, " +
-                        "`t1`.`c_1_6`, `t1`.`c_1_7`, `t1`.`c_1_8`, `t1`.`c_1_9`, `t1`.`c_1_10`, `t1`.`c_1_11`, " +
-                        "`t1`.`c_1_12`\n" +
-                        "FROM `test`.`t1` LIMIT 10;"
+                        "AS select * from t1 limit 10;"
                 ,
                 starRocksAssert.showCreateTable("show create table mv_invalid"));
         starRocksAssert.dropMaterializedView("mv_invalid");
@@ -4566,10 +4563,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                         "\"enable_query_rewrite\" = \"false\",\n" +
                         "\"storage_medium\" = \"HDD\"\n" +
                         ")\n" +
-                        "AS SELECT `t1`.`c_1_0`, `t1`.`c_1_1`, `t1`.`c_1_2`, `t1`.`c_1_3`, `t1`.`c_1_4`, `t1`.`c_1_5`, " +
-                        "`t1`.`c_1_6`, `t1`.`c_1_7`, `t1`.`c_1_8`, `t1`.`c_1_9`, `t1`.`c_1_10`, `t1`.`c_1_11`, " +
-                        "`t1`.`c_1_12`\n" +
-                        "FROM `test`.`t1` LIMIT 10;",
+                        "AS select * from t1 limit 10;",
                 starRocksAssert.showCreateTable("show create table mv_invalid"));
         starRocksAssert.dropMaterializedView("mv_invalid");
 
@@ -4588,10 +4582,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                         "\"enable_query_rewrite\" = \"true\",\n" +
                         "\"storage_medium\" = \"HDD\"\n" +
                         ")\n" +
-                        "AS SELECT `t1`.`c_1_0`, `t1`.`c_1_1`, `t1`.`c_1_2`, `t1`.`c_1_3`, `t1`.`c_1_4`, `t1`.`c_1_5`, " +
-                        "`t1`.`c_1_6`, `t1`.`c_1_7`, `t1`.`c_1_8`, `t1`.`c_1_9`, `t1`.`c_1_10`, `t1`.`c_1_11`, " +
-                        "`t1`.`c_1_12`\n" +
-                        "FROM `test`.`t1`;",
+                        "AS select * from t1;",
                 starRocksAssert.showCreateTable("show create table mv_enable"));
         starRocksAssert.refreshMV("refresh materialized view mv_enable with sync mode");
         MaterializedView mv = starRocksAssert.getMv("test", "mv_enable");
@@ -4610,10 +4601,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                         "\"enable_query_rewrite\" = \"FALSE\",\n" +
                         "\"storage_medium\" = \"HDD\"\n" +
                         ")\n" +
-                        "AS SELECT `t1`.`c_1_0`, `t1`.`c_1_1`, `t1`.`c_1_2`, `t1`.`c_1_3`, `t1`.`c_1_4`, `t1`.`c_1_5`, " +
-                        "`t1`.`c_1_6`, `t1`.`c_1_7`, `t1`.`c_1_8`, `t1`.`c_1_9`, `t1`.`c_1_10`, `t1`.`c_1_11`, " +
-                        "`t1`.`c_1_12`\n" +
-                        "FROM `test`.`t1`;",
+                        "AS select * from t1;",
                 starRocksAssert.showCreateTable("show create table mv_enable"));
         valid = MvRewritePreprocessor.isMVValidToRewriteQuery(connectContext, mv, null,
                 true, false, connectContext.getSessionVariable().getOptimizerExecuteTimeout());
@@ -4641,10 +4629,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 "\"replication_num\" = \"1\",\n" +
                 "\"storage_medium\" = \"HDD\"\n" +
                 ")\n" +
-                "AS SELECT `t1`.`c_1_0`, `t1`.`c_1_1`, `t1`.`c_1_2`, `t1`.`c_1_3`, `t1`.`c_1_4`, `t1`.`c_1_5`, " +
-                "`t1`.`c_1_6`, `t1`.`c_1_7`, `t1`.`c_1_8`, `t1`.`c_1_9`, `t1`.`c_1_10`, `t1`.`c_1_11`, " +
-                "`t1`.`c_1_12`\n" +
-                "FROM `test`.`t1` LIMIT 10;", sql);
+                "AS select * from t1 limit 10;", sql);
         starRocksAssert.dropMaterializedView("mv_invalid");
 
         // enable
@@ -4662,10 +4647,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                         "\"replication_num\" = \"1\",\n" +
                         "\"storage_medium\" = \"HDD\"\n" +
                         ")\n" +
-                        "AS SELECT `t1`.`c_1_0`, `t1`.`c_1_1`, `t1`.`c_1_2`, `t1`.`c_1_3`, `t1`.`c_1_4`, `t1`.`c_1_5`, " +
-                        "`t1`.`c_1_6`, `t1`.`c_1_7`, `t1`.`c_1_8`, `t1`.`c_1_9`, `t1`.`c_1_10`, `t1`.`c_1_11`, " +
-                        "`t1`.`c_1_12`\n" +
-                        "FROM `test`.`t1`;",
+                        "AS select * from t1;",
                 starRocksAssert.showCreateTable("show create table mv_enable"));
         starRocksAssert.refreshMV("refresh materialized view mv_enable with sync mode");
         MaterializedView mv = starRocksAssert.getMv("test", "mv_enable");
@@ -4684,10 +4666,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 "\"replication_num\" = \"1\",\n" +
                 "\"storage_medium\" = \"HDD\"\n" +
                 ")\n" +
-                "AS SELECT `t1`.`c_1_0`, `t1`.`c_1_1`, `t1`.`c_1_2`, `t1`.`c_1_3`, `t1`.`c_1_4`, `t1`.`c_1_5`, " +
-                "`t1`.`c_1_6`, `t1`.`c_1_7`, `t1`.`c_1_8`, `t1`.`c_1_9`, `t1`.`c_1_10`, `t1`.`c_1_11`, " +
-                "`t1`.`c_1_12`\n" +
-                "FROM `test`.`t1`;", sql);
+                "AS select * from t1;", sql);
         Assertions.assertTrue(!mv.isEnableTransparentRewrite());
         Assertions.assertTrue(mv.getTransparentRewriteMode().equals(TableProperty.MVTransparentRewriteMode.FALSE));
 
@@ -4702,10 +4681,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                         "\"replication_num\" = \"1\",\n" +
                         "\"storage_medium\" = \"HDD\"\n" +
                         ")\n" +
-                        "AS SELECT `t1`.`c_1_0`, `t1`.`c_1_1`, `t1`.`c_1_2`, `t1`.`c_1_3`, `t1`.`c_1_4`, `t1`.`c_1_5`, " +
-                        "`t1`.`c_1_6`, `t1`.`c_1_7`, `t1`.`c_1_8`, `t1`.`c_1_9`, `t1`.`c_1_10`, `t1`.`c_1_11`, " +
-                        "`t1`.`c_1_12`\n" +
-                        "FROM `test`.`t1`;",
+                        "AS select * from t1;",
                 starRocksAssert.showCreateTable("show create table mv_enable"));
         Assertions.assertTrue(mv.isEnableTransparentRewrite());
         Assertions.assertTrue(mv.getTransparentRewriteMode().equals(TableProperty.MVTransparentRewriteMode.TRANSPARENT_OR_ERROR));
@@ -4720,10 +4696,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                         "\"replication_num\" = \"1\",\n" +
                         "\"storage_medium\" = \"HDD\"\n" +
                         ")\n" +
-                        "AS SELECT `t1`.`c_1_0`, `t1`.`c_1_1`, `t1`.`c_1_2`, `t1`.`c_1_3`, `t1`.`c_1_4`, `t1`.`c_1_5`, " +
-                        "`t1`.`c_1_6`, `t1`.`c_1_7`, `t1`.`c_1_8`, `t1`.`c_1_9`, `t1`.`c_1_10`, `t1`.`c_1_11`, " +
-                        "`t1`.`c_1_12`\n" +
-                        "FROM `test`.`t1`;",
+                        "AS select * from t1;",
                 starRocksAssert.showCreateTable("show create table mv_enable"));
         Assertions.assertTrue(mv.isEnableTransparentRewrite());
         Assertions.assertTrue(mv.getTransparentRewriteMode().equals(TableProperty.MVTransparentRewriteMode.TRANSPARENT_OR_DEFAULT));
