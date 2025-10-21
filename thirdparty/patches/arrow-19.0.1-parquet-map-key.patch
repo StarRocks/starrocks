@@ -2,7 +2,7 @@ diff --git a/cpp/src/parquet/arrow/schema.cc b/cpp/src/parquet/arrow/schema.cc
 index ec3890a41..f615b3f0a 100644
 --- a/cpp/src/parquet/arrow/schema.cc
 +++ b/cpp/src/parquet/arrow/schema.cc
-@@ -564,10 +564,24 @@ Status MapToSchemaField(const GroupNode& group, LevelInfo current_levels,
+@@ -573,10 +573,24 @@ Status MapToSchemaField(const GroupNode& group, LevelInfo current_levels,
      return Status::Invalid("Key-value map node must have 1 or 2 child elements. Found: ",
                             key_value.field_count());
    }
