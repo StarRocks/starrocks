@@ -10,6 +10,41 @@ After upgrading StarRocks to v3.5, DO NOT downgrade it directly to v3.4.0 ～ v3
 
 :::
 
+## 3.5.7
+
+Release date: October 21, 2025
+
+### Improvements
+
+- Improved memory statistics accuracy for Scan operators by introducing retry backoff under heavy memory contention scenarios. [#63788](https://github.com/StarRocks/starrocks/pull/63788)
+- Optimized materialized view bucketing inference by leveraging existing tablet distribution to prevent excessive bucket creation. [#63367](https://github.com/StarRocks/starrocks/pull/63367)
+- Revised the Iceberg table caching mechanism to enhance consistency and reduce cache invalidation risks during frequent metadata updates. [#63388](https://github.com/StarRocks/starrocks/pull/63388)
+- Added the `querySource` field to `QueryDetail` and `AuditEvent` for better traceability of query origins across APIs and schedulers. [#63480](https://github.com/StarRocks/starrocks/pull/63480)
+- Enhanced Persistent Index diagnostics by printing detailed context when duplicate keys are detected in MemTable writes. [#63560](https://github.com/StarRocks/starrocks/pull/63560)
+- Reduced lock contention in materialized view operations by refining lock granularity and sequencing in concurrent scenarios. [#63481](https://github.com/StarRocks/starrocks/pull/63481)
+
+### Bug Fixes
+
+The following issues have been fixed:
+
+- Materialized view rewrite failures caused by type mismatch. [#63659](https://github.com/StarRocks/starrocks/pull/63659)  
+- `regexp_extract_all` has wrong behavior and lacks support for `pos=0`. [#63626](https://github.com/StarRocks/starrocks/pull/63626)  
+- Degraded scan performance caused by the profitless simplification of CASE WHEN with complex functions. [#63732](https://github.com/StarRocks/starrocks/pull/63732)  
+- Incorrect DCG data reading when partial updates switch from column mode to row mode. [#61529](https://github.com/StarRocks/starrocks/pull/61529)  
+- A potential deadlock during initialization of `ExceptionStackContext`. [#63776](https://github.com/StarRocks/starrocks/pull/63776)  
+- Crashes in Parquet numeric conversion for ARM architecture machines. [#63294](https://github.com/StarRocks/starrocks/pull/63294)  
+- An issue caused by the aggregate intermediate type uses `ARRAY<NULL_TYPE>`. [#63371](https://github.com/StarRocks/starrocks/pull/63371)
+- Stability issue caused by incorrect overflow detection when casting LARGEINT to DECIMAL128 at sign-edge cases (for example, INT128_MIN) [#63559](https://github.com/StarRocks/starrocks/pull/63559)
+- LZ4 compression and decompression errors cannot be perceived. [#63629](https://github.com/StarRocks/starrocks/pull/63629)
+- `ClassCastException` when querying tables partitioned by `FROM_UNIXTIME` on INT-type columns. [#63684](https://github.com/StarRocks/starrocks/pull/63684)
+- Tablets cannot be repaired after a balance-triggered migration when the only valid source replica is marked `DECOMMISSION`. [#62942](https://github.com/StarRocks/starrocks/pull/62942)
+- Profiles lost SQL statements and Planner Trace when the PREPARE statement is used. [#63519](https://github.com/StarRocks/starrocks/pull/63519)
+- The `extract_number`, `extract_bool`, and `extract_string` functions are not exception-safe. [#63575](https://github.com/StarRocks/starrocks/pull/63575)
+- Shutdown tablets cannot be garbage-collected properly. [#63595](https://github.com/StarRocks/starrocks/pull/63595)
+- Profiles showing SQL as `omit` for returns of the PREPARE/EXECUTE statements. [#62988](https://github.com/StarRocks/starrocks/pull/62988)
+- `date_trunc` partition pruning with combined predicates that mistakenly produced EMPTYSET. [#63464](https://github.com/StarRocks/starrocks/pull/63464)
+- Crashes in release builds due to the CHECK in NullableColumn. [#63553](https://github.com/StarRocks/starrocks/pull/63553)
+
 ## 3.5.6
 
 Release date: September 22, 2025
