@@ -1,5 +1,5 @@
 # Logs:
-debug: false  # Debug mode
+debug: true  # Debug mode
 weave_project: "gpt-translate"  # Weave project
 silence_openai: true  # Silence OpenAI logger
 
