@@ -426,28 +426,43 @@ Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(uint32_t
 Status RowsetUpdateState::_prepare_partial_update_states(uint32_t segment_id, const RowsetUpdateStateParams& params,
                                                          bool need_lock) {
     CHECK_MEM_LIMIT("RowsetUpdateState::_prepare_partial_update_states");
-    std::vector<ColumnId> read_column_ids = get_read_columns_ids(params.op_write, params.tablet_schema);
 
+    // For COLUMN_UPSERT_MODE, we only need src_rss_rowids to identify new rows (UINT64_MAX)
     const auto& txn_meta = params.op_write.txn_meta();
+    bool is_column_upsert_mode = (txn_meta.partial_update_mode() == PartialUpdateMode::COLUMN_UPSERT_MODE);
+
+    std::vector<ColumnId> read_column_ids;
+    if (!is_column_upsert_mode) {
+        read_column_ids = get_read_columns_ids(params.op_write, params.tablet_schema);
+    }
+
     for (auto& entry : txn_meta.column_to_expr_value()) {
         _column_to_expr_value.insert({entry.first, entry.second});
     }
-    auto read_column_schema = ChunkHelper::convert_schema(params.tablet_schema, read_column_ids);
-    // column list that need to read from source segment
-    MutableColumns read_columns;
-    read_columns.resize(read_column_ids.size());
-    _partial_update_states[segment_id].write_columns.resize(read_columns.size());
+
     _partial_update_states[segment_id].src_rss_rowids.resize(_upserts[segment_id]->pk_column->size());
-    for (uint32_t j = 0; j < read_columns.size(); ++j) {
-        auto column = ChunkHelper::column_from_field(*read_column_schema.field(j).get());
-        read_columns[j] = column->clone_empty();
-        _partial_update_states[segment_id].write_columns[j] = column->clone_empty();
-    }
 
     // use upsert to get rowids for this segment
     RETURN_IF_ERROR(params.tablet->update_mgr()->get_rowids_from_pkindex(
             params.tablet->id(), _base_versions[segment_id], _upserts[segment_id]->pk_column,
             &(_partial_update_states[segment_id].src_rss_rowids), need_lock));
+
+    // For COLUMN_UPSERT_MODE, skip reading column values to save memory
+    if (is_column_upsert_mode) {
+        return Status::OK();
+    }
+
+    // For COLUMN_UPDATE_MODE, read column values as before
+    auto read_column_schema = ChunkHelper::convert_schema(params.tablet_schema, read_column_ids);
+    // column list that need to read from source segment
+    MutableColumns read_columns;
+    read_columns.resize(read_column_ids.size());
+    _partial_update_states[segment_id].write_columns.resize(read_columns.size());
+    for (uint32_t j = 0; j < read_columns.size(); ++j) {
+        auto column = ChunkHelper::column_from_field(*read_column_schema.field(j).get());
+        read_columns[j] = column->clone_empty();
+        _partial_update_states[segment_id].write_columns[j] = column->clone_empty();
+    }
 
     size_t num_default = 0;
     std::map<uint32_t, std::vector<uint32_t>> rowids_by_rssid;

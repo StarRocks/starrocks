@@ -568,11 +568,13 @@ Status UpdateManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_writ
             .tablet = tablet,
             .container = rssid_fileinfo_container,
     };
-    RowsetUpdateState state;
+    // Create state entry for memory tracking
+    auto state_entry = _update_state_cache.get_or_create(cache_key(tablet->id(), txn_id));
+    state_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
+    DeferOp remove_state_entry([&] { _update_state_cache.remove(state_entry); });
+
+    RowsetUpdateState& state = state_entry->value();
     state.init(params);
-    for (uint32_t segment_id = 0; segment_id < op_write.rowset().segments_size(); segment_id++) {
-        RETURN_IF_ERROR(state.load_segment(segment_id, params, base_version, false /*resolve*/, false));
-    }
 
     auto tschema = params.tablet_schema;
     std::vector<uint32_t> pk_cids;
@@ -598,7 +600,11 @@ Status UpdateManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_writ
     TxnLogPB_OpWrite new_rows_op;
     uint64_t total_rows = 0;
     std::map<uint32_t, size_t> segment_id_to_add_dels_new_acc;
+
     for (uint32_t seg = 0; seg < op_write.rowset().segments_size(); ++seg) {
+        RETURN_IF_ERROR(state.load_segment(seg, params, base_version, false /*resolve*/, false));
+        _update_state_cache.update_object_size(state_entry, state.memory_usage());
+
         const auto& cps = state.parital_update_states(seg);
         // use src_rss_rowids == UINT64_MAX to detect insert_rowids
         std::vector<uint32_t> insert_rowids;
@@ -606,15 +612,28 @@ Status UpdateManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_writ
         for (uint32_t i = 0; i < cps.src_rss_rowids.size(); ++i) {
             if (cps.src_rss_rowids[i] == UINT64_MAX) insert_rowids.push_back(i);
         }
-        if (insert_rowids.empty()) continue;
 
-        ChunkPtr full_chunk;
-        RETURN_IF_ERROR(_write_segment_for_upsert(op_write, tschema, tablet, fs, txn_id, seg, insert_rowids,
-                                                  update_cids, &new_rows_op, &total_rows, &full_chunk));
+        if (!insert_rowids.empty()) {
+            // Process insert rowids in batches to avoid memory overflow
+            const size_t batch_size = config::column_mode_partial_update_batch_size;
+            for (size_t batch_start = 0; batch_start < insert_rowids.size(); batch_start += batch_size) {
+                size_t batch_end = std::min(batch_start + batch_size, insert_rowids.size());
+                std::vector<uint32_t> batch_insert_rowids(insert_rowids.begin() + batch_start,
+                                                         insert_rowids.begin() + batch_end);
 
-        RETURN_IF_ERROR(_handle_upsert_index_conflicts(metadata, index, builder, pkey_schema, rowset_id, new_rows_op,
-                                                       full_chunk, &segment_id_to_add_dels_new_acc));
+                ChunkPtr full_chunk;
+                RETURN_IF_ERROR(_write_segment_for_upsert(op_write, tschema, tablet, fs, txn_id, seg, batch_insert_rowids,
+                                                          update_cids, &new_rows_op, &total_rows, &full_chunk));
+
+                RETURN_IF_ERROR(_handle_upsert_index_conflicts(metadata, index, builder, pkey_schema, rowset_id,
+                                                               new_rows_op, full_chunk, &segment_id_to_add_dels_new_acc));
+            }
+        }
+
+        state.release_segment(seg);
+        _update_state_cache.update_object_size(state_entry, state.memory_usage());
     }
+
     new_rows_op.mutable_rowset()->set_num_rows(total_rows);
     new_rows_op.mutable_rowset()->set_data_size(0);
     new_rows_op.mutable_rowset()->set_overlapped(new_rows_op.rowset().segments_size() > 1);
@@ -689,8 +708,10 @@ Status UpdateManager::publish_column_mode_partial_update(const TxnLogPB_OpWrite&
             .container = rssid_fileinfo_container,
     };
 
-    ColumnModePartialUpdateHandler handler(base_version, txn_id, _update_mem_tracker);
-    RETURN_IF_ERROR(handler.execute(params, builder));
+    {
+        ColumnModePartialUpdateHandler handler(base_version, txn_id, _update_mem_tracker);
+        RETURN_IF_ERROR(handler.execute(params, builder));
+    }
 
     const uint32_t rowset_id = metadata->next_rowset_id();
     const uint32_t del_rebuild_rssid = rowset_id + std::max(op_write.rowset().segments_size(), 1) - 1;
