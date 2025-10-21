@@ -340,6 +340,9 @@ public class OperationType {
     public static final short OP_MODIFY_ENABLE_LOAD_PROFILE = 11142;
 
     @IgnorableOnReplayFailed
+    public static final short OP_MODIFY_DEFAULT_BUCKET_NUM = 11144;
+
+    @IgnorableOnReplayFailed
     public static final short OP_MODIFY_BASE_COMPACTION_FORBIDDEN_TIME_RANGES = 11143;
 
     // external table analyze

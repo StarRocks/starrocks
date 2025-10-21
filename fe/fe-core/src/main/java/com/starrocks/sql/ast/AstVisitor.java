@@ -1261,6 +1261,10 @@ public interface AstVisitor<R, C> {
         return visitNode(clause, context);
     }
 
+    default R visitAlterTableModifyDefaultBucketsClause(AlterTableModifyDefaultBucketsClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
     default R visitAddFieldClause(AddFieldClause clause, C context) {
         return visitNode(clause, context);
     }

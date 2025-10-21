@@ -184,6 +184,7 @@ public class EditLogDeserializer {
             .put(OperationType.OP_MODIFY_MUTABLE_BUCKET_NUM, ModifyTablePropertyOperationLog.class)
             .put(OperationType.OP_MODIFY_ENABLE_LOAD_PROFILE, ModifyTablePropertyOperationLog.class)
             .put(OperationType.OP_MODIFY_BASE_COMPACTION_FORBIDDEN_TIME_RANGES, ModifyTablePropertyOperationLog.class)
+            .put(OperationType.OP_MODIFY_DEFAULT_BUCKET_NUM, ModifyTablePropertyOperationLog.class)
             .put(OperationType.OP_MODIFY_BINLOG_CONFIG, ModifyTablePropertyOperationLog.class)
             .put(OperationType.OP_MODIFY_BINLOG_AVAILABLE_VERSION, ModifyTablePropertyOperationLog.class)
             .put(OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX, ModifyTablePropertyOperationLog.class)

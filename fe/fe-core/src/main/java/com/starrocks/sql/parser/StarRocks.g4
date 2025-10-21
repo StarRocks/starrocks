@@ -953,6 +953,7 @@ alterClause
     | addPartitionClause
     | dropPartitionClause
     | distributionClause
+    | alterModifyDefaultBuckets
     | truncatePartitionClause
     | modifyPartitionClause
     | replacePartitionClause
@@ -2819,6 +2820,10 @@ distributionDesc
     : DISTRIBUTED BY HASH identifierList (BUCKETS INTEGER_VALUE)?
     | DISTRIBUTED BY HASH identifierList
     | DISTRIBUTED BY RANDOM (BUCKETS INTEGER_VALUE)?
+    ;
+
+alterModifyDefaultBuckets
+    : DISTRIBUTED BY HASH identifierList DEFAULT BUCKETS INTEGER_VALUE
     ;
 
 refreshSchemeDesc

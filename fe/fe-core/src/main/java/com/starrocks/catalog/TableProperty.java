@@ -379,6 +379,8 @@ public class TableProperty implements Writable, GsonPostProcessable {
             case OperationType.OP_MODIFY_MUTABLE_BUCKET_NUM:
                 buildMutableBucketNum();
                 break;
+            case OperationType.OP_MODIFY_DEFAULT_BUCKET_NUM:
+                break;
             case OperationType.OP_MODIFY_ENABLE_LOAD_PROFILE:
                 buildEnableLoadProfile();
                 break;
