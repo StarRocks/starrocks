@@ -516,17 +516,10 @@ cd -
 # patch arrow
 if [[ -d $TP_SOURCE_DIR/$ARROW_SOURCE ]] ; then
     cd $TP_SOURCE_DIR/$ARROW_SOURCE
-    if [ ! -f $PATCHED_MARK ] && [ $ARROW_SOURCE = "arrow-apache-arrow-5.0.0" ] ; then
-        # use our built jemalloc
-        patch -p1 < $TP_PATCH_DIR/arrow-5.0.0-force-use-external-jemalloc.patch
-        # fix exception handling
-        patch -p1 < $TP_PATCH_DIR/arrow-5.0.0-fix-exception-handling.patch
-        patch -p1 < $TP_PATCH_DIR/arrow-5.0.0-parquet-map-key.patch
-        touch $PATCHED_MARK
-    fi
-    if [ ! -f $PATCHED_MARK ] && [ $ARROW_SOURCE = "arrow-apache-arrow-16.1.0" ] ; then
-        patch -p1 < $TP_PATCH_DIR/arrow-16.1.0-parquet-map-key.patch
-        patch -p1 < $TP_PATCH_DIR/arrow-16.1.0-use-zstd-1.5.7.patch
+    if [ ! -f $PATCHED_MARK ] && [ $ARROW_SOURCE = "arrow-apache-arrow-19.0.1" ] ; then
+        patch -p1 < $TP_PATCH_DIR/arrow-19.0.1-parquet-map-key.patch
+        patch -p1 < $TP_PATCH_DIR/arrow-19.0.1-use-zstd-1.5.7.patch
+        patch -p1 < $TP_PATCH_DIR/arrow-19.0.1-flight-types-clang.patch
         touch $PATCHED_MARK
     fi
     cd -
