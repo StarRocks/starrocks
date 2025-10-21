@@ -72,7 +72,8 @@ LABEL org.opencontainers.image.source="https://github.com/starrocks/starrocks"
 
 RUN yum-config-manager --add-repo https://cli.github.com/packages/rpm/gh-cli.repo && yum install -y gh && \
         yum install -y ${EPEL_RPM_URL} && yum install -y wget unzip bzip2 patch bison byacc flex autoconf automake make \
-        libtool which git ccache binutils-devel python3 file less psmisc && \
+        libtool which git ccache binutils-devel python3 file less psmisc \
+        perl perl-IPC-Cmd perl-Text-Template  perl-Time-Piece && \
         yum clean all && rm -rf /var/cache/yum
 
 # install gcc
@@ -81,7 +82,7 @@ COPY --from=gcc-builder /workspace/installed/ /
 COPY --from=binutils-builder /workspace/installed/ /
 # install cmake
 RUN ARCH=`uname -m` && mkdir -p $CMAKE_INSTALL_HOME && cd $CMAKE_INSTALL_HOME && \
-    curl -s -k https://cmake.org/files/v3.22/cmake-3.22.4-linux-${ARCH}.tar.gz | tar -xzf - --strip-components=1 && \
+    curl -s -k https://cmake.org/files/v3.31/cmake-3.31.9-linux-${ARCH}.tar.gz | tar -xzf - --strip-components=1 && \
     ln -s $CMAKE_INSTALL_HOME/bin/cmake /usr/bin/cmake
 
 # install jdk17
