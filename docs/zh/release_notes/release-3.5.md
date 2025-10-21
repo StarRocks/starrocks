@@ -10,6 +10,41 @@ displayed_sidebar: docs
 
 :::
 
+## 3.5.7
+
+发布日期：2025年10月21日
+
+### 功能增强
+
+- 通过在内存竞争严重的情况下引入重试回退机制，提升了 Scan Operator 的内存统计准确性。[#63788](https://github.com/StarRocks/starrocks/pull/63788)
+- 通过利用现有的分区分布，优化了物化视图桶的推理，防止了过多桶的创建。[#63367](https://github.com/StarRocks/starrocks/pull/63367)
+- 修改了 Iceberg 表缓存机制，提高了一致性并减少了频繁元数据更新时的缓存失效风险。[#63388](https://github.com/StarRocks/starrocks/pull/63388)
+- 在 `QueryDetail` 和 `AuditEvent` 中增加了 `querySource` 字段，以便更好地追踪查询来源，跨 API 和调度器。[#63480](https://github.com/StarRocks/starrocks/pull/63480)
+- 通过在 MemTable 写入时检测到 Duplicate Key 时打印详细的上下文，增强了持久化索引诊断功能。[#63560](https://github.com/StarRocks/starrocks/pull/63560)
+- 通过优化锁粒度和并发场景中的顺序，减少了物化视图操作中的锁竞争。[#63481](https://github.com/StarRocks/starrocks/pull/63481)
+
+### 问题修复
+
+修复了以下问题：
+
+- 由于类型不匹配导致的物化视图重写失败。[#63659](https://github.com/StarRocks/starrocks/pull/63659)
+- `regexp_extract_all` 行为不正确，且不支持 `pos=0`。[#63626](https://github.com/StarRocks/starrocks/pull/63626)
+- 由于对带有复杂函数的 CASE WHEN 简化不当，导致扫描性能下降。[#63732](https://github.com/StarRocks/starrocks/pull/63732)
+- 在部分更新时，从列模式切换到行模式时，DCG 数据读取不正确。[#61529](https://github.com/StarRocks/starrocks/pull/61529)
+- 初始化 `ExceptionStackContext` 时可能发生死锁。[#63776](https://github.com/StarRocks/starrocks/pull/63776)
+- ARM 架构机器上 Parquet 数值转换崩溃。[#63294](https://github.com/StarRocks/starrocks/pull/63294)
+- 聚合中间类型使用 `ARRAY<NULL_TYPE>` 引发的问题。[#63371](https://github.com/StarRocks/starrocks/pull/63371)
+- 在边缘情况下（例如，INT128_MIN）将 LARGEINT 转换为 DECIMAL128 时，溢出检测不正确导致的稳定性问题。[#63559](https://github.com/StarRocks/starrocks/pull/63559)
+- 无法感知 LZ4 压缩和解压缩错误。[#63629](https://github.com/StarRocks/starrocks/pull/63629)
+- 查询由 `FROM_UNIXTIME` 分区的表时，出现 `ClassCastException`。[#63684](https://github.com/StarRocks/starrocks/pull/63684)
+- 当唯一有效的源副本被标记为 `DECOMMISSION` 时，平衡触发迁移后的分区无法修复。[#62942](https://github.com/StarRocks/starrocks/pull/62942)
+- 使用 PREPARE 语句时，Profile 丢失 SQL 语句和 Planner Trace。[#63519](https://github.com/StarRocks/starrocks/pull/63519)
+- `extract_number`，`extract_bool`和`extract_string`函数不具备异常安全性。[#63575](https://github.com/StarRocks/starrocks/pull/63575)
+- 关闭的分区无法正确进行垃圾回收。[#63595](https://github.com/StarRocks/starrocks/pull/63595)
+- `PREPARE`/`EXECUTE`语句的返回结果在 Profile 中显示为`omit`。[#62988](https://github.com/StarRocks/starrocks/pull/62988)
+- `date_trunc` 的分区裁剪与组合谓词错误地产生了 EMPTYSET。[#63464](https://github.com/StarRocks/starrocks/pull/63464)
+- `NullableColumn` 中的 CHECK 导致 Release Build 发生崩溃。[#63553](https://github.com/StarRocks/starrocks/pull/63553)
+
 ## 3.5.6
 
 发布日期: 2025年9月22日
