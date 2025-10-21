@@ -3480,8 +3480,8 @@ public class Config extends ConfigBase {
             " If one base mv has done reload, no need to do it again while other mv that related to it is reloading ")
     public static boolean enable_mv_post_image_reload_cache = true;
 
-    @ConfField(mutable = true, comment = "The timeout for waiting async mv reload done, 5 min by default")
-    public static int mv_async_reload_wait_timeout_second = 5 * 60; // 5 min
+    @ConfField(mutable = true, comment = "The timeout for waiting async mv reload done, 3 min by default")
+    public static int mv_async_reload_wait_timeout_second = 3 * 60; // 3 min
 
     /**
      * Whether analyze the mv after refresh in async mode.

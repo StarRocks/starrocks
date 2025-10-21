@@ -997,7 +997,7 @@ public class MaterializedViewTest extends StarRocksTestBase {
             Config.enable_mv_post_image_reload_cache = false;
             boolean postLoadImage = false;
 
-            baseMv.setReloaded(false);
+            baseMv.changeReloadState(-1);
             baseTable.removeRelatedMaterializedView(baseMv.getMvId());
             baseMv.removeRelatedMaterializedView(mv1.getMvId());
             baseMv.removeRelatedMaterializedView(mv2.getMvId());
@@ -1015,7 +1015,7 @@ public class MaterializedViewTest extends StarRocksTestBase {
             Config.enable_mv_post_image_reload_cache = true;
             boolean postLoadImage = true;
 
-            baseMv.setReloaded(false);
+            baseMv.changeReloadState(-1);
             baseTable.removeRelatedMaterializedView(baseMv.getMvId());
             baseMv.removeRelatedMaterializedView(mv1.getMvId());
             baseMv.removeRelatedMaterializedView(mv2.getMvId());
@@ -1037,7 +1037,7 @@ public class MaterializedViewTest extends StarRocksTestBase {
             Config.enable_mv_post_image_reload_cache = true;
             boolean postLoadImage = false;
 
-            baseMv.setReloaded(false);
+            baseMv.changeReloadState(-1);
             baseTable.removeRelatedMaterializedView(baseMv.getMvId());
             baseMv.removeRelatedMaterializedView(mv1.getMvId());
             baseMv.removeRelatedMaterializedView(mv2.getMvId());

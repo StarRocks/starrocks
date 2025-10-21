@@ -109,7 +109,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 import static com.starrocks.backup.mv.MVRestoreUpdater.checkMvDefinedQuery;
@@ -638,7 +638,10 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
     // Use a flag to prevent MV reload too many times while recursively reloading every mv at FE start time
     // and in each round of checkpoint
-    private AtomicBoolean reloaded = new AtomicBoolean(false);
+    private static final int RELOAD_STATE_NOT = -1;
+    private static final int RELOAD_STATE_ING = 0;
+    private static final int RELOAD_STATE_DONE = 1;
+    private AtomicInteger reloadState = new AtomicInteger(RELOAD_STATE_NOT);
 
     public MaterializedView() {
         super(TableType.MATERIALIZED_VIEW);
@@ -894,11 +897,15 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     }
 
     public boolean hasReloaded() {
-        return reloaded.get();
+        return reloadState.get() == RELOAD_STATE_DONE;
     }
 
-    public void setReloaded(boolean reloaded) {
-        this.reloaded.set(reloaded);
+    public int getReloadState() {
+        return  reloadState.get();
+    }
+
+    public void changeReloadState(int state) {
+        this.reloadState.set(state);
     }
 
     public RefreshMode getRefreshMode() {
@@ -1111,7 +1118,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         mv.refBaseTablePartitionColumnsOpt = this.refBaseTablePartitionColumnsOpt;
         mv.tableToBaseTableInfoCache = this.tableToBaseTableInfoCache;
         mv.defineQueryParseNode = this.defineQueryParseNode;
-        mv.reloaded = this.reloaded;
+        mv.reloadState = this.reloadState;
     }
 
     @Override
@@ -1239,7 +1246,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             // set inactive first to avoid inconsistent state during reloading
             this.active = false;
             // set reload first
-            this.reloaded.set(false);
+            this.changeReloadState(RELOAD_STATE_ING);
             // reload mv required metadata synchronously
             onReloadImpl();
             // if desired to be active, check whether you can be active
@@ -1250,24 +1257,12 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             LOG.error("reload mv failed: {}", this, e);
             // only set inactive when it is desired to be active
             if (desiredActive) {
-                if (isReloadAsync) {
-                    // try to set inactive asynchronously
-                    CachingMvPlanContextBuilder.submitAsyncTask(buildTaskName("MVSetInactiveOnReloadFailure"), () -> {
-                        try {
-                            setInActiveReason(InactiveReason.ofInactive("reload failed: " + e.getMessage()));
-                        } finally {
-                            setReloaded(true);
-                        }
-                        return null;
-                    });
-                } else {
-                    setInActiveReason(InactiveReason.ofInactive("reload failed: " + e.getMessage()));
-                }
+                setInActiveReason(InactiveReason.ofInactive("reload failed: " + e.getMessage()));
             }
         } finally {
             if (!isReloadAsync || !desiredActive) {
                 LOG.info("finish reloading mv {}. current active state: {}", getName(), isActive());
-                setReloaded(true);
+                changeReloadState(RELOAD_STATE_DONE);
             }
         }
     }
@@ -1283,8 +1278,11 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 try {
                     InactiveReason reason = checkIsActiveOnLoadBlocking();
                     setInActiveReason(reason);
+                } catch (Throwable e) {
+                    LOG.error("check and set active failed for mv: {}", this, e);
+                    setInActiveReason(InactiveReason.ofInactive("check and set active failed: " + e.getMessage()));
                 } finally {
-                    setReloaded(true);
+                    changeReloadState(RELOAD_STATE_DONE);
                 }
                 return null;
             });
@@ -1401,8 +1399,14 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 if (baseMV.hasReloaded()) {
                     LOG.info("baseMv: {} has reloaded before, skip reload it again", baseMV.getName());
                 } else {
-                    // recursive reload MV, to guarantee the order of hierarchical MV
-                    baseMV.onReload(false);
+                    if (baseMV.getReloadState() == RELOAD_STATE_ING) {
+                        LOG.info("baseMv: {} is reloading, wait it to be reloaded first", baseMV.getName());
+                        baseMV.waitForReloaded();
+                        LOG.info("baseMv: {} has been reloaded, continue to check mv: {}", baseMV.getName(), getName());
+                    } else {
+                        // recursive reload MV, to guarantee the order of hierarchical MV
+                        baseMV.onReload(false);
+                    }
                 }
 
                 if (!baseMV.isActive()) {
