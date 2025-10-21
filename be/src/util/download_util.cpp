@@ -105,10 +105,10 @@ Status DownloadUtil::get_java_udf_url(const std::string& url, std::string* real_
         file_name = url.substr(pos + 1);
     }
     const char* starrocks_home = std::getenv("STARROCKS_HOME");
-    std::string target_path = std::string(starrocks_home) + "/plugins/java_udf";
-    std::string target_url = std::string("file://") + target_path + "/" + file_name;
+    std::string target_path = std::string(starrocks_home) + "/plugins/java_udf/" + file_name;
+    std::string target_url = std::string("file://") + target_path;
     udf_downloder downloader;
-    Status status = downloader.download_remote_file_2_local(url, target_url);
+    Status status = downloader.download_remote_file_2_local(url, target_path);
     if (status.ok()) {
         *real_url = target_url;
         return Status::OK();
