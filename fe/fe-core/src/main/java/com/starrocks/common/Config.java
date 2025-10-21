@@ -3653,6 +3653,9 @@ public class Config extends ConfigBase {
     @ConfField
     public static boolean enable_parser_context_cache = true;
 
+    @ConfField
+    public static boolean enable_concurrent_parse_optimization = false;
+
     // Whether restore tables into colocate group if the
     // backuped table is colocated
     @ConfField(mutable = true)
