@@ -619,14 +619,16 @@ Status UpdateManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_writ
             for (size_t batch_start = 0; batch_start < insert_rowids.size(); batch_start += batch_size) {
                 size_t batch_end = std::min(batch_start + batch_size, insert_rowids.size());
                 std::vector<uint32_t> batch_insert_rowids(insert_rowids.begin() + batch_start,
-                                                         insert_rowids.begin() + batch_end);
+                                                          insert_rowids.begin() + batch_end);
 
                 ChunkPtr full_chunk;
-                RETURN_IF_ERROR(_write_segment_for_upsert(op_write, tschema, tablet, fs, txn_id, seg, batch_insert_rowids,
-                                                          update_cids, &new_rows_op, &total_rows, &full_chunk));
+                RETURN_IF_ERROR(_write_segment_for_upsert(op_write, tschema, tablet, fs, txn_id, seg,
+                                                          batch_insert_rowids, update_cids, &new_rows_op, &total_rows,
+                                                          &full_chunk));
 
                 RETURN_IF_ERROR(_handle_upsert_index_conflicts(metadata, index, builder, pkey_schema, rowset_id,
-                                                               new_rows_op, full_chunk, &segment_id_to_add_dels_new_acc));
+                                                               new_rows_op, full_chunk,
+                                                               &segment_id_to_add_dels_new_acc));
             }
         }
 

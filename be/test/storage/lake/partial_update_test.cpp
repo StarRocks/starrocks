@@ -3425,13 +3425,13 @@ TEST_F(LakeColumnUpsertModeTest, memory_optimization_skip_column_reading) {
     {
         auto txn_id = next_id();
         ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
-                                           .set_tablet_manager(_tablet_mgr.get())
-                                           .set_tablet_id(tablet_id)
-                                           .set_txn_id(txn_id)
-                                           .set_partition_id(_partition_id)
-                                           .set_mem_tracker(_mem_tracker.get())
-                                           .set_schema_id(tablet_schema_wide->id())
-                                           .build());
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(tablet_schema_wide->id())
+                                                   .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(generate_full_chunk(0, 2), indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish_with_txnlog());
@@ -3449,15 +3449,15 @@ TEST_F(LakeColumnUpsertModeTest, memory_optimization_skip_column_reading) {
     {
         auto txn_id = next_id();
         ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
-                                           .set_tablet_manager(_tablet_mgr.get())
-                                           .set_tablet_id(tablet_id)
-                                           .set_txn_id(txn_id)
-                                           .set_partition_id(_partition_id)
-                                           .set_mem_tracker(_mem_tracker.get())
-                                           .set_schema_id(tablet_schema_wide->id())
-                                           .set_slot_descriptors(&slot_pointers_wide)
-                                           .set_partial_update_mode(PartialUpdateMode::COLUMN_UPDATE_MODE)
-                                           .build());
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(tablet_schema_wide->id())
+                                                   .set_slot_descriptors(&slot_pointers_wide)
+                                                   .set_partial_update_mode(PartialUpdateMode::COLUMN_UPDATE_MODE)
+                                                   .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(generate_partial_chunk(0, 100), indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish_with_txnlog());
@@ -3481,15 +3481,15 @@ TEST_F(LakeColumnUpsertModeTest, memory_optimization_skip_column_reading) {
     {
         auto txn_id = next_id();
         ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
-                                           .set_tablet_manager(_tablet_mgr.get())
-                                           .set_tablet_id(tablet_id)
-                                           .set_txn_id(txn_id)
-                                           .set_partition_id(_partition_id)
-                                           .set_mem_tracker(_mem_tracker.get())
-                                           .set_schema_id(tablet_schema_wide->id())
-                                           .set_slot_descriptors(&slot_pointers_wide)
-                                           .set_partial_update_mode(PartialUpdateMode::COLUMN_UPSERT_MODE)
-                                           .build());
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(tablet_schema_wide->id())
+                                                   .set_slot_descriptors(&slot_pointers_wide)
+                                                   .set_partial_update_mode(PartialUpdateMode::COLUMN_UPSERT_MODE)
+                                                   .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(generate_partial_chunk(0, 200), indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish_with_txnlog());
@@ -3503,7 +3503,7 @@ TEST_F(LakeColumnUpsertModeTest, memory_optimization_skip_column_reading) {
 
         LOG(INFO) << "[OPTIMIZED] COLUMN_UPSERT_MODE memory delta: " << mem_optimized_delta << " bytes";
         LOG(INFO) << "  (After optimization: skips reading c2-c9 in RowsetUpdateState)";
-        LOG(INFO) << "[COMPARISON] COLUMN_UPDATE_MODE: " << mem_baseline_delta 
+        LOG(INFO) << "[COMPARISON] COLUMN_UPDATE_MODE: " << mem_baseline_delta
                   << " vs COLUMN_UPSERT_MODE: " << mem_optimized_delta;
 
         // Calculate memory ratio
