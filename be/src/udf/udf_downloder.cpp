@@ -34,31 +34,30 @@ Status udf_downloder::download_remote_file_2_local(const std::string& remotePath
 }
 
 Status udf_downloder::setup_local_file_path(const std::string& local_path) {
-    RETURN_IF_ERROR(FileSystem::Default()->path_exists(local_path));
-    RETURN_IF_ERROR(FileSystem::Default()->delete_file(local_path));
-    LOG(INFO) << fmt::format("Removed existing file:{}", local_path);
     std::string dir_path = local_path.substr(0, local_path.find_last_of('/'));
-    if (!dir_path.empty()) {
-        RETURN_IF_ERROR(FileSystem::Default()->create_dir(dir_path));
-    }
+    LOG(INFO) << fmt::format("[udf_downloder] Ensuring directory exists: {}", dir_path);
+    RETURN_IF_ERROR(FileSystem::Default()->create_dir_if_missing(dir_path));
+    LOG(INFO) << "[udf_downloder] setup_local_file_path() completed successfully";
     return Status::OK();
 }
 
 Status udf_downloder::do_download(const std::string& remotePath, std::string& localPath) {
-        ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(remotePath));
-        if (!fs) {
-            return Status::NotFound(  fmt::format("No matching filesystem available for {}", remotePath));
-        }
-        std::unique_ptr<WritableFile> local_writable_file;
-        ASSIGN_OR_RETURN(auto remoteFile, fs->new_sequential_file(remotePath));
-        ASSIGN_OR_RETURN(local_writable_file, FileSystem::Default()->new_writable_file(localPath));
-        auto res = fs::copy(remoteFile.get(), local_writable_file.get(), 1024 * 1024);
-        if (!res.ok()) {
-            return Status::RuntimeError(fmt::format("Failed to download file from {} to {}", remotePath, localPath)
-                );
-        }
-        RETURN_IF_ERROR(local_writable_file->close());
-        return Status::OK();
+    LOG(INFO) << fmt::format("[udf_downloder] do_download() start: remote={}, local={}", remotePath, localPath);
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(remotePath));
+    if (!fs) {
+        LOG(ERROR) << fmt::format("[udf_downloder] No matching filesystem for {}", remotePath);
+        return Status::NotFound(fmt::format("No matching filesystem available for {}", remotePath));
+    }
+    LOG(INFO) << "[udf_downloder] Filesystem initialized successfully";
+    LOG(INFO) << "[udf_downloder] Starting file copy...";
+    auto res = fs::copy_file(remotePath, localPath, 1024 * 1024);
+    if (!res.ok()) {
+        LOG(ERROR) << fmt::format("[udf_downloder] Failed to download from {} to {}", remotePath, localPath);
+        return res.status();
+    }
+    LOG(INFO) << fmt::format("[udf_downloder] File download completed successfully: {}", localPath);
+
+    return Status::OK();
 }
 
 std::shared_ptr<std::mutex> udf_downloder::get_mutex_for_path(const std::string& localPath) {
