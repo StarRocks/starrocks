@@ -451,8 +451,18 @@ public class InsertOverwriteJobRunner {
                     }
                 }
             }
-            List<String> tmpPartitionNames = job.getTmpPartitionIds().stream()
-                    .map(partitionId -> targetTable.getPartition(partitionId).getName())
+            List<Long> tmpPartitionIds = job.getTmpPartitionIds();
+            if (tmpPartitionIds == null) {
+                throw new DmlException("tmp partitions are empty for job:%s", job.getJobId());
+            }
+            List<String> tmpPartitionNames = tmpPartitionIds.stream()
+                    .map(partitionId -> {
+                        Partition partition = targetTable.getPartition(partitionId);
+                        if (partition == null) {
+                            throw new DmlException("temp partition id:%s does not exist", partitionId);
+                        }
+                        return partition.getName();
+                    })
                     .collect(Collectors.toList());
             Set<Tablet> sourceTablets = Sets.newHashSet();
             sourcePartitionNames.forEach(name -> {
@@ -470,9 +480,41 @@ public class InsertOverwriteJobRunner {
 
             PartitionInfo partitionInfo = targetTable.getPartitionInfo();
             if (partitionInfo.isRangePartition() || partitionInfo.getType() == PartitionType.LIST) {
+<<<<<<< HEAD
                 targetTable.replaceTempPartitions(sourcePartitionNames, tmpPartitionNames, true, false);
             } else if (partitionInfo instanceof SinglePartitionInfo) {
                 targetTable.replacePartition(sourcePartitionNames.get(0), tmpPartitionNames.get(0));
+=======
+                if (job.isDynamicOverwrite()) {
+                    if (!isReplay) {
+                        TransactionState txnState = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                                .getTransactionState(dbId, insertStmt.getTxnId());
+                        if (txnState == null) {
+                            throw new DmlException("transaction state is null dbId:%s, txnId:%s", dbId, insertStmt.getTxnId());
+                        }
+                        tmpPartitionNames = txnState.getCreatedPartitionNames(tableId);
+                        job.setTmpPartitionIds(tmpPartitionNames.stream()
+                                .map(name -> {
+                                    Partition partition = targetTable.getPartition(name, true);
+                                    if (partition == null) {
+                                        throw new DmlException("temp partition %s does not exist", name);
+                                    }
+                                    return partition.getId();
+                                })
+                                .collect(Collectors.toList()));
+                        tmpPartitionIds = job.getTmpPartitionIds();
+                    }
+                    LOG.info("dynamic overwrite job {} replace tmpPartitionNames:{}", job.getJobId(), tmpPartitionNames);
+                    ensureTempPartitionsVisible(targetTable, tmpPartitionIds);
+                    targetTable.replaceMatchPartitions(dbId, tmpPartitionNames);
+                } else {
+                    ensureTempPartitionsVisible(targetTable, tmpPartitionIds);
+                    targetTable.replaceTempPartitions(dbId, sourcePartitionNames, tmpPartitionNames, true, false);
+                }
+            } else if (partitionInfo instanceof SinglePartitionInfo) {
+                ensureTempPartitionsVisible(targetTable, tmpPartitionIds);
+                targetTable.replacePartition(dbId, sourcePartitionNames.get(0), tmpPartitionNames.get(0));
+>>>>>>> 09959fadb1 ([BugFix] OptimizeJob: prevent partition replace with non-visible data (#63584))
             } else {
                 throw new DdlException("partition type " + partitionInfo.getType() + " is not supported");
             }
@@ -567,5 +609,29 @@ public class InsertOverwriteJobRunner {
 
     protected void testDoCommit(boolean isReplay) {
         doCommit(isReplay);
+    }
+
+    protected void ensureTempPartitionsVisible(OlapTable targetTable, List<Long> partitionIds) {
+        if (partitionIds == null) {
+            return;
+        }
+        for (Long partitionId : partitionIds) {
+            if (partitionId == null) {
+                continue;
+            }
+            Partition partition = targetTable.getPartition(partitionId);
+            if (partition == null) {
+                throw new DmlException("temp partition id:%s does not exist", partitionId);
+            }
+            if (hasCommittedNotVisible(partitionId)) {
+                throw new DmlException("temp partition %s still has committed transactions not visible",
+                        partition.getName());
+            }
+        }
+    }
+
+    protected boolean hasCommittedNotVisible(long partitionId) {
+        return GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                .existCommittedTxns(dbId, tableId, partitionId);
     }
 }
