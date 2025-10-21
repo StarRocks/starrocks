@@ -82,7 +82,7 @@ COPY --from=gcc-builder /workspace/installed/ /
 COPY --from=binutils-builder /workspace/installed/ /
 # install cmake
 RUN ARCH=`uname -m` && mkdir -p $CMAKE_INSTALL_HOME && cd $CMAKE_INSTALL_HOME && \
-    curl -s -k https://cmake.org/files/v3.22/cmake-3.22.4-linux-${ARCH}.tar.gz | tar -xzf - --strip-components=1 && \
+    curl -s -k https://cmake.org/files/v3.31/cmake-3.31.9-linux-${ARCH}.tar.gz | tar -xzf - --strip-components=1 && \
     ln -s $CMAKE_INSTALL_HOME/bin/cmake /usr/bin/cmake
 
 # install jdk17
