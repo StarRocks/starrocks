@@ -16,7 +16,7 @@ Routine Load は Apache Kafka® からメッセージを継続的に消費し、
 
 :::note
 - Routine Load の適用シナリオ、原則、および基本操作については、 [Load data using Routine Load](../../../../loading/Loading_intro.md) を参照してください。
-> - StarRocks テーブルにデータをロードするには、その StarRocks テーブルに対して INSERT 権限を持つユーザーとしてのみ可能です。INSERT 権限を持っていない場合は、 [GRANT](../../account-management/GRANT.md) の指示に従って、StarRocks クラスターに接続するために使用するユーザーに INSERT 権限を付与してください。
+- StarRocks テーブルにデータをロードするには、その StarRocks テーブルに対して INSERT 権限を持つユーザーとしてのみ可能です。INSERT 権限を持っていない場合は、 [GRANT](../../account-management/GRANT.md) の指示に従って、StarRocks クラスターに接続するために使用するユーザーに INSERT 権限を付与してください。
 :::
 
 ## 構文
