@@ -18,7 +18,6 @@ import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Objects;
 
-import static com.starrocks.common.util.Util.normalizeName;
 
 // label name used to identify a load job
 public class LabelName implements ParseNode {
@@ -33,7 +32,7 @@ public class LabelName implements ParseNode {
 
     public LabelName(String dbName, String labelName, NodePosition pos) {
         this.pos = pos;
-        this.dbName = normalizeName(dbName);
+        this.dbName = dbName;
         this.labelName = labelName;
     }
 
@@ -42,7 +41,7 @@ public class LabelName implements ParseNode {
     }
 
     public void setDbName(String dbName) {
-        this.dbName = normalizeName(dbName);
+        this.dbName = dbName;
     }
 
     public String getLabelName() {

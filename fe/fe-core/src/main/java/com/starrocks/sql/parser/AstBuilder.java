@@ -3380,7 +3380,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         String label = ((Identifier) visit(context.label)).getValue();
         String db = "";
         if (context.db != null) {
-            db = ((Identifier) visit(context.db)).getValue();
+            db = normalizeName(((Identifier) visit(context.db)).getValue());
         }
         return new LabelName(db, label, createPos(context));
     }
@@ -9540,7 +9540,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         // Hierarchy: catalog.database.table
         List<String> parts = qualifiedName.getParts();
         if (parts.size() == 2) {
-            return new LabelName(parts.get(0), parts.get(1), qualifiedName.getPos());
+            return new LabelName(normalizeName(parts.get(0)), parts.get(1), qualifiedName.getPos());
         } else if (parts.size() == 1) {
             return new LabelName(null, parts.get(0), qualifiedName.getPos());
         } else {
@@ -9696,7 +9696,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
         String dbName = null;
         if (dbCtx != null) {
-            dbName = getQualifiedName(dbCtx).toString();
+            dbName = normalizeName(getQualifiedName(dbCtx).toString());
             start = dbCtx.start;
         }
 
