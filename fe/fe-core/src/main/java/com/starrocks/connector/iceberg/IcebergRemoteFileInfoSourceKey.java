@@ -44,7 +44,6 @@ public class IcebergRemoteFileInfoSourceKey extends PredicateSearchKey {
             copy.setPredicate(ConstantOperator.TRUE);
             params = copy;
         }
-
         return new IcebergRemoteFileInfoSourceKey(databaseName, tableName, params, morId, icebergMORParams);
     }
 

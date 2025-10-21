@@ -68,12 +68,16 @@ public class PredicateSearchKey {
         if (getPredicate() == null && that.getPredicate() != null) {
             return false;
         }
+        if (getPredicate() != null && !getPredicate().equivalent(that.getPredicate())) {
+            return false;
+        }
+        if (params.isEnableColumnStats() != that.params.isEnableColumnStats()) {
+            return false;
+        }
 
         return Objects.equals(getVersion(), that.getVersion()) &&
                 Objects.equals(databaseName, that.databaseName) &&
-                Objects.equals(tableName, that.tableName) &&
-                getPredicate().equivalent(that.getPredicate()) &&
-                params.isEnableColumnStats() == that.params.isEnableColumnStats();
+                Objects.equals(tableName, that.tableName);
     }
 
     @Override
