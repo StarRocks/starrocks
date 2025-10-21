@@ -103,6 +103,8 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
                     mvId, context.ctx.getDatabase()));
         }
         this.mv = (MaterializedView) table;
+        // refresh mv until mv is reloaded.
+        mv.waitForReloaded();
         this.logger = MVTraceUtils.getLogger(mv, MVTaskRunProcessor.class);
 
         // NOTE: mvId is set in Task's properties when creating
