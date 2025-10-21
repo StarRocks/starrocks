@@ -139,4 +139,18 @@ public class FeNameFormatTest {
         Assertions.assertDoesNotThrow(() -> FeNameFormat.checkColumnName("$abc!abc"));
     }
 
+    @Test
+    public void testUserRegexDirectly() {
+        Assertions.assertDoesNotThrow(() -> FeNameFormat.checkUserName("user1"));
+        Assertions.assertDoesNotThrow(() -> FeNameFormat.checkUserName("user_1"));
+        Assertions.assertDoesNotThrow(() -> FeNameFormat.checkUserName("user-1"));
+        Assertions.assertDoesNotThrow(() -> FeNameFormat.checkUserName("a-user1"));
+        Assertions.assertDoesNotThrow(() -> FeNameFormat.checkUserName("user1/host"));
+        Assertions.assertDoesNotThrow(() -> FeNameFormat.checkUserName("user1/host-1"));
+        Assertions.assertThrows(SemanticException.class, () -> FeNameFormat.checkUserName(""));
+        Assertions.assertThrows(SemanticException.class, () -> FeNameFormat.checkUserName("-user1"));
+        Assertions.assertThrows(SemanticException.class, () -> FeNameFormat.checkUserName("user@"));
+        Assertions.assertThrows(SemanticException.class, () -> FeNameFormat.checkUserName("user/host/extra"));
+        Assertions.assertThrows(SemanticException.class, () -> FeNameFormat.checkUserName("user with space"));
+    }
 }
