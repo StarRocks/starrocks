@@ -305,7 +305,7 @@ Kafka に関連する追加のデータソースプロパティを指定でき�
 
     ```SQL
     "property.security.protocol" = "SASL_PLAINTEXT", -- セキュリティプロトコルを SASL_PLAINTEXT として指定します。
-    "property.sasl.mechanism" = "PLAIN", -- SASL メカニズムを PLAIN として指定します。これはシンプルなユーザー名/パスワード認証メカニズムです。
+    "property.sasl.mechanism" = "PLAIN", -- SASL メカニズムを PLAIN として指定します。これは単純なユーザー名/パスワード認証メカニズムです。
     "property.sasl.username" = "admin",  -- SASL ユーザー名。
     "property.sasl.password" = "xxxxxx"  -- SASL パスワード。
     ```
@@ -323,7 +323,7 @@ Kafka に関連する追加のデータソースプロパティを指定でき�
     :::note
 
     - StarRocks v3.1.4 以降、SASL/GSSAPI (Kerberos) 認証がサポートされています。
-    - SASL 関連モジュールは BE マシンにインストールする必要があります。
+    - SASL 関連のモジュールは BE マシンにインストールする必要があります。
 
         ```bash
         # Debian/Ubuntu:
@@ -744,7 +744,7 @@ FROM KAFKA
 
 **ターゲットデータベースとテーブル**
 
-StarRocks クラスターのデータベース `example_db` に `tbl_expr_test` という名前のテーブルを作成します。ターゲットテーブル `tbl_expr_test` には 2 つのカラムが含まれ、`col2` カラムの値は JSON データに対する CASE 式を使用して計算されます。
+StarRocks クラスターのデータベース `example_db` に `tbl_expr_test` という名前のテーブルを作成します。ターゲットテーブル `tbl_expr_test` には 2 つのカラムが含まれており、`col2` カラムの値は JSON データに対する CASE 式を使用して計算されます。
 
 ```SQL
 CREATE TABLE tbl_expr_test (
@@ -997,7 +997,7 @@ Avro スキーマに Union フィールドが含まれており、StarRocks に 
 
     1. 次の Avro スキーマファイル `avro_schema3.avsc` を作成します。外部の Avro レコードには、順番に `id`、`name`、`checked`、`sensor_type`、および `data` の 5 つのフィールドが含まれています。フィールド `data` は Union 型であり、2 つの要素 `null` とネストされたレコード `data_record` を含んでいます。
 
-```JSON
+        ```JSON
         {
             "type": "record",
             "name": "sensor_log",
@@ -1019,9 +1019,9 @@ Avro スキーマに Union フィールドが含まれており、StarRocks に 
                 }
             ]
         }
-```
+        ```
 
-2. Avro スキーマを [Schema Registry](https://docs.confluent.io/platform/current/schema-registry/index.html) に登録します。
+    2. Avro スキーマを [Schema Registry](https://docs.confluent.io/platform/current/schema-registry/index.html) に登録します。
 
 - **Avro データ**
 
