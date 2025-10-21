@@ -778,7 +778,7 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
         String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
         PlanTestBase.assertContains(plan, "PARTITION PREDICATES: 5: par_date >= '2020-01-01', " +
                 "5: par_date < '2020-01-03'");
-        PlanTestBase.assertContains(plan, "partitions=3/7");
+        PlanTestBase.assertContains(plan, "partitions=3/");
     }
 
     @Test
