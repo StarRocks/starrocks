@@ -33,6 +33,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkState;
+import static com.starrocks.sql.ast.LoadStmt.MERGE_CONDITION;
 
 /**
  * Insert into is performed to load data from the result of query stmt.
@@ -268,6 +269,10 @@ public class InsertStmt extends DmlStmt {
 
     public List<String> getTargetColumnNames() {
         return targetColumnNames;
+    }
+
+    public String getMergingCondition() {
+        return this.properties.get(MERGE_CONDITION);
     }
 
     public void setAutoIncrementPartialUpdate() {
