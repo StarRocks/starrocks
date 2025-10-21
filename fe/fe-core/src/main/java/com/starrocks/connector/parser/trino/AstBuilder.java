@@ -751,7 +751,28 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         } else {
             exprs = Collections.emptyList();
         }
-        return new ArrayExpr(null, exprs);
+
+        Type arrayType = null;
+        if (!exprs.isEmpty()) {
+            try {
+                Expr firstNonNullExpr = null;
+                for (Expr expr : exprs) {
+                    if (!(expr instanceof NullLiteral)) {
+                        firstNonNullExpr = expr;
+                        break;
+                    }
+                }
+
+                if (firstNonNullExpr != null) {
+                    if (firstNonNullExpr.getType() != null) {
+                        arrayType = new ArrayType(firstNonNullExpr.getType());
+                    }
+                }
+            } catch (Exception e) {
+            }
+        }
+
+        return new ArrayExpr(arrayType, exprs);
     }
 
     @Override

@@ -93,6 +93,15 @@ public class AnalyzeTranslateTest {
         assertTranslateTrinoSQL("translate trino select approx_set(\"tc\") from tall",
                 "SELECT hll_hash(`tc`)\nFROM `tall`");
 
+        assertTranslateTrinoSQL("translate trino select array[2,3]",
+                "SELECT ARRAY<TINYINT>[2, 3]");
+
+        assertTranslateTrinoSQL("translate trino select cardinality(array[1,2,3])",
+                "SELECT cardinality(ARRAY<TINYINT>[1, 2, 3])");
+
+        assertTranslateTrinoSQL("translate trino select cardinality(array_intersect(array[1,2,3], array[3,4,5]))",
+                "SELECT cardinality(array_intersect(ARRAY<TINYINT>[1, 2, 3], ARRAY<TINYINT>[3, 4, 5]))");
+
         // test TPCH query
         assertTranslateTrinoSQL("translate trino select\n" +
                 "  o_orderpriority,\n" +
