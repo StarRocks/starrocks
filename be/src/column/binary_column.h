@@ -65,7 +65,7 @@ public:
     }
 
     explicit BinaryColumnBase(const void* data, size_t length, Offsets offsets)
-            : _data(data), _length(length), _is_view(true), _offsets(std::move(offsets)), _immuable_container(*this) {}
+            : _bytes(), _offsets(std::move(offsets)), _data(data), _length(length), _is_view(true), _immuable_container(*this) {}
 
     // NOTE: do *NOT* copy |_slices|
     BinaryColumnBase(const BinaryColumnBase<T>& rhs) 
