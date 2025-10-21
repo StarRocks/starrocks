@@ -352,7 +352,7 @@ Status PrimaryKeyDump::read_deserialize_from_file(const std::string& dump_filepa
 
 Status PrimaryKeyDump::deserialize_pkcol_pkindex_from_meta(
         const std::string& dump_filepath, const PrimaryKeyDumpPB& dump_pb,
-        const std::function<void(const Chunk&)>& column_key_func,
+        const std::function<void(uint32_t, const Chunk&)>& column_key_func,
         const std::function<void(const std::string&, const PartialKVsPB&)>& index_kvs_func) {
     std::unique_ptr<RandomAccessFile> rfile;
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(dump_filepath));
@@ -375,7 +375,7 @@ Status PrimaryKeyDump::deserialize_pkcol_pkindex_from_meta(
             } else if (!st.ok()) {
                 return st;
             } else {
-                column_key_func(*chunk);
+                column_key_func(primary_key_column.segment_id(), *chunk);
             }
         }
     }
