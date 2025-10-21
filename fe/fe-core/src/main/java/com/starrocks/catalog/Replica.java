@@ -36,6 +36,8 @@ package com.starrocks.catalog;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
+import com.starrocks.system.Backend;
+import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -49,6 +51,20 @@ public class Replica implements Writable {
     public static final VersionComparator<Replica> VERSION_DESC_COMPARATOR = new VersionComparator<Replica>();
 
     public static final int DEPRECATED_PROP_SCHEMA_HASH = 0;
+
+    public static ReplicaStatus computeReplicaStatus(Replica replica, SystemInfoService infoService, long visibleVersion, int schemaHash) {
+        ReplicaStatus status = ReplicaStatus.OK;
+        Backend be = infoService.getBackend(replica.getBackendId());
+        if (be == null || !be.isAvailable() || replica.isBad()) {
+            status = ReplicaStatus.DEAD;
+        } else if (replica.getVersion() < visibleVersion
+                || replica.getLastFailedVersion() > 0) {
+            status = ReplicaStatus.VERSION_ERROR;
+        } else if (replica.getSchemaHash() != -1 && replica.getSchemaHash() != schemaHash) {
+            status = ReplicaStatus.SCHEMA_ERROR;
+        }
+        return status;
+    }
 
     public enum ReplicaState {
         NORMAL,
