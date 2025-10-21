@@ -77,69 +77,69 @@ starrocks_project:
 
 #### `type`
 
-**Description**:  The specific adapter to use, this must be set to `starrocks`\
-**Required\?**:  Required\
-**Example**:  `starrocks`                    
+**Description**: The specific adapter to use, this must be set to `starrocks`\
+**Required\?**: Required\
+**Example**: `starrocks`
 
 #### `host`
 
-**Description**:  The hostname to connect to\
-**Required\?**:  Required\
-**Example**:  `192.168.100.28`               
+**Description**: The hostname to connect to\
+**Required\?**: Required\
+**Example**: `192.168.100.28`
 
 #### `port`
 
-**Description**:  The port to use\
-**Required\?**:  Required\
-**Example**:  `9030`                         
+**Description**: The port to use\
+**Required\?**: Required\
+**Example**: `9030`
 
 #### `catalog`
 
-**Description**:  Specify the catalog to build models into\
-**Required\?**:  Optional\
-**Example**:  `default_catalog`       
+**Description**: Specify the catalog to build models into\
+**Required\?**: Optional\
+**Example**: `default_catalog`
 
 #### `schema`
 
-**Description**:  Specify the schema (database in StarRocks) to build models into\
-**Required\?**:  Required\
-**Example**:  `analytics`                    
+**Description**: Specify the schema (database in StarRocks) to build models into\
+**Required\?**: Required\
+**Example**: `analytics`
 
 #### `username`
 
-**Description**:  The username to use to connect to the server\
-**Required\?**:  Required\
-**Example**:  `dbt_admin`                    
+**Description**: The username to use to connect to the server\
+**Required\?**: Required\
+**Example**: `dbt_admin`
 
 #### `password`
 
-**Description**:  The password to use for authenticating to the server\
-**Required\?**:  Required\
-**Example**:  `correct-horse-battery-staple` 
+**Description**: The password to use for authenticating to the server\
+**Required\?**: Required\
+**Example**: `correct-horse-battery-staple` 
 
 #### `version`
 
-**Description**:  Let Plugin try to go to a compatible starrocks version\
-**Required\?**:  Optional\
-**Example**:  `3.1.0`                        
+**Description**: Let Plugin try to go to a compatible starrocks version\
+**Required\?**: Optional\
+**Example**: `3.1.0`
 
 #### `use_pure`
 
-**Description**:  set to "true" to use C extensions\
-**Required\?**:  Optional  \
-**Example**:  `true`                         
+**Description**: set to "true" to use C extensions\
+**Required\?**: Optional\
+**Example**: `true`
 
 #### `is_async`
 
-**Description**:  "true" to submit suitable tasks as etl tasks.\
-**Required\?**:  Optional  \
-**Example**:  `true`                         
+**Description**: "true" to submit suitable tasks as etl tasks.\
+**Required\?**: Optional\
+**Example**: `true`
 
 #### `async_query_timeout`
 
-**Description**:  Sets the `query_timeout` value when submitting a task to StarRocks\
-**Required\?**:  Optional  \
-**Example**:  `300`                          
+**Description**: Sets the `query_timeout` value when submitting a task to StarRocks\
+**Required\?**: Optional\
+**Example**: `300`
 
 
 ### Sources
@@ -240,7 +240,7 @@ GROUP BY
     h.order_date
 ```
 
- ### Write to External
+### Write to External
 
 ```sql
 {{
@@ -286,7 +286,7 @@ FROM {{ source('raw', 'events') }}
 {% endif %}
 ```
 
- #### Incremental Strategies
+#### Incremental Strategies
 
 `dbt-starrocks` supports multiple incremental strategies:
 
