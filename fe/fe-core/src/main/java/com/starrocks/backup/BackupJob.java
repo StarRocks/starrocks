@@ -824,7 +824,7 @@ public class BackupJob extends AbstractJob {
     }
 
     /*
-     * Choose a replica whose version >= visibleVersion and dose not have failed version.
+     * Choose a replica whose status is OK.
      * Iterate replica order by replica id, the reason is to choose the same replica at each backup job.
      */
     private Replica chooseReplica(LocalTablet tablet, long visibleVersion, int schemaHash) {

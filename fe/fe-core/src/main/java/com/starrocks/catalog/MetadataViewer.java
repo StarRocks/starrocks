@@ -57,7 +57,6 @@ import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
-import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.warehouse.Warehouse;
 
