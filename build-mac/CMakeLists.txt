@@ -75,6 +75,23 @@ execute_process(COMMAND bash "-c" "uname -m"
 message(STATUS "Build target arch is ${CMAKE_BUILD_TARGET_ARCH}")
 
 # ==============================================================================
+# HOMEBREW PREFIX DETECTION
+# ==============================================================================
+# Dynamically detect Homebrew installation path
+execute_process(
+    COMMAND brew --prefix
+    OUTPUT_VARIABLE HOMEBREW_PREFIX
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    RESULT_VARIABLE BREW_RESULT
+)
+
+if(NOT BREW_RESULT EQUAL 0)
+    message(FATAL_ERROR "Homebrew not found. Please install Homebrew first: https://brew.sh")
+endif()
+
+message(STATUS "Homebrew prefix: ${HOMEBREW_PREFIX}")
+
+# ==============================================================================
 # DIRECTORY CONFIGURATION
 # ==============================================================================
 set(BASE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../be")
@@ -104,89 +121,10 @@ message(STATUS "Base directory: ${BASE_DIR}")
 message(STATUS "Build directory: ${BUILD_DIR}")
 message(STATUS "Third-party directory: ${THIRDPARTY_DIR}")
 
-# ==============================================================================
-# FEATURE OPTIONS - DISABLED COMPONENTS FOR MACOS
-# ==============================================================================
-# Force disable problematic components on macOS
-option(MAKE_TEST "ON for make unit test or OFF for not" OFF)
-option(WITH_AVRO "Build with Avro support" OFF)
-option(WITH_ORC "Build with ORC support" OFF)
-option(WITH_HDFS "Build with HDFS support" OFF)
-option(WITH_JDBC "Build with JDBC support" OFF)
-option(WITH_HTTP "Build with HTTP client support" ON)  # Required for BE operation
-option(WITH_PYTHON "Build with Python runtime support" OFF)
-option(WITH_JAVA "Build with Java runtime support" OFF)
-option(WITH_LZO "Build with LZO compression support" OFF)
-option(WITH_S2 "Build with S2 geometry support" OFF)
-option(WITH_GLOG_STACKTRACE "Build with glog stack trace support" OFF)
-option(WITH_STARCACHE "Build with starcache support" OFF)
-option(WITH_PULSAR "Build with Pulsar support" OFF)
-option(WITH_BVAR "Build with BVAR support" OFF)
-option(WITH_JSON_FLAT "Build with JSON flat support" OFF)
-option(WITH_ARROW_FLIGHT "Build with Arrow Flight support" OFF)
-option(WITH_KAFKA "Build with Kafka support" OFF)
-option(WITH_TENANN "Build with TENANN" OFF)
-option(WITH_AZURE "Build with Azure support" OFF)
-option(WITH_GEO "Build with GEO support" OFF)
-option(WITH_S3 "Build with S3 support" OFF)
-option(WITH_MYSQL "Build with MySQL table writer support" OFF)
-option(WITH_CLUCENE "Build with CLucene inverted index support" OFF)
-option(USE_SSE4_2 "Build with SSE4.2 instruction" OFF)
-option(USE_BMI_2 "Build with BMI2 instruction" OFF)
-option(USE_AVX2 "Build with AVX2 instruction" OFF)
-option(USE_AVX512 "Build with AVX512f/AVX512BW instruction" OFF)
-option(STARROCKS_JIT_ENABLE "Enable JIT compilation support" OFF)
-
-# Set all disabled options as FORCE to prevent override
-set(WITH_AVRO OFF CACHE BOOL "Disable Avro on macOS" FORCE)
-set(WITH_ORC OFF CACHE BOOL "Disable ORC on macOS" FORCE)
-set(WITH_PARQUET OFF CACHE BOOL "Disable Parquet on macOS" FORCE)
-set(WITH_HDFS OFF CACHE BOOL "Disable HDFS on macOS" FORCE)
-set(WITH_JDBC OFF CACHE BOOL "Disable JDBC on macOS" FORCE)
-set(WITH_PYTHON OFF CACHE BOOL "Disable Python runtime on macOS" FORCE)
-set(WITH_JAVA OFF CACHE BOOL "Disable Java runtime on macOS" FORCE)
-set(WITH_LZO OFF CACHE BOOL "Disable LZO compression on macOS" FORCE)
-set(WITH_S2 OFF CACHE BOOL "Disable S2 geometry on macOS" FORCE)
-set(WITH_GLOG_STACKTRACE OFF CACHE BOOL "Disable glog stack trace on macOS" FORCE)
-set(WITH_STARCACHE OFF CACHE BOOL "Disable starcache on macOS" FORCE)
-set(USE_SSE4_2 OFF CACHE BOOL "Disable SSE4.2 on ARM64" FORCE)
-set(USE_AVX2 OFF CACHE BOOL "Disable AVX2 on ARM64" FORCE)
-set(USE_AVX512 OFF CACHE BOOL "Disable AVX512 on ARM64" FORCE)
-set(STARROCKS_JIT_ENABLE OFF CACHE BOOL "Disable JIT on macOS" FORCE)
-set(WITH_AZURE OFF CACHE BOOL "Disable Azure on macOS" FORCE)
-set(WITH_GEO OFF CACHE BOOL "Disable GEO on macOS" FORCE)
-set(WITH_S3 OFF CACHE BOOL "Disable S3 on macOS" FORCE)
-set(WITH_MYSQL OFF CACHE BOOL "Disable MySQL table writer on macOS" FORCE)
-set(WITH_CLUCENE OFF CACHE BOOL "Disable CLucene inverted index on macOS" FORCE)
-
-# Add compile definitions for disabled features
-add_definitions(-DMACOS_DISABLE_AVRO)
-add_definitions(-DMACOS_DISABLE_ORC)
-add_definitions(-DMACOS_DISABLE_PARQUET)
-add_definitions(-DMACOS_DISABLE_HDFS)
-add_definitions(-DMACOS_DISABLE_JDBC)
-add_definitions(-DMACOS_DISABLE_PYTHON)
-add_definitions(-DMACOS_DISABLE_JAVA)
-add_definitions(-DMACOS_DISABLE_LZO)
-add_definitions(-DMACOS_DISABLE_S2)
-add_definitions(-DMACOS_DISABLE_GLOG_STACKTRACE)
-add_definitions(-DMACOS_DISABLE_TRACER)
-add_definitions(-DMACOS_DISABLE_OPENTELEMETRY)
-add_definitions(-DMACOS_DISABLE_JIT)
-add_definitions(-DMACOS_DISABLE_AZURE)
-add_definitions(-DMACOS_DISABLE_GEO)
-add_definitions(-DMACOS_DISABLE_S3)
-add_definitions(-DMACOS_DISABLE_MYSQL)
-add_definitions(-DMACOS_DISABLE_CLUCENE)
-add_definitions(-DMACOS_DISABLE_PULSAR)
-add_definitions(-DMACOS_DISABLE_STARCACHE)
-add_definitions(-DMACOS_DISABLE_ES)
-add_definitions(-DMACOS_DISABLE_ICEBERG)
-add_definitions(-DDMACOS_DISABLE_FILE_SINK)
-
-# Force-include macOS shim headers across all translation units to avoid
-# touching core source files.
+# Force-include macOS shim headers (required for typeof, std::max overloads, etc.)
+# Note: We now use fmt 8.1.1 from source (same as Linux), so fmt-related conflicts are resolved
 add_compile_options(-include ${CMAKE_CURRENT_LIST_DIR}/shims/include/starrocks_macos_fmt_shims.h)
+
 # Ensure starcache/staros code paths are disabled by making the macros undefined
 add_compile_options(-UWITH_STARCACHE -UUSE_STAROS)
 # Add glog export definition to fix compilation issues
@@ -285,9 +223,9 @@ set(Boost_USE_MULTITHREADED ON)
 set(Boost_NO_BOOST_CMAKE ON)
 set(BOOST_ROOT ${THIRDPARTY_DIR}/installed)
 
-# On macOS, use shared Boost (more compatible)
-set(Boost_USE_STATIC_LIBS OFF)
-set(Boost_USE_STATIC_RUNTIME OFF)
+# On macOS, use static Boost libraries (matching thirdparty build)
+set(Boost_USE_STATIC_LIBS ON)
+set(Boost_USE_STATIC_RUNTIME ON)
 
 # Thread configuration for macOS
 set(CMAKE_THREAD_LIBS_INIT "-lpthread")
@@ -365,6 +303,17 @@ set_target_properties(velocypack PROPERTIES
     IMPORTED_LOCATION ${THIRDPARTY_DIR}/installed/lib/libvelocypack.a
     INTERFACE_INCLUDE_DIRECTORIES ${THIRDPARTY_DIR}/installed/include)
 
+# fmt - formatting library (check if not already imported by Arrow)
+if(NOT TARGET fmt)
+    add_library(fmt STATIC IMPORTED GLOBAL)
+    set_target_properties(fmt PROPERTIES
+        IMPORTED_LOCATION ${THIRDPARTY_DIR}/installed/lib/libfmt.a
+        INTERFACE_INCLUDE_DIRECTORIES ${THIRDPARTY_DIR}/installed/include)
+    message(STATUS "fmt library imported from thirdparty: ${THIRDPARTY_DIR}/installed/lib/libfmt.a")
+else()
+    message(STATUS "fmt target already exists (likely from Arrow), using existing target")
+endif()
+
 # bitshuffle
 add_library(bitshuffle STATIC IMPORTED GLOBAL)
 set_target_properties(bitshuffle PROPERTIES
@@ -372,34 +321,34 @@ set_target_properties(bitshuffle PROPERTIES
     INTERFACE_INCLUDE_DIRECTORIES ${THIRDPARTY_DIR}/installed/include)
 
 # Homebrew libraries - snappy
-find_library(SNAPPY_LIB NAMES snappy PATHS /opt/homebrew/lib REQUIRED)
+find_library(SNAPPY_LIB NAMES snappy PATHS ${HOMEBREW_PREFIX}/lib REQUIRED)
 add_library(snappy STATIC IMPORTED GLOBAL)
 set_target_properties(snappy PROPERTIES
     IMPORTED_LOCATION ${SNAPPY_LIB}
-    INTERFACE_INCLUDE_DIRECTORIES /opt/homebrew/include)
+    INTERFACE_INCLUDE_DIRECTORIES ${HOMEBREW_PREFIX}/include)
 
 # Homebrew libraries - lz4
-find_library(LZ4_LIB NAMES lz4 PATHS /opt/homebrew/lib REQUIRED)
+find_library(LZ4_LIB NAMES lz4 PATHS ${HOMEBREW_PREFIX}/lib REQUIRED)
 add_library(lz4 STATIC IMPORTED GLOBAL)
 set_target_properties(lz4 PROPERTIES
     IMPORTED_LOCATION ${LZ4_LIB}
-    INTERFACE_INCLUDE_DIRECTORIES /opt/homebrew/opt/lz4/include)
+    INTERFACE_INCLUDE_DIRECTORIES ${HOMEBREW_PREFIX}/opt/lz4/include)
 
 # On macOS, Homebrew installs headers without subdirectory
 # Add macro to use direct includes instead of subdirectory includes
 add_compile_definitions(STARROCKS_MACOS_USE_FLAT_INCLUDES=1)
 
 # Homebrew libraries - zstd
-find_library(ZSTD_LIB NAMES zstd PATHS /opt/homebrew/lib REQUIRED)
+find_library(ZSTD_LIB NAMES zstd PATHS ${HOMEBREW_PREFIX}/lib REQUIRED)
 add_library(zstd STATIC IMPORTED GLOBAL)
 set_target_properties(zstd PROPERTIES
     IMPORTED_LOCATION ${ZSTD_LIB}
-    INTERFACE_INCLUDE_DIRECTORIES /opt/homebrew/opt/zstd/include)
+    INTERFACE_INCLUDE_DIRECTORIES ${HOMEBREW_PREFIX}/opt/zstd/include)
 
 # zlib (from homebrew) - use dynamic lookup
 find_library(ZLIB_LIB NAMES z PATHS
-    /opt/homebrew/Cellar/zlib/*/lib
-    /opt/homebrew/lib
+    ${HOMEBREW_PREFIX}/Cellar/zlib/*/lib
+    ${HOMEBREW_PREFIX}/lib
     REQUIRED
     NO_DEFAULT_PATH)
 if(NOT ZLIB_LIB)
@@ -408,13 +357,13 @@ endif()
 add_library(zlib STATIC IMPORTED GLOBAL)
 set_target_properties(zlib PROPERTIES
     IMPORTED_LOCATION ${ZLIB_LIB}
-    INTERFACE_INCLUDE_DIRECTORIES /opt/homebrew/include)
+    INTERFACE_INCLUDE_DIRECTORIES ${HOMEBREW_PREFIX}/include)
 message(STATUS "zlib found: ${ZLIB_LIB}")
 
 # Bzip2 library for compression support - use dynamic lookup
 find_library(BZIP2_LIB NAMES bz2 PATHS
-    /opt/homebrew/Cellar/bzip2/*/lib
-    /opt/homebrew/lib
+    ${HOMEBREW_PREFIX}/Cellar/bzip2/*/lib
+    ${HOMEBREW_PREFIX}/lib
     REQUIRED
     NO_DEFAULT_PATH)
 if(NOT BZIP2_LIB)
@@ -423,7 +372,7 @@ endif()
 add_library(bzip2 STATIC IMPORTED GLOBAL)
 set_target_properties(bzip2 PROPERTIES
     IMPORTED_LOCATION ${BZIP2_LIB}
-    INTERFACE_INCLUDE_DIRECTORIES /opt/homebrew/include)
+    INTERFACE_INCLUDE_DIRECTORIES ${HOMEBREW_PREFIX}/include)
 message(STATUS "bzip2 found: ${BZIP2_LIB}")
 
 # Ryu library for fast float-to-string conversion
@@ -461,7 +410,7 @@ set_target_properties(roaring PROPERTIES
     INTERFACE_INCLUDE_DIRECTORIES ${THIRDPARTY_DIR}/installed/include)
 
 # Apache Arrow and Parquet from Homebrew - required for file formats
-set(APACHE_ARROW_HOME "/opt/homebrew/opt/apache-arrow")
+set(APACHE_ARROW_HOME "${HOMEBREW_PREFIX}/opt/apache-arrow")
 if(EXISTS "${APACHE_ARROW_HOME}/lib/libarrow.dylib")
     add_library(arrow SHARED IMPORTED GLOBAL)
     set_target_properties(arrow PROPERTIES
@@ -478,13 +427,7 @@ else()
     message(FATAL_ERROR "Apache Arrow not found. Please install: brew install apache-arrow")
 endif()
 
-# fmt library - use Homebrew version
-find_library(FMT_LIB NAMES fmt PATHS /opt/homebrew/lib REQUIRED)
-add_library(fmt STATIC IMPORTED GLOBAL)
-set_target_properties(fmt PROPERTIES
-    IMPORTED_LOCATION ${FMT_LIB}
-    INTERFACE_INCLUDE_DIRECTORIES /opt/homebrew/include)
-message(STATUS "fmt library found: ${FMT_LIB}")
+# fmt library - already defined above using thirdparty compiled version (removed duplicate)
 
 # ICU libraries (use thirdparty compiled version for compatibility)
 # Use static libraries from thirdparty to avoid version conflicts
@@ -576,7 +519,7 @@ set_target_properties(CURL::libcurl PROPERTIES
 message(STATUS "Using custom curl: ${CURL_LIBRARY}")
 
 # libevent from Homebrew - required for HTTP server functionality
-find_library(LIBEVENT_LIB NAMES event PATHS /opt/homebrew/lib REQUIRED)
+find_library(LIBEVENT_LIB NAMES event PATHS ${HOMEBREW_PREFIX}/lib REQUIRED)
 if(NOT LIBEVENT_LIB)
     message(FATAL_ERROR "libevent not found. Please install: brew install libevent")
 endif()
@@ -584,7 +527,39 @@ endif()
 add_library(libevent STATIC IMPORTED GLOBAL)
 set_target_properties(libevent PROPERTIES
     IMPORTED_LOCATION ${LIBEVENT_LIB}
-    INTERFACE_INCLUDE_DIRECTORIES /opt/homebrew/include)
+    INTERFACE_INCLUDE_DIRECTORIES ${HOMEBREW_PREFIX}/include)
+
+# re2 library from Homebrew - required for regex support
+find_library(RE2_LIB NAMES re2 PATHS ${HOMEBREW_PREFIX}/lib REQUIRED)
+if(NOT RE2_LIB)
+    message(FATAL_ERROR "re2 not found. Please install: brew install re2")
+endif()
+
+add_library(re2 STATIC IMPORTED GLOBAL)
+set_target_properties(re2 PROPERTIES
+    IMPORTED_LOCATION ${RE2_LIB}
+    INTERFACE_INCLUDE_DIRECTORIES ${HOMEBREW_PREFIX}/include)
+
+# abseil libraries from Homebrew - required by re2 (dynamic libraries)
+# Temporarily allow finding .dylib files for abseil
+set(CMAKE_FIND_LIBRARY_SUFFIXES_SAVED ${CMAKE_FIND_LIBRARY_SUFFIXES})
+set(CMAKE_FIND_LIBRARY_SUFFIXES ".dylib" ".a")
+
+find_library(ABSL_BASE_LIB NAMES absl_base PATHS ${HOMEBREW_PREFIX}/lib NO_DEFAULT_PATH)
+find_library(ABSL_SPINLOCK_WAIT_LIB NAMES absl_spinlock_wait PATHS ${HOMEBREW_PREFIX}/lib NO_DEFAULT_PATH)
+find_library(ABSL_HASH_LIB NAMES absl_hash PATHS ${HOMEBREW_PREFIX}/lib NO_DEFAULT_PATH)
+find_library(ABSL_LOG_INTERNAL_MESSAGE_LIB NAMES absl_log_internal_message PATHS ${HOMEBREW_PREFIX}/lib NO_DEFAULT_PATH)
+find_library(ABSL_SYNCHRONIZATION_LIB NAMES absl_synchronization PATHS ${HOMEBREW_PREFIX}/lib NO_DEFAULT_PATH)
+find_library(ABSL_STRINGS_LIB NAMES absl_strings PATHS ${HOMEBREW_PREFIX}/lib NO_DEFAULT_PATH)
+find_library(ABSL_STR_FORMAT_INTERNAL_LIB NAMES absl_str_format_internal PATHS ${HOMEBREW_PREFIX}/lib NO_DEFAULT_PATH)
+find_library(ABSL_RAW_HASH_SET_LIB NAMES absl_raw_hash_set PATHS ${HOMEBREW_PREFIX}/lib NO_DEFAULT_PATH)
+
+# Restore the original suffixes
+set(CMAKE_FIND_LIBRARY_SUFFIXES ${CMAKE_FIND_LIBRARY_SUFFIXES_SAVED})
+
+if(NOT ABSL_BASE_LIB)
+    message(FATAL_ERROR "abseil libraries not found. Please install: brew install abseil")
+endif()
 
 message(STATUS "Third-party libraries configured successfully")
 
@@ -681,6 +656,15 @@ list(APPEND STARROCKS_LINK_LIBS
     thrift
     thriftnb
     libevent
+    re2
+    ${ABSL_BASE_LIB}
+    ${ABSL_SPINLOCK_WAIT_LIB}
+    ${ABSL_HASH_LIB}
+    ${ABSL_LOG_INTERNAL_MESSAGE_LIB}
+    ${ABSL_SYNCHRONIZATION_LIB}
+    ${ABSL_STRINGS_LIB}
+    ${ABSL_STR_FORMAT_INTERNAL_LIB}
+    ${ABSL_RAW_HASH_SET_LIB}
     icuuc
     icui18n
     icudata
@@ -690,28 +674,24 @@ list(APPEND STARROCKS_LINK_LIBS
     ${OPENSSL_CRYPTO_LIBRARY}
     CURL::libcurl
     # Additional libraries for missing symbols
-    -lre2
     -levent_pthreads
 )
 
-# Link cctz for timezone support used by Date/Time utilities
-find_library(CCTZ_LIB NAMES cctz PATHS /opt/homebrew/lib REQUIRED)
-if(CCTZ_LIB)
-    add_library(cctz SHARED IMPORTED GLOBAL)
-    set_target_properties(cctz PROPERTIES IMPORTED_LOCATION ${CCTZ_LIB})
-    list(APPEND STARROCKS_LINK_LIBS cctz)
-    message(STATUS "cctz found: ${CCTZ_LIB}")
-else()
-    message(FATAL_ERROR "cctz not found. Please install: brew install cctz")
-endif()
+# cctz - Google's C++ time zone library (from thirdparty)
+add_library(cctz STATIC IMPORTED GLOBAL)
+set_target_properties(cctz PROPERTIES
+    IMPORTED_LOCATION ${THIRDPARTY_DIR}/installed/lib/libcctz.a
+    INTERFACE_INCLUDE_DIRECTORIES ${THIRDPARTY_DIR}/installed/include)
+list(APPEND STARROCKS_LINK_LIBS cctz)
+message(STATUS "cctz found (thirdparty): ${THIRDPARTY_DIR}/installed/lib/libcctz.a")
 
 # streamvbyte for integer compression
-find_library(STREAMVBYTE_LIB NAMES streamvbyte PATHS /opt/homebrew/lib REQUIRED)
+find_library(STREAMVBYTE_LIB NAMES streamvbyte PATHS ${HOMEBREW_PREFIX}/lib REQUIRED)
 if(STREAMVBYTE_LIB)
     add_library(streamvbyte STATIC IMPORTED GLOBAL)
     set_target_properties(streamvbyte PROPERTIES
         IMPORTED_LOCATION ${STREAMVBYTE_LIB}
-        INTERFACE_INCLUDE_DIRECTORIES /opt/homebrew/include)
+        INTERFACE_INCLUDE_DIRECTORIES ${HOMEBREW_PREFIX}/include)
     list(APPEND STARROCKS_LINK_LIBS streamvbyte)
     message(STATUS "streamvbyte found: ${STREAMVBYTE_LIB}")
 else()
@@ -719,12 +699,12 @@ else()
 endif()
 
 # simdjson for fast JSON parsing
-find_library(SIMDJSON_LIB NAMES simdjson PATHS /opt/homebrew/lib REQUIRED)
+find_library(SIMDJSON_LIB NAMES simdjson PATHS ${HOMEBREW_PREFIX}/lib REQUIRED)
 if(SIMDJSON_LIB)
     add_library(simdjson SHARED IMPORTED GLOBAL)
     set_target_properties(simdjson PROPERTIES
         IMPORTED_LOCATION ${SIMDJSON_LIB}
-        INTERFACE_INCLUDE_DIRECTORIES /opt/homebrew/include)
+        INTERFACE_INCLUDE_DIRECTORIES ${HOMEBREW_PREFIX}/include)
     list(APPEND STARROCKS_LINK_LIBS simdjson)
     message(STATUS "simdjson found: ${SIMDJSON_LIB}")
 else()
@@ -738,10 +718,6 @@ set_target_properties(simdutf PROPERTIES
     INTERFACE_INCLUDE_DIRECTORIES ${THIRDPARTY_DIR}/installed/include)
 list(APPEND STARROCKS_LINK_LIBS simdutf)
 message(STATUS "simdutf found (compiled): ${THIRDPARTY_DIR}/installed/lib/libsimdutf.a")
-
-# Poco HTTP session pools are disabled on macOS - use shim instead
-# HTTP session pools are optional for StarRocks BE functionality
-message(STATUS "Poco HTTP session pools disabled on macOS")
 
 # System libraries for macOS - fix libc++ linking, put standard libraries last
 list(APPEND STARROCKS_LINK_LIBS
@@ -785,6 +761,16 @@ include_directories(${BASE_DIR}/build)
 include_directories(${BASE_DIR}/../gensrc/build)
 include_directories(${BASE_DIR}/../gensrc/build/gen_cpp)
 include_directories(${THIRDPARTY_DIR}/installed/include)
+include_directories(${HOMEBREW_PREFIX}/opt/re2/include)
+include_directories(${HOMEBREW_PREFIX}/opt/abseil/include)
+include_directories(${HOMEBREW_PREFIX}/opt/rapidjson/include)
+include_directories(${HOMEBREW_PREFIX}/opt/fast_float/include)
+include_directories(${HOMEBREW_PREFIX}/opt/simdjson/include)
+include_directories(${HOMEBREW_PREFIX}/opt/googletest/include)
+include_directories(${HOMEBREW_PREFIX}/opt/libevent/include)
+include_directories(${HOMEBREW_PREFIX}/opt/apache-arrow/include)
+include_directories(${HOMEBREW_PREFIX}/opt/openssl@3/include)
+include_directories(${HOMEBREW_PREFIX}/opt/gperftools/include)
 include_directories(SYSTEM ${Boost_INCLUDE_DIRS})
 
 # Add source subdirectories - following the same pattern as main CMakeLists.txt
@@ -1050,16 +1036,6 @@ list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/exec/update_config_action\\.cpp$
 list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/cache/.*\\.cpp$")
 list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/http/action/datacache_action\\.cpp$")
 
-# Add compile definitions for macOS compatibility
-add_definitions(-DMACOS_DISABLE_LAKE_STORAGE)
-add_definitions(-DMACOS_DISABLE_POCO_HTTP_SESSION_POOLS)
-add_definitions(-DMACOS_DISABLE_CLOUD_NATIVE)
-add_definitions(-DMACOS_DISABLE_DATA_CACHE_METRICS)
-add_definitions(-DMACOS_DISABLE_FORMAT_CSV)
-add_definitions(-DMACOS_DISABLE_CACHE)
-add_definitions(-DMACOS_DISABLE_STARCACHE)
-add_definitions(-DMACOS_DISABLE_IOPROFILER)
-
 # Exclude connector sink operator which requires full connector implementations
 list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/exec/pipeline/sink/connector_sink_operator\\.cpp$")
 
@@ -1073,6 +1049,7 @@ set(MACOS_SHIM_SOURCES
     "${CMAKE_CURRENT_LIST_DIR}/shims/src/sinks_shim.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/shims/src/connector_shims.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/shims/src/disabled_components_shim.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/shims/src/thrift_uuid_stub.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/shims/src/tracer_shim.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/shims/src/lake_manager_stub.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/shims/src/inverted_index_stub.cpp"
@@ -1148,6 +1125,7 @@ add_dependencies(starrocks_be starrocks_exprs)
 # The rest of starrocks_core is linked normally to avoid pulling in unwanted symbols.
 target_link_libraries(starrocks_be
     -Wl,-force_load,$<TARGET_FILE:starrocks_exprs>
+    starrocks_exprs  # Explicitly add the library target so CMake/ninja tracks the dependency
     starrocks_core
     build_version
     ${STARROCKS_LINK_LIBS}
