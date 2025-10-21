@@ -3390,20 +3390,34 @@ TEST_F(LakeColumnUpsertModeTest, memory_optimization_skip_column_reading) {
         CHECK_OK(reader->prepare());
         CHECK_OK(reader->open(TabletReaderParams()));
 
-        auto result_chunk = ChunkHelper::new_chunk(*_schema, kChunkSize * 2);
-        CHECK_OK(reader->get_next(result_chunk.get()));
-        ASSERT_EQ(result_chunk->num_rows(), kChunkSize * 2);
+        auto chunk = ChunkHelper::new_chunk(*_schema, 128);
+        int total_rows = 0;
+        int new_rows_found = 0;
 
-        // Find and verify new rows (pk 12-23)
-        for (int i = 0; i < kChunkSize * 2; i++) {
-            int pk = result_chunk->get_column_by_index(0)->get(i).get_int32();
-            if (pk >= kChunkSize && pk < kChunkSize * 2) {
-                int c1 = result_chunk->get_column_by_index(1)->get(i).get_int32();
-                int c2 = result_chunk->get_column_by_index(2)->get(i).get_int32();
-                EXPECT_EQ(c1, pk * 5) << "New row c1 should be pk * 5";
-                EXPECT_EQ(c2, 10) << "New row c2 should have default value 10";
+        while (true) {
+            auto st = reader->get_next(chunk.get());
+            if (st.is_end_of_file()) {
+                break;
             }
+            CHECK_OK(st);
+            total_rows += chunk->num_rows();
+
+            // Find and verify new rows (pk 12-23)
+            for (int i = 0; i < chunk->num_rows(); i++) {
+                int pk = chunk->get_column_by_index(0)->get(i).get_int32();
+                if (pk >= kChunkSize && pk < kChunkSize * 2) {
+                    int c1 = chunk->get_column_by_index(1)->get(i).get_int32();
+                    int c2 = chunk->get_column_by_index(2)->get(i).get_int32();
+                    EXPECT_EQ(c1, pk * 5) << "New row c1 should be pk * 5";
+                    EXPECT_EQ(c2, 10) << "New row c2 should have default value 10";
+                    new_rows_found++;
+                }
+            }
+            chunk->reset();
         }
+
+        ASSERT_EQ(total_rows, kChunkSize * 2) << "Should have total 24 rows (12 base + 12 new)";
+        ASSERT_EQ(new_rows_found, kChunkSize) << "Should find 12 new rows with pk 12-23";
     }
 
     // Step 3: Partial update with COLUMN_UPDATE_MODE (baseline for memory comparison)
@@ -3492,27 +3506,43 @@ TEST_F(LakeColumnUpsertModeTest, memory_optimization_skip_column_reading) {
     CHECK_OK(reader->prepare());
     CHECK_OK(reader->open(TabletReaderParams()));
 
-    auto result_chunk = ChunkHelper::new_chunk(*_schema, kChunkSize * 2);
-    CHECK_OK(reader->get_next(result_chunk.get()));
+    auto chunk = ChunkHelper::new_chunk(*_schema, 128);
+    int total_rows = 0;
+    int existing_rows_updated = 0;
+    int new_rows_verified = 0;
 
-    ASSERT_EQ(result_chunk->num_rows(), kChunkSize * 2);
-
-    // Verify existing rows (pk 0-11) were updated to c0 * 9 (from step 4)
-    // and new rows (pk 12-23) still have c1 = pk * 5 and c2 = 10
-    for (int i = 0; i < kChunkSize * 2; i++) {
-        int pk = result_chunk->get_column_by_index(0)->get(i).get_int32();
-        int c1 = result_chunk->get_column_by_index(1)->get(i).get_int32();
-        int c2 = result_chunk->get_column_by_index(2)->get(i).get_int32();
-
-        if (pk < kChunkSize) {
-            // Existing rows: c1 should be updated to pk * 9
-            EXPECT_EQ(c1, pk * 9) << "Existing row c1 should be updated";
-        } else {
-            // New rows: c1 = pk * 5, c2 = 10 (default)
-            EXPECT_EQ(c1, pk * 5) << "New row c1 should be pk * 5";
-            EXPECT_EQ(c2, 10) << "New row c2 should still have default value 10";
+    while (true) {
+        auto st = reader->get_next(chunk.get());
+        if (st.is_end_of_file()) {
+            break;
         }
+        CHECK_OK(st);
+        total_rows += chunk->num_rows();
+
+        // Verify existing rows (pk 0-11) were updated to c0 * 9 (from step 4)
+        // and new rows (pk 12-23) still have c1 = pk * 5 and c2 = 10
+        for (int i = 0; i < chunk->num_rows(); i++) {
+            int pk = chunk->get_column_by_index(0)->get(i).get_int32();
+            int c1 = chunk->get_column_by_index(1)->get(i).get_int32();
+            int c2 = chunk->get_column_by_index(2)->get(i).get_int32();
+
+            if (pk < kChunkSize) {
+                // Existing rows: c1 should be updated to pk * 9
+                EXPECT_EQ(c1, pk * 9) << "Existing row c1 should be updated";
+                existing_rows_updated++;
+            } else {
+                // New rows: c1 = pk * 5, c2 = 10 (default)
+                EXPECT_EQ(c1, pk * 5) << "New row c1 should be pk * 5";
+                EXPECT_EQ(c2, 10) << "New row c2 should still have default value 10";
+                new_rows_verified++;
+            }
+        }
+        chunk->reset();
     }
+
+    ASSERT_EQ(total_rows, kChunkSize * 2) << "Should have total 24 rows";
+    ASSERT_EQ(existing_rows_updated, kChunkSize) << "Should have 12 updated existing rows";
+    ASSERT_EQ(new_rows_verified, kChunkSize) << "Should have 12 new rows";
 
     // Verify DCG was generated for COLUMN_UPSERT_MODE
     ASSIGN_OR_ABORT(auto md, _tablet_mgr->get_tablet_metadata(tablet_id, version));
