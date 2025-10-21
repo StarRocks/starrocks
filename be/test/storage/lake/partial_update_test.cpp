@@ -3385,8 +3385,8 @@ TEST_F(LakeColumnUpsertModeTest, memory_optimization_skip_column_reading) {
 
     // Verify new rows: c2 should have default value 10
     {
-        ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id));
-        ASSIGN_OR_ABORT(auto reader, tablet.new_reader(version, *_schema));
+        ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema);
         CHECK_OK(reader->prepare());
         CHECK_OK(reader->open(TabletReaderParams()));
 
@@ -3487,8 +3487,8 @@ TEST_F(LakeColumnUpsertModeTest, memory_optimization_skip_column_reading) {
     }
 
     // Step 5: Verify functional correctness
-    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id));
-    ASSIGN_OR_ABORT(auto reader, tablet.new_reader(version, *_schema));
+    ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+    auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema);
     CHECK_OK(reader->prepare());
     CHECK_OK(reader->open(TabletReaderParams()));
 
