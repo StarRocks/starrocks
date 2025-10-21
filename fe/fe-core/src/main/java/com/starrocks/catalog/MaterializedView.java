@@ -1136,11 +1136,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     /**
      * Reload the materialized view with original active state.
      * NOTE: This method will not try to activate the materialized view.
-<<<<<<< HEAD
-     * @param postLoadImage: whether this reload is called after FE's image loading process.
-=======
      * @param isReloadAsync whether reload mv asynchronously when it is desired to be active.
->>>>>>> b81e1e9343 ([Enhancement] Optimize MaterializedView onReload performance (#64217))
      */
     public void onReload(boolean isReloadAsync) {
         onReload(isReloadAsync, isActive());
