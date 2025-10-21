@@ -53,12 +53,8 @@ import io.netty.util.ReferenceCountUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-<<<<<<< HEAD
-=======
 import java.net.URI;
-import java.util.concurrent.Executor;
 
->>>>>>> 4b7071534c ([BugFix] Ignore uri params when getAction (#64230))
 public class HttpServerHandler extends ChannelInboundHandlerAdapter {
     private static final Logger LOG = LogManager.getLogger(HttpServerHandler.class);
     // keep connectContext when channel is open
