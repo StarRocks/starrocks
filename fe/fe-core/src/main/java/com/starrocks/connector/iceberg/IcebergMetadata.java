@@ -1161,7 +1161,7 @@ public class IcebergMetadata implements ConnectorMetadata {
                 return statisticProvider.getCardinalityStats(columns, icebergScanTasks);
             }
         } else {
-            return statisticProvider.getTableStatistics(icebergTable, columns, session, predicate, version);
+            return statisticProvider.getTableStatistics(icebergTable, columns, session, params);
         }
     }
 

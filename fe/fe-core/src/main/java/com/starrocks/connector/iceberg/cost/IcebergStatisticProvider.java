@@ -23,7 +23,6 @@ import com.starrocks.connector.PredicateSearchKey;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import org.apache.iceberg.BlobMetadata;
@@ -95,11 +94,11 @@ public class IcebergStatisticProvider {
     public Statistics getTableStatistics(IcebergTable icebergTable,
                                          Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
                                          OptimizerContext session,
-                                         ScalarOperator predicate,
-                                         TvrVersionRange version) {
+                                         GetRemoteFilesParams params) {
         Table nativeTable = icebergTable.getNativeTable();
         Statistics.Builder statisticsBuilder = Statistics.builder();
         String uuid = icebergTable.getUUID();
+        TvrVersionRange version = params.getTableVersionRange();
         if (version.end().isPresent()) {
             Set<Integer> primitiveColumnsFieldIds = nativeTable.schema().columns().stream()
                     .filter(column -> column.type().isPrimitiveType())
@@ -120,12 +119,6 @@ public class IcebergStatisticProvider {
                     colIdToNdvs.putAll(partitionSourceIdToNdv);
                 }
             }
-
-            GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder()
-                    .setTableVersionRange(version)
-                    .setPredicate(predicate)
-                    .setEnableColumnStats(true)
-                    .build();
 
             PredicateSearchKey key = PredicateSearchKey.of(icebergTable.getCatalogDBName(),
                     icebergTable.getCatalogTableName(), params);

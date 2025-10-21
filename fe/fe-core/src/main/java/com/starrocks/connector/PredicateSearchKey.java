@@ -64,6 +64,11 @@ public class PredicateSearchKey {
             return false;
         }
         PredicateSearchKey that = (PredicateSearchKey) o;
+
+        if (getPredicate() == null && that.getPredicate() != null) {
+            return false;
+        }
+
         return Objects.equals(getVersion(), that.getVersion()) &&
                 Objects.equals(databaseName, that.databaseName) &&
                 Objects.equals(tableName, that.tableName) &&
