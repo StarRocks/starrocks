@@ -1092,7 +1092,7 @@ under the License.
             <!-- also parse the proto for FE -->
             <plugin>
                 <artifactId>maven-antrun-plugin</artifactId>
-                <version>1.8</version>
+                <version>3.1.0</version>
                 <executions>
                     <execution>
                         <id>generate-sources</id>
@@ -1167,14 +1167,14 @@ under the License.
                                 <condition property="jacoco.diff.enabled" value="true">
                                     <equals arg1="${env.JACOCO_DIFF_ENABLED}" arg2="true"/>
                                 </condition>
-                                <exec executable="bash" dir="${project.basedir}" if="jacoco.diff.enabled">
+                                <exec executable="bash" dir="${project.basedir}" failonerror="false">
                                     <arg value="scripts/generate-jacoco-includes.sh"/>
                                     <arg value="${jacoco.base.branch}"/>
                                     <arg value="target/jacoco-includes.txt"/>
                                     <arg value="target/jacoco-includes.properties"/>
                                 </exec>
-                                <echo message="JaCoCo incremental coverage disabled, using full coverage" unless="jacoco.diff.enabled"/>
-                                <echo message="jacoco.includes=com/starrocks/**" file="target/jacoco-includes.properties" unless="jacoco.diff.enabled"/>
+                                <echo message="JaCoCo incremental coverage disabled, using full coverage"/>
+                                <echo message="jacoco.includes=com/starrocks/**" file="target/jacoco-includes.properties"/>
                             </target>
                         </configuration>
                     </execution>
