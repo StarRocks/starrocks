@@ -1,0 +1,19 @@
+-- name: test_expr_partition_default_bucket
+CREATE TABLE expr_bucket_t (
+    k1 DATETIME,
+    v1 INT
+)
+PARTITION BY date_trunc('day', k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 3
+PROPERTIES(
+    "replication_num" = "1"
+);
+
+insert into expr_bucket_t values('2020-01-02', 1);
+show partitions from expr_bucket_t;
+
+ALTER TABLE expr_bucket_t DISTRIBUTED BY HASH(k1) DEFAULT BUCKETS 8;
+SHOW CREATE TABLE expr_bucket_t;
+
+insert into expr_bucket_t values('2020-01-01', 1);
+show partitions from expr_bucket_t;
