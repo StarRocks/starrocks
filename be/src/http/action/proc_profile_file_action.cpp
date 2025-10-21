@@ -251,8 +251,9 @@ bool ProcProfileFileAction::convert_pprof_to_flame(const std::string& pprof_file
         std::string stackcollapse_path = config::flamegraph_tool_dir + "/stackcollapse-go.pl";
         std::string flamegraph_path = config::flamegraph_tool_dir + "/flamegraph.pl";
         // Convert pprof to flame format using the command: pprof -raw cpu.pprof | stackcollapse-go.pl | flamegraph.pl > flame.svg
-        std::string pprof_cmd = pprof_path + " -raw '" + temp_pprof + "' 2>/dev/null | " + stackcollapse_path +
-                                " 2>/dev/null | " + flamegraph_path + " > '" + temp_flame + "' 2>/dev/null";
+        std::string pprof_cmd =
+                fmt::format("{} -symbolize=fastlocal -raw '{}' 2>/dev/null | {} 2>/dev/null | {} > '{}' 2>/dev/null",
+                            pprof_path, temp_pprof, stackcollapse_path, flamegraph_path, temp_flame);
 
         LOG(INFO) << "ProcProfileFileAction: Executing pprof conversion command";
         int pprof_result = system(pprof_cmd.c_str());
