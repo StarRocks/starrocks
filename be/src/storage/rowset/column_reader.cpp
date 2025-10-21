@@ -119,6 +119,9 @@ ColumnReader::~ColumnReader() {
                                  _bloom_filter_index_meta->SpaceUsedLong());
         _bloom_filter_index_meta.reset(nullptr);
     }
+    if (_builtin_inverted_index_meta != nullptr) {
+        _builtin_inverted_index_meta.reset(nullptr);
+    }
     MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->column_metadata_mem_tracker(), sizeof(ColumnReader));
 }
 
@@ -201,6 +204,9 @@ Status ColumnReader::_init(ColumnMetaPB* meta, const TabletColumn* column) {
                                          _bloom_filter_index_meta->SpaceUsedLong());
                 _meta_mem_usage.fetch_add(_bloom_filter_index_meta->SpaceUsedLong(), std::memory_order_relaxed);
                 _bloom_filter_index = std::make_unique<BloomFilterIndexReader>();
+                break;
+            case BUILTIN_INVERTED_INDEX:
+                _builtin_inverted_index_meta.reset(index_meta->release_builtin_inverted_index());
                 break;
             case UNKNOWN_INDEX_TYPE:
                 return Status::Corruption(fmt::format("Bad file {}: unknown index type", file_name()));
@@ -523,16 +529,16 @@ Status ColumnReader::_load_bloom_filter_index(const IndexReadOptions& opts) {
 }
 
 Status ColumnReader::new_inverted_index_iterator(const std::shared_ptr<TabletIndex>& index_meta,
-                                                 InvertedIndexIterator** iterator, const SegmentReadOptions& opts) {
-    RETURN_IF_ERROR(_load_inverted_index(index_meta, opts));
-    RETURN_IF_ERROR(_inverted_index->new_iterator(index_meta, iterator));
+                                                 InvertedIndexIterator** iterator, const SegmentReadOptions& opts,
+                                                 const IndexReadOptions& index_opt) {
+    RETURN_IF_ERROR(_load_inverted_index(index_meta, opts, index_opt));
+    RETURN_IF_ERROR(_inverted_index->new_iterator(index_meta, iterator, index_opt));
     return Status::OK();
 }
 
 Status ColumnReader::_load_inverted_index(const std::shared_ptr<TabletIndex>& index_meta,
-                                          const SegmentReadOptions& opts) {
-    if (_inverted_index && index_meta && _inverted_index->get_index_id() == index_meta->index_id() &&
-        _inverted_index_loaded()) {
+                                          const SegmentReadOptions& opts, const IndexReadOptions& index_opt) {
+    if (index_meta == nullptr || _inverted_index_loaded()) {
         return Status::OK();
     }
 
@@ -554,7 +560,10 @@ Status ColumnReader::_load_inverted_index(const std::shared_ptr<TabletIndex>& in
                             ASSIGN_OR_RETURN(auto inverted_plugin, InvertedPluginFactory::get_plugin(imp_type));
                             RETURN_IF_ERROR(inverted_plugin->create_inverted_index_reader(index_path, index_meta, type,
                                                                                           &_inverted_index));
-
+                            RETURN_IF_ERROR(_inverted_index->load(index_opt, _builtin_inverted_index_meta.get()));
+                            if (_builtin_inverted_index_meta != nullptr) {
+                                _builtin_inverted_index_meta.reset();
+                            }
                             return Status::OK();
                         })
             .status();
