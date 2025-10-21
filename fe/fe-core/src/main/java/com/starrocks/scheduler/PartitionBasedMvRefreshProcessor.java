@@ -892,6 +892,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                     mvId, context.ctx.getDatabase()));
         }
         this.mv = (MaterializedView) table;
+        // refresh mv until mv is reloaded.
+        this.mv.waitForReloaded();
         // reinit the logger
         this.logger = MVTraceUtils.getLogger(mv, PartitionBasedMvRefreshProcessor.class);
 
