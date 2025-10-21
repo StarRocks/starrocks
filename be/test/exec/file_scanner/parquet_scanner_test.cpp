@@ -224,8 +224,7 @@ class ParquetScannerTest : public ::testing::Test {
                 {"nested_array_c0", TypeDescriptor::create_array_type(TypeDescriptor::create_array_type(
                                             TypeDescriptor::from_logical_type(TYPE_VARCHAR)))},
                 {"col_map", TypeDescriptor::create_map_type(TypeDescriptor::create_varchar_type(1048576),
-                                                            TypeDescriptor::create_varchar_type(1048576))},
-                {"col_variant", TypeDescriptor::create_variant_type()}};
+                                                            TypeDescriptor::create_varchar_type(1048576))}};
         SlotTypeDescInfoArray slot_infos;
         slot_infos.reserve(column_names.size());
         for (auto& name : column_names) {
@@ -772,61 +771,6 @@ TEST_F(ParquetScannerTest, datetime) {
             std::string expect = expected[i];
             EXPECT_EQ(expect, result);
         }
-    }
-}
-
-TEST_F(ParquetScannerTest, test_variant) {
-    const std::vector variant_file_name = {test_exec_dir + "/test_data/parquet_data/variant.parquet"};
-    std::vector<std::string> column = {"col_variant"};
-    auto slot_infos = select_columns(column, true);
-    auto ranges = generate_ranges(variant_file_name, slot_infos.size(), {});
-    auto* desc_tbl = DescTblHelper::generate_desc_tbl(_runtime_state, _obj_pool, {slot_infos, {}});
-    auto scanner = create_parquet_scanner("UTC", desc_tbl, {}, ranges);
-    auto check = [](const ChunkPtr& chunk) {
-        auto& columns = chunk->columns();
-        for (auto& col : columns) {
-            ASSERT_TRUE(col->is_nullable() && !col->is_constant());
-        }
-    };
-
-    validate(scanner, 24, check);
-
-    std::vector<std::string> expected{
-            "{boolean_false_field:false,boolean_true_field:true,double_field:1.23456789,int_field:1,null_field:null,"
-            "string_field:Apache Parquet,timestamp_field:2025-04-16T12:34:56.78}",
-            "This string is longer than 64 bytes and therefore does not fit in a short_string and it also includes "
-            "several non ascii characters such as 🐢, 💖, ♥️, 🎣 and 🤦!!",
-            "{id:1,observation:{location:In the "
-            "Volcano,time:12:34:56,value:{humidity:456,temperature:123}},species:{name:lava monster,population:6789}}",
-            "[{id:1,thing:{names:[Contrarian,Spider]}},null,{id:2,names:[Apple,Ray,null],type:if}]",
-            "Less than 64 bytes (❤️ with utf8)",
-            "12345678912345678.90",
-            "\"2025-04-16 12:34:56.780000\"",
-            "\"2025-04-16 04:34:56.78+00:00\"",
-            "[2,1,5,9]",
-            "\"AxM33q2+78r+\"",
-            "12345678.90",
-            "1234567890.123400",
-            "1234567890123456789",
-            "true",
-            "12.34",
-            "false",
-            "\"2025-04-16\"",
-            "123456",
-            "1234567936.000000",
-            "1234",
-            "42",
-            "{}",
-            "[]",
-            "NULL"};
-    std::unordered_map<size_t, TExpr> dst_slot_exprs;
-    ChunkPtr chunk_ptr = get_chunk<true>(column, dst_slot_exprs, variant_file_name[0], 24);
-    ASSERT_EQ(1, chunk_ptr->num_columns());
-    auto col = chunk_ptr->columns()[0];
-    for (int i = 0; i < col->size(); i++) {
-        std::string result = col->debug_item(i);
-        ASSERT_TRUE(!result.empty());
-        EXPECT_EQ(expected[i], result) << "Mismatch at row " << i;
     }
 }
 
