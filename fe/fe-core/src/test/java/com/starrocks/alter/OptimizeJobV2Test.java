@@ -598,6 +598,12 @@ public class OptimizeJobV2Test extends DDLTestBase {
     }
 
     private OptimizeJobV2 spyPreviousTxnFinished(OptimizeJobV2 job) throws AnalysisException {
+        // Detach the job from schema change handler to prevent the background scheduler
+        // from mutating its state in parallel with the UT driven state machine, which
+        // occasionally drops temp partitions and leads to flaky failures.
+        SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        schemaChangeHandler.getAlterJobsV2().remove(job.getJobId());
+
         OptimizeJobV2 spy = Mockito.spy(job);
         Mockito.doReturn(true).when(spy).isPreviousLoadFinished();
         return spy;
