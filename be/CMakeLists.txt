@@ -79,6 +79,7 @@ endif()
 message(STATUS "make test: ${MAKE_TEST}")
 
 option(WITH_GCOV "Build binary with gcov to get code coverage" OFF)
+option(WITH_GCOV_INCREMENTAL "Build binary with gcov only for changed files" OFF)
 
 option(WITH_COMPRESS "Build binary with compresss debug section" ON)
 
@@ -742,6 +743,43 @@ if (WITH_GCOV)
     set(CXX_GCC_FLAGS "${CXX_GCC_FLAGS} -fprofile-arcs -ftest-coverage")
 endif()
 
+# Handle incremental gcov
+if (WITH_GCOV_INCREMENTAL)
+    message(STATUS "Incremental gcov enabled")
+    if (GCOV_INCREMENTAL_FILES)
+        # Split the semicolon-separated list of files
+        string(REPLACE ";" " " GCOV_FILES_LIST "${GCOV_INCREMENTAL_FILES}")
+        message(STATUS "Files for incremental coverage: ${GCOV_FILES_LIST}")
+        
+        # Check if debug file exists and log its location
+        set(GCOV_DEBUG_FILE "${CMAKE_SOURCE_DIR}/.gcov_incremental_debug.txt")
+        if (EXISTS "${GCOV_DEBUG_FILE}")
+            message(STATUS "GCOV debug file available at: ${GCOV_DEBUG_FILE}")
+        endif()
+        
+        # Apply coverage flags to specific files
+        set(INSTRUMENTED_COUNT 0)
+        foreach(file IN LISTS GCOV_FILES_LIST)
+            if (file)
+                # Convert relative path to absolute path
+                set(ABSOLUTE_FILE "${CMAKE_CURRENT_SOURCE_DIR}/src/${file}")
+                if (EXISTS "${ABSOLUTE_FILE}")
+                    set_source_files_properties("${ABSOLUTE_FILE}" PROPERTIES 
+                        COMPILE_FLAGS "-fprofile-arcs -ftest-coverage")
+                    message(STATUS "Added coverage flags to: ${file}")
+                    math(EXPR INSTRUMENTED_COUNT "${INSTRUMENTED_COUNT} + 1")
+                else()
+                    message(WARNING "File not found for incremental coverage: ${ABSOLUTE_FILE}")
+                endif()
+            endif()
+        endforeach()
+        message(STATUS "Total files instrumented for incremental coverage: ${INSTRUMENTED_COUNT}")
+    else()
+        message(WARNING "Incremental gcov enabled but no files specified, falling back to full coverage")
+        set(CXX_GCC_FLAGS "${CXX_GCC_FLAGS} -fprofile-arcs -ftest-coverage")
+    endif()
+endif()
+
 if (WITH_COMPRESS)
     # to compresss debug section. https://gcc.gnu.org/onlinedocs/gcc/Debugging-Options.html
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -gz=zlib")
@@ -1068,8 +1106,8 @@ set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS}
     ${WL_LINK_DYNAMIC} -lresolv -liberty -lc -lm -ldl -rdynamic -pthread -Wl,-wrap,__cxa_throw -Wl,-wrap,__floattidf
 )
 
-# link gcov if WITH_GCOV is on
-if (WITH_GCOV)
+# link gcov if WITH_GCOV or WITH_GCOV_INCREMENTAL is on
+if (WITH_GCOV OR WITH_GCOV_INCREMENTAL)
     set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} --coverage)
 endif()
 

@@ -111,3 +111,6 @@ build-mac/CMakeFiles/
 build-mac/build.ninja
 build-mac/build_version.cc
 build-mac/cmake_install.cmake
+
+# GCOV incremental coverage debug files
+.gcov_incremental_debug.txt

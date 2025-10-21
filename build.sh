@@ -89,6 +89,8 @@ Usage: $0 <options>
                         build Backend with shared-data feature support
      --use-staros       DEPRECATED, an alias of --enable-shared-data option
      --with-gcov        build Backend with gcov, has an impact on performance
+     --with-gcov-incremental
+                        build Backend with gcov only for changed files (faster than full gcov)
      --without-gcov     build Backend without gcov(default)
      --with-bench       build Backend with bench(default without bench)
      --with-clang-tidy  build Backend with clang-tidy(default without clang-tidy)
@@ -121,6 +123,7 @@ Usage: $0 <options>
     $0 --spark-dpp                               build Spark DPP application alone
     $0 --hive-udf                                build Hive UDF
     $0 --be --output PATH                        build Backend that outputs results to a specified path (relative paths are supported).
+    $0 --be --with-gcov-incremental              build Backend with incremental coverage (faster than full gcov)
     BUILD_TYPE=build_type ./build.sh --be        build Backend is different mode (build_type could be Release, Debug, or Asan. Default value is Release. To build Backend in Debug mode, you can execute: BUILD_TYPE=Debug ./build.sh --be)
     DISABLE_JAVA_CHECK_STYLE=ON ./build.sh       build with Java checkstyle disabled
   "
@@ -137,6 +140,7 @@ OPTS=$(getopt \
   -l 'hive-udf' \
   -l 'clean' \
   -l 'with-gcov' \
+  -l 'with-gcov-incremental' \
   -l 'with-bench' \
   -l 'with-clang-tidy' \
   -l 'without-gcov' \
@@ -169,6 +173,7 @@ BUILD_SPARK_DPP=
 BUILD_HIVE_UDF=
 CLEAN=
 WITH_GCOV=OFF
+WITH_GCOV_INCREMENTAL=ON
 WITH_BENCH=OFF
 WITH_CLANG_TIDY=OFF
 WITH_COMPRESS=ON
@@ -275,6 +280,7 @@ else
             --hive-udf) BUILD_HIVE_UDF=1 ; shift ;;
             --clean) CLEAN=1 ; shift ;;
             --with-gcov) WITH_GCOV=ON; shift ;;
+            --with-gcov-incremental) WITH_GCOV_INCREMENTAL=ON; shift ;;
             --without-gcov) WITH_GCOV=OFF; shift ;;
             --enable-shared-data|--use-staros) USE_STAROS=ON; shift ;;
             --with-bench) WITH_BENCH=ON; shift ;;
@@ -298,14 +304,84 @@ else
     done
 fi
 
-if [[ "${BUILD_TYPE}" == "ASAN" && "${WITH_GCOV}" == "ON" ]]; then
+if [[ "${BUILD_TYPE}" == "ASAN" && ("${WITH_GCOV}" == "ON" || "${WITH_GCOV_INCREMENTAL}" == "ON") ]]; then
     echo "Error: ASAN and gcov cannot be enabled at the same time. Please disable one of them."
+    exit 1
+fi
+
+if [[ "${WITH_GCOV}" == "ON" && "${WITH_GCOV_INCREMENTAL}" == "ON" ]]; then
+    echo "Error: --with-gcov and --with-gcov-incremental cannot be used together. Please use only one."
     exit 1
 fi
 
 if [[ ${HELP} -eq 1 ]]; then
     usage
     exit
+fi
+
+# Handle incremental gcov: detect changed files
+GCOV_INCREMENTAL_FILES=""
+if [[ "${WITH_GCOV_INCREMENTAL}" == "ON" ]]; then
+    echo "Detecting changed files for incremental coverage..."
+    
+    # Check if we're in a git repository
+    if ! git rev-parse --git-dir > /dev/null 2>&1; then
+        echo "Warning: Not in a git repository, falling back to full coverage"
+        WITH_GCOV=ON
+        WITH_GCOV_INCREMENTAL=OFF
+    else
+        # Try to find base branch for comparison
+        BASE_BRANCH=""
+        if git show-ref --verify --quiet refs/heads/main; then
+            BASE_BRANCH="main"
+        else
+            BASE_BRANCH="HEAD~1"
+        fi
+        
+        echo "Using base branch: $BASE_BRANCH"
+        
+        # Get changed C++ files in be/ directory
+        CHANGED_FILES=$(git diff --name-only $BASE_BRANCH...HEAD 2>/dev/null | grep -E '^be/.*\.(cpp|cc|h|hpp)$' || true)
+        
+        if [[ -z "$CHANGED_FILES" ]]; then
+            echo "No changed C++ files detected, falling back to full coverage"
+            WITH_GCOV=ON
+            WITH_GCOV_INCREMENTAL=OFF
+        else
+            # Count changed files
+            FILE_COUNT=$(echo "$CHANGED_FILES" | wc -l)
+            echo "Found $FILE_COUNT changed C++ files"
+            
+            # If too many files changed, fall back to full coverage
+            if [[ $FILE_COUNT -gt 1000 ]]; then
+                echo "Too many files changed ($FILE_COUNT), falling back to full coverage"
+                WITH_GCOV=ON
+                WITH_GCOV_INCREMENTAL=OFF
+            else
+                # Convert to CMake-friendly format (relative to be/ directory)
+                GCOV_INCREMENTAL_FILES=$(echo "$CHANGED_FILES" | sed 's|^be/||' | tr '\n' ';')
+                echo "Incremental coverage will instrument $FILE_COUNT files"
+                echo "Changed files: $(echo "$CHANGED_FILES" | tr '\n' ' ')"
+                
+                # Write debug information to file
+                GCOV_DEBUG_FILE="${STARROCKS_HOME}/.gcov_incremental_debug.txt"
+                cat > "$GCOV_DEBUG_FILE" << EOF
+# GCOV Incremental Coverage Debug Information
+# Generated on: $(date)
+# Base branch: $BASE_BRANCH
+# Git command: git diff --name-only $BASE_BRANCH...HEAD
+# File count: $FILE_COUNT
+
+# Changed C++ files (relative to be/ directory):
+$(echo "$CHANGED_FILES" | sed 's|^be/||')
+
+# CMake format (semicolon-separated):
+$GCOV_INCREMENTAL_FILES
+EOF
+                echo "Debug information written to: $GCOV_DEBUG_FILE"
+            fi
+        fi
+    fi
 fi
 
 if [ ${CLEAN} -eq 1 ] && [ ${BUILD_BE} -eq 0 ] && [ ${BUILD_FORMAT_LIB} -eq 0 ] && [ ${BUILD_FE} -eq 0 ] && [ ${BUILD_SPARK_DPP} -eq 0 ] && [ ${BUILD_HIVE_UDF} -eq 0 ]; then
@@ -331,6 +407,7 @@ echo "Get params:
     CCACHE                      -- ${CCACHE}
     CLEAN                       -- $CLEAN
     WITH_GCOV                   -- $WITH_GCOV
+    WITH_GCOV_INCREMENTAL       -- $WITH_GCOV_INCREMENTAL
     WITH_BENCH                  -- $WITH_BENCH
     WITH_CLANG_TIDY             -- $WITH_CLANG_TIDY
     WITH_COMPRESS_DEBUG_SYMBOL  -- $WITH_COMPRESS
@@ -461,6 +538,8 @@ if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
                   -DCMAKE_CXX_COMPILER_LAUNCHER=${CXX_COMPILER_LAUNCHER} \
                   -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}                \
                   -DMAKE_TEST=OFF -DWITH_GCOV=${WITH_GCOV}              \
+                  -DWITH_GCOV_INCREMENTAL=${WITH_GCOV_INCREMENTAL}      \
+                  -DGCOV_INCREMENTAL_FILES="${GCOV_INCREMENTAL_FILES}"  \
                   -DUSE_AVX2=$USE_AVX2 -DUSE_AVX512=$USE_AVX512         \
                   -DUSE_SSE4_2=$USE_SSE4_2 -DUSE_BMI_2=$USE_BMI_2       \
                   -DENABLE_QUERY_DEBUG_TRACE=$ENABLE_QUERY_DEBUG_TRACE  \
