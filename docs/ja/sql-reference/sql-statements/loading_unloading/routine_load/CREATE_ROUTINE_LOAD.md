@@ -10,16 +10,6 @@ import WarehouseProperty from '../../../../_assets/sql-reference/sql-statements/
 
 <Tip />
 
-<<<<<<< HEAD
-Routine Load は Apache Kafka® からメッセージを継続的に消費し、StarRocks にデータをロードできます。Routine Load は Kafka クラスターから CSV、JSON、Avro (v3.0.1 以降でサポート) データを消費し、`plaintext`、`ssl`、`sasl_plaintext`、`sasl_ssl` などの複数のセキュリティプロトコルを介して Kafka にアクセスできます。
-
-このトピックでは、CREATE ROUTINE LOAD ステートメントの構文、パラメーター、および例について説明します。
-
-> **NOTE**
->
-> - Routine Load のアプリケーションシナリオ、原則、および基本操作については、[Load data using Routine Load](../../../../loading/Loading_intro.md) を参照してください。
-> - StarRocks テーブルにデータをロードするには、StarRocks テーブルに対して INSERT 権限を持つユーザーとしてのみ可能です。INSERT 権限がない場合は、[GRANT](../../account-management/GRANT.md) に従って、使用する StarRocks クラスターに接続するユーザーに INSERT 権限を付与してください。
-=======
 Routine Load は Apache Kafka® からメッセージを継続的に消費し、StarRocks にデータをロードできます。Routine Load は Kafka クラスターから CSV、JSON、Avro（v3.0.1 以降でサポート）データを消費し、`plaintext`、`ssl`、`sasl_plaintext`、`sasl_ssl` などの複数のセキュリティプロトコルを介して Kafka にアクセスできます。
 
 このトピックでは、CREATE ROUTINE LOAD ステートメントの構文、パラメーター、および例について説明します。
@@ -28,7 +18,6 @@ Routine Load は Apache Kafka® からメッセージを継続的に消費し、
 - Routine Load の適用シナリオ、原則、および基本操作については、 [Load data using Routine Load](../../../../loading/Loading_intro.md) を参照してください。
 - StarRocks テーブルにデータをロードするには、その StarRocks テーブルに対して INSERT 権限を持つユーザーとしてのみ可能です。INSERT 権限を持っていない場合は、 [GRANT](../../account-management/GRANT.md) の指示に従って、StarRocks クラスターに接続するために使用するユーザーに INSERT 権限を付与してください。
 :::
->>>>>>> acc48c26a0 ([Doc] remove tables (#64275))
 
 ## 構文
 
@@ -50,11 +39,7 @@ FROM data_source
 
 `job_name`
 
-<<<<<<< HEAD
-必須。Routine Load ジョブの名前。テーブルは複数の Routine Load ジョブからデータを受け取ることができます。識別可能な情報、例えば Kafka トピック名やおおよそのジョブ作成時間を使用して、意味のある Routine Load ジョブ名を設定することをお勧めします。同じデータベース内で Routine Load ジョブの名前は一意でなければなりません。
-=======
 必須。Routine Load ジョブの名前。1 つのテーブルは複数の Routine Load ジョブからデータを受け取ることができます。識別可能な情報（例: Kafka トピック名やジョブ作成時刻）を使用して、意味のある Routine Load ジョブ名を設定することをお勧めします。Routine Load ジョブの名前は同じデータベース内で一意である必要があります。
->>>>>>> acc48c26a0 ([Doc] remove tables (#64275))
 
 `table_name`
 
@@ -75,15 +60,6 @@ FROM data_source
 
 `COLUMNS TERMINATED BY`
 
-<<<<<<< HEAD
-CSV 形式データのカラム区切り文字。デフォルトのカラム区切り文字は `\t` (タブ) です。例えば、カラム区切り文字をカンマに指定するには `COLUMNS TERMINATED BY ","` を使用します。
-
-> **Note**
->
-> - ここで指定したカラム区切り文字が、取り込むデータのカラム区切り文字と同じであることを確認してください。
-> - カンマ (,) やタブ、パイプ (|) などの UTF-8 文字列をテキストデリミタとして使用できますが、その長さは 50 バイトを超えてはいけません。
-> - Null 値は `\N` を使用して示されます。例えば、データレコードが 3 つのカラムで構成され、データレコードが最初と 3 番目のカラムにデータを保持し、2 番目のカラムにデータを保持しない場合、この状況では 2 番目のカラムに `\N` を使用して Null 値を示す必要があります。これは、レコードを `a,\N,b` としてコンパイルする必要があり、`a,,b` ではないことを意味します。`a,,b` は、レコードの 2 番目のカラムが空の文字列を保持していることを示します。
-=======
 CSV 形式データのカラム区切り文字。デフォルトのカラム区切り文字は `\t`（タブ）です。例えば、カラム区切り文字をカンマに指定するには `COLUMNS TERMINATED BY ","` を使用します。
 
 :::tip
@@ -91,7 +67,6 @@ CSV 形式データのカラム区切り文字。デフォルトのカラム区�
 - UTF-8 文字列（カンマ（,）、タブ、パイプ（|）など）をテキストデリミタとして使用できますが、長さは 50 バイトを超えないようにしてください。
 - Null 値は `\N` を使用して示されます。例えば、データレコードが 3 つのカラムで構成されており、データレコードが最初と 3 番目のカラムにデータを保持しているが、2 番目のカラムにはデータを保持していない場合、この状況では 2 番目のカラムに `\N` を使用して Null 値を示す必要があります。つまり、レコードは `a,\N,b` としてコンパイルされる必要があり、`a,,b` ではありません。`a,,b` はレコードの 2 番目のカラムが空の文字列を保持していることを示します。
 :::
->>>>>>> acc48c26a0 ([Doc] remove tables (#64275))
 
 `ROWS TERMINATED BY`
 
@@ -101,27 +76,13 @@ CSV 形式データの行区切り文字。デフォルトの行区切り文字�
 
 ソースデータのカラムと StarRocks テーブルのカラム間のマッピング。詳細については、このトピックの [Column mapping](#column-mapping) を参照してください。
 
-<<<<<<< HEAD
-- `column_name`: ソースデータのカラムが StarRocks テーブルのカラムに計算なしでマッピングできる場合、カラム名を指定するだけで済みます。これらのカラムはマッピングされたカラムと呼ばれます。
-- `column_assignment`: ソースデータのカラムが StarRocks テーブルのカラムに直接マッピングできず、データロード前に関数を使用してカラムの値を計算する必要がある場合、`expr` に計算関数を指定する必要があります。これらのカラムは派生カラムと呼ばれます。StarRocks は最初にマッピングされたカラムを解析するため、派生カラムはマッピングされたカラムの後に配置することをお勧めします。
-=======
 - `column_name`: ソースデータのカラムが計算なしで StarRocks テーブルのカラムにマッピングできる場合、カラム名を指定するだけで済みます。これらのカラムはマップされたカラムと呼ばれます。
 - `column_assignment`: ソースデータのカラムが直接 StarRocks テーブルのカラムにマッピングできない場合、データロード前に関数を使用してカラムの値を計算する必要があります。この場合、`expr` に計算関数を指定する必要があります。これらのカラムは派生カラムと呼ばれます。StarRocks は最初にマップされたカラムを解析するため、派生カラムはマップされたカラムの後に配置することをお勧めします。
->>>>>>> acc48c26a0 ([Doc] remove tables (#64275))
 
 `WHERE`
 
 フィルター条件。フィルター条件を満たすデータのみが StarRocks にロードされます。例えば、`col1` の値が `100` より大きく、`col2` の値が `1000` と等しい行のみを取り込みたい場合、`WHERE col1 > 100 and col2 = 1000` を使用できます。
 
-<<<<<<< HEAD
-> **NOTE**
->
-> フィルター条件で指定されたカラムは、ソースカラムまたは派生カラムであることができます。
-
-`PARTITION`
-
-StarRocks テーブルがパーティション p0, p1, p2, p3 に分散されており、StarRocks で p1, p2, p3 にのみデータをロードし、p0 に保存されるデータをフィルタリングしたい場合、フィルター条件として `PARTITION(p1, p2, p3)` を指定できます。デフォルトでは、このパラメーターを指定しない場合、データはすべてのパーティションにロードされます。例:
-=======
 :::note
 フィルター条件で指定されたカラムは、ソースカラムまたは派生カラムであることができます。
 :::
@@ -129,7 +90,6 @@ StarRocks テーブルがパーティション p0, p1, p2, p3 に分散されて
 `PARTITION`
 
 StarRocks テーブルがパーティション p0、p1、p2、p3 に分散されており、StarRocks にデータをロードする際に p1、p2、p3 のみにデータをロードし、p0 に保存されるデータをフィルタリングしたい場合、フィルター条件として `PARTITION(p1, p2, p3)` を指定できます。デフォルトでは、このパラメーターを指定しない場合、データはすべてのパーティションにロードされます。例:
->>>>>>> acc48c26a0 ([Doc] remove tables (#64275))
 
 ```SQL
 PARTITION (p1, p2, p3)
@@ -137,11 +97,7 @@ PARTITION (p1, p2, p3)
 
 `TEMPORARY PARTITION`
 
-<<<<<<< HEAD
-データをロードしたい [temporary partition](../../../../table_design/data_distribution/Temporary_partition.md) の名前。複数の一時パーティションを指定する場合、カンマ (,) で区切る必要があります。
-=======
 データをロードしたい [temporary partition](../../../../table_design/data_distribution/Temporary_partition.md) の名前。複数の一時パーティションを指定することができ、カンマ（,）で区切る必要があります。
->>>>>>> acc48c26a0 ([Doc] remove tables (#64275))
 
 ### `job_properties`
 
@@ -152,32 +108,7 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 ```
 <WarehouseProperty />
 
-<<<<<<< HEAD
-| **Property**              | **Required** | **Description**                                              |
-| ------------------------- | ------------ | ------------------------------------------------------------ |
-| desired_concurrent_number | No           | 単一の Routine Load ジョブの期待されるタスク並行性。デフォルト値: `3`。実際のタスク並行性は、複数のパラメーターの最小値によって決まります: `min(alive_be_number, partition_number, desired_concurrent_number, max_routine_load_task_concurrent_num)`。 <ul><li>`alive_be_number`: 生存している BE ノードの数。</li><li>`partition_number`: 消費されるパーティションの数。</li><li>`desired_concurrent_number`: 単一の Routine Load ジョブの期待されるタスク並行性。デフォルト値: `3`。</li><li>`max_routine_load_task_concurrent_num`: Routine Load ジョブのデフォルトの最大タスク並行性で、`5` です。[FE dynamic parameter](../../../../administration/management/FE_configuration.md#configure-fe-dynamic-parameters) を参照してください。</li></ul>最大の実際のタスク並行性は、生存している BE ノードの数または消費されるパーティションの数によって決まります。|
-| max_batch_interval        | No           | タスクのスケジューリング間隔、つまりタスクが実行される頻度。単位: 秒。値の範囲: `5` ~ `60`。デフォルト値: `10`。`10` より大きい値を設定することをお勧めします。スケジューリングが 10 秒未満の場合、ロード頻度が高すぎるために多くのタブレットバージョンが生成されます。 |
-| max_batch_rows            | No           | このプロパティは、エラーデータ検出ウィンドウを定義するためにのみ使用されます。ウィンドウは、単一の Routine Load タスクによって消費されるデータ行数です。値は `10 * max_batch_rows` です。デフォルト値は `10 * 200000 = 2000000` です。Routine Load タスクは、エラーデータ検出ウィンドウ内でエラーデータを検出します。エラーデータとは、StarRocks が解析できないデータを指します。例えば、無効な JSON 形式のデータです。 |
-| max_error_number          | No           | エラーデータ検出ウィンドウ内で許容されるエラーデータ行の最大数。この値を超えると、ロードジョブは一時停止します。[SHOW ROUTINE LOAD](SHOW_ROUTINE_LOAD.md) を実行し、`ErrorLogUrls` を使用してエラーログを表示できます。その後、エラーログに従って Kafka のエラーを修正できます。デフォルト値は `0` で、エラーデータ行は許可されません。 <br />**NOTE** <br /> <ul><li>エラーデータ行が多すぎる場合、ロードジョブが一時停止する前に最後のタスクバッチは **成功** します。つまり、適格なデータはロードされ、不適格なデータはフィルタリングされます。あまりにも多くの不適格なデータ行をフィルタリングしたくない場合は、パラメーター `max_filter_ratio` を設定してください。 </li><li>エラーデータ行には、WHERE 句によってフィルタリングされたデータ行は含まれません。</li><li>このパラメーターは、次のパラメーター `max_filter_ratio` と共に、エラーデータレコードの最大数を制御します。`max_filter_ratio` が設定されていない場合、このパラメーターの値が有効になります。`max_filter_ratio` が設定されている場合、エラーデータレコードの数がこのパラメーターまたは `max_filter_ratio` パラメーターで設定されたしきい値に達すると、ロードジョブは一時停止します。</li></ul>|
-|max_filter_ratio|No|ロードジョブの最大エラー許容度。エラー許容度は、ロードジョブによって要求されたすべてのデータレコードの中で、不適格なデータ品質のためにフィルタリングされるデータレコードの最大割合です。有効な値: `0` から `1`。デフォルト値: `1` (実際には効果を発揮しません)。<br/>`0` に設定することをお勧めします。これにより、不適格なデータレコードが検出された場合、ロードジョブが一時停止し、データの正確性が保証されます。<br/>不適格なデータレコードを無視したい場合は、このパラメーターを `0` より大きい値に設定できます。これにより、データファイルに不適格なデータレコードが含まれていても、ロードジョブは成功します。  <br/>**NOTE**<br/><ul><li>エラーデータ行が `max_filter_ratio` を超える場合、最後のタスクバッチは **失敗** します。これは、`max_error_number` の効果とは少し **異なります**。</li><li>不適格なデータレコードには、WHERE 句によってフィルタリングされたデータレコードは含まれません。</li><li>このパラメーターは、前のパラメーター `max_error_number` と共に、エラーデータレコードの最大数を制御します。このパラメーターが設定されていない場合 (`max_filter_ratio = 1` と同じように動作します)、`max_error_number` パラメーターの値が有効になります。このパラメーターが設定されている場合、エラーデータレコードの数がこのパラメーターまたは `max_error_number` パラメーターで設定されたしきい値に達すると、ロードジョブは一時停止します。</li></ul>|
-| strict_mode               | No           | [strict mode](../../../../loading/load_concept/strict_mode.md) を有効にするかどうかを指定します。有効な値: `true` と `false`。デフォルト値: `false`。strict mode が有効な場合、ロードされたデータのカラムの値が `NULL` であり、ターゲットテーブルがそのカラムに `NULL` 値を許可しない場合、データ行はフィルタリングされます。 |
-| log_rejected_record_num | No | ログに記録できる不適格なデータ行の最大数を指定します。このパラメータは v3.1 以降でサポートされています。有効な値: `0`、`-1`、および任意の非ゼロの正の整数。デフォルト値: `0`。<ul><li>値 `0` は、フィルタリングされたデータ行がログに記録されないことを指定します。</li><li>値 `-1` は、フィルタリングされたすべてのデータ行がログに記録されることを指定します。</li><li>`n` などの非ゼロの正の整数は、各 BE でフィルタリングされた最大 `n` 行のデータ行がログに記録されることを指定します。</li></ul>ロード ジョブでフィルタリングされて除外されたすべての未承認のデータ行にアクセスするには、`information_schema.loads` ビューに対するクエリから返される `REJECTED_RECORD_PATH` フィールドに指定されたパスに移動してください。 |
-| timezone                  | No           | ロードジョブで使用されるタイムゾーン。デフォルト値: `Asia/Shanghai`。このパラメーターの値は、strftime()、alignment_timestamp()、from_unixtime() などの関数によって返される結果に影響します。このパラメーターで指定されたタイムゾーンはセッションレベルのタイムゾーンです。詳細については、[Configure a time zone](../../../../administration/management/timezone.md) を参照してください。 |
-| partial_update | No | 部分更新を使用するかどうか。 有効な値: `TRUE` と `FALSE`。 デフォルト値: `FALSE`、この機能を無効にすることを示します。 |
-| merge_condition           | No           | データを更新するかどうかを判断する条件として使用するカラムの名前を指定します。このカラムにロードされるデータの値がこのカラムの現在の値以上の場合にのみデータが更新されます。 **NOTE**<br />条件付き更新をサポートするのは主キーテーブルのみです。指定するカラムは主キーのカラムであってはなりません。 |
-| format                    | No           | ロードされるデータの形式。有効な値: `CSV`、`JSON`、および `Avro` (v3.0.1 以降でサポート)。デフォルト値: `CSV`。 |
-| trim_space                | No           | データファイルが CSV 形式の場合、カラム区切り文字の前後のスペースを削除するかどうかを指定します。タイプ: BOOLEAN。デフォルト値: `false`。<br />一部のデータベースでは、データを CSV 形式のデータファイルとしてエクスポートする際にカラム区切り文字にスペースが追加されます。これらのスペースは、位置に応じて先行スペースまたは後続スペースと呼ばれます。`trim_space` パラメーターを設定することで、StarRocks がデータロード中にこれらの不要なスペースを削除できるようにします。<br />StarRocks は、`enclose` で指定された文字で囲まれたフィールド内のスペース (先行スペースと後続スペースを含む) を削除しないことに注意してください。例えば、次のフィールド値はパイプ (<code class="language-text">&#124;</code>) をカラム区切り文字として使用し、二重引用符 (`"`) を `enclose` で指定された文字として使用しています: <code class="language-text">&#124; "Love StarRocks" &#124;</code>。`trim_space` を `true` に設定すると、StarRocks は前述のフィールド値を <code class="language-text">&#124;"Love StarRocks"&#124;</code> として処理します。 |
-| enclose                   | No           | データファイルが CSV 形式の場合、[RFC4180](https://www.rfc-editor.org/rfc/rfc4180) に従ってフィールド値を囲むために使用される文字を指定します。タイプ: 単一バイト文字。デフォルト値: `NONE`。最も一般的な文字は単一引用符 (`'`) と二重引用符 (`"`) です。<br />`enclose` で指定された文字で囲まれたすべての特殊文字 (行区切り文字やカラム区切り文字を含む) は通常の記号と見なされます。StarRocks は、`enclose` で指定された文字として任意の単一バイト文字を指定できるため、RFC4180 よりも多くのことができます。<br />フィールド値に `enclose` で指定された文字が含まれている場合、同じ文字を使用してその `enclose` で指定された文字をエスケープできます。例えば、`enclose` を `"` に設定し、フィールド値が `a "quoted" c` の場合、このフィールド値をデータファイルに `"a ""quoted"" c"` として入力できます。 |
-| escape                    | No           | 行区切り文字、カラム区切り文字、エスケープ文字、`enclose` で指定された文字などのさまざまな特殊文字をエスケープするために使用される文字を指定します。これらは通常の文字と見なされ、存在するフィールド値の一部として解析されます。タイプ: 単一バイト文字。デフォルト値: `NONE`。最も一般的な文字はスラッシュ (`\`) で、SQL ステートメントではダブルスラッシュ (`\\`) として記述する必要があります。<br />**NOTE**<br />`escape` で指定された文字は、各ペアの `enclose` で指定された文字の内側と外側の両方に適用されます。<br />以下の 2 つの例を示します:<br /><ul><li>`enclose` を `"` に設定し、`escape` を `\` に設定すると、StarRocks は `"say \"Hello world\""` を `say "Hello world"` に解析します。</li><li>カラム区切り文字がカンマ (`,`) の場合、`escape` を `\` に設定すると、StarRocks は `a, b\, c` を 2 つの別々のフィールド値に解析します: `a` と `b, c`。</li></ul> |
-| strip_outer_array         | No           | JSON 形式のデータの最外部の配列構造を削除するかどうかを指定します。有効な値: `true` と `false`。デフォルト値: `false`。実際のビジネスシナリオでは、JSON 形式のデータには `[]` で示される最外部の配列構造がある場合があります。この状況では、このパラメーターを `true` に設定することをお勧めします。これにより、StarRocks は最外部の角括弧 `[]` を削除し、各内部配列を個別のデータレコードとしてロードします。このパラメーターを `false` に設定すると、StarRocks は JSON 形式のデータ全体を 1 つの配列として解析し、その配列を単一のデータレコードとしてロードします。JSON 形式のデータ `[{"category" : 1, "author" : 2}, {"category" : 3, "author" : 4} ]` を例にとります。このパラメーターを `true` に設定すると、`{"category" : 1, "author" : 2}` と `{"category" : 3, "author" : 4}` は 2 つの別々のデータレコードとして解析され、2 つの StarRocks データ行にロードされます。 |
-| jsonpaths                 | No           | JSON 形式のデータからロードしたいフィールドの名前。このパラメーターの値は有効な JsonPath 式です。詳細については、[StarRocks table contains derived columns whose values are generated by using expressions](#starrocks-table-contains-derived-columns-whose-values-are-generated-by-using-expressions) を参照してください。 |
-| json_root                 | No           | ロードする JSON 形式のデータのルート要素。StarRocks は `json_root` を通じてルートノードの要素を抽出して解析します。デフォルトでは、このパラメーターの値は空で、すべての JSON 形式のデータがロードされることを示します。詳細については、[Specify the root element of the JSON-formatted data to be loaded](#specify-the-root-element-of-the-json-formatted-data-to-be-loaded) を参照してください。 |
-| task_consume_second | No | 指定された Routine Load ジョブ内の各 Routine Load タスクがデータを消費する最大時間。単位: 秒。[FE dynamic parameters](../../../../administration/management/FE_configuration.md) `routine_load_task_consume_second` (クラスター内のすべての Routine Load ジョブに適用される) とは異なり、このパラメーターは個々の Routine Load ジョブに特有であり、より柔軟です。このパラメーターは v3.1.0 以降でサポートされています。<ul> <li>`task_consume_second` と `task_timeout_second` が設定されていない場合、StarRocks は FE dynamic parameters `routine_load_task_consume_second` と `routine_load_task_timeout_second` を使用してロード動作を制御します。</li> <li>`task_consume_second` のみが設定されている場合、`task_timeout_second` のデフォルト値は `task_consume_second` * 4 として計算されます。</li> <li>`task_timeout_second` のみが設定されている場合、`task_consume_second` のデフォルト値は `task_timeout_second`/4 として計算されます。</li> </ul> |
-|task_timeout_second|No|指定された Routine Load ジョブ内の各 Routine Load タスクのタイムアウト期間。単位: 秒。[FE dynamic parameter](../../../../administration/management/FE_configuration.md) `routine_load_task_timeout_second` (クラスター内のすべての Routine Load ジョブに適用される) とは異なり、このパラメーターは個々の Routine Load ジョブに特有であり、より柔軟です。このパラメーターは v3.1.0 以降でサポートされています。 <ul> <li>`task_consume_second` と `task_timeout_second` が設定されていない場合、StarRocks は FE dynamic parameters `routine_load_task_consume_second` と `routine_load_task_timeout_second` を使用してロード動作を制御します。</li> <li>`task_timeout_second` のみが設定されている場合、`task_consume_second` のデフォルト値は `task_timeout_second`/4 として計算されます。</li> <li>`task_consume_second` のみが設定されている場合、`task_timeout_second` のデフォルト値は `task_consume_second` * 4 として計算されます。</li> </ul>|
-| pause_on_fatal_parse_error          | NO | 回復不能なデータ解析エラーが発生した場合にジョブを自動的に一時停止するかどうかを指定します。有効な値: `true` と `false`。デフォルト値: `false`。このパラメーターは v3.3.12/v3.4.2 以降でサポートされています。 <br />このような解析エラーは通常、`strip_outer_array` を設定せずに JSON 配列をインポートする場合や、Kafka メッセージに `abcd` のような不正な JSON が含まれている場合など、違法なデータ形式によって引き起こされます。 |
-=======
 #### `desired_concurrent_number`
->>>>>>> acc48c26a0 ([Doc] remove tables (#64275))
 
 **必須**: いいえ\
 **説明**: 単一の Routine Load ジョブの期待されるタスク並行性。デフォルト値: `3`。実際のタスク並行性は、複数のパラメーターの最小値によって決定されます: `min(alive_be_number, partition_number, desired_concurrent_number, max_routine_load_task_concurrent_num)`。 <ul><li>`alive_be_number`: 生存している BE ノードの数。</li><li>`partition_number`: 消費されるパーティションの数。</li><li>`desired_concurrent_number`: 単一の Routine Load ジョブの期待されるタスク並行性。デフォルト値: `3`。</li><li>`max_routine_load_task_concurrent_num`: Routine Load ジョブのデフォルトの最大タスク並行性で、`5` です。 [FE dynamic parameter](../../../../administration/management/FE_configuration.md#configure-fe-dynamic-parameters) を参照してください。</li></ul>最大の実際のタスク並行性は、生存している BE ノードの数または消費されるパーティションの数によって決定されます。<br/>
@@ -294,24 +225,6 @@ FROM <data_source>
 
 データソースのプロパティ。
 
-<<<<<<< HEAD
-| Property          | Required | Description                                                  |
-| ----------------- | -------- | ------------------------------------------------------------ |
-| kafka_broker_list | Yes      | Kafka のブローカー接続情報。形式は `<kafka_broker_ip>:<broker_ port>`。複数のブローカーはカンマ (,) で区切られます。Kafka ブローカーで使用されるデフォルトポートは `9092` です。例: `"kafka_broker_list" = ""xxx.xx.xxx.xx:9092,xxx.xx.xxx.xx:9092"`。 |
-| kafka_topic       | Yes      | 消費される Kafka トピック。Routine Load ジョブは 1 つのトピックからのみメッセージを消費できます。 |
-| kafka_partitions  | No       | 消費される Kafka パーティション。例: `"kafka_partitions" = "0, 1, 2, 3"`。このプロパティが指定されていない場合、デフォルトですべてのパーティションが消費されます。 |
-| kafka_offsets     | No       | `kafka_partitions` で指定された Kafka パーティションでデータを消費し始めるオフセット。指定されていない場合、Routine Load ジョブは `kafka_partitions` の最新のオフセットからデータを消費します。有効な値:<ul><li>特定のオフセット: 特定のオフセットからデータを消費します。</li><li>`OFFSET_BEGINNING`: 可能な限り最も早いオフセットからデータを消費します。</li><li>`OFFSET_END`: 最新のオフセットからデータを消費します。</li></ul> 複数の開始オフセットはカンマ (,) で区切られます。例: `"kafka_offsets" = "1000, OFFSET_BEGINNING, OFFSET_END, 2000"`。|
-| property.kafka_default_offsets| No| すべての消費者パーティションのデフォルトの開始オフセット。このプロパティでサポートされる値は `kafka_offsets` プロパティと同じです。|
-| confluent.schema.registry.url|No |Avro スキーマが登録されている Schema Registry の URL。StarRocks はこの URL を使用して Avro スキーマを取得します。形式は次のとおりです:<br />`confluent.schema.registry.url = http[s]://[<schema-registry-api-key>:<schema-registry-api-secret>@]<hostname or ip address>[:<port>]`|
-
-#### データソース関連の追加プロパティ
-
-Kafka コマンドライン `--property` を使用するのと同等の追加のデータソース (Kafka) 関連プロパティを指定できます。サポートされているプロパティの詳細については、[librdkafka configuration properties](https://github.com/confluentinc/librdkafka/blob/master/CONFIGURATION.md) にある Kafka コンシューマークライアントのプロパティを参照してください。
-
-> **NOTE**
->
-> プロパティの値がファイル名の場合、ファイル名の前にキーワード `FILE:` を追加します。ファイルの作成方法については、[CREATE FILE](../../cluster-management/file/CREATE_FILE.md) を参照してください。
-=======
 #### `kafka_broker_list`
 
 **必須**: はい\
@@ -321,7 +234,6 @@ Kafka コマンドライン `--property` を使用するのと同等の追加の
 
 **必須**: はい\
 **説明**: 消費する Kafka トピック。Routine Load ジョブは 1 つのトピックからのみメッセージを消費できます。
->>>>>>> acc48c26a0 ([Doc] remove tables (#64275))
 
 #### `kafka_partitions`
 
@@ -363,19 +275,11 @@ Kafka に関連する追加のデータソースプロパティを指定でき�
 "property.group.id" = "group_id_0"
 ```
 
-<<<<<<< HEAD
-`property.group.id` が指定されていない場合、StarRocks は Routine Load ジョブの名前に基づいてランダムな値を生成します。形式は `{job_name}_{random uuid}` で、例: `simple_job_0a64fe25-3983-44b2-a4d8-f52d3af4c3e8`。
-
-- **BE が Kafka にアクセスするために使用するセキュリティプロトコルと関連するパラメーターを指定する**
-
-  セキュリティプロトコルは `plaintext` (デフォルト)、`ssl`、`sasl_plaintext`、または `sasl_ssl` として指定できます。指定されたセキュリティプロトコルに応じて関連するパラメーターを設定する必要があります。
-=======
 `property.group.id` が指定されていない場合、StarRocks は Routine Load ジョブの名前に基づいてランダムな値を生成します。形式は `{job_name}_{random uuid}` です。例: `simple_job_0a64fe25-3983-44b2-a4d8-f52d3af4c3e8`。
 
 - **BE が Kafka にアクセスするために使用するセキュリティプロトコルと関連するパラメーターを指定する**
 
   セキュリティプロトコルは `plaintext`（デフォルト）、`ssl`、`sasl_plaintext`、または `sasl_ssl` として指定できます。指定されたセキュリティプロトコルに応じて関連するパラメーターを設定する必要があります。
->>>>>>> acc48c26a0 ([Doc] remove tables (#64275))
 
   セキュリティプロトコルが `sasl_plaintext` または `sasl_ssl` に設定されている場合、次の SASL 認証メカニズムがサポートされます:
 
@@ -438,24 +342,6 @@ Routine Load に関連する FE と BE の設定項目については、 [config
 
 ### CSV 形式データのロードのためのカラムマッピングの設定
 
-<<<<<<< HEAD
-CSV 形式データのカラムが StarRocks テーブルのカラムに順番に 1 対 1 でマッピングできる場合、データと StarRocks テーブル間のカラムマッピングを設定する必要はありません。
-
-CSV 形式データのカラムが StarRocks テーブルのカラムに順番に 1 対 1 でマッピングできない場合、`columns` パラメーターを使用してデータファイルと StarRocks テーブル間のカラムマッピングを設定する必要があります。これには次の 2 つのユースケースが含まれます:
-
-- **カラム数は同じだがカラムの順序が異なる。また、データファイルからのデータは、StarRocks テーブルの対応するカラムにロードされる前に関数で計算する必要がない。**
-
-  - `columns` パラメーターでは、データファイルのカラムが配置されている順序と同じ順序で StarRocks テーブルのカラム名を指定する必要があります。
-
-  - 例えば、StarRocks テーブルは順番に `col1`、`col2`、`col3` の 3 つのカラムで構成され、データファイルも 3 つのカラムで構成され、StarRocks テーブルのカラム `col3`、`col2`、`col1` に順番にマッピングできます。この場合、`"columns: col3, col2, col1"` を指定する必要があります。
-
-- **カラム数が異なり、カラムの順序も異なる。また、データファイルからのデータは、StarRocks テーブルの対応するカラムにロードされる前に関数で計算する必要がある。**
-
-  `columns` パラメーターでは、データファイルのカラムが配置されている順序と同じ順序で StarRocks テーブルのカラム名を指定し、データを計算するために使用する関数を指定する必要があります。以下の 2 つの例を示します:
-
-  - StarRocks テーブルは順番に `col1`、`col2`、`col3` の 3 つのカラムで構成されています。データファイルは 4 つのカラムで構成され、そのうち最初の 3 つのカラムは順番に StarRocks テーブルのカラム `col1`、`col2`、`col3` にマッピングでき、4 番目のカラムは StarRocks テーブルのカラムにマッピングできません。この場合、データファイルの 4 番目のカラムに一時的な名前を指定する必要があり、その一時的な名前は StarRocks テーブルのカラム名と異なる必要があります。例えば、`"columns: col1, col2, col3, temp"` と指定できます。この場合、データファイルの 4 番目のカラムは一時的に `temp` と名付けられます。
-  - StarRocks テーブルは順番に `year`、`month`、`day` の 3 つのカラムで構成されています。データファイルは `yyyy-mm-dd hh:mm:ss` 形式の日付と時刻の値を含む 1 つのカラムのみで構成されています。この場合、`"columns: col, year = year(col), month=month(col), day=day(col)"` と指定できます。この場合、`col` はデータファイルのカラムの一時的な名前であり、関数 `year = year(col)`、`month=month(col)`、`day=day(col)` はデータファイルのカラム `col` からデータを抽出し、対応する StarRocks テーブルのカラムにデータをロードするために使用されます。例えば、`year = year(col)` はデータファイルのカラム `col` から `yyyy` データを抽出し、StarRocks テーブルのカラム `year` にデータをロードするために使用されます。
-=======
 CSV 形式データのカラムが StarRocks テーブルのカラムに順番に 1 対 1 でマッピングできる場合、データと StarRocks テーブルの間のカラムマッピングを設定する必要はありません。
 
 CSV 形式データのカラムが StarRocks テーブルのカラムに順番に 1 対 1 でマッピングできない場合、`columns` パラメーターを使用してデータファイルと StarRocks テーブルの間のカラムマッピングを設定する必要があります。これには次の 2 つのユースケースが含まれます:
@@ -472,7 +358,6 @@ CSV 形式データのカラムが StarRocks テーブルのカラムに順番�
 
   - StarRocks テーブルは 3 つのカラムで構成されており、順番に `col1`、`col2`、`col3` です。データファイルは 4 つのカラムで構成されており、そのうち最初の 3 つのカラムは順番に StarRocks テーブルのカラム `col1`、`col2`、`col3` にマッピングでき、4 番目のカラムは StarRocks テーブルのカラムにマッピングできません。この場合、データファイルの 4 番目のカラムに一時的な名前を指定する必要があり、その一時的な名前は StarRocks テーブルのカラム名と異なる必要があります。例えば、`"columns: col1, col2, col3, temp"` と指定できます。この場合、データファイルの 4 番目のカラムは一時的に `temp` と名付けられます。
   - StarRocks テーブルは 3 つのカラムで構成されており、順番に `year`、`month`、`day` です。データファイルは `yyyy-mm-dd hh:mm:ss` 形式の日付と時刻の値を含む 1 つのカラムで構成されています。この場合、`"columns: col, year = year(col), month=month(col), day=day(col)"` と指定できます。この場合、`col` はデータファイルのカラムの一時的な名前であり、関数 `year = year(col)`、`month=month(col)`、`day=day(col)` はデータファイルのカラム `col` からデータを抽出し、StarRocks テーブルの対応するカラムにデータをロードします。例えば、`year = year(col)` はデータファイルのカラム `col` から `yyyy` データを抽出し、StarRocks テーブルのカラム `year` にデータをロードします。
->>>>>>> acc48c26a0 ([Doc] remove tables (#64275))
 
 詳細な例については、 [Configure column mapping](#configure-column-mapping) を参照してください。
 
@@ -482,38 +367,19 @@ CSV 形式データのカラムが StarRocks テーブルのカラムに順番�
 v3.0.1 以降、StarRocks は Routine Load を使用して Avro データのロードをサポートしています。JSON または Avro データをロードする場合、カラムマッピングと変換の設定は同じです。したがって、このセクションでは、JSON データを例にとって設定を紹介します。
 :::
 
-<<<<<<< HEAD
-JSON 形式データのキーが StarRocks テーブルのカラムと同じ名前を持っている場合、簡易モードを使用して JSON 形式データをロードできます。簡易モードでは、`jsonpaths` パラメーターを指定する必要はありません。このモードでは、JSON 形式データは `{}` で示されるオブジェクトである必要があります。例えば、`{"category": 1, "author": 2, "price": "3"}` です。この例では、`category`、`author`、`price` はキー名であり、これらのキーは名前によって StarRocks テーブルのカラム `category`、`author`、`price` に 1 対 1 でマッピングできます。例については、[simple mode](#starrocks-table-column-names-consistent-with-json-key-names) を参照してください。
-
-JSON 形式データのキーが StarRocks テーブルのカラムと異なる名前を持っている場合、マッチモードを使用して JSON 形式データをロードできます。マッチモードでは、`jsonpaths` および `COLUMNS` パラメーターを使用して JSON 形式データと StarRocks テーブル間のカラムマッピングを指定する必要があります:
-=======
 JSON 形式データのキーが StarRocks テーブルのカラムと同じ名前を持っている場合、簡易モードを使用して JSON 形式データをロードできます。簡易モードでは、`jsonpaths` パラメーターを指定する必要はありません。このモードでは、JSON 形式データは `{}` で示されるオブジェクトである必要があります。例: `{"category": 1, "author": 2, "price": "3"}`。この例では、`category`、`author`、`price` はキー名であり、これらのキーは名前によって StarRocks テーブルのカラム `category`、`author`、`price` に 1 対 1 でマッピングできます。例については、 [simple mode](#starrocks-table-column-names-consistent-with-json-key-names) を参照してください。
 
 JSON 形式データのキーが StarRocks テーブルのカラムと異なる名前を持っている場合、マッチドモードを使用して JSON 形式データをロードできます。マッチドモードでは、`jsonpaths` および `COLUMNS` パラメーターを使用して JSON 形式データと StarRocks テーブルの間のカラムマッピングを指定する必要があります:
->>>>>>> acc48c26a0 ([Doc] remove tables (#64275))
 
 - `jsonpaths` パラメーターでは、JSON 形式データに配置されている順序で JSON キーを指定します。
 - `COLUMNS` パラメーターでは、JSON キーと StarRocks テーブルのカラム間のマッピングを指定します:
   - `COLUMNS` パラメーターで指定されたカラム名は、JSON 形式データに順番に 1 対 1 でマッピングされます。
   - `COLUMNS` パラメーターで指定されたカラム名は、名前によって StarRocks テーブルのカラムに 1 対 1 でマッピングされます。
 
-<<<<<<< HEAD
-例については、[StarRocks table contains derived columns whose values are generated by using expressions](#starrocks-table-contains-derived-columns-whose-values-are-generated-by-using-expressions) を参照してください。
-=======
 例については、 [StarRocks table contains derived columns whose values are generated by using expressions](#starrocks-table-contains-derived-columns-whose-values-are-generated-by-using-expressions) を参照してください。
->>>>>>> acc48c26a0 ([Doc] remove tables (#64275))
 
 ## 例
 
-<<<<<<< HEAD
-### CSV 形式データのロード
-
-このセクションでは、CSV 形式データを例にとり、さまざまなパラメーター設定と組み合わせを使用して、多様なロード要件を満たす方法を説明します。
-
-**データセットの準備**
-
-Kafka トピック `ordertest1` から CSV 形式データをロードしたいとします。データセット内の各メッセージには、注文 ID、支払日、顧客名、国籍、性別、価格の 6 つのカラムが含まれています。
-=======
 <WarehouseExample />
 
 ### CSV 形式データのロード
@@ -523,7 +389,6 @@ Kafka トピック `ordertest1` から CSV 形式データをロードしたい�
 **データセットの準備**
 
 Kafka トピック `ordertest1` から CSV 形式データをロードしたいとします。データセット内の各メッセージには 6 つのカラムが含まれています: 注文 ID、支払日、顧客名、国籍、性別、価格。
->>>>>>> acc48c26a0 ([Doc] remove tables (#64275))
 
 ```plaintext
 2020050802,2020-05-08,Johann Georg Faust,Deutschland,male,895
@@ -569,29 +434,14 @@ FROM KAFKA
 
 #### タスク並行性を増やしてロードパフォーマンスを向上させる
 
-<<<<<<< HEAD
-ロードパフォーマンスを向上させ、累積消費を回避するために、Routine Load ジョブを作成する際に `desired_concurrent_number` の値を増やしてタスク並行性を増やすことができます。タスク並行性により、1 つの Routine Load ジョブを可能な限り多くの並行タスクに分割できます。
-
-実際のタスク並行性は、次の複数のパラメーターの最小値によって決まります:
-=======
 ロードパフォーマンスを向上させ、累積消費を回避するために、Routine Load ジョブを作成する際に `desired_concurrent_number` 値を増やしてタスク並行性を増やすことができます。タスク並行性により、1 つの Routine Load ジョブを可能な限り多くの並列タスクに分割できます。
 
 実際のタスク並行性は、次の複数のパラメーターの最小値によって決定されることに注意してください:
->>>>>>> acc48c26a0 ([Doc] remove tables (#64275))
 
 ```SQL
 min(alive_be_number, partition_number, desired_concurrent_number, max_routine_load_task_concurrent_num)
 ```
 
-<<<<<<< HEAD
-> **Note**
->
-> 最大の実際のタスク並行性は、生存している BE ノードの数または消費されるパーティションの数です。
-
-したがって、消費されるパーティションの数と生存している BE ノードの数が他の 2 つのパラメーター `max_routine_load_task_concurrent_num` と `desired_concurrent_number` の値よりも大きい場合、他の 2 つのパラメーターの値を増やして実際のタスク並行性を増やすことができます。
-
-消費されるパーティションの数が 7、生存している BE ノードの数が 5、`max_routine_load_task_concurrent_num` がデフォルト値 `5` の場合、実際のタスク並行性を増やしたい場合は、`desired_concurrent_number` を `5` (デフォルト値は `3`) に設定できます。この場合、実際のタスク並行性 `min(5,7,5,5)` は `5` に設定されます。
-=======
 :::note
 最大の実際のタスク並行性は、生存している BE ノードの数または消費されるパーティションの数のいずれかです。
 :::
@@ -599,7 +449,6 @@ min(alive_be_number, partition_number, desired_concurrent_number, max_routine_lo
 したがって、消費されるパーティションの数と生存している BE ノードの数が他の 2 つのパラメーター `max_routine_load_task_concurrent_num` および `desired_concurrent_number` の値よりも大きい場合、他の 2 つのパラメーターの値を増やして実際のタスク並行性を増やすことができます。
 
 消費されるパーティションの数が 7、生存している BE ノードの数が 5、`max_routine_load_task_concurrent_num` がデフォルト値 `5` であると仮定します。実際のタスク並行性を増やしたい場合、`desired_concurrent_number` を `5` に設定できます（デフォルト値は `3`）。この場合、実際のタスク並行性 `min(5,7,5,5)` は `5` に設定されます。
->>>>>>> acc48c26a0 ([Doc] remove tables (#64275))
 
 ```SQL
 CREATE ROUTINE LOAD example_db.example_tbl1_ordertest1 ON example_tbl1
@@ -622,11 +471,7 @@ CSV 形式データのカラムの順序がターゲットテーブルのカラ�
 
 **ターゲットデータベースとテーブル**
 
-<<<<<<< HEAD
-CSV 形式データのカラムに基づいて、ターゲットデータベース `example_db` にターゲットテーブル `example_tbl2` を作成します。このシナリオでは、性別を格納する 5 番目のカラムを除く、CSV 形式データの 5 つのカラムに対応する 5 つのカラムを作成する必要があります。
-=======
 CSV 形式データのカラムに基づいて、ターゲットデータベース `example_db` にターゲットテーブル `example_tbl2` を作成します。このシナリオでは、性別を格納する 5 番目のカラムを除く 5 つのカラムを作成する必要があります。
->>>>>>> acc48c26a0 ([Doc] remove tables (#64275))
 
 ```SQL
 CREATE TABLE example_db.example_tbl2 ( 
@@ -642,11 +487,7 @@ DISTRIBUTED BY HASH(order_id);
 
 **Routine Load ジョブ**
 
-<<<<<<< HEAD
-この例では、CSV 形式データの 5 番目のカラムがターゲットテーブルにロードされる必要がないため、5 番目のカラムは `COLUMNS` で一時的に `temp_gender` と名付けられ、他のカラムはテーブル `example_tbl2` に直接マッピングされます。
-=======
 この例では、CSV 形式データの 5 番目のカラムをターゲットテーブルにロードする必要がないため、5 番目のカラムは `COLUMNS` で一時的に `temp_gender` と名付けられ、他のカラムはテーブル `example_tbl2` に直接マッピングされます。
->>>>>>> acc48c26a0 ([Doc] remove tables (#64275))
 
 ```SQL
 CREATE ROUTINE LOAD example_db.example_tbl2_ordertest1 ON example_tbl2
@@ -661,11 +502,7 @@ FROM KAFKA
 
 #### フィルター条件の設定
 
-<<<<<<< HEAD
-特定の条件を満たすデータのみをロードしたい場合、`WHERE` 句でフィルター条件を設定できます。例えば、`price > 100`。
-=======
 特定の条件を満たすデータのみをロードしたい場合、`WHERE` 句でフィルター条件を設定できます。例: `price > 100.`
->>>>>>> acc48c26a0 ([Doc] remove tables (#64275))
 
 ```SQL
 CREATE ROUTINE LOAD example_db.example_tbl2_ordertest1 ON example_tbl2
@@ -681,11 +518,7 @@ FROM KAFKA
 
 #### NULL 値を持つ行をフィルタリングするために strict mode を有効にする
 
-<<<<<<< HEAD
-`PROPERTIES` で `"strict_mode" = "true"` を設定することで、Routine Load ジョブが strict mode になります。ソースカラムに `NULL` 値があるが、ターゲット StarRocks テーブルのカラムが NULL 値を許可しない場合、ソースカラムに NULL 値を持つ行はフィルタリングされます。
-=======
 `PROPERTIES` で `"strict_mode" = "true"` を設定することができ、これは Routine Load ジョブが strict mode であることを意味します。ソースカラムに `NULL` 値が含まれているが、ターゲット StarRocks テーブルカラムが NULL 値を許可しない場合、ソースカラムに `NULL` 値を含む行はフィルタリングされます。
->>>>>>> acc48c26a0 ([Doc] remove tables (#64275))
 
 ```SQL
 CREATE ROUTINE LOAD example_db.example_tbl1_ordertest1 ON example_tbl1
@@ -704,11 +537,7 @@ FROM KAFKA
 
 #### エラー許容度の設定
 
-<<<<<<< HEAD
-ビジネスシナリオで不適格なデータに対する許容度が低い場合、`max_batch_rows` および `max_error_number` パラメーターを設定してエラーデータ検出ウィンドウとエラーデータ行の最大数を設定する必要があります。エラーデータ検出ウィンドウ内のエラーデータ行の数が `max_error_number` の値を超えると、Routine Load ジョブは一時停止します。
-=======
 ビジネスシナリオで不適格なデータに対する許容度が低い場合、`max_batch_rows` および `max_error_number` パラメーターを設定して、エラーデータ検出ウィンドウとエラーデータ行の最大数を設定する必要があります。エラーデータ検出ウィンドウ内のエラーデータ行の数が `max_error_number` の値を超えると、Routine Load ジョブは一時停止します。
->>>>>>> acc48c26a0 ([Doc] remove tables (#64275))
 
 ```SQL
 CREATE ROUTINE LOAD example_db.example_tbl1_ordertest1 ON example_tbl1
@@ -716,13 +545,8 @@ COLUMNS TERMINATED BY ",",
 COLUMNS (order_id, pay_dt, customer_name, nationality, gender, price)
 PROPERTIES
 (
-<<<<<<< HEAD
-"max_batch_rows" = "100000",-- max_batch_rows の値に 10 を掛けたものがエラーデータ検出ウィンドウになります。
-"max_error_number" = "100" -- エラーデータ検出ウィンドウ内で許容されるエラーデータ行の最大数。
-=======
 "max_batch_rows" = "100000",-- max_batch_rows の値に 10 を掛けた値がエラーデータ検出ウィンドウになります。
 "max_error_number" = "100" -- エラーデータ検出ウィンドウ内で許可されるエラーデータ行の最大数。
->>>>>>> acc48c26a0 ([Doc] remove tables (#64275))
 )
 FROM KAFKA
 (
@@ -731,15 +555,9 @@ FROM KAFKA
 );
 ```
 
-<<<<<<< HEAD
-#### セキュリティプロトコルを SSL に設定し、関連するパラメーターを設定する
-
-BE が Kafka にアクセスするために使用するセキュリティプロトコルを SSL に設定する必要がある場合、`"property.security.protocol" = "ssl"` と関連するパラメーターを設定する必要があります。
-=======
 #### セキュリティプロトコルを SSL として指定し、関連するパラメーターを設定する
 
 BE が Kafka にアクセスするために使用するセキュリティプロトコルを SSL として指定する必要がある場合、`"property.security.protocol" = "ssl"` および関連するパラメーターを設定する必要があります。
->>>>>>> acc48c26a0 ([Doc] remove tables (#64275))
 
 ```SQL
 CREATE ROUTINE LOAD example_db.example_tbl1_ordertest1 ON example_tbl1
@@ -769,11 +587,7 @@ FROM KAFKA
 
 #### trim_space、enclose、および escape の設定
 
-<<<<<<< HEAD
-Kafka トピック `test_csv` から CSV 形式データをロードしたいとします。データセット内の各メッセージには、注文 ID、支払日、顧客名、国籍、性別、価格の 6 つのカラムが含まれています。
-=======
 Kafka トピック `test_csv` から CSV 形式データをロードしたいとします。データセット内の各メッセージには 6 つのカラムが含まれています: 注文 ID、支払日、顧客名、国籍、性別、価格。
->>>>>>> acc48c26a0 ([Doc] remove tables (#64275))
 
 ```Plaintext
  "2020050802" , "2020-05-08" , "Johann Georg Faust" , "Deutschland" , "male" , "895"
@@ -784,11 +598,7 @@ Kafka トピック `test_csv` から CSV 形式データをロードしたいと
  "2020051101" , "2020-05-11" , "Edogawa Conan" , "japan" , "male" , "8924"
 ```
 
-<<<<<<< HEAD
-Kafka トピック `test_csv` から `example_tbl1` にすべてのデータをロードし、カラム区切り文字の前後のスペースを削除し、`enclose` を `"` に設定し、`escape` を `\` に設定する場合、次のコマンドを実行します:
-=======
 Kafka トピック `test_csv` からすべてのデータを `example_tbl1` にロードし、カラムセパレーターの前後のスペースを削除し、`enclose` を `"` に設定し、`escape` を `\` に設定する場合、次のコマンドを実行します:
->>>>>>> acc48c26a0 ([Doc] remove tables (#64275))
 
 ```SQL
 CREATE ROUTINE LOAD example_db.example_tbl1_test_csv ON example_tbl1
@@ -822,13 +632,9 @@ FROM KAFKA
 {"commodity_id": "3", "customer_name": "Antoine de Saint-Exupéry","country": "France","pay_time": 1589191487,"price": 895}
 ```
 
-<<<<<<< HEAD
-> **Note** 各 JSON オブジェクトは 1 つの Kafka メッセージ内にある必要があります。そうでない場合、JSON 形式データの解析に失敗したことを示すエラーが発生します。
-=======
 :::note
 各 JSON オブジェクトは 1 つの Kafka メッセージ内にある必要があります。そうでない場合、JSON 形式データの解析に失敗したことを示すエラーが発生します。
 :::
->>>>>>> acc48c26a0 ([Doc] remove tables (#64275))
 
 **ターゲットデータベースとテーブル**
 
@@ -847,11 +653,7 @@ DISTRIBUTED BY HASH(commodity_id);
 
 **Routine Load ジョブ**
 
-<<<<<<< HEAD
-Routine Load ジョブには簡易モードを使用できます。つまり、Routine Load ジョブを作成する際に `jsonpaths` および `COLUMNS` パラメーターを指定する必要はありません。StarRocks はターゲットテーブル `example_tbl3` のカラム名に基づいて Kafka クラスターのトピック `ordertest2` の JSON 形式データのキーを抽出し、JSON 形式データをターゲットテーブルにロードします。
-=======
 Routine Load ジョブには簡易モードを使用できます。つまり、Routine Load ジョブを作成する際に `jsonpaths` および `COLUMNS` パラメーターを指定する必要はありません。StarRocks はターゲットテーブル `example_tbl3` のカラム名に従って Kafka クラスターのトピック `ordertest2` の JSON 形式データのキーを抽出し、JSON 形式データをターゲットテーブルにロードします。
->>>>>>> acc48c26a0 ([Doc] remove tables (#64275))
 
 ```SQL
 CREATE ROUTINE LOAD example_db.example_tbl3_ordertest2 ON example_tbl3
@@ -866,21 +668,12 @@ FROM KAFKA
 );
 ```
 
-<<<<<<< HEAD
-> **Note**
->
-> - JSON 形式データの最外部レイヤーが配列構造の場合、`PROPERTIES` で `"strip_outer_array"="true"` を設定して最外部の配列構造を削除する必要があります。また、`jsonpaths` を指定する必要がある場合、JSON 形式データ全体のルート要素はフラットな JSON オブジェクトです。これは、JSON 形式データの最外部の配列構造が削除されるためです。
-> - `json_root` を使用して JSON 形式データのルート要素を指定できます。
-
-#### StarRocks テーブルに、式を使用して生成された値を持つ派生カラムが含まれている場合
-=======
 :::note
 - JSON 形式データの最外部のレイヤーが配列構造である場合、`PROPERTIES` で `"strip_outer_array"="true"` を設定して最外部の配列構造を削除する必要があります。さらに、`jsonpaths` を指定する必要がある場合、JSON 形式データ全体のルート要素は、JSON 形式データの最外部の配列構造が削除されたフラットな JSON オブジェクトです。
 - `json_root` を使用して JSON 形式データのルート要素を指定できます。
 :::
 
 #### StarRocks テーブルに式を使用して生成された値を持つ派生カラムが含まれている場合
->>>>>>> acc48c26a0 ([Doc] remove tables (#64275))
 
 **データセットの準備**
 
@@ -894,11 +687,7 @@ FROM KAFKA
 
 **ターゲットデータベースとテーブル**
 
-<<<<<<< HEAD
-StarRocks クラスターのデータベース `example_db` に `example_tbl4` という名前のテーブルを作成します。カラム `pay_dt` は、JSON 形式データのキー `pay_time` の値を計算して生成される派生カラムです。
-=======
 StarRocks クラスターのデータベース `example_db` に `example_tbl4` という名前のテーブルを作成します。カラム `pay_dt` は、JSON 形式データのキー `pay_time` の値を計算することによって生成される派生カラムです。
->>>>>>> acc48c26a0 ([Doc] remove tables (#64275))
 
 ```SQL
 CREATE TABLE example_db.example_tbl4 ( 
@@ -914,19 +703,11 @@ DISTRIBUTED BY HASH(`commodity_id`);
 
 **Routine Load ジョブ**
 
-<<<<<<< HEAD
-Routine Load ジョブにはマッチモードを使用できます。つまり、Routine Load ジョブを作成する際に `jsonpaths` および `COLUMNS` パラメーターを指定する必要があります。
-
-JSON 形式データのキーを `jsonpaths` パラメーターで順番に指定する必要があります。
-
-また、JSON 形式データのキー `pay_time` の値は、`example_tbl4` テーブルの `pay_dt` カラムに格納される前に DATE 型に変換する必要があるため、`COLUMNS` で `pay_dt=from_unixtime(pay_time,'%Y%m%d')` を使用して計算を指定する必要があります。JSON 形式データの他のキーの値は、`example_tbl4` テーブルに直接マッピングできます。
-=======
 Routine Load ジョブにはマッチドモードを使用できます。つまり、Routine Load ジョブを作成する際に `jsonpaths` および `COLUMNS` パラメーターを指定する必要があります。
 
 `jsonpaths` パラメーターでは、JSON 形式データのキーを指定し、順番に配置します。
 
 また、JSON 形式データのキー `pay_time` の値を DATE 型に変換してから `example_tbl4` テーブルの `pay_dt` カラムに値を格納する必要があるため、`COLUMNS` で `pay_dt=from_unixtime(pay_time,'%Y%m%d')` を使用して計算を指定する必要があります。他の JSON 形式データのキーの値は `example_tbl4` テーブルに直接マッピングできます。
->>>>>>> acc48c26a0 ([Doc] remove tables (#64275))
 
 ```SQL
 CREATE ROUTINE LOAD example_db.example_tbl4_ordertest2 ON example_tbl4
@@ -943,21 +724,12 @@ FROM KAFKA
 );
 ```
 
-<<<<<<< HEAD
-> **Note**
->
-> - JSON データの最外部レイヤーが配列構造の場合、`PROPERTIES` で `"strip_outer_array"="true"` を設定して最外部の配列構造を削除する必要があります。また、`jsonpaths` を指定する必要がある場合、JSON データ全体のルート要素はフラットな JSON オブジェクトです。これは、JSON データの最外部の配列構造が削除されるためです。
-> - `json_root` を使用して JSON 形式データのルート要素を指定できます。
-
-#### StarRocks テーブルに、CASE 式を使用して生成された値を持つ派生カラムが含まれている場合
-=======
 :::note
 - JSON データの最外部のレイヤーが配列構造である場合、`PROPERTIES` で `"strip_outer_array"="true"` を設定して最外部の配列構造を削除する必要があります。さらに、`jsonpaths` を指定する必要がある場合、JSON データ全体のルート要素は、JSON データの最外部の配列構造が削除されたフラットな JSON オブジェクトです。
 - `json_root` を使用して JSON 形式データのルート要素を指定できます。
 :::
 
 #### StarRocks テーブルに CASE 式を使用して生成された値を持つ派生カラムが含まれている場合
->>>>>>> acc48c26a0 ([Doc] remove tables (#64275))
 
 **データセットの準備**
 
@@ -1020,11 +792,7 @@ MySQL [example_db]> SELECT * FROM tbl_expr_test;
 
 #### ロードする JSON 形式データのルート要素を指定する
 
-<<<<<<< HEAD
-ロードする JSON 形式データのルート要素を指定するには、`json_root` を使用し、その値は有効な JsonPath 式である必要があります。
-=======
 ロードする JSON 形式データのルート要素を指定するには、`json_root` を使用する必要があり、その値は有効な JsonPath 式でなければなりません。
->>>>>>> acc48c26a0 ([Doc] remove tables (#64275))
 
 **データセットの準備**
 
@@ -1105,11 +873,7 @@ Avro データを準備し、Kafka トピック `topic_1` に送信します。
 
 **ターゲットデータベースとテーブル**
 
-<<<<<<< HEAD
-Avro データのフィールドに基づいて、StarRocks クラスターのターゲットデータベース `sensor` にテーブル `sensor_log1` を作成します。テーブルのカラム名は Avro データのフィールド名と一致している必要があります。Avro データが StarRocks にロードされる際のデータ型のマッピングについては、[Data types mapping](#Data types mapping) を参照してください。
-=======
 Avro データのフィールドに基づいて、StarRocks クラスターのターゲットデータベース `sensor` にテーブル `sensor_log1` を作成します。テーブルのカラム名は Avro データのフィールド名と一致している必要があります。Avro データが StarRocks にロードされる際のデータ型のマッピングについては、 [Data types mapping](#Data types mapping) を参照してください。
->>>>>>> acc48c26a0 ([Doc] remove tables (#64275))
 
 ```SQL
 CREATE TABLE sensor.sensor_log1 ( 
@@ -1152,11 +916,7 @@ Avro スキーマにネストされたレコード型フィールドが含まれ
 
 - **Avro スキーマ**
 
-<<<<<<< HEAD
-    1. 次の Avro スキーマファイル `avro_schema2.avsc` を作成します。外部の Avro レコードには、順番に `id`、`name`、`checked`、`sensor_type`、`data` の 5 つのフィールドが含まれています。フィールド `data` にはネストされたレコード `data_record` があります。
-=======
     1. 次の Avro スキーマファイル `avro_schema2.avsc` を作成します。外部の Avro レコードには、順番に `id`、`name`、`checked`、`sensor_type`、および `data` の 5 つのフィールドが含まれています。フィールド `data` にはネストされたレコード `data_record` があります。
->>>>>>> acc48c26a0 ([Doc] remove tables (#64275))
 
         ```JSON
         {
@@ -1235,11 +995,7 @@ Avro スキーマに Union フィールドが含まれており、StarRocks に 
 
 - **Avro スキーマ**
 
-<<<<<<< HEAD
-    1. 次の Avro スキーマファイル `avro_schema3.avsc` を作成します。外部の Avro レコードには、順番に `id`、`name`、`checked`、`sensor_type`、`data` の 5 つのフィールドが含まれています。フィールド `data` は Union 型で、`null` とネストされたレコード `data_record` の 2 つの要素を含んでいます。
-=======
     1. 次の Avro スキーマファイル `avro_schema3.avsc` を作成します。外部の Avro レコードには、順番に `id`、`name`、`checked`、`sensor_type`、および `data` の 5 つのフィールドが含まれています。フィールド `data` は Union 型であり、2 つの要素 `null` とネストされたレコード `data_record` を含んでいます。
->>>>>>> acc48c26a0 ([Doc] remove tables (#64275))
 
 ```JSON
         {
