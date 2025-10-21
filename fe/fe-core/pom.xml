@@ -1164,17 +1164,12 @@ under the License.
                         </goals>
                         <configuration>
                             <target>
-                                <condition property="jacoco.diff.enabled" value="true">
-                                    <equals arg1="${env.JACOCO_DIFF_ENABLED}" arg2="true"/>
-                                </condition>
                                 <exec executable="bash" dir="${project.basedir}" failonerror="false">
                                     <arg value="../../build-support/generate-jacoco-includes.sh"/>
                                     <arg value="${jacoco.base.branch}"/>
                                     <arg value="target/jacoco-includes.txt"/>
                                     <arg value="target/jacoco-includes.properties"/>
                                 </exec>
-                                <echo message="JaCoCo incremental coverage disabled, using full coverage"/>
-                                <echo message="jacoco.includes=com/starrocks/**" file="target/jacoco-includes.properties"/>
                             </target>
                         </configuration>
                     </execution>
