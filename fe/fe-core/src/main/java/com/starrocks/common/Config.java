@@ -960,6 +960,9 @@ public class Config extends ConfigBase {
     @ConfField
     public static boolean mysql_service_nio_enable_keep_alive = true;
 
+    @ConfField
+    public static boolean mysql_service_kill_after_disconnect = true;
+
     /**
      * max num of thread to handle task in mysql.
      */

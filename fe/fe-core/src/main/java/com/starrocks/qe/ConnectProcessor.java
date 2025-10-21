@@ -66,6 +66,7 @@ import com.starrocks.mysql.MysqlPacket;
 import com.starrocks.mysql.MysqlProto;
 import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.mysql.MysqlServerStatusFlag;
+import com.starrocks.mysql.RequestPackage;
 import com.starrocks.plugin.AuditEvent.EventType;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.rpc.RpcException;
@@ -1013,6 +1014,25 @@ public class ConnectProcessor {
             }
         }
         return result;
+    }
+
+    public void processOnce(RequestPackage req) throws Exception {
+        // set status of query to OK.
+        ctx.getState().reset();
+        executor = null;
+
+        packetBuf = req.getByteBuffer();
+
+        final MysqlChannel channel = ctx.getMysqlChannel();
+        channel.setSequenceId(req.getPackageId());
+        channel.accSequenceId();
+
+        dispatch();
+
+        finalizeCommand();
+
+        ctx.setCommand(MysqlCommand.COM_SLEEP);
+        ctx.setEndTime();
     }
 
     // handle one process
