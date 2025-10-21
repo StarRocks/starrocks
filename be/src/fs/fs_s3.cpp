@@ -271,7 +271,7 @@ static std::shared_ptr<Aws::S3::S3Client> new_s3client(
     Aws::Client::ClientConfiguration config = S3ClientFactory::getClientConfig();
     const THdfsProperties* hdfs_properties = opts.hdfs_properties();
 
-    LOG(INFO) << "[S3ClientInit] new_s3client() called for uri=" << uri.to_string()
+    LOG(INFO) << "[S3ClientInit] new_s3client() called for uri=" << uri.bucket() + uri.region() + uri.key()
               << ", operation_type=" << static_cast<int>(operation_type);
 
     if ((hdfs_properties != nullptr && hdfs_properties->__isset.cloud_configuration) ||
