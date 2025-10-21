@@ -18,7 +18,7 @@ package com.starrocks.sql.ast;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.sql.ast.expression.TableRefPersist;
+import com.starrocks.persist.TableRefPersist;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;

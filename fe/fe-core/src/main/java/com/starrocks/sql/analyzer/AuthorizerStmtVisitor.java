@@ -44,6 +44,7 @@ import com.starrocks.load.ExportJob;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.loadv2.SparkLoadJob;
 import com.starrocks.load.routineload.RoutineLoadJob;
+import com.starrocks.persist.TableRefPersist;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.CatalogMgr;
@@ -214,7 +215,6 @@ import com.starrocks.sql.ast.UserRef;
 import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.sql.ast.expression.SetVarHint;
 import com.starrocks.sql.ast.expression.TableName;
-import com.starrocks.sql.ast.expression.TableRefPersist;
 import com.starrocks.sql.ast.group.CreateGroupProviderStmt;
 import com.starrocks.sql.ast.group.DropGroupProviderStmt;
 import com.starrocks.sql.ast.group.ShowCreateGroupProviderStmt;
@@ -1791,8 +1791,13 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
     @Override
     public Void visitTruncateTableStatement(TruncateTableStmt statement, ConnectContext context) {
         try {
+            String dbName = statement.getDbName();
+            if (dbName == null) {
+                dbName = context.getDatabase();
+            }
+
             Authorizer.checkTableAction(context,
-                    new TableName(context.getCurrentCatalog(), statement.getDbName(), statement.getTblName()),
+                    new TableName(context.getCurrentCatalog(), dbName, statement.getTblName()),
                     PrivilegeType.DELETE);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(

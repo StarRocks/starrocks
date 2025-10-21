@@ -12,44 +12,34 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
-import com.starrocks.sql.ast.expression.TableRefPersist;
 import com.starrocks.sql.parser.NodePosition;
 
-// TRUNCATE TABLE tbl [PARTITION(p1, p2, ...)]
-public class TruncateTableStmt extends DdlStmt {
+//  ADMIN REPAIR TABLE table_name partitions;
+public class AdminRepairTableStmt extends DdlStmt {
 
-    private final TableRefPersist tblRef;
+    private final TableRef tblRef;
 
-    public TruncateTableStmt(TableRefPersist tblRef) {
-        this(tblRef, NodePosition.ZERO);
-    }
-
-    public TruncateTableStmt(TableRefPersist tblRef, NodePosition pos) {
+    public AdminRepairTableStmt(TableRef tblRef, NodePosition pos) {
         super(pos);
         this.tblRef = tblRef;
     }
 
-    public TableRefPersist getTblRef() {
-        return tblRef;
-    }
-
     public String getDbName() {
-        return tblRef.getName().getDb();
-    }
-
-    public void setDbName(String dbName) {
-        this.tblRef.getName().setDb(dbName);
+        return tblRef.getDbName();
     }
 
     public String getTblName() {
-        return tblRef.getName().getTbl();
+        return tblRef.getTableName();
+    }
+
+    public PartitionRef getPartitionRef() {
+        return tblRef.getPartitionDef();
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitTruncateTableStatement(this, context);
+        return visitor.visitAdminRepairTableStatement(this, context);
     }
 }

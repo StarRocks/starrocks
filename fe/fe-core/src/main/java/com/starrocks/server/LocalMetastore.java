@@ -222,6 +222,7 @@ import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.SystemVariable;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.expression.Expr;
@@ -231,7 +232,6 @@ import com.starrocks.sql.ast.expression.SetVarHint;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.TableName;
-import com.starrocks.sql.ast.expression.TableRefPersist;
 import com.starrocks.sql.ast.expression.UserVariableHint;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.PListCell;
@@ -4467,17 +4467,24 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
      */
     @Override
     public void truncateTable(TruncateTableStmt truncateTableStmt, ConnectContext context) throws DdlException {
-        TableRefPersist tblRef = truncateTableStmt.getTblRef();
-        TableName dbTbl = tblRef.getName();
+        String dbName = truncateTableStmt.getDbName();
+        if (dbName == null) {
+            dbName = context.getDatabase();
+        }
+        String tableName = truncateTableStmt.getTblName();
+
         // check, and save some info which need to be checked again later
         Map<String, Partition> origPartitions = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
         OlapTable copiedTbl;
-        Database db = getDb(dbTbl.getDb());
+        Database db = getDb(dbName);
         if (db == null) {
-            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbTbl.getDb());
+            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
 
-        boolean truncateEntireTable = tblRef.getPartitionNames() == null;
+        TableRef tblRef = truncateTableStmt.getTblRef();
+        TableName dbTbl = new TableName(dbName, tableName);
+        boolean truncateEntireTable = tblRef.getPartitionDef() == null;
+
         Locker locker = new Locker();
         locker.lockDatabase(db.getId(), LockType.READ);
         try {
@@ -4496,7 +4503,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             }
 
             if (!truncateEntireTable) {
-                for (String partName : tblRef.getPartitionNames().getPartitionNames()) {
+                for (String partName : tblRef.getPartitionDef().getPartitionNames()) {
                     Partition partition = olapTable.getPartition(partName);
                     if (partition == null) {
                         throw new DdlException("Partition " + partName + " does not exist");
@@ -4646,7 +4653,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
 
         LOG.info("finished to truncate table {}, partitions: {}",
-                tblRef.getName().toSql(), tblRef.getPartitionNames());
+                tblRef.getTableName(), tblRef.getPartitionDef() != null ? tblRef.getPartitionDef().getPartitionNames() : null);
     }
 
     private void deleteUselessTablets(Set<Long> tabletIdSet) {

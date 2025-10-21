@@ -35,6 +35,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Enums;
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
@@ -48,7 +49,6 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
-import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.PartitionRef;
@@ -68,7 +68,8 @@ import java.util.Map;
 
 public class MetadataViewer {
 
-    public static List<List<String>> getTabletStatus(AdminShowReplicaStatusStmt stmt) throws DdlException {
+    public static List<List<String>> getTabletStatus(AdminShowReplicaStatusStmt stmt, ConnectContext context)
+            throws DdlException {
         Replica.ReplicaStatus statusFilter = null;
         BinaryType op = null; // Default to null instead of stmt.getOp()
         Expr where = stmt.getWhere();
@@ -87,7 +88,20 @@ public class MetadataViewer {
             }
         }
 
-        return getTabletStatus(stmt.getDbName(), stmt.getTblName(), stmt.getPartitions(),
+        // Get partitions from PartitionRef instead of the removed partitions field
+        List<String> partitions = Lists.newArrayList();
+        PartitionRef partitionRef = stmt.getPartitionRef();
+        if (partitionRef != null) {
+            partitions.addAll(partitionRef.getPartitionNames());
+        }
+
+        // Resolve database name from TableRef or context
+        String dbName = stmt.getDbName();
+        if (Strings.isNullOrEmpty(dbName)) {
+            dbName = context.getDatabase();
+        }
+
+        return getTabletStatus(dbName, stmt.getTblName(), partitions,
                 statusFilter, op);
     }
 
@@ -215,12 +229,7 @@ public class MetadataViewer {
         }
     }
 
-    public static List<List<String>> getTabletDistribution(AdminShowReplicaDistributionStmt stmt) throws DdlException {
-        return getTabletDistribution(stmt.getDbName(), stmt.getTblName(), stmt.getPartitionNames());
-    }
-
-    private static List<List<String>> getTabletDistribution(String dbName, String tblName,
-                                                            PartitionNames partitionNames)
+    public static List<List<String>> getTabletDistribution(String dbName, String tblName, PartitionNames partitionNames)
             throws DdlException {
         DecimalFormat df = new DecimalFormat("##.00 %");
 

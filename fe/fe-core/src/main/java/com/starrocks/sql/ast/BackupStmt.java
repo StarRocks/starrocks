@@ -15,7 +15,7 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.sql.ast.expression.TableRefPersist;
+import com.starrocks.persist.TableRefPersist;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;

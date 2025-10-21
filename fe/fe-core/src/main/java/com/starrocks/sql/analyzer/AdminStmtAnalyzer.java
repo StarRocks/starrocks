@@ -16,7 +16,6 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Enums;
 import com.google.common.base.Strings;
-import com.google.common.collect.Lists;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Replica;
 import com.starrocks.common.util.PropertyAnalyzer;
@@ -30,7 +29,7 @@ import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
-import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.Property;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
@@ -40,13 +39,9 @@ import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.parser.NodePosition;
 
-import java.util.List;
-
 import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 
 public class AdminStmtAnalyzer {
-    public static final long DEFAULT_PRIORITY_REPAIR_TIMEOUT_SEC = 4 * 3600L;
-
     public static void analyze(StatementBase statementBase, ConnectContext session) {
         new AdminStmtAnalyzerVisitor().analyze(statementBase, session);
     }
@@ -105,14 +100,9 @@ public class AdminStmtAnalyzer {
             String dbName = adminShowReplicaDistributionStmt.getDbName();
             String tblName = adminShowReplicaDistributionStmt.getTblName();
             NodePosition pos = adminShowReplicaDistributionStmt.getPos();
-            if (Strings.isNullOrEmpty(dbName)) {
-                if (Strings.isNullOrEmpty(session.getDatabase())) {
-                    throw new SemanticException(PARSER_ERROR_MSG.noDbSelected(), pos);
-                } else {
-                    dbName = session.getDatabase();
-                }
+            if (Strings.isNullOrEmpty(dbName) && Strings.isNullOrEmpty(session.getDatabase())) {
+                throw new SemanticException(PARSER_ERROR_MSG.noDbSelected(), pos);
             }
-            adminShowReplicaDistributionStmt.setDbName(dbName);
             return null;
         }
 
@@ -126,21 +116,18 @@ public class AdminStmtAnalyzer {
                 if (Strings.isNullOrEmpty(session.getDatabase())) {
                     throw new SemanticException(PARSER_ERROR_MSG.noDbSelected(), pos);
                 } else {
+                    // Database name will be resolved from session when needed
                     dbName = session.getDatabase();
                 }
             }
-            adminShowReplicaStatusStmt.setDbName(dbName);
 
             CatalogUtils.checkIsLakeTable(dbName, tblName);
 
-            List<String> partitions = Lists.newArrayList();
-            PartitionNames partitionNames = adminShowReplicaStatusStmt.getTblRef().getPartitionNames();
-            if (partitionNames != null) {
-                if (partitionNames.isTemp()) {
+            PartitionRef partitionRef = adminShowReplicaStatusStmt.getPartitionRef();
+            if (partitionRef != null) {
+                if (partitionRef.isTemp()) {
                     throw new SemanticException(PARSER_ERROR_MSG.unsupportedOpWithInfo("temporary partitions"), pos);
                 }
-                partitions.addAll(partitionNames.getPartitionNames());
-                adminShowReplicaStatusStmt.setPartitions(partitions);
             }
 
             if (!analyzeWhere(adminShowReplicaStatusStmt)) {
@@ -163,23 +150,16 @@ public class AdminStmtAnalyzer {
         @Override
         public Void visitAdminRepairTableStatement(AdminRepairTableStmt adminRepairTableStmt, ConnectContext session) {
             String dbName = adminRepairTableStmt.getDbName();
-            if (Strings.isNullOrEmpty(dbName)) {
-                if (Strings.isNullOrEmpty(session.getDatabase())) {
-                    throw new SemanticException(PARSER_ERROR_MSG.noDbSelected());
-                } else {
-                    dbName = session.getDatabase();
-                }
+            if (Strings.isNullOrEmpty(dbName) && Strings.isNullOrEmpty(session.getDatabase())) {
+                throw new SemanticException(PARSER_ERROR_MSG.noDbSelected());
             }
-            adminRepairTableStmt.setDbName(dbName);
-            PartitionNames partitionNames = adminRepairTableStmt.getPartitionNames();
-            if (partitionNames != null) {
-                if (partitionNames.isTemp()) {
+            PartitionRef partitionRef = adminRepairTableStmt.getPartitionRef();
+            if (partitionRef != null) {
+                if (partitionRef.isTemp()) {
                     throw new SemanticException(PARSER_ERROR_MSG.unsupportedOpWithInfo("temp partitions"),
-                            partitionNames.getPos());
+                            partitionRef.getPos());
                 }
-                adminRepairTableStmt.setPartitions(partitionNames);
             }
-            adminRepairTableStmt.setTimeoutSec(DEFAULT_PRIORITY_REPAIR_TIMEOUT_SEC); // default 4 hours
             return null;
         }
 
@@ -187,21 +167,15 @@ public class AdminStmtAnalyzer {
         public Void visitAdminCancelRepairTableStatement(AdminCancelRepairTableStmt adminCancelRepairTableStmt,
                                                          ConnectContext session) {
             String dbName = adminCancelRepairTableStmt.getDbName();
-            if (Strings.isNullOrEmpty(dbName)) {
-                if (Strings.isNullOrEmpty(session.getDatabase())) {
-                    throw new SemanticException(PARSER_ERROR_MSG.noDbSelected(), adminCancelRepairTableStmt.getPos());
-                } else {
-                    dbName = session.getDatabase();
-                }
+            if (Strings.isNullOrEmpty(dbName) && Strings.isNullOrEmpty(session.getDatabase())) {
+                throw new SemanticException(PARSER_ERROR_MSG.noDbSelected(), adminCancelRepairTableStmt.getPos());
             }
-            adminCancelRepairTableStmt.setDbName(dbName);
-            PartitionNames partitionNames = adminCancelRepairTableStmt.getPartitionNames();
-            if (partitionNames != null) {
-                if (partitionNames.isTemp()) {
+            PartitionRef partitionRef = adminCancelRepairTableStmt.getPartitionRef();
+            if (partitionRef != null) {
+                if (partitionRef.isTemp()) {
                     throw new SemanticException(PARSER_ERROR_MSG.unsupportedOpWithInfo("temp partitions"),
-                            partitionNames.getPos());
+                            partitionRef.getPos());
                 }
-                adminCancelRepairTableStmt.setPartitions(partitionNames);
             }
             return null;
         }

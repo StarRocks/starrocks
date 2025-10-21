@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.sql.ast.TruncateTableStmt;
@@ -40,8 +39,8 @@ public class AnalyzeTruncateTableTest {
 
         stmt = (TruncateTableStmt) analyzeSuccess("TRUNCATE TABLE tbl PARTITION(p1, p2);");
         Assertions.assertEquals("tbl", stmt.getTblName());
-        Assertions.assertEquals("test", stmt.getDbName());
-        Assertions.assertEquals(stmt.getTblRef().getPartitionNames().getPartitionNames().toString(), "[p1, p2]");
+        Assertions.assertNull(stmt.getDbName());
+        Assertions.assertEquals("[p1, p2]", stmt.getTblRef().getPartitionDef().getPartitionNames().toString());
     }
 
     @Test
