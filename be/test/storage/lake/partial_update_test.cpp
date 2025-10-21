@@ -3327,102 +3327,17 @@ TEST_F(LakeColumnUpsertModeTest, test_default_value_and_null_handling) {
 //   - After optimization: Skip reading (new rows don't need old data to merge)
 //
 // This test verifies the optimization by:
-// 1. Creating a table with many columns to amplify memory usage
-// 2. Comparing COLUMN_UPDATE_MODE (baseline, doesn't use RowsetUpdateState)
-// 3. With COLUMN_UPSERT_MODE (optimized, now also skips unnecessary reads)
+// 1. Inserting new rows with only c0+c1 (partial update), verifying c2 is filled with default value
+// 2. Comparing memory usage between COLUMN_UPDATE_MODE and COLUMN_UPSERT_MODE
 TEST_F(LakeColumnUpsertModeTest, memory_optimization_skip_column_reading) {
-    // Create a tablet with more columns to amplify the memory difference
-    // Schema: pk(c0), value columns (c1, c2, ..., c9) - total 10 columns
-    // We'll only update c1
-    auto tablet_metadata_wide = std::make_shared<TabletMetadata>();
-    tablet_metadata_wide->set_id(next_id());
-    tablet_metadata_wide->set_version(1);
-    tablet_metadata_wide->set_next_rowset_id(1);
-
-    auto schema = tablet_metadata_wide->mutable_schema();
-    schema->set_id(next_id());
-    schema->set_num_short_key_columns(1);
-    schema->set_keys_type(PRIMARY_KEYS);
-    schema->set_num_rows_per_row_block(65535);
-
-    // Primary key column
-    auto c0 = schema->add_column();
-    c0->set_unique_id(next_id());
-    c0->set_name("c0");
-    c0->set_type("INT");
-    c0->set_is_key(true);
-    c0->set_is_nullable(false);
-
-    // Add 9 value columns (c1-c9)
-    for (int i = 1; i <= 9; i++) {
-        auto col = schema->add_column();
-        col->set_unique_id(next_id());
-        col->set_name("c" + std::to_string(i));
-        col->set_type("INT");
-        col->set_is_key(false);
-        col->set_is_nullable(true);
-        col->set_aggregation("REPLACE");
-    }
-
-    CHECK_OK(_tablet_mgr->put_tablet_metadata(*tablet_metadata_wide));
-
-    auto tablet_schema_wide = TabletSchema::create(*schema);
-    auto full_schema_wide = std::make_shared<Schema>(ChunkHelper::convert_schema(tablet_schema_wide));
-    auto partial_schema_wide = std::make_shared<Schema>(ChunkHelper::convert_schema(tablet_schema_wide, {0, 1}));
-
-    // Helper: generate full chunk with all 10 columns
-    auto generate_full_chunk = [&](int64_t pk_start, int64_t multiplier) {
-        std::vector<int> values[10];
-        for (int col = 0; col < 10; col++) {
-            values[col].resize(kChunkSize);
-            for (int row = 0; row < kChunkSize; row++) {
-                values[col][row] = (pk_start + row) * multiplier + col;
-            }
-        }
-
-        Columns columns;
-        columns.push_back(Int32Column::create());
-        columns[0]->append_numbers(values[0].data(), kChunkSize * sizeof(int));
-
-        for (int col = 1; col < 10; col++) {
-            auto nullable_col = NullableColumn::create(Int32Column::create(), NullColumn::create());
-            nullable_col->append_numbers(values[col].data(), kChunkSize * sizeof(int));
-            columns.push_back(nullable_col);
-        }
-
-        return std::make_shared<Chunk>(columns, full_schema_wide);
-    };
-
-    // Helper: generate partial chunk with only c0 (pk) and c1 (updated column)
-    auto generate_partial_chunk = [&](int64_t pk_start, int64_t multiplier) {
-        std::vector<int> c0_values(kChunkSize);
-        std::vector<int> c1_values(kChunkSize);
-        for (int row = 0; row < kChunkSize; row++) {
-            c0_values[row] = pk_start + row;
-            c1_values[row] = (pk_start + row) * multiplier;
-        }
-
-        auto c0_col = Int32Column::create();
-        c0_col->append_numbers(c0_values.data(), kChunkSize * sizeof(int));
-
-        auto c1_col = NullableColumn::create(Int32Column::create(), NullColumn::create());
-        c1_col->append_numbers(c1_values.data(), kChunkSize * sizeof(int));
-
-        return std::make_shared<Chunk>(Columns{c0_col, c1_col}, partial_schema_wide);
-    };
-
-    std::vector<SlotDescriptor> slots_wide;
-    slots_wide.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
-    slots_wide.emplace_back(1, "c1", TypeDescriptor{LogicalType::TYPE_INT});
-    std::vector<SlotDescriptor*> slot_pointers_wide = {&slots_wide[0], &slots_wide[1]};
-
+    auto tablet_id = _tablet_metadata->id();
     auto indexes = std::vector<uint32_t>(kChunkSize);
     for (int i = 0; i < kChunkSize; i++) indexes[i] = i;
     auto version = 1;
-    auto tablet_id = tablet_metadata_wide->id();
 
-    // Step 1: Write initial full data with all 10 columns (pk 0-99)
+    // Step 1: Write initial full data with all 3 columns (pk 0-11)
     {
+        auto chunk_full = generate_data(kChunkSize, 0, false, 3);
         auto txn_id = next_id();
         ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
                                                    .set_tablet_manager(_tablet_mgr.get())
@@ -3430,23 +3345,75 @@ TEST_F(LakeColumnUpsertModeTest, memory_optimization_skip_column_reading) {
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
-                                                   .set_schema_id(tablet_schema_wide->id())
+                                                   .set_schema_id(_tablet_schema->id())
                                                    .build());
         ASSERT_OK(delta_writer->open());
-        ASSERT_OK(delta_writer->write(generate_full_chunk(0, 2), indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->write(chunk_full, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
         version++;
+        LOG(INFO) << "[BASE DATA] Inserted base rows with full columns";
     }
 
-    // Step 2: Partial update with COLUMN_UPDATE_MODE (baseline)
+    // Step 2: Insert NEW rows with COLUMN_UPSERT_MODE (pk 12-23, only update c0+c1)
+    // This tests the optimization for NEW row inserts (src_rss_rowids == UINT64_MAX)
+    // These rows should NOT read c2 from storage since they don't exist yet
+    // c2 should be filled with default value "10"
+    {
+        auto chunk_partial = generate_data(kChunkSize, 1, true, 5); // shift=1 means pk 12-23
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .set_partial_update_mode(PartialUpdateMode::COLUMN_UPSERT_MODE)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk_partial, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+
+        LOG(INFO) << "[NEW ROWS] Inserted new rows with COLUMN_UPSERT_MODE (only c0+c1)";
+    }
+
+    // Verify new rows: c2 should have default value 10
+    {
+        ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id));
+        ASSIGN_OR_ABORT(auto reader, tablet.new_reader(version, *_schema));
+        CHECK_OK(reader->prepare());
+        CHECK_OK(reader->open(TabletReaderParams()));
+
+        auto result_chunk = ChunkHelper::new_chunk(*_schema, kChunkSize * 2);
+        CHECK_OK(reader->get_next(result_chunk.get()));
+        ASSERT_EQ(result_chunk->num_rows(), kChunkSize * 2);
+
+        // Find and verify new rows (pk 12-23)
+        for (int i = 0; i < kChunkSize * 2; i++) {
+            int pk = result_chunk->get_column_by_index(0)->get(i).get_int32();
+            if (pk >= kChunkSize && pk < kChunkSize * 2) {
+                int c1 = result_chunk->get_column_by_index(1)->get(i).get_int32();
+                int c2 = result_chunk->get_column_by_index(2)->get(i).get_int32();
+                EXPECT_EQ(c1, pk * 5) << "New row c1 should be pk * 5";
+                EXPECT_EQ(c2, 10) << "New row c2 should have default value 10";
+            }
+        }
+    }
+
+    // Step 3: Partial update with COLUMN_UPDATE_MODE (baseline for memory comparison)
     // This mode does NOT use RowsetUpdateState, so it never had the memory issue
     // It directly uses ColumnModePartialUpdateHandler which reads columns on-demand per rssid
     int64_t mem_baseline_before = _mem_tracker->consumption();
     int64_t mem_baseline_delta = 0;
 
     {
+        auto chunk_partial = generate_data(kChunkSize, 0, true, 7);
         auto txn_id = next_id();
         ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
                                                    .set_tablet_manager(_tablet_mgr.get())
@@ -3454,12 +3421,12 @@ TEST_F(LakeColumnUpsertModeTest, memory_optimization_skip_column_reading) {
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
-                                                   .set_schema_id(tablet_schema_wide->id())
-                                                   .set_slot_descriptors(&slot_pointers_wide)
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
                                                    .set_partial_update_mode(PartialUpdateMode::COLUMN_UPDATE_MODE)
                                                    .build());
         ASSERT_OK(delta_writer->open());
-        ASSERT_OK(delta_writer->write(generate_partial_chunk(0, 100), indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->write(chunk_partial, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
 
@@ -3473,12 +3440,13 @@ TEST_F(LakeColumnUpsertModeTest, memory_optimization_skip_column_reading) {
         LOG(INFO) << "  (Uses ColumnModePartialUpdateHandler, not RowsetUpdateState)";
     }
 
-    // Step 3: Partial update with COLUMN_UPSERT_MODE
+    // Step 4: Partial update with COLUMN_UPSERT_MODE (update existing rows)
     // Before optimization: Would read all unmodified columns in RowsetUpdateState::_prepare_partial_update_states
     // After optimization: Skips reading because new rows don't need old data to merge
     int64_t mem_optimized_before = _mem_tracker->consumption();
 
     {
+        auto chunk_partial = generate_data(kChunkSize, 0, true, 9);
         auto txn_id = next_id();
         ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
                                                    .set_tablet_manager(_tablet_mgr.get())
@@ -3486,12 +3454,12 @@ TEST_F(LakeColumnUpsertModeTest, memory_optimization_skip_column_reading) {
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
-                                                   .set_schema_id(tablet_schema_wide->id())
-                                                   .set_slot_descriptors(&slot_pointers_wide)
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
                                                    .set_partial_update_mode(PartialUpdateMode::COLUMN_UPSERT_MODE)
                                                    .build());
         ASSERT_OK(delta_writer->open());
-        ASSERT_OK(delta_writer->write(generate_partial_chunk(0, 200), indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->write(chunk_partial, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
 
@@ -3502,7 +3470,7 @@ TEST_F(LakeColumnUpsertModeTest, memory_optimization_skip_column_reading) {
         version++;
 
         LOG(INFO) << "[OPTIMIZED] COLUMN_UPSERT_MODE memory delta: " << mem_optimized_delta << " bytes";
-        LOG(INFO) << "  (After optimization: skips reading c2-c9 in RowsetUpdateState)";
+        LOG(INFO) << "  (After optimization: skips reading c2 in RowsetUpdateState)";
         LOG(INFO) << "[COMPARISON] COLUMN_UPDATE_MODE: " << mem_baseline_delta
                   << " vs COLUMN_UPSERT_MODE: " << mem_optimized_delta;
 
@@ -3513,29 +3481,37 @@ TEST_F(LakeColumnUpsertModeTest, memory_optimization_skip_column_reading) {
         // Key assertion: With our optimization, COLUMN_UPSERT_MODE should have comparable memory usage
         // to COLUMN_UPDATE_MODE (within 2x) despite the additional _handle_column_upsert_mode logic
         // Without optimization, the ratio would be much higher due to reading all unmodified columns
-        EXPECT_LT(memory_ratio, 2.0) << "Optimized COLUMN_UPSERT_MODE should not use 2x more memory than baseline";
+        EXPECT_LT(memory_ratio, 1.5) << "Optimized COLUMN_UPSERT_MODE should not use 1.5x more memory than baseline";
 
         LOG(INFO) << "SUCCESS! COLUMN_UPSERT_MODE now skips unnecessary column reading in RowsetUpdateState";
     }
 
-    // Step 4: Verify functional correctness
+    // Step 5: Verify functional correctness
     ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id));
-    ASSIGN_OR_ABORT(auto reader, tablet.new_reader(version, *full_schema_wide));
+    ASSIGN_OR_ABORT(auto reader, tablet.new_reader(version, *_schema));
     CHECK_OK(reader->prepare());
     CHECK_OK(reader->open(TabletReaderParams()));
 
-    auto result_chunk = ChunkHelper::new_chunk(*full_schema_wide, kChunkSize);
+    auto result_chunk = ChunkHelper::new_chunk(*_schema, kChunkSize * 2);
     CHECK_OK(reader->get_next(result_chunk.get()));
 
-    ASSERT_EQ(result_chunk->num_rows(), kChunkSize);
+    ASSERT_EQ(result_chunk->num_rows(), kChunkSize * 2);
 
-    // Verify c1 was updated to c0 * 200 (from step 3)
-    auto& c0_col = result_chunk->get_column_by_index(0);
-    auto& c1_col = result_chunk->get_column_by_index(1);
-    for (int i = 0; i < kChunkSize; i++) {
-        int c0_val = c0_col->get(i).get_int32();
-        int c1_val = c1_col->get(i).get_int32();
-        EXPECT_EQ(c1_val, c0_val * 200) << "c1 should be updated";
+    // Verify existing rows (pk 0-11) were updated to c0 * 9 (from step 4)
+    // and new rows (pk 12-23) still have c1 = pk * 5 and c2 = 10
+    for (int i = 0; i < kChunkSize * 2; i++) {
+        int pk = result_chunk->get_column_by_index(0)->get(i).get_int32();
+        int c1 = result_chunk->get_column_by_index(1)->get(i).get_int32();
+        int c2 = result_chunk->get_column_by_index(2)->get(i).get_int32();
+
+        if (pk < kChunkSize) {
+            // Existing rows: c1 should be updated to pk * 9
+            EXPECT_EQ(c1, pk * 9) << "Existing row c1 should be updated";
+        } else {
+            // New rows: c1 = pk * 5, c2 = 10 (default)
+            EXPECT_EQ(c1, pk * 5) << "New row c1 should be pk * 5";
+            EXPECT_EQ(c2, 10) << "New row c2 should still have default value 10";
+        }
     }
 
     // Verify DCG was generated for COLUMN_UPSERT_MODE
