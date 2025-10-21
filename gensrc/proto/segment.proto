@@ -250,6 +250,7 @@ enum ColumnIndexTypePB {
     ZONE_MAP_INDEX = 2;
     BITMAP_INDEX = 3;
     BLOOM_FILTER_INDEX = 4;
+    BUILTIN_INVERTED_INDEX = 5;
 }
 
 message ColumnIndexMetaPB {
@@ -258,6 +259,7 @@ message ColumnIndexMetaPB {
     optional ZoneMapIndexPB zone_map_index = 8;
     optional BitmapIndexPB bitmap_index = 9;
     optional BloomFilterIndexPB bloom_filter_index = 10;
+    optional BuiltinInvertedIndexPB builtin_inverted_index = 11;
 }
 
 message OrdinalIndexPB {
@@ -304,4 +306,8 @@ message BloomFilterIndexPB {
     optional BloomFilterAlgorithmPB algorithm = 2;
     // required: meta for bloom filters
     optional IndexedColumnMetaPB bloom_filter = 3;
+}
+
+message BuiltinInvertedIndexPB {
+    optional BitmapIndexPB bitmap_index = 1;
 }

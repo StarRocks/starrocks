@@ -187,7 +187,7 @@ public:
     Status load_ordinal_index(const IndexReadOptions& opts);
 
     Status new_inverted_index_iterator(const std::shared_ptr<TabletIndex>& index_meta, InvertedIndexIterator** iterator,
-                                       const SegmentReadOptions& opts);
+                                       const SegmentReadOptions& opts, const IndexReadOptions& index_opt);
 
     uint32_t num_rows() const { return _segment->num_rows(); }
 
@@ -238,7 +238,8 @@ private:
     Status _zone_map_filter(const std::vector<const ColumnPredicate*>& predicates, const ColumnPredicate* del_predicate,
                             std::unordered_set<uint32_t>* del_partial_filtered_pages, std::vector<uint32_t>* pages);
 
-    Status _load_inverted_index(const std::shared_ptr<TabletIndex>& index_meta, const SegmentReadOptions& opts);
+    Status _load_inverted_index(const std::shared_ptr<TabletIndex>& index_meta, const SegmentReadOptions& opts,
+                                const IndexReadOptions& index_opt);
 
     NgramBloomFilterReaderOptions _get_reader_options_for_ngram() const;
 
@@ -266,6 +267,7 @@ private:
     std::unique_ptr<OrdinalIndexPB> _ordinal_index_meta;
     std::unique_ptr<BitmapIndexPB> _bitmap_index_meta;
     std::unique_ptr<BloomFilterIndexPB> _bloom_filter_index_meta;
+    std::unique_ptr<BuiltinInvertedIndexPB> _builtin_inverted_index_meta;
 
     std::unique_ptr<ZoneMapIndexReader> _zonemap_index;
     std::unique_ptr<OrdinalIndexReader> _ordinal_index;

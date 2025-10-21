@@ -232,6 +232,8 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
     if (_metadata->has_record_predicate()) {
         ASSIGN_OR_RETURN(seg_options.record_predicate, RecordPredicateHelper::create(_metadata->record_predicate()));
     }
+    seg_options.enable_gin_filter = options.enable_gin_filter;
+    seg_options.has_preaggregation = options.has_preaggregation;
 
     std::unique_ptr<Schema> segment_schema_guard;
     auto* segment_schema = const_cast<Schema*>(&schema);

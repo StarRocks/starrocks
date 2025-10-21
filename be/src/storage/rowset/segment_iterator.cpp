@@ -2453,9 +2453,16 @@ Status SegmentIterator::_init_inverted_index_iterators() {
         ColumnId cid = pair.first;
         ColumnUID ucid = cid_2_ucid[cid];
 
+        IndexReadOptions index_opts;
+        index_opts.use_page_cache = !_opts.temporary_data && _opts.use_page_cache &&
+                                    !config::disable_storage_page_cache;
+        index_opts.lake_io_opts = _opts.lake_io_opts;
+        index_opts.read_file = _column_files[cid].get();
+        index_opts.stats = _opts.stats;
+
         if (_inverted_index_ctx->inverted_index_iterators[cid] == nullptr) {
             RETURN_IF_ERROR(_segment->new_inverted_index_iterator(
-                    ucid, &_inverted_index_ctx->inverted_index_iterators[cid], _opts));
+                    ucid, &_inverted_index_ctx->inverted_index_iterators[cid], _opts, index_opts));
             _inverted_index_ctx->has_inverted_index |= (_inverted_index_ctx->inverted_index_iterators[cid] != nullptr);
         }
     }
@@ -2519,6 +2526,12 @@ Status SegmentIterator::_apply_inverted_index() {
                 // inverted index filtering.These columns may can be pruned.
                 _inverted_index_ctx->prune_cols_candidate_by_inverted_index.insert(cid);
             }
+        }
+    }
+
+    for (auto* iter : _inverted_index_ctx->inverted_index_iterators) {
+        if (iter != nullptr) {
+            RETURN_IF_ERROR(iter->close());
         }
     }
 
