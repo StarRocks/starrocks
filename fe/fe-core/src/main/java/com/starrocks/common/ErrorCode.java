@@ -274,7 +274,15 @@ public enum ErrorCode {
     ERR_TXN_FORBID_CROSS_DB(5304, new byte[] {'2', '5', 'P', '0', '1'},
             "Cannot execute cross-database transactions. All DML target tables must belong to the same db"),
     ERR_EXPLICIT_TXN_NOT_SUPPORT_STMT(5305, new byte[] {'2', '5', 'P', '0', '1'},
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/common/ErrorCode.java
             "Explicit transaction only support insert statement"),
+=======
+            "Explicit transaction only support begin/commit/rollback/insert/update/delete/set/select statements"),
+    ERR_EXPLICIT_TXN_NOT_SUPPORT_STMT_ORDER(5306, new byte[] {'2', '5', 'P', '0', '1'},
+            "Explicit transaction only support single update/delete before insert statement"),
+    ERR_EXPLICIT_TXN_SELECT_ON_MODIFIED_TABLE(5307, new byte[] {'2', '5', 'P', '0', '1'},
+            "SELECT cannot read table '%s' modified earlier in the same transaction"),
+>>>>>>> 06d18890aa ([Enhancement] Allow SELECT/SET in explicit transactions and add error 5307 for SELECT on previously modified tables (#63722)):fe/fe-spi/src/main/java/com/starrocks/common/ErrorCode.java
 
     /**
      * 5400 - 5499: Internal error
