@@ -113,17 +113,11 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
                 break;
             case Types.INTEGER:
                 if (lowerTypeName.startsWith("mediumint")) {
-                    if (isUnsigned) {
-                        primitiveType = PrimitiveType.INT;
-                    } else {
-                        primitiveType = PrimitiveType.INT;
-                    }
+                    primitiveType = PrimitiveType.INT;
+                } else if (isUnsigned) {
+                    primitiveType = PrimitiveType.BIGINT;
                 } else {
-                    if (isUnsigned) {
-                        primitiveType = PrimitiveType.BIGINT;
-                    } else {
-                        primitiveType = PrimitiveType.INT;
-                    }
+                    primitiveType = PrimitiveType.INT;
                 }
                 break;
             case Types.BIGINT:
