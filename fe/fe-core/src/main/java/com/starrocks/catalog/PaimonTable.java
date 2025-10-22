@@ -22,6 +22,7 @@ import com.starrocks.thrift.TIcebergSchemaField;
 import com.starrocks.thrift.TPaimonTable;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
+import org.apache.paimon.catalog.Identifier;
 import org.apache.paimon.table.DataTable;
 import org.apache.paimon.types.DataField;
 
@@ -86,7 +87,11 @@ public class PaimonTable extends Table {
 
     @Override
     public String getUUID() {
-        return String.join(".", catalogName, databaseName, tableName, paimonNativeTable.uuid());
+        if (!new Identifier(databaseName, tableName).isSystemTable()) {
+            return String.join(".", catalogName,  paimonNativeTable.uuid());
+        } else {
+            return String.join(".", catalogName, databaseName, tableName, paimonNativeTable.uuid());
+        }
     }
 
     @Override
