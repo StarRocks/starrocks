@@ -35,20 +35,12 @@ import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TExplainLevel;
 import mockit.Mock;
 import mockit.MockUp;
-<<<<<<< HEAD
+import org.apache.commons.collections4.CollectionUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.FixMethodOrder;
 import org.junit.Test;
 import org.junit.runners.MethodSorters;
-=======
-import org.apache.commons.collections.CollectionUtils;
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.MethodOrderer.MethodName;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.TestMethodOrder;
->>>>>>> dfe11c8a08 ([UT] fix flaky test testAlterMVOnView (#64393))
 
 import java.util.Collection;
 import java.util.HashMap;
