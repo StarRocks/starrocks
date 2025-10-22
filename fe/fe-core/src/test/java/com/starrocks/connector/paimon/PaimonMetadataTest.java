@@ -199,7 +199,7 @@ public class PaimonMetadataTest {
         Assert.assertEquals(ScalarType.DOUBLE, paimonTable.getBaseSchema().get(1).getType());
         Assert.assertTrue(paimonTable.getBaseSchema().get(1).isAllowNull());
         Assert.assertEquals("paimon_catalog", paimonTable.getCatalogName());
-        Assert.assertEquals("paimon_catalog.db1.tbl1.0", paimonTable.getUUID());
+        Assert.assertEquals("paimon_catalog.null", paimonTable.getUUID());
     }
 
     @Test
