@@ -58,17 +58,12 @@ void ProcProfileFileAction::handle(HttpRequest* req) {
         return;
     }
 
-    try {
-        std::string format = ProfileUtils::get_profile_format(filename);
-        if (format == "Pprof") {
-            // Convert pprof to flame format and serve as HTML
-            serve_pprof_as_flame(req, profile_file_path);
-        } else {
-            serve_gz_file(req, profile_file_path);
-        }
-    } catch (const std::exception& e) {
-        LOG(WARNING) << "ProcProfileFileAction: Error serving profile file: " << filename << ", error: " << e.what();
-        HttpChannel::send_reply(req, HttpStatus::INTERNAL_SERVER_ERROR, "Error serving profile file");
+    std::string format = ProfileUtils::get_profile_format(filename);
+    if (format == "Pprof") {
+        // Convert pprof to flame format and serve as HTML
+        serve_pprof_as_flame(req, profile_file_path);
+    } else {
+        serve_gz_file(req, profile_file_path);
     }
 }
 
@@ -122,22 +117,10 @@ void ProcProfileFileAction::serve_pprof_as_flame(HttpRequest* req, const std::st
     std::string stackcollapse_path = config::flamegraph_tool_dir + "/stackcollapse-go.pl";
     std::string flamegraph_path = config::flamegraph_tool_dir + "/flamegraph.pl";
 
-    if (!std::filesystem::exists(pprof_path) || !std::filesystem::is_regular_file(pprof_path)) {
-        LOG(WARNING) << "ProcProfileFileAction: pprof tool not found at " << pprof_path
-                     << ", falling back to serving raw pprof file";
-        serve_gz_file(req, file_path);
-        return;
-    }
-
-    if (!std::filesystem::exists(flamegraph_path) || !std::filesystem::is_regular_file(flamegraph_path)) {
-        LOG(WARNING) << "ProcProfileFileAction: FlameGraph tools not found at " << flamegraph_path
-                     << ", falling back to serving raw pprof file";
-        serve_gz_file(req, file_path);
-        return;
-    }
-
-    if (!std::filesystem::exists(stackcollapse_path) || !std::filesystem::is_regular_file(stackcollapse_path)) {
-        LOG(WARNING) << "ProcProfileFileAction: stackcollapse-go.pl not found at " << stackcollapse_path
+    if ((!std::filesystem::exists(pprof_path) || !std::filesystem::is_regular_file(pprof_path)) ||
+        (!std::filesystem::exists(flamegraph_path) || !std::filesystem::is_regular_file(flamegraph_path)) ||
+        (!std::filesystem::exists(stackcollapse_path) || !std::filesystem::is_regular_file(stackcollapse_path))) {
+        LOG(WARNING) << "ProcProfileFileAction: FlameGraph tools not found at " << config::flamegraph_tool_dir
                      << ", falling back to serving raw pprof file";
         serve_gz_file(req, file_path);
         return;
