@@ -296,6 +296,201 @@ TEST_F(JsonFunctionsTest, json_query_filter_no_match) {
     ASSERT_EQ(expect, out);
 }
 
+TEST_F(JsonFunctionsTest, json_query_filter_string_equality) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    JsonColumn::Ptr jsons = JsonColumn::create();
+    ColumnBuilder<TYPE_VARCHAR> path_builder(1);
+
+    std::string input = R"({
+        "users": [
+            { "name": "Alice", "role": "admin" },
+            { "name": "Bob", "role": "user" },
+            { "name": "Charlie", "role": "admin" }
+        ]
+    })";
+
+    JsonValue json;
+    ASSERT_TRUE(JsonValue::parse(input, &json).ok());
+    jsons->append(&json);
+
+    path_builder.append("$.users[?(@.role = 'admin')]");
+    Columns columns{jsons, path_builder.build(true)};
+
+    ctx.get()->set_constant_columns(columns);
+    std::ignore =
+            JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+    DeferOp defer([&]() {
+        (void)JsonFunctions::native_json_path_close(
+                ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+    });
+
+    ColumnPtr result = JsonFunctions::json_query(ctx.get(), columns).value();
+    ASSERT_TRUE(!!result);
+    Datum datum = result->get(0);
+    ASSERT_FALSE(datum.is_null());
+    std::string out = datum.get_json()->to_string().value();
+    StripWhiteSpace(&out);
+    std::string expect = R"([{"name": "Alice", "role": "admin"}, {"name": "Charlie", "role": "admin"}])";
+    StripWhiteSpace(&expect);
+    ASSERT_EQ(expect, out);
+}
+
+TEST_F(JsonFunctionsTest, json_query_filter_less_than_or_equal) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    JsonColumn::Ptr jsons = JsonColumn::create();
+    ColumnBuilder<TYPE_VARCHAR> path_builder(1);
+
+    std::string input = R"({
+        "products": [
+            { "name": "A", "price": 5 },
+            { "name": "B", "price": 10 },
+            { "name": "C", "price": 15 }
+        ]
+    })";
+
+    JsonValue json;
+    ASSERT_TRUE(JsonValue::parse(input, &json).ok());
+    jsons->append(&json);
+
+    path_builder.append("$.products[?(@.price <= 10)]");
+    Columns columns{jsons, path_builder.build(true)};
+
+    ctx.get()->set_constant_columns(columns);
+    std::ignore =
+            JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+    DeferOp defer([&]() {
+        (void)JsonFunctions::native_json_path_close(
+                ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+    });
+
+    ColumnPtr result = JsonFunctions::json_query(ctx.get(), columns).value();
+    ASSERT_TRUE(!!result);
+    Datum datum = result->get(0);
+    ASSERT_FALSE(datum.is_null());
+    std::string out = datum.get_json()->to_string().value();
+    StripWhiteSpace(&out);
+    std::string expect = R"([{"name": "A", "price": 5}, {"name": "B", "price": 10}])";
+    StripWhiteSpace(&expect);
+    ASSERT_EQ(expect, out);
+}
+
+TEST_F(JsonFunctionsTest, json_query_filter_or_operator) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    JsonColumn::Ptr jsons = JsonColumn::create();
+    ColumnBuilder<TYPE_VARCHAR> path_builder(1);
+
+    std::string input = R"({
+        "items": [
+            { "id": 1, "category": "A" },
+            { "id": 2, "category": "B" },
+            { "id": 3, "category": "C" }
+        ]
+    })";
+
+    JsonValue json;
+    ASSERT_TRUE(JsonValue::parse(input, &json).ok());
+    jsons->append(&json);
+
+    path_builder.append("$.items[?(@.category = 'A' || @.category = 'C')]");
+    Columns columns{jsons, path_builder.build(true)};
+
+    ctx.get()->set_constant_columns(columns);
+    std::ignore =
+            JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+    DeferOp defer([&]() {
+        (void)JsonFunctions::native_json_path_close(
+                ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+    });
+
+    ColumnPtr result = JsonFunctions::json_query(ctx.get(), columns).value();
+    ASSERT_TRUE(!!result);
+    Datum datum = result->get(0);
+    ASSERT_FALSE(datum.is_null());
+    std::string out = datum.get_json()->to_string().value();
+    StripWhiteSpace(&out);
+    std::string expect = R"([{"id": 1, "category": "A"}, {"id": 3, "category": "C"}])";
+    StripWhiteSpace(&expect);
+    ASSERT_EQ(expect, out);
+}
+
+TEST_F(JsonFunctionsTest, json_query_filter_nested_field) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    JsonColumn::Ptr jsons = JsonColumn::create();
+    ColumnBuilder<TYPE_VARCHAR> path_builder(1);
+
+    std::string input = R"({
+        "employees": [
+            { "name": "Alice", "details": { "age": 30 } },
+            { "name": "Bob", "details": { "age": 25 } },
+            { "name": "Charlie", "details": { "age": 35 } }
+        ]
+    })";
+
+    JsonValue json;
+    ASSERT_TRUE(JsonValue::parse(input, &json).ok());
+    jsons->append(&json);
+
+    path_builder.append("$.employees[?(@.details.age > 28)]");
+    Columns columns{jsons, path_builder.build(true)};
+
+    ctx.get()->set_constant_columns(columns);
+    std::ignore =
+            JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+    DeferOp defer([&]() {
+        (void)JsonFunctions::native_json_path_close(
+                ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+    });
+
+    ColumnPtr result = JsonFunctions::json_query(ctx.get(), columns).value();
+    ASSERT_TRUE(!!result);
+    Datum datum = result->get(0);
+    ASSERT_FALSE(datum.is_null());
+    std::string out = datum.get_json()->to_string().value();
+    StripWhiteSpace(&out);
+    std::string expect = R"([{"name": "Alice", "details": {"age": 30}}, {"name": "Charlie", "details": {"age": 35}}])";
+    StripWhiteSpace(&expect);
+    ASSERT_EQ(expect, out);
+}
+
+TEST_F(JsonFunctionsTest, json_query_filter_type_mismatch) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    JsonColumn::Ptr jsons = JsonColumn::create();
+    ColumnBuilder<TYPE_VARCHAR> path_builder(1);
+
+    std::string input = R"({
+        "mixed": [
+            { "value": "text" },
+            { "value": 42 },
+            { "value": "another" }
+        ]
+    })";
+
+    JsonValue json;
+    ASSERT_TRUE(JsonValue::parse(input, &json).ok());
+    jsons->append(&json);
+
+    path_builder.append("$.mixed[?(@.value > 30)]");
+    Columns columns{jsons, path_builder.build(true)};
+
+    ctx.get()->set_constant_columns(columns);
+    std::ignore =
+            JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+    DeferOp defer([&]() {
+        (void)JsonFunctions::native_json_path_close(
+                ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+    });
+
+    ColumnPtr result = JsonFunctions::json_query(ctx.get(), columns).value();
+    ASSERT_TRUE(!!result);
+    Datum datum = result->get(0);
+    ASSERT_FALSE(datum.is_null());
+    std::string out = datum.get_json()->to_string().value();
+    StripWhiteSpace(&out);
+    std::string expect = R"([{"value": 42}])";
+    StripWhiteSpace(&expect);
+    ASSERT_EQ(expect, out);
+}
+
 TEST_F(JsonFunctionsTest, get_json_emptyTest) {
     {
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
