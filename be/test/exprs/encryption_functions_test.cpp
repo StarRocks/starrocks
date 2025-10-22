@@ -1435,6 +1435,346 @@ TEST_F(EncryptionFunctionsTest, aes_decryptConstAllTest) {
     }
 }
 
+// Test 2-parameter version: aes_encrypt(data, key) and aes_decrypt(data, key)
+// This version uses default ECB mode for backward compatibility with old FE
+TEST_F(EncryptionFunctionsTest, aes_encrypt_decrypt_2params_basic_test) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+
+    // Test case 1: Simple ASCII text
+    {
+        std::string plaintext = "Hello, StarRocks!";
+        std::string key = "1234567890123456"; // 16-byte key for AES-128
+
+        // Encrypt with 2 parameters
+        Columns encrypt_columns;
+        auto plain_col = BinaryColumn::create();
+        auto key_col = BinaryColumn::create();
+
+        plain_col->append(plaintext);
+        key_col->append(key);
+
+        encrypt_columns.emplace_back(plain_col);
+        encrypt_columns.emplace_back(key_col);
+
+        ColumnPtr encrypted = EncryptionFunctions::aes_encrypt_with_mode(ctx.get(), encrypt_columns).value();
+        ASSERT_FALSE(encrypted->is_null(0));
+
+        auto encrypted_data = ColumnHelper::cast_to<TYPE_VARCHAR>(encrypted);
+        ASSERT_GT(encrypted_data->get_data()[0].size, 0);
+
+        // Decrypt with 2 parameters
+        Columns decrypt_columns;
+        decrypt_columns.emplace_back(encrypted);
+        decrypt_columns.emplace_back(key_col);
+
+        ColumnPtr decrypted = EncryptionFunctions::aes_decrypt_with_mode(ctx.get(), decrypt_columns).value();
+        ASSERT_FALSE(decrypted->is_null(0));
+
+        auto result = ColumnHelper::cast_to<TYPE_VARCHAR>(decrypted);
+        ASSERT_EQ(plaintext, result->get_data()[0].to_string());
+    }
+
+    // Test case 2: Binary data
+    {
+        std::string plaintext = std::string("\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0a\x0b\x0c\x0d\x0e\x0f", 16);
+        std::string key = "mysecretkey12345"; // 16-byte key
+
+        Columns encrypt_columns;
+        auto plain_col = BinaryColumn::create();
+        auto key_col = BinaryColumn::create();
+
+        plain_col->append(plaintext);
+        key_col->append(key);
+
+        encrypt_columns.emplace_back(plain_col);
+        encrypt_columns.emplace_back(key_col);
+
+        ColumnPtr encrypted = EncryptionFunctions::aes_encrypt_with_mode(ctx.get(), encrypt_columns).value();
+        ASSERT_FALSE(encrypted->is_null(0));
+
+        Columns decrypt_columns;
+        decrypt_columns.emplace_back(encrypted);
+        decrypt_columns.emplace_back(key_col);
+
+        ColumnPtr decrypted = EncryptionFunctions::aes_decrypt_with_mode(ctx.get(), decrypt_columns).value();
+        ASSERT_FALSE(decrypted->is_null(0));
+
+        auto result = ColumnHelper::cast_to<TYPE_VARCHAR>(decrypted);
+        ASSERT_EQ(plaintext, result->get_data()[0].to_string());
+    }
+
+    // Test case 3: Empty string
+    {
+        std::string plaintext = "";
+        std::string key = "1234567890123456";
+
+        Columns encrypt_columns;
+        auto plain_col = BinaryColumn::create();
+        auto key_col = BinaryColumn::create();
+
+        plain_col->append(plaintext);
+        key_col->append(key);
+
+        encrypt_columns.emplace_back(plain_col);
+        encrypt_columns.emplace_back(key_col);
+
+        ColumnPtr encrypted = EncryptionFunctions::aes_encrypt_with_mode(ctx.get(), encrypt_columns).value();
+        ASSERT_FALSE(encrypted->is_null(0));
+
+        Columns decrypt_columns;
+        decrypt_columns.emplace_back(encrypted);
+        decrypt_columns.emplace_back(key_col);
+
+        ColumnPtr decrypted = EncryptionFunctions::aes_decrypt_with_mode(ctx.get(), decrypt_columns).value();
+        ASSERT_FALSE(decrypted->is_null(0));
+
+        auto result = ColumnHelper::cast_to<TYPE_VARCHAR>(decrypted);
+        ASSERT_EQ(plaintext, result->get_data()[0].to_string());
+    }
+}
+
+// Test 2-parameter version with NULL values
+TEST_F(EncryptionFunctionsTest, aes_encrypt_decrypt_2params_null_test) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+
+    // Test case 1: NULL plaintext
+    {
+        Columns encrypt_columns;
+        auto plain_col = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+        auto key_col = BinaryColumn::create();
+
+        plain_col->append_nulls(1);
+        key_col->append("1234567890123456");
+
+        encrypt_columns.emplace_back(plain_col);
+        encrypt_columns.emplace_back(key_col);
+
+        ColumnPtr encrypted = EncryptionFunctions::aes_encrypt_with_mode(ctx.get(), encrypt_columns).value();
+        ASSERT_TRUE(encrypted->is_null(0));
+    }
+
+    // Test case 2: NULL key
+    {
+        Columns encrypt_columns;
+        auto plain_col = BinaryColumn::create();
+        auto key_col = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+
+        plain_col->append("Hello, StarRocks!");
+        key_col->append_nulls(1);
+
+        encrypt_columns.emplace_back(plain_col);
+        encrypt_columns.emplace_back(key_col);
+
+        ColumnPtr encrypted = EncryptionFunctions::aes_encrypt_with_mode(ctx.get(), encrypt_columns).value();
+        ASSERT_TRUE(encrypted->is_null(0));
+    }
+
+    // Test case 3: Both NULL
+    {
+        Columns encrypt_columns;
+        auto plain_col = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+        auto key_col = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+
+        plain_col->append_nulls(1);
+        key_col->append_nulls(1);
+
+        encrypt_columns.emplace_back(plain_col);
+        encrypt_columns.emplace_back(key_col);
+
+        ColumnPtr encrypted = EncryptionFunctions::aes_encrypt_with_mode(ctx.get(), encrypt_columns).value();
+        ASSERT_TRUE(encrypted->is_null(0));
+    }
+}
+
+// Test 2-parameter version with multiple rows (batch processing)
+TEST_F(EncryptionFunctionsTest, aes_encrypt_decrypt_2params_batch_test) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+
+    std::vector<std::string> plaintexts = {"row1", "row2", "row3", "row4", "row5"};
+    std::vector<std::string> keys = {"key1key1key1key1", "key2key2key2key2", "key3key3key3key3", "key4key4key4key4",
+                                     "key5key5key5key5"};
+
+    // Encrypt
+    Columns encrypt_columns;
+    auto plain_col = BinaryColumn::create();
+    auto key_col = BinaryColumn::create();
+
+    for (size_t i = 0; i < plaintexts.size(); ++i) {
+        plain_col->append(plaintexts[i]);
+        key_col->append(keys[i]);
+    }
+
+    encrypt_columns.emplace_back(plain_col);
+    encrypt_columns.emplace_back(key_col);
+
+    ColumnPtr encrypted = EncryptionFunctions::aes_encrypt_with_mode(ctx.get(), encrypt_columns).value();
+    ASSERT_EQ(encrypted->size(), plaintexts.size());
+
+    // Verify all rows are encrypted successfully
+    for (size_t i = 0; i < plaintexts.size(); ++i) {
+        ASSERT_FALSE(encrypted->is_null(i));
+    }
+
+    // Decrypt
+    Columns decrypt_columns;
+    decrypt_columns.emplace_back(encrypted);
+    decrypt_columns.emplace_back(key_col);
+
+    ColumnPtr decrypted = EncryptionFunctions::aes_decrypt_with_mode(ctx.get(), decrypt_columns).value();
+    ASSERT_EQ(decrypted->size(), plaintexts.size());
+
+    // Verify all rows are decrypted correctly
+    auto result = ColumnHelper::cast_to<TYPE_VARCHAR>(decrypted);
+    for (size_t i = 0; i < plaintexts.size(); ++i) {
+        ASSERT_FALSE(decrypted->is_null(i));
+        ASSERT_EQ(plaintexts[i], result->get_data()[i].to_string());
+    }
+}
+
+// Test 2-parameter version with mixed NULL and non-NULL values
+TEST_F(EncryptionFunctionsTest, aes_encrypt_decrypt_2params_mixed_null_test) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+
+    // Encrypt
+    Columns encrypt_columns;
+    auto plain_col = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    auto key_col = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+
+    // Row 0: both non-NULL
+    plain_col->append_datum(Datum("data1"));
+    key_col->append_datum(Datum("key1key1key1key1"));
+
+    // Row 1: plaintext NULL
+    plain_col->append_datum(Datum());
+    key_col->append_datum(Datum("key2key2key2key2"));
+
+    // Row 2: key NULL
+    plain_col->append_datum(Datum("data3"));
+    key_col->append_datum(Datum());
+
+    // Row 3: both non-NULL
+    plain_col->append_datum(Datum("data4"));
+    key_col->append_datum(Datum("key4key4key4key4"));
+
+    encrypt_columns.emplace_back(plain_col);
+    encrypt_columns.emplace_back(key_col);
+
+    ColumnPtr encrypted = EncryptionFunctions::aes_encrypt_with_mode(ctx.get(), encrypt_columns).value();
+    ASSERT_EQ(encrypted->size(), 4);
+
+    // Verify NULL handling
+    ASSERT_FALSE(encrypted->is_null(0)); // Row 0: should succeed
+    ASSERT_TRUE(encrypted->is_null(1));  // Row 1: plaintext NULL
+    ASSERT_TRUE(encrypted->is_null(2));  // Row 2: key NULL
+    ASSERT_FALSE(encrypted->is_null(3)); // Row 3: should succeed
+
+    // Decrypt (only non-NULL rows)
+    Columns decrypt_columns;
+    decrypt_columns.emplace_back(encrypted);
+    decrypt_columns.emplace_back(key_col);
+
+    ColumnPtr decrypted = EncryptionFunctions::aes_decrypt_with_mode(ctx.get(), decrypt_columns).value();
+    ASSERT_EQ(decrypted->size(), 4);
+
+    // For NullableColumn, we need to access the data_column
+    auto nullable_result = down_cast<NullableColumn*>(decrypted.get());
+    auto result = down_cast<BinaryColumn*>(nullable_result->data_column().get());
+
+    ASSERT_FALSE(decrypted->is_null(0));
+    ASSERT_EQ("data1", result->get_data()[0].to_string());
+    ASSERT_TRUE(decrypted->is_null(1));
+    ASSERT_TRUE(decrypted->is_null(2));
+    ASSERT_FALSE(decrypted->is_null(3));
+    ASSERT_EQ("data4", result->get_data()[3].to_string());
+}
+
+// Test 2-parameter version with constant columns (optimization path)
+TEST_F(EncryptionFunctionsTest, aes_encrypt_decrypt_2params_const_test) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+
+    std::string plaintext = "Constant data";
+    std::string key = "constantkey12345";
+
+    // Create constant columns
+    Columns encrypt_columns;
+    auto plain_col = ConstColumn::create(BinaryColumn::create(), 5);
+    auto key_col = ConstColumn::create(BinaryColumn::create(), 5);
+
+    auto plain_data = BinaryColumn::create();
+    plain_data->append(plaintext);
+    plain_col = ConstColumn::create(plain_data, 5);
+
+    auto key_data = BinaryColumn::create();
+    key_data->append(key);
+    key_col = ConstColumn::create(key_data, 5);
+
+    encrypt_columns.emplace_back(plain_col);
+    encrypt_columns.emplace_back(key_col);
+
+    ColumnPtr encrypted = EncryptionFunctions::aes_encrypt_with_mode(ctx.get(), encrypt_columns).value();
+    ASSERT_EQ(encrypted->size(), 5);
+
+    // All rows should have the same encrypted value
+    // Unpack ConstColumn to get the actual data column
+    auto encrypted_unpacked = ColumnHelper::unpack_and_duplicate_const_column(encrypted->size(), encrypted);
+    auto encrypted_data = ColumnHelper::cast_to<TYPE_VARCHAR>(encrypted_unpacked);
+    for (size_t i = 1; i < 5; ++i) {
+        ASSERT_EQ(encrypted_data->get_data()[0].to_string(), encrypted_data->get_data()[i].to_string());
+    }
+
+    // Decrypt
+    Columns decrypt_columns;
+    decrypt_columns.emplace_back(encrypted);
+    decrypt_columns.emplace_back(key_col);
+
+    ColumnPtr decrypted = EncryptionFunctions::aes_decrypt_with_mode(ctx.get(), decrypt_columns).value();
+    ASSERT_EQ(decrypted->size(), 5);
+
+    // Unpack ConstColumn to get the actual data column
+    auto decrypted_unpacked = ColumnHelper::unpack_and_duplicate_const_column(decrypted->size(), decrypted);
+    auto result = ColumnHelper::cast_to<TYPE_VARCHAR>(decrypted_unpacked);
+    for (size_t i = 0; i < 5; ++i) {
+        ASSERT_EQ(plaintext, result->get_data()[i].to_string());
+    }
+}
+
+// Test 2-parameter version with only_null columns
+TEST_F(EncryptionFunctionsTest, aes_encrypt_decrypt_2params_only_null_test) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+
+    // Test case 1: only_null plaintext column
+    {
+        Columns encrypt_columns;
+        auto plain_col = ColumnHelper::create_const_null_column(5);
+        auto key_col = BinaryColumn::create();
+        for (int i = 0; i < 5; ++i) {
+            key_col->append("key1key1key1key1");
+        }
+
+        encrypt_columns.emplace_back(plain_col);
+        encrypt_columns.emplace_back(key_col);
+
+        ColumnPtr encrypted = EncryptionFunctions::aes_encrypt_with_mode(ctx.get(), encrypt_columns).value();
+        ASSERT_TRUE(encrypted->only_null());
+    }
+
+    // Test case 2: only_null key column
+    {
+        Columns encrypt_columns;
+        auto plain_col = BinaryColumn::create();
+        for (int i = 0; i < 5; ++i) {
+            plain_col->append("data");
+        }
+        auto key_col = ColumnHelper::create_const_null_column(5);
+
+        encrypt_columns.emplace_back(plain_col);
+        encrypt_columns.emplace_back(key_col);
+
+        ColumnPtr encrypted = EncryptionFunctions::aes_encrypt_with_mode(ctx.get(), encrypt_columns).value();
+        ASSERT_TRUE(encrypted->only_null());
+    }
+}
+
 // ==================== End of AES Encrypt/Decrypt with Mode Tests ====================
 
 TEST_F(EncryptionFunctionsTest, from_base64GeneralTest) {

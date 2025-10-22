@@ -220,11 +220,134 @@ private:
     uint32_t cached_aad_len_{0};
 };
 
-// 4/5-parameter version: aes_encrypt(data, key, iv, mode, [aad])
-// Parameters: data, key, iv, mode, [aad]
+// Helper function to handle 2-parameter AES encryption: aes_encrypt(data, key)
+// Uses default ECB mode with NULL IV for backward compatibility
+static StatusOr<ColumnPtr> aes_encrypt_2params(FunctionContext* ctx, const Columns& columns) {
+    DCHECK_EQ(columns.size(), 2);
+
+    // Check if data or key columns are only_null
+    if (columns[0]->only_null() || columns[1]->only_null()) {
+        return columns[0]->only_null() ? columns[0] : columns[1];
+    }
+
+    auto src_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
+    auto key_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
+
+    const int size = columns[0]->size();
+    ColumnBuilder<TYPE_VARCHAR> result(size);
+
+    // Reuse buffer across all rows
+    std::vector<unsigned char> encrypt_buf;
+
+    // Use default mode: AES_128_ECB
+    const AesMode default_mode = AES_128_ECB;
+
+    for (int row = 0; row < size; ++row) {
+        if (src_viewer.is_null(row) || key_viewer.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+
+        auto src_value = src_viewer.value(row);
+        auto key_value = key_viewer.value(row);
+
+        // ECB mode: may need padding (max one block = 16 bytes)
+        int cipher_len = src_value.size + 16;
+
+        if (encrypt_buf.size() < static_cast<size_t>(cipher_len)) {
+            encrypt_buf.resize(cipher_len);
+        }
+
+        // ECB mode doesn't use IV, so pass nullptr for iv_data
+        int len = AesUtil::encrypt_ex(default_mode, (unsigned char*)src_value.data, src_value.size,
+                                      (const unsigned char*)key_value.data, key_value.size, nullptr,
+                                      0,                                     // No IV for ECB
+                                      true, encrypt_buf.data(), nullptr, 0); // No AAD
+
+        if (len < 0) {
+            result.append_null();
+            continue;
+        }
+
+        result.append(Slice(reinterpret_cast<char*>(encrypt_buf.data()), len));
+    }
+
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+// Helper function to handle 2-parameter AES decryption: aes_decrypt(data, key)
+// Uses default ECB mode with NULL IV for backward compatibility
+static StatusOr<ColumnPtr> aes_decrypt_2params(FunctionContext* ctx, const Columns& columns) {
+    DCHECK_EQ(columns.size(), 2);
+
+    // Check if data or key columns are only_null
+    if (columns[0]->only_null() || columns[1]->only_null()) {
+        return columns[0]->only_null() ? columns[0] : columns[1];
+    }
+
+    auto src_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
+    auto key_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
+
+    const int size = columns[0]->size();
+    ColumnBuilder<TYPE_VARCHAR> result(size);
+
+    // Reuse buffer across all rows
+    std::vector<unsigned char> decrypt_buf;
+
+    // Use default mode: AES_128_ECB
+    const AesMode default_mode = AES_128_ECB;
+
+    for (int row = 0; row < size; ++row) {
+        if (src_viewer.is_null(row) || key_viewer.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+
+        auto src_value = src_viewer.value(row);
+        auto key_value = key_viewer.value(row);
+
+        // Additional validation for decryption
+        if (src_value.size == 0 || key_value.size == 0) {
+            result.append_null();
+            continue;
+        }
+
+        // Decrypted plaintext will never exceed ciphertext size
+        int cipher_len = src_value.size;
+
+        if (decrypt_buf.size() < static_cast<size_t>(cipher_len)) {
+            decrypt_buf.resize(cipher_len);
+        }
+
+        // ECB mode doesn't use IV, so pass nullptr for iv_data
+        int len = AesUtil::decrypt_ex(default_mode, (unsigned char*)src_value.data, src_value.size,
+                                      (const unsigned char*)key_value.data, key_value.size, nullptr,
+                                      0,                                     // No IV for ECB
+                                      true, decrypt_buf.data(), nullptr, 0); // No AAD
+
+        if (len < 0) {
+            result.append_null();
+            continue;
+        }
+
+        result.append(Slice(reinterpret_cast<char*>(decrypt_buf.data()), len));
+    }
+
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+// 2/4/5-parameter version: aes_encrypt(data, key, [iv, mode, [aad]])
+// Parameters: data, key, [iv, mode, [aad]]
+// - 2-parameter version uses default ECB mode with NULL IV (for backward compatibility)
 // - iv can be NULL for ECB mode
 // - aad is optional and only used for GCM mode
 StatusOr<ColumnPtr> EncryptionFunctions::aes_encrypt_with_mode(FunctionContext* ctx, const Columns& columns) {
+    // Handle 2-parameter version: aes_encrypt(data, key)
+    // Use default mode (AES_128_ECB) and NULL IV
+    if (columns.size() == 2) {
+        return aes_encrypt_2params(ctx, columns);
+    }
+
     // Check only essential columns (data, key, mode) for only_null
     // IV and AAD are checked later based on the encryption mode
     CHECK_AES_ESSENTIAL_COLUMNS_NULL(columns);
@@ -287,11 +410,18 @@ StatusOr<ColumnPtr> EncryptionFunctions::aes_encrypt_with_mode(FunctionContext* 
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-// 4/5-parameter version: aes_decrypt(data, key, iv, mode, [aad])
-// Parameters: data, key, iv, mode, [aad]
+// 2/4/5-parameter version: aes_decrypt(data, key, [iv, mode, [aad]])
+// Parameters: data, key, [iv, mode, [aad]]
+// - 2-parameter version uses default ECB mode with NULL IV (for backward compatibility)
 // - iv can be NULL for ECB mode
 // - aad is optional and only used for GCM mode
 StatusOr<ColumnPtr> EncryptionFunctions::aes_decrypt_with_mode(FunctionContext* ctx, const Columns& columns) {
+    // Handle 2-parameter version: aes_decrypt(data, key)
+    // Use default mode (AES_128_ECB) and NULL IV
+    if (columns.size() == 2) {
+        return aes_decrypt_2params(ctx, columns);
+    }
+
     // Check only essential columns (data, key, mode) for only_null
     // IV and AAD are checked later based on the encryption mode
     CHECK_AES_ESSENTIAL_COLUMNS_NULL(columns);
