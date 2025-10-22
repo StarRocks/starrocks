@@ -1479,6 +1479,12 @@ public class Config extends ConfigBase {
     public static long proc_profile_file_retained_size_bytes = 2L * 1024 * 1024 * 1024;
 
     /**
+     * Maximum Java stack depth for proc profile collection
+     */
+    @ConfField(mutable = true, comment = "Maximum Java stack depth for proc profile collection, default is 128")
+    public static int proc_profile_jstack_depth = 128;
+
+    /**
      * If batch creation of partitions is allowed to create half of the partitions, it is easy to generate holes.
      * By default, this is not enabled. If it is turned on, the partitions built by batch creation syntax will
      * not allow partial creation.
