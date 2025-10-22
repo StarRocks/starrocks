@@ -18,12 +18,12 @@ import com.google.common.collect.AbstractSequentialIterator;
 import com.google.common.collect.HashMultimap;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.PredicateSearchKey;
 import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import org.apache.iceberg.BlobMetadata;
@@ -99,11 +99,11 @@ public class IcebergStatisticProvider {
     public Statistics getTableStatistics(IcebergTable icebergTable,
                                          Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
                                          OptimizerContext session,
-                                         ScalarOperator predicate,
-                                         TableVersionRange version) {
+                                         GetRemoteFilesParams params) {
         Table nativeTable = icebergTable.getNativeTable();
         Statistics.Builder statisticsBuilder = Statistics.builder();
         String uuid = icebergTable.getUUID();
+        TableVersionRange version = params.getTableVersionRange();
         if (version.end().isPresent()) {
             Set<Integer> primitiveColumnsFieldIds = nativeTable.schema().columns().stream()
                     .filter(column -> column.type().isPrimitiveType())
@@ -125,8 +125,8 @@ public class IcebergStatisticProvider {
                 }
             }
 
-            PredicateSearchKey key = PredicateSearchKey.of(icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(),
-                    version.end().get(), predicate);
+            PredicateSearchKey key =
+                    PredicateSearchKey.of(icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(), params);
             IcebergFileStats icebergFileStats;
             if (!icebergFileStatistics.containsKey(key)) {
                 icebergFileStats = new IcebergFileStats(1);
