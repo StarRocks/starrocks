@@ -65,11 +65,16 @@ public class PredicateSearchKey {
         }
         PredicateSearchKey that = (PredicateSearchKey) o;
 
-        if (getPredicate() == null && that.getPredicate() != null) {
-            return false;
-        }
-        if (getPredicate() != null && !getPredicate().equivalent(that.getPredicate())) {
-            return false;
+        ScalarOperator thisPredicate = getPredicate();
+        ScalarOperator thatPredicate = that.getPredicate();
+        if (thisPredicate == null) {
+            if (thatPredicate != null) {
+                return false;
+            }
+        } else {
+            if (thatPredicate == null || !thisPredicate.equivalent(thatPredicate)) {
+                return false;
+            }
         }
         if (params.isEnableColumnStats() != that.params.isEnableColumnStats()) {
             return false;

@@ -16,7 +16,6 @@ package com.starrocks.connector.iceberg;
 
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.PredicateSearchKey;
-import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 
 import java.util.Objects;
 
@@ -39,11 +38,6 @@ public class IcebergRemoteFileInfoSourceKey extends PredicateSearchKey {
                                                     GetRemoteFilesParams params,
                                                     long morId,
                                                     IcebergMORParams icebergMORParams) {
-        if (params.getPredicate() == null) {
-            GetRemoteFilesParams copy = params.copy();
-            copy.setPredicate(ConstantOperator.TRUE);
-            params = copy;
-        }
         return new IcebergRemoteFileInfoSourceKey(databaseName, tableName, params, morId, icebergMORParams);
     }
 
