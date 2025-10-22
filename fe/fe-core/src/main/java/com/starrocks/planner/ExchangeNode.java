@@ -89,6 +89,7 @@ public class ExchangeNode extends PlanNode {
     // Specify the columns which need to send, work on CTE, and keep empty in other sense
     private List<Integer> receiveColumns;
 
+    private boolean useParallelMerge = true;
     /**
      * Create ExchangeNode that consumes output of inputNode.
      * An ExchangeNode doesn't have an input node as a child, which is why we
@@ -158,6 +159,14 @@ public class ExchangeNode extends PlanNode {
         return receiveColumns;
     }
 
+    public void setUseParallelMerge(boolean useParallelMerge) {
+        this.useParallelMerge = useParallelMerge;
+    }
+
+    public boolean isUseParallelMerge() {
+        return useParallelMerge;
+    }
+
     @Override
     public final void setLimit(long limit) {
         if (limit != -1) {
@@ -201,7 +210,7 @@ public class ExchangeNode extends PlanNode {
             msg.exchange_node.setPartition_type(partitionType);
         }
         SessionVariable sv = ConnectContext.get().getSessionVariable();
-        msg.exchange_node.setEnable_parallel_merge(sv.isEnableParallelMerge());
+        msg.exchange_node.setEnable_parallel_merge(isUseParallelMerge());
         TLateMaterializeMode mode = TLateMaterializeMode.valueOf(sv.getParallelMergeLateMaterializationMode().toUpperCase());
         msg.exchange_node.setParallel_merge_late_materialize_mode(mode);
     }

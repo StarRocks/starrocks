@@ -98,6 +98,8 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
 
     private DataPartition inputPartition;
 
+    private boolean useParallelMerge = true;
+
     public SortNode(PlanNodeId id, PlanNode input, SortInfo info, boolean useTopN,
                     boolean isDefaultLimit, long offset) {
         super(id, useTopN ? "TOP-N" : (info.getPartitionExprs().isEmpty() ? "SORT" : "PARTITION-TOP-N"));
@@ -144,6 +146,14 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
 
     @Override
     protected void computeStats() {
+    }
+
+    public void setUseParallelMerge(boolean useParallelMerge) {
+        this.useParallelMerge = useParallelMerge;
+    }
+
+    public boolean isUseParallelMerge() {
+        return useParallelMerge;
     }
 
     @Override
@@ -224,7 +234,7 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
         }
 
         msg.sort_node.setLate_materialization(sessionVariable.isFullSortLateMaterialization());
-        msg.sort_node.setEnable_parallel_merge(sessionVariable.isEnableParallelMerge());
+        msg.sort_node.setEnable_parallel_merge(isUseParallelMerge());
         TLateMaterializeMode mode = TLateMaterializeMode.valueOf(sessionVariable.getParallelMergeLateMaterializationMode().toUpperCase());
         msg.sort_node.setParallel_merge_late_materialize_mode(mode);
 
