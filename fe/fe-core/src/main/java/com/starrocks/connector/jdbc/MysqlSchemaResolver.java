@@ -134,7 +134,7 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
                 }
                 break;
             case Types.FLOAT:
-            case Types.REAL:
+            case Types.REAL: // real => short float
                 primitiveType = PrimitiveType.FLOAT;
                 break;
             case Types.DOUBLE:
