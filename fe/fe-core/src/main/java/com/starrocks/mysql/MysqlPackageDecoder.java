@@ -18,6 +18,7 @@
 package com.starrocks.mysql;
 
 import com.google.api.client.util.Lists;
+import com.google.common.base.Preconditions;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -47,7 +48,7 @@ public class MysqlPackageDecoder {
                     | ((header.get() & 0xFF) << 8)
                     | ((header.get() & 0xFF) << 16);
             this.seq = header.get() & 0xFF;
-            header.clear();
+            Preconditions.checkState(!header.hasRemaining());
         }
 
         int getLength() {
