@@ -493,6 +493,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         summary.put("totalRows", Long.valueOf(totalRows));
         summary.put("loadedRows", Long.valueOf(totalRows - errorRows - unselectedRows));
         summary.put("errorRows", Long.valueOf(errorRows));
+        summary.put("currentErrorRows", Long.valueOf(currentErrorRows));
         summary.put("unselectedRows", Long.valueOf(unselectedRows));
         summary.put("receivedBytes", Long.valueOf(receivedBytes));
         summary.put("taskExecuteTimeMs", Long.valueOf(totalTaskExcutionTimeMs));
