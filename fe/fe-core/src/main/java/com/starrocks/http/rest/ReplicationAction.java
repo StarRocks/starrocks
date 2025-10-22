@@ -41,11 +41,11 @@ import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
+import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.replication.ReplicationJob;
 import com.starrocks.replication.ReplicationMgr;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.UserIdentity;
 import io.netty.handler.codec.http.HttpMethod;
 
 import java.util.Collection;
@@ -63,11 +63,7 @@ public class ReplicationAction extends RestBaseAction {
     }
 
     @Override
-    public void executeWithoutPassword(BaseRequest request, BaseResponse response) throws AccessDeniedException {
-        // check authority
-        UserIdentity currentUser = ConnectContext.get().getCurrentUserIdentity();
-        checkUserOwnsAdminRole(currentUser);
-
+    public void execute(BaseRequest request, BaseResponse response) throws AccessDeniedException {
         String type = request.getSingleParameter("type");
         if (type.equals("cancel_all")) {
             GlobalStateMgr.getCurrentState().getReplicationMgr().cancelRunningJobs();
