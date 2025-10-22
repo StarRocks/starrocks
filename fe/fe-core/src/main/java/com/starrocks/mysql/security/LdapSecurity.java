@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.mysql.security;
 
 import com.google.common.base.Strings;
@@ -24,6 +23,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.Hashtable;
 import javax.naming.Context;
 import javax.naming.NamingEnumeration;
+import javax.naming.PartialResultException;
 import javax.naming.directory.DirContext;
 import javax.naming.directory.InitialDirContext;
 import javax.naming.directory.SearchControls;
@@ -104,8 +104,8 @@ public class LdapSecurity {
 
             String userDN = null;
             int matched = 0;
-            for (; ; ) {
-                if (results.hasMore()) {
+            try {
+                while (results.hasMore()) {
                     matched++;
                     if (matched > 1) {
                         LOG.warn("searched more than one entry from ldap server for user {}", user);
@@ -114,9 +114,9 @@ public class LdapSecurity {
 
                     SearchResult result = results.next();
                     userDN = result.getNameInNamespace();
-                } else {
-                    break;
                 }
+            } catch (PartialResultException e) {
+                LOG.warn("ldap search partial result exception", e);
             }
 
             if (matched != 1) {
