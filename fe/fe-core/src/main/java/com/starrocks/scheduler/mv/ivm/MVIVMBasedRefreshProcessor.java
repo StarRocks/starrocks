@@ -78,18 +78,24 @@ import static com.starrocks.scheduler.TaskRun.MV_UNCOPYABLE_PROPERTIES;
  * - Build an incremental refresh plan based on the changed version ranges of base tables.
  * - Execute the refresh plan to update the materialized view.
  */
-public class MVIVMBasedMVRefreshProcessor extends BaseMVRefreshProcessor {
+public final class MVIVMBasedRefreshProcessor extends BaseMVRefreshProcessor {
     // This map is used to store the temporary tvr version range for each base table
     private final Map<BaseTableInfo, TvrVersionRange> tempMvTvrVersionRangeMap = Maps.newConcurrentMap();
     // whether the next task run is needed
     private boolean hasNextTaskRun = false;
-    public MVIVMBasedMVRefreshProcessor(Database db, MaterializedView mv,
-                                        MvTaskRunContext mvContext,
-                                        IMaterializedViewMetricsEntity mvEntity) {
-        super(db, mv, mvContext, mvEntity, MVIVMBasedMVRefreshProcessor.class);
+
+    public MVIVMBasedRefreshProcessor(Database db, MaterializedView mv,
+                                      MvTaskRunContext mvContext,
+                                      IMaterializedViewMetricsEntity mvEntity,
+                                      MaterializedView.RefreshMode refreshMode) {
+        super(db, mv, mvContext, mvEntity, refreshMode, MVIVMBasedRefreshProcessor.class);
     }
 
+    @Override
     public ProcessExecPlan getProcessExecPlan(TaskRunContext taskRunContext) throws Exception {
+        if (!mvRefreshParams.isCompleteRefresh()) {
+            throw new SemanticException("IVM based refresh only supports complete refresh, but got partial refresh");
+        }
         syncAndCheckPCTPartitions(taskRunContext);
 
         // collect change snapshots
@@ -98,13 +104,12 @@ public class MVIVMBasedMVRefreshProcessor extends BaseMVRefreshProcessor {
                     mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableInfoTvrVersionRangeMap();
             for (BaseTableSnapshotInfo snapshotInfo : snapshotBaseTables.values()) {
                 TvrVersionRange changedVersionRange =
-                        getBaseTableChangedVersionRange(snapshotInfo, mvTvrVersionRangeMap);
+                        getBaseTableChangedVersionRange(snapshotInfo, mvTvrVersionRangeMap, currentRefreshMode);
                 logger.info("Base table: {}, changed version range: {}",
                         snapshotInfo.getBaseTableInfo().getTableName(), changedVersionRange);
                 // collect changed version range
                 TvrTableSnapshotInfo tvrTableSnapshotInfo = (TvrTableSnapshotInfo) snapshotInfo;
 
-                tvrTableSnapshotInfo.setTvrSnapshot(changedVersionRange);
                 tempMvTvrVersionRangeMap.put(snapshotInfo.getBaseTableInfo(), changedVersionRange);
                 // update the snapshot info with the changed version range
                 tvrTableSnapshotInfo.setTvrSnapshot(changedVersionRange);
@@ -139,25 +144,9 @@ public class MVIVMBasedMVRefreshProcessor extends BaseMVRefreshProcessor {
     }
 
     @Override
-    public Constants.TaskRunState doProcessTaskRun(TaskRunContext taskRunContext,
-                                                   MVRefreshExecutor executor) throws Exception {
-        try {
-            return refreshMaterializedView(executor);
-        } catch (Exception e) {
-            logger.warn("Failed to process task run for materialized view: {}, error: {}",
-                    mv.getName(), e.getMessage(), e);
-            throw e;
-        }
-    }
-
-    private Constants.TaskRunState refreshMaterializedView(MVRefreshExecutor executor) throws Exception {
-        final ProcessExecPlan processExecPlan = getProcessExecPlan(mvContext);
-        if (processExecPlan.state() == Constants.TaskRunState.SKIPPED) {
-            logger.info("Skip the refresh for materialized view: {}, no base table has changed",
-                    mv.getName());
-            return Constants.TaskRunState.SKIPPED;
-        }
-
+    public Constants.TaskRunState execProcessExecPlan(TaskRunContext taskRunContext,
+                                                      ProcessExecPlan processExecPlan,
+                                                      MVRefreshExecutor executor) throws Exception {
         final InsertStmt insertStmt = processExecPlan.insertStmt();
         final ExecPlan execPlan = processExecPlan.execPlan();
         try (Timer ignored = Tracers.watchScope("MVRefreshMaterializedView")) {
@@ -169,22 +158,32 @@ public class MVIVMBasedMVRefreshProcessor extends BaseMVRefreshProcessor {
         }
 
         try (Timer ignored = Tracers.watchScope("MVRefreshUpdateMeta")) {
-            try {
-                updatePCTMeta(execPlan, pctMVToRefreshedPartitions, pctRefTableRefreshPartitions);
-            } catch (Exception e) {
-                // if the update meta failed, we should not throw exception here
-                // because this meta-update only affects pct-based refresh rather than ivm-based mv refresh, which means only
-                // affect mv rewrite only.
-                logger.warn("Failed to update meta for materialized view: {}, error: {}",
-                        mv.getName(), e.getMessage(), e);
-            }
+            updatePCTMeta(execPlan, pctMVToRefreshedPartitions, pctRefTableRefreshPartitions, Maps.newHashMap());
         }
 
         return Constants.TaskRunState.SUCCESS;
     }
 
-    private TvrTableDelta getBaseTableChangedVersionRange(BaseTableSnapshotInfo snapshotInfo,
-                                                          Map<BaseTableInfo, TvrVersionRange> mvTvrVersionRangeMap) {
+    @Override
+    public void updateVersionMeta(ExecPlan execPlan,
+                                  Set<String> mvRefreshedPartitions,
+                                  Map<BaseTableSnapshotInfo, Set<String>> refTableAndPartitionNames) {
+        // ivm's meta has already been commited in the transaction of executing the plan,
+        // update the meta for pct-based refresh
+        try {
+            updatePCTMeta(execPlan, pctMVToRefreshedPartitions, pctRefTableRefreshPartitions, Maps.newHashMap());
+        } catch (Exception e) {
+            // if the update meta failed, we should not throw exception here
+            // because this meta-update only affects pct-based refresh rather than ivm-based mv refresh, which means only
+            // affect mv rewrite only.
+            logger.warn("Failed to update meta for materialized view: {}, error: {}",
+                    mv.getName(), e.getMessage(), e);
+        }
+    }
+
+    public TvrTableDelta getBaseTableChangedVersionRange(BaseTableSnapshotInfo snapshotInfo,
+                                                         Map<BaseTableInfo, TvrVersionRange> mvTvrVersionRangeMap,
+                                                         MaterializedView.RefreshMode refreshMode) {
         final BaseTableInfo baseTableInfo = snapshotInfo.getBaseTableInfo();
         final Table snapshotTable = snapshotInfo.getBaseTable();
 
@@ -194,7 +193,7 @@ public class MVIVMBasedMVRefreshProcessor extends BaseMVRefreshProcessor {
                     baseTableInfo.getDbName(), baseTableInfo.getTableName());
         }
         if (!snapshotTable.isIcebergTable()) {
-            throw new SemanticException("Only support Iceberg table for MVIVMBasedMVRefreshProcessor, " +
+            throw new SemanticException("Only support Iceberg table for MVIVMBasedRefreshProcessor, " +
                     "but got: " + snapshotTable.getType());
         }
         IcebergTable icebergTable = (IcebergTable) snapshotTable;
@@ -225,14 +224,18 @@ public class MVIVMBasedMVRefreshProcessor extends BaseMVRefreshProcessor {
                     lastTvrDeltaSnapshot, maxTvrDelta.toSnapshot());
         }
         for (TvrTableDeltaTrait deltaTrait : tableDeltaTraits) {
-            // TODO: We may need to handle the case where the deltaTrait is not append-only.
             if (!deltaTrait.isAppendOnly()) {
-                throw new SemanticException("TvrTableDeltaTrait is not append-only for base table: %s.%s, delta:%s",
-                        baseTableInfo.getDbName(), baseTableInfo.getTableName(), deltaTrait);
+                if (refreshMode.isIncremental()) {
+                    throw new SemanticException("TvrTableDeltaTrait is not append-only for base table: %s.%s, delta:%s",
+                            baseTableInfo.getDbName(), baseTableInfo.getTableName(), deltaTrait);
+                } else {
+                    logger.info("TvrTableDeltaTrait is not append-only for base table: {}, db: {}, delta:{}, " +
+                                    "use the max tvr delta instead", baseTableInfo.getTableName(),
+                            baseTableInfo.getDbName(), deltaTrait);
+                }
             }
         }
-        boolean isIVMRefreshAdaptive = isIVMRefreshAdaptive();
-        if (isIVMRefreshAdaptive) {
+        if (isGenerateNextTaskRun()) {
             return getBaseTableChangedDeltaAdaptive(baseTableInfo, tableDeltaTraits, maxTvrDelta);
         } else {
             logger.info("Base table: {}, db: {}, use the max tvr delta: {} for sync refresh",
@@ -241,7 +244,7 @@ public class MVIVMBasedMVRefreshProcessor extends BaseMVRefreshProcessor {
         }
     }
 
-    private boolean isIVMRefreshAdaptive() {
+    public boolean isGenerateNextTaskRun() {
         if (Config.mv_max_rows_per_refresh <= 0) {
             return false;
         }
@@ -468,7 +471,7 @@ public class MVIVMBasedMVRefreshProcessor extends BaseMVRefreshProcessor {
     }
 
     @Override
-    protected BaseTableSnapshotInfo buildBaseTableSnapshotInfo(BaseTableInfo baseTableInfo, Table table) {
+    public BaseTableSnapshotInfo buildBaseTableSnapshotInfo(BaseTableInfo baseTableInfo, Table table) {
         return new TvrTableSnapshotInfo(baseTableInfo, table);
     }
 }

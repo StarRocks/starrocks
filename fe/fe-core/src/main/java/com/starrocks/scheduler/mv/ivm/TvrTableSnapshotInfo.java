@@ -16,7 +16,7 @@ package com.starrocks.scheduler.mv.ivm;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.tvr.TvrVersionRange;
-import com.starrocks.scheduler.mv.PCTTableSnapshotInfo;
+import com.starrocks.scheduler.mv.pct.PCTTableSnapshotInfo;
 
 public class TvrTableSnapshotInfo extends PCTTableSnapshotInfo  {
     private TvrVersionRange tvrVersionRange;

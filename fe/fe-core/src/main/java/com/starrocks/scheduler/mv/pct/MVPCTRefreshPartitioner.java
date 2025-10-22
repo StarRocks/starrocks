@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.scheduler.mv;
+package com.starrocks.scheduler.mv.pct;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
@@ -36,6 +36,11 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.ExecuteOption;
 import com.starrocks.scheduler.MvTaskRunContext;
 import com.starrocks.scheduler.TaskRunContext;
+import com.starrocks.scheduler.mv.BaseTableSnapshotInfo;
+import com.starrocks.scheduler.mv.MVAdaptiveRefreshException;
+import com.starrocks.scheduler.mv.MVRefreshParams;
+import com.starrocks.scheduler.mv.MVRefreshPartitionSelector;
+import com.starrocks.scheduler.mv.MVTraceUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
 import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
@@ -196,6 +201,22 @@ public abstract class MVPCTRefreshPartitioner {
     }
 
     /**
+     * Whether can generate next task run according to the current refresh context.
+     */
+    public boolean isGenerateNextTaskRun() {
+        // refresh all partition when it's a sync refresh, otherwise updated partitions may be lost.
+        ExecuteOption executeOption = mvContext.getExecuteOption();
+        if (executeOption != null && executeOption.getIsSync()) {
+            return false;
+        }
+        // ignore if mv is not partitioned.
+        if (!mv.isPartitionedTable()) {
+            return false;
+        }
+        return true;
+    }
+
+    /**
      * Calculate the associated potential partitions to refresh according to the partitions to refresh.
      * NOTE: This must be called after filterMVToRefreshPartitions, otherwise it may lose some potential to-refresh mv partitions
      * which will cause filtered insert load.
@@ -312,16 +333,10 @@ public abstract class MVPCTRefreshPartitioner {
         if (mvToRefreshedPartitions.isEmpty() || mvToRefreshedPartitions.size() <= 1) {
             return;
         }
-        // refresh all partition when it's a sync refresh, otherwise updated partitions may be lost.
-        ExecuteOption executeOption = mvContext.getExecuteOption();
-        if (executeOption != null && executeOption.getIsSync()) {
+        // if cannot generate next task run, return directly
+        if (!mvRefreshParams.isCanGenerateNextTaskRun() || !isGenerateNextTaskRun()) {
             return;
         }
-        // ignore if mv is not partitioned.
-        if (!mv.isPartitionedTable()) {
-            return;
-        }
-
         // filter partitions by partition refresh strategy
         boolean hasUnsupportedTableType = mv.getBaseTableTypes().stream()
                 .anyMatch(type -> !SUPPORTED_TABLE_TYPES_FOR_ADAPTIVE_MV_REFRESH.contains(type));
@@ -360,6 +375,17 @@ public abstract class MVPCTRefreshPartitioner {
      */
     public int getPartitionRefreshNumberAdaptive(PCellSortedSet toRefreshPartitions,
                                                  MaterializedView.PartitionRefreshStrategy refreshStrategy) {
+        int partitionRefreshNumber = getPartitionRefreshNumberAdaptiveImpl(toRefreshPartitions, refreshStrategy);
+        logger.info("Determined partition refresh number: {} using strategy: {} for MV: {}",
+                partitionRefreshNumber, refreshStrategy, mv.getName());
+        if (this.mvContext.getStatus() != null && this.mvContext.getStatus().getMvTaskRunExtraMessage() != null) {
+            this.mvContext.getStatus().getMvTaskRunExtraMessage().setAdaptivePartitionRefreshNumber(partitionRefreshNumber);
+        }
+        return partitionRefreshNumber;
+    }
+
+    private int getPartitionRefreshNumberAdaptiveImpl(PCellSortedSet toRefreshPartitions,
+                                                      MaterializedView.PartitionRefreshStrategy refreshStrategy) {
         try {
             switch (refreshStrategy) {
                 case ADAPTIVE:
@@ -660,8 +686,8 @@ public abstract class MVPCTRefreshPartitioner {
         return getExpiredPartitionsByRetentionCondition(db, mv, ttlCondition, toRefreshPartitions, isMockPartitionIds);
     }
 
-    protected void filterPartitionsByTTL(PCellSortedSet toRefreshPartitions,
-                                         boolean isMockPartitionIds) {
+    public void filterPartitionsByTTL(PCellSortedSet toRefreshPartitions,
+                                      boolean isMockPartitionIds) {
         if (toRefreshPartitions == null || toRefreshPartitions.isEmpty()) {
             return;
         }
