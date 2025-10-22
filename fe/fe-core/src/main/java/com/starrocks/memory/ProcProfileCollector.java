@@ -69,8 +69,8 @@ public class ProcProfileCollector extends FrontendDaemon {
         String fileName = MEM_FILE_NAME_PREFIX + currentTimeString() + ".html";
         AsyncProfiler profiler = AsyncProfiler.getInstance();
         try {
-            profiler.execute(String.format("start,quiet,event=alloc,alloc=2m,cstack=vm,file=%s",
-                    profileLogDir + "/" + fileName));
+            profiler.execute(String.format("start,quiet,event=alloc,alloc=2m,cstack=vm,jstackdepth=%d,file=%s",
+                    Config.proc_profile_jstack_depth, profileLogDir + "/" + fileName));
             Thread.sleep(Config.proc_profile_collect_time_s * 1000L);
             profiler.execute(String.format("stop,file=%s", profileLogDir + "/" + fileName));
         } catch (Exception e) {
@@ -90,7 +90,8 @@ public class ProcProfileCollector extends FrontendDaemon {
         String fileName = CPU_FILE_NAME_PREFIX + currentTimeString() + ".html";
         AsyncProfiler profiler = AsyncProfiler.getInstance();
         try {
-            profiler.execute(String.format("start,quiet,event=cpu,cstack=vm,file=%s", profileLogDir + "/" + fileName));
+            profiler.execute(String.format("start,quiet,event=cpu,cstack=vm,jstackdepth=%d,file=%s",
+                    Config.proc_profile_jstack_depth, profileLogDir + "/" + fileName));
             Thread.sleep(Config.proc_profile_collect_time_s * 1000L);
             profiler.execute(String.format("stop,file=%s", profileLogDir + "/" + fileName));
         } catch (Exception e) {
