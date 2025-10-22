@@ -11,7 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package com.starrocks.scheduler.mv;
+package com.starrocks.scheduler.mv.pct;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
@@ -28,6 +28,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.connector.PartitionUtil;
+import com.starrocks.scheduler.mv.BaseTableSnapshotInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.common.ListPartitionDiffer;

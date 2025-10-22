@@ -1,0 +1,285 @@
+-- name: test_ivm_with_iceberg_full
+create external catalog mv_iceberg_${uuid0}
+properties
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+-- result:
+-- !result
+set catalog mv_iceberg_${uuid0};
+-- result:
+-- !result
+create database mv_ice_db_${uuid0};
+-- result:
+-- !result
+use mv_ice_db_${uuid0};
+-- result:
+-- !result
+create table t1 (
+  col_str string,
+  col_int int,
+  dt date
+) partition by(dt);
+-- result:
+-- !result
+insert into t1 values 
+  ('a', 1, '2023-12-01'),
+  ('a', 2, '2023-12-01'),
+  ('b', 3, '2023-12-02'),
+  ('', 4, '2023-12-02'),
+  (NULL, 5, '2023-12-03'),
+  (NULL, 6, '2023-12-03'),
+  (NULL, NULL, '2023-12-04'),
+  (NULL, NULL, NULL);
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+set enable_materialized_view_rewrite = false;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_mv1 PARTITION BY dt 
+REFRESH DEFERRED MANUAL 
+properties
+(
+    "refresh_mode" = "full"
+)
+AS SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+function: print_hit_materialized_view("SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1;", "test_mv1")
+-- result:
+True
+-- !result
+SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 ORDER BY col_str, col_int, dt limit 3;
+-- result:
+None	None	None
+None	None	2023-12-04
+None	5	2023-12-03
+-- !result
+SELECT col_str, col_int, dt FROM test_mv1 ORDER BY col_str, col_int, dt limit 3;
+-- result:
+None	None	None
+None	None	2023-12-04
+None	5	2023-12-03
+-- !result
+insert overwrite mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 select 'new_a', 3, '2023-12-01';
+-- result:
+-- !result
+insert overwrite mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 select 'new_b', 3, '2023-12-02';
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+function: print_hit_materialized_view("SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1;", "test_mv1")
+-- result:
+True
+-- !result
+SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 WHERE dt <= '2023-12-02' ORDER BY col_str, col_int, dt limit 3;
+-- result:
+new_a	3	2023-12-01
+new_b	3	2023-12-02
+-- !result
+SELECT col_str, col_int, dt FROM test_mv1 WHERE dt <= '2023-12-02' ORDER BY col_str, col_int, dt limit 3;
+-- result:
+new_a	3	2023-12-01
+new_b	3	2023-12-02
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values ('a', 20, '2023-12-02');
+-- result:
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values (NULL, 30, '2023-12-01');
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+function: print_hit_materialized_view("SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1;", "test_mv1")
+-- result:
+True
+-- !result
+SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 WHERE dt <= '2023-12-02' ORDER BY col_str, col_int, dt limit 3;
+-- result:
+None	30	2023-12-01
+a	20	2023-12-02
+new_a	3	2023-12-01
+-- !result
+SELECT col_str, col_int, dt FROM test_mv1 WHERE dt <= '2023-12-02' ORDER BY col_str, col_int, dt limit 3;
+-- result:
+None	30	2023-12-01
+a	20	2023-12-02
+new_a	3	2023-12-01
+-- !result
+drop materialized view test_mv1;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_mv1 PARTITION BY dt 
+REFRESH DEFERRED MANUAL 
+properties
+(
+    "refresh_mode" = "full"
+)
+AS 
+SELECT dt, sum(col_int) as sum_col_int, approx_count_distinct(col_str) as approx_count_distinct_col_str 
+FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 
+WHERE col_int > 5
+group by dt;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+function: print_hit_materialized_view("SELECT dt, sum(col_int) as sum_col_int, approx_count_distinct(col_str) as approx_count_distinct_col_str FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1  WHERE col_int > 5 group by dt;", "test_mv1")
+-- result:
+True
+-- !result
+SELECT dt, sum_col_int, approx_count_distinct_col_str FROM test_mv1 ORDER BY dt;
+-- result:
+2023-12-01	30	0
+2023-12-02	20	1
+2023-12-03	6	0
+-- !result
+SELECT dt, sum(col_int) as sum_col_int, approx_count_distinct(col_str) as approx_count_distinct_col_str FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1  WHERE col_int > 5 group by dt order by dt;
+-- result:
+2023-12-01	30	0
+2023-12-02	20	1
+2023-12-03	6	0
+-- !result
+insert overwrite mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 select 'b', 20, '2023-12-02';
+-- result:
+-- !result
+insert overwrite mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 select 'b', 20, '2023-12-02';
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+function: print_hit_materialized_view("SELECT dt, sum(col_int) as sum_col_int, approx_count_distinct(col_str) as approx_count_distinct_col_str FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1  WHERE col_int > 5 group by dt;", "test_mv1")
+-- result:
+True
+-- !result
+SELECT dt, sum_col_int, approx_count_distinct_col_str FROM test_mv1 ORDER BY dt;
+-- result:
+2023-12-01	30	0
+2023-12-02	20	1
+2023-12-03	6	0
+-- !result
+SELECT dt, sum(col_int) as sum_col_int, approx_count_distinct(col_str) as approx_count_distinct_col_str FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1  WHERE col_int > 5 group by dt order by dt;
+-- result:
+2023-12-01	30	0
+2023-12-02	20	1
+2023-12-03	6	0
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values ('a', 20, '2023-12-02');
+-- result:
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values (NULL, 30, '2023-12-01');
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+function: print_hit_materialized_view("SELECT dt, sum(col_int) as sum_col_int, approx_count_distinct(col_str) as approx_count_distinct_col_str FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1  WHERE col_int > 5 group by dt;", "test_mv1")
+-- result:
+True
+-- !result
+SELECT dt, sum_col_int, approx_count_distinct_col_str FROM test_mv1 ORDER BY dt;
+-- result:
+2023-12-01	60	0
+2023-12-02	40	2
+2023-12-03	6	0
+-- !result
+SELECT dt, sum(col_int) as sum_col_int, approx_count_distinct(col_str) as approx_count_distinct_col_str FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1  WHERE col_int > 5 group by dt order by dt;
+-- result:
+2023-12-01	60	0
+2023-12-02	40	2
+2023-12-03	6	0
+-- !result
+DROP MATERIALIZED VIEW test_mv1;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_mv1 PARTITION BY dt 
+REFRESH DEFERRED MANUAL 
+properties
+(
+    "refresh_mode" = "full"
+)
+AS 
+SELECT 
+  dt, sum(col_int) over(partition by dt) as sum_col_int, count(col_str) over(partition by dt) as count_col_str 
+FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 
+WHERE col_int > 5;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT dt, sum_col_int, count_col_str FROM test_mv1 ORDER BY 1, 2, 3;
+-- result:
+2023-12-01	60	0
+2023-12-01	60	0
+2023-12-02	40	2
+2023-12-02	40	2
+2023-12-03	6	0
+-- !result
+SELECT dt, sum(col_int) over(partition by dt) as sum_col_int, count(col_str) over(partition by dt) as count_col_str FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1  WHERE col_int > 5 order by 1, 2, 3;
+-- result:
+2023-12-01	60	0
+2023-12-01	60	0
+2023-12-02	40	2
+2023-12-02	40	2
+2023-12-03	6	0
+-- !result
+insert overwrite mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 select 'a', 10, '2023-12-01';
+-- result:
+-- !result
+insert overwrite mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 select 'b', 11, '2023-12-02';
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT dt, sum_col_int, count_col_str FROM test_mv1 ORDER BY 1, 2, 3;
+-- result:
+2023-12-01	10	1
+2023-12-02	11	1
+2023-12-03	6	0
+-- !result
+SELECT dt, sum(col_int) over(partition by dt) as sum_col_int, count(col_str) over(partition by dt) as count_col_str FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1  WHERE col_int > 5 order by 1, 2, 3;
+-- result:
+2023-12-01	10	1
+2023-12-02	11	1
+2023-12-03	6	0
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values ('a', 20, '2023-12-02');
+-- result:
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values (NULL, 30, '2023-12-01');
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT dt, sum_col_int, count_col_str FROM test_mv1 ORDER BY 1, 2, 3;
+-- result:
+2023-12-01	40	1
+2023-12-01	40	1
+2023-12-02	31	2
+2023-12-02	31	2
+2023-12-03	6	0
+-- !result
+SELECT dt, sum(col_int) over(partition by dt) as sum_col_int, count(col_str) over(partition by dt) as count_col_str FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1  WHERE col_int > 5 order by 1, 2, 3;
+-- result:
+2023-12-01	40	1
+2023-12-01	40	1
+2023-12-02	31	2
+2023-12-02	31	2
+2023-12-03	6	0
+-- !result
+DROP MATERIALIZED VIEW test_mv1;
+-- result:
+-- !result
+drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 force;
+-- result:
+-- !result
+drop database mv_iceberg_${uuid0}.mv_ice_db_${uuid0} force;
+-- result:
+-- !result
+drop database db_${uuid0} force;
+-- result:
+-- !result

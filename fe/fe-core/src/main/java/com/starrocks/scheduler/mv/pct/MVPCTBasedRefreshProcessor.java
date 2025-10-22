@@ -12,10 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.scheduler.mv;
+package com.starrocks.scheduler.mv.pct;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Stopwatch;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Database;
@@ -26,7 +25,6 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
-import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
@@ -41,6 +39,9 @@ import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.TaskRun;
 import com.starrocks.scheduler.TaskRunBuilder;
 import com.starrocks.scheduler.TaskRunContext;
+import com.starrocks.scheduler.mv.BaseMVRefreshProcessor;
+import com.starrocks.scheduler.mv.BaseTableSnapshotInfo;
+import com.starrocks.scheduler.mv.MVRefreshExecutor;
 import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.StatementPlanner;
@@ -48,7 +49,6 @@ import com.starrocks.sql.analyzer.PlannerMetaLocker;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.QueryDebugOptions;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.plan.ExecPlan;
 import org.apache.commons.collections.CollectionUtils;
 
@@ -69,39 +69,9 @@ public final class MVPCTBasedRefreshProcessor extends BaseMVRefreshProcessor {
 
     public MVPCTBasedRefreshProcessor(Database db, MaterializedView mv,
                                       MvTaskRunContext mvContext,
-                                      IMaterializedViewMetricsEntity mvEntity) {
-        super(db, mv, mvContext, mvEntity, MVPCTBasedRefreshProcessor.class);
-    }
-
-    // Core logics:
-    // 1. prepare to check some conditions
-    // 2. sync partitions with base tables(add or drop partitions, which will be optimized  by dynamic partition creation later)
-    // 3. decide which partitions of mv to refresh and the corresponding base tables' source partitions
-    // 4. construct the refresh sql and execute it
-    // 5. update the source table version map if refresh task completes successfully
-    @Override
-    public Constants.TaskRunState doProcessTaskRun(TaskRunContext taskRunContext,
-                                                   MVRefreshExecutor executor) throws Exception {
-        Stopwatch watch = Stopwatch.createStarted();
-
-        // log mv basic info, it may throw exception if mv is invalid since base table has dropped
-        try {
-            logger.debug("refBaseTablePartitionExprMap:{},refBaseTablePartitionSlotMap:{}, " +
-                            "refBaseTablePartitionColumnMap:{},baseTableInfos:{}",
-                    mv.getRefBaseTablePartitionExprs(), mv.getRefBaseTablePartitionSlots(),
-                    mv.getRefBaseTablePartitionColumns(), MvUtils.formatBaseTableInfos(mv.getBaseTableInfos()));
-        } catch (Throwable e) {
-            logger.warn("Log mv basic info failed:", e);
-        }
-
-        // refresh materialized view
-        Constants.TaskRunState result = doRefreshMaterializedView(taskRunContext, executor);
-
-        long elapsed = watch.elapsed(TimeUnit.MILLISECONDS);
-        logger.info("refresh mv success, cost time(ms): {}", DebugUtil.DECIMAL_FORMAT_SCALE_3.format(elapsed));
-        mvEntity.updateRefreshDuration(elapsed);
-
-        return result;
+                                      IMaterializedViewMetricsEntity mvEntity,
+                                      MaterializedView.RefreshMode refreshMode) {
+        super(db, mv, mvContext, mvEntity, refreshMode, MVPCTBasedRefreshProcessor.class);
     }
 
     @Override
@@ -140,25 +110,19 @@ public final class MVPCTBasedRefreshProcessor extends BaseMVRefreshProcessor {
         return new ProcessExecPlan(Constants.TaskRunState.SUCCESS, mvContext.getExecPlan(), insertStmt);
     }
 
-    private Constants.TaskRunState doRefreshMaterializedView(TaskRunContext context,
-                                                             MVRefreshExecutor executor) throws Exception {
-        final ProcessExecPlan processExecPlan = getProcessExecPlan(context);
-        if (processExecPlan.state() == Constants.TaskRunState.SKIPPED) {
-            logger.info("MV {} refresh task skipped, no partitions to refresh", mv.getName());
-            return Constants.TaskRunState.SKIPPED;
-        }
-
+    @Override
+    public Constants.TaskRunState execProcessExecPlan(TaskRunContext context,
+                                                      ProcessExecPlan processExecPlan,
+                                                      MVRefreshExecutor executor) throws Exception {
         ExecPlan mvExecPlan = processExecPlan.execPlan();
         try (Timer ignored = Tracers.watchScope("MVRefreshMaterializedView")) {
             InsertStmt insertStmt = processExecPlan.insertStmt();
             executor.executePlan(mvExecPlan, insertStmt);
         }
-
         // insert execute successfully, update the meta of mv according to ExecPlan
         try (Timer ignored = Tracers.watchScope("MVRefreshUpdateMeta")) {
-            updatePCTMeta(mvExecPlan, pctMVToRefreshedPartitions, pctRefTableRefreshPartitions);
+            updateVersionMeta(mvExecPlan, pctMVToRefreshedPartitions, pctRefTableRefreshPartitions);
         }
-
         return Constants.TaskRunState.SUCCESS;
     }
 
@@ -314,11 +278,18 @@ public final class MVPCTBasedRefreshProcessor extends BaseMVRefreshProcessor {
     }
 
     @Override
-    protected BaseTableSnapshotInfo buildBaseTableSnapshotInfo(BaseTableInfo baseTableInfo, Table table) {
+    public BaseTableSnapshotInfo buildBaseTableSnapshotInfo(BaseTableInfo baseTableInfo, Table table) {
         return new PCTTableSnapshotInfo(baseTableInfo, table);
     }
 
     public MVPCTRefreshPartitioner getMvRefreshPartitioner() {
         return mvRefreshPartitioner;
+    }
+
+    @Override
+    public void updateVersionMeta(ExecPlan execPlan,
+                                  Set<String> mvRefreshedPartitions,
+                                  Map<BaseTableSnapshotInfo, Set<String>> refTableAndPartitionNames) {
+        updatePCTMeta(execPlan, pctMVToRefreshedPartitions, pctRefTableRefreshPartitions, Maps.newHashMap());
     }
 }

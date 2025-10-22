@@ -22,6 +22,7 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.scheduler.MvTaskRunContext;
+import com.starrocks.scheduler.mv.pct.MVPCTRefreshRangePartitioner;
 import com.starrocks.sql.common.PCellNone;
 import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.PCellWithName;
