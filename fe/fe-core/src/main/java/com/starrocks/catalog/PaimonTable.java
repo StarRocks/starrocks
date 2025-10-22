@@ -23,6 +23,7 @@ import com.starrocks.thrift.TIcebergSchemaField;
 import com.starrocks.thrift.TPaimonTable;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
+import org.apache.paimon.catalog.Identifier;
 import org.apache.paimon.table.DataTable;
 import org.apache.paimon.types.DataField;
 
@@ -87,7 +88,15 @@ public class PaimonTable extends Table {
 
     @Override
     public String getUUID() {
+<<<<<<< HEAD
         return String.join(".", catalogName, databaseName, tableName, Long.toString(createTime));
+=======
+        if (!new Identifier(databaseName, tableName).isSystemTable()) {
+            return String.join(".", catalogName,  paimonNativeTable.uuid());
+        } else {
+            return String.join(".", catalogName, databaseName, tableName, paimonNativeTable.uuid());
+        }
+>>>>>>> 9c2aa7af54 ([BugFix] Fix collect paimon table column statistics information report error (#63650))
     }
 
     @Override
