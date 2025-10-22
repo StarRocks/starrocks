@@ -45,6 +45,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.mysql.MysqlCommand;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlConnectContext;
 import com.starrocks.sql.analyzer.Authorizer;
 import org.apache.logging.log4j.LogManager;
@@ -54,6 +55,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.TimerTask;
 import java.util.UUID;
@@ -173,6 +175,58 @@ public class ConnectScheduler {
         }
     }
 
+    public Pair<Boolean, String> onUserChanged(ConnectContext ctx, String oldQualifiedUser, String newQualifiedUser) {
+        if (Objects.equals(oldQualifiedUser, newQualifiedUser)) {
+            return new Pair<>(true, null);
+        }
+
+        if (newQualifiedUser == null) {
+            return new Pair<>(false, "new qualifiedUser is null");
+        }
+
+        try {
+            connStatsLock.lock();
+            AtomicInteger newCounter = connCountByUser.computeIfAbsent(newQualifiedUser, k -> new AtomicInteger(0));
+            int currentNewCount = newCounter.get();
+            long currentUserMaxConn = GlobalStateMgr.getCurrentState().getAuthenticationMgr().getMaxConn(newQualifiedUser);
+
+            if (currentNewCount >= currentUserMaxConn) {
+                int totalConn = connCountByUser.values().stream().mapToInt(AtomicInteger::get).sum();
+                String userErrMsg = "Reach user-level(qualifiedUser: " + newQualifiedUser
+                        + ", currUserIdentity: " + ctx.getCurrentUserIdentity() + ") connection limit, "
+                        + "currentUserMaxConn=" + currentUserMaxConn + ", connectionMap.size="
+                        + connectionMap.size() + ", connByUser.totConn=" + totalConn
+                        + ", user.currConn=" + currentNewCount;
+                LOG.info("{}, details: connectionId={}, connByUser={}", userErrMsg, ctx.getConnectionId(), connCountByUser);
+                return new Pair<>(false, userErrMsg);
+            }
+
+            newCounter.incrementAndGet();
+
+            if (oldQualifiedUser != null) {
+                AtomicInteger oldCounter = connCountByUser.get(oldQualifiedUser);
+                if (oldCounter != null) {
+                    int oldCountAfterDecrement = oldCounter.decrementAndGet();
+                    if (oldCountAfterDecrement < 0) {
+                        LOG.warn("Negative connection count detected for user {} during user change of connection {}",
+                                oldQualifiedUser, ctx.getConnectionId());
+                        oldCounter.set(0);
+                        oldCountAfterDecrement = 0;
+                    }
+                    if (oldCountAfterDecrement == 0) {
+                        connCountByUser.remove(oldQualifiedUser, oldCounter);
+                    }
+                } else {
+                    LOG.warn("Missing connection counter for user {} during user change of connection {}",
+                            oldQualifiedUser, ctx.getConnectionId());
+                }
+            }
+            return new Pair<>(true, null);
+        } finally {
+            connStatsLock.unlock();
+        }
+    }
+
     public void unregisterConnection(ConnectContext ctx) {
         boolean removed;
         try {
@@ -259,6 +313,10 @@ public class ConnectScheduler {
             infos.add(ctx.toThreadInfo());
         }
         return infos;
+    }
+
+    public Map<Long, ConnectContext> getCurrentConnectionMap() {
+        return connectionMap;
     }
 
     public List<ConnectContext.ThreadInfo> listConnection(String currUser, String forUser) {
