@@ -25,15 +25,20 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.NoAliveBackendException;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.lake.LakeTablet;
+import com.starrocks.lake.Utils;
 import com.starrocks.proto.PublishLogVersionBatchRequest;
+import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.replication.ReplicationTxnCommitAttachment;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
+import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
@@ -56,6 +61,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import javax.validation.constraints.NotNull;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -108,6 +114,19 @@ public class LakePublishBatchTest {
         new MockUp<PublishVersionDaemon>() {
             @Mock
             public void runOneCycle() {
+
+            }
+        };
+
+        new MockUp<Utils>() {
+            @Mock
+            public static void publishVersionBatch(@NotNull List<Tablet> tablets, List<TxnInfoPB> txnInfos,
+                    long baseVersion, long newVersion,
+                    Map<Long, Double> compactionScores,
+                    Map<ComputeNode, List<Long>> nodeToTablets,
+                    long warehouseId,
+                    Map<Long, Long> tabletRowNum)
+                    throws NoAliveBackendException, RpcException {
 
             }
         };
