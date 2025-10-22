@@ -48,7 +48,6 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.utframe.MockedBackend;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Mock;
 import mockit.MockUp;
 import org.awaitility.Awaitility;
@@ -122,10 +121,11 @@ public class LakePublishBatchTest {
 
         new MockUp<Utils>() {
             @Mock
-            public static void publishVersion(@NotNull List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion,
-                    long newVersion, Map<Long, Double> compactionScores,
-                    List<String> distributionColumns, ComputeResource computeResource,
-                    Map<Long, Long> tabletRowNums, boolean useAggregatePublish)
+            public void publishVersionBatch(@NotNull List<Tablet> tablets, List<TxnInfoPB> txnInfos,
+                    long baseVersion, long newVersion,
+                    Map<Long, Double> compactionScores,
+                    Map<ComputeNode, List<Long>> nodeToTablets,
+                    long warehouseId)
                     throws NoAliveBackendException, RpcException {
 
             }
