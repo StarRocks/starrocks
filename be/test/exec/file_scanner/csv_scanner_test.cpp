@@ -145,31 +145,33 @@ TEST_P(CSVScannerTest, test_preceding_filter) {
 
     // Build minimal TExpr structure for filter (just placeholder shape — actual eval happens elsewhere)
     TExprNode predicate;
-    predicate.node_type = TExprNodeType::BINARY_PRED;
-    predicate.opcode = TExprOpcode::GT;
-    predicate.child_type = TPrimitiveType::INT;
-    predicate.__isset.opcode = true;
-    predicate.__isset.child_type = true;
+    predicate.__set_type(gen_type_desc(TPrimitiveType::INT));
+    predicate.__set_num_children(2);
+    predicate.__set_node_type(TExprNodeType::BINARY_PRED);
+    predicate.__set_child_type(TPrimitiveType::INT);
+    predicate.__set_opcode(TExprOpcode::GT);
 
     // Slot ref for first column (col0)
+    TSlotRef t_slot_ref;
+    t_slot_ref.__set_slot_id(0);
     TExprNode slot_ref;
-    slot_ref.node_type = TExprNodeType::SLOT_REF;
-    slot_ref.type = gen_type_desc(TPrimitiveType::INT);
-    slot_ref.slot_ref.slot_id = 0; // refers to first column
-    slot_ref.num_children = 0;
+    slot_ref.__set_node_type(TExprNodeType::SLOT_REF);
+    slot_ref.__set_type(gen_type_desc(TPrimitiveType::INT));
+    slot_ref.__set_slot_ref(t_slot_ref);
+    slot_ref.__set_num_children(0);
 
     // Constant for value '1'
+    TIntLiteral int_literal;
+    int_literal.__set_value(1);
     TExprNode constant;
-    constant.node_type = TExprNodeType::INT_LITERAL;
-    constant.type = gen_type_desc(TPrimitiveType::INT);
-    constant.int_literal.value = 1;
-    constant.num_children = 0;
+    constant.__set_node_type(TExprNodeType::INT_LITERAL);
+    constant.__set_type(gen_type_desc(TPrimitiveType::INT));
+    constant.__set_int_literal(int_literal);
+    constant.__set_num_children(0);
 
     // Build expr tree: col0 > 1
     TExpr filter_expr;
-    filter_expr.nodes.push_back(predicate);
-    filter_expr.nodes.push_back(slot_ref);
-    filter_expr.nodes.push_back(constant);
+    filter_expr.__set_nodes({predicate, slot_ref, constant});
 
     preceding_filter_exprs.push_back(filter_expr);
 
