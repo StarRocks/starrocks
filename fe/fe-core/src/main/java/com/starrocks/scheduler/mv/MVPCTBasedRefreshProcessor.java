@@ -256,7 +256,7 @@ public final class MVPCTBasedRefreshProcessor extends BaseMVRefreshProcessor {
         String taskName = TaskBuilder.getMvTaskName(mvId);
         Map<String, String> newProperties = Maps.newHashMap();
         for (Map.Entry<String, String> proEntry : properties.entrySet()) {
-            // skip uncopyable properties: force/partition_values/... which only can be set specifically.
+            // skip uncopyable properties: partition_values/... which only can be set specifically.
             if (proEntry.getKey() == null || proEntry.getValue() == null
                     || MV_UNCOPYABLE_PROPERTIES.contains(proEntry.getKey())) {
                 continue;
@@ -293,7 +293,7 @@ public final class MVPCTBasedRefreshProcessor extends BaseMVRefreshProcessor {
         ExecuteOption option = new ExecuteOption(priority, true, newProperties);
         logger.info("[MV] Generate a task to refresh next batches of partitions for MV {}-{}, start={}, end={}, " +
                         "priority={}, properties={}", mv.getName(), mv.getId(),
-                mvContext.getNextPartitionStart(), mvContext.getNextPartitionEnd(), priority, properties);
+                mvContext.getNextPartitionStart(), mvContext.getNextPartitionEnd(), priority, newProperties);
 
         if (properties.containsKey(TaskRun.IS_TEST) && properties.get(TaskRun.IS_TEST).equalsIgnoreCase("true")) {
             // for testing
