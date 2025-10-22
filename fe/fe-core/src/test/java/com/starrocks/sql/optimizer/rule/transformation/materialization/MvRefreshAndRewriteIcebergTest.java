@@ -2152,4 +2152,22 @@ public class MvRefreshAndRewriteIcebergTest extends MVTestBase {
         mvPlanContexts = CachingMvPlanContextBuilder.getInstance().getOrLoadPlanContext(mv2, 3000);
         Assertions.assertTrue(mvPlanContexts.size() == 1);
     }
+
+
+    @Test
+    public void testRefBaseTablePartitionWithTransform2() throws Exception {
+        final String sql = "CREATE MATERIALIZED VIEW test_mv1\n" +
+                "PARTITION BY ds\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")\n" +
+                "AS SELECT id, data, date_trunc('month', ts) as ds  FROM `iceberg0`.`partitioned_transforms_db`.`t0_month` as a;";
+        CreateMaterializedViewStatement stmt =
+                (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql,
+                        connectContext);
+        MaterializedViewAnalyzer.analyze(stmt, starRocksAssert.getCtx());
+        Assertions.assertTrue(stmt.isRefBaseTablePartitionWithTransform());
+    }
 }

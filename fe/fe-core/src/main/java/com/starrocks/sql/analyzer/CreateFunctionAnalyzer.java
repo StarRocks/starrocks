@@ -28,6 +28,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.udf.UDFDownloader;
 import com.starrocks.common.util.UDFInternalClassLoader;
+import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateFunctionStmt;
@@ -63,10 +64,13 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import static com.starrocks.common.Config.STARROCKS_HOME_DIR;
+import static com.starrocks.sql.ast.CreateFunctionStmt.STORAGE_VOLUME_NAME_KEY;
 
 public class CreateFunctionAnalyzer {
 
     private String objectFile;
+
+    private String storageVolumeName;
 
     public void analyze(CreateFunctionStmt stmt, ConnectContext context) {
         if (!Config.enable_udf) {
@@ -106,10 +110,10 @@ public class CreateFunctionAnalyzer {
 
     private String getJUdfUrl(String url) throws IOException {
         String fileName = url.substring(url.lastIndexOf("/") + 1);
-        StorageVolume sv = GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getDefaultStorageVolume();
+        StorageVolume sv = GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolumeByName(this.storageVolumeName);
         if (sv == null) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
-                    "No default cloud storage volume. Please create a cloud storage volume and set it as default");
+                    "No corresponding cloud storage volume. Please create a cloud storage volume and choose it");
         }
         String targetPath = String.format("%s/%s", STARROCKS_HOME_DIR + "/plugins/java_udf", fileName);
         String targetUrl = String.format("file://%s", targetPath);
@@ -128,6 +132,7 @@ public class CreateFunctionAnalyzer {
         Map<String, String> properties = stmt.getProperties();
 
         objectFile = properties.get(CreateFunctionStmt.FILE_KEY);
+        storageVolumeName = properties.get(STORAGE_VOLUME_NAME_KEY);
         if (Strings.isNullOrEmpty(objectFile)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "No 'object_file' in properties");
         }
@@ -234,11 +239,14 @@ public class CreateFunctionAnalyzer {
         TypeDef returnType = stmt.getReturnType();
         String objectFile = stmt.getProperties().get(CreateFunctionStmt.FILE_KEY);
         String isolation = stmt.getProperties().get(CreateFunctionStmt.ISOLATION_KEY);
-
+        String storageVolumeName = stmt.getProperties().get(STORAGE_VOLUME_NAME_KEY);
+        StorageVolume storageVolume = GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolumeByName(storageVolumeName);
+        CloudConfiguration cloudConfiguration = storageVolume == null ? null : storageVolume.getCloudConfiguration();
         Function function = ScalarFunction.createUdf(
                 functionName, argsDef.getArgTypes(),
                 returnType.getType(), argsDef.isVariadic(), TFunctionBinaryType.SRJAR,
-                objectFile, handleClass.getCanonicalName(), "", "", !"shared".equalsIgnoreCase(isolation));
+                objectFile, handleClass.getCanonicalName(), "", "", !"shared".equalsIgnoreCase(isolation),
+                cloudConfiguration);
         function.setChecksum(checksum);
         return function;
     }
