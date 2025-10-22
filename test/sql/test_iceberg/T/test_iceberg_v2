@@ -5,6 +5,7 @@ create external catalog iceberg_sql_test_${uuid0} PROPERTIES ("type"="iceberg", 
 -- Currently only flink can write iceberg equality delete file. The table in the case was created in advance and some test data was inserted using flink. If you want test more cases, you could contact stephen5217@163.com
 
 set enable_connector_incremental_scan_ranges=true;
+set new_planner_optimize_timeout = 30000;
 
 -- unpartitioned table with orc (eq-delete && pos-delete) 
 /*
