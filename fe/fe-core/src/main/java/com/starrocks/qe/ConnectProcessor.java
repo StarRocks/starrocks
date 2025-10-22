@@ -1018,8 +1018,12 @@ public class ConnectProcessor {
                 executor = new StmtExecutor(ctx, statement);
             }
             ctx.setExecutor(executor);
+            if (ctx.getIsLastStmt()) {
+                executor.addRunningQueryDetail(statement);
+            }
             executor.setProxy();
             executor.execute();
+            executor.addFinishedQueryDetail();
         } catch (IOException e) {
             // Client failed.
             LOG.warn("Process one query failed because IOException: ", e);
