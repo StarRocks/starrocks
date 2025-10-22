@@ -23,8 +23,7 @@ namespace starrocks::csv {
 // Mock CSVReader for testing - implements the pure virtual function
 class MockCSVReader : public starrocks::CSVReader {
 public:
-    explicit MockCSVReader(const starrocks::CSVParseOptions& parse_options)
-            : CSVReader(parse_options) {}
+    explicit MockCSVReader(const starrocks::CSVParseOptions& parse_options) : CSVReader(parse_options) {}
 
 protected:
     starrocks::Status _fill_buffer() override {
