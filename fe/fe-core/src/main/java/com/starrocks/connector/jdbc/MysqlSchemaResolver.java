@@ -96,9 +96,7 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
                 primitiveType = PrimitiveType.BOOLEAN;
                 break;
             case Types.TINYINT:
-                if (lowerTypeName.equals("tinyint") && columnSize == 1) {
-                    primitiveType = PrimitiveType.BOOLEAN;
-                } else if (isUnsigned) {
+                if (isUnsigned) {
                     primitiveType = PrimitiveType.SMALLINT;
                 } else {
                     primitiveType = PrimitiveType.TINYINT;

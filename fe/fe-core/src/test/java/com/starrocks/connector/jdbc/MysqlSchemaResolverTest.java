@@ -380,6 +380,9 @@ public class MysqlSchemaResolverTest {
         type = resolver.convertColumnType(java.sql.Types.BOOLEAN, "BIT", 64, 0);
         Assertions.assertEquals(PrimitiveType.BOOLEAN, type.getPrimitiveType());
         
+        type = resolver.convertColumnType(java.sql.Types.TINYINT, "TINYINT", 1, 0);
+        Assertions.assertEquals(PrimitiveType.TINYINT, type.getPrimitiveType());
+        
         type = resolver.convertColumnType(java.sql.Types.TINYINT, "TINYINT", 3, 0);
         Assertions.assertEquals(PrimitiveType.TINYINT, type.getPrimitiveType());
         
