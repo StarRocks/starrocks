@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "udf_downloder.h"
+
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 
@@ -21,13 +22,13 @@ namespace starrocks {
 std::mutex udf_downloder::_map_mutex;
 std::unordered_map<std::string, std::shared_ptr<std::mutex>> udf_downloder::_path_mutexes;
 
-Status udf_downloder::download_remote_file_2_local(const std::string& remotePath, std::string& localPath) {
+Status udf_downloder::download_remote_file_2_local(const std::string& remotePath, std::string& localPath, const FSOptions& options) {
     auto mtx = get_mutex_for_path(localPath);
     std::lock_guard<std::mutex> lock(*mtx);
     udf_downloder downloader;
     RETURN_IF_ERROR(downloader.setup_local_file_path(localPath));
     LOG(INFO) << fmt::format("Downloading udf file from {}", remotePath);
-    RETURN_IF_ERROR(downloader.do_download(remotePath, localPath));
+    RETURN_IF_ERROR(downloader.do_download(remotePath, localPath, options));
     LOG(INFO) << fmt::format("Successfully downloaded udf file from {} to {}", remotePath, localPath);
 
     return Status::OK();
@@ -35,15 +36,14 @@ Status udf_downloder::download_remote_file_2_local(const std::string& remotePath
 
 Status udf_downloder::setup_local_file_path(const std::string& local_path) {
     std::string dir_path = local_path.substr(0, local_path.find_last_of('/'));
-    LOG(INFO) << fmt::format("[udf_downloder] Ensuring directory exists: {}", dir_path);
-    RETURN_IF_ERROR(FileSystem::Default()->create_dir_if_missing(dir_path));
-    LOG(INFO) << "[udf_downloder] setup_local_file_path() completed successfully";
+    RETURN_IF_ERROR(FileSystem::Default()->create_dir_recursive(dir_path));
+    LOG(INFO) << "setup_local_file_path() completed successfully";
     return Status::OK();
 }
 
-Status udf_downloder::do_download(const std::string& remotePath, std::string& localPath) {
+Status udf_downloder::do_download(const std::string& remotePath, std::string& localPath, const FSOptions& options) {
     LOG(INFO) << fmt::format("[udf_downloder] do_download() start: remote={}, local={}", remotePath, localPath);
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(remotePath));
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateUniqueFromString(remotePath, options));
     if (!fs) {
         LOG(ERROR) << fmt::format("[udf_downloder] No matching filesystem for {}", remotePath);
         return Status::NotFound(fmt::format("No matching filesystem available for {}", remotePath));

@@ -26,12 +26,12 @@ namespace starrocks {
 class udf_downloder {
 
 public:
-    static Status download_remote_file_2_local(const std::string& remotePath, std::string& localPath);
+    static Status download_remote_file_2_local(const std::string& remotePath, std::string& localPath, const FSOptions& options);
 
 private:
     Status setup_local_file_path(const std::string& local_path);
 
-    Status do_download(const std::string& remotePath, std::string& localPath);
+    Status do_download(const std::string& remotePath, std::string& localPath, const FSOptions& options);
 
     static std::unordered_map<std::string, std::shared_ptr<std::mutex>> _path_mutexes;
 

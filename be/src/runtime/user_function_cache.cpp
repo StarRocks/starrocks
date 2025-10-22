@@ -58,11 +58,12 @@ static const int kLibShardNum = 128;
 // function cache entry, store information for
 struct UserFunctionCacheEntry {
     UserFunctionCacheEntry(int64_t fid_, std::string checksum_, std::string lib_file_,
-                           TFunctionBinaryType::type function_type)
+                           TFunctionBinaryType::type function_type, TCloudConfiguration cloud_configuration)
             : function_id(fid_),
               checksum(std::move(checksum_)),
               lib_file(std::move(lib_file_)),
-              function_type(function_type) {}
+              function_type(function_type),
+              cloud_configuration(cloud_configuration){}
     ~UserFunctionCacheEntry();
 
     int64_t function_id = 0;
@@ -93,6 +94,8 @@ struct UserFunctionCacheEntry {
 
     // function type
     TFunctionBinaryType::type function_type;
+
+    TCloudConfiguration cloud_configuration;
 
     std::any cache_handle;
 };
@@ -137,19 +140,19 @@ Status UserFunctionCache::init(const std::string& lib_dir) {
 }
 
 Status UserFunctionCache::get_libpath(int64_t fid, const std::string& url, const std::string& checksum,
-                                      FuncType function_type, std::string* libpath) {
+                                      FuncType function_type, std::string* libpath, const TCloudConfiguration& cloud_configuration) {
     UserFunctionCacheEntryPtr entry;
     RETURN_IF_ERROR(_get_cache_entry(fid, url, checksum, function_type, &entry,
-                                     [](const auto& entry) -> StatusOr<std::any> { return std::any{}; }));
+                                     [](const auto& entry) -> StatusOr<std::any> { return std::any{}; }, cloud_configuration));
     *libpath = entry->lib_file;
     return Status::OK();
 }
 
 StatusOr<std::any> UserFunctionCache::load_cacheable_java_udf(
         int64_t fid, const std::string& url, const std::string& checksum, FuncType function_type,
-        const std::function<StatusOr<std::any>(const std::string& path)>& loader) {
+        const std::function<StatusOr<std::any>(const std::string& path)>& loader, const TCloudConfiguration& cloud_configuration) {
     UserFunctionCacheEntryPtr entry;
-    RETURN_IF_ERROR(_get_cache_entry(fid, url, checksum, function_type, &entry, loader));
+    RETURN_IF_ERROR(_get_cache_entry(fid, url, checksum, function_type, &entry, loader, cloud_configuration));
     return entry->cache_handle;
 }
 
@@ -163,7 +166,7 @@ auto UserFunctionCache::_get_function_type(const std::string& url) -> FuncType {
 }
 
 // Now we only support JAVA_UDF
-Status UserFunctionCache::_load_entry_from_lib(const std::string& dir, const std::string& file) {
+Status UserFunctionCache::_load_entry_from_lib(const std::string& dir, const std::string& file, TCloudConfiguration& cloud_configuration) {
     auto type = _get_function_type(file);
     if (type == UDF_TYPE_UNKNOWN) {
         return Status::InternalError(fmt::format("unknown udf type:{} for file:{}", type, file));
@@ -181,7 +184,7 @@ Status UserFunctionCache::_load_entry_from_lib(const std::string& dir, const std
         return Status::InternalError("duplicate function id");
     }
     // create a cache entry and put it into entry map
-    auto entry = std::make_shared<UserFunctionCacheEntry>(function_id, checksum, dir + "/" + file, type);
+    auto entry = std::make_shared<UserFunctionCacheEntry>(function_id, checksum, dir + "/" + file, type, cloud_configuration);
     entry->is_downloaded = true;
     _entry_map[function_id] = entry;
 
@@ -200,7 +203,7 @@ Status UserFunctionCache::_load_cached_lib() {
             if (file == "." || file == "..") {
                 return true;
             }
-            auto st = _load_entry_from_lib(sub_dir, std::string(file));
+            auto st = _load_entry_from_lib(sub_dir, std::string(file), _cloud_configuration);
             if (!st.ok()) {
                 LOG(WARNING) << "load a library failed, dir=" << sub_dir << ", file=" << file;
             }
@@ -212,7 +215,7 @@ Status UserFunctionCache::_load_cached_lib() {
 }
 template <class Loader>
 Status UserFunctionCache::_get_cache_entry(int64_t fid, const std::string& url, const std::string& checksum,
-                                           FuncType type, UserFunctionCacheEntryPtr* output_entry, Loader&& loader) {
+                                           FuncType type, UserFunctionCacheEntryPtr* output_entry, Loader&& loader, TCloudConfiguration cloud_configuration) {
     std::string suffix = ".unk";
     if (type == UDF_TYPE_JAVA) {
         suffix = JAVA_UDF_SUFFIX;
@@ -230,7 +233,7 @@ Status UserFunctionCache::_get_cache_entry(int64_t fid, const std::string& url, 
             entry = it->second;
         } else {
             entry = std::make_shared<UserFunctionCacheEntry>(fid, checksum, _make_lib_file(fid, checksum, suffix),
-                                                             type);
+                                                             type, cloud_configuration);
             _entry_map.emplace(fid, entry);
         }
     }
@@ -257,14 +260,14 @@ void UserFunctionCache::_destroy_cache_entry(UserFunctionCacheEntryPtr& entry) {
 }
 
 template <class Loader>
-Status UserFunctionCache::_load_cache_entry(const std::string& url, UserFunctionCacheEntryPtr& entry, Loader&& loader) {
+Status UserFunctionCache::_load_cache_entry(const std::string& url, UserFunctionCacheEntryPtr& entry, Loader&& loader, const TCloudConfiguration& cloud_configuration) {
     if (entry->is_loaded.load()) {
         return Status::OK();
     }
 
     std::unique_lock<std::mutex> l(entry->load_lock);
     if (!entry->is_downloaded) {
-        RETURN_IF_ERROR(_download_lib(url, entry));
+        RETURN_IF_ERROR(_download_lib(url, entry, cloud_configuration));
     }
 
     if (!entry->is_loaded.load()) {
@@ -274,12 +277,12 @@ Status UserFunctionCache::_load_cache_entry(const std::string& url, UserFunction
 }
 
 // entry's lock must be held
-Status UserFunctionCache::_download_lib(const std::string& url, UserFunctionCacheEntryPtr& entry) {
+Status UserFunctionCache::_download_lib(const std::string& url, UserFunctionCacheEntryPtr& entry, const TCloudConfiguration& cloud_configuration) {
     DCHECK(!entry->is_downloaded);
 
     std::string target_file = entry->lib_file;
     std::string expected_checksum = entry->checksum;
-    RETURN_IF_ERROR(DownloadUtil::download(url, target_file, expected_checksum));
+    RETURN_IF_ERROR(DownloadUtil::download(url, target_file, expected_checksum, cloud_configuration));
 
     // check download
     entry->is_downloaded = true;
