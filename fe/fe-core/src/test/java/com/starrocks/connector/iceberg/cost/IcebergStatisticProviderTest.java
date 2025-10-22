@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.iceberg.cost;
 
 import com.google.common.collect.Lists;
@@ -20,6 +19,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Type;
+import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.iceberg.TableTestBase;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
@@ -70,7 +70,10 @@ public class IcebergStatisticProviderTest extends TableTestBase {
 
         TableVersionRange version = TableVersionRange.withEnd(Optional.of(
                 mockedNativeTableA.currentSnapshot().snapshotId()));
-        Statistics statistics = statisticProvider.getTableStatistics(icebergTable, colRefToColumnMetaMap, null, null, version);
+        GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder()
+                .setTableVersionRange(version)
+                .build();
+        Statistics statistics = statisticProvider.getTableStatistics(icebergTable, colRefToColumnMetaMap, null, params);
         Assertions.assertEquals(1.0, statistics.getOutputRowCount(), 0.001);
     }
 
@@ -109,8 +112,9 @@ public class IcebergStatisticProviderTest extends TableTestBase {
         ColumnRefOperator columnRefOperator2 = new ColumnRefOperator(4, Type.STRING, "data", true);
         colRefToColumnMetaMap.put(columnRefOperator1, new Column("id", Type.INT));
         colRefToColumnMetaMap.put(columnRefOperator2, new Column("data", Type.STRING));
-        Statistics statistics = statisticProvider.getTableStatistics(icebergTable, colRefToColumnMetaMap,
-                null, null, TableVersionRange.empty());
+
+        GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder().setTableVersionRange(TableVersionRange.empty()).build();
+        Statistics statistics = statisticProvider.getTableStatistics(icebergTable, colRefToColumnMetaMap, null, params);
         Assertions.assertEquals(1.0, statistics.getOutputRowCount(), 0.001);
     }
 

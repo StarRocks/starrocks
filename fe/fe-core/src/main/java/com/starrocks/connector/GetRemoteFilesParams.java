@@ -106,6 +106,10 @@ public class GetRemoteFilesParams {
         return tableVersionRange;
     }
 
+    public long getSnapshotId() {
+        return tableVersionRange.end().orElse(-1L);
+    }
+
     public ScalarOperator getPredicate() {
         return predicate;
     }
@@ -163,6 +167,11 @@ public class GetRemoteFilesParams {
 
         public Builder setTableVersionRange(TableVersionRange tableVersionRange) {
             this.tableVersionRange = tableVersionRange;
+            return this;
+        }
+
+        public Builder setSnapshotId(long snapshotId) {
+            this.tableVersionRange = TableVersionRange.withEnd(java.util.Optional.of(snapshotId));
             return this;
         }
 

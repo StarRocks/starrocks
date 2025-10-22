@@ -169,6 +169,11 @@ public class IcebergMetadataTest extends TableTestBase {
     public static final Map<String, String> DEFAULT_CONFIG = new HashMap<>();
     public static ConnectContext connectContext;
 
+    public static GetRemoteFilesParams emptyParams = GetRemoteFilesParams.newBuilder()
+            .setSnapshotId(1)
+            .setPredicate(ConstantOperator.TRUE)
+            .build();
+
     static {
         DEFAULT_CONFIG.put(HIVE_METASTORE_URIS, "thrift://188.122.12.1:8732"); // non-exist ip, prevent to connect local service
         DEFAULT_CONFIG.put(ICEBERG_CATALOG_TYPE, "hive");
@@ -360,10 +365,10 @@ public class IcebergMetadataTest extends TableTestBase {
         Assertions.assertEquals("tbl", icebergTable.getCatalogTableName());
         String createSql = AstToStringBuilder.getExternalCatalogTableDdlStmt(actual);
         Assertions.assertEquals("CREATE TABLE `tbl` (\n" +
-                "  `c1` int(11) DEFAULT NULL,\n" +
-                "  `c2` varchar(1048576) DEFAULT NULL\n" +
-                ")\n" +
-                "ORDER BY (c1 ASC NULLS FIRST,c2 DESC NULLS LAST);",
+                        "  `c1` int(11) DEFAULT NULL,\n" +
+                        "  `c2` varchar(1048576) DEFAULT NULL\n" +
+                        ")\n" +
+                        "ORDER BY (c1 ASC NULLS FIRST,c2 DESC NULLS LAST);",
                 createSql);
     }
 
@@ -1109,8 +1114,9 @@ public class IcebergMetadataTest extends TableTestBase {
         Assertions.assertEquals(1, res.size());
         Assertions.assertEquals(3, ((IcebergRemoteFileInfo) res.get(0)).getFileScanTask().file().recordCount());
 
-        PredicateSearchKey filter = PredicateSearchKey.of("db", "table", 1, null);
-        Assertions.assertEquals("Filter{databaseName='db', tableName='table', snapshotId=1, predicate=true}",
+        PredicateSearchKey filter = PredicateSearchKey.of("db", "table", emptyParams);
+        Assertions.assertEquals(
+                "Filter{databaseName='db', tableName='table', snapshotId=1, predicate=true, enableColumnStats=false}",
                 filter.toString());
     }
 
@@ -1375,12 +1381,26 @@ public class IcebergMetadataTest extends TableTestBase {
         newArguments.add(new ColumnRefOperator(22, Type.INT, "date_col", true));
         ScalarOperator newCallOperator = new CallOperator("date_trunc", Type.DATE, newArguments);
 
-        PredicateSearchKey filter = PredicateSearchKey.of("db", "table", 1L, callOperator);
-        PredicateSearchKey newFilter = PredicateSearchKey.of("db", "table", 1L, newCallOperator);
+        GetRemoteFilesParams callParams = GetRemoteFilesParams.newBuilder()
+                .setSnapshotId(1)
+                .setPredicate(callOperator)
+                .setFieldNames(Lists.newArrayList())
+                .setLimit(10)
+                .build();
+
+        GetRemoteFilesParams newCallParams = GetRemoteFilesParams.newBuilder()
+                .setSnapshotId(1)
+                .setPredicate(newCallOperator)
+                .setFieldNames(Lists.newArrayList())
+                .setLimit(10)
+                .build();
+
+        PredicateSearchKey filter = PredicateSearchKey.of("db", "table", callParams);
+        PredicateSearchKey newFilter = PredicateSearchKey.of("db", "table", newCallParams);
         Assertions.assertEquals(filter, newFilter);
 
-        Assertions.assertEquals(newFilter, PredicateSearchKey.of("db", "table", 1L, newCallOperator));
-        Assertions.assertNotEquals(newFilter, PredicateSearchKey.of("db", "table", 1L, null));
+        Assertions.assertEquals(newFilter, PredicateSearchKey.of("db", "table", newCallParams));
+        Assertions.assertNotEquals(newFilter, PredicateSearchKey.of("db", "table", emptyParams));
     }
 
     @Test
@@ -1496,7 +1516,6 @@ public class IcebergMetadataTest extends TableTestBase {
         Assertions.assertTrue(partitions.stream().anyMatch(x -> x.getModifiedTime() == -1));
     }
 
-
     @Test
     public void testPartitionWithReservedName() {
         // Create a schema with a column named "partition" (which is a reserved word)
@@ -1504,23 +1523,23 @@ public class IcebergMetadataTest extends TableTestBase {
                 required(1, "id", Types.IntegerType.get()),
                 required(2, "partition", Types.StringType.get())
         );
-        
+
         PartitionSpec specWithPartitionColumn = PartitionSpec.builderFor(schemaWithPartitionColumn)
                 .identity("partition")
                 .bucket("partition", 32)
                 .truncate("partition", 32)
                 .build();
-        
+
         TestTables.TestTable testTable = create(schemaWithPartitionColumn, specWithPartitionColumn, "test_partition_table", 1);
 
         List<Column> columns = Lists.newArrayList(
                 new Column("id", INT),
                 new Column("partition", STRING)
         );
-        
+
         IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "db_name",
                 "table_name", "", columns, testTable, Maps.newHashMap());
-        
+
         List<String> partitionColumnNames = icebergTable.getPartitionColumnNames();
 
         Assertions.assertNotNull(partitionColumnNames);
@@ -1949,7 +1968,6 @@ public class IcebergMetadataTest extends TableTestBase {
             }
         };
 
-
         // Normalize Date
         TableName tableName = new TableName(CATALOG_NAME, "db", "table");
         AlterTableOperationClause clause = new AlterTableOperationClause(NodePosition.ZERO,
@@ -2035,8 +2053,8 @@ public class IcebergMetadataTest extends TableTestBase {
 
     @Test
     public void testRollbackToSnapshot(@Mocked IcebergHiveCatalog icebergHiveCatalog,
-                                   @Mocked org.apache.iceberg.BaseTable table,
-                                   @Mocked Snapshot snapshot) throws Exception {
+                                       @Mocked org.apache.iceberg.BaseTable table,
+                                       @Mocked Snapshot snapshot) throws Exception {
         new MockUp<IcebergMetadata>() {
             @Mock
             public Database getDb(ConnectContext context, String dbName) {

@@ -291,7 +291,7 @@ public class PaimonMetadata implements ConnectorMetadata {
             LOG.warn("Cannot get snapshot because {}", e.getMessage());
         }
         PredicateSearchKey filter = PredicateSearchKey.of(paimonTable.getCatalogDBName(),
-                paimonTable.getCatalogTableName(), latestSnapshotId, params.getPredicate());
+                paimonTable.getCatalogTableName(), params);
         if (!paimonSplits.containsKey(filter)) {
             ReadBuilder readBuilder = paimonTable.getNativeTable().newReadBuilder();
             int[] projected =
