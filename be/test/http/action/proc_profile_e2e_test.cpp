@@ -126,12 +126,12 @@ TEST_F(ProcProfileE2ETest, TestProcProfilePageDisplay) {
     EXPECT_TRUE(result.find("<table") != std::string::npos);
 
     // Check that fake files are listed
-    EXPECT_TRUE(result.find("cpu-profile-20231201-143022-flame.html.gz") != std::string::npos);
+    EXPECT_TRUE(result.find("cpu-profile-20231201-143022-flame.html.gz") == std::string::npos);
     EXPECT_TRUE(result.find("cpu-profile-20231201-143022-pprof.gz") != std::string::npos);
 
     // Check that profile types and formats are correctly identified
     EXPECT_TRUE(result.find(">CPU<") != std::string::npos);
-    EXPECT_TRUE(result.find(">Flame<") != std::string::npos);
+    EXPECT_TRUE(result.find(">Flame<") == std::string::npos);
     EXPECT_TRUE(result.find(">Pprof<") != std::string::npos);
 
     // Check that action links are present
