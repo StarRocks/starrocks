@@ -122,6 +122,7 @@ import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.streamload.AbstractStreamLoadTask;
 import com.starrocks.load.streamload.StreamLoadFunctionalExprProvider;
 import com.starrocks.meta.BlackListSql;
+import com.starrocks.persist.TableRefPersist;
 import com.starrocks.proto.FailPointTriggerModeType;
 import com.starrocks.proto.PFailPointInfo;
 import com.starrocks.proto.PFailPointTriggerMode;
@@ -156,6 +157,7 @@ import com.starrocks.sql.ast.EnhancedShowStmt;
 import com.starrocks.sql.ast.HelpStmt;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
 import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
@@ -231,7 +233,6 @@ import com.starrocks.sql.ast.expression.Predicate;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.TableName;
-import com.starrocks.sql.ast.expression.TableRefPersist;
 import com.starrocks.sql.ast.group.ShowCreateGroupProviderStmt;
 import com.starrocks.sql.ast.group.ShowGroupProvidersStmt;
 import com.starrocks.sql.ast.integration.ShowCreateSecurityIntegrationStatement;
@@ -2171,7 +2172,7 @@ public class ShowExecutor {
         public ShowResultSet visitAdminShowReplicaStatusStatement(AdminShowReplicaStatusStmt statement, ConnectContext context) {
             List<List<String>> results;
             try {
-                results = MetadataViewer.getTabletStatus(statement);
+                results = MetadataViewer.getTabletStatus(statement, context);
             } catch (DdlException e) {
                 throw new SemanticException(e.getMessage());
             }
@@ -2183,7 +2184,22 @@ public class ShowExecutor {
                                                                         ConnectContext context) {
             List<List<String>> results;
             try {
-                results = MetadataViewer.getTabletDistribution(statement);
+                // Get database name from statement or context
+                String dbName = statement.getDbName();
+                if (dbName == null) {
+                    dbName = context.getDatabase();
+                }
+                
+                PartitionRef partitionRef = statement.getPartitionRef();
+                PartitionNames partitionNames = null;
+                if (partitionRef != null) {
+                    partitionNames = new PartitionNames(
+                            partitionRef.isTemp(),
+                            partitionRef.getPartitionNames(),
+                            partitionRef.getPos());
+                }
+                
+                results = MetadataViewer.getTabletDistribution(dbName, statement.getTblName(), partitionNames);
             } catch (DdlException e) {
                 throw new SemanticException(e.getMessage());
             }

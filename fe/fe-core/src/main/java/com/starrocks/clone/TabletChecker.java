@@ -61,10 +61,11 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.AdminStmtAnalyzer;
 import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
 import com.starrocks.sql.ast.AdminRepairTableStmt;
+import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.NodeSelector;
@@ -147,7 +148,9 @@ public class TabletChecker extends FrontendDaemon {
         this.stat = stat;
     }
 
-    private void addToUrgentTable(RepairTabletInfo repairTabletInfo, long timeoutMs) {
+    private void addToUrgentTable(RepairTabletInfo repairTabletInfo) {
+        long timeoutMs = 4 * 3600L; // TODO: may be can set in Config
+
         Preconditions.checkArgument(!repairTabletInfo.partIds.isEmpty());
         long currentTime = System.currentTimeMillis();
         synchronized (urgentTable) {
@@ -178,7 +181,7 @@ public class TabletChecker extends FrontendDaemon {
      */
     public void setTabletForUrgentRepair(long dbId, long tableId, long partitionId) {
         RepairTabletInfo repairTabletInfo = new RepairTabletInfo(dbId, tableId, Collections.singletonList(partitionId));
-        addToUrgentTable(repairTabletInfo, AdminStmtAnalyzer.DEFAULT_PRIORITY_REPAIR_TIMEOUT_SEC);
+        addToUrgentTable(repairTabletInfo);
     }
 
     public void removeFromUrgentTable(RepairTabletInfo repairTabletInfo) {
@@ -590,10 +593,21 @@ public class TabletChecker extends FrontendDaemon {
      * This operation will add specified tables into 'urgentTable', and tablets of this table will be set VERY_HIGH
      * when being scheduled.
      */
-    public void repairTable(AdminRepairTableStmt stmt) throws DdlException {
-        RepairTabletInfo repairTabletInfo =
-                getRepairTabletInfo(stmt.getDbName(), stmt.getTblName(), stmt.getPartitions());
-        addToUrgentTable(repairTabletInfo, stmt.getTimeoutS());
+    public void repairTable(ConnectContext context, AdminRepairTableStmt stmt) throws DdlException {
+        String dbName = stmt.getDbName();
+        if (dbName == null) {
+            dbName = context.getDatabase();
+        }
+
+        // Get partition names from PartitionRef
+        List<String> partitions = Lists.newArrayList();
+        PartitionRef partitionRef = stmt.getPartitionRef();
+        if (partitionRef != null) {
+            partitions.addAll(partitionRef.getPartitionNames());
+        }
+
+        RepairTabletInfo repairTabletInfo = getRepairTabletInfo(dbName, stmt.getTblName(), partitions);
+        addToUrgentTable(repairTabletInfo);
         LOG.info("repair database: {}, table: {}, partition: {}", repairTabletInfo.dbId, repairTabletInfo.tblId,
                 repairTabletInfo.partIds);
     }
@@ -611,9 +625,20 @@ public class TabletChecker extends FrontendDaemon {
      * handle ADMIN CANCEL REPAIR TABLE stmt send by user.
      * This operation will remove the specified partitions from 'urgentTable'
      */
-    public void cancelRepairTable(AdminCancelRepairTableStmt stmt) throws DdlException {
-        RepairTabletInfo repairTabletInfo =
-                getRepairTabletInfo(stmt.getDbName(), stmt.getTblName(), stmt.getPartitions());
+    public void cancelRepairTable(ConnectContext context, AdminCancelRepairTableStmt stmt) throws DdlException {
+        String dbName = stmt.getDbName();
+        if (dbName == null) {
+            dbName = context.getDatabase();
+        }
+
+        // Get partition names from PartitionRef
+        List<String> partitions = Lists.newArrayList();
+        PartitionRef partitionRef = stmt.getPartitionRef();
+        if (partitionRef != null) {
+            partitions.addAll(partitionRef.getPartitionNames());
+        }
+
+        RepairTabletInfo repairTabletInfo = getRepairTabletInfo(dbName, stmt.getTblName(), partitions);
         removeFromUrgentTable(repairTabletInfo);
         LOG.info("cancel repair database: {}, table: {}, partition: {}", repairTabletInfo.dbId, repairTabletInfo.tblId,
                 repairTabletInfo.partIds);
@@ -1142,8 +1167,8 @@ public class TabletChecker extends FrontendDaemon {
      * @return true if high availability should be enforced based on the location configuration; false otherwise
      */
     public static boolean shouldEnsureReplicaHA(int replicationNum,
-                                                 Multimap<String, String> requiredLocation,
-                                                 SystemInfoService systemInfoService) {
+                                                Multimap<String, String> requiredLocation,
+                                                SystemInfoService systemInfoService) {
         if (requiredLocation == null || requiredLocation.isEmpty()) {
             return false;
         }

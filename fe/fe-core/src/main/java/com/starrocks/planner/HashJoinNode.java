@@ -42,7 +42,6 @@ import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.JoinOperator;
 import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.sql.ast.expression.TableRefPersist;
 import com.starrocks.thrift.TAsofJoinCondition;
 import com.starrocks.thrift.TEqJoinCondition;
 import com.starrocks.thrift.THashJoinNode;

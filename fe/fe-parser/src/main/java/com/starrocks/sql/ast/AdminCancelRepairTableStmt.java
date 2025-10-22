@@ -12,56 +12,34 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
-import com.google.common.collect.Lists;
-import com.starrocks.sql.ast.expression.TableRefPersist;
 import com.starrocks.sql.parser.NodePosition;
-
-import java.util.List;
 
 // ADMIN CANCEL REPAIR TABLE example_db.example_table PARTITION(p1);
 public class AdminCancelRepairTableStmt extends DdlStmt {
 
-    private final TableRefPersist tblRef;
-    private final List<String> partitions = Lists.newArrayList();
+    private final TableRef tblRef;
 
-    public AdminCancelRepairTableStmt(TableRefPersist tblRef) {
-        this(tblRef, NodePosition.ZERO);
-    }
-
-    public AdminCancelRepairTableStmt(TableRefPersist tblRef, NodePosition pos) {
+    public AdminCancelRepairTableStmt(TableRef tblRef, NodePosition pos) {
         super(pos);
         this.tblRef = tblRef;
     }
 
-    public void setDbName(String dbName) {
-        this.tblRef.getName().setDb(dbName);
-    }
-
-    public void setPartitions(PartitionNames partitionNames) {
-        this.partitions.addAll(partitionNames.getPartitionNames());
-    }
-
     public String getDbName() {
-        return tblRef.getName().getDb();
+        return tblRef.getDbName();
     }
 
     public String getTblName() {
-        return tblRef.getName().getTbl();
+        return tblRef.getTableName();
     }
 
-    public List<String> getPartitions() {
-        return partitions;
-    }
-
-    public PartitionNames getPartitionNames() {
-        return tblRef.getPartitionNames();
+    public PartitionRef getPartitionRef() {
+        return tblRef.getPartitionDef();
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitAdminCancelRepairTableStatement(this, context);
+        return visitor.visitAdminCancelRepairTableStatement(this, context);
     }
 }

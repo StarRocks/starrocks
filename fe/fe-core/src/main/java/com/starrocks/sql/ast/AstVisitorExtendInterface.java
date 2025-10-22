@@ -152,9 +152,6 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
-    default R visitTruncateTableStatement(TruncateTableStmt statement, C context) {
-        return visitDDLStatement(statement, context);
-    }
 
     default R visitRefreshTableStatement(RefreshTableStmt statement, C context) {
         return visitDDLStatement(statement, context);
@@ -306,21 +303,11 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
-    default R visitAdminShowReplicaDistributionStatement(AdminShowReplicaDistributionStmt statement, C context) {
-        return visitShowStatement(statement, context);
-    }
 
     default R visitAdminShowReplicaStatusStatement(AdminShowReplicaStatusStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
 
-    default R visitAdminRepairTableStatement(AdminRepairTableStmt statement, C context) {
-        return visitDDLStatement(statement, context);
-    }
-
-    default R visitAdminCancelRepairTableStatement(AdminCancelRepairTableStmt statement, C context) {
-        return visitDDLStatement(statement, context);
-    }
 
     default R visitAdminSetPartitionVersionStmt(AdminSetPartitionVersionStmt statement, C context) {
         return visitDDLStatement(statement, context);

@@ -32,12 +32,13 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.sql.ast.expression;
+package com.starrocks.persist;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
 import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 /**

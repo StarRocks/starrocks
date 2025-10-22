@@ -41,11 +41,11 @@ public class AdminRepairStmtTest {
     @Test
     public void testAdminRepairTable() {
         AdminRepairTableStmt stmt = (AdminRepairTableStmt) analyzeSuccess("ADMIN REPAIR TABLE test;");
-        Assertions.assertEquals("test", stmt.getDbName());
+        Assertions.assertNull(stmt.getDbName()); // No database specified in SQL
         Assertions.assertEquals("test", stmt.getTblName());
         stmt = (AdminRepairTableStmt) analyzeSuccess("ADMIN REPAIR TABLE test PARTITION(p1, p2, p3);");
-        Assertions.assertEquals(Arrays.asList("p1", "p2", "p3"), stmt.getPartitions());
-        Assertions.assertEquals(4 * 3600L, stmt.getTimeoutS());
+        Assertions.assertNull(stmt.getDbName()); // No database specified in SQL
+        Assertions.assertEquals(Arrays.asList("p1", "p2", "p3"), stmt.getPartitionRef().getPartitionNames());
         analyzeSuccess("ADMIN REPAIR TABLE test PARTITIONs(p1, p2, p3)");
         // bad cases
         analyzeFail("ADMIN REPAIR TABLE");
@@ -55,10 +55,11 @@ public class AdminRepairStmtTest {
     @Test
     public void testAdminCancelRepairTable() {
         AdminCancelRepairTableStmt stmt = (AdminCancelRepairTableStmt) analyzeSuccess("ADMIN cancel REPAIR TABLE test;");
-        Assertions.assertEquals("test", stmt.getDbName());
+        Assertions.assertNull(stmt.getDbName()); // No database specified in SQL
         Assertions.assertEquals("test", stmt.getTblName());
         stmt = (AdminCancelRepairTableStmt) analyzeSuccess("ADMIN CANCEL REPAIR TABLE test PARTITION(p1, p2, p3);");
-        Assertions.assertEquals(Arrays.asList("p1", "p2", "p3"), stmt.getPartitions());
+        Assertions.assertNull(stmt.getDbName()); // No database specified in SQL
+        Assertions.assertEquals(Arrays.asList("p1", "p2", "p3"), stmt.getPartitionRef().getPartitionNames());
         analyzeFail("ADMIN CANCEL REPAIR TABLE");
         analyzeFail("ADMIN cancel REPAIR TABLE test TEMPORARY PARTITION(p1, p2, p3);");
     }
