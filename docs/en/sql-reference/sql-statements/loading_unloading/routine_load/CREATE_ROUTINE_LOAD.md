@@ -53,6 +53,7 @@ Optional. The properties of the data. Syntax:
 [COLUMNS TERMINATED BY '<column_separator>'],
 [ROWS TERMINATED BY '<row_separator>'],
 [COLUMNS (<column1_name>[, <column2_name>, <column_assignment>, ... ])],
+[PRECEDING FILTER <expr>],
 [WHERE <expr>],
 [PARTITION (<partition1_name>[, <partition2_name>, ...])]
 [TEMPORARY PARTITION (<temporary_partition1_name>[, <temporary_partition2_name>, ...])]
@@ -79,6 +80,14 @@ The mapping between the columns in the source data and the columns in the StarRo
 - `column_name`: If a column of the source data can be mapped to a column of the StarRocks table without any computation, you only need to specify the column name. These columns can be referred to as mapped columns.
 - `column_assignment`: If a column of the source data cannot be directly mapped to a column of the StarRocks table, and the column's values must be computed by using functions before data loading, you must specify the computation function in `expr`. These columns can be referred to as derived columns.
   It is recommended to place derived columns after mapped columns because StarRocks first parses mapped columns.
+
+`PRECEDING FILTER`
+
+The filter condition. Only data that meets the filter condition can be loaded into StarRocks. For example, if you only want to ingest rows whose `col1` value is greater than `100` and `col2` value is equal to `1000`, you can use `PRECEDING FILTER col1 > 100 and col2 = 1000`.
+
+:::note
+The columns specified in the filter condition do not have to exist in the StarRocks table.
+:::
 
 `WHERE`
 
