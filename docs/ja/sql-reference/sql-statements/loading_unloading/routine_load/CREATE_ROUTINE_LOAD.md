@@ -53,6 +53,7 @@ FROM data_source
 [COLUMNS TERMINATED BY '<column_separator>'],
 [ROWS TERMINATED BY '<row_separator>'],
 [COLUMNS (<column1_name>[, <column2_name>, <column_assignment>, ... ])],
+[PRECEDING FILTER <expr>],
 [WHERE <expr>],
 [PARTITION (<partition1_name>[, <partition2_name>, ...])]
 [TEMPORARY PARTITION (<temporary_partition1_name>[, <temporary_partition2_name>, ...])]
@@ -78,6 +79,14 @@ CSV 形式データの行区切り文字。デフォルトの行区切り文字�
 
 - `column_name`: ソースデータのカラムが計算なしで StarRocks テーブルのカラムにマッピングできる場合、カラム名を指定するだけで済みます。これらのカラムはマップされたカラムと呼ばれます。
 - `column_assignment`: ソースデータのカラムが直接 StarRocks テーブルのカラムにマッピングできない場合、データロード前に関数を使用してカラムの値を計算する必要があります。この場合、`expr` に計算関数を指定する必要があります。これらのカラムは派生カラムと呼ばれます。StarRocks は最初にマップされたカラムを解析するため、派生カラムはマップされたカラムの後に配置することをお勧めします。
+
+`PRECEDING FILTER`
+
+フィルター条件。フィルター条件を満たすデータのみが StarRocks にロードされます。例えば、`col1` の値が `100` より大きく、`col2` の値が `1000` と等しい行のみを取り込みたい場合、`PRECEDING FILTER col1 > 100 and col2 = 1000` を使用できます。
+
+:::note
+フィルター条件で指定されたカラムは、StarRocks のテーブルに存在しなくてもよい。
+:::
 
 `WHERE`
 
