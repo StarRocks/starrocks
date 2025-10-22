@@ -514,11 +514,11 @@ public class BackupJobTest {
         Replica replica = new Replica(1L, backendId, 10L, schemaHash, 0L, 0L,
                 Replica.ReplicaState.NORMAL, -1L, -1L);
 
-        Replica.ReplicaStatus status = Replica.computeReplicaStatus(replica, infoService, 10L, schemaHash);
+        Replica.ReplicaStatus status = replica.computeReplicaStatus(infoService, 10L, schemaHash);
         Assertions.assertEquals(Replica.ReplicaStatus.OK, status);
 
         // Test with higher replica version
-        status = Replica.computeReplicaStatus(replica, infoService, 8L, schemaHash);
+        status = replica.computeReplicaStatus(infoService, 8L, schemaHash);
         Assertions.assertEquals(Replica.ReplicaStatus.OK, status);
     }
 
@@ -535,20 +535,20 @@ public class BackupJobTest {
         // Case 1: Backend is null
         Replica replica = new Replica(1L, backendId, 10L, schemaHash, 0L, 0L,
                 Replica.ReplicaState.NORMAL, -1L, -1L);
-        Replica.ReplicaStatus status = Replica.computeReplicaStatus(replica, infoService, 10L, schemaHash);
+        Replica.ReplicaStatus status = replica.computeReplicaStatus(infoService, 10L, schemaHash);
         Assertions.assertEquals(Replica.ReplicaStatus.DEAD, status);
 
         // Case 2: Backend is not available (not alive)
         Backend backend = new Backend(backendId, "127.0.0.1", 9050);
         backend.setAlive(false);
         infoService.addBackend(backend);
-        status = Replica.computeReplicaStatus(replica, infoService, 10L, schemaHash);
+        status = replica.computeReplicaStatus(infoService, 10L, schemaHash);
         Assertions.assertEquals(Replica.ReplicaStatus.DEAD, status);
 
         // Case 3: Backend is available but replica is bad
         backend.setAlive(true);
         replica.setBad(true);
-        status = Replica.computeReplicaStatus(replica, infoService, 10L, schemaHash);
+        status = replica.computeReplicaStatus(infoService, 10L, schemaHash);
         Assertions.assertEquals(Replica.ReplicaStatus.DEAD, status);
     }
 
@@ -567,13 +567,13 @@ public class BackupJobTest {
         // Case 1: Replica version < visible version
         Replica replica = new Replica(1L, backendId, 5L, schemaHash, 0L, 0L,
                 Replica.ReplicaState.NORMAL, -1L, -1L);
-        Replica.ReplicaStatus status = Replica.computeReplicaStatus(replica, infoService, 10L, schemaHash);
+        Replica.ReplicaStatus status = replica.computeReplicaStatus(infoService, 10L, schemaHash);
         Assertions.assertEquals(Replica.ReplicaStatus.VERSION_ERROR, status);
 
         // Case 2: Replica has failed version
         Replica replica2 = new Replica(2L, backendId, 10L, schemaHash, 0L, 0L,
                 Replica.ReplicaState.NORMAL, 8L, -1L);
-        status = Replica.computeReplicaStatus(replica2, infoService, 10L, schemaHash);
+        status = replica2.computeReplicaStatus(infoService, 10L, schemaHash);
         Assertions.assertEquals(Replica.ReplicaStatus.VERSION_ERROR, status);
     }
 
@@ -591,13 +591,13 @@ public class BackupJobTest {
         Replica replica = new Replica(1L, backendId, 10L, 12345, 0L, 0L,
                 Replica.ReplicaState.NORMAL, -1L, -1L);
 
-        Replica.ReplicaStatus status = Replica.computeReplicaStatus(replica, infoService, 10L, 67890);
+        Replica.ReplicaStatus status = replica.computeReplicaStatus(infoService, 10L, 67890);
         Assertions.assertEquals(Replica.ReplicaStatus.SCHEMA_ERROR, status);
 
         // Test that -1 schema hash is treated as OK (not checked)
         Replica replica2 = new Replica(2L, backendId, 10L, -1, 0L, 0L,
                 Replica.ReplicaState.NORMAL, -1L, -1L);
-        status = Replica.computeReplicaStatus(replica2, infoService, 10L, 67890);
+        status = replica2.computeReplicaStatus(infoService, 10L, 67890);
         Assertions.assertEquals(Replica.ReplicaStatus.OK, status);
     }
 

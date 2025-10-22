@@ -52,21 +52,6 @@ public class Replica implements Writable {
 
     public static final int DEPRECATED_PROP_SCHEMA_HASH = 0;
 
-    public static ReplicaStatus computeReplicaStatus(Replica replica, SystemInfoService infoService,
-                                                     long visibleVersion, int schemaHash) {
-        ReplicaStatus status = ReplicaStatus.OK;
-        Backend be = infoService.getBackend(replica.getBackendId());
-        if (be == null || !be.isAvailable() || replica.isBad()) {
-            status = ReplicaStatus.DEAD;
-        } else if (replica.getVersion() < visibleVersion
-                || replica.getLastFailedVersion() > 0) {
-            status = ReplicaStatus.VERSION_ERROR;
-        } else if (replica.getSchemaHash() != -1 && replica.getSchemaHash() != schemaHash) {
-            status = ReplicaStatus.SCHEMA_ERROR;
-        }
-        return status;
-    }
-
     public enum ReplicaState {
         NORMAL,
         @Deprecated
@@ -642,6 +627,19 @@ public class Replica implements Writable {
                 && (lastFailedVersion == replica.lastFailedVersion)
                 && (lastSuccessVersion == replica.lastSuccessVersion)
                 && (minReadableVersion == replica.minReadableVersion);
+    }
+
+    public ReplicaStatus computeReplicaStatus(SystemInfoService infoService, long visibleVersion, int schemaHash) {
+        ReplicaStatus status = ReplicaStatus.OK;
+        Backend be = infoService.getBackend(this.backendId);
+        if (be == null || !be.isAvailable() || this.bad) {
+            status = ReplicaStatus.DEAD;
+        } else if (this.version < visibleVersion || this.lastFailedVersion > 0) {
+            status = ReplicaStatus.VERSION_ERROR;
+        } else if (this.schemaHash != -1 && this.schemaHash != schemaHash) {
+            status = ReplicaStatus.SCHEMA_ERROR;
+        }
+        return status;
     }
 
     private static class VersionComparator<T extends Replica> implements Comparator<T> {

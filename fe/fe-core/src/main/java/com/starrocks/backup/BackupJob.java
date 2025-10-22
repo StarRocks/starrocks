@@ -837,7 +837,7 @@ public class BackupJob extends AbstractJob {
         Collections.sort(replicaIds);
         for (Long replicaId : replicaIds) {
             Replica replica = tablet.getReplicaById(replicaId);
-            if (Replica.computeReplicaStatus(replica, infoService, visibleVersion, schemaHash) == Replica.ReplicaStatus.OK) {
+            if (replica.computeReplicaStatus(infoService, visibleVersion, schemaHash) == Replica.ReplicaStatus.OK) {
                 return replica;
             }
         }
