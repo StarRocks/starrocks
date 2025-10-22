@@ -48,7 +48,8 @@ Status DownloadUtil::download(const std::string& url, const std::string& target_
                 fmt::format("fail to open tmp file when downloading file from {}. error = {}", url, errmsg));
     }
     std::string real_url;
-    RETURN_IF_ERROR(get_real_url(url, &real_url, FSOptions(*cloud_configuration)));
+
+    RETURN_IF_ERROR(get_real_url(url, &real_url, FSOptions(&cloud_configuration)));
     Md5Digest digest;
     HttpClient client;
     RETURN_IF_ERROR(client.init(real_url));

@@ -77,7 +77,7 @@ public:
     static UserFunctionCache* instance();
 
     struct FunctionCacheDesc {
-        FunctionCacheDesc(int64_t fid_, const std::string& url_, const std::string& checksum_, FuncType function_type_, TCloudConfiguration cloud_configuration_)
+        FunctionCacheDesc(int64_t fid_, const std::string& url_, const std::string& checksum_, FuncType function_type_, const TCloudConfiguration& cloud_configuration_)
                 : fid(fid_), url(url_), checksum(checksum_), function_type(function_type_), cloud_configuration(cloud_configuration_) {}
         int64_t fid;
         const std::string& url;
@@ -104,7 +104,7 @@ private:
     Status _load_entry_from_lib(const std::string& dir, const std::string& file, TCloudConfiguration& cloud_configuration);
     template <class Loader>
     Status _get_cache_entry(int64_t fid, const std::string& url, const std::string& checksum, FuncType function_type,
-                            UserFunctionCacheEntryPtr* output_entry, Loader&& loader, TCloudConfiguration cloud_configuration);
+                            UserFunctionCacheEntryPtr* output_entry, Loader&& loader, const TCloudConfiguration& cloud_configuration);
     template <class Loader>
     Status _load_cache_entry(const std::string& url, UserFunctionCacheEntryPtr& entry, Loader&& loader, const TCloudConfiguration& cloud_configuration);
     Status _download_lib(const std::string& url, UserFunctionCacheEntryPtr& entry, const TCloudConfiguration& cloud_configuration);
