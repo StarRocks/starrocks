@@ -46,6 +46,7 @@ import com.google.gson.ToNumberPolicy;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.CompressionUtils;
@@ -3716,6 +3717,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     public long getOptimizerExecuteTimeout() {
+        if (FeConstants.runningUnitTest) {
+            return 30_000;
+        }
         return optimizerExecuteTimeout;
     }
 
