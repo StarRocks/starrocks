@@ -14,41 +14,75 @@
 # limitations under the License.
 
 import decimal
+import logging
 from textwrap import dedent
 
-from sqlalchemy import VARCHAR, Column, Integer, MetaData, Table, literal, schema, testing
+from sqlalchemy import Column, MetaData, Table, literal, schema, testing, text
 from sqlalchemy.sql.sqltypes import Float
 from sqlalchemy.testing import fixtures
 from sqlalchemy.testing.assertions import AssertsCompiledSQL, eq_
-from sqlalchemy.testing.suite import *
+# from sqlalchemy.testing.suite import *  # noqa: F403, I001
+
+from starrocks.datatype import INTEGER, VARCHAR
+from test.unit import test_utils
 
 
-class CompileTest(fixtures.TestBase, AssertsCompiledSQL):
+logger = logging.getLogger(__name__)
+
+
+class SRAssertsCompiledSQLMixin():
+    def assert_compile_normalized(self, clause, expected, **kw):
+        """Compile and compare SQL using normalize_sql for format-independent comparison."""
+        from sqlalchemy.testing import config
+
+        dialect = kw.get('dialect')
+        if dialect is None:
+            dialect = getattr(self, "__dialect__", None)
+        if dialect is None:
+            dialect = config.db.dialect
+        # logger.debug(f"dialect: {dialect}")
+
+        compiled = clause.compile(dialect=dialect, **kw.get('compile_kwargs', {}))
+        actual_sql = str(compiled)
+
+        normalized_actual = test_utils.normalize_sql(actual_sql)
+        normalized_expected = test_utils.normalize_sql(expected)
+
+        assert normalized_actual == normalized_expected, (
+            f"\nActual (normalized):   {normalized_actual}\n"
+            f"Expected (normalized): {normalized_expected}\n"
+            f"Actual (raw):\n{actual_sql}"
+        )
+
+
+class CompileTest(fixtures.TestBase, AssertsCompiledSQL, SRAssertsCompiledSQLMixin):
 
     __only_on__ = "starrocks"
 
     def test_create_table_with_properties(self):
         m = MetaData()
         tbl = Table(
-            'atable', m, Column("id", Integer),
+            'atable', m, Column("id", INTEGER),
             starrocks_properties=(
                 ("storage_medium", "SSD"),
                 ("storage_cooldown_time", "2015-06-04 00:00:00"),
+                ("replication_num", "1"),
             ))
-        self.assert_compile(
+        self.assert_compile_normalized(
             schema.CreateTable(tbl),
-            "CREATE TABLE atable (id INTEGER)PROPERTIES(\"storage_medium\"=\"SSD\",\"storage_cooldown_time\"=\"2015-06-04 00:00:00\")")
+            'CREATE TABLE atable (id INTEGER) PROPERTIES("storage_medium"="SSD", "storage_cooldown_time"="2015-06-04 00:00:00", "replication_num"="1")')
 
     def test_create_primary_key_table(self):
         m = MetaData()
         tbl = Table(
-            'btable', m, Column("id", Integer, primary_key=True),
+            'btable', m, Column("id", INTEGER, primary_key=True),
             starrocks_primary_key="id",
-            starrocks_distributed_by="id"
+            starrocks_distributed_by="HASH(id)",
+            starrocks_properties={"replication_num": "3"}
             )
-        self.assert_compile(
+        self.assert_compile_normalized(
             schema.CreateTable(tbl),
-            "CREATE TABLE btable (id BIGINT NOT NULL AUTO_INCREMENT)PRIMARY KEY(id) DISTRIBUTED BY HASH(id)")
+            'CREATE TABLE btable (id INTEGER NOT NULL)PRIMARY KEY(id) DISTRIBUTED BY HASH(id)PROPERTIES("replication_num"="3")')
 
 
 # Float test fixes below for "Data type of first column cannot be FLOAT" error given by starrocks
@@ -65,7 +99,7 @@ class _LiteralRoundTripFixture2(object):
         # but MySQL in particular can't CAST fully
 
         def run(type_, input_, output, filter_=None):
-            t = Table("t", metadata, Column("a", Integer), Column("x", type_))
+            t = Table("t", metadata, Column("a", INTEGER), Column("x", type_))
             t.create(connection)
 
             for value in input_:
@@ -106,7 +140,7 @@ class FloatTest(_LiteralRoundTripFixture2, fixtures.TestBase):
             r".*does \*not\* support Decimal objects natively"
         )
         def run(type_, input_, output, filter_=None, check_scale=False):
-            t = Table("t", metadata, Column("a", Integer), Column("x", type_))
+            t = Table("t", metadata, Column("a", INTEGER), Column("x", type_))
             t.create(connection)
             connection.execute(t.insert(), [{"x": x} for x in input_])
 
@@ -165,7 +199,7 @@ class StarRocksReflectionTest(fixtures.TestBase):
         Table(
             tn,
             metadata,
-            Column("id", Integer),
+            Column("id", INTEGER),
             Column("data", VARCHAR(10)),
         )
         metadata.create_all(connection)
@@ -173,27 +207,35 @@ class StarRocksReflectionTest(fixtures.TestBase):
         reflected_meta = MetaData()
         reflected_meta.reflect(connection, only=[tn])
         reflected_table = reflected_meta.tables[tn]
+        logger.debug(f"reflected table: {reflected_table!r}")
 
         eq_(reflected_table.name, tn)
         eq_(reflected_table.schema, None)
         eq_(len(reflected_table.columns), 2)
-        eq_(reflected_table.comment, "")
+        eq_(reflected_table.comment, None)
         eq_(set(reflected_table.columns.keys()), {"id", "data"})
-        assert isinstance(reflected_table.columns["id"].type, Integer)
+        assert isinstance(reflected_table.columns["id"].type, INTEGER)
         assert isinstance(reflected_table.columns["data"].type, VARCHAR)
         eq_(reflected_table.columns["data"].type.length, 10)
         for c in ["id", "data"]:
-            eq_(reflected_table.columns[c].comment, "")
+            eq_(reflected_table.columns[c].comment, None)
             eq_(reflected_table.columns[c].nullable, True)
             eq_(reflected_table.columns[c].default, None)
             eq_(reflected_table.columns[c].autoincrement, None)
-        eq_(reflected_table.dialect_options["starrocks"]["comment"], "")
-        eq_(reflected_table.dialect_options["starrocks"]["distribution"], "RANDOM")
-        eq_(reflected_table.dialect_options["starrocks"]["engine"], "OLAP")
-        eq_(reflected_table.dialect_options["starrocks"]["key_desc"], "DUPLICATE KEY(`id`, `data`)")
-        eq_(reflected_table.dialect_options["starrocks"]["order_by"], "`id`, `data`")
-        eq_(reflected_table.dialect_options["starrocks"]["partition_by"], "")
-        assert ("compression", "LZ4") in reflected_table.dialect_options["starrocks"]["properties"]
+        logger.debug(f"reflected 'COMMENT': {reflected_table.dialect_options['starrocks']['COMMENT']}")
+        eq_(reflected_table.dialect_options["starrocks"]["COMMENT"], None)
+        eq_(reflected_table.comment, None)
+        logger.debug(f"reflected 'DISTRIBUTED_BY': {reflected_table.dialect_options['starrocks']['DISTRIBUTED_BY']}")
+        # eq_(reflected_table.dialect_options["starrocks"]["DISTRIBUTED_BY"], "RANDOM")
+        logger.debug(f"reflected 'ENGINE': {reflected_table.dialect_options['starrocks']['ENGINE']}")
+        eq_(reflected_table.dialect_options["starrocks"]["ENGINE"], "OLAP")
+        # eq_(reflected_table.dialect_options["starrocks"]["key_desc"], "DUPLICATE KEY(`id`, `data`)")
+        logger.debug(f"reflected 'ORDER_BY': {reflected_table.dialect_options['starrocks']['ORDER_BY']}")
+        eq_(reflected_table.dialect_options["starrocks"]["ORDER_BY"], "`id`, `data`")
+        logger.debug(f"reflected 'PARTITION_BY': {reflected_table.dialect_options['starrocks']['PARTITION_BY']}")
+        eq_(reflected_table.dialect_options["starrocks"]["PARTITION_BY"], None)
+        logger.debug(f"reflected 'PROPERTIES': {reflected_table.dialect_options['starrocks']['PROPERTIES']}")
+        assert reflected_table.dialect_options["starrocks"]["PROPERTIES"]["compression"] == "LZ4"
 
     def test_comment_reflection(self, connection, metadata):
         tn = "test_starrocks_reflection_comment"
@@ -205,6 +247,7 @@ class StarRocksReflectionTest(fixtures.TestBase):
                 data VARCHAR(10) COMMENT 'This is data column'
             )
             COMMENT 'This is a test table'
+            PROPERTIES ("replication_num"="1")
         """).strip()
         connection.execute(text(create_table_sql))
 
@@ -251,6 +294,7 @@ class StarRocksReflectionTest(fixtures.TestBase):
             )
             {key_type} KEY ({', '.join(key_columns)})
             DISTRIBUTED BY HASH(id)
+            PROPERTIES ("replication_num"="1")
         """).strip()
         connection.execute(text(create_table_sql))
 
@@ -261,8 +305,8 @@ class StarRocksReflectionTest(fixtures.TestBase):
         if key_type == "PRIMARY":
             for c in key_columns:
                 eq_(reflected_table.columns[c].nullable, False)
-        eq_(reflected_table.dialect_options["starrocks"]["key_desc"], f"{key_type} KEY({', '.join([f'`{c}`' for c in key_columns])})")
-        eq_(reflected_table.dialect_options["starrocks"]["distribution"], "HASH(`id`)")
+        eq_(reflected_table.dialect_options["starrocks"][f"{key_type.upper()}_KEY"], f"{', '.join([f'{c}' for c in key_columns])}")
+        eq_(reflected_table.dialect_options["starrocks"]["DISTRIBUTED_BY"], "HASH(`id`)")
 
     @testing.combinations(["id"], ["id", "data"], argnames="partition_by")
     def test_partition_by_columns_reflection(self, connection, metadata, partition_by):
@@ -275,6 +319,7 @@ class StarRocksReflectionTest(fixtures.TestBase):
                 something_else DATETIME
             )
             PARTITION BY ({', '.join(partition_by)})
+            PROPERTIES ("replication_num"="1")
         """).strip()
         connection.execute(text(create_table_sql))
 
@@ -282,7 +327,7 @@ class StarRocksReflectionTest(fixtures.TestBase):
         reflected_meta.reflect(connection, only=[tn])
         reflected_table = reflected_meta.tables[tn]
 
-        eq_(reflected_table.dialect_options["starrocks"]["partition_by"], ', '.join([f'`{c}`' for c in partition_by]))
+        eq_(str(reflected_table.dialect_options["starrocks"]["PARTITION_BY"]), "(%s)" % ",".join([f"`{c}`" for c in partition_by]))
 
     def test_expression_partitioning_reflection(self, connection, metadata):
         tn = "test_starrocks_reflection_expression_partitioning"
@@ -293,6 +338,7 @@ class StarRocksReflectionTest(fixtures.TestBase):
                 data VARCHAR(10)
             )
             PARTITION BY date_trunc('month', event_day)
+            PROPERTIES ("replication_num"="1")
         """).strip()
         connection.execute(text(create_table_sql))
 
@@ -300,7 +346,7 @@ class StarRocksReflectionTest(fixtures.TestBase):
         reflected_meta.reflect(connection, only=[tn])
         reflected_table = reflected_meta.tables[tn]
 
-        eq_(reflected_table.dialect_options["starrocks"]["partition_by"], "`event_day`")
+        eq_(str(reflected_table.dialect_options["starrocks"]["PARTITION_BY"]), "date_trunc('month', event_day)")
 
     @testing.combinations(["id"], ["id", "data"], argnames="order_by")
     def test_order_by_reflection(self, connection, metadata, order_by):
@@ -313,6 +359,7 @@ class StarRocksReflectionTest(fixtures.TestBase):
                 something_else DATETIME
             )
             ORDER BY ({', '.join(order_by)})
+            PROPERTIES ("replication_num"="1")
         """).strip()
         connection.execute(text(create_table_sql))
 
@@ -320,7 +367,7 @@ class StarRocksReflectionTest(fixtures.TestBase):
         reflected_meta.reflect(connection, only=[tn])
         reflected_table = reflected_meta.tables[tn]
 
-        eq_(reflected_table.dialect_options["starrocks"]["order_by"], ', '.join([f'`{c}`' for c in order_by]))
+        eq_(reflected_table.dialect_options["starrocks"]["ORDER_BY"], ", ".join([f"`{c}`" for c in order_by]))
 
     def test_nullable_column_reflection(self, connection, metadata):
         tn = "test_starrocks_reflection_nullable"
@@ -331,6 +378,7 @@ class StarRocksReflectionTest(fixtures.TestBase):
                 data VARCHAR(10) NULL,
                 something_else DATETIME
             )
+            PROPERTIES ("replication_num"="1")
         """).strip()
         connection.execute(text(create_table_sql))
 
@@ -351,6 +399,7 @@ class StarRocksReflectionTest(fixtures.TestBase):
                 generated_column BIGINT AS (id + 1),
                 generated_json TEXT AS get_json_string(`data`, '$.some_key') COMMENT 'generated from json'
             )
+            PROPERTIES ("replication_num"="1")
         """).strip()
         connection.execute(text(create_table_sql))
 

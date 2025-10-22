@@ -432,7 +432,7 @@ def test_special_equivalence_rules_work_correctly(database: str, alembic_env: Al
     if len(non_comment_lines) == 1:
         assert non_comment_lines[0].strip() == 'pass', \
             f"Only 'pass' should be present for equivalent types, got: {non_comment_lines[0]}"
-    else:
+    elif len(non_comment_lines) > 1:
         assert False, "Equivalent type changes should not generate operations, except for 'pass'."
 
     logger.info("Special equivalence rules test completed successfully")

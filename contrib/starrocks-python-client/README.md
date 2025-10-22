@@ -65,6 +65,8 @@ from sqlalchemy import create_engine, text
 
 engine = create_engine('starrocks://myname:pswd1234@localhost:9030/mydatabase')
 
+# make sure you have create a table `mytable` in `mydatabase`.
+
 with engine.connect() as connection:
     rows = connection.execute(text("SELECT * FROM mytable LIMIT 2")).fetchall()
     print("Connection successful!")
@@ -131,14 +133,14 @@ metadata.create_all(engine)
 
 This dialect integrates with Alembic to support automated schema migrations. Here’s a quick-start guide to get you up and running.
 
-**1. Install and Initialize Alembic**
+#### 1. Install and Initialize Alembic
 
 ```bash
 pip install "alembic>=1.16"
 alembic init alembic
 ```
 
-**2. Configure your Database URL**
+#### 2. Configure your Database URL
 
 In `alembic.ini`, set the `sqlalchemy.url` to your StarRocks connection string.
 
@@ -147,7 +149,7 @@ In `alembic.ini`, set the `sqlalchemy.url` to your StarRocks connection string.
 sqlalchemy.url = starrocks://myname:pswd1234@localhost:9030/mydatabase
 ```
 
-**3. Configure your Models for Autogeneration**
+#### 3. Configure your Models for Autogeneration
 
 In `alembic/env.py`, import your models' metadata and assign it to `target_metadata`.
 
@@ -170,7 +172,7 @@ def run_migrations_online() -> None:
     # ...
 ```
 
-**4. Generate and Apply Your First Migration**
+#### 4. Generate and Apply Your First Migration
 
 With your models defined (as shown in the SQLAlchemy examples above), you can now generate and apply a migration.
 
@@ -182,9 +184,9 @@ alembic revision --autogenerate -m "Create initial tables"
 alembic upgrade head
 ```
 
-> For a full tutorial on advanced topics like data migrations, handling complex types, and managing views, please refer to the **[Alembic Integration Guide](./docs/usage_guide/alembic.md)**.
->
-> For a detailed reference on all StarRocks-specific table attributes and data types, please see the **[Table Definition Reference](./docs/usage_guide/tables.md)**.
+For a full tutorial on advanced topics like data migrations, handling complex types, and managing views, please refer to the **[Alembic Integration Guide](./docs/usage_guide/alembic.md)**.
+
+For a detailed reference on all StarRocks-specific table attributes and data types, please see the **[Table Definition Reference](./docs/usage_guide/tables.md)**.
 
 ## Contributing
 
@@ -209,10 +211,10 @@ This will run the standard SQLAlchemy dialect test suite as well as StarRocks-sp
 
 #### Test Logging
 
-To see the raw SQL that the dialect compiles and executes during tests, you can create a `pytest.ini` file in your project root with the following content:
+To see the raw SQL that the dialect compiles and executes during tests, you can modify the `[tool.pytest.ini_options]` section in the `pyproject.toml` file in your project with the following content:
 
 ```ini
-[pytest]
+[tool.pytest.ini_options]
 log_cli = true
 log_cli_level = DEBUG
 log_cli_format = %(levelname)-5.5s [%(name)s] %(message)s
@@ -269,7 +271,7 @@ In addition to the StarRocks-specific tests, you can run the comprehensive test 
    With the plugin enabled and your `STARROCKS_URL` configured, run pytest:
 
    ```bash
-   pytest test_suite.py --DBURI=${STARROCKS_URL}
+   pytest test/test_suite.py --DBURI=${STARROCKS_URL}
    ```
 
 This will run the standard SQLAlchemy dialect test suite as well as StarRocks-specific tests. For more details, please check [SQLAlchemy's guide for dialect development](https://github.com/sqlalchemy/sqlalchemy/blob/main/README.dialects.rst).

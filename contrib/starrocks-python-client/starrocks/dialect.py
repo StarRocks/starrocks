@@ -12,7 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import logging
 import re
 from textwrap import dedent
@@ -195,6 +194,14 @@ class StarRocksTypeCompiler(MySQLTypeCompiler):
         return "STRING"
         # return "VARCHAR(65533)"
 
+    def visit_VARCHAR(self, type_, **kw):
+        # StarRocks supports unbounded strings via STRING. When no length is
+        # provided (e.g. from SQLAlchemy String() without length), render
+        # STRING instead of requiring a VARCHAR length.
+        if getattr(type_, "length", None) is None:
+            return "STRING"
+        return f"VARCHAR({type_.length})"
+
     def visit_BINARY(self, type_, **kw):
         return "BINARY"
 
@@ -297,7 +304,7 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
         if create_table_suffix := self.create_table_suffix(table):
             text += create_table_suffix + " "
 
-        text += f"(\n{self.indent}"
+        text += "(\n"
 
         column_text_list = list()
         # if only one primary key, specify it along with the column
@@ -308,7 +315,7 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
                 processed = self.process(create_column)
                 # logger.debug(f"column desc for column: {column.name} is '{processed}'")
                 if processed is not None:
-                    column_text_list.append(processed)
+                    column_text_list.append(f"{self.indent}{processed}")
                 if column.primary_key:
                     primary_keys.append(column.name)
             except exc.CompileError as ce:
@@ -316,7 +323,7 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
                     "(in table '%s', column '%s'): %s"
                     % (self._get_simple_full_table_name(table.name, table.schema), column.name, ce.args[0])
                 ) from ce
-        text += f", \n{self.indent}".join(column_text_list)
+        text += ", \n".join(column_text_list)
 
         # N.B. Primary Key is specified in post_create_table
         #  Indexes are created by SQLA after the creation of the table using CREATE INDEX
@@ -446,6 +453,7 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
         Returns:
             A string containing all the compiled table-level DDL clauses.
         """
+        import warnings
 
         table_opts: List[str] = []
 
@@ -465,14 +473,21 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
             table_opts.append(key_desc)
 
         # Comment
-        if table.comment is not None:
-            comment = self.sql_compiler.render_literal_value(table.comment, sqltypes.String())
+        table_comment = table.comment
+        if table_comment is None:
+            # For backward compatibility, check for 'starrocks_comment'
+            if starrocks_comment := opts.get(TableInfoKey.COMMENT):
+                warnings.warn(
+                    f"The 'starrocks_comment' dialect argument is deprecated for table '{table.name}'. "
+                    "Please use the standard 'comment' argument on the Table object instead.",
+                    DeprecationWarning,
+                    stacklevel=3,
+                )
+                table_comment = starrocks_comment
+
+        if table_comment is not None:
+            comment = self.sql_compiler.render_literal_value(table_comment, sqltypes.String())
             table_opts.append(f"COMMENT {comment}")
-        elif opts.get(TableInfoKey.COMMENT):
-            logger.warning(
-                f"Don't use 'starrocks_comment' dialect-specific argument to set the comment. "
-                f"Please directly use the standard 'comment' argument on the Table object for table '{table.name}'."
-            )
 
         # Partition
         # TODO: there are 3 types of partitioning with different restrictions, we need to support all of them.
@@ -480,7 +495,19 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
             table_opts.append(f'PARTITION BY {partition_by}')
 
         # Distribution
-        if distributed_by := opts.get(TableInfoKey.DISTRIBUTED_BY):
+        distributed_by = opts.get(TableInfoKey.DISTRIBUTED_BY)
+        if distributed_by is None:
+            # For backward compatibility, check for 'distribution'
+            if starrocks_distribution := opts.get("DISTRIBUTION"):
+                warnings.warn(
+                    f"The 'starrocks_distribution' dialect argument is deprecated for table '{table.name}'. "
+                    "Please use 'starrocks_distributed_by' instead.",
+                    DeprecationWarning,
+                    stacklevel=3,
+                )
+                distributed_by = starrocks_distribution
+
+        if distributed_by:
             table_opts.append(f'DISTRIBUTED BY {distributed_by}')
 
         # Order By
@@ -489,17 +516,23 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
             table_opts.append(f'ORDER BY ({order_by})')
 
         # Properties
-        if properties := opts.get(TableInfoKey.PROPERTIES):
+        properties = opts.get(TableInfoKey.PROPERTIES)
+        props_dict = {}
+        if properties is not None:
             if isinstance(properties, dict):
-                props_items = properties.items()
+                props_dict = dict(properties)
             elif isinstance(properties, list):
-                props_items = properties
+                props_dict = dict(properties)
+            elif isinstance(properties, tuple):
+                props_dict = dict(properties)
             else:
                 raise exc.CompileError(
                     f"Unsupported type for PROPERTIES: {type(properties)}"
                 )
-
-            props = ",\n".join([f'{self.indent}"{k}"="{v}"' for k, v in props_items])
+        if self.dialect.test_replication_num and "replication_num" not in props_dict:
+            props_dict.setdefault("replication_num", str(self.dialect.test_replication_num))
+        if props_dict:
+            props = ",\n".join([f'{self.indent}"{k}"="{v}"' for k, v in props_dict.items()])
             table_opts.append(f"PROPERTIES(\n{props}\n)")
 
         logger.debug(f"table opts for table: {table.name}, schema: {table.schema}, processed opts: {table_opts!r}")
@@ -1067,6 +1100,23 @@ class StarRocksDialect(MySQLDialect_pymysql):
         self.run_mode: Optional[str] = None
         # Explicitly instantiate the preparer here, ensuring it's an instance
         self.preparer = self.preparer(self)
+
+        # some test parameters
+        self.test_replication_num: Optional[int] = None
+
+    def create_connect_args(self, url):
+        # Allow the superclass to create the base connect arguments
+        connect_args = super(StarRocksDialect, self).create_connect_args(url)[1]
+        logger.debug(f"connect_args: {connect_args}")
+
+        # Handle the test-specific replication_num parameter
+        self.test_replication_num = connect_args.pop("test_replication_num", None)
+        if self.test_replication_num is not None:
+            logger.info(
+                f"set replication_num={self.test_replication_num} for small test environment"
+            )
+
+        return [], connect_args
 
     def initialize(self, connection: Connection) -> None:
         super().initialize(connection)

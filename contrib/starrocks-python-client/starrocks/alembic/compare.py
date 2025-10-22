@@ -1,4 +1,4 @@
-# Copyright license_header.txt Copyright 2021-present StarRocks, Inc. All rights reserved.
+# Copyright 2021-present StarRocks, Inc. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -580,6 +580,18 @@ def compare_starrocks_table(
         meta_table_attributes,
     )
 
+    if metadata_table is not None and metadata_table.comment is None:
+        # Handle backward compatibility for 'starrocks_comment'.
+        if starrocks_comment := meta_table_attributes.get(TableInfoKey.COMMENT):
+            import warnings
+            warnings.warn(
+                f"The 'starrocks_comment' dialect argument is deprecated for table '{table_name}'. "
+                "Please use the standard 'comment' argument on the Table object instead.",
+                DeprecationWarning,
+                stacklevel=4,
+            )
+            metadata_table.comment = starrocks_comment
+
     # Note: Table comment comparison is handled by Alembic's built-in _compare_table_comment
 
     # Compare each type of table attribute using dedicated functions
@@ -594,8 +606,7 @@ def compare_starrocks_table(
     _compare_table_order_by(upgrade_ops.ops, schema, table, conn_table_attributes, meta_table_attributes)
     _compare_table_properties(upgrade_ops.ops, schema, table, conn_table_attributes, meta_table_attributes, run_mode)
 
-    return False  # Return False to indicate we didn't add any ops to the list directly
-
+    return False
 
 def _compare_table_engine(
     ops_list: List[AlterTableOp],
@@ -763,6 +774,50 @@ def _is_equal_partition_method(
     # Only compare the partition_method.
     return conn_partition == default_partition
 
+def _compare_table_comment_sr(
+    ops_list: List[AlterTableOp],
+    schema: Optional[str],
+    table_name: str,
+    conn_table: Table,
+    metadata_table: Table,
+    meta_table_attributes: CaseInsensitiveDict,
+) -> None:
+    """Compare table comments, with backward compatibility for 'starrocks_comment'.
+    Note: useless now.
+    """
+    conn_comment = conn_table.comment
+    meta_comment = metadata_table.comment
+
+    if meta_comment is None:
+        # For backward compatibility
+        if starrocks_comment := meta_table_attributes.get(TableInfoKey.COMMENT):
+            import warnings
+            warnings.warn(
+                f"The 'starrocks_comment' dialect argument is deprecated for table '{table_name}'. "
+                "Please use the standard 'comment' argument on the Table object instead.",
+                DeprecationWarning,
+                stacklevel=4,
+            )
+            meta_comment = starrocks_comment
+
+    if conn_comment != meta_comment:
+        from alembic.operations import ops
+
+        if meta_comment is None:
+            ops_list.append(
+                ops.DropTableCommentOp(
+                    table_name, schema=schema, existing_comment=conn_comment
+                )
+            )
+        else:
+            ops_list.append(
+                ops.CreateTableCommentOp(
+                    table_name,
+                    meta_comment,
+                    schema=schema,
+                    existing_comment=conn_comment,
+                )
+            )
 
 def _compare_table_partition(
     ops_list: List[AlterTableOp], schema: Optional[str], table_name: str,
@@ -817,6 +872,18 @@ def _compare_table_distribution(
     """Compare distribution changes and add AlterTableDistributionOp if needed."""
     conn_distribution = conn_table_attributes.get(TableInfoKey.DISTRIBUTED_BY)
     meta_distribution = meta_table_attributes.get(TableInfoKey.DISTRIBUTED_BY)
+    if meta_distribution is None:
+        # For backward compatibility
+        if starrocks_distribution := meta_table_attributes.get("DISTRIBUTION"):
+            import warnings
+            warnings.warn(
+                f"The 'starrocks_distribution' dialect argument is deprecated for table '{table_name}'. "
+                "Please use 'starrocks_distributed_by' instead.",
+                DeprecationWarning,
+                stacklevel=4,
+            )
+            meta_distribution = starrocks_distribution
+
     if isinstance(conn_distribution, str):
         conn_distribution = StarRocksTableDefinitionParser.parse_distribution(conn_distribution)
     if isinstance(meta_distribution, str):
@@ -1168,7 +1235,7 @@ def compare_starrocks_column_agg_type(
         # Update the alter_column_op with the new aggregate type. useless now
         # "KEY", "SUM" for set, None for unsert
         if alter_column_op is not None:
-            alter_column_op.kwargs[ColumnAggInfoKeyWithPrefix.AGG_TYPE] = meta_agg_type
+            alter_column_op.kw[ColumnAggInfoKeyWithPrefix.AGG_TYPE] = meta_agg_type
         raise NotSupportedError(
             f"StarRocks does not support changing the aggregation type of a column: '{cname}', "
             f"from {conn_agg_type} to {meta_agg_type}.",

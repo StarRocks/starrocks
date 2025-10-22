@@ -247,8 +247,8 @@ aggregate_table = Table(
     # Table-level attributes
     starrocks_AGGREGATE_KEY="event_date, site_id",
     starrocks_PARTITION_BY="date_trunc('day', event_date)",
-    starrocks_DISTRIBUTED_BY="RANDOM",
-    starrocks_PROPERTIES={"replication_num": "3"}
+    starrocks_DISTRIBUTED_BY="HASH(site_id)",
+    starrocks_PROPERTIES={"replication_num": "1"}
 )
 ```
 
@@ -273,6 +273,7 @@ orders = Table(
     starrocks_ORDER_BY='order_dt, order_id',
     # With BUCKETS
     starrocks_DISTRIBUTED_BY='HASH(order_id) BUCKETS 16',
+    starrocks_PROPERTIES={'replication_num': '1'},
 )
 ```
 
@@ -297,7 +298,7 @@ daily_stats = Table(
 
     starrocks_AGGREGATE_KEY='dt, site_id',
     starrocks_PARTITION_BY="date_trunc('day', dt)",
-    starrocks_DISTRIBUTED_BY='RANDOM',
+    starrocks_DISTRIBUTED_BY='HASH(dt)',
     starrocks_PROPERTIES={'replication_num': '1'},
 )
 ```
@@ -314,7 +315,7 @@ events = Table(
     'events',
     metadata,
     Column('event_id', INTEGER, primary_key=True),
-    Column('event_type', VARCHAR(50)),
+    Column('event_type', VARCHAR(50), primary_key=True),
     Column('tags', ARRAY(STRING)),
     Column('attributes', MAP(STRING, STRING)),
     Column('payload', STRUCT(

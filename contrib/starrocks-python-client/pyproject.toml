@@ -3,10 +3,10 @@ requires = ["setuptools>=61.0.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.ruff]
-target-version = "py38"
+target-version = "py310"
 line-length = 120
 select = ["E", "F", "W", "I"]   # Basic PEP8 rules (E,W), F is for pyflakes
-ignore = ["E501"]          # Ignore line too long (can be ignored for now if you want to fix it incrementally)
+ignore = ["F541", "E501"]          # Ignore line too long (can be ignored for now if you want to fix it incrementally)
 fix = true                 # Allow auto-fixing
 show-fixes = true
 exclude = [".git", "__pycache__", "build", "dist", "venv"]
@@ -18,7 +18,7 @@ force-sort-within-sections = true
 lines-after-imports = 2
 
 [tool.black]
-target-version = ["py38", "py39", "py310"]
+target-version = ["py310", "py311", "py312"]
 line-length = 120
 skip-string-normalization = false
 include = '\.pyi?$'
