@@ -43,6 +43,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.combinator.AggStateDesc;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Writable;
+import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.sql.ast.HdfsURI;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FunctionName;
@@ -153,6 +154,9 @@ public class Function implements Writable {
     private Vector<Pair<String, Expr>> defaultArgExprs;
 
     private boolean isMetaFunction = false;
+
+    @SerializedName(value = "cloud_configuration")
+    private CloudConfiguration cloudConfiguration;
 
     // Only used for serialization
     protected Function() {
@@ -272,6 +276,14 @@ public class Function implements Writable {
 
     public void setLocation(HdfsURI loc) {
         location = loc;
+    }
+
+    public CloudConfiguration getCloudConfiguration() {
+        return cloudConfiguration;
+    }
+
+    public void setCloudConfiguration(CloudConfiguration cloudConfiguration) {
+        this.cloudConfiguration = cloudConfiguration;
     }
 
     public TFunctionBinaryType getBinaryType() {
