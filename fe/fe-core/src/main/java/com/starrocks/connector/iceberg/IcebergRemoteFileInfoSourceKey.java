@@ -14,9 +14,11 @@
 
 package com.starrocks.connector.iceberg;
 
+<<<<<<< HEAD
+=======
+import com.starrocks.connector.GetRemoteFilesParams;
+>>>>>>> a5ff91dfe2 ([BugFix] fix cache key of iceberg split tasks (#64272))
 import com.starrocks.connector.PredicateSearchKey;
-import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.Objects;
 
@@ -26,23 +28,37 @@ public class IcebergRemoteFileInfoSourceKey extends PredicateSearchKey {
 
     private IcebergRemoteFileInfoSourceKey(String databaseName,
                                            String tableName,
+<<<<<<< HEAD
                                            long snapshotId,
                                            ScalarOperator predicate,
                                            long morId,
                                            IcebergMORParams icebergMORParams) {
         super(databaseName, tableName, snapshotId, predicate);
+=======
+                                           GetRemoteFilesParams params,
+                                           long morId,
+                                           IcebergMORParams icebergMORParams) {
+        super(databaseName, tableName, params);
+>>>>>>> a5ff91dfe2 ([BugFix] fix cache key of iceberg split tasks (#64272))
         this.morId = morId;
         this.icebergMORParams = icebergMORParams;
     }
 
     public static IcebergRemoteFileInfoSourceKey of(String databaseName,
                                                     String tableName,
+<<<<<<< HEAD
                                                     long snapshotId,
                                                     ScalarOperator predicate,
                                                     long morId,
                                                     IcebergMORParams icebergMORParams) {
         predicate = predicate == null ? ConstantOperator.TRUE : predicate;
         return new IcebergRemoteFileInfoSourceKey(databaseName, tableName, snapshotId, predicate, morId, icebergMORParams);
+=======
+                                                    GetRemoteFilesParams params,
+                                                    long morId,
+                                                    IcebergMORParams icebergMORParams) {
+        return new IcebergRemoteFileInfoSourceKey(databaseName, tableName, params, morId, icebergMORParams);
+>>>>>>> a5ff91dfe2 ([BugFix] fix cache key of iceberg split tasks (#64272))
     }
 
     @Override

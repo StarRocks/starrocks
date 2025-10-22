@@ -126,6 +126,14 @@ public class GetRemoteFilesParams {
         this.useCache = useCache;
     }
 
+    public void setPredicate(ScalarOperator predicate) {
+        this.predicate = predicate;
+    }
+
+    public void setTableVersionRange(TvrVersionRange tableVersionRange) {
+        this.tableVersionRange = tableVersionRange;
+    }
+
     public boolean isCheckPartitionExistence() {
         return checkPartitionExistence;
     }

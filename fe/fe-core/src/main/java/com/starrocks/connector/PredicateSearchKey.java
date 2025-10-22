@@ -14,7 +14,11 @@
 
 package com.starrocks.connector;
 
+<<<<<<< HEAD
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+=======
+import com.starrocks.common.tvr.TvrVersionRange;
+>>>>>>> a5ff91dfe2 ([BugFix] fix cache key of iceberg split tasks (#64272))
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.Objects;
@@ -22,6 +26,7 @@ import java.util.Objects;
 public class PredicateSearchKey {
     private final String databaseName;
     private final String tableName;
+<<<<<<< HEAD
     private final long snapshotId;
     private final ScalarOperator predicate;
 
@@ -34,6 +39,18 @@ public class PredicateSearchKey {
         this.tableName = tableName;
         this.snapshotId = snapshotId;
         this.predicate = predicate;
+=======
+    private final GetRemoteFilesParams params;
+
+    public static PredicateSearchKey of(String databaseName, String tableName, GetRemoteFilesParams params) {
+        return new PredicateSearchKey(databaseName, tableName, params);
+    }
+
+    public PredicateSearchKey(String databaseName, String tableName, GetRemoteFilesParams params) {
+        this.databaseName = databaseName;
+        this.tableName = tableName;
+        this.params = params;
+>>>>>>> a5ff91dfe2 ([BugFix] fix cache key of iceberg split tasks (#64272))
     }
 
     public String getDatabaseName() {
@@ -44,8 +61,21 @@ public class PredicateSearchKey {
         return tableName;
     }
 
+<<<<<<< HEAD
     public long getSnapshotId() {
         return snapshotId;
+=======
+    public TvrVersionRange getVersion() {
+        return params.getTableVersionRange();
+    }
+
+    public ScalarOperator getPredicate() {
+        return params.getPredicate();
+    }
+
+    public GetRemoteFilesParams getParams() {
+        return params;
+>>>>>>> a5ff91dfe2 ([BugFix] fix cache key of iceberg split tasks (#64272))
     }
 
     @Override
@@ -58,23 +88,52 @@ public class PredicateSearchKey {
             return false;
         }
         PredicateSearchKey that = (PredicateSearchKey) o;
+<<<<<<< HEAD
         return snapshotId == that.snapshotId &&
+=======
+
+        ScalarOperator thisPredicate = getPredicate();
+        ScalarOperator thatPredicate = that.getPredicate();
+        if (thisPredicate == null) {
+            if (thatPredicate != null) {
+                return false;
+            }
+        } else {
+            if (thatPredicate == null || !thisPredicate.equivalent(thatPredicate)) {
+                return false;
+            }
+        }
+        if (params.isEnableColumnStats() != that.params.isEnableColumnStats()) {
+            return false;
+        }
+
+        return Objects.equals(getVersion(), that.getVersion()) &&
+>>>>>>> a5ff91dfe2 ([BugFix] fix cache key of iceberg split tasks (#64272))
                 Objects.equals(databaseName, that.databaseName) &&
-                Objects.equals(tableName, that.tableName) &&
-                predicate.equivalent(that.predicate);
+                Objects.equals(tableName, that.tableName);
     }
 
     @Override
     public int hashCode() {
+<<<<<<< HEAD
         return Objects.hash(databaseName, tableName, snapshotId, predicate);
+=======
+        return Objects.hash(databaseName, tableName, params);
+>>>>>>> a5ff91dfe2 ([BugFix] fix cache key of iceberg split tasks (#64272))
     }
 
     @Override
     public String toString() {
         return "Filter{" + "databaseName='" + databaseName + '\'' +
                 ", tableName='" + tableName + '\'' +
+<<<<<<< HEAD
                 ", snapshotId=" + snapshotId +
                 ", predicate=" + predicate +
+=======
+                ", version=" + getVersion() +
+                ", predicate=" + getPredicate() +
+                ", enableColumnStats=" + params.isEnableColumnStats() +
+>>>>>>> a5ff91dfe2 ([BugFix] fix cache key of iceberg split tasks (#64272))
                 '}';
     }
 }
