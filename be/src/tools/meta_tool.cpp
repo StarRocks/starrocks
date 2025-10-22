@@ -1112,9 +1112,9 @@ int meta_tool_main(int argc, char** argv) {
         std::cout << "[pk dump] meta: " << dump_pb.Utf8DebugString() << std::endl;
         st = starrocks::PrimaryKeyDump::deserialize_pkcol_pkindex_from_meta(
                 FLAGS_file, dump_pb,
-                [&](const starrocks::Chunk& chunk) {
+                [&](uint32_t segment_id, const starrocks::Chunk& chunk) {
                     for (int i = 0; i < chunk.num_rows(); i++) {
-                        std::cout << "pk column " << chunk.debug_row(i) << std::endl;
+                        std::cout << "pk column: " << chunk.debug_row(i) << " segmentid: " << segment_id << std::endl;
                     }
                 },
                 [&](const std::string& filename, const starrocks::PartialKVsPB& kvs) {
