@@ -19,6 +19,7 @@ import com.mockrunner.mock.jdbc.MockResultSet;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.JDBCResource;
 import com.starrocks.catalog.JDBCTable;
+import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
@@ -355,9 +356,195 @@ public class MysqlSchemaResolverTest {
             JDBCTable jdbcTable = new JDBCTable(100000, "tbl1", columns, Lists.newArrayList(),
                     "test", "catalog", properties);
             jdbcMetadata.getPartitions(jdbcTable, Arrays.asList("20230810")).size();
-            // different mysql source may have different partition information, so we can ignore partition information parse
         } catch (Exception e) {
             Assertions.fail();
         }
+    }
+
+    @Test
+    public void testConvertNumericTypes() {
+        MysqlSchemaResolver resolver = new MysqlSchemaResolver();
+        
+        Type type = resolver.convertColumnType(java.sql.Types.BIT, "BIT", 1, 0);
+        Assertions.assertEquals(PrimitiveType.BOOLEAN, type.getPrimitiveType());
+        
+        type = resolver.convertColumnType(java.sql.Types.BIT, "BIT", 5, 0);
+        Assertions.assertEquals(PrimitiveType.BOOLEAN, type.getPrimitiveType());
+        
+        type = resolver.convertColumnType(java.sql.Types.BIT, "BIT", 64, 0);
+        Assertions.assertEquals(PrimitiveType.BOOLEAN, type.getPrimitiveType());
+        
+        type = resolver.convertColumnType(java.sql.Types.BOOLEAN, "BIT", 5, 0);
+        Assertions.assertEquals(PrimitiveType.BOOLEAN, type.getPrimitiveType());
+        
+        type = resolver.convertColumnType(java.sql.Types.BOOLEAN, "BIT", 64, 0);
+        Assertions.assertEquals(PrimitiveType.BOOLEAN, type.getPrimitiveType());
+        
+        type = resolver.convertColumnType(java.sql.Types.TINYINT, "TINYINT", 3, 0);
+        Assertions.assertEquals(PrimitiveType.TINYINT, type.getPrimitiveType());
+        
+        type = resolver.convertColumnType(java.sql.Types.TINYINT, "TINYINT UNSIGNED", 3, 0);
+        Assertions.assertEquals(PrimitiveType.SMALLINT, type.getPrimitiveType());
+        
+        type = resolver.convertColumnType(java.sql.Types.SMALLINT, "SMALLINT", 5, 0);
+        Assertions.assertEquals(PrimitiveType.SMALLINT, type.getPrimitiveType());
+        
+        type = resolver.convertColumnType(java.sql.Types.SMALLINT, "SMALLINT UNSIGNED", 5, 0);
+        Assertions.assertEquals(PrimitiveType.INT, type.getPrimitiveType());
+        
+        type = resolver.convertColumnType(java.sql.Types.INTEGER, "MEDIUMINT", 7, 0);
+        Assertions.assertEquals(PrimitiveType.INT, type.getPrimitiveType());
+        
+        type = resolver.convertColumnType(java.sql.Types.INTEGER, "MEDIUMINT UNSIGNED", 8, 0);
+        Assertions.assertEquals(PrimitiveType.INT, type.getPrimitiveType());
+        
+        type = resolver.convertColumnType(java.sql.Types.INTEGER, "INT", 10, 0);
+        Assertions.assertEquals(PrimitiveType.INT, type.getPrimitiveType());
+        
+        type = resolver.convertColumnType(java.sql.Types.INTEGER, "INT UNSIGNED", 10, 0);
+        Assertions.assertEquals(PrimitiveType.BIGINT, type.getPrimitiveType());
+        
+        type = resolver.convertColumnType(java.sql.Types.BIGINT, "BIGINT", 19, 0);
+        Assertions.assertEquals(PrimitiveType.BIGINT, type.getPrimitiveType());
+        
+        type = resolver.convertColumnType(java.sql.Types.BIGINT, "BIGINT UNSIGNED", 20, 0);
+        Assertions.assertEquals(PrimitiveType.LARGEINT, type.getPrimitiveType());
+        
+        type = resolver.convertColumnType(java.sql.Types.FLOAT, "FLOAT", 12, 0);
+        Assertions.assertEquals(PrimitiveType.FLOAT, type.getPrimitiveType());
+        
+        type = resolver.convertColumnType(java.sql.Types.DOUBLE, "DOUBLE", 22, 0);
+        Assertions.assertEquals(PrimitiveType.DOUBLE, type.getPrimitiveType());
+        
+        type = resolver.convertColumnType(java.sql.Types.DECIMAL, "DECIMAL", 10, 2);
+        Assertions.assertTrue(type.getPrimitiveType().isDecimalV3Type());
+    }
+
+    @Test
+    public void testConvertStringTypes() {
+        MysqlSchemaResolver resolver = new MysqlSchemaResolver();
+        
+        Type type = resolver.convertColumnType(java.sql.Types.CHAR, "CHAR", 10, 0);
+        Assertions.assertEquals(PrimitiveType.CHAR, type.getPrimitiveType());
+        
+        type = resolver.convertColumnType(java.sql.Types.VARCHAR, "VARCHAR", 255, 0);
+        Assertions.assertEquals(PrimitiveType.VARCHAR, type.getPrimitiveType());
+        
+        type = resolver.convertColumnType(java.sql.Types.BINARY, "BINARY", 10, 0);
+        Assertions.assertEquals(PrimitiveType.VARBINARY, type.getPrimitiveType());
+        
+        type = resolver.convertColumnType(java.sql.Types.VARBINARY, "VARBINARY", 255, 0);
+        Assertions.assertEquals(PrimitiveType.VARBINARY, type.getPrimitiveType());
+        
+        type = resolver.convertColumnType(java.sql.Types.LONGVARBINARY, "TINYBLOB", 255, 0);
+        Assertions.assertEquals(PrimitiveType.VARBINARY, type.getPrimitiveType());
+        
+        type = resolver.convertColumnType(java.sql.Types.LONGVARBINARY, "BLOB", 65535, 0);
+        Assertions.assertEquals(PrimitiveType.VARBINARY, type.getPrimitiveType());
+        
+        type = resolver.convertColumnType(java.sql.Types.LONGVARBINARY, "MEDIUMBLOB", 16777215, 0);
+        Assertions.assertEquals(PrimitiveType.VARBINARY, type.getPrimitiveType());
+        
+        type = resolver.convertColumnType(java.sql.Types.LONGVARBINARY, "LONGBLOB", 2147483647, 0);
+        Assertions.assertEquals(PrimitiveType.VARBINARY, type.getPrimitiveType());
+        
+        type = resolver.convertColumnType(java.sql.Types.LONGVARCHAR, "TINYTEXT", 255, 0);
+        Assertions.assertEquals(PrimitiveType.VARCHAR, type.getPrimitiveType());
+        
+        type = resolver.convertColumnType(java.sql.Types.LONGVARCHAR, "TEXT", 65535, 0);
+        Assertions.assertEquals(PrimitiveType.VARCHAR, type.getPrimitiveType());
+        
+        type = resolver.convertColumnType(java.sql.Types.LONGVARCHAR, "MEDIUMTEXT", 16777215, 0);
+        Assertions.assertEquals(PrimitiveType.VARCHAR, type.getPrimitiveType());
+        
+        type = resolver.convertColumnType(java.sql.Types.LONGVARCHAR, "LONGTEXT", 2147483647, 0);
+        Assertions.assertEquals(PrimitiveType.VARCHAR, type.getPrimitiveType());
+        
+        type = resolver.convertColumnType(java.sql.Types.CHAR, "ENUM", 5, 0);
+        Assertions.assertEquals(PrimitiveType.VARCHAR, type.getPrimitiveType());
+        
+        type = resolver.convertColumnType(java.sql.Types.CHAR, "SET", 21, 0);
+        Assertions.assertEquals(PrimitiveType.VARCHAR, type.getPrimitiveType());
+    }
+
+    @Test
+    public void testConvertDateTimeTypes() {
+        MysqlSchemaResolver resolver = new MysqlSchemaResolver();
+        
+        Type type = resolver.convertColumnType(java.sql.Types.DATE, "DATE", 10, 0);
+        Assertions.assertEquals(PrimitiveType.DATE, type.getPrimitiveType());
+        
+        type = resolver.convertColumnType(java.sql.Types.TIME, "TIME", 10, 0);
+        Assertions.assertEquals(PrimitiveType.TIME, type.getPrimitiveType());
+        
+        type = resolver.convertColumnType(java.sql.Types.TIME, "TIME", 16, 6);
+        Assertions.assertEquals(PrimitiveType.TIME, type.getPrimitiveType());
+        
+        type = resolver.convertColumnType(java.sql.Types.TIMESTAMP, "DATETIME", 19, 0);
+        Assertions.assertEquals(PrimitiveType.DATETIME, type.getPrimitiveType());
+        
+        type = resolver.convertColumnType(java.sql.Types.TIMESTAMP, "DATETIME", 26, 6);
+        Assertions.assertEquals(PrimitiveType.DATETIME, type.getPrimitiveType());
+        
+        type = resolver.convertColumnType(java.sql.Types.TIMESTAMP, "TIMESTAMP", 19, 0);
+        Assertions.assertEquals(PrimitiveType.DATETIME, type.getPrimitiveType());
+        
+        type = resolver.convertColumnType(java.sql.Types.TIMESTAMP, "TIMESTAMP", 26, 6);
+        Assertions.assertEquals(PrimitiveType.DATETIME, type.getPrimitiveType());
+        
+        type = resolver.convertColumnType(java.sql.Types.DATE, "YEAR", 4, 0);
+        Assertions.assertEquals(PrimitiveType.DATE, type.getPrimitiveType());
+    }
+
+    @Test
+    public void testConvertJsonType() {
+        MysqlSchemaResolver resolver = new MysqlSchemaResolver();
+        
+        Type type = resolver.convertColumnType(java.sql.Types.LONGVARCHAR, "JSON", 1073741824, 0);
+        Assertions.assertEquals(PrimitiveType.VARCHAR, type.getPrimitiveType());
+        
+        type = resolver.convertColumnType(java.sql.Types.OTHER, "JSON", 1073741824, 0);
+        Assertions.assertEquals(PrimitiveType.VARCHAR, type.getPrimitiveType());
+    }
+
+    @Test
+    public void testConvertSpatialTypes() {
+        MysqlSchemaResolver resolver = new MysqlSchemaResolver();
+        
+        Type type = resolver.convertColumnType(java.sql.Types.LONGVARBINARY, "GEOMETRY", 2147483647, 0);
+        Assertions.assertEquals(PrimitiveType.VARBINARY, type.getPrimitiveType());
+        
+        type = resolver.convertColumnType(java.sql.Types.LONGVARBINARY, "POINT", 2147483647, 0);
+        Assertions.assertEquals(PrimitiveType.VARBINARY, type.getPrimitiveType());
+        
+        type = resolver.convertColumnType(java.sql.Types.LONGVARBINARY, "LINESTRING", 2147483647, 0);
+        Assertions.assertEquals(PrimitiveType.VARBINARY, type.getPrimitiveType());
+        
+        type = resolver.convertColumnType(java.sql.Types.LONGVARBINARY, "POLYGON", 2147483647, 0);
+        Assertions.assertEquals(PrimitiveType.VARBINARY, type.getPrimitiveType());
+        
+        type = resolver.convertColumnType(java.sql.Types.LONGVARBINARY, "MULTIPOINT", 2147483647, 0);
+        Assertions.assertEquals(PrimitiveType.VARBINARY, type.getPrimitiveType());
+        
+        type = resolver.convertColumnType(java.sql.Types.LONGVARBINARY, "MULTILINESTRING", 2147483647, 0);
+        Assertions.assertEquals(PrimitiveType.VARBINARY, type.getPrimitiveType());
+        
+        type = resolver.convertColumnType(java.sql.Types.LONGVARBINARY, "MULTIPOLYGON", 2147483647, 0);
+        Assertions.assertEquals(PrimitiveType.VARBINARY, type.getPrimitiveType());
+        
+        type = resolver.convertColumnType(java.sql.Types.LONGVARBINARY, "GEOMETRYCOLLECTION", 2147483647, 0);
+        Assertions.assertEquals(PrimitiveType.VARBINARY, type.getPrimitiveType());
+        
+        type = resolver.convertColumnType(java.sql.Types.LONGVARCHAR, "GEOMETRYCOLLECTION", 1073741824, 0);
+        Assertions.assertEquals(PrimitiveType.VARBINARY, type.getPrimitiveType());
+        
+        type = resolver.convertColumnType(java.sql.Types.OTHER, "GEOMETRY", 2147483647, 0);
+        Assertions.assertEquals(PrimitiveType.VARBINARY, type.getPrimitiveType());
+        
+        type = resolver.convertColumnType(java.sql.Types.OTHER, "POINT", 2147483647, 0);
+        Assertions.assertEquals(PrimitiveType.VARBINARY, type.getPrimitiveType());
+        
+        type = resolver.convertColumnType(java.sql.Types.OTHER, "GEOMETRYCOLLECTION", 1073741824, 0);
+        Assertions.assertEquals(PrimitiveType.VARBINARY, type.getPrimitiveType());
     }
 }
