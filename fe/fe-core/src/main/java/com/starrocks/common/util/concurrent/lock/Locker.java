@@ -256,6 +256,8 @@ public class Locker {
             } else {
                 rwLock.sharedUnlock();
             }
+
+            LOG.info("unlock object: {}, {}", database.getFullName(), rwLock.getLockInfoToJson(null));
         }
     }
 

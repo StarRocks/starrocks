@@ -98,6 +98,8 @@ public class LockUtils {
                 throw new UnsupportedOperationException("unknown lock type: " + type);
         }
 
+        LOG.info("lock object: {}, {}", objectName, getLockInfoWithOwnerStack(rwLock));
+
         logSlowLockEventIfNeeded(startMs, type, objectId, objectName,
                 beforeLockInfo, true, rwLock, slowLockLogStats);
     }
@@ -122,6 +124,7 @@ public class LockUtils {
                 throw new UnsupportedOperationException("unknown lock type: " + type);
         }
 
+        LOG.info("try lock object: {}, {}", objectName, getLockInfoWithOwnerStack(rwLock));
 
         if (lockingResult) {
             logSlowLockEventIfNeeded(startMs, type,
