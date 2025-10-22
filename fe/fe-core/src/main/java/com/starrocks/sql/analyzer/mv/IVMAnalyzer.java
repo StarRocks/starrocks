@@ -18,6 +18,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.Table;
 import com.starrocks.catalog.combinator.AggStateUtils;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.PropertyAnalyzer;
@@ -32,6 +33,7 @@ import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetOperationRelation;
+import com.starrocks.sql.ast.SetQualifier;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UnionRelation;
@@ -63,46 +65,72 @@ public class IVMAnalyzer {
     }
 
     public record IVMAnalyzeResult(QueryStatement queryStatement,
-                                   boolean needRetractableSink) {
-        public static IVMAnalyzeResult of(QueryStatement queryStatement, boolean needRetractableSink) {
-            return new IVMAnalyzeResult(queryStatement, needRetractableSink);
+                                   boolean needRetractableSink,
+                                   MaterializedView.RefreshMode currentRefreshMode) {
+        public static IVMAnalyzeResult of(QueryStatement queryStatement, boolean needRetractableSink,
+                                          MaterializedView.RefreshMode currentRefreshMode) {
+            return new IVMAnalyzeResult(queryStatement, needRetractableSink, currentRefreshMode);
         }
     }
 
-    private final ConnectContext connectContext;
-    private final CreateMaterializedViewStatement statement;
+    // table tables that supports IVM
+    public static final Set<Table.TableType> SUPPORTED_TABLE_TYPES = Set.of(
+            Table.TableType.ICEBERG
+    );
 
-    private boolean isNeedRetractableSink = false;
-
-    public IVMAnalyzer(ConnectContext connectContext,
-                       CreateMaterializedViewStatement statement) {
-        this.connectContext = connectContext;
-        this.statement = statement;
-    }
-
+    // join operators that supports IVM
     public static final Set<JoinOperator> IVM_SUPPORTED_JOIN_OPS = Set.of(
             JoinOperator.INNER_JOIN,
             JoinOperator.CROSS_JOIN
     );
+
+    private final ConnectContext connectContext;
+    private final QueryStatement queryStatement;
+
+    private boolean isNeedRetractableSink = false;
+
+    public IVMAnalyzer(ConnectContext connectContext,
+                       QueryStatement queryStatement) {
+        this.connectContext = connectContext;
+        this.queryStatement = queryStatement;
+    }
+
+    public static boolean isSupportedIVM(MaterializedView mv) {
+        if (mv == null) {
+            return false;
+        }
+        // check table types
+        for (Table baseTable : mv.getBaseTables()) {
+            if (!SUPPORTED_TABLE_TYPES.contains(baseTable.getType())) {
+                return false;
+            }
+        }
+        return true;
+    }
 
     /**
      * Rewrite the mv defined query to incremental refresh query.
      * - Optional.empty: cannot be applied to incremental refresh.
      * - If incremental refresh is supported, the result must not be none.
      */
-    public Optional<IVMAnalyzeResult> rewrite() {
+    public Optional<IVMAnalyzeResult> rewrite(MaterializedView.RefreshMode refreshMode) {
+        if (!refreshMode.isIncremental() && !refreshMode.isAuto()) {
+            return Optional.empty();
+        }
+
         try {
-            MaterializedView.RefreshMode refreshMode = getRefreshMode(statement);
-            if (!refreshMode.isIncremental()) {
-                return Optional.empty();
-            }
-            QueryStatement queryStatement = statement.getQueryStatement();
             QueryRelation queryRelation = queryStatement.getQueryRelation();
             rewriteImpl(queryRelation);
-            IVMAnalyzeResult result = IVMAnalyzeResult.of(queryStatement, isNeedRetractableSink);
+            IVMAnalyzeResult result = IVMAnalyzeResult.of(queryStatement,
+                    isNeedRetractableSink, refreshMode);
             return Optional.of(result);
         } catch (Exception e) {
-            throw new SemanticException("Failed to rewrite the query for IVM: %s", e.getMessage());
+            if (refreshMode.isIncremental()) {
+                throw new SemanticException("Failed to rewrite the query for IVM: %s", e.getMessage());
+            } else {
+                // If the refresh mode is not strictly incremental, we can fallback to full refresh.
+                return Optional.empty();
+            }
         }
     }
 
@@ -141,6 +169,10 @@ public class IVMAnalyzer {
                     "but got: %s", setOperationRelation.getClass().getSimpleName());
         }
         UnionRelation unionRelation = (UnionRelation) setOperationRelation;
+        if (unionRelation.getQualifier() != SetQualifier.ALL) {
+            throw new SemanticException("IVMAnalyzer only supports UNION ALL, but got: %s",
+                    unionRelation.getQualifier().toString());
+        }
         // For UnionRelation, we only handle the case where all children are SelectRelation.
         List<QueryRelation> children = unionRelation.getRelations();
         for (QueryRelation child : children) {
@@ -164,6 +196,15 @@ public class IVMAnalyzer {
     }
 
     private boolean checkSelectRelation(SelectRelation selectRelation) throws AnalysisException {
+        if (CollectionUtils.isNotEmpty(selectRelation.getOutputAnalytic())) {
+            throw new SemanticException("IVMAnalyzer does not support window functions, " +
+                    "but got: %s", selectRelation.getOutputAnalytic());
+        }
+        if (CollectionUtils.isNotEmpty(selectRelation.getOrderBy()) ||
+                CollectionUtils.isNotEmpty(selectRelation.getOrderByExpressions())) {
+            throw new SemanticException("IVMAnalyzer does not support order by clause, " +
+                    "but got: %s", selectRelation.getOrderBy());
+        }
         boolean isRetractable = checkAggregate(selectRelation);
         Relation innerRelation = selectRelation.getRelation();
         isRetractable |= checkRelation(innerRelation);
@@ -197,6 +238,14 @@ public class IVMAnalyzer {
             if (!IVM_SUPPORTED_JOIN_OPS.contains(joinType)) {
                 throw new SemanticException("IVMAnalyzer does not support join type: %s", joinType);
             }
+            if (checkRelation(joinRelation.getLeft())) {
+                throw new SemanticException("IVMAnalyzer does not support with retractable left input, " +
+                        "but got: %s", joinRelation.getLeft());
+            }
+            if (checkRelation(joinRelation.getRight())) {
+                throw new SemanticException("IVMAnalyzer does not support with retractable right input, " +
+                        "but got: %s", joinRelation.getRight());
+            }
             if (isRetractableJoin(joinType)) {
                 // only can support two tables with outer join, cannot support multi tables with outer join,
                 if (hasMarkedRetractableSink()) {
@@ -216,6 +265,11 @@ public class IVMAnalyzer {
                 // If the inner relation is not a JoinRelation or QueryRelation, we cannot handle it.
                 throw new SemanticException("IVMAnalyzer does not support inner relation type: %s",
                         relation.getClass().getSimpleName());
+            }
+            TableRelation tableRelation = (TableRelation) relation;
+            Table table = tableRelation.getTable();
+            if (!SUPPORTED_TABLE_TYPES.contains(table.getType())) {
+                throw new SemanticException("IVMAnalyzer does not support table type: %s", table.getType());
             }
             return false;
         }
@@ -297,7 +351,7 @@ public class IVMAnalyzer {
         return expr.substitute(substitutionMap);
     }
 
-    private MaterializedView.RefreshMode getRefreshMode(CreateMaterializedViewStatement statement) {
+    public static MaterializedView.RefreshMode getRefreshMode(CreateMaterializedViewStatement statement) {
         Map<String, String> properties = statement.getProperties();
         if (properties == null) {
             properties = Maps.newHashMap();
@@ -308,7 +362,7 @@ public class IVMAnalyzer {
             return MaterializedView.RefreshMode.valueOf(mode.toUpperCase());
         } else {
             // Default to INCREMENTAL
-            return MaterializedView.RefreshMode.defaultValue();
+            return MaterializedView.RefreshMode.PCT;
         }
     }
 

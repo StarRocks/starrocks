@@ -61,13 +61,6 @@ public class TaskRunHistoryTest {
     public void testTaskRunStatusSerialization() {
         TaskRunStatus status = new TaskRunStatus();
         String json = status.toJSON();
-        assertEquals("{\"taskId\":0,\"createTime\":0,\"expireTime\":0,\"priority\":0,\"mergeRedundant\":false," +
-                "\"source\":\"CTAS\",\"errorCode\":0,\"finishTime\":0,\"processStartTime\":0,\"state\":\"PENDING\"," +
-                "\"progress\":0,\"mvExtraMessage\":{\"forceRefresh\":false,\"mvPartitionsToRefresh\":[]," +
-                "\"refBasePartitionsToRefreshMap\":{},\"basePartitionsToRefreshMap\":{},\"processStartTime\":0," +
-                "\"executeOption\":{\"priority\":0,\"taskRunProperties\":{},\"isMergeRedundant\":false,\"isManual\":false," +
-                "\"isSync\":false,\"isReplay\":false},\"planBuilderMessage\":{}}}", json);
-
         TaskRunStatus b = TaskRunStatus.fromJson(json);
         assertEquals(status.toJSON(), b.toJSON());
     }

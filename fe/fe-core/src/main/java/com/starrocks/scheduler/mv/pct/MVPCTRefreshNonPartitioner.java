@@ -13,7 +13,7 @@
 // limitations under the License.
 
 
-package com.starrocks.scheduler.mv;
+package com.starrocks.scheduler.mv.pct;
 
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
@@ -21,6 +21,8 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.scheduler.MvTaskRunContext;
 import com.starrocks.scheduler.TaskRunContext;
+import com.starrocks.scheduler.mv.BaseTableSnapshotInfo;
+import com.starrocks.scheduler.mv.MVRefreshParams;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.PCellNone;

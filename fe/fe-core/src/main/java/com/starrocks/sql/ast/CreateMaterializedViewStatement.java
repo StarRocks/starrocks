@@ -21,6 +21,7 @@ import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.epack.sql.ast.WithColumnMaskingPolicy;
 import com.starrocks.epack.sql.ast.WithRowAccessPolicy;
@@ -83,6 +84,8 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     // current db name when creating mv
     private String originalDBName;
     private List<BaseTableInfo> baseTableInfos;
+    // the refresh mode of the mv determined by analyzer
+    private MaterializedView.RefreshMode currentRefreshMode = MaterializedView.RefreshMode.PCT;
 
     // Maintenance information
     ExecPlan maintenancePlan;
@@ -390,6 +393,14 @@ public class CreateMaterializedViewStatement extends DdlStmt {
 
     public void setRefBaseTablePartitionWithTransform(boolean refBaseTablePartitionWithTransform) {
         isRefBaseTablePartitionWithTransform = refBaseTablePartitionWithTransform;
+    }
+
+    public void setCurrentRefreshMode(MaterializedView.RefreshMode currentRefreshMode) {
+        this.currentRefreshMode = currentRefreshMode;
+    }
+
+    public MaterializedView.RefreshMode getCurrentRefreshMode() {
+        return currentRefreshMode;
     }
 
     @Override

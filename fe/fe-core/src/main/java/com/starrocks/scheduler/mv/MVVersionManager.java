@@ -19,9 +19,11 @@ import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
 import com.starrocks.scheduler.MvTaskRunContext;
+import com.starrocks.scheduler.mv.pct.PCTTableSnapshotInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import org.apache.logging.log4j.LogManager;
@@ -58,11 +60,13 @@ public class MVVersionManager {
      * @param mvRefreshedPartitions mv refreshed partitions
      * @param refBaseTableIds  mv's ref base table ids
      * @param refTableAndPartitionNames mv's ref base table and partition names
+     * @param tempMvTvrVersionRangeMap temporary tvr version range map for each base table which is used for ivm refresh
      */
     public void updateMVVersionInfo(Map<Long, BaseTableSnapshotInfo> snapshotBaseTables,
                                     Set<String> mvRefreshedPartitions,
                                     Set<Long> refBaseTableIds,
-                                    Map<BaseTableSnapshotInfo, Set<String>> refTableAndPartitionNames) {
+                                    Map<BaseTableSnapshotInfo, Set<String>> refTableAndPartitionNames,
+                                    Map<BaseTableInfo, TvrVersionRange> tempMvTvrVersionRangeMap) {
         MaterializedView.MvRefreshScheme mvRefreshScheme = mv.getRefreshScheme();
         MaterializedView.AsyncRefreshContext refreshContext = mvRefreshScheme.getAsyncRefreshContext();
         // update materialized view partition to ref base table partition names meta
@@ -78,6 +82,14 @@ public class MVVersionManager {
 
         if (!isOlapTableRefreshed && !isExternalTableRefreshed) {
             return;
+        }
+        if (tempMvTvrVersionRangeMap != null) {
+            // update the tvr version range map in mv context
+            final Map<BaseTableInfo, TvrVersionRange> mvTvrVersionRangeMap =
+                    mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableInfoTvrVersionRangeMap();
+            for (Map.Entry<BaseTableInfo, TvrVersionRange> entry : tempMvTvrVersionRangeMap.entrySet()) {
+                mvTvrVersionRangeMap.put(entry.getKey(), entry.getValue());
+            }
         }
 
         long maxChangedTableRefreshTime = 0L;

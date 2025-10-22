@@ -51,10 +51,11 @@ import com.starrocks.scheduler.TaskRunBuilder;
 import com.starrocks.scheduler.TaskRunManager;
 import com.starrocks.scheduler.TaskRunProcessor;
 import com.starrocks.scheduler.mv.BaseTableSnapshotInfo;
-import com.starrocks.scheduler.mv.MVPCTBasedRefreshProcessor;
+import com.starrocks.scheduler.mv.pct.MVPCTBasedRefreshProcessor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
@@ -404,6 +405,13 @@ public abstract class MVTestBase extends StarRocksTestBase {
 
     protected MVTaskRunProcessor getMVTaskRunProcessor(String dbName, MaterializedView mv) throws Exception {
         TaskRun taskRun = withMVRefreshTaskRun(dbName, mv);
+        return getMVTaskRunProcessor(taskRun);
+    }
+
+    protected MVTaskRunProcessor getMVTaskRunProcessor(MaterializedView mv) throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mv.getDbId());
+        Assertions.assertNotNull(db);
+        TaskRun taskRun = withMVRefreshTaskRun(db.getFullName(), mv);
         return getMVTaskRunProcessor(taskRun);
     }
 
@@ -831,5 +839,33 @@ public abstract class MVTestBase extends StarRocksTestBase {
             throw new IOException("Couldn't create folders " + root);
         }
         return result;
+    }
+
+    protected static void alterMaterializedView(String sql, boolean expectedException) throws Exception {
+        AlterMaterializedViewStmt alterMaterializedViewStmt =
+                (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        try {
+            GlobalStateMgr.getCurrentState().getLocalMetastore().alterMaterializedView(alterMaterializedViewStmt);
+            if (expectedException) {
+                Assertions.fail();
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            if (!expectedException) {
+                Assertions.fail();
+            }
+        }
+    }
+
+    protected MaterializedView createMaterializedViewWithRefreshMode(String query,
+                                                                     String refreshMode) throws Exception {
+        String ddl = String.format("CREATE MATERIALIZED VIEW `test_mv1` " +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"refresh_mode\" = \"%s\"" +
+                ")\n" +
+                "AS %s;", refreshMode, query);
+        starRocksAssert.withMaterializedView(ddl);
+        return getMv("test_mv1");
     }
 }
