@@ -1728,7 +1728,9 @@ CONF_mInt64(load_spill_merge_memory_limit_percent, "30");
 CONF_mInt64(load_spill_merge_max_thread, "16");
 // Do lazy load when PK column larger than this threshold. Default is 300MB.
 CONF_mInt64(pk_column_lazy_load_threshold_bytes, "314572800");
-// Batch size for column mode partial update when processing insert rows. Default is 4096.
+// Batch size for column mode partial update when processing insert rows.
+// If set to 0 or negative, will be clamped to 1 to avoid infinite loop.
+// Default is 4096.
 CONF_mInt32(column_mode_partial_update_batch_size, "4096");
 
 // ignore union type tag in avro kafka routine load
