@@ -73,13 +73,8 @@ public class PaimonPartitionsProcDirTest {
             }
 
             @Mock
-<<<<<<< HEAD
             public Table getTable(String catalogName, String dbName, String tblName) {
-                return new PaimonTable("paimon_catalog", "db1", "tb1", null, nativeTable, 1L);
-=======
-            public Table getTable(ConnectContext context, String catalogName, String dbName, String tblName) {
                 return new PaimonTable("paimon_catalog", "db1", "tb1", null, nativeTable);
->>>>>>> e8bab73912 ([Enhancement] Use uuid instead of table create time when selecting paimon (#57578))
             }
 
             @Mock

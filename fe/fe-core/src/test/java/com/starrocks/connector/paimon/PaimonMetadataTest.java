@@ -683,14 +683,8 @@ public class PaimonMetadataTest {
             }
         };
         PaimonTable paimonTable =
-<<<<<<< HEAD
-                new PaimonTable("paimon", "db1", "tbl1", Lists.newArrayList(), nativeTable, 1723081832L);
-        new ConnectContext().setThreadLocalInfo();
-        ConnectContext.get().getSessionVariable().setEnablePaimonColumnStatistics(true);
-=======
                 new PaimonTable("paimon", "db1", "tbl1", Lists.newArrayList(), nativeTable);
-        optimizerContext.getSessionVariable().setEnablePaimonColumnStatistics(true);
->>>>>>> e8bab73912 ([Enhancement] Use uuid instead of table create time when selecting paimon (#57578))
+        new ConnectContext().setThreadLocalInfo();
 
         Map<ColumnRefOperator, Column> colRefToColumnMetaMap = new HashMap<ColumnRefOperator, Column>();
         ColumnRefOperator columnRefOperator1 = new ColumnRefOperator(3, Type.INT, "user_id", true);
