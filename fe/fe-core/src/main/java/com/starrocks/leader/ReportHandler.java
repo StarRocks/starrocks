@@ -1175,7 +1175,8 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                     }
 
                     ReplicaState state = replica.getState();
-                    if (state == ReplicaState.NORMAL || state == ReplicaState.SCHEMA_CHANGE) {
+                    if (state == ReplicaState.NORMAL || state == ReplicaState.SCHEMA_CHANGE
+                            || state == ReplicaState.DECOMMISSION) {
                         // if state is PENDING / ROLLUP / CLONE
                         // it's normal that the replica is not created in BE but exists in meta.
                         // so we do not delete it.
