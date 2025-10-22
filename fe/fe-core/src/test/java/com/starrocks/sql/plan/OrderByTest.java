@@ -760,4 +760,23 @@ class OrderByTest extends PlanTestBase {
                 "order by: <slot 3> 3: v3 ASC"));
         return list.stream();
     }
+
+    @Test
+    public void testTopNParallelMergeAdaptOnInputRowCount() throws Exception {
+        {
+            String sql = "select * from t0 order by v1, v2 limit 10";
+            String thriftPlan = getThriftPlan(sql);
+            assertCContains(thriftPlan, "enable_parallel_merge:false");
+            assertNotContains(thriftPlan, "enable_parallel_merge:true");
+        }
+
+        {
+            int dop = 16;
+            starRocksAssert.getCtx().getSessionVariable().setPipelineDop(dop);
+            String sql = "select * from t0 order by v1, v2 limit 1 offset " + (dop * 4096 + 1);
+            String thriftPlan = getThriftPlan(sql);
+            assertCContains(thriftPlan, "enable_parallel_merge:true");
+            assertNotContains(thriftPlan, "enable_parallel_merge:false");
+        }
+    }
 }
