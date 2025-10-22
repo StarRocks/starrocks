@@ -15,7 +15,6 @@
 #include "paimon_native_writer.h"
 
 #include <algorithm>
-#include <unordered_map>
 
 #include "arrow/c/bridge.h"
 #include "arrow/c/helpers.h"
@@ -89,6 +88,14 @@ Status PaimonNativeWriter::do_init(RuntimeState* runtime_state) {
 }
 
 Status PaimonNativeWriter::write(RuntimeState* runtime_state, const ChunkPtr& chunk) {
+    if (chunk == nullptr) {
+        return Status::InvalidArgument("Chunk cannot be null");
+    }
+
+    if (chunk->num_rows() == 0) {
+        return Status::OK();
+    }
+
     if (_file_store_write == nullptr) {
         RETURN_IF_ERROR(do_init(runtime_state));
     }
@@ -98,7 +105,6 @@ Status PaimonNativeWriter::write(RuntimeState* runtime_state, const ChunkPtr& ch
     if (!st.ok()) {
         return Status::InternalError(fmt::format("Failed to write via paimon, reason: {}", st.message()));
     }
-    record_batch->GetData()->length;
     return Status::OK();
 }
 
@@ -113,7 +119,7 @@ Status PaimonNativeWriter::commit(RuntimeState* runtime_state) {
     auto res = paimon::CommitMessage::SerializeList(st.value(), paimon::GetDefaultPool());
     if (!res.ok()) {
         return Status::InternalError(
-                fmt::format("Failed to serialized commit message, reason: ", res.status().message()));
+                fmt::format("Failed to serialized commit message, reason: {}", res.status().message()));
     }
     commit_message = std::move(res).value();
     return Status::OK();
@@ -167,7 +173,7 @@ StatusOr<std::map<std::string, std::string>> PaimonNativeWriter::extract_partiti
     std::map<std::string, std::string> partition_values;
     const std::vector<std::string>& partition_keys = _paimon_table->get_partition_keys();
     for (int i = 0; i < partition_keys.size(); ++i) {
-        ASSIGN_OR_RETURN(ColumnPtr column, _partition_expr[i]->evaluate(chunk.get()))
+        ASSIGN_OR_RETURN(ColumnPtr column, _partition_expr[i]->evaluate(chunk.get()));
         auto type = _partition_expr[i]->root()->type();
         ASSIGN_OR_RETURN(auto value, connector::HiveUtils::column_value(type, column, 0));
         partition_values.emplace(partition_keys[i], value);
@@ -196,7 +202,9 @@ StatusOr<std::unique_ptr<paimon::RecordBatch>> PaimonNativeWriter::convert_chunk
     }
     if (_is_static_partition_sink) {
         std::map<std::string, std::string> partition;
-        assert(_partition_column_names.size() == _partition_column_values.size());
+        if (_partition_column_names.size() != _partition_column_values.size()) {
+            return Status::InternalError("partition_column_names.size() != partition_column_values.size()");
+        }
         for (size_t i = 0; i < _partition_column_names.size(); ++i) {
             partition[_partition_column_names[i]] = _partition_column_values[i];
         }
@@ -213,8 +221,8 @@ StatusOr<std::unique_ptr<paimon::RecordBatch>> PaimonNativeWriter::convert_chunk
             if (i == 0) {
                 debug_id = bucket_ids[i];
             } else if (debug_id != bucket_ids[i]) {
-                LOG(ERROR) << "xxxx debug_id = " << debug_id << ", new id = " << bucket_ids[i] << std::endl;
-                LOG(ERROR) << "xxxx debug row = " << chunk->debug_row(0) << ", new row = " << chunk->debug_row(i)
+                LOG(ERROR) << "debug_id = " << debug_id << ", new id = " << bucket_ids[i] << std::endl;
+                LOG(ERROR) << "debug row = " << chunk->debug_row(0) << ", new row = " << chunk->debug_row(i)
                            << std::endl;
             }
         }

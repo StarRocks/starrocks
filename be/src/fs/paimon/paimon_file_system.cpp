@@ -72,7 +72,6 @@ PaimonFileSystem::PaimonFileSystem(const std::map<std::string, std::string>& opt
     if (!st.ok()) {
         // It looks like no scenario can reach this code path, but just in case.
         LOG(ERROR) << "Failed to create delegate file system, reason: " << st.status().detailed_message();
-        throw std::runtime_error("Failed to create delegate file system");
     }
     _fs = std::move(st).value();
 }
@@ -265,9 +264,9 @@ paimon::Status PaimonFileSystem::ListFileStatus(
                 // that means file name contains delimiter character which will cause a failure cast.
                 return false;
             }
-            if (auto res = GetFileStatus(filename); res.ok()) {
-                file_status_list->emplace_back(std::move(res).value());
-            }
+            auto res = std::make_unique<PaimonFileStatus>(dir_entry.size.value_or(0), dir_entry.mtime.value_or(0),
+                                                          dir_entry.is_dir.value_or(true), filename);
+            file_status_list->emplace_back(std::move(res));
             return true;
         });
         if (!status.ok()) {
@@ -299,7 +298,6 @@ paimon::Result<int32_t> PaimonInputStream::Read(char* buffer, uint32_t size) {
 }
 
 paimon::Status PaimonInputStream::Close() {
-    // todo: close
     return paimon::Status::OK();
 }
 

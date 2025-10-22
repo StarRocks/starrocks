@@ -27,11 +27,17 @@ PaimonEvaluator::PaimonEvaluator(const std::vector<SlotDescriptor*>& slots) : sl
 
 std::shared_ptr<paimon::Predicate> PaimonEvaluator::evaluate(const std::vector<Expr*>* conjuncts) {
     if (VLOG_ROW_IS_ON) {
-        for (auto conjunct : *conjuncts) {
-            VLOG(10) << "PaimonEvaluator conjunct : " << conjunct->debug_string();
+        VLOG(10) << "PaimonEvaluator evaluating " << conjuncts->size() << " conjuncts";
+        for (size_t i = 0; i < conjuncts->size(); ++i) {
+            VLOG(10) << "Conjunct " << i << ": " << (*conjuncts)[i]->debug_string();
         }
     }
-    return evaluate_compound(TExprOpcode::type::COMPOUND_AND, conjuncts, false);
+    auto result = evaluate_compound(TExprOpcode::type::COMPOUND_AND, conjuncts, false);
+
+    if (VLOG_ROW_IS_ON) {
+        VLOG(10) << "PaimonEvaluator result: " << (result ? "predicate created" : "null predicate");
+    }
+    return result;
 }
 
 std::shared_ptr<::paimon::Predicate> PaimonEvaluator::evaluate(starrocks::Expr* conjunct, bool neg) {

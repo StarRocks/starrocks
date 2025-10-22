@@ -26,11 +26,8 @@
 #include "exec/csv_scanner.h"
 #include "exec/orc_scanner.h"
 #include "exec/parquet_scanner.h"
-#include "fs/fs_broker.h"
 #include "gutil/strings/substitute.h"
 #include "io/compressed_input_stream.h"
-#include "paimon/executor.h"
-#include "paimon/fs/file_system_factory.h"
 #include "paimon/memory/memory_pool.h"
 #include "paimon/read_context.h"
 #include "paimon/table/source/data_split.h"
@@ -112,10 +109,6 @@ Status PaimonScanner::do_open(RuntimeState* runtime_state) {
                 fmt::format("Paimon CreateReader error : {}", create_reader_result.status().ToString()));
     }
     _reader = std::move(create_reader_result).value();
-
-    for (auto i = 0; i < _scanner_ctx.materialized_columns.size(); ++i) {
-        _conv_funcs.emplace_back(std::make_unique<ConvertFuncTree>());
-    }
     _cast_exprs.resize(_scanner_ctx.materialized_columns.size(), nullptr);
     _conv_ctx.state = runtime_state;
     _chunk_filter.reserve(0);
