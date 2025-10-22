@@ -3886,7 +3886,7 @@ public class Config extends ConfigBase {
     public static long max_graceful_exit_time_second = 60;
 
     @ConfField(mutable = true)
-    public static long default_statistics_output_row_count = 1L * 1000 * 1000 * 1000;
+    public static long default_statistics_output_row_count = 1L;
 
     /**
      * Whether enable dynamic tablet.
