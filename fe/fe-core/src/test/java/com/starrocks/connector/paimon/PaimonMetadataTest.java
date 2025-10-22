@@ -685,6 +685,7 @@ public class PaimonMetadataTest {
         PaimonTable paimonTable =
                 new PaimonTable("paimon", "db1", "tbl1", Lists.newArrayList(), nativeTable);
         new ConnectContext().setThreadLocalInfo();
+        ConnectContext.get().getSessionVariable().setEnablePaimonColumnStatistics(true);
 
         Map<ColumnRefOperator, Column> colRefToColumnMetaMap = new HashMap<ColumnRefOperator, Column>();
         ColumnRefOperator columnRefOperator1 = new ColumnRefOperator(3, Type.INT, "user_id", true);
