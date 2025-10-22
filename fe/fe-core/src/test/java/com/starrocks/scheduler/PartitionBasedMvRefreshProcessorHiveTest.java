@@ -35,6 +35,7 @@ import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TExplainLevel;
 import mockit.Mock;
 import mockit.MockUp;
+import org.apache.commons.collections4.CollectionUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.FixMethodOrder;
@@ -1236,7 +1237,9 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
             @Mock
             public void refreshTable(String catalogName, String srDbName, Table table,
                                      List<String> partitionNames, boolean onlyCachedPartitions) {
-                calls.add(partitionNames);
+                if (CollectionUtils.isNotEmpty(partitionNames)) {
+                    calls.add(partitionNames);
+                }
             }
         };
 
