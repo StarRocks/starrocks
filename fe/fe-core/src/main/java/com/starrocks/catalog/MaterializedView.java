@@ -213,6 +213,10 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         public boolean isFull() {
             return this == FULL;
         }
+
+        public boolean isIncrementalOrAuto() {
+            return this == INCREMENTAL || this == AUTO;
+        }
     }
 
     /**
@@ -636,6 +640,11 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
     protected volatile ParseNode defineQueryParseNode = null;
 
+    // current refresh mode means the actual refresh mode of the mv,
+    // it may be different from the defined refresh mode since we only support limited auto mode now.
+    @SerializedName(value = "currentRefreshMode")
+    private RefreshMode currentRefreshMode = RefreshMode.PCT;
+
     // Use a flag to prevent MV reload too many times while recursively reloading every mv at FE start time
     // and in each round of checkpoint
     private static final int RELOAD_STATE_NOT = -1;
@@ -793,16 +802,20 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         this.originalDBName = originalDBName;
     }
 
+    public String getMVQueryDefinedSql() {
+        if (Strings.isNullOrEmpty(ivmDefineSql)) {
+            return getViewDefineSql();
+        } else {
+            return getIvmDefineSql();
+        }
+    }
+
     public String getTaskDefinition() {
-        return String.format("insert overwrite `%s` %s", getName(), getViewDefineSql());
+        return String.format("insert overwrite `%s` %s", getName(), getMVQueryDefinedSql());
     }
 
     public String getIVMTaskDefinition() {
-        String ivmDefineSql = getIvmDefineSql();
-        if (Strings.isNullOrEmpty(ivmDefineSql)) {
-            ivmDefineSql = getViewDefineSql();
-        }
-        return String.format("INSERT INTO `%s` %s", getName(), ivmDefineSql);
+        return String.format("INSERT INTO `%s` %s", getName(), getMVQueryDefinedSql());
     }
 
     /**
@@ -909,7 +922,21 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     }
 
     public RefreshMode getRefreshMode() {
+        if (tableProperty == null || StringUtils.isEmpty(tableProperty.getMvRefreshMode())) {
+            return RefreshMode.PCT;
+        }
         return RefreshMode.valueOf(tableProperty.getMvRefreshMode().toUpperCase());
+    }
+
+    public RefreshMode getCurrentRefreshMode() {
+        if (this.currentRefreshMode == null) {
+            return RefreshMode.PCT;
+        }
+        return this.currentRefreshMode;
+    }
+
+    public void setCurrentRefreshMode(RefreshMode currentRefreshMode) {
+        this.currentRefreshMode = currentRefreshMode;
     }
 
     /**
@@ -1641,7 +1668,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
         // NOTE: only output non-generated columns
         // use ordered columns to keep the same order as the original create statement
-        List<Column> orderedColumns = getOrderedOutputColumns();
+        List<Column> orderedColumns = getOrderedOutputColumns(true);
         for (Column column : orderedColumns) {
             StringBuilder colSb = new StringBuilder();
             // Since mv supports complex expressions as the output column, add `` to support to replay it.
@@ -2545,15 +2572,24 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      * @return: mv's defined output columns in the defined order
      */
     public List<Column> getOrderedOutputColumns() {
-        final List<Column> baseSchema = getVisibleColumnsWithoutGeneratedColumn();
+        return getOrderedOutputColumns(false);
+    }
+
+    /**
+     * Get mv's ordered columns if the mv has defined its output columns order.
+     * @param isWithInvisible whether include invisible columns
+     */
+    public List<Column> getOrderedOutputColumns(boolean isWithInvisible) {
+        final List<Column> baseSchema = getBaseSchemaWithoutGeneratedColumn();
         if (CollectionUtils.isEmpty(this.queryOutputIndices)) {
-            return baseSchema;
+            return baseSchema.stream()
+                    .filter(col -> isWithInvisible || !col.isHidden())
+                    .collect(Collectors.toList());
         } else {
-            List<Column> outputColumns = Lists.newArrayList();
-            for (Integer index : this.queryOutputIndices) {
-                outputColumns.add(baseSchema.get(index));
-            }
-            return outputColumns;
+            return queryOutputIndices.stream()
+                    .map(baseSchema::get)
+                    .filter(col -> isWithInvisible || !col.isHidden())
+                    .collect(Collectors.toList());
         }
     }
 }
