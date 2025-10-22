@@ -49,7 +49,6 @@
 #include "gutil/strings/split.h"
 #include "util/download_util.h"
 #include "util/dynamic_util.h"
-#include "util/spinlock.h"
 
 namespace starrocks {
 
@@ -215,7 +214,7 @@ Status UserFunctionCache::_load_cached_lib() {
 }
 template <class Loader>
 Status UserFunctionCache::_get_cache_entry(int64_t fid, const std::string& url, const std::string& checksum,
-                                           FuncType type, UserFunctionCacheEntryPtr* output_entry, Loader&& loader, TCloudConfiguration cloud_configuration) {
+                                           FuncType type, UserFunctionCacheEntryPtr* output_entry, Loader&& loader, const TCloudConfiguration& cloud_configuration) {
     std::string suffix = ".unk";
     if (type == UDF_TYPE_JAVA) {
         suffix = JAVA_UDF_SUFFIX;
@@ -237,7 +236,7 @@ Status UserFunctionCache::_get_cache_entry(int64_t fid, const std::string& url, 
             _entry_map.emplace(fid, entry);
         }
     }
-    auto st = _load_cache_entry(url, entry, loader);
+    auto st = _load_cache_entry(url, entry, loader, cloud_configuration);
     if (!st.ok()) {
         LOG(WARNING) << "fail to load cache entry, fid=" << fid;
         // if we load a cache entry failed, I think we should delete this entry cache
