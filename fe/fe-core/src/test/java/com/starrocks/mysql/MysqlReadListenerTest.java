@@ -20,6 +20,7 @@ import com.starrocks.qe.ConnectProcessor;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 import org.xnio.XnioIoThread;
 import org.xnio.XnioWorker;
 import org.xnio.channels.StreamSinkChannel;
@@ -115,13 +116,18 @@ public class MysqlReadListenerTest {
     public void test() {
 
         new MockUp<MysqlPackageDecoder>() {
+            private int counter = 0;
+
             @Mock
             public void consume(ByteBuffer srcBuffer) {
             }
 
             @Mock
             public RequestPackage poll() {
-                return new RequestPackage(0, null);
+                if (counter++ == 0) {
+                    return new RequestPackage(0, null);
+                }
+                return null;
             }
         };
 
@@ -131,6 +137,13 @@ public class MysqlReadListenerTest {
 
             }
         };
+
+        XnioWorker mockWorker = Mockito.mock(XnioWorker.class);
+        Mockito.doAnswer(inv -> {
+            Runnable cmd = inv.getArgument(0);
+            cmd.run();
+            return null;
+        }).when(mockWorker).execute(Mockito.any());
 
         new MockUp<ConduitStreamSourceChannel>() {
             private int counter = 0;
@@ -142,6 +155,10 @@ public class MysqlReadListenerTest {
                 }
                 dst.putInt(1);
                 return 4;
+            }
+            @Mock
+            public XnioWorker getWorker() {
+                return mockWorker;
             }
         };
 
