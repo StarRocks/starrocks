@@ -3912,4 +3912,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "The threshold to flatten compound predicate from deep tree to a balanced tree to " +
             "avoid stack over flow")
     public static int compound_predicate_flatten_threshold = 512;
+<<<<<<< HEAD
+=======
+
+    @ConfField public static int ui_queries_sql_statement_max_length = 128;
+>>>>>>> 92dc5e1bf4 ([Enhancement] truncate the long sql statement in fe profiles (#64377))
 }

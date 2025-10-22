@@ -118,7 +118,28 @@ public class QueryAction extends WebBaseAction {
                     continue;
                 }
                 buffer.append("<td>");
+<<<<<<< HEAD
                 buffer.append(row.get(i));
+=======
+                if (columnHeaders.get(i).equals(ProfileManager.SQL_STATEMENT)) {
+                    String statement = row.get(i);
+                    if (statement != null && statement.length() > Config.ui_queries_sql_statement_max_length) {
+                        String truncatedStatement =
+                                statement.substring(0, Math.max(Config.ui_queries_sql_statement_max_length, 0))
+                                + " ...";
+                        // Add title attribute for hover tooltip to show full statement
+                        buffer.append("<span title=\"")
+                                .append(statement.replace("\"", "&quot;"))
+                                .append("\">")
+                                .append(truncatedStatement)
+                                .append("</span>");
+                    } else {
+                        buffer.append(statement);
+                    }
+                } else {
+                    buffer.append(row.get(i));
+                }
+>>>>>>> 92dc5e1bf4 ([Enhancement] truncate the long sql statement in fe profiles (#64377))
                 buffer.append("</td>");
             }
 
