@@ -96,6 +96,7 @@ import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.common.mv.MaterializedViewDependencyGraph;
 import com.starrocks.common.util.Daemon;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.LogUtil;
@@ -1663,19 +1664,33 @@ public class GlobalStateMgr {
         }
     }
 
-    private void processMvRelatedMeta() {
-        List<String> dbNames = metadataMgr.listDbNames(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
 
+    @VisibleForTesting
+    public void processMvRelatedMeta() {
         long startMillis = System.currentTimeMillis();
-        for (String dbName : dbNames) {
-            Database db = metadataMgr.getDb(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbName);
+        List<MaterializedView> allMVs = new ArrayList<>();
+        for (Database db : localMetastore.getIdToDb().values()) {
             for (MaterializedView mv : db.getMaterializedViews()) {
-                mv.onReload();
+                allMVs.add(mv);
             }
         }
 
+        // Process in topological order
+        List<MaterializedView> topoOrder = Config.enable_mv_post_image_reload_cache ?
+                MaterializedViewDependencyGraph.buildTopologicalOrder(allMVs) : allMVs;
+        long topoBuildDuration = System.currentTimeMillis() - startMillis;
+
+        // only load image async when FE restart and it's not checkpoint thread to avoid changing original behavior.
+        boolean isReloadAsync = Config.enable_mv_post_image_reload_cache && !isCheckpointThread();
+        for (MaterializedView mv : topoOrder) {
+            // set `postLoadImage` flag to true to indicate that this is called after image loading
+            mv.onReload(isReloadAsync);
+        }
+
         long duration = System.currentTimeMillis() - startMillis;
-        LOG.info("finish processing all tables' related materialized views in {}ms", duration);
+        LOG.info("finish processing all tables' related materialized views in {}ms, " +
+                "isReLoadAsync:{}, total mv count: {}, topo mv order:{}, topo build cost(ms):{}", duration, isReloadAsync,
+                allMVs.size(), topoOrder.size(), topoBuildDuration);
     }
 
     public void loadHeader(DataInputStream dis) throws IOException {
