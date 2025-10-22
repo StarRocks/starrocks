@@ -397,7 +397,7 @@ jobs:
       - name: UPDATE ECI & RUN UT
         id: run_ut
         shell: bash
-        timeout-minutes: 60
+        timeout-minutes: 90
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           if [[ "${{ needs.fe-checker.outputs.thirdparty }}" == 'true' ]]; then
