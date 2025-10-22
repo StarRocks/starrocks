@@ -1267,7 +1267,7 @@ TEST_F(ParquetSchemaTest, ParquetLists) {
                 GroupNode::make("my_list_8", FieldRepetitionType::OPTIONAL, ConvertedType::type::LIST, 1));
         t_schemas.emplace_back(GroupNode::make("array", FieldRepetitionType::REPEATED, ConvertedType::type::LIST, 1));
         t_schemas.emplace_back(PrimitiveNode::make("array", FieldRepetitionType::type::REPEATED, Type::type::INT32,
-                                                           ConvertedType::type::INT_32));
+                                                   ConvertedType::type::INT_32));
 
         expected_fields.emplace_back(GroupNode::make_field(
                 "my_list_8", true, ColumnType::ARRAY,
@@ -1288,14 +1288,14 @@ TEST_F(ParquetSchemaTest, ParquetLists) {
     // }
     {
         t_schemas.emplace_back(
-                        GroupNode::make("my_list_9", FieldRepetitionType::OPTIONAL, ConvertedType::type::LIST, 1));
+                GroupNode::make("my_list_9", FieldRepetitionType::OPTIONAL, ConvertedType::type::LIST, 1));
         t_schemas.emplace_back(GroupNode::make("list", FieldRepetitionType::REPEATED, 1));
         t_schemas.emplace_back(GroupNode::make("element", FieldRepetitionType::REQUIRED, ConvertedType::type::MAP, 1));
         t_schemas.emplace_back(GroupNode::make("key_value", FieldRepetitionType::REPEATED, 2));
         t_schemas.emplace_back(PrimitiveNode::make("key", FieldRepetitionType::type::REQUIRED, Type::type::BYTE_ARRAY,
-                                                           ConvertedType::type::UTF8));
+                                                   ConvertedType::type::UTF8));
         t_schemas.emplace_back(PrimitiveNode::make("value", FieldRepetitionType::type::OPTIONAL, Type::type::BYTE_ARRAY,
-                                                           ConvertedType::type::UTF8));
+                                                   ConvertedType::type::UTF8));
 
         expected_fields.emplace_back(GroupNode::make_field(
                 "my_list_9", true, ColumnType::ARRAY,
@@ -1312,409 +1312,435 @@ TEST_F(ParquetSchemaTest, ParquetLists) {
 }
 
 TEST_F(ParquetSchemaTest, ParquetNestedSchema) {
-    std::vector<SchemaElement> t_schemas;
-    t_schemas.emplace_back(GroupNode::make_root(2));
-    std::vector<ParquetField> expected_fields;
+            std::vector<SchemaElement> t_schemas;
+            t_schemas.emplace_back(GroupNode::make_root(2));
+            std::vector<ParquetField> expected_fields;
 
-    // required group group1 {
-    //   required bool leaf1;
-    //   required int32 leaf2;
-    // }
-    // required int64 leaf3;
-    {
-        t_schemas.emplace_back(GroupNode::make("group1", FieldRepetitionType::REQUIRED, 2));
-        t_schemas.emplace_back(PrimitiveNode::make("leaf1", FieldRepetitionType::type::REQUIRED, Type::type::BOOLEAN));
-        t_schemas.emplace_back(PrimitiveNode::make("leaf2", FieldRepetitionType::type::REQUIRED, Type::type::INT32));
+            // required group group1 {
+            //   required bool leaf1;
+            //   required int32 leaf2;
+            // }
+            // required int64 leaf3;
+            {
+                t_schemas.emplace_back(GroupNode::make("group1", FieldRepetitionType::REQUIRED, 2));
+                t_schemas.emplace_back(
+                        PrimitiveNode::make("leaf1", FieldRepetitionType::type::REQUIRED, Type::type::BOOLEAN));
+                t_schemas.emplace_back(
+                        PrimitiveNode::make("leaf2", FieldRepetitionType::type::REQUIRED, Type::type::INT32));
 
-        t_schemas.emplace_back(PrimitiveNode::make("leaf3", FieldRepetitionType::type::REQUIRED, Type::type::INT64));
+                t_schemas.emplace_back(
+                        PrimitiveNode::make("leaf3", FieldRepetitionType::type::REQUIRED, Type::type::INT64));
 
-        expected_fields.emplace_back(
-                GroupNode::make_field("group1", false, ColumnType::STRUCT,
-                                      {PrimitiveNode::make_field("leaf1", false, Type::type::BOOLEAN),
-                                       PrimitiveNode::make_field("leaf2", false, Type::type::INT32)}));
-        expected_fields.emplace_back(PrimitiveNode::make_field("leaf3", false, Type::type::INT64));
-    }
+                expected_fields.emplace_back(
+                        GroupNode::make_field("group1", false, ColumnType::STRUCT,
+                                              {PrimitiveNode::make_field("leaf1", false, Type::type::BOOLEAN),
+                                               PrimitiveNode::make_field("leaf2", false, Type::type::INT32)}));
+                expected_fields.emplace_back(PrimitiveNode::make_field("leaf3", false, Type::type::INT64));
+            }
 
-    SchemaDescriptor desc;
-    auto st = desc.from_thrift(t_schemas, true);
-    ASSERT_TRUE(st.ok()) << st.message();
-    check_flat_parquet_field(expected_fields, desc.get_parquet_fields());
+            SchemaDescriptor desc;
+            auto st = desc.from_thrift(t_schemas, true);
+            ASSERT_TRUE(st.ok()) << st.message();
+            check_flat_parquet_field(expected_fields, desc.get_parquet_fields());
 }
 
 TEST_F(ParquetSchemaTest, ParquetNestedSchema2) {
-    std::vector<SchemaElement> t_schemas;
-    t_schemas.emplace_back(GroupNode::make_root(3));
-    std::vector<ParquetField> expected_fields;
+            std::vector<SchemaElement> t_schemas;
+            t_schemas.emplace_back(GroupNode::make_root(3));
+            std::vector<ParquetField> expected_fields;
 
-    // Full Parquet Schema:
-    // required group group1 {
-    //   required int64 leaf1;
-    //   required int64 leaf2;
-    // }
-    // required group group2 {
-    //   required int64 leaf3;
-    //   required int64 leaf4;
-    // }
-    // required int64 leaf5;
-    {
-        t_schemas.emplace_back(GroupNode::make("group1", FieldRepetitionType::REQUIRED, 2));
-        t_schemas.emplace_back(PrimitiveNode::make("leaf1", FieldRepetitionType::type::REQUIRED, Type::type::INT64));
-        t_schemas.emplace_back(PrimitiveNode::make("leaf2", FieldRepetitionType::type::REQUIRED, Type::type::INT64));
+            // Full Parquet Schema:
+            // required group group1 {
+            //   required int64 leaf1;
+            //   required int64 leaf2;
+            // }
+            // required group group2 {
+            //   required int64 leaf3;
+            //   required int64 leaf4;
+            // }
+            // required int64 leaf5;
+            {
+                t_schemas.emplace_back(GroupNode::make("group1", FieldRepetitionType::REQUIRED, 2));
+                t_schemas.emplace_back(
+                        PrimitiveNode::make("leaf1", FieldRepetitionType::type::REQUIRED, Type::type::INT64));
+                t_schemas.emplace_back(
+                        PrimitiveNode::make("leaf2", FieldRepetitionType::type::REQUIRED, Type::type::INT64));
 
-        t_schemas.emplace_back(GroupNode::make("group2", FieldRepetitionType::REQUIRED, 2));
-        t_schemas.emplace_back(PrimitiveNode::make("leaf3", FieldRepetitionType::type::REQUIRED, Type::type::INT64));
-        t_schemas.emplace_back(PrimitiveNode::make("leaf4", FieldRepetitionType::type::REQUIRED, Type::type::INT64));
+                t_schemas.emplace_back(GroupNode::make("group2", FieldRepetitionType::REQUIRED, 2));
+                t_schemas.emplace_back(
+                        PrimitiveNode::make("leaf3", FieldRepetitionType::type::REQUIRED, Type::type::INT64));
+                t_schemas.emplace_back(
+                        PrimitiveNode::make("leaf4", FieldRepetitionType::type::REQUIRED, Type::type::INT64));
 
-        t_schemas.emplace_back(PrimitiveNode::make("leaf5", FieldRepetitionType::type::REQUIRED, Type::type::INT64));
+                t_schemas.emplace_back(
+                        PrimitiveNode::make("leaf5", FieldRepetitionType::type::REQUIRED, Type::type::INT64));
 
-        expected_fields.emplace_back(
-                GroupNode::make_field("group1", false, ColumnType::STRUCT,
-                                      {PrimitiveNode::make_field("leaf1", false, Type::type::INT64),
-                                       PrimitiveNode::make_field("leaf2", false, Type::type::INT64)}));
-        expected_fields.emplace_back(
-                GroupNode::make_field("group2", false, ColumnType::STRUCT,
-                                      {PrimitiveNode::make_field("leaf3", false, Type::type::INT64),
-                                       PrimitiveNode::make_field("leaf4", false, Type::type::INT64)}));
-        expected_fields.emplace_back(PrimitiveNode::make_field("leaf5", false, Type::type::INT64));
-    }
+                expected_fields.emplace_back(
+                        GroupNode::make_field("group1", false, ColumnType::STRUCT,
+                                              {PrimitiveNode::make_field("leaf1", false, Type::type::INT64),
+                                               PrimitiveNode::make_field("leaf2", false, Type::type::INT64)}));
+                expected_fields.emplace_back(
+                        GroupNode::make_field("group2", false, ColumnType::STRUCT,
+                                              {PrimitiveNode::make_field("leaf3", false, Type::type::INT64),
+                                               PrimitiveNode::make_field("leaf4", false, Type::type::INT64)}));
+                expected_fields.emplace_back(PrimitiveNode::make_field("leaf5", false, Type::type::INT64));
+            }
 
-    SchemaDescriptor desc;
-    auto st = desc.from_thrift(t_schemas, true);
-    ASSERT_TRUE(st.ok()) << st.message();
-    check_flat_parquet_field(expected_fields, desc.get_parquet_fields());
+            SchemaDescriptor desc;
+            auto st = desc.from_thrift(t_schemas, true);
+            ASSERT_TRUE(st.ok()) << st.message();
+            check_flat_parquet_field(expected_fields, desc.get_parquet_fields());
 }
 
 TEST_F(ParquetSchemaTest, ParquetRepeatedNestedSchema) {
-    std::vector<SchemaElement> t_schemas;
-    t_schemas.emplace_back(GroupNode::make_root(2));
-    std::vector<ParquetField> expected_fields;
+            std::vector<SchemaElement> t_schemas;
+            t_schemas.emplace_back(GroupNode::make_root(2));
+            std::vector<ParquetField> expected_fields;
 
-    //   optional int32 leaf1;
-    //   repeated group outerGroup {
-    //     optional int32 leaf2;
-    //     repeated group innerGroup {
-    //       optional int32 leaf3;
-    //     }
-    //   }
-    {
-        t_schemas.emplace_back(PrimitiveNode::make("leaf1", FieldRepetitionType::OPTIONAL, Type::type::INT32));
-        t_schemas.emplace_back(GroupNode::make("outerGroup", FieldRepetitionType::REPEATED, 2));
-        t_schemas.emplace_back(PrimitiveNode::make("leaf2", FieldRepetitionType::type::OPTIONAL, Type::type::INT32));
-        t_schemas.emplace_back(GroupNode::make("innerGroup", FieldRepetitionType::REPEATED, 1));
-        t_schemas.emplace_back(PrimitiveNode::make("leaf3", FieldRepetitionType::type::OPTIONAL, Type::type::INT32));
+            //   optional int32 leaf1;
+            //   repeated group outerGroup {
+            //     optional int32 leaf2;
+            //     repeated group innerGroup {
+            //       optional int32 leaf3;
+            //     }
+            //   }
+            {
+                t_schemas.emplace_back(PrimitiveNode::make("leaf1", FieldRepetitionType::OPTIONAL, Type::type::INT32));
+                t_schemas.emplace_back(GroupNode::make("outerGroup", FieldRepetitionType::REPEATED, 2));
+                t_schemas.emplace_back(
+                        PrimitiveNode::make("leaf2", FieldRepetitionType::type::OPTIONAL, Type::type::INT32));
+                t_schemas.emplace_back(GroupNode::make("innerGroup", FieldRepetitionType::REPEATED, 1));
+                t_schemas.emplace_back(
+                        PrimitiveNode::make("leaf3", FieldRepetitionType::type::OPTIONAL, Type::type::INT32));
 
-        expected_fields.emplace_back(PrimitiveNode::make_field("leaf1", true, Type::type::INT32));
+                expected_fields.emplace_back(PrimitiveNode::make_field("leaf1", true, Type::type::INT32));
 
-        auto leaf2_field = PrimitiveNode::make_field("leaf2", true, Type::type::INT32);
-        auto leaf3_field = PrimitiveNode::make_field("leaf3", true, Type::type::INT32);
-        auto inner_group_struct = GroupNode::make_field("innerGroup", false, ColumnType::STRUCT, {leaf3_field});
-        auto inner_group = GroupNode::make_field("innerGroup", false, ColumnType::ARRAY, {inner_group_struct});
-        auto outer_group_struct =
-                GroupNode::make_field("outerGroup", false, ColumnType::STRUCT, {leaf2_field, inner_group});
-        auto outer_group = GroupNode::make_field("outerGroup", false, ColumnType::ARRAY, {outer_group_struct});
-        expected_fields.emplace_back(outer_group);
-    }
+                auto leaf2_field = PrimitiveNode::make_field("leaf2", true, Type::type::INT32);
+                auto leaf3_field = PrimitiveNode::make_field("leaf3", true, Type::type::INT32);
+                auto inner_group_struct = GroupNode::make_field("innerGroup", false, ColumnType::STRUCT, {leaf3_field});
+                auto inner_group = GroupNode::make_field("innerGroup", false, ColumnType::ARRAY, {inner_group_struct});
+                auto outer_group_struct =
+                        GroupNode::make_field("outerGroup", false, ColumnType::STRUCT, {leaf2_field, inner_group});
+                auto outer_group = GroupNode::make_field("outerGroup", false, ColumnType::ARRAY, {outer_group_struct});
+                expected_fields.emplace_back(outer_group);
+            }
 
-    SchemaDescriptor desc;
-    auto st = desc.from_thrift(t_schemas, true);
-    ASSERT_TRUE(st.ok()) << st.message();
-    check_flat_parquet_field(expected_fields, desc.get_parquet_fields());
+            SchemaDescriptor desc;
+            auto st = desc.from_thrift(t_schemas, true);
+            ASSERT_TRUE(st.ok()) << st.message();
+            check_flat_parquet_field(expected_fields, desc.get_parquet_fields());
 }
 
 TEST_F(ParquetLevelsTest, TestPrimitive) {
-    {
-        std::vector<SchemaElement> t_schemas;
-        t_schemas.emplace_back(GroupNode::make_root(1));
-        t_schemas.emplace_back(PrimitiveNode::make("node_name", FieldRepetitionType::REQUIRED, Type::type::BOOLEAN));
+            {
+                std::vector<SchemaElement> t_schemas;
+                t_schemas.emplace_back(GroupNode::make_root(1));
+                t_schemas.emplace_back(
+                        PrimitiveNode::make("node_name", FieldRepetitionType::REQUIRED, Type::type::BOOLEAN));
 
-        std::vector<LevelInfo> expected;
-        expected.emplace_back(make(0, 0, 0));
+                std::vector<LevelInfo> expected;
+                expected.emplace_back(make(0, 0, 0));
 
-        do_check(t_schemas, expected);
-    }
-    {
-        std::vector<SchemaElement> t_schemas;
-        t_schemas.emplace_back(GroupNode::make_root(1));
-        t_schemas.emplace_back(PrimitiveNode::make("node_name", FieldRepetitionType::OPTIONAL, Type::type::BOOLEAN));
+                do_check(t_schemas, expected);
+            }
+            {
+                std::vector<SchemaElement> t_schemas;
+                t_schemas.emplace_back(GroupNode::make_root(1));
+                t_schemas.emplace_back(
+                        PrimitiveNode::make("node_name", FieldRepetitionType::OPTIONAL, Type::type::BOOLEAN));
 
-        std::vector<LevelInfo> expected;
-        expected.emplace_back(make(1, 0, 0));
-        do_check(t_schemas, expected);
-    }
-    {
-        std::vector<SchemaElement> t_schemas;
-        t_schemas.emplace_back(GroupNode::make_root(1));
-        t_schemas.emplace_back(PrimitiveNode::make("node_name", FieldRepetitionType::REPEATED, Type::type::BOOLEAN));
+                std::vector<LevelInfo> expected;
+                expected.emplace_back(make(1, 0, 0));
+                do_check(t_schemas, expected);
+            }
+            {
+                std::vector<SchemaElement> t_schemas;
+                t_schemas.emplace_back(GroupNode::make_root(1));
+                t_schemas.emplace_back(
+                        PrimitiveNode::make("node_name", FieldRepetitionType::REPEATED, Type::type::BOOLEAN));
 
-        std::vector<LevelInfo> expected;
-        expected.emplace_back(make(1, 1, 0));
-        expected.emplace_back(make(1, 1, 1));
-        do_check(t_schemas, expected);
-    }
+                std::vector<LevelInfo> expected;
+                expected.emplace_back(make(1, 1, 0));
+                expected.emplace_back(make(1, 1, 1));
+                do_check(t_schemas, expected);
+            }
 }
 
 TEST_F(ParquetLevelsTest, TestMaps) {
-    // two column map
-    {
-        std::vector<SchemaElement> t_schemas;
-        t_schemas.emplace_back(GroupNode::make_root(1));
+            // two column map
+            {
+                std::vector<SchemaElement> t_schemas;
+                t_schemas.emplace_back(GroupNode::make_root(1));
 
-        t_schemas.emplace_back(GroupNode::make("my_map", FieldRepetitionType::OPTIONAL, ConvertedType::type::MAP, 1));
-        t_schemas.emplace_back(GroupNode::make("key_value", FieldRepetitionType::REPEATED, 2));
-        t_schemas.emplace_back(PrimitiveNode::make("key", FieldRepetitionType::type::REQUIRED, Type::type::BYTE_ARRAY,
-                                                   ConvertedType::type::UTF8));
-        t_schemas.emplace_back(PrimitiveNode::make("value", FieldRepetitionType::type::OPTIONAL, Type::type::BYTE_ARRAY,
-                                                   ConvertedType::type::UTF8));
+                t_schemas.emplace_back(
+                        GroupNode::make("my_map", FieldRepetitionType::OPTIONAL, ConvertedType::type::MAP, 1));
+                t_schemas.emplace_back(GroupNode::make("key_value", FieldRepetitionType::REPEATED, 2));
+                t_schemas.emplace_back(PrimitiveNode::make("key", FieldRepetitionType::type::REQUIRED,
+                                                           Type::type::BYTE_ARRAY, ConvertedType::type::UTF8));
+                t_schemas.emplace_back(PrimitiveNode::make("value", FieldRepetitionType::type::OPTIONAL,
+                                                           Type::type::BYTE_ARRAY, ConvertedType::type::UTF8));
 
-        std::vector<LevelInfo> expected;
-        expected.emplace_back(make(2, 1, 0));
-        expected.emplace_back(make(2, 1, 2));
-        expected.emplace_back(make(3, 1, 2));
-        do_check(t_schemas, expected);
-    }
-    // Single column map (i.e. set) gets converted to list of struct.
-    {
-        std::vector<SchemaElement> t_schemas;
-        t_schemas.emplace_back(GroupNode::make_root(1));
+                std::vector<LevelInfo> expected;
+                expected.emplace_back(make(2, 1, 0));
+                expected.emplace_back(make(2, 1, 2));
+                expected.emplace_back(make(3, 1, 2));
+                do_check(t_schemas, expected);
+            }
+            // Single column map (i.e. set) gets converted to list of struct.
+            {
+                std::vector<SchemaElement> t_schemas;
+                t_schemas.emplace_back(GroupNode::make_root(1));
 
-        t_schemas.emplace_back(
-                GroupNode::make("my_set", FieldRepetitionType::type::REQUIRED, ConvertedType::type::MAP, 1));
-        t_schemas.emplace_back(GroupNode::make("key_value", FieldRepetitionType::type::REPEATED, 1));
-        t_schemas.emplace_back(PrimitiveNode::make("key", FieldRepetitionType::type::REQUIRED, Type::type::BYTE_ARRAY,
-                                                   ConvertedType::type::UTF8));
+                t_schemas.emplace_back(
+                        GroupNode::make("my_set", FieldRepetitionType::type::REQUIRED, ConvertedType::type::MAP, 1));
+                t_schemas.emplace_back(GroupNode::make("key_value", FieldRepetitionType::type::REPEATED, 1));
+                t_schemas.emplace_back(PrimitiveNode::make("key", FieldRepetitionType::type::REQUIRED,
+                                                           Type::type::BYTE_ARRAY, ConvertedType::type::UTF8));
 
-        std::vector<LevelInfo> expected;
-        expected.emplace_back(make(1, 1, 0));
-        expected.emplace_back(make(1, 1, 1));
-        do_check(t_schemas, expected);
-    }
+                std::vector<LevelInfo> expected;
+                expected.emplace_back(make(1, 1, 0));
+                expected.emplace_back(make(1, 1, 1));
+                do_check(t_schemas, expected);
+            }
 }
 
 TEST_F(ParquetLevelsTest, TestSimpleGroups) {
-    // schema: struct(child: struct(inner: boolean not null))
-    {
-        std::vector<SchemaElement> t_schemas;
-        t_schemas.emplace_back(GroupNode::make_root(1));
+            // schema: struct(child: struct(inner: boolean not null))
+            {
+                std::vector<SchemaElement> t_schemas;
+                t_schemas.emplace_back(GroupNode::make_root(1));
 
-        t_schemas.emplace_back(GroupNode::make("parent", FieldRepetitionType::OPTIONAL, 1));
-        t_schemas.emplace_back(GroupNode::make("child", FieldRepetitionType::OPTIONAL, 1));
-        t_schemas.emplace_back(PrimitiveNode::make("inner", FieldRepetitionType::REQUIRED, Type::type::BOOLEAN));
+                t_schemas.emplace_back(GroupNode::make("parent", FieldRepetitionType::OPTIONAL, 1));
+                t_schemas.emplace_back(GroupNode::make("child", FieldRepetitionType::OPTIONAL, 1));
+                t_schemas.emplace_back(
+                        PrimitiveNode::make("inner", FieldRepetitionType::REQUIRED, Type::type::BOOLEAN));
 
-        std::vector<LevelInfo> expected;
-        expected.emplace_back(make(1, 0, 0));
-        expected.emplace_back(make(2, 0, 0));
-        expected.emplace_back(make(2, 0, 0));
-        do_check(t_schemas, expected);
-    }
-    // schema: struct(child: struct(inner: boolean ))
-    {
-        std::vector<SchemaElement> t_schemas;
-        t_schemas.emplace_back(GroupNode::make_root(1));
+                std::vector<LevelInfo> expected;
+                expected.emplace_back(make(1, 0, 0));
+                expected.emplace_back(make(2, 0, 0));
+                expected.emplace_back(make(2, 0, 0));
+                do_check(t_schemas, expected);
+            }
+            // schema: struct(child: struct(inner: boolean ))
+            {
+                std::vector<SchemaElement> t_schemas;
+                t_schemas.emplace_back(GroupNode::make_root(1));
 
-        t_schemas.emplace_back(GroupNode::make("parent", FieldRepetitionType::OPTIONAL, 1));
-        t_schemas.emplace_back(GroupNode::make("child", FieldRepetitionType::OPTIONAL, 1));
-        t_schemas.emplace_back(PrimitiveNode::make("inner", FieldRepetitionType::OPTIONAL, Type::type::BOOLEAN));
+                t_schemas.emplace_back(GroupNode::make("parent", FieldRepetitionType::OPTIONAL, 1));
+                t_schemas.emplace_back(GroupNode::make("child", FieldRepetitionType::OPTIONAL, 1));
+                t_schemas.emplace_back(
+                        PrimitiveNode::make("inner", FieldRepetitionType::OPTIONAL, Type::type::BOOLEAN));
 
-        std::vector<LevelInfo> expected;
-        expected.emplace_back(make(1, 0, 0));
-        expected.emplace_back(make(2, 0, 0));
-        expected.emplace_back(make(3, 0, 0));
-        do_check(t_schemas, expected);
-    }
-    // schema: struct(child: struct(inner: boolean)) not null
-    {
-        std::vector<SchemaElement> t_schemas;
-        t_schemas.emplace_back(GroupNode::make_root(1));
+                std::vector<LevelInfo> expected;
+                expected.emplace_back(make(1, 0, 0));
+                expected.emplace_back(make(2, 0, 0));
+                expected.emplace_back(make(3, 0, 0));
+                do_check(t_schemas, expected);
+            }
+            // schema: struct(child: struct(inner: boolean)) not null
+            {
+                std::vector<SchemaElement> t_schemas;
+                t_schemas.emplace_back(GroupNode::make_root(1));
 
-        t_schemas.emplace_back(GroupNode::make("parent", FieldRepetitionType::REQUIRED, 1));
-        t_schemas.emplace_back(GroupNode::make("child", FieldRepetitionType::OPTIONAL, 1));
-        t_schemas.emplace_back(PrimitiveNode::make("inner", FieldRepetitionType::OPTIONAL, Type::type::BOOLEAN));
+                t_schemas.emplace_back(GroupNode::make("parent", FieldRepetitionType::REQUIRED, 1));
+                t_schemas.emplace_back(GroupNode::make("child", FieldRepetitionType::OPTIONAL, 1));
+                t_schemas.emplace_back(
+                        PrimitiveNode::make("inner", FieldRepetitionType::OPTIONAL, Type::type::BOOLEAN));
 
-        std::vector<LevelInfo> expected;
-        expected.emplace_back(make(0, 0, 0));
-        expected.emplace_back(make(1, 0, 0));
-        expected.emplace_back(make(2, 0, 0));
-        do_check(t_schemas, expected);
-    }
+                std::vector<LevelInfo> expected;
+                expected.emplace_back(make(0, 0, 0));
+                expected.emplace_back(make(1, 0, 0));
+                expected.emplace_back(make(2, 0, 0));
+                do_check(t_schemas, expected);
+            }
 }
 
 TEST_F(ParquetLevelsTest, TestRepeatedGroups) {
-    // schema: list(bool)
-    {
-        std::vector<SchemaElement> t_schemas;
-        t_schemas.emplace_back(GroupNode::make_root(1));
+            // schema: list(bool)
+            {
+                std::vector<SchemaElement> t_schemas;
+                t_schemas.emplace_back(GroupNode::make_root(1));
 
-        t_schemas.emplace_back(
-                GroupNode::make("child_list", FieldRepetitionType::OPTIONAL, ConvertedType::type::LIST, 1));
-        t_schemas.emplace_back(GroupNode::make("list", FieldRepetitionType::REPEATED, 1));
-        t_schemas.emplace_back(PrimitiveNode::make("element", FieldRepetitionType::OPTIONAL, Type::type::BOOLEAN));
+                t_schemas.emplace_back(
+                        GroupNode::make("child_list", FieldRepetitionType::OPTIONAL, ConvertedType::type::LIST, 1));
+                t_schemas.emplace_back(GroupNode::make("list", FieldRepetitionType::REPEATED, 1));
+                t_schemas.emplace_back(
+                        PrimitiveNode::make("element", FieldRepetitionType::OPTIONAL, Type::type::BOOLEAN));
 
-        std::vector<LevelInfo> expected;
-        expected.emplace_back(make(2, 1, 0));
-        expected.emplace_back(make(3, 1, 2));
-        do_check(t_schemas, expected);
-    }
-    // schema: list(bool) not null
-    {
-        std::vector<SchemaElement> t_schemas;
-        t_schemas.emplace_back(GroupNode::make_root(1));
+                std::vector<LevelInfo> expected;
+                expected.emplace_back(make(2, 1, 0));
+                expected.emplace_back(make(3, 1, 2));
+                do_check(t_schemas, expected);
+            }
+            // schema: list(bool) not null
+            {
+                std::vector<SchemaElement> t_schemas;
+                t_schemas.emplace_back(GroupNode::make_root(1));
 
-        t_schemas.emplace_back(
-                GroupNode::make("child_list", FieldRepetitionType::REQUIRED, ConvertedType::type::LIST, 1));
-        t_schemas.emplace_back(GroupNode::make("list", FieldRepetitionType::REPEATED, 1));
-        t_schemas.emplace_back(PrimitiveNode::make("element", FieldRepetitionType::OPTIONAL, Type::type::BOOLEAN));
+                t_schemas.emplace_back(
+                        GroupNode::make("child_list", FieldRepetitionType::REQUIRED, ConvertedType::type::LIST, 1));
+                t_schemas.emplace_back(GroupNode::make("list", FieldRepetitionType::REPEATED, 1));
+                t_schemas.emplace_back(
+                        PrimitiveNode::make("element", FieldRepetitionType::OPTIONAL, Type::type::BOOLEAN));
 
-        std::vector<LevelInfo> expected;
-        expected.emplace_back(make(1, 1, 0));
-        expected.emplace_back(make(2, 1, 1));
-        do_check(t_schemas, expected);
-    }
-    // schema: list(bool not null)
-    {
-        std::vector<SchemaElement> t_schemas;
-        t_schemas.emplace_back(GroupNode::make_root(1));
+                std::vector<LevelInfo> expected;
+                expected.emplace_back(make(1, 1, 0));
+                expected.emplace_back(make(2, 1, 1));
+                do_check(t_schemas, expected);
+            }
+            // schema: list(bool not null)
+            {
+                std::vector<SchemaElement> t_schemas;
+                t_schemas.emplace_back(GroupNode::make_root(1));
 
-        t_schemas.emplace_back(
-                GroupNode::make("child_list", FieldRepetitionType::OPTIONAL, ConvertedType::type::LIST, 1));
-        t_schemas.emplace_back(GroupNode::make("list", FieldRepetitionType::REPEATED, 1));
-        t_schemas.emplace_back(PrimitiveNode::make("element", FieldRepetitionType::REQUIRED, Type::type::BOOLEAN));
+                t_schemas.emplace_back(
+                        GroupNode::make("child_list", FieldRepetitionType::OPTIONAL, ConvertedType::type::LIST, 1));
+                t_schemas.emplace_back(GroupNode::make("list", FieldRepetitionType::REPEATED, 1));
+                t_schemas.emplace_back(
+                        PrimitiveNode::make("element", FieldRepetitionType::REQUIRED, Type::type::BOOLEAN));
 
-        std::vector<LevelInfo> expected;
-        expected.emplace_back(make(2, 1, 0));
-        expected.emplace_back(make(2, 1, 2));
-        do_check(t_schemas, expected);
-    }
-    // schema: list(bool not null) not null
-    {
-        std::vector<SchemaElement> t_schemas;
-        t_schemas.emplace_back(GroupNode::make_root(1));
+                std::vector<LevelInfo> expected;
+                expected.emplace_back(make(2, 1, 0));
+                expected.emplace_back(make(2, 1, 2));
+                do_check(t_schemas, expected);
+            }
+            // schema: list(bool not null) not null
+            {
+                std::vector<SchemaElement> t_schemas;
+                t_schemas.emplace_back(GroupNode::make_root(1));
 
-        t_schemas.emplace_back(
-                GroupNode::make("child_list", FieldRepetitionType::REQUIRED, ConvertedType::type::LIST, 1));
-        t_schemas.emplace_back(GroupNode::make("list", FieldRepetitionType::REPEATED, 1));
-        t_schemas.emplace_back(PrimitiveNode::make("element", FieldRepetitionType::REQUIRED, Type::type::BOOLEAN));
+                t_schemas.emplace_back(
+                        GroupNode::make("child_list", FieldRepetitionType::REQUIRED, ConvertedType::type::LIST, 1));
+                t_schemas.emplace_back(GroupNode::make("list", FieldRepetitionType::REPEATED, 1));
+                t_schemas.emplace_back(
+                        PrimitiveNode::make("element", FieldRepetitionType::REQUIRED, Type::type::BOOLEAN));
 
-        std::vector<LevelInfo> expected;
-        expected.emplace_back(make(1, 1, 0));
-        expected.emplace_back(make(1, 1, 1));
-        do_check(t_schemas, expected);
-    }
-    // schema: list(struct(child: struct(list(bool not null) not null)) non null) not null
-    {
-        std::vector<SchemaElement> t_schemas;
-        t_schemas.emplace_back(GroupNode::make_root(1));
+                std::vector<LevelInfo> expected;
+                expected.emplace_back(make(1, 1, 0));
+                expected.emplace_back(make(1, 1, 1));
+                do_check(t_schemas, expected);
+            }
+            // schema: list(struct(child: struct(list(bool not null) not null)) non null) not null
+            {
+                std::vector<SchemaElement> t_schemas;
+                t_schemas.emplace_back(GroupNode::make_root(1));
 
-        t_schemas.emplace_back(GroupNode::make("parent", FieldRepetitionType::REPEATED, 1));
-        t_schemas.emplace_back(GroupNode::make("child", FieldRepetitionType::OPTIONAL, 1));
-        t_schemas.emplace_back(PrimitiveNode::make("inner", FieldRepetitionType::REPEATED, Type::type::BOOLEAN));
+                t_schemas.emplace_back(GroupNode::make("parent", FieldRepetitionType::REPEATED, 1));
+                t_schemas.emplace_back(GroupNode::make("child", FieldRepetitionType::OPTIONAL, 1));
+                t_schemas.emplace_back(
+                        PrimitiveNode::make("inner", FieldRepetitionType::REPEATED, Type::type::BOOLEAN));
 
-        std::vector<LevelInfo> expected;
-        expected.emplace_back(make(1, 1, 0));
-        expected.emplace_back(make(1, 1, 1));
+                std::vector<LevelInfo> expected;
+                expected.emplace_back(make(1, 1, 0));
+                expected.emplace_back(make(1, 1, 1));
 
-        expected.emplace_back(make(2, 1, 1)); // optional child struct
+                expected.emplace_back(make(2, 1, 1)); // optional child struct
 
-        expected.emplace_back(make(3, 2, 1)); // repeated field
-        expected.emplace_back(make(3, 2, 3)); // inner field
+                expected.emplace_back(make(3, 2, 1)); // repeated field
+                expected.emplace_back(make(3, 2, 3)); // inner field
 
-        do_check(t_schemas, expected);
-    }
-    // schema: list(struct(child_list: list(struct(f0: bool f1: bool))) not null) not null
-    {
-        std::vector<SchemaElement> t_schemas;
-        t_schemas.emplace_back(GroupNode::make_root(1));
+                do_check(t_schemas, expected);
+            }
+            // schema: list(struct(child_list: list(struct(f0: bool f1: bool))) not null) not null
+            {
+                std::vector<SchemaElement> t_schemas;
+                t_schemas.emplace_back(GroupNode::make_root(1));
 
-        t_schemas.emplace_back(GroupNode::make("parent", FieldRepetitionType::REPEATED, 1));
-        t_schemas.emplace_back(
-                GroupNode::make("child_list", FieldRepetitionType::OPTIONAL, ConvertedType::type::LIST, 1));
-        t_schemas.emplace_back(GroupNode::make("list", FieldRepetitionType::REPEATED, 1));
-        t_schemas.emplace_back(GroupNode::make("element", FieldRepetitionType::OPTIONAL, 2));
-        t_schemas.emplace_back(PrimitiveNode::make("f0", FieldRepetitionType::OPTIONAL, Type::type::BOOLEAN));
-        t_schemas.emplace_back(PrimitiveNode::make("f1", FieldRepetitionType::REQUIRED, Type::type::BOOLEAN));
+                t_schemas.emplace_back(GroupNode::make("parent", FieldRepetitionType::REPEATED, 1));
+                t_schemas.emplace_back(
+                        GroupNode::make("child_list", FieldRepetitionType::OPTIONAL, ConvertedType::type::LIST, 1));
+                t_schemas.emplace_back(GroupNode::make("list", FieldRepetitionType::REPEATED, 1));
+                t_schemas.emplace_back(GroupNode::make("element", FieldRepetitionType::OPTIONAL, 2));
+                t_schemas.emplace_back(PrimitiveNode::make("f0", FieldRepetitionType::OPTIONAL, Type::type::BOOLEAN));
+                t_schemas.emplace_back(PrimitiveNode::make("f1", FieldRepetitionType::REQUIRED, Type::type::BOOLEAN));
 
-        std::vector<LevelInfo> expected;
-        expected.emplace_back(make(1, 1, 0));
-        expected.emplace_back(make(1, 1, 1));
+                std::vector<LevelInfo> expected;
+                expected.emplace_back(make(1, 1, 0));
+                expected.emplace_back(make(1, 1, 1));
 
-        // Def_level=2 is handled together with def_level=3
-        // When decoding. Def_level=2 indicates present but empty
-        // list. def_level=3 indicates a present element in the
-        // list.
-        expected.emplace_back(make(3, 2, 1)); // list field
-        expected.emplace_back(make(4, 2, 3)); // inner struct field
+                // Def_level=2 is handled together with def_level=3
+                // When decoding. Def_level=2 indicates present but empty
+                // list. def_level=3 indicates a present element in the
+                // list.
+                expected.emplace_back(make(3, 2, 1)); // list field
+                expected.emplace_back(make(4, 2, 3)); // inner struct field
 
-        expected.emplace_back(make(5, 2, 3)); // f0 bool field
-        expected.emplace_back(make(4, 2, 3)); // f1 bool field
+                expected.emplace_back(make(5, 2, 3)); // f0 bool field
+                expected.emplace_back(make(4, 2, 3)); // f1 bool field
 
-        do_check(t_schemas, expected);
-    }
-    // schema: list(struct(child_list: list(bool not null)) not null) not null
-    // Legacy 2-level encoding (required for backwards compatibility.  See
-    // https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#nested-types
-    // for definitions).
-    {
-        std::vector<SchemaElement> t_schemas;
-        t_schemas.emplace_back(GroupNode::make_root(1));
+                do_check(t_schemas, expected);
+            }
+            // schema: list(struct(child_list: list(bool not null)) not null) not null
+            // Legacy 2-level encoding (required for backwards compatibility.  See
+            // https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#nested-types
+            // for definitions).
+            {
+                std::vector<SchemaElement> t_schemas;
+                t_schemas.emplace_back(GroupNode::make_root(1));
 
-        t_schemas.emplace_back(GroupNode::make("parent", FieldRepetitionType::REPEATED, 1));
-        t_schemas.emplace_back(
-                GroupNode::make("child_list", FieldRepetitionType::OPTIONAL, ConvertedType::type::LIST, 1));
-        t_schemas.emplace_back(PrimitiveNode::make("bool", FieldRepetitionType::REPEATED, Type::type::BOOLEAN));
+                t_schemas.emplace_back(GroupNode::make("parent", FieldRepetitionType::REPEATED, 1));
+                t_schemas.emplace_back(
+                        GroupNode::make("child_list", FieldRepetitionType::OPTIONAL, ConvertedType::type::LIST, 1));
+                t_schemas.emplace_back(PrimitiveNode::make("bool", FieldRepetitionType::REPEATED, Type::type::BOOLEAN));
 
-        std::vector<LevelInfo> expected;
-        expected.emplace_back(make(1, 1, 0)); // parent list
-        expected.emplace_back(make(1, 1, 1)); // parent struct
+                std::vector<LevelInfo> expected;
+                expected.emplace_back(make(1, 1, 0)); // parent list
+                expected.emplace_back(make(1, 1, 1)); // parent struct
 
-        // Def_level=2 is handled together with def_level=3
-        // When decoding. Def_level=2 indicates present but empty
-        // list. def_level=3 indicates a present element in the
-        // list.
-        expected.emplace_back(make(3, 2, 1)); // list field
-        expected.emplace_back(make(3, 2, 3)); // inner bool
-    }
+                // Def_level=2 is handled together with def_level=3
+                // When decoding. Def_level=2 indicates present but empty
+                // list. def_level=3 indicates a present element in the
+                // list.
+                expected.emplace_back(make(3, 2, 1)); // list field
+                expected.emplace_back(make(3, 2, 3)); // inner bool
+            }
 }
 
 TEST_F(ParquetLevelsTest, ListErrors) {
-    {
-        std::vector<SchemaElement> t_schemas;
-        t_schemas.emplace_back(GroupNode::make_root(1));
+            {
+                std::vector<SchemaElement> t_schemas;
+                t_schemas.emplace_back(GroupNode::make_root(1));
 
-        t_schemas.emplace_back(
-                GroupNode::make("child_list", FieldRepetitionType::REPEATED, ConvertedType::type::LIST, 1));
-        t_schemas.emplace_back(PrimitiveNode::make("bool", FieldRepetitionType::type::REPEATED, Type::type::BOOLEAN));
+                t_schemas.emplace_back(
+                        GroupNode::make("child_list", FieldRepetitionType::REPEATED, ConvertedType::type::LIST, 1));
+                t_schemas.emplace_back(
+                        PrimitiveNode::make("bool", FieldRepetitionType::type::REPEATED, Type::type::BOOLEAN));
 
-        SchemaDescriptor desc;
-        auto st = desc.from_thrift(t_schemas, true);
-        ASSERT_FALSE(st.ok()) << st.message();
-        ASSERT_EQ("LIST-annotated groups must not be repeated.", st.message());
-    }
-    {
-        std::vector<SchemaElement> t_schemas;
-        t_schemas.emplace_back(GroupNode::make_root(1));
+                SchemaDescriptor desc;
+                auto st = desc.from_thrift(t_schemas, true);
+                ASSERT_FALSE(st.ok()) << st.message();
+                ASSERT_EQ("LIST-annotated groups must not be repeated.", st.message());
+            }
+            {
+                std::vector<SchemaElement> t_schemas;
+                t_schemas.emplace_back(GroupNode::make_root(1));
 
-        t_schemas.emplace_back(
-                GroupNode::make("child_list", FieldRepetitionType::OPTIONAL, ConvertedType::type::LIST, 2));
-        t_schemas.emplace_back(PrimitiveNode::make("f1", FieldRepetitionType::type::REPEATED, Type::type::BOOLEAN));
-        t_schemas.emplace_back(PrimitiveNode::make("f2", FieldRepetitionType::type::REPEATED, Type::type::BOOLEAN));
+                t_schemas.emplace_back(
+                        GroupNode::make("child_list", FieldRepetitionType::OPTIONAL, ConvertedType::type::LIST, 2));
+                t_schemas.emplace_back(
+                        PrimitiveNode::make("f1", FieldRepetitionType::type::REPEATED, Type::type::BOOLEAN));
+                t_schemas.emplace_back(
+                        PrimitiveNode::make("f2", FieldRepetitionType::type::REPEATED, Type::type::BOOLEAN));
 
-        SchemaDescriptor desc;
-        auto st = desc.from_thrift(t_schemas, true);
-        ASSERT_FALSE(st.ok()) << st.message();
-        ASSERT_EQ("LIST-annotated groups must have a single child.", st.message());
-    }
-    {
-        std::vector<SchemaElement> t_schemas;
-        t_schemas.emplace_back(GroupNode::make_root(1));
+                SchemaDescriptor desc;
+                auto st = desc.from_thrift(t_schemas, true);
+                ASSERT_FALSE(st.ok()) << st.message();
+                ASSERT_EQ("LIST-annotated groups must have a single child.", st.message());
+            }
+            {
+                std::vector<SchemaElement> t_schemas;
+                t_schemas.emplace_back(GroupNode::make_root(1));
 
-        t_schemas.emplace_back(
-                GroupNode::make("child_list", FieldRepetitionType::OPTIONAL, ConvertedType::type::LIST, 1));
-        t_schemas.emplace_back(PrimitiveNode::make("f1", FieldRepetitionType::type::OPTIONAL, Type::type::BOOLEAN));
+                t_schemas.emplace_back(
+                        GroupNode::make("child_list", FieldRepetitionType::OPTIONAL, ConvertedType::type::LIST, 1));
+                t_schemas.emplace_back(
+                        PrimitiveNode::make("f1", FieldRepetitionType::type::OPTIONAL, Type::type::BOOLEAN));
 
-        SchemaDescriptor desc;
-        auto st = desc.from_thrift(t_schemas, true);
-        ASSERT_FALSE(st.ok()) << st.message();
-        ASSERT_EQ("Non-repeated nodes in a LIST-annotated group are not supported.", st.message());
-    }
+                SchemaDescriptor desc;
+                auto st = desc.from_thrift(t_schemas, true);
+                ASSERT_FALSE(st.ok()) << st.message();
+                ASSERT_EQ("Non-repeated nodes in a LIST-annotated group are not supported.", st.message());
+            }
 }
 
-} // namespace starrocks::parquet
+    } // namespace starrocks::parquet
