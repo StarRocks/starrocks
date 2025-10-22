@@ -26,27 +26,27 @@ You can only use Paimon catalogs to query data. You cannot use Paimon catalogs t
 
 ## Paimon to StarRocks data types
 
-| Paimon Type         | StarRocks Type            |
-|---------------------|---------------------------|
-| BINARY	            | VARBINARY                 |
-| VARBINARY	          | VARBINARY                 |
-| CHAR	              | CHAR(length)              |
-| VARCHAR	            | VARCHAR                   |
-| BOOLEAN	            | BOOLEAN                   |
-| DECIMAL	            | DECIMAL(precision, scale) |
-| TINYINT	            | TINYINT                   |
-| SMALLINT	          | SMALLINT                  |
-| INT	                | INT                       |
-| BIGINT	            | BIGINT                    |
-| FLOAT	              | FLOAT                     |
-| DOUBLE	            | DOUBLE                    |
-| DATE	              | DATE                      |
-| TIME	              | TIME                      |
-| TIMESTAMP	          | DATETIME                  |
-| LocalZonedTimestamp	| DATETIME                  |
-| ARRAY	              | ARRAY<element_type>       |
-| MAP	                | MAP<key_type, value_type> |
-| ROW/STRUCT	        | STRUCT<field1:type1, ...> |
+| Paimon Type           | StarRocks Type              |
+|-----------------------|-----------------------------|
+| `BINARY`              | `VARBINARY`                 |
+| `VARBINARY`           | `VARBINARY`                 |
+| `CHAR`                | `CHAR(length)`              |
+| `VARCHAR`             | `VARCHAR`                   |
+| `BOOLEAN`             | `BOOLEAN`                   |
+| `DECIMAL`             | `DECIMAL(precision, scale)` |
+| `TINYINT`             | `TINYINT`                   |
+| `SMALLINT`            | `SMALLINT`                  |
+| `INT`                 | `INT`                       |
+| `BIGINT`              | `BIGINT`                    |
+| `FLOAT`               | `FLOAT`                     |
+| `DOUBLE`              | `DOUBLE`                    |
+| `DATE`                | `DATE`                      |
+| `TIME`                | `TIME`                      |
+| `TIMESTAMP`           | `DATETIME`                  |
+| `LocalZonedTimestamp` | `DATETIME`                  |
+| `ARRAY`               | `ARRAY<element_type>`       |
+| `MAP`                 | `MAP<key_type, value_type>` |
+| `ROW/STRUCT`          | `STRUCT<field1:type1, ...>` |
 
 ## Integration preparations
 
