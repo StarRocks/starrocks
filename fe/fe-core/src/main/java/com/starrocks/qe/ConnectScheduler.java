@@ -50,6 +50,7 @@ import com.starrocks.mysql.NegotiateState;
 import com.starrocks.mysql.nio.NConnectContext;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.PrivilegeType;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -58,6 +59,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.TimerTask;
 import java.util.UUID;
@@ -170,6 +172,58 @@ public class ConnectScheduler {
             numberConnection.incrementAndGet();
             currentConnAtomic.incrementAndGet();
             connectionMap.put((long) ctx.getConnectionId(), ctx);
+            return new Pair<>(true, null);
+        } finally {
+            connStatsLock.unlock();
+        }
+    }
+
+    public Pair<Boolean, String> onUserChanged(ConnectContext ctx, String oldQualifiedUser, String newQualifiedUser) {
+        if (Objects.equals(oldQualifiedUser, newQualifiedUser)) {
+            return new Pair<>(true, null);
+        }
+
+        if (newQualifiedUser == null) {
+            return new Pair<>(false, "new qualifiedUser is null");
+        }
+
+        try {
+            connStatsLock.lock();
+            AtomicInteger newCounter = connCountByUser.computeIfAbsent(newQualifiedUser, k -> new AtomicInteger(0));
+            int currentNewCount = newCounter.get();
+            long currentUserMaxConn = GlobalStateMgr.getCurrentState().getAuthenticationMgr().getMaxConn(newQualifiedUser);
+
+            if (currentNewCount >= currentUserMaxConn) {
+                int totalConn = connCountByUser.values().stream().mapToInt(AtomicInteger::get).sum();
+                String userErrMsg = "Reach user-level(qualifiedUser: " + newQualifiedUser
+                        + ", currUserIdentity: " + ctx.getCurrentUserIdentity() + ") connection limit, "
+                        + "currentUserMaxConn=" + currentUserMaxConn + ", connectionMap.size="
+                        + connectionMap.size() + ", connByUser.totConn=" + totalConn
+                        + ", user.currConn=" + currentNewCount;
+                LOG.info("{}, details: connectionId={}, connByUser={}", userErrMsg, ctx.getConnectionId(), connCountByUser);
+                return new Pair<>(false, userErrMsg);
+            }
+
+            newCounter.incrementAndGet();
+
+            if (oldQualifiedUser != null) {
+                AtomicInteger oldCounter = connCountByUser.get(oldQualifiedUser);
+                if (oldCounter != null) {
+                    int oldCountAfterDecrement = oldCounter.decrementAndGet();
+                    if (oldCountAfterDecrement < 0) {
+                        LOG.warn("Negative connection count detected for user {} during user change of connection {}",
+                                oldQualifiedUser, ctx.getConnectionId());
+                        oldCounter.set(0);
+                        oldCountAfterDecrement = 0;
+                    }
+                    if (oldCountAfterDecrement == 0) {
+                        connCountByUser.remove(oldQualifiedUser, oldCounter);
+                    }
+                } else {
+                    LOG.warn("Missing connection counter for user {} during user change of connection {}",
+                            oldQualifiedUser, ctx.getConnectionId());
+                }
+            }
             return new Pair<>(true, null);
         } finally {
             connStatsLock.unlock();
