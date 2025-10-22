@@ -27,20 +27,35 @@ shell: curl -s -u root: "http://$(cat be_ip.txt):$(cat be_http_port.txt)/proc_pr
 [UC]shell: cat be_profile_file.txt
 -- result:
 0
-cpu-profile-20251020-112959-pprof.gz
+cpu-profile-20251022-105520-pprof.gz
 -- !result
 shell: if [ $(curl -s -u root: "http://$(cat be_ip.txt):$(cat be_http_port.txt)/proc_profile/file?filename=$(cat be_profile_file.txt)" | wc -l) -gt 0 ]; then echo "exist"; else echo "empty"; fi
 -- result:
 0
 exist
 -- !result
-shell: rm be_profile_file.txt
+shell: if [ $(curl -s -u root: "http://$(cat be_ip.txt):$(cat be_http_port.txt)/proc_profile/file?filename=$(cat be_profile_file.txt)" | wc -l) -gt 0 ]; then echo "exist"; else echo "empty"; fi
+-- result:
+0
+exist
+-- !result
+shell: curl -s -u root: "http://$(cat be_ip.txt):$(cat be_http_port.txt)/proc_profile/file?filename=invalid_file.tar.gz"
+-- result:
+0
+Invalid filename
+-- !result
+shell: curl -s -u root: "http://$(cat be_ip.txt):$(cat be_http_port.txt)/proc_profile/file?filename=invalid_file"
+-- result:
+0
+Invalid filename
+-- !result
+shell: rm -f be_profile_file.txt
 -- result:
 0
 
 -- !result
-shell: curl -s -u root: "http://$(cat be_ip.txt):$(cat be_http_port.txt)/proc_profile/file?filename=invalid_file.tar.gz" | wc -l
+shell: rm -f be_ip.txt be_http_port.txt
 -- result:
 0
-0
+
 -- !result

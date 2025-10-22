@@ -218,9 +218,10 @@ void mem_usage_handler(MemTracker* mem_tracker, const WebPageHandler::ArgumentMa
 
 void proc_profile_handler(const WebPageHandler::ArgumentMap& args, std::stringstream* output) {
     (*output) << "<h2>Process Profiles</h2>";
-    (*output) << "<p>This page displays collected CPU and contention profiles from BRPC.</p>";
+    (*output) << "<p>This page displays collected CPU profiles from BE.</p>";
     (*output) << "<p>To collect profiles, use the <code>collect_be_profile.sh</code> script.</p>";
     (*output) << "<p>Profiles are stored in: <code>" << config::sys_log_dir << "/proc_profile</code></p>";
+    (*output) << "<p>Profiles are in pprof format, it would take a few seconds to convert to flame graph.</p>";
 
     // List profile files directly in this page
     std::string profile_log_dir = std::string(config::sys_log_dir) + "/proc_profile";
@@ -237,7 +238,8 @@ void proc_profile_handler(const WebPageHandler::ArgumentMap& args, std::stringst
         for (const auto& entry : std::filesystem::directory_iterator(dir_path)) {
             if (entry.is_regular_file()) {
                 std::string filename = entry.path().filename().string();
-                if (filename.ends_with(".gz")) {
+                // Only serve files in the pprof format
+                if (ProfileUtils::get_profile_format(filename) == "Pprof") {
                     // Extract timestamp from filename using utility function
                     std::string timestamp = ProfileUtils::extract_timestamp_from_filename(filename);
                     if (!timestamp.empty()) {

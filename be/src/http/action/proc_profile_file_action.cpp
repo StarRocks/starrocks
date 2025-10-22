@@ -23,6 +23,8 @@
 #include <vector>
 
 #include "common/config.h"
+#include "common/status.h"
+#include "fmt/format.h"
 #include "http/action/profile_utils.h"
 #include "http/http_channel.h"
 #include "http/http_headers.h"
@@ -39,14 +41,6 @@ ProcProfileFileAction::ProcProfileFileAction(ExecEnv* exec_env) : _exec_env(exec
 void ProcProfileFileAction::handle(HttpRequest* req) {
     const std::string& filename = req->param("filename");
 
-    LOG(INFO) << "ProcProfileFileAction: Handling request for filename: " << filename;
-
-    if (filename.empty()) {
-        LOG(WARNING) << "ProcProfileFileAction: Missing filename parameter";
-        HttpChannel::send_reply(req, HttpStatus::BAD_REQUEST, "Missing filename parameter");
-        return;
-    }
-
     // Validate filename security
     if (!is_valid_filename(filename)) {
         LOG(WARNING) << "ProcProfileFileAction: Invalid filename: " << filename;
@@ -56,31 +50,21 @@ void ProcProfileFileAction::handle(HttpRequest* req) {
 
     std::string profile_log_dir = std::string(config::sys_log_dir) + "/proc_profile";
     std::string profile_file_path = profile_log_dir + "/" + filename;
+    std::filesystem::path path(profile_file_path);
 
-    LOG(INFO) << "ProcProfileFileAction: Looking for file at: " << profile_file_path;
-
-    std::ifstream file(profile_file_path, std::ios::binary);
-    if (!file.good()) {
-        LOG(WARNING) << "ProcProfileFileAction: Profile file not found: " << profile_file_path;
+    if (!std::filesystem::exists(path) || !std::filesystem::is_regular_file(path)) {
+        LOG(WARNING) << "ProcProfileFileAction: Profile file not found: " << path;
         HttpChannel::send_reply(req, HttpStatus::NOT_FOUND, "Profile file not found");
         return;
     }
 
     try {
         std::string format = ProfileUtils::get_profile_format(filename);
-        LOG(INFO) << "ProcProfileFileAction: Detected format: " << format << " for file: " << filename;
-
-        if (format == "Flame") {
-            LOG(INFO) << "ProcProfileFileAction: Serving gzipped HTML content for: " << filename;
-            // Serve gzipped HTML content with proper headers
-            serve_gzipped_html(req, profile_file_path);
-        } else if (format == "Pprof") {
-            LOG(INFO) << "ProcProfileFileAction: Converting pprof to flame format for: " << filename;
+        if (format == "Pprof") {
             // Convert pprof to flame format and serve as HTML
             serve_pprof_as_flame(req, profile_file_path);
         } else {
-            LOG(WARNING) << "ProcProfileFileAction: Unsupported profile file format: " << filename;
-            HttpChannel::send_reply(req, HttpStatus::BAD_REQUEST, "Unsupported profile file format");
+            serve_gz_file(req, profile_file_path);
         }
     } catch (const std::exception& e) {
         LOG(WARNING) << "ProcProfileFileAction: Error serving profile file: " << filename << ", error: " << e.what();
@@ -111,31 +95,6 @@ bool ProcProfileFileAction::is_valid_filename(const std::string& filename) {
     return true;
 }
 
-void ProcProfileFileAction::serve_gzipped_html(HttpRequest* req, const std::string& file_path) {
-    // Serve the gzipped HTML file directly with proper Content-Encoding header
-    std::ifstream file(file_path, std::ios::binary);
-    if (!file.good()) {
-        HttpChannel::send_reply(req, HttpStatus::NOT_FOUND, "File not found");
-        return;
-    }
-
-    // Read file content
-    file.seekg(0, std::ios::end);
-    size_t file_size = file.tellg();
-    file.seekg(0, std::ios::beg);
-
-    std::vector<char> buffer(file_size);
-    file.read(buffer.data(), file_size);
-    file.close();
-
-    // Set headers for gzipped HTML content
-    req->add_output_header(HttpHeaders::CONTENT_TYPE, HEADER_HTML.c_str());
-    req->add_output_header(HttpHeaders::CONTENT_ENCODING, "gzip");
-    req->add_output_header(HttpHeaders::CONTENT_LENGTH, std::to_string(file_size).c_str());
-
-    HttpChannel::send_reply(req, HttpStatus::OK, std::string(buffer.data(), file_size));
-}
-
 void ProcProfileFileAction::serve_gz_file(HttpRequest* req, const std::string& file_path) {
     std::ifstream file(file_path, std::ios::binary);
     if (!file.good()) {
@@ -158,30 +117,36 @@ void ProcProfileFileAction::serve_gz_file(HttpRequest* req, const std::string& f
 }
 
 void ProcProfileFileAction::serve_pprof_as_flame(HttpRequest* req, const std::string& file_path) {
-    LOG(INFO) << "ProcProfileFileAction: Converting pprof file to flame format: " << file_path;
-
     // Check if required tools are available
     std::string pprof_path = config::flamegraph_tool_dir + "/pprof";
     std::string stackcollapse_path = config::flamegraph_tool_dir + "/stackcollapse-go.pl";
     std::string flamegraph_path = config::flamegraph_tool_dir + "/flamegraph.pl";
 
-    if (system(("test -f " + pprof_path + " >/dev/null 2>&1").c_str()) != 0) {
+    if (!std::filesystem::exists(pprof_path) || !std::filesystem::is_regular_file(pprof_path)) {
         LOG(WARNING) << "ProcProfileFileAction: pprof tool not found at " << pprof_path
                      << ", falling back to serving raw pprof file";
         serve_gz_file(req, file_path);
         return;
     }
 
-    if (system(("test -f " + flamegraph_path + " >/dev/null 2>&1").c_str()) != 0) {
+    if (!std::filesystem::exists(flamegraph_path) || !std::filesystem::is_regular_file(flamegraph_path)) {
         LOG(WARNING) << "ProcProfileFileAction: FlameGraph tools not found at " << flamegraph_path
                      << ", falling back to serving raw pprof file";
         serve_gz_file(req, file_path);
         return;
     }
 
+    if (!std::filesystem::exists(stackcollapse_path) || !std::filesystem::is_regular_file(stackcollapse_path)) {
+        LOG(WARNING) << "ProcProfileFileAction: stackcollapse-go.pl not found at " << stackcollapse_path
+                     << ", falling back to serving raw pprof file";
+        serve_gz_file(req, file_path);
+        return;
+    }
+
     std::string flame_svg_content;
-    if (!convert_pprof_to_flame(file_path, flame_svg_content)) {
-        LOG(WARNING) << "convert pprof to flame failed";
+    Status status = convert_pprof_to_flame(file_path, flame_svg_content);
+    if (!status.ok()) {
+        LOG(WARNING) << "ProcProfileFileAction: Failed to convert pprof to flame format: " << status.to_string();
         serve_gz_file(req, file_path);
         return;
     }
@@ -197,7 +162,8 @@ void ProcProfileFileAction::serve_pprof_as_flame(HttpRequest* req, const std::st
     HttpChannel::send_reply(req, HttpStatus::OK, flame_svg_content);
 }
 
-bool ProcProfileFileAction::convert_pprof_to_flame(const std::string& pprof_file_path, std::string& flame_svg_content) {
+Status ProcProfileFileAction::convert_pprof_to_flame(const std::string& pprof_file_path,
+                                                     std::string& flame_svg_content) {
     LOG(INFO) << "ProcProfileFileAction: Converting pprof to flame format: " << pprof_file_path;
 
     // Generate the corresponding flame file path in proc_profile directory
@@ -227,7 +193,7 @@ bool ProcProfileFileAction::convert_pprof_to_flame(const std::string& pprof_file
         cached_file.close();
 
         LOG(INFO) << "ProcProfileFileAction: Loaded cached flame file, " << file_size << " bytes";
-        return true;
+        return {};
     }
 
     // Create temporary files for the conversion process
@@ -238,14 +204,9 @@ bool ProcProfileFileAction::convert_pprof_to_flame(const std::string& pprof_file
     try {
         // First, decompress the gzipped pprof file to a temporary location
         std::string gunzip_cmd = "gunzip -c '" + pprof_file_path + "' > '" + temp_pprof + "'";
-        LOG(INFO) << "ProcProfileFileAction: Executing gunzip command: " << gunzip_cmd;
-
         int gunzip_result = system(gunzip_cmd.c_str());
-        if (gunzip_result != 0) {
-            LOG(WARNING) << "ProcProfileFileAction: Failed to decompress pprof file, gunzip returned: "
-                         << gunzip_result;
-            return false;
-        }
+        RETURN_IF(gunzip_result != 0, Status::InternalError("Failed to decompress pprof file, gunzip returned: " +
+                                                            std::to_string(gunzip_result)));
 
         std::string pprof_path = config::flamegraph_tool_dir + "/pprof";
         std::string stackcollapse_path = config::flamegraph_tool_dir + "/stackcollapse-go.pl";
@@ -255,40 +216,28 @@ bool ProcProfileFileAction::convert_pprof_to_flame(const std::string& pprof_file
                 fmt::format("{} -symbolize=fastlocal -raw '{}' 2>/dev/null | {} 2>/dev/null | {} > '{}' 2>/dev/null",
                             pprof_path, temp_pprof, stackcollapse_path, flamegraph_path, temp_flame);
 
-        LOG(INFO) << "ProcProfileFileAction: Executing pprof conversion command";
         int pprof_result = system(pprof_cmd.c_str());
-        if (pprof_result != 0) {
-            LOG(WARNING) << "ProcProfileFileAction: Failed to convert pprof to flame format, pprof returned: "
-                         << pprof_result;
-            return false;
-        }
+        RETURN_IF(pprof_result != 0, Status::InternalError("Failed to convert pprof to flame format, pprof returned: " +
+                                                           std::to_string(pprof_result)));
 
         // Compress the generated flame SVG file
         std::string gzip_cmd = "gzip -c '" + temp_flame + "' > '" + temp_flame_gz + "'";
-        LOG(INFO) << "ProcProfileFileAction: Compressing flame SVG file: " << gzip_cmd;
 
         int gzip_result = system(gzip_cmd.c_str());
-        if (gzip_result != 0) {
-            LOG(WARNING) << "ProcProfileFileAction: Failed to compress flame SVG file, gzip returned: " << gzip_result;
-            return false;
-        }
+        RETURN_IF(gzip_result != 0, Status::InternalError("Failed to compress flame SVG file, gzip returned: " +
+                                                          std::to_string(gzip_result)));
 
         // Read the compressed flame SVG file
         std::ifstream flame_gz_file(temp_flame_gz, std::ios::binary);
-        if (!flame_gz_file.good()) {
-            LOG(WARNING) << "ProcProfileFileAction: Failed to read compressed flame file: " << temp_flame_gz;
-            return false;
-        }
+        RETURN_IF(!flame_gz_file.good(),
+                  Status::InternalError("Failed to read compressed flame file: " + temp_flame_gz));
 
         // Read compressed file content
         flame_gz_file.seekg(0, std::ios::end);
         size_t file_size = flame_gz_file.tellg();
         flame_gz_file.seekg(0, std::ios::beg);
 
-        if (file_size == 0) {
-            LOG(WARNING) << "ProcProfileFileAction: Compressed flame file is empty";
-            return false;
-        }
+        RETURN_IF(file_size == 0, Status::InternalError("Compressed flame file is empty"));
 
         flame_svg_content.resize(file_size);
         flame_gz_file.read(flame_svg_content.data(), file_size);
@@ -299,7 +248,6 @@ bool ProcProfileFileAction::convert_pprof_to_flame(const std::string& pprof_file
         if (cache_file.good()) {
             cache_file.write(flame_svg_content.data(), file_size);
             cache_file.close();
-            LOG(INFO) << "ProcProfileFileAction: Cached flame file saved to: " << cached_flame_file;
         } else {
             LOG(WARNING) << "ProcProfileFileAction: Failed to save cached flame file to: " << cached_flame_file;
         }
@@ -309,13 +257,10 @@ bool ProcProfileFileAction::convert_pprof_to_flame(const std::string& pprof_file
         unlink(temp_flame.c_str());
         unlink(temp_flame_gz.c_str());
 
-        LOG(INFO) << "ProcProfileFileAction: Successfully converted pprof to flame format and compressed, " << file_size
-                  << " bytes";
-        return true;
+        return {};
 
     } catch (const std::exception& e) {
-        LOG(WARNING) << "ProcProfileFileAction: Exception during pprof to flame conversion: " << e.what();
-        return false;
+        return Status::InternalError("Exception during pprof to flame conversion: " + std::string(e.what()));
     }
 }
 
