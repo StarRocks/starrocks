@@ -27,7 +27,7 @@
 namespace starrocks {
 
 Status DownloadUtil::download(const std::string& url, const std::string& target_file,
-                              const std::string& expected_checksum) {
+                              const std::string& expected_checksum, const TCloudConfiguration& cloud_configuration) {
     auto success = false;
     auto tmp_file = fmt::format("{}_{}", target_file, ThreadLocalUUIDGenerator::next_uuid_string());
     auto fp = fopen(tmp_file.c_str(), "w");
@@ -48,7 +48,7 @@ Status DownloadUtil::download(const std::string& url, const std::string& target_
                 fmt::format("fail to open tmp file when downloading file from {}. error = {}", url, errmsg));
     }
     std::string real_url;
-    RETURN_IF_ERROR(get_real_url(url, &real_url));
+    RETURN_IF_ERROR(get_real_url(url, &real_url, FSOptions(*cloud_configuration)));
     Md5Digest digest;
     HttpClient client;
     RETURN_IF_ERROR(client.init(real_url));
@@ -86,17 +86,17 @@ Status DownloadUtil::download(const std::string& url, const std::string& target_
     return Status::OK();
 }
 
-Status DownloadUtil::get_real_url(const std::string& url, std::string* real_url) {
+Status DownloadUtil::get_real_url(const std::string& url, std::string* real_url, const FSOptions& options) {
     bool is_http = url.rfind("http://", 0) == 0;
     bool is_file = url.rfind("file://", 0) == 0;
     if (!is_http && !is_file) {
-         return get_java_udf_url(url, real_url);
+         return get_java_udf_url(url, real_url, options);
     }
     *real_url = url;
     return Status::OK();
 }
 
-Status DownloadUtil::get_java_udf_url(const std::string& url, std::string* real_url) {
+Status DownloadUtil::get_java_udf_url(const std::string& url, std::string* real_url, const FSOptions& options) {
     std::string file_name;
     std::size_t pos = url.find_last_of('/');
     if (pos == std::string::npos) {
@@ -108,7 +108,7 @@ Status DownloadUtil::get_java_udf_url(const std::string& url, std::string* real_
     std::string target_path = std::string(starrocks_home) + "/plugins/java_udf/" + file_name;
     std::string target_url = std::string("file://") + target_path;
     udf_downloder downloader;
-    Status status = downloader.download_remote_file_2_local(url, target_path);
+    Status status = downloader.download_remote_file_2_local(url, target_path, options);
     if (status.ok()) {
         *real_url = target_url;
         return Status::OK();
