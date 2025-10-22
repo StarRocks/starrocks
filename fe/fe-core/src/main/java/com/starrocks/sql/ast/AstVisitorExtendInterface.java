@@ -489,14 +489,6 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
 
     // ---------------------------------------- Backup Restore Statement -----------------------------------------------
 
-    default R visitBackupStatement(BackupStmt statement, C context) {
-        return visitDDLStatement(statement, context);
-    }
-
-    default R visitRestoreStatement(RestoreStmt statement, C context) {
-        return visitDDLStatement(statement, context);
-    }
-
     default R visitShowBackupStatement(ShowBackupStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
