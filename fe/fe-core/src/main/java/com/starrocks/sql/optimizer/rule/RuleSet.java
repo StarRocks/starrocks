@@ -327,7 +327,6 @@ public class RuleSet {
                     new RewriteBitmapCountDistinctRule(),
                     new RewriteHllCountDistinctRule(),
                     new RewriteDuplicateAggregateFnRule(),
-                    new RewriteSimpleAggToMetaScanRule(),
                     new RewriteSumByAssociativeRule(),
                     new RewriteCountIfFunction(),
                     new RewriteMinMaxByMonotonicFunctionRule()
