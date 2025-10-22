@@ -349,7 +349,7 @@ Status Analytor::open(RuntimeState* state) {
             if (_fns[i].binary_type == TFunctionBinaryType::SRJAR) {
                 const auto& fn = _fns[i];
                 auto st = window_init_jvm_context(fn.fid, fn.hdfs_location, fn.checksum, fn.aggregate_fn.symbol,
-                                                  _agg_fn_ctxs[i]);
+                                                  _agg_fn_ctxs[i], fn.cloud_configuration);
                 RETURN_IF_ERROR(st);
             }
 #endif
