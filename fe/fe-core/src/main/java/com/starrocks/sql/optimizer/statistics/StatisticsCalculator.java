@@ -469,7 +469,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         }
 
         if (partitionStatistics.size() == 1) {
-            Statistics partitionStats =  partitionStatistics.values().iterator().next();
+            Statistics partitionStats = partitionStatistics.values().iterator().next();
             columnMap.keySet().forEach(column ->
                     statistics.addColumnStatistic(column, partitionStats.getColumnStatistic(column)));
         }
@@ -985,6 +985,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             allBuilder.addColumnStatistic(requiredColumnRefOperator, outputStatistic);
         }
 
+        builder.addMultiColumnStatistics(inputStatistics.getMultiColumnCombinedStats());
         context.setStatistics(builder.build());
         return visitOperator(context.getOp(), context);
     }
@@ -1151,6 +1152,11 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                 preserveJoinHistogram);
         crossBuilder.addColumnStatisticsFromOtherStatistic(rightStatistics, context.getChildOutputColumns(1),
                 preserveJoinHistogram);
+
+        // Add multi-column statistics from both sides (they are independent after cross join)
+        crossBuilder.addMultiColumnStatistics(leftStatistics.getMultiColumnCombinedStats());
+        crossBuilder.addMultiColumnStatistics(rightStatistics.getMultiColumnCombinedStats());
+
         double leftRowCount = leftStatistics.getOutputRowCount();
         double rightRowCount = rightStatistics.getOutputRowCount();
         double crossRowCount = StatisticUtils.multiplyRowCount(leftRowCount, rightRowCount);
