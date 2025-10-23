@@ -94,7 +94,8 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 getCostPlanFragment(getDumpInfoFromFile("query_dump/join_eliminate_nulls"), sessionVariable);
         Assertions.assertTrue(replayPair.second.contains("  11:NESTLOOP JOIN\n" +
                 "  |  join op: INNER JOIN\n" +
-                "  |  other join predicates: CASE 174: type WHEN '1' THEN concat('ocms_', 90: name) = 'ocms_fengyang56' WHEN '0' THEN TRUE ELSE FALSE END\n" +
+                "  |  other join predicates: CASE 174: type WHEN '1' THEN concat('ocms_', 90: name) = 'ocms_fengyang56' WHEN " +
+                "'0' THEN TRUE ELSE FALSE END\n" +
                 "  |  limit: 10\n" +
                 "  |  cardinality: 1"), replayPair.second);
         Assertions.assertTrue(replayPair.second.contains("  4:HASH JOIN\n" +
