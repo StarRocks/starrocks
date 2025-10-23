@@ -1092,7 +1092,7 @@ public class ConnectContext {
         if (!RunMode.isSharedDataMode() || this.computeResource == null) {
             return;
         }
-        // acquire compute resource again to for better-schedule balance
+        // acquire compute resource again for better schedule balance
         acquireComputeResource();
     }
 

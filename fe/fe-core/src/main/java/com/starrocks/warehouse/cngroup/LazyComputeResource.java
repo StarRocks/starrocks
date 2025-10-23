@@ -53,7 +53,9 @@ public class LazyComputeResource implements ComputeResource {
         }
 
         ComputeResource result = lazy.get();
-        initialized.set(true);
+        if (result != null) {
+            initialized.set(true);
+        }
         return result;
     }
 
