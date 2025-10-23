@@ -447,7 +447,7 @@ public class StatementPlanner {
     }
 
     public static int collectSourceTablesCount(ConnectContext session, StatementBase queryStmt) {
-        Set<Table> sourceTables = Sets.newHashSet();
+        List<Table> sourceTables = Lists.newArrayList();
         AnalyzerUtils.collectSourceTables(queryStmt, sourceTables);
         return sourceTables.size();
     }

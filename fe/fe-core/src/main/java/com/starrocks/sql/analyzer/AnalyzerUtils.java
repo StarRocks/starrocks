@@ -839,7 +839,7 @@ public class AnalyzerUtils {
         new AnalyzerUtils.OlapTableCollector(olapTables).visit(statementBase);
     }
 
-    public static void collectSourceTables(StatementBase statementBase, Set<Table> sourceTables) {
+    public static void collectSourceTables(StatementBase statementBase, List<Table> sourceTables) {
         new SourceTablesCollector(sourceTables).visit(statementBase);
     }
 
@@ -1031,9 +1031,9 @@ public class AnalyzerUtils {
     }
 
     private static class SourceTablesCollector extends TableCollector {
-        private Set<Table> sourceTables;
+        private List<Table> sourceTables;
 
-        public SourceTablesCollector(Set<Table> sourceTables) {
+        public SourceTablesCollector(List<Table> sourceTables) {
             super();
             this.sourceTables = sourceTables;
         }
