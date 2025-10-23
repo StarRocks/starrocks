@@ -59,6 +59,16 @@ CONF_String(ssl_private_key_path, "");
 // These connections are created during the first few access and will be used thereafter
 CONF_Int32(brpc_max_connections_per_server, "1");
 
+// Whether to resolve backend hostnames to IP addresses in generated error URLs.
+// - true: StarRocks will attempt to resolve hostnames to IPs.
+//  Useful in debugging scenarios where internal hostnames (e.g., K8s pod names)
+//  are not resolvable from the client’s network, so you can curl or open the
+//   error URL directly.
+// - false (default) : Keep the original hostname in the error URL.
+//  Recommended if your DNS setup already allows resolving backend hostnames
+//  across your network, or if IP-based access is unstable (e.g., NAT environments).
+CONF_mBool(enable_resolve_hostname_to_ip_in_load_error_url, "false");
+
 // Declare a selection strategy for those servers have many ips.
 // Note that there should at most one ip match this list.
 // this is a list in semicolon-delimited format, in CIDR notation, e.g. 10.10.10.0/24
