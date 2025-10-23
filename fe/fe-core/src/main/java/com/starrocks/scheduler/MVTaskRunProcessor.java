@@ -224,6 +224,7 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
                 if (logger.isDebugEnabled()) {
                     logger.debug("refresh mv trace logs: {}", Tracers.getTrace(mvRefreshTraceMode));
                 }
+                Tracers.close();
             } catch (Exception e) {
                 logger.error("Failed to close Tracers", e);
             }

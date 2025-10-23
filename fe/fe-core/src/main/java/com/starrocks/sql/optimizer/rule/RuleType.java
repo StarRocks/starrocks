@@ -221,6 +221,7 @@ public enum RuleType {
     TF_OR_TO_UNION_ALL_JOIN,
 
     TF_INNER_TO_SEMI,
+    TF_LARGE_IN_PREDICATE_TO_JOIN,
 
     // TVR transform rules
     TF_TVR_TABLE_SCAN,
@@ -261,6 +262,7 @@ public enum RuleType {
     IMP_ASSERT_ONE_ROW,
     IMP_ANALYTIC,
     IMP_VALUES,
+    IMP_RAW_VALUES,
     IMP_REPEAT,
     IMP_FILTER,
     IMP_TABLE_FUNCTION,

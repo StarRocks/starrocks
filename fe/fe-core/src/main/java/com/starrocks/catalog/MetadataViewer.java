@@ -57,7 +57,6 @@ import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
-import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.warehouse.Warehouse;
 
@@ -155,17 +154,7 @@ public class MetadataViewer {
                                 --count;
                                 List<String> row = Lists.newArrayList();
 
-                                ReplicaStatus status = ReplicaStatus.OK;
-                                Backend be = infoService.getBackend(replica.getBackendId());
-                                if (be == null || !be.isAvailable() || replica.isBad()) {
-                                    status = ReplicaStatus.DEAD;
-                                } else if (replica.getVersion() < visibleVersion
-                                        || replica.getLastFailedVersion() > 0) {
-                                    status = ReplicaStatus.VERSION_ERROR;
-
-                                } else if (replica.getSchemaHash() != -1 && replica.getSchemaHash() != schemaHash) {
-                                    status = ReplicaStatus.SCHEMA_ERROR;
-                                }
+                                ReplicaStatus status = replica.computeReplicaStatus(infoService, visibleVersion, schemaHash);
 
                                 if (filterReplica(status, statusFilter, op)) {
                                     continue;

@@ -42,7 +42,7 @@
 #include "gutil/strings/substitute.h"
 #include "simd/simd.h"
 #include "storage/index/inverted/inverted_index_option.h"
-#ifndef MACOS_DISABLE_CLUCENE
+#ifndef __APPLE__
 #include "storage/index/inverted/inverted_plugin_factory.h"
 #endif
 #include "storage/rowset/array_column_writer.h"
@@ -428,7 +428,7 @@ Status ScalarColumnWriter::init() {
         }
         RETURN_IF_ERROR(BloomFilterIndexWriter::create(bf_options, _type_info, &_bloom_filter_index_builder));
     }
-#ifndef MACOS_DISABLE_CLUCENE
+#ifndef __APPLE__
     if (_opts.need_inverted_index) {
         _has_index_builder = true;
         TabletIndex& inverted_tablet_index = _opts.tablet_index.at(GIN);
@@ -466,7 +466,7 @@ uint64_t ScalarColumnWriter::estimate_buffer_size() {
     if (_bloom_filter_index_builder != nullptr) {
         size += _bloom_filter_index_builder->size();
     }
-#ifndef MACOS_DISABLE_CLUCENE
+#ifndef __APPLE__
     if (_inverted_index_builder != nullptr) {
         size += _inverted_index_builder->size();
     }
@@ -575,7 +575,7 @@ Status ScalarColumnWriter::write_bloom_filter_index() {
 }
 
 Status ScalarColumnWriter::write_inverted_index() {
-#ifndef MACOS_DISABLE_CLUCENE
+#ifndef __APPLE__
     if (_inverted_index_builder != nullptr) {
         return _inverted_index_builder->finish();
     }
@@ -788,14 +788,14 @@ Status ScalarColumnWriter::append(const uint8_t* data, const uint8_t* null_flags
                     INDEX_ADD_NULLS(_zone_map_index_builder, run);
                     INDEX_ADD_NULLS(_bitmap_index_builder, run);
                     INDEX_ADD_NULLS(_bloom_filter_index_builder, run);
-#ifndef MACOS_DISABLE_CLUCENE
+#ifndef __APPLE__
                     INDEX_ADD_NULLS(_inverted_index_builder, run);
 #endif
                 } else {
                     INDEX_ADD_VALUES(_zone_map_index_builder, pdata, run);
                     INDEX_ADD_VALUES(_bitmap_index_builder, pdata, run);
                     INDEX_ADD_VALUES(_bloom_filter_index_builder, pdata, run);
-#ifndef MACOS_DISABLE_CLUCENE
+#ifndef __APPLE__
                     INDEX_ADD_VALUES(_inverted_index_builder, pdata, run);
 #endif
                 }
@@ -805,7 +805,7 @@ Status ScalarColumnWriter::append(const uint8_t* data, const uint8_t* null_flags
             INDEX_ADD_VALUES(_zone_map_index_builder, data, num_written);
             INDEX_ADD_VALUES(_bitmap_index_builder, data, num_written);
             INDEX_ADD_VALUES(_bloom_filter_index_builder, data, num_written);
-#ifndef MACOS_DISABLE_CLUCENE
+#ifndef __APPLE__
             INDEX_ADD_VALUES(_inverted_index_builder, data, num_written);
 #endif
         }

@@ -32,8 +32,11 @@ std::string to_load_error_http_path(const std::string& file_name) {
     if (file_name.empty()) {
         return "";
     }
+
+    std::string resolved_ip = BackendOptions::get_resolved_ip();
+
     std::stringstream url;
-    url << "http://" << get_host_port(BackendOptions::get_localhost(), config::be_http_port) << "/api/_load_error_log?"
+    url << "http://" << get_host_port(resolved_ip, config::be_http_port) << "/api/_load_error_log?"
         << "file=" << file_name;
     return url.str();
 }

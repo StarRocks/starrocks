@@ -55,7 +55,9 @@ int CpuUsageRecorder::cpu_used_permille() const {
 uint64_t CpuUsageRecorder::_get_proc_time() {
     FILE* fp = fopen("/proc/self/stat", "r");
     if (fp == nullptr) {
+#ifndef __APPLE__
         LOG(WARNING) << "open /proc/self/stat failed";
+#endif
         return 0;
     }
     DeferOp close_fp([fp] { fclose(fp); });

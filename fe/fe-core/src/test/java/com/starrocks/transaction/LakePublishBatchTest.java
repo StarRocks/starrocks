@@ -49,6 +49,7 @@ import com.starrocks.utframe.MockedBackend;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.cngroup.ComputeResource;
+import com.starrocks.warehouse.cngroup.WarehouseComputeResourceProvider;
 import mockit.Mock;
 import mockit.MockUp;
 import org.awaitility.Awaitility;
@@ -119,6 +120,12 @@ public class LakePublishBatchTest {
             @Mock
             public void runOneCycle() {
 
+            }
+        };
+        new MockUp<WarehouseComputeResourceProvider>() {
+            @Mock
+            public boolean isResourceAvailable(ComputeResource computeResource) {
+                return true;
             }
         };
 

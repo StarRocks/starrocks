@@ -47,9 +47,6 @@
 #include <fmt/ranges.h>
 
 #include <csignal>
-// Need POSIX signal APIs like sigaction/siginfo_t.
-// NOLINTNEXTLINE(modernize-deprecated-headers)
-#include <signal.h>
 
 #include "fs/encrypt_file.h"
 #include "gutil/cpu.h"
@@ -203,6 +200,7 @@ static void retrieve_jemalloc_stats(JemallocStats* stats) {
     }
 }
 
+#ifndef __APPLE__
 // Tracker the memory usage of jemalloc
 void jemalloc_tracker_daemon(void* arg_this) {
     auto* daemon = static_cast<Daemon*>(arg_this);
@@ -220,6 +218,7 @@ void jemalloc_tracker_daemon(void* arg_this) {
         nap_sleep(1, [daemon] { return daemon->stopped(); });
     }
 }
+#endif
 
 static void init_starrocks_metrics(const std::vector<StorePath>& store_paths) {
     bool init_system_metrics = config::enable_system_metrics;
@@ -327,6 +326,7 @@ void Daemon::init(bool as_cn, const std::vector<StorePath>& paths) {
 
     init_starrocks_metrics(paths);
 
+#ifndef __APPLE__
     if (config::enable_metric_calculator) {
         std::thread calculate_metrics_thread(calculate_metrics, this);
         Thread::set_thread_name(calculate_metrics_thread, "metrics_daemon");
@@ -338,16 +338,19 @@ void Daemon::init(bool as_cn, const std::vector<StorePath>& paths) {
         Thread::set_thread_name(jemalloc_tracker_thread, "jemalloc_tracker_daemon");
         _daemon_threads.emplace_back(std::move(jemalloc_tracker_thread));
     }
+#endif
 
     init_signals();
     init_minidump();
 #if defined(__SANITIZE_ADDRESS__) || defined(ADDRESS_SANITIZER)
 #else
+#ifndef __APPLE__
     // Don't bother set the limit if the process is running with very limited memory capacity
     if (MemInfo::physical_mem() > 1024 * 1024 * 1024) {
         // set mem hook to reject the memory allocation if large than available physical memory detected.
         set_large_memory_alloc_failure_threshold(MemInfo::physical_mem());
     }
+#endif
 #endif
 }
 
