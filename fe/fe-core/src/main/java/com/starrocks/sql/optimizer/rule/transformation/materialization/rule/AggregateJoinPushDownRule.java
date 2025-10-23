@@ -142,7 +142,7 @@ public class AggregateJoinPushDownRule extends BaseMaterializedViewRewriteRule {
             if (isLogicalSPG(mvContext.getMvExpression()) && validMv(mvContext, scanOperators)) {
                 validCandidateContexts.add(mvContext);
             } else {
-                logMVRewrite(mvContext, "mv pruned");
+                logMVRewrite(mvContext, "mv pruned: not logical SPG or not contain all columns used in scan");
             }
         }
         return validCandidateContexts;
