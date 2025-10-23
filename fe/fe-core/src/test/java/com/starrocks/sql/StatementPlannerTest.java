@@ -295,37 +295,9 @@ class StatementPlannerTest extends PlanTestBase {
         boolean originalRunningUnitTest = FeConstants.runningUnitTest;
         try {
             FeConstants.runningUnitTest = false;
-            String sql = "WITH incr_batch_data AS (\n"
-                    + "SELECT\n"
-                    + "DISTINCT $3 AS profile_id,\n"
-                    + "$4 AS group_id\n"
-                    + "FROM\n"
-                    + "FILES(\n"
-                    + "\"path\" = \"xx\",\n"
-                    + "\"format\" = \"csv\", \"csv.enclose\" = \"\"\",\n"
-                    + "\"csv.column_separator\" = \",\", \"aws.s3.region\" = \"us-west-2\",\n"
-                    + "\"aws.s3.use_instance_profile\" = \"true\",\n"
-                    + "\"auto_detect_sample_files\" = \"152\"\n"
-                    + ")\n"
-                    + ")\n"
-                    + "SELECT\n"
-                    + "1 as __sr_op_name,\n"
-                    + "null as analytics_t_update,\n"
-                    + "analytics.profile_skill.group_id,\n"
-                    + "null as original_skill,\n"
-                    + "null as parent_group_id,\n"
-                    + "null as proficiency_level,\n"
-                    + "null as proficiency_source,\n"
-                    + "null as proficiency_ts,\n"
-                    + "analytics.profile_skill.profile_id,\n"
-                    + "null as profile_type,\n"
-                    + "analytics.profile_skill.skill,\n"
-                    + "null as skill_cluster,\n"
-                    + "null as skill_type\n"
-                    + "FROM\n"
-                    + "incr_batch_data\n"
-                    + "JOIN analytics.profile_skill ON incr_batch_data.profile_id = analytics.profile_skill.profile_id\n"
-                    + "AND incr_batch_data.group_id = analytics.profile_skill.group_id";
+            String sql = "WITH incr_batch_data AS ( SELECT DISTINCT $3 AS profile_id, $4 AS group_id "
+                    + "FROM files(\"path\" = \"xx\", \"format\" = \"csv\") ) "
+                    + "SELECT d.profile_id FROM incr_batch_data d JOIN t0 ON d.profile_id = t0.v1";
 
             StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             QueryStatement queryStatement = (QueryStatement) stmt;
