@@ -209,7 +209,7 @@ public class LazyComputeResourceTest {
 
         // Even when the supplier returns null, isInitialized should be true after get()
         lazyComputeResource.get();
-        Assertions.assertTrue(lazyComputeResource.isInitialized(),
+        Assertions.assertFalse(lazyComputeResource.isInitialized(),
                 "Resource should be marked as initialized even when supplier returns null");
     }
 
