@@ -408,7 +408,7 @@ TEST_F(JsonFunctionsTest, json_query_filter_or_operator) {
     ASSERT_FALSE(datum.is_null());
     std::string out = datum.get_json()->to_string().value();
     StripWhiteSpace(&out);
-    std::string expect = R"([{"id": 1, "category": "A"}, {"id": 3, "category": "C"}])";
+    std::string expect = R"([{"category": "A", "id": 1}, {"category": "C", "id": 3}])";
     StripWhiteSpace(&expect);
     ASSERT_EQ(expect, out);
 }
@@ -447,7 +447,7 @@ TEST_F(JsonFunctionsTest, json_query_filter_nested_field) {
     ASSERT_FALSE(datum.is_null());
     std::string out = datum.get_json()->to_string().value();
     StripWhiteSpace(&out);
-    std::string expect = R"([{"name": "Alice", "details": {"age": 30}}, {"name": "Charlie", "details": {"age": 35}}])";
+    std::string expect = R"([{"details": {"age": 30}, "name": "Alice"}, {"details": {"age": 35}, "name": "Charlie"}])";
     StripWhiteSpace(&expect);
     ASSERT_EQ(expect, out);
 }
