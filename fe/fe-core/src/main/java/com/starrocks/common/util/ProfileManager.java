@@ -180,24 +180,9 @@ public class ProfileManager implements MemoryTrackable {
         String removedQueryId = null;
         writeLock.lock();
         try {
-<<<<<<< HEAD
-            if (queryType != null && queryType.equals("Load")) {
-                loadProfileMap.put(queryId, element);
-                if (loadProfileMap.size() > Config.load_profile_info_reserved_num) {
-                    removedQueryId = loadProfileMap.keySet().iterator().next();
-                    loadProfileMap.remove(removedQueryId);
-                }
-            } else {
-                profileMap.put(queryId, element);
-                if (profileMap.size() > Config.profile_info_reserved_num) {
-                    removedQueryId = profileMap.keySet().iterator().next();
-                    profileMap.remove(removedQueryId);
-                }
-=======
             profileMap.put(queryId, element);
             if (profileMap.size() > Config.profile_info_reserved_num) {
                 profileMap.remove(profileMap.keySet().iterator().next());
->>>>>>> 0372e310b9 ([Enhancement] Remove unnecessary LoadProfileMap (#53768))
             }
         } finally {
             writeLock.unlock();
