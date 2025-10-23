@@ -18,6 +18,7 @@ import com.google.common.base.Stopwatch;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.StatementBase;
@@ -83,6 +84,9 @@ public class OptimizerContext {
 
     // TvrOptContext is used to store the context for TVR optimization.
     private final TvrOptContext tvrOptContext;
+
+    // updated tables count and source tables count in the query
+    private final Pair<Integer, Integer> tablesCount = Pair.create(0, 0);
 
     OptimizerContext(ConnectContext context) {
         this.connectContext = context;
@@ -247,6 +251,15 @@ public class OptimizerContext {
 
     public TvrOptContext getTvrOptContext() {
         return tvrOptContext;
+    }
+
+    public int getSourceTablesCount() {
+        return tablesCount.second;
+    }
+
+    public void setTablesCount(Pair<Integer, Integer> count) {
+        this.tablesCount.first = count.first;
+        this.tablesCount.second = count.second;
     }
 
     /**
