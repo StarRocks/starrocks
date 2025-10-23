@@ -528,4 +528,23 @@ public class ScanTest extends PlanTestBase {
                 "     <id 10> : count_v3\n" +
                 "     <id 11> : rows_v1");
     }
+
+    @Test
+    public void testPruneCTE() throws Exception {
+        String sql = "select \n"
+                + "*\n"
+                + "from t0 a \n"
+                + "where 1=1\n"
+                + "and v1='2025-10-21'\n"
+                + "and (\n"
+                + "        a.v2 IN (SELECT '123')\n"
+                + "        or\n"
+                + "        a.v3 IN (SELECT '123')\n"
+                + ");\n";
+
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(-1);
+        FeConstants.enablePruneEmptyOutputScan = true;
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "0:EMPTYSET");
+    }
 }

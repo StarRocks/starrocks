@@ -12,39 +12,35 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
-package com.starrocks.sql.optimizer.rule.implementation;
+package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.OperatorType;
-import com.starrocks.sql.optimizer.operator.logical.LogicalCTEAnchorOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEAnchorOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.List;
 
-public class CTEAnchorImplementationRule extends ImplementationRule {
-    public CTEAnchorImplementationRule() {
-        super(RuleType.IMP_CTE_ANCHOR,
-                Pattern.create(OperatorType.LOGICAL_CTE_ANCHOR, OperatorType.PATTERN_MULTI_LEAF));
+public class PruneEmptyCTEAnchorRule extends TransformationRule {
+    public PruneEmptyCTEAnchorRule() {
+        super(RuleType.TF_PRUNE_EMPTY_CTE_ANCHOR,
+                Pattern.create(OperatorType.LOGICAL_CTE_ANCHOR)
+                        .addChildren(Pattern.create(OperatorType.PATTERN_LEAF), Pattern.create(OperatorType.LOGICAL_VALUES)));
     }
 
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
-        int cteId = ((LogicalCTEAnchorOperator) input.getOp()).getCteId();
-        int consumeNum = context.getCteContext().getCTEConsumeNum(cteId);
-        return consumeNum > 0;
+        LogicalValuesOperator v = input.inputAt(1).getOp().cast();
+        return v.getRows().isEmpty();
     }
 
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
-        int cteId = ((LogicalCTEAnchorOperator) input.getOp()).getCteId();
-        int consumeNum = context.getCteContext().getCTEConsumeNum(cteId);
-        PhysicalCTEAnchorOperator anchor =
-                new PhysicalCTEAnchorOperator(cteId, consumeNum, input.getOp().getProjection());
-        return Lists.newArrayList(OptExpression.create(anchor, input.getInputs()));
+        List<ColumnRefOperator> refs = input.getOutputColumns().getColumnRefOperators(context.getColumnRefFactory());
+        return Lists.newArrayList(OptExpression.create(new LogicalValuesOperator(refs)));
     }
 }
