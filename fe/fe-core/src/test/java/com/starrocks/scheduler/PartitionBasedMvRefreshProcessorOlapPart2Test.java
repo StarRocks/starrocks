@@ -639,4 +639,22 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVTestBase {
                     testMVRefreshWithTTLCondition(tableName);
                 });
     }
+
+    @Test
+    public void testMVRefreshWithTTLConditionTT3() {
+        starRocksAssert.withTable(R1,
+                (obj) -> {
+                    String tableName = (String) obj;
+                    testMVRefreshWithTTLCondition(tableName);
+                });
+    }
+
+    @Test
+    public void testMVRefreshWithTTLConditionTT4() {
+        starRocksAssert.withTable(R2,
+                (obj) -> {
+                    String tableName = (String) obj;
+                    testMVRefreshWithTTLCondition(tableName);
+                });
+    }
 }

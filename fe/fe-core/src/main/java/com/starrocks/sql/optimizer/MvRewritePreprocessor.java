@@ -45,6 +45,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.mv.MVPlanValidationResult;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.profile.Timer;
@@ -387,6 +388,16 @@ public class MvRewritePreprocessor {
                 .collect(Collectors.toSet());
     }
 
+    /**
+     * Whether to load MV plan even if it's not in the plan cache.
+     * NOTE: to make sure the unit test is stable, we always load the MV plan in unit test.
+     */
+    private boolean isForceLoadMVPlan(MaterializedView mv) {
+        return FeConstants.runningUnitTest
+                || mv.getRefreshScheme().isSync()
+                || connectContext.getSessionVariable().isEnableMaterializedViewForceRewrite();
+    }
+
     private List<MaterializedViewWrapper> getMVWithContext(MaterializedViewWrapper wrapper) {
         final MaterializedView mv = wrapper.getMV();
         if (!mv.isActive()) {
@@ -545,8 +556,8 @@ public class MvRewritePreprocessor {
                                                               OptExpression queryOptExpression) {
         // choose all valid mvs and filter mvs that cannot be rewritten for the query
         Set<MaterializedViewWrapper> validMVs = relatedMVs.stream()
-                .filter(wrapper ->
-                        isMVValidToRewriteQuery(connectContext, wrapper.getMV(), false, queryTables, false).isValid())
+                .filter(wrapper -> isMVValidToRewriteQuery(connectContext, wrapper.getMV(), 
+                            isForceLoadMVPlan(wrapper.getMV()), queryTables, false).isValid())
                 .collect(Collectors.toSet());
         logMVPrepare(connectContext, "Choose {}/{} valid mvs after checking valid",
                 validMVs.size(), relatedMVs.size());
