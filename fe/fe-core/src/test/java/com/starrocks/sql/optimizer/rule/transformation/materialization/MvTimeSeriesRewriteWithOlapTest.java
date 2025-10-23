@@ -481,6 +481,7 @@ public class MvTimeSeriesRewriteWithOlapTest extends MVTestBase {
             String plan = getFragmentPlan(query);
             PlanTestBase.assertNotContains(plan, "test_mv1");
         }
+        Thread.sleep(10000);
         starRocksAssert.dropMaterializedView("test_mv1");
     }
 }

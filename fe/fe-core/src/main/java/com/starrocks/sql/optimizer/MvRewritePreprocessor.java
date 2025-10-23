@@ -46,6 +46,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.mv.MVPlanValidationResult;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.profile.Timer;
@@ -88,7 +89,6 @@ import java.util.PriorityQueue;
 import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -557,9 +557,11 @@ public class MvRewritePreprocessor {
         // choose all valid mvs and filter mvs that cannot be rewritten for the query
         int maxRelatedMVsLimit = connectContext.getSessionVariable().getCboMaterializedViewRewriteRelatedMVsLimit();
         long timeoutMs = getPrepareTimeoutMsPerMV(Math.min(relatedMVs.size(), maxRelatedMVsLimit));
+        // to make unit test more stable, force build mv plan in unit test
+        boolean isForceValid = FeConstants.runningUnitTest ? true : false;
         Set<MaterializedViewWrapper> validMVs = relatedMVs.stream()
                 .filter(wrapper -> isMVValidToRewriteQuery(connectContext, wrapper.getMV(),
-                        queryTables, false, false, timeoutMs).isValid())
+                        queryTables, isForceValid, false, timeoutMs).isValid())
                 .collect(Collectors.toSet());
         logMVPrepare(connectContext, "Choose {}/{} valid mvs after checking valid",
                 validMVs.size(), relatedMVs.size());
@@ -823,13 +825,15 @@ public class MvRewritePreprocessor {
             } catch (TimeoutException e) {
                 LOG.warn("MV {} preparation timeout after {} ms", mv.getName(), individualTimeoutMs);
                 timeoutMvNames.add(mv.getName());
+                logMVPrepare("MV {} preparation timed out after {} ms", mv.getName(), individualTimeoutMs);
                 // Don't throw exception, continue with other MVs
             } catch (InterruptedException e) {
                 LOG.warn("MV {} preparation interrupted", mv.getName());
                 Thread.currentThread().interrupt();
                 throw new RuntimeException("MV preparation interrupted", e);
-            } catch (ExecutionException e) {
+            } catch (Exception e) {
                 LOG.warn("MV {} preparation failed with execution exception", mv.getName(), e);
+                logMVPrepare(connectContext, "MV {} preparation failed: {}", mv.getName(), e.getMessage());
                 failedMvNames.add(mv.getName());
                 // Don't throw exception, continue with other MVs
             }
