@@ -37,9 +37,12 @@ import com.starrocks.utframe.StarRocksTestBase;
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.BeforeClass;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.openjdk.jmh.annotations.Scope;
 import org.openjdk.jmh.annotations.State;
 import java.util.List;
@@ -92,7 +95,7 @@ public class MaterializedViewTestBase extends PlanTestBase {
     }
 
 
-    @BeforeEach
+    @Before
     public void before() throws Exception {
         super.setUp();
         if (starRocksAssert != null) {
@@ -100,7 +103,7 @@ public class MaterializedViewTestBase extends PlanTestBase {
         }
     }
 
-    @AfterEach
+    @After
     public void after() throws Exception {
         if (starRocksAssert != null) {
             try {

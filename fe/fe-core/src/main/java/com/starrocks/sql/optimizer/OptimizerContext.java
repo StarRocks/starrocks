@@ -49,6 +49,7 @@ public class OptimizerContext {
     private final GlobalStateMgr globalStateMgr;
     private final TaskScheduler taskScheduler;
     private final ColumnRefFactory columnRefFactory;
+    private ConnectContext connectContext;
     private SessionVariable sessionVariable;
     private DumpInfo dumpInfo;
     private Set<Long> currentSqlDbIds;
@@ -109,6 +110,7 @@ public class OptimizerContext {
         this.globalStateMgr = GlobalStateMgr.getCurrentState();
         this.taskScheduler = SeriallyTaskScheduler.create();
         this.columnRefFactory = columnRefFactory;
+        this.connectContext = connectContext;
         this.queryId = connectContext.getQueryId();
         this.sessionVariable = connectContext.getSessionVariable();
         this.dumpInfo = connectContext.getDumpInfo();
@@ -175,6 +177,10 @@ public class OptimizerContext {
 
     public OptimizerConfig getOptimizerConfig() {
         return optimizerConfig;
+    }
+
+    public ConnectContext getConnectContext() {
+        return connectContext;
     }
 
     /**

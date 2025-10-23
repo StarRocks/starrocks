@@ -639,7 +639,7 @@ public abstract class MVTestBase extends StarRocksTestBase {
                 try {
                     pName = AnalyzerUtils.calculateUniquePartitionName(pName, pListCell, partitions);
                 } catch (Exception e) {
-                    Assertions.fail("add partition failed:" + e);
+                    Assert.fail("add partition failed:" + e);
                 }
             }
             partitions.put(pName, pListCell);
@@ -649,7 +649,7 @@ public abstract class MVTestBase extends StarRocksTestBase {
 
     public View getView(String viewName) {
         Table table = getTable(DB_NAME, viewName);
-        Assertions.assertTrue(table instanceof View);
+        Assert.assertTrue(table instanceof View);
         return (View) table;
     }
 }
