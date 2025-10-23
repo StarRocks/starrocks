@@ -210,196 +210,9 @@ protected:
     PTabletWriterOpenResult _open_response;
 };
 
-<<<<<<< HEAD
 TEST_F(LocalTabletsChannelTest, test_profile) {
     auto open_request = _open_single_replica_request;
     ASSERT_OK(_tablets_channel->open(open_request, &_open_response, _schema_param, false));
-=======
-using RpcLoadDisagnosePair = std::pair<PLoadDiagnoseRequest*, ReusableClosure<PLoadDiagnoseResult>*>;
-
-TEST_F(LocalTabletsChannelTest, test_add_chunk_not_exist_tablet) {
-    _create_tablets(1);
-
-    ReplicaInfo replica_info{_tablets[0]->tablet_id(), _nodes};
-    PTabletWriterOpenRequest request;
-    _create_open_request(_nodes[1].node_id(), {replica_info}, &request);
-    // turn off _is_replicated_storage to avoid launching secondary waiter
-    request.set_is_replicated_storage(false);
-
-    std::shared_ptr<OlapTableSchemaParam> schema_param(new OlapTableSchemaParam());
-    ASSERT_OK(schema_param->init(request.schema()));
-    PTabletWriterOpenResult response;
-    ASSERT_OK(_tablets_channel->open(request, &response, schema_param, false));
-
-    PTabletWriterAddChunkRequest add_chunk_request;
-    add_chunk_request.mutable_id()->CopyFrom(_load_id);
-    add_chunk_request.set_index_id(_index_id);
-    add_chunk_request.set_sink_id(_sink_id);
-    add_chunk_request.set_sender_id(0);
-    add_chunk_request.set_eos(true);
-    add_chunk_request.set_packet_seq(0);
-    add_chunk_request.set_timeout_ms(60000);
-
-    // NOTE: this is a malformed request, because the chunk is nullptr but tablet_ids is not empty().
-    auto non_exist_tablet_id = _tablets[0]->tablet_id() + 1;
-    add_chunk_request.add_tablet_ids(non_exist_tablet_id);
-
-    bool close_channel = false;
-    PTabletWriterAddBatchResult add_chunk_response;
-    _tablets_channel->add_chunk(nullptr, add_chunk_request, &add_chunk_response, &close_channel);
-    ASSERT_EQ(TStatusCode::INTERNAL_ERROR, add_chunk_response.status().status_code()) << add_chunk_response.status();
-    ASSERT_TRUE(close_channel); // set_eos(true)
-    _tablets_channel->abort();
-}
-
-TEST_F(LocalTabletsChannelTest, test_add_chunk_not_exist_tablet_for_chunk_rows) {
-    // create 3 tablets
-    _create_tablets(3);
-
-    // open tablets[0] & tablets[1]
-    std::vector<ReplicaInfo> replica_infos;
-    replica_infos.emplace_back(ReplicaInfo{_tablets[0]->tablet_id(), _nodes});
-    replica_infos.emplace_back(ReplicaInfo{_tablets[1]->tablet_id(), _nodes});
-    PTabletWriterOpenRequest request;
-    _create_open_request(_nodes[1].node_id(), replica_infos, &request);
-    // Turn off _is_replicated_storage to avoid launching secondary waiter
-    request.set_is_replicated_storage(false);
-
-    std::shared_ptr<OlapTableSchemaParam> schema_param(new OlapTableSchemaParam());
-    ASSERT_OK(schema_param->init(request.schema()));
-    PTabletWriterOpenResult response;
-    ASSERT_OK(_tablets_channel->open(request, &response, schema_param, false));
-
-    PTabletWriterAddChunkRequest add_chunk_request;
-    PTabletWriterAddBatchResult add_chunk_response;
-
-    add_chunk_request.mutable_id()->CopyFrom(_load_id);
-    add_chunk_request.set_index_id(_index_id);
-    add_chunk_request.set_sink_id(_sink_id);
-    add_chunk_request.set_sender_id(0);
-    add_chunk_request.set_eos(false);
-    add_chunk_request.set_packet_seq(0);
-    add_chunk_request.set_timeout_ms(60000);
-
-    {
-        int num_rows = 10;
-        auto chunk = _generate_data(num_rows, _tablets[0]->tablet_schema());
-        for (int i = 0; i < num_rows; i++) {
-            // tablets[2] not opened, so every 3 rows, there will be one row whose tablet_id can't be found.
-            add_chunk_request.add_tablet_ids(_tablets[i % 3]->tablet_id());
-            add_chunk_request.add_partition_ids(_partition_id);
-        }
-        bool close_channel = false;
-        _tablets_channel->add_chunk(&chunk, add_chunk_request, &add_chunk_response, &close_channel);
-        // chunk is released when out of the scope, simulating the resource release after RPC done.
-    }
-
-    ASSERT_EQ(TStatusCode::INTERNAL_ERROR, add_chunk_response.status().status_code()) << add_chunk_response.status();
-    _tablets_channel->abort();
-}
-
-TEST_F(LocalTabletsChannelTest, diagnose_stack_trace) {
-    _create_tablets(1);
-    // open as a secondary replica of 3 replicas
-    ReplicaInfo replica_info{_tablets[0]->tablet_id(), _nodes};
-    _open_channel(_nodes[1].node_id(), {replica_info});
-
-    PTabletWriterAddChunkRequest add_chunk_request;
-    add_chunk_request.mutable_id()->CopyFrom(_load_id);
-    add_chunk_request.set_index_id(_index_id);
-    add_chunk_request.set_sink_id(_sink_id);
-    add_chunk_request.set_sender_id(0);
-    add_chunk_request.set_eos(true);
-    add_chunk_request.set_packet_seq(0);
-    add_chunk_request.set_timeout_ms(100);
-
-    auto old_threshold = config::load_diagnose_rpc_timeout_stack_trace_threshold_ms;
-    DeferOp defer([&]() {
-        SyncPoint::GetInstance()->ClearCallBack("LocalTabletsChannel::rpc::load_diagnose_send");
-        SyncPoint::GetInstance()->DisableProcessing();
-        config::load_diagnose_rpc_timeout_stack_trace_threshold_ms = old_threshold;
-    });
-    config::load_diagnose_rpc_timeout_stack_trace_threshold_ms = 0;
-
-    int32_t num_diagnose = 0;
-    SyncPoint::GetInstance()->EnableProcessing();
-    SyncPoint::GetInstance()->SetCallBack("LocalTabletsChannel::rpc::load_diagnose_send", [&](void* arg) {
-        RpcLoadDisagnosePair* rpc_pair = (RpcLoadDisagnosePair*)arg;
-        PLoadDiagnoseRequest* request = rpc_pair->first;
-        ReusableClosure<PLoadDiagnoseResult>* closure = rpc_pair->second;
-        EXPECT_FALSE(request->has_profile());
-        EXPECT_TRUE(request->has_stack_trace() && request->stack_trace());
-        closure->result.mutable_stack_trace_status()->set_status_code(TStatusCode::OK);
-        closure->Run();
-        num_diagnose += 1;
-    });
-
-    bool close_channel;
-    PTabletWriterAddBatchResult add_chunk_response;
-    _tablets_channel->add_chunk(nullptr, add_chunk_request, &add_chunk_response, &close_channel);
-    ASSERT_TRUE(add_chunk_response.status().status_code() == TStatusCode::OK)
-            << add_chunk_response.status().error_msgs(0);
-    ASSERT_TRUE(close_channel);
-    ASSERT_EQ(1, num_diagnose);
-}
-
-TEST_F(LocalTabletsChannelTest, test_add_chunk_missing_timeout_ms) {
-    _create_tablets(1);
-    // open as a secondary replica of 3 replicas
-    ReplicaInfo replica_info{_tablets[0]->tablet_id(), _nodes};
-    _open_channel(_nodes[1].node_id(), {replica_info});
-
-    PTabletWriterAddChunkRequest add_chunk_request;
-    add_chunk_request.mutable_id()->CopyFrom(_load_id);
-    add_chunk_request.set_index_id(_index_id);
-    add_chunk_request.set_sink_id(_sink_id);
-    add_chunk_request.set_sender_id(0);
-    add_chunk_request.set_eos(true);
-    add_chunk_request.set_packet_seq(0);
-    // intentionally do NOT set timeout_ms to trigger validation error
-
-    bool close_channel = true; // will be reset to false inside add_chunk
-    PTabletWriterAddBatchResult add_chunk_response;
-    _tablets_channel->add_chunk(nullptr, add_chunk_request, &add_chunk_response, &close_channel);
-    ASSERT_EQ(TStatusCode::INVALID_ARGUMENT, add_chunk_response.status().status_code()) << add_chunk_response.status();
-    ASSERT_TRUE(add_chunk_response.status().error_msgs_size() > 0);
-    ASSERT_TRUE(add_chunk_response.status().error_msgs(0).find("missing timeout_ms") != std::string::npos)
-            << add_chunk_response.status().error_msgs(0);
-    ASSERT_FALSE(close_channel);
-}
-
-TEST_F(LocalTabletsChannelTest, test_add_chunk_negative_timeout_ms) {
-    _create_tablets(1);
-    // open as a secondary replica of 3 replicas
-    ReplicaInfo replica_info{_tablets[0]->tablet_id(), _nodes};
-    _open_channel(_nodes[1].node_id(), {replica_info});
-
-    PTabletWriterAddChunkRequest add_chunk_request;
-    add_chunk_request.mutable_id()->CopyFrom(_load_id);
-    add_chunk_request.set_index_id(_index_id);
-    add_chunk_request.set_sink_id(_sink_id);
-    add_chunk_request.set_sender_id(0);
-    add_chunk_request.set_eos(true);
-    add_chunk_request.set_packet_seq(0);
-    add_chunk_request.set_timeout_ms(-1); // negative to trigger validation error
-
-    bool close_channel = true; // will be reset to false inside add_chunk
-    PTabletWriterAddBatchResult add_chunk_response;
-    _tablets_channel->add_chunk(nullptr, add_chunk_request, &add_chunk_response, &close_channel);
-    ASSERT_EQ(TStatusCode::INVALID_ARGUMENT, add_chunk_response.status().status_code()) << add_chunk_response.status();
-    ASSERT_TRUE(add_chunk_response.status().error_msgs_size() > 0);
-    ASSERT_TRUE(add_chunk_response.status().error_msgs(0).find("negtive timeout_ms") != std::string::npos)
-            << add_chunk_response.status().error_msgs(0);
-    ASSERT_FALSE(close_channel);
-}
-
-TEST_F(LocalTabletsChannelTest, test_primary_replica_profile) {
-    _create_tablets(1);
-    auto& tablet = _tablets[0];
-    // open as a primary replica of 1 replica
-    ReplicaInfo replica_info{tablet->tablet_id(), {_nodes[0]}};
-    _open_channel(_nodes[0].node_id(), {replica_info});
->>>>>>> f3c417348b ([BugFix] Fix tablets channel use-after-free issue (#64360))
 
     PTabletWriterAddChunkRequest add_chunk_request;
     add_chunk_request.mutable_id()->CopyFrom(_load_id);
@@ -445,11 +258,46 @@ TEST_F(LocalTabletsChannelTest, test_add_chunk_not_exist_tablet) {
     add_chunk_request.set_eos(true);
     add_chunk_request.set_packet_seq(0);
 
+    // NOTE: this is a malformed request, because the chunk is nullptr but tablet_ids is not empty().
     auto non_exist_tablet_id = _tablet->tablet_id() + 1;
     add_chunk_request.add_tablet_ids(non_exist_tablet_id);
 
     PTabletWriterAddBatchResult add_chunk_response;
     _tablets_channel->add_chunk(nullptr, add_chunk_request, &add_chunk_response);
+    ASSERT_EQ(TStatusCode::INTERNAL_ERROR, add_chunk_response.status().status_code()) << add_chunk_response.status();
+    _tablets_channel->abort();
+}
+
+TEST_F(LocalTabletsChannelTest, test_add_chunk_not_exist_tablet_for_chunk_rows) {
+    auto open_request = _open_single_replica_request;
+    ASSERT_OK(_tablets_channel->open(open_request, &_open_response, _schema_param, false));
+
+    PTabletWriterAddChunkRequest add_chunk_request;
+    PTabletWriterAddBatchResult add_chunk_response;
+
+    add_chunk_request.mutable_id()->CopyFrom(_load_id);
+    add_chunk_request.set_index_id(_index_id);
+    add_chunk_request.set_sender_id(0);
+    add_chunk_request.set_eos(false);
+    add_chunk_request.set_packet_seq(0);
+    add_chunk_request.set_timeout_ms(60000);
+    {
+        int num_rows = 10;
+        auto chunk = generate_data(num_rows);
+        for (int i = 0; i < num_rows; i++) {
+            if (i > num_rows / 2) {
+                // invalid tablet id, the channel is not opened
+                add_chunk_request.add_tablet_ids(_tablet_id + 1);
+            } else {
+                // valid tablet id, the channel is opened
+                add_chunk_request.add_tablet_ids(_tablet_id);
+            }
+            add_chunk_request.add_partition_ids(_partition_id);
+        }
+        _tablets_channel->add_chunk(&chunk, add_chunk_request, &add_chunk_response);
+        // chunk is released when out of the scope, simulating the resource release after RPC done.
+    }
+
     ASSERT_EQ(TStatusCode::INTERNAL_ERROR, add_chunk_response.status().status_code()) << add_chunk_response.status();
     _tablets_channel->abort();
 }

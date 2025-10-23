@@ -618,26 +618,14 @@ TEST_F(LakeTabletsChannelTest, test_tablet_not_existed) {
         add_chunk_request.add_partition_ids(tablet_id < 10088 ? 10 : 11);
     }
 
-<<<<<<< HEAD
-    ASSIGN_OR_ABORT(auto chunk_pb, serde::ProtobufChunkSerde::serialize(chunk));
-    add_chunk_request.mutable_chunk()->Swap(&chunk_pb);
-
-    add_chunk_request.add_tablet_ids(10000); // Not existed tablet id
-
-    _tablets_channel->add_chunk(&chunk, add_chunk_request, &add_chunk_response);
-    ASSERT_NE(TStatusCode::INTERNAL_ERROR, add_chunk_response.status().status_code());
-=======
     {
         // `chunk` is only available inside the scope, will be released out of the scope to simulate resource release after RPC done.
         auto chunk = generate_data(num_rows);
         ASSIGN_OR_ABORT(auto chunk_pb, serde::ProtobufChunkSerde::serialize(chunk));
         add_chunk_request.mutable_chunk()->Swap(&chunk_pb);
-        bool close_channel;
-        _tablets_channel->add_chunk(&chunk, add_chunk_request, &add_chunk_response, &close_channel);
+        _tablets_channel->add_chunk(&chunk, add_chunk_request, &add_chunk_response);
         ASSERT_EQ(TStatusCode::INTERNAL_ERROR, add_chunk_response.status().status_code());
-        ASSERT_FALSE(close_channel);
     }
->>>>>>> f3c417348b ([BugFix] Fix tablets channel use-after-free issue (#64360))
 
     _tablets_channel->abort();
     ASSERT_FALSE(fs::path_exist(_tablet_manager->txn_log_location(10086, kTxnId)));
