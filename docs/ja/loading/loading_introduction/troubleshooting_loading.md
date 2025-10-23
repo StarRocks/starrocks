@@ -442,6 +442,10 @@ Load Profiles を分析するには、[ANALYZE PROFILE](../../sql-reference/sql-
 
 ### 運用に役立つ SQL
 
+:::note
+このセクションは共有なしクラスタにのみ適用されます。
+:::
+
 #### 分単位のスループットをクエリする
 
 ```SQL

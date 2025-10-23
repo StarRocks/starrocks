@@ -442,6 +442,10 @@ Load Profiles 的结构与 Query Profiles 相同。有关详细说明，请参�
 
 ### 运维常用 SQL
 
+:::note
+本节仅适用于存算一体集群。
+:::
+
 #### 查询每分钟吞吐量
 
 ```SQL

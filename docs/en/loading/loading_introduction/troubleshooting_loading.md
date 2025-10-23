@@ -442,6 +442,10 @@ The profile shows that the `FILE_SCAN` section took nearly 29 seconds, accountin
 
 ### Useful SQL for Operations
 
+:::note
+This section only applies to shared-nothing clusters.
+:::
+
 #### query the throughput per minute
 
 ```SQL
