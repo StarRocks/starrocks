@@ -146,7 +146,14 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
     public Statistics getTableStatistics(OptimizerContext session, Table table, Map<ColumnRefOperator, Column> columns,
                                          List<PartitionKey> partitionKeys, ScalarOperator predicate, long limit,
                                          TvrVersionRange versionRange) {
-        if (!properties.enableGetTableStatsFromExternalMetadata() || session.getSourceTablesCount() == 1) {
+        boolean useDefaultStats = false;
+        if (!properties.enableGetTableStatsFromExternalMetadata()) {
+            useDefaultStats = true;
+        }
+        if (session.getSessionVariable().disableTableStatsFromMetadataForSingleTable() && session.getSourceTablesCount() == 1) {
+            useDefaultStats = true;
+        }
+        if (useDefaultStats) {
             return StatisticsUtils.buildDefaultStatistics(columns.keySet());
         }
 
