@@ -39,9 +39,11 @@
 #include "service/service_be/arrow_flight_sql_service.h"
 #include "service/service_be/http_service.h"
 #include "service/service_be/internal_service.h"
+#ifndef __APPLE__
 #include "service/service_be/lake_service.h"
-#include "service/staros_worker.h"
 #include "storage/lake/tablet_manager.h"
+#endif
+#include "service/staros_worker.h"
 #include "storage/storage_engine.h"
 #include "util/logging.h"
 #include "util/mem_info.h"
@@ -88,9 +90,11 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     daemon->init(as_cn, paths);
     LOG(INFO) << process_name << " start step " << start_step++ << ": daemon threads start successfully";
 
+#if defined(WITH_JDBC)
     // init jdbc driver manager
     EXIT_IF_ERROR(JDBCDriverManager::getInstance()->init(std::string(getenv("STARROCKS_HOME")) + "/lib/jdbc_drivers"));
     LOG(INFO) << process_name << " start step " << start_step++ << ": jdbc driver manager init successfully";
+#endif
 
     // init network option
     if (!BackendOptions::init(as_cn)) {
@@ -110,9 +114,14 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 
     // cache env should be initialized before init_storage_engine,
     // because apply task is triggered in init_storage_engine and needs cache env.
+#ifndef __APPLE__
     auto* cache_env = DataCache::GetInstance();
     EXIT_IF_ERROR(cache_env->init(paths));
     LOG(INFO) << process_name << " start step " << start_step++ << ": cache env init successfully";
+#else
+    // On macOS, skip DataCache initialization
+    LOG(INFO) << process_name << " start step " << start_step++ << ": cache env disabled on macOS";
+#endif
 
     auto* storage_engine = init_storage_engine(global_env, paths, as_cn);
     LOG(INFO) << process_name << " start step " << start_step++ << ": storage engine init successfully";
@@ -127,6 +136,7 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     LOG(INFO) << process_name << " start step " << start_step++ << ": storage engine start bg threads successfully";
 
 #ifdef USE_STAROS
+#ifndef __APPLE__
     auto* local_cache = cache_env->local_disk_cache();
     if (config::datacache_unified_instance_enable && local_cache && local_cache->is_initialized()) {
         auto* starcache = reinterpret_cast<StarCacheEngine*>(local_cache);
@@ -134,6 +144,10 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     } else {
         init_staros_worker(nullptr);
     }
+#else
+    // On macOS, disable staros worker with starcache
+    init_staros_worker(nullptr);
+#endif
     LOG(INFO) << process_name << " start step " << start_step++ << ": staros worker init successfully";
 #endif
 
@@ -167,10 +181,14 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     auto brpc_server = std::make_unique<brpc::Server>();
 
     BackendInternalServiceImpl<PInternalService> internal_service(exec_env);
+#ifndef __APPLE__
     LakeServiceImpl lake_service(exec_env, exec_env->lake_tablet_manager());
 
     brpc_server->AddService(&internal_service, brpc::SERVER_DOESNT_OWN_SERVICE);
     brpc_server->AddService(&lake_service, brpc::SERVER_DOESNT_OWN_SERVICE);
+#else
+    brpc_server->AddService(&internal_service, brpc::SERVER_DOESNT_OWN_SERVICE);
+#endif
 
     brpc::ServerOptions options;
     if (config::brpc_num_threads != -1) {
@@ -182,6 +200,7 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
         sslOptions->default_cert.private_key = config::ssl_private_key_path;
     }
 
+#ifndef __APPLE__
     const auto lake_service_max_concurrency = config::lake_service_max_concurrency;
     const auto service_name = "starrocks.LakeService";
     const auto methods = {"abort_txn",
@@ -201,6 +220,7 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     for (auto method : methods) {
         brpc_server->MaxConcurrencyOf(service_name, method) = lake_service_max_concurrency;
     }
+#endif
     int brpc_port = config::brpc_port;
     butil::EndPoint point;
     if (butil::str2endpoint(BackendOptions::get_service_bind_address(), brpc_port, &point) < 0) {
@@ -217,8 +237,14 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     LOG(INFO) << process_name << " start step " << start_step++ << ": start brpc server successfully";
 
     // Start HTTP server
+#ifndef __APPLE__
     auto http_server =
             std::make_unique<HttpServiceBE>(cache_env, exec_env, config::be_http_port, config::be_http_num_workers);
+#else
+    // On macOS, pass nullptr for cache_env
+    auto http_server =
+            std::make_unique<HttpServiceBE>(nullptr, exec_env, config::be_http_port, config::be_http_num_workers);
+#endif
     if (auto status = http_server->start(); !status.ok()) {
         LOG(ERROR) << process_name << " http server did not start correctly, exiting: " << status.message();
         shutdown_logging();
@@ -227,6 +253,7 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     LOG(INFO) << process_name << " start step " << start_step++ << ": start http server successfully";
 
     // Start Arrow Flight SQL server
+#ifndef __APPLE__
     auto arrow_flight_sql_server = std::make_unique<ArrowFlightSqlServer>();
     if (auto status = arrow_flight_sql_server->start(config::arrow_flight_port); !status.ok()) {
         LOG(ERROR) << process_name << " Arrow Flight Sql Server did not start correctly, exiting: " << status.message()
@@ -236,6 +263,7 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
         exit(1);
     }
     LOG(INFO) << process_name << " start step " << start_step++ << ": start arrow flight sql server successfully";
+#endif
 
     // Start heartbeat server
     std::unique_ptr<ThriftServer> heartbeat_server;
@@ -271,9 +299,11 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     heartbeat_server.reset();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": heartbeat server exit successfully";
 
+#ifndef __APPLE__
     arrow_flight_sql_server->stop();
     arrow_flight_sql_server.reset();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": Arrow Flight SQL server exit successfully";
+#endif
 
     http_server->stop();
     brpc_server->Stop(0);
@@ -297,10 +327,12 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": staros worker exit successfully";
 #endif
 
+#ifndef __APPLE__
     if (config::enable_poco_client_for_aws_sdk) {
         starrocks::poco::HTTPSessionPools::instance().shutdown();
         LOG(INFO) << process_name << " exit step " << exit_step++ << ": poco connection pool shutdown successfully";
     }
+#endif
 
     http_server->join();
     http_server.reset();
@@ -319,8 +351,12 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 
     delete storage_engine;
 
+#ifndef __APPLE__
     cache_env->destroy();
     LOG(ERROR) << process_name << " exit step " << exit_step++ << ": cache env destroy successfully";
+#else
+    LOG(ERROR) << process_name << " exit step " << exit_step++ << ": cache env disabled on macOS";
+#endif
 
     // Unbind with MemTracker
     tls_mem_tracker = nullptr;

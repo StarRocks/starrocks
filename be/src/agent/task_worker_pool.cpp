@@ -318,15 +318,19 @@ void* PushTaskWorkerPool::_worker_thread_callback(void* arg_this) {
             continue;
         }
         auto& push_req = agent_task_req->task_req;
-
         LOG(INFO) << "get push task. signature: " << agent_task_req->signature << " priority: " << priority
                   << " push_type: " << push_req.push_type;
         std::vector<TTabletInfo> tablet_infos;
 
+#ifndef __APPLE__
         EngineBatchLoadTask engine_task(push_req, &tablet_infos, agent_task_req->signature, &status,
                                         GlobalEnv::GetInstance()->load_mem_tracker());
         // EngineBatchLoadTask execute always return OK
         (void)(StorageEngine::instance()->execute_task(&engine_task));
+#else
+        LOG(WARNING) << "push is not supported on MacOS, signature: " << agent_task_req->signature;
+        status = STARROCKS_ERROR;
+#endif
 
         if (status == STARROCKS_PUSH_HAD_LOADED) {
             // remove the task and not return to fe
@@ -438,10 +442,15 @@ void* DeleteTaskWorkerPool::_worker_thread_callback(void* arg_this) {
         VLOG(3) << "get delete push task. signature: " << agent_task_req->signature << " priority: " << priority
                 << " push_type: " << push_req.push_type;
         std::vector<TTabletInfo> tablet_infos;
+#ifndef __APPLE__
         EngineBatchLoadTask engine_task(push_req, &tablet_infos, agent_task_req->signature, &status,
                                         GlobalEnv::GetInstance()->load_mem_tracker());
         // EngineBatchLoadTask execute always return OK
         (void)(StorageEngine::instance()->execute_task(&engine_task));
+#else
+        LOG(WARNING) << "delete is not supported on MacOS, signature: " << agent_task_req->signature;
+        status = STARROCKS_ERROR;
+#endif
 
         if (status == STARROCKS_PUSH_HAD_LOADED) {
             // remove the task and not return to fe
@@ -829,6 +838,7 @@ void* ReportResourceUsageTaskWorkerPool::_worker_thread_callback(void* arg_this)
 }
 
 void* ReportDataCacheMetricsTaskWorkerPool::_worker_thread_callback(void* arg_this) {
+#ifndef __APPLE__
     const auto* worker_pool_this = static_cast<ReportDataCacheMetricsTaskWorkerPool*>(arg_this);
 
     TReportRequest request;
@@ -877,7 +887,7 @@ void* ReportDataCacheMetricsTaskWorkerPool::_worker_thread_callback(void* arg_th
         size_t sleep_secs = config::report_datacache_metrics_interval_ms / 1000;
         nap_sleep(sleep_secs, [&]() { return worker_pool_this->_stopped.load(); });
     }
-
+#endif // __APPLE__
     return nullptr;
 }
 

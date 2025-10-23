@@ -35,7 +35,7 @@ class RuntimeState;
 class Column;
 class Slice;
 struct JavaUDAFContext;
-#if defined(MACOS_DISABLE_JAVA)
+#if defined(__APPLE__)
 // On macOS build, Java is disabled. Provide an empty definition so that
 // std::unique_ptr<JavaUDAFContext> has a complete type and can be destroyed
 // without pulling in JNI headers.

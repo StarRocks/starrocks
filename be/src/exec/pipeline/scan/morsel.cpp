@@ -529,9 +529,13 @@ Status PhysicalSplitMorselQueue::_init_segment() {
                                                                _range_start_key, _range_end_key, &_tablet_seek_ranges,
                                                                &_mempool));
             } else {
+#ifndef __APPLE__
                 RETURN_IF_ERROR(lake::TabletReader::parse_seek_range(*_tablet_schema, _range_start_op, _range_end_op,
                                                                      _range_start_key, _range_end_key,
                                                                      &_tablet_seek_ranges, &_mempool));
+#else
+                return Status::RuntimeError("Lake storage is disabled on macOS");
+#endif
             }
         }
         // Read a new rowset.
@@ -868,9 +872,13 @@ Status LogicalSplitMorselQueue::_init_tablet() {
                                                            _range_start_key, _range_end_key, &_tablet_seek_ranges,
                                                            &_mempool));
         } else {
+#ifndef __APPLE__
             RETURN_IF_ERROR(lake::TabletReader::parse_seek_range(*_tablet_schema, _range_start_op, _range_end_op,
                                                                  _range_start_key, _range_end_key, &_tablet_seek_ranges,
                                                                  &_mempool));
+#else
+            return Status::RuntimeError("Lake storage is disabled on macOS");
+#endif
         }
     }
 

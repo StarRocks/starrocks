@@ -261,7 +261,6 @@ ASYNC_PROFILER_DOWNLOAD="https://github.com/async-profiler/async-profiler/releas
 ASYNC_PROFILER_NAME="async-profiler-4.1-macos.zip"
 ASYNC_PROFILER_SOURCE="async-profiler-4.1-macos"
 
-
 download_source() {
     local name="$1"
     local version="$2"

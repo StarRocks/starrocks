@@ -16,7 +16,9 @@
 
 #include "common/config.h"
 #include "gen_cpp/internal_service.pb.h"
+#ifndef __APPLE__
 #include "gen_cpp/lake_service.pb.h"
+#endif
 #include "runtime/exec_env.h"
 #include "util/failpoint/fail_point.h"
 #include "util/starrocks_metrics.h"
@@ -214,6 +216,8 @@ void HttpBrpcStubCache::cleanup_expired(const butil::EndPoint& endpoint) {
     _stub_map.erase(endpoint);
 }
 
+#ifndef __APPLE__
+
 LakeServiceBrpcStubCache* LakeServiceBrpcStubCache::getInstance() {
     static LakeServiceBrpcStubCache cache;
     return &cache;
@@ -298,5 +302,6 @@ void LakeServiceBrpcStubCache::cleanup_expired(const butil::EndPoint& endpoint) 
     LOG(INFO) << "cleanup lake service brpc stub, endpoint:" << endpoint;
     _stub_map.erase(endpoint);
 }
+#endif
 
 } // namespace starrocks

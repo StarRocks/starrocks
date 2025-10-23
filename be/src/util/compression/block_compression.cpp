@@ -39,18 +39,15 @@
 #ifdef __x86_64__
 #include <libdeflate.h>
 #endif
-#include <lz4/lz4.h>
-#include <lz4/lz4frame.h>
 #include <snappy/snappy-sinksource.h>
 #include <snappy/snappy.h>
 #include <zlib.h>
-#include <zstd/zstd.h>
-#include <zstd/zstd_errors.h>
 
 #include "gutil/endian.h"
 #include "gutil/strings/substitute.h"
 #include "util/coding.h"
 #include "util/compression/compression_context_pool_singletons.h"
+#include "util/compression/compression_headers.h"
 #include "util/faststring.h"
 namespace orc {
 uint64_t lzoDecompress(const char* inputAddress, const char* inputLimit, char* outputAddress, char* outputLimit);

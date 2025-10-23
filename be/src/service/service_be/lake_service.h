@@ -15,6 +15,7 @@
 #pragma once
 #include <span>
 
+#ifndef __APPLE__
 #include "gen_cpp/lake_service.pb.h"
 
 namespace starrocks {
@@ -117,3 +118,4 @@ private:
 };
 
 } // namespace starrocks
+#endif // __APPLE__

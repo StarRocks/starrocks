@@ -64,6 +64,11 @@
 #include <string_view>
 #include <libgen.h> // ensure basename() is declared on macOS
 
+// Fix for typeof compatibility on Clang/macOS - typeof is GCC extension
+#ifndef typeof
+#define typeof __typeof__
+#endif
+
 // Prefer the lightweight format_as customization point added in fmt >= 10.
 // It lets fmt format our types via ADL by converting them to a formattable type.
 namespace starrocks {

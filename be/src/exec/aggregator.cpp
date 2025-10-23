@@ -293,6 +293,7 @@ Status Aggregator::open(RuntimeState* state) {
     // init function context
     _has_udaf = std::any_of(_fns.begin(), _fns.end(),
                             [](const auto& ctx) { return ctx.binary_type == TFunctionBinaryType::SRJAR; });
+#ifndef __APPLE__
     if (_has_udaf) {
         auto promise_st = call_function_in_pthread(state, [this]() {
             for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
@@ -307,6 +308,7 @@ Status Aggregator::open(RuntimeState* state) {
         });
         RETURN_IF_ERROR(promise_st->get_future().get());
     }
+#endif
 
     // For SQL: select distinct id from table or select id from from table group by id;
     // we don't need to allocate memory for agg states.
@@ -375,12 +377,16 @@ Status Aggregator::open(RuntimeState* state) {
 
             return Status::OK();
         };
+#ifdef __APPLE__
+        RETURN_IF_ERROR(call_agg_create());
+#else
         if (_has_udaf) {
             auto promise_st = call_function_in_pthread(state, call_agg_create);
             RETURN_IF_ERROR(promise_st->get_future().get());
         } else {
             RETURN_IF_ERROR(call_agg_create());
         }
+#endif
 
         if (_agg_expr_ctxs.empty()) {
             return Status::InternalError("Invalid agg query plan");
@@ -758,12 +764,16 @@ void Aggregator::close(RuntimeState* state) {
         Expr::close(_conjunct_ctxs, state);
         return Status::OK();
     };
+#ifdef __APPLE__
+    (void)agg_close();
+#else
     if (_has_udaf) {
         auto promise_st = call_function_in_pthread(state, agg_close);
         (void)promise_st->get_future().get();
     } else {
         (void)agg_close();
     }
+#endif
 }
 
 bool Aggregator::is_chunk_buffer_empty() {

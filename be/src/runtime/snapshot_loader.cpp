@@ -51,7 +51,9 @@
 #include "runtime/broker_mgr.h"
 #include "runtime/exec_env.h"
 #include "storage/index/index_descriptor.h"
+#ifndef __APPLE__
 #include "storage/index/inverted/clucene/clucene_plugin.h"
+#endif
 #include "storage/snapshot_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
@@ -1012,9 +1014,11 @@ Status SnapshotLoader::_replace_tablet_id(const std::string& file_name, int64_t 
                _end_with(file_name, ".vi")) {
         *new_file_name = file_name;
         return Status::OK();
+#ifndef __APPLE__
     } else if (CLucenePlugin::is_index_files(file_name)) {
         *new_file_name = file_name;
         return Status::OK();
+#endif
     } else {
         return Status::InternalError("invalid tablet file name: " + file_name);
     }

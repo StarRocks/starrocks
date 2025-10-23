@@ -185,8 +185,12 @@ static void failure_handler_after_output_log() {
     static bool start_dump = false;
     if (!start_dump && config::enable_core_file_size_optimization && base::get_cur_core_file_limit() != 0) {
         ExecEnv::GetInstance()->try_release_resource_before_core_dump();
+#ifndef __APPLE__
         DataCache::GetInstance()->try_release_resource_before_core_dump();
+#endif
+#ifndef __APPLE__
         dontdump_unused_pages();
+#endif
     }
     start_dump = true;
 }
@@ -211,7 +215,9 @@ bool init_glog(const char* basename, bool install_signal_handler) {
     }
 
     if (install_signal_handler) {
+#ifndef __APPLE__
         google::InstallFailureSignalHandler();
+#endif
     }
 
     // only write fatal log to stderr
@@ -309,7 +315,7 @@ bool init_glog(const char* basename, bool install_signal_handler) {
     if (config::dump_trace_info) {
         google::InstallFailureWriter(failure_writer);
         google::InstallFailureFunction((google::logging_fail_func_t)failure_function);
-#ifndef MACOS_DISABLE_GLOG_STACKTRACE
+#ifndef __APPLE__
         // This symbol may be unavailable on macOS builds using system glog.
         google::InstallFailureHandlerAfterOutputLog(failure_handler_after_output_log);
 #endif

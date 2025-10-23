@@ -63,7 +63,13 @@
 namespace starrocks {
 
 static void on_chunked(struct evhttp_request* ev_req, void* param) {
+#ifdef __APPLE__
+    // macOS: use evhttp_request_get_user_data API
+    auto* request = (HttpRequest*)evhttp_request_get_user_data(ev_req);
+#else
+    // Linux: directly access on_free_cb_arg field
     auto* request = (HttpRequest*)ev_req->on_free_cb_arg;
+#endif
     request->handler()->on_chunk_data(request);
 }
 
@@ -73,7 +79,13 @@ static void on_free(struct evhttp_request* ev_req, void* arg) {
 }
 
 static void on_request(struct evhttp_request* ev_req, void* arg) {
+#ifdef __APPLE__
+    // macOS: use evhttp_request_get_user_data API
+    auto request = (HttpRequest*)evhttp_request_get_user_data(ev_req);
+#else
+    // Linux: directly access on_free_cb_arg field
     auto request = (HttpRequest*)ev_req->on_free_cb_arg;
+#endif
     if (request == nullptr) {
         // In this case, request's on_header return -1
         return;
@@ -294,8 +306,15 @@ int EvHttpServer::on_header(struct evhttp_request* ev_req) {
         evhttp_request_set_chunked_cb(ev_req, on_chunked);
     }
 
-    // Free request when evhttp_request is done; also stash pointer via on_free_cb_arg
-    evhttp_request_set_on_free_cb(ev_req, on_free, request.release());
+    // Free request when evhttp_request is done; also stash pointer
+    HttpRequest* req_ptr = request.release();
+#ifdef __APPLE__
+    // macOS: use evhttp_request_set_user_data API for storing pointer
+    evhttp_request_set_user_data(ev_req, req_ptr);
+#endif
+    // Both platforms: set on_free callback with req_ptr as argument
+    // On Linux, this also sets on_free_cb_arg which is accessed directly
+    evhttp_request_set_on_free_cb(ev_req, on_free, req_ptr);
     return 0;
 }
 

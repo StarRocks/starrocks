@@ -111,7 +111,9 @@ public:
 
     void assign(size_t n, size_t idx) override {
         auto& datas = get_data();
-        datas.assign(n, _data[idx]);
+        // Avoid use-after-free: save value before assign() deallocates _data
+        T value = _data[idx];
+        datas.assign(n, value);
     }
 
     void remove_first_n_values(size_t count) override;

@@ -90,6 +90,7 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             _exec_env->thread_pool()->set_num_thread(config::scanner_thread_pool_thread_num);
             return Status::OK();
         });
+#ifndef __APPLE__
         _config_callback.emplace("storage_page_cache_limit", [&]() -> Status {
             StoragePageCache* cache = DataCache::GetInstance()->page_cache();
             if (cache == nullptr || !cache->is_initialized()) {
@@ -101,6 +102,8 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             cache->set_capacity(cache_limit);
             return Status::OK();
         });
+#endif
+#ifndef __APPLE__
         _config_callback.emplace("disable_storage_page_cache", [&]() -> Status {
             StoragePageCache* cache = DataCache::GetInstance()->page_cache();
             if (cache == nullptr || !cache->is_initialized()) {
@@ -115,6 +118,8 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             }
             return Status::OK();
         });
+#endif
+#ifndef __APPLE__
         _config_callback.emplace("datacache_mem_size", [&]() -> Status {
             LocalMemCacheEngine* cache = DataCache::GetInstance()->local_mem_cache();
             if (cache == nullptr || !cache->is_initialized()) {
@@ -156,6 +161,7 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             }
             return cache->update_inline_cache_count_limit(config::datacache_inline_item_count_limit);
         });
+#endif
         _config_callback.emplace("max_compaction_concurrency", [&]() -> Status {
             if (!config::enable_event_based_compaction_framework) {
                 return Status::InvalidArgument(

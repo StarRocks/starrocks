@@ -43,9 +43,12 @@
 #include "gen_cpp/Types_types.h" // TNetworkAddress
 #include "service/brpc.h"
 #include "util/internal_service_recoverable_stub.h"
-#include "util/lake_service_recoverable_stub.h"
 #include "util/network_util.h"
 #include "util/spinlock.h"
+
+#ifndef __APPLE__
+#include "util/lake_service_recoverable_stub.h"
+#endif
 
 namespace starrocks {
 
@@ -110,6 +113,7 @@ private:
     pipeline::PipelineTimer* _pipeline_timer;
 };
 
+#ifndef __APPLE__
 class LakeServiceBrpcStubCache {
 public:
     static LakeServiceBrpcStubCache* getInstance();
@@ -129,5 +133,6 @@ private:
             _stub_map;
     pipeline::PipelineTimer* _pipeline_timer;
 };
+#endif
 
 } // namespace starrocks
