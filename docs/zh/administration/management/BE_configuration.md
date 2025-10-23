@@ -612,6 +612,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 引入版本：-
 -->
 
+##### update_tablet_meta_info_worker_count
+
+- 默认值：10
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群alter tablet元数据的线程数。
+- 引入版本：-
+
 ##### upload_worker_count
 
 - 默认值：0
