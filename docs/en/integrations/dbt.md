@@ -14,8 +14,6 @@ import Experimental from '../_assets/commonMarkdown/_experimental.mdx'
 
 ## Supported features
 
-## Supported features
-
 | StarRocks >= 3.1 | StarRocks >= 3.4 |              Feature              |
 |:----------------:|:----------------:|:---------------------------------:|
 |        ✅        |        ✅         |       Table materialization       |
