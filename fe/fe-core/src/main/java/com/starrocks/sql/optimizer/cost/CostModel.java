@@ -218,7 +218,7 @@ public class CostModel {
 
         /**
          * For single-node execution, if the aggregation ratio is not high enough,
-         * we prefer a single-stage aggregation (with a local shuffle) rather than a two-stage aggregation.
+         * we prefer a one-phase aggregation (with a local shuffle) rather than a two-phase aggregation.
          */
         private boolean preferLocalShuffleOnePhaseAgg(PhysicalHashAggregateOperator node, ExpressionContext context) {
             ConnectContext ctx = ConnectContext.get();
