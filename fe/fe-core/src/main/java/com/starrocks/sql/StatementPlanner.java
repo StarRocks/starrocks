@@ -47,6 +47,7 @@ import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.InsertAnalyzer;
 import com.starrocks.sql.analyzer.PlannerMetaLocker;
+import com.starrocks.sql.analyzer.QueryAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DmlStmt;
@@ -233,7 +234,22 @@ public class StatementPlanner {
                 Map<Long, Set<Long>> tables = Maps.newHashMap();
                 PlannerMetaLocker.collectTablesNeedLock(insertStmt.getQueryStatement(), session, dbs, tables);
 
-                if (tables.isEmpty() || FeConstants.runningUnitTest) {
+                // If SELECT contains files() table function, resolve files() without lock but analyze normal tables
+                // under lock. So:
+                // - files() present AND normal tables present: pre-analyze files() without lock, then lock and analyze
+                //   the whole statement under lock (no overall deferred lock).
+                // - files() present AND no normal tables to lock: safe to use overall deferred lock path.
+                boolean hasFileTableFunction =
+                        !AnalyzerUtils.collectFileTableFunctionRelation(insertStmt.getQueryStatement()).isEmpty();
+                boolean hasNormalTablesToLock = !tables.isEmpty();
+
+                if (hasFileTableFunction && hasNormalTablesToLock) {
+                    // Pre-analyze files() without lock to fetch schema via BE RPC
+                    new QueryAnalyzer(session).analyzeFilesOnly(insertStmt.getQueryStatement());
+                    // We will take lock and run full analyze below (no deferred lock)
+                    deferredLock = false;
+                } else if (hasFileTableFunction || tables.isEmpty() || FeConstants.runningUnitTest) {
+                    // Only files() or no tables at all: allow deferred lock
                     deferredLock = true;
                 }
             }
