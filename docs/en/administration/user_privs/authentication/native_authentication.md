@@ -148,6 +148,11 @@ You can view the property of a user using [SHOW PROPERTY](../../../sql-reference
 The following example shows the property of the user `jack`:
 
 ```SQL
-SHOW PROPERTY FOR jack@'172.10.1.10';
+SHOW PROPERTY FOR 'jack';
+```
+Or to view a specific property:
+
+```SQL
+SHOW PROPERTY FOR 'jack' LIKE 'max_user_connections';
 ```
 
