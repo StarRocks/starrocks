@@ -13,14 +13,50 @@
 // limitations under the License.package com.starrocks.sql.plan;
 package com.starrocks.sql.plan;
 
+import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.ibm.icu.impl.Assert;
+import com.starrocks.catalog.AggregateFunction;
+import com.starrocks.catalog.Function;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
+=======
+import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.operator.AggType;
+import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalRepeatOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
+import com.starrocks.sql.optimizer.rule.transformation.PushDownAggregateGroupingSetsRule;
+import mockit.Mock;
+import mockit.MockUp;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+>>>>>>> 6a318c2507 ([Enhancement] Add enable_optimizer_rule_debug session variable for rule failure diagnosis (#63693))
+
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.stream.Collectors;
 
 public class GroupingSetsTest extends PlanTestBase {
     private static final int NUM_TABLE0_ROWS = 10000;
@@ -415,6 +451,138 @@ public class GroupingSetsTest extends PlanTestBase {
             assertContains(plan, "PREDICATES: 14: t1b IS NULL");
         } finally {
             connectContext.getSessionVariable().setCboPushDownGroupingSet(false);
+        }
+    }
+
+    @Test
+    public void testPushDownGroupingSetHavingWithPlanValidate() {
+        new MockUp<PushDownAggregateGroupingSetsRule>() {
+            @Mock
+            public OptExpression buildSubRepeatConsume(ColumnRefFactory factory,
+                                                       Map<ColumnRefOperator, ColumnRefOperator> outputs,
+                                                       LogicalAggregationOperator aggregate, LogicalRepeatOperator repeat,
+                                                       int cteId) {
+                int subGroups = repeat.getRepeatColumnRef().size() - 1;
+                List<ColumnRefOperator> nullRefs = Lists.newArrayList(repeat.getRepeatColumnRef().get(subGroups));
+                repeat.getRepeatColumnRef().stream().limit(subGroups).forEach(nullRefs::removeAll);
+
+                // consume
+                Map<ColumnRefOperator, ColumnRefOperator> cteColumnRefs = Maps.newHashMap();
+                for (ColumnRefOperator input : aggregate.getAggregations().keySet()) {
+                    ColumnRefOperator cteOutput = factory.create(input, input.getType(), input.isNullable());
+                    cteColumnRefs.put(cteOutput, input);
+                    outputs.put(input, cteOutput);
+                }
+                for (ColumnRefOperator input : aggregate.getGroupingKeys()) {
+                    if (!repeat.getOutputGrouping().contains(input) && !nullRefs.contains(input)) {
+                        ColumnRefOperator cteOutput = factory.create(input, input.getType(), input.isNullable());
+                        cteColumnRefs.put(cteOutput, input);
+                        outputs.put(input, cteOutput);
+                    }
+                }
+
+                LogicalCTEConsumeOperator consume = new LogicalCTEConsumeOperator(cteId, cteColumnRefs);
+
+                // repeat
+                List<ColumnRefOperator> outputGrouping = Lists.newArrayList();
+                repeat.getOutputGrouping().forEach(k -> {
+                    ColumnRefOperator x = factory.create(k, k.getType(), k.isNullable());
+                    outputs.put(k, x);
+                    outputGrouping.add(x);
+                });
+
+                List<List<ColumnRefOperator>> repeatRefs = repeat.getRepeatColumnRef().stream().limit(subGroups)
+                        .map(l -> l.stream().map(outputs::get).filter(Objects::nonNull).collect(Collectors.toList()))
+                        .collect(Collectors.toList());
+
+                List<List<Long>> groupingIds = repeat.getGroupingIds().stream()
+                        .map(s -> s.subList(0, subGroups)).collect(Collectors.toList());
+
+                ScalarOperator predicate = null;
+                if (null != repeat.getPredicate()) {
+                    ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(outputs);
+                    predicate = rewriter.rewrite(repeat.getPredicate());
+                }
+
+                LogicalRepeatOperator newRepeat = LogicalRepeatOperator.builder()
+                        .setOutputGrouping(outputGrouping)
+                        .setRepeatColumnRefList(repeatRefs)
+                        .setGroupingIds(groupingIds)
+                        .setHasPushDown(true)
+                        .setPredicate(predicate)
+                        .build();
+
+                // aggregate
+                Map<ColumnRefOperator, CallOperator> aggregations = Maps.newHashMap();
+                aggregate.getAggregations().forEach((k, v) -> {
+                    ColumnRefOperator x = factory.create(k, k.getType(), k.isNullable());
+                    Function aggFunc = Expr.getBuiltinFunction(v.getFnName(), new Type[] {k.getType()},
+                            Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+
+                    Preconditions.checkState(aggFunc instanceof AggregateFunction);
+                    if (k.getType().isDecimalOfAnyVersion()) {
+                        aggFunc = DecimalV3FunctionAnalyzer.rectifyAggregationFunction((AggregateFunction) aggFunc, k.getType(),
+                                v.getType());
+                    }
+
+                    aggregations.put(x,
+                            new CallOperator(v.getFnName(), k.getType(), Lists.newArrayList(outputs.get(k)), aggFunc));
+                    outputs.put(k, x);
+                });
+
+                List<ColumnRefOperator> groupings = aggregate.getGroupingKeys().stream()
+                        .filter(c -> !nullRefs.contains(c)).map(outputs::get).collect(Collectors.toList());
+
+                if (null != aggregate.getPredicate()) {
+                    Map<ColumnRefOperator, ScalarOperator> replaceMap = Maps.newHashMap(outputs);
+                    nullRefs.forEach(c -> replaceMap.put(c, ConstantOperator.createNull(c.getType())));
+                    ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(replaceMap);
+                    predicate = rewriter.rewrite(aggregate.getPredicate());
+                }
+                LogicalAggregationOperator newAggregate = LogicalAggregationOperator.builder()
+                        .setAggregations(aggregations)
+                        .setGroupingKeys(groupings)
+                        .setType(AggType.GLOBAL)
+                        .setPredicate(predicate)
+                        .setPartitionByColumns(groupings)
+                        .build();
+
+                // project
+                Map<ColumnRefOperator, ScalarOperator> projection = Maps.newHashMap();
+                aggregations.keySet().forEach(k -> projection.put(k, k));
+                groupings.forEach(k -> projection.put(k, k));
+
+                for (ColumnRefOperator nullRef : nullRefs) {
+                    ColumnRefOperator m = factory.create(nullRef, nullRef.getType(), true);
+                    projection.put(m, ConstantOperator.createNull(nullRef.getType()));
+                    outputs.put(nullRef, m);
+                }
+                LogicalProjectOperator projectOperator = new LogicalProjectOperator(projection);
+
+                return OptExpression.create(projectOperator,
+                        OptExpression.create(newAggregate, OptExpression.create(newRepeat, OptExpression.create(consume))));
+            }
+        };
+
+        connectContext.getSessionVariable().setCboPushDownGroupingSet(true);
+        connectContext.getSessionVariable().setEnableOptimizerRuleDebug(true);
+        try {
+            String sql = "select t1b, t1c, t1d, sum(t1g) " +
+                    "   from test_all_type group by rollup(t1b, t1c, t1d) " +
+                    "   having t1b is null and (t1c is null or t1d is null)";
+            try {
+                getFragmentPlan(sql);
+                Assert.fail("should throw exception");
+            } catch (Exception e) {
+                String errMsg = e.getMessage();
+                assertContains(errMsg, "Optimizer rule debug: Plan validation failed after applying rule " +
+                        "[TF_PUSHDOWN_AGG_GROUPING_SET].");
+                assertContains(errMsg, "The required cols {4} cannot obtain from input cols {13,14,15}");
+                assertContains(errMsg, "Input dependency cols check failed");
+            }
+        } finally {
+            connectContext.getSessionVariable().setCboPushDownGroupingSet(false);
+            connectContext.getSessionVariable().setEnableOptimizerRuleDebug(false);
         }
     }
 }
