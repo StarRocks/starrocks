@@ -79,7 +79,6 @@ endif()
 message(STATUS "make test: ${MAKE_TEST}")
 
 option(WITH_GCOV "Build binary with gcov to get code coverage" OFF)
-option(WITH_GCOV_INCREMENTAL "Build binary with gcov only for changed files" OFF)
 
 option(WITH_COMPRESS "Build binary with compresss debug section" ON)
 
@@ -741,10 +740,8 @@ set(CXX_GCC_FLAGS "${CXX_GCC_FLAGS} -g -Wno-unused-local-typedefs")
 if (WITH_GCOV)
     # To generate flags to code coverage
     set(CXX_GCC_FLAGS "${CXX_GCC_FLAGS} -fprofile-arcs -ftest-coverage")
-endif()
 
-# Handle incremental gcov
-if (WITH_GCOV_INCREMENTAL)
+    # Handle incremental gcov
     message(STATUS "Incremental gcov enabled")
     if (GCOV_INCREMENTAL_FILES)
         # Split the semicolon-separated list of files
@@ -1106,8 +1103,8 @@ set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS}
     ${WL_LINK_DYNAMIC} -lresolv -liberty -lc -lm -ldl -rdynamic -pthread -Wl,-wrap,__cxa_throw -Wl,-wrap,__floattidf
 )
 
-# link gcov if WITH_GCOV or WITH_GCOV_INCREMENTAL is on
-if (WITH_GCOV OR WITH_GCOV_INCREMENTAL)
+# link gcov if WITH_GCOV is on
+if (WITH_GCOV)
     set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} --coverage)
 endif()
 

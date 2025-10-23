@@ -89,8 +89,6 @@ Usage: $0 <options>
                         build Backend with shared-data feature support
      --use-staros       DEPRECATED, an alias of --enable-shared-data option
      --with-gcov        build Backend with gcov, has an impact on performance
-     --with-gcov-incremental
-                        build Backend with gcov only for changed files (faster than full gcov)
      --without-gcov     build Backend without gcov(default)
      --with-bench       build Backend with bench(default without bench)
      --with-clang-tidy  build Backend with clang-tidy(default without clang-tidy)
@@ -123,7 +121,6 @@ Usage: $0 <options>
     $0 --spark-dpp                               build Spark DPP application alone
     $0 --hive-udf                                build Hive UDF
     $0 --be --output PATH                        build Backend that outputs results to a specified path (relative paths are supported).
-    $0 --be --with-gcov-incremental              build Backend with incremental coverage (faster than full gcov)
     BUILD_TYPE=build_type ./build.sh --be        build Backend is different mode (build_type could be Release, Debug, or Asan. Default value is Release. To build Backend in Debug mode, you can execute: BUILD_TYPE=Debug ./build.sh --be)
     DISABLE_JAVA_CHECK_STYLE=ON ./build.sh       build with Java checkstyle disabled
   "
@@ -140,7 +137,6 @@ OPTS=$(getopt \
   -l 'hive-udf' \
   -l 'clean' \
   -l 'with-gcov' \
-  -l 'with-gcov-incremental' \
   -l 'with-bench' \
   -l 'with-clang-tidy' \
   -l 'without-gcov' \
@@ -173,7 +169,6 @@ BUILD_SPARK_DPP=
 BUILD_HIVE_UDF=
 CLEAN=
 WITH_GCOV=OFF
-WITH_GCOV_INCREMENTAL=ON
 WITH_BENCH=OFF
 WITH_CLANG_TIDY=OFF
 WITH_COMPRESS=ON
@@ -280,7 +275,6 @@ else
             --hive-udf) BUILD_HIVE_UDF=1 ; shift ;;
             --clean) CLEAN=1 ; shift ;;
             --with-gcov) WITH_GCOV=ON; shift ;;
-            --with-gcov-incremental) WITH_GCOV_INCREMENTAL=ON; shift ;;
             --without-gcov) WITH_GCOV=OFF; shift ;;
             --enable-shared-data|--use-staros) USE_STAROS=ON; shift ;;
             --with-bench) WITH_BENCH=ON; shift ;;
@@ -304,13 +298,8 @@ else
     done
 fi
 
-if [[ "${BUILD_TYPE}" == "ASAN" && ("${WITH_GCOV}" == "ON" || "${WITH_GCOV_INCREMENTAL}" == "ON") ]]; then
+if [[ "${BUILD_TYPE}" == "ASAN" && ("${WITH_GCOV}" == "ON") ]]; then
     echo "Error: ASAN and gcov cannot be enabled at the same time. Please disable one of them."
-    exit 1
-fi
-
-if [[ "${WITH_GCOV}" == "ON" && "${WITH_GCOV_INCREMENTAL}" == "ON" ]]; then
-    echo "Error: --with-gcov and --with-gcov-incremental cannot be used together. Please use only one."
     exit 1
 fi
 
@@ -321,7 +310,7 @@ fi
 
 # Handle incremental gcov: detect changed files
 GCOV_INCREMENTAL_FILES=""
-if [[ "${WITH_GCOV_INCREMENTAL}" == "ON" ]]; then
+if [[ "${WITH_GCOV}" == "ON" ]]; then
     # Source the common incremental file detection script
     source ${STARROCKS_HOME}/build-support/detect_incremental_files.sh
     detect_incremental_files "build"
@@ -350,7 +339,6 @@ echo "Get params:
     CCACHE                      -- ${CCACHE}
     CLEAN                       -- $CLEAN
     WITH_GCOV                   -- $WITH_GCOV
-    WITH_GCOV_INCREMENTAL       -- $WITH_GCOV_INCREMENTAL
     WITH_BENCH                  -- $WITH_BENCH
     WITH_CLANG_TIDY             -- $WITH_CLANG_TIDY
     WITH_COMPRESS_DEBUG_SYMBOL  -- $WITH_COMPRESS
@@ -481,7 +469,6 @@ if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
                   -DCMAKE_CXX_COMPILER_LAUNCHER=${CXX_COMPILER_LAUNCHER} \
                   -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}                \
                   -DMAKE_TEST=OFF -DWITH_GCOV=${WITH_GCOV}              \
-                  -DWITH_GCOV_INCREMENTAL=${WITH_GCOV_INCREMENTAL}      \
                   -DGCOV_INCREMENTAL_FILES="${GCOV_INCREMENTAL_FILES}"  \
                   -DUSE_AVX2=$USE_AVX2 -DUSE_AVX512=$USE_AVX512         \
                   -DUSE_SSE4_2=$USE_SSE4_2 -DUSE_BMI_2=$USE_BMI_2       \

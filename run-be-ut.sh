@@ -37,7 +37,6 @@ Usage: $0 <options>
      --dry-run                      dry-run unit tests
      --clean                        clean old unit tests before run
      --with-gcov                    enable to build with gcov
-     --with-gcov-incremental        enable to build with gcov only for changed files (faster than full gcov)
      --with-aws                     enable to test aws
      --with-bench                   enable to build with benchmark
      --excluding-test-suit          don't run cases of specific suit
@@ -54,7 +53,6 @@ Usage: $0 <options>
     $0 --test CompactionUtilsTest   run compaction test
     $0 --dry-run                    dry-run unit tests
     $0 --clean                      clean old unit tests before run
-    $0 --with-gcov-incremental      run unit tests with incremental coverage
     $0 --help                       display usage
     $0 --gtest_filter CompactionUtilsTest*:TabletUpdatesTest*   run the two test suites: CompactionUtilsTest and TabletUpdatesTest
   "
@@ -86,7 +84,6 @@ OPTS=$(getopt \
   -l 'dry-run' \
   -l 'clean' \
   -l 'with-gcov' \
-  -l 'with-gcov-incremental' \
   -l 'module:' \
   -l 'with-aws' \
   -l 'with-bench' \
@@ -119,7 +116,6 @@ HELP=0
 WITH_AWS=OFF
 USE_STAROS=OFF
 WITH_GCOV=OFF
-WITH_GCOV_INCREMENTAL=OFF
 WITH_STARCACHE=ON
 WITH_BRPC_KEEPALIVE=OFF
 WITH_DEBUG_SYMBOL_SPLIT=ON
@@ -135,7 +131,6 @@ while true; do
         --help) HELP=1 ; shift ;;
         --with-aws) WITH_AWS=ON; shift ;;
         --with-gcov) WITH_GCOV=ON; shift ;;
-        --with-gcov-incremental) WITH_GCOV_INCREMENTAL=ON; shift ;;
         --without-starcache) WITH_STARCACHE=OFF; shift ;;
         --with-brpc-keepalive) WITH_BRPC_KEEPALIVE=ON; shift ;;
         --excluding-test-suit) EXCLUDING_TEST_SUIT=$2; shift 2;;
@@ -148,13 +143,8 @@ while true; do
     esac
 done
 
-if [[ "${BUILD_TYPE}" == "ASAN" && ("${WITH_GCOV}" == "ON" || "${WITH_GCOV_INCREMENTAL}" == "ON") ]]; then
+if [[ "${BUILD_TYPE}" == "ASAN" && ("${WITH_GCOV}" == "ON") ]]; then
     echo "Error: ASAN and gcov cannot be enabled at the same time. Please disable one of them."
-    exit 1
-fi
-
-if [[ "${WITH_GCOV}" == "ON" && "${WITH_GCOV_INCREMENTAL}" == "ON" ]]; then
-    echo "Error: --with-gcov and --with-gcov-incremental cannot be used together. Please use only one."
     exit 1
 fi
 
@@ -165,7 +155,7 @@ fi
 
 # Handle incremental gcov: detect changed files
 GCOV_INCREMENTAL_FILES=""
-if [[ "${WITH_GCOV_INCREMENTAL}" == "ON" ]]; then
+if [[ "${WITH_GCOV}" == "ON" ]]; then
     # Source the common incremental file detection script
     source ${STARROCKS_HOME}/build-support/detect_incremental_files.sh
     detect_incremental_files "unit-test"
@@ -232,7 +222,6 @@ ${CMAKE_CMD}  -G "${CMAKE_GENERATOR}" \
             -DUSE_STAROS=${USE_STAROS} \
             -DSTARLET_INSTALL_DIR=${STARLET_INSTALL_DIR}          \
             -DWITH_GCOV=${WITH_GCOV} \
-            -DWITH_GCOV_INCREMENTAL=${WITH_GCOV_INCREMENTAL} \
             -DGCOV_INCREMENTAL_FILES="${GCOV_INCREMENTAL_FILES}" \
             -DWITH_STARCACHE=${WITH_STARCACHE} \
             -DWITH_BRPC_KEEPALIVE=${WITH_BRPC_KEEPALIVE} \
