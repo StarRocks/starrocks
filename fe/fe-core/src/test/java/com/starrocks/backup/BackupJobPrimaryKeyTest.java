@@ -51,8 +51,11 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.TableRefPersist;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.NodeMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.expression.TableName;
+import com.starrocks.system.Backend;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -181,6 +184,15 @@ public class BackupJobPrimaryKeyTest {
         LockManager lockManager = new LockManager();
         WarehouseManager warehouseManager = new WarehouseManagerEPack();
 
+        // Setup default NodeMgr with SystemInfoService
+        SystemInfoService infoService = new SystemInfoService();
+        Backend backend = new Backend(backendId, "127.0.0.1", 9050);
+        backend.setAlive(true);
+        infoService.addBackend(backend);
+        
+        NodeMgr nodeMgr = new NodeMgr();
+        Deencapsulation.setField(nodeMgr, "systemInfo", infoService);
+
         new Expectations(globalStateMgr) {
             {
                 globalStateMgr.getLocalMetastore().getDb(anyLong);
@@ -202,6 +214,10 @@ public class BackupJobPrimaryKeyTest {
                 globalStateMgr.getGtidGenerator();
                 minTimes = 0;
                 result = new GtidGenerator();
+
+                globalStateMgr.getNodeMgr();
+                minTimes = 0;
+                result = nodeMgr;
 
                 globalStateMgr.getLocalMetastore().getTable(testDbName, testTableName);
                 minTimes = 0;
