@@ -677,6 +677,7 @@ public:
         TypeDescriptor return_type(_type);
         std::vector<TypeDescriptor> arg_types = {TypeDescriptor::create_json_type(), TypeDescriptor(TYPE_VARCHAR)};
         _fn_context.reset(FunctionContext::create_context(&_state, &_mem_pool, return_type, arg_types));
+        _fn_context->set_constant_columns(Columns{nullptr, path_column->clone()});
     }
 
     ~JsonExtractIterator() override {
