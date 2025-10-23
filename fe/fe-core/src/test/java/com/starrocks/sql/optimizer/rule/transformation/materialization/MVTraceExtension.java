@@ -33,7 +33,10 @@ public class MVTraceExtension implements BeforeEachCallback, AfterEachCallback, 
         Object testInstance = context.getRequiredTestInstance();
         if (testInstance instanceof StarRocksTestBase) {
             StarRocksTestBase mvTest = (StarRocksTestBase) testInstance;
-            ConnectContext connectContext = mvTest.starRocksAssert.getCtx();
+            ConnectContext connectContext = mvTest.starRocksAssert != null ? mvTest.starRocksAssert.getCtx() : null;
+            if (connectContext == null) {
+                connectContext = new ConnectContext();
+            }
             Tracers.register(connectContext);
             Tracers.init(connectContext, "LOGS", "MV");
         }
