@@ -18,7 +18,7 @@ sidebar_label: Troubleshooting
 观察导入作业有两种方式：
 
 - 使用 SQL 语句 **[SHOW ROUTINE LOAD](../../sql-reference/sql-statements/loading_unloading/routine_load/SHOW_ROUTINE_LOAD.md)** 和 **[SHOW PIPES](../../sql-reference/sql-statements/loading_unloading/pipe/SHOW_PIPES.md)**。
-- 使用系统视图 **[information_schema.routine_load_jobs](../../sql-reference/information_schema/routine_load_jobs.md)** 和 **[information_schema.pipes](../../sql-reference/information_schema/pipes.md)**。
+- 使用系统视图 **information_schema.routine_load_jobs** 和 **[information_schema.pipes](../../sql-reference/information_schema/pipes.md)**。
 
 ## 观察导入任务
 
