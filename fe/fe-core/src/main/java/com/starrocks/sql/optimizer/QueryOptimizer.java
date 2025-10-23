@@ -131,7 +131,6 @@ import com.starrocks.sql.optimizer.task.TaskContext;
 import com.starrocks.sql.optimizer.task.TaskScheduler;
 import com.starrocks.sql.optimizer.validate.MVRewriteValidator;
 import com.starrocks.sql.optimizer.validate.OptExpressionValidator;
-import com.starrocks.sql.optimizer.validate.PlanValidator;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -309,8 +308,9 @@ public class QueryOptimizer extends Optimizer {
         mvScan.stream().map(scan -> ((MaterializedView) scan.getTable()).getDbId()).forEach(currentSqlDbIds::add);
 
         try (Timer ignored = Tracers.watchScope("PlanValidate")) {
+            rootTaskContext.getPlanValidator().enableAllCheckers();
             // valid the final plan
-            PlanValidator.getInstance().validatePlan(finalPlan, rootTaskContext);
+            rootTaskContext.getPlanValidator().validatePlan(finalPlan, rootTaskContext);
             // validate mv and log tracer if needed
             MVRewriteValidator mvRewriteValidator = new MVRewriteValidator(allLogicalOlapScanOperators);
             mvRewriteValidator.validateMV(connectContext, finalPlan, rootTaskContext);
@@ -573,6 +573,9 @@ public class QueryOptimizer extends Optimizer {
         rootTaskContext.setRequiredColumns(requiredColumns.clone());
         scheduler.rewriteOnce(tree, rootTaskContext, RuleSet.PRUNE_COLUMNS_RULES);
 
+        // Enable input dependencies checker after column pruning for rule transformation validation
+        rootTaskContext.getPlanValidator().enableInputDependenciesChecker();
+
         pruneTables(tree, rootTaskContext, requiredColumns);
 
         scheduler.rewriteIterative(tree, rootTaskContext, new PruneEmptyWindowRule());
@@ -647,7 +650,6 @@ public class QueryOptimizer extends Optimizer {
 
         scheduler.rewriteDownTop(tree, rootTaskContext, OnPredicateMoveAroundRule.INSTANCE);
         scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.PUSH_DOWN_PREDICATE_RULES);
-
         scheduler.rewriteIterative(tree, rootTaskContext, new PartitionColumnMinMaxRewriteRule());
         scheduler.rewriteOnce(tree, rootTaskContext, RuleSet.PARTITION_PRUNE_RULES);
         scheduler.rewriteIterative(tree, rootTaskContext, new RewriteMultiDistinctRule());
@@ -683,10 +685,8 @@ public class QueryOptimizer extends Optimizer {
         scheduler.rewriteOnce(tree, rootTaskContext, new PartitionColumnValueOnlyOnScanRule());
         // before MergeProjectWithChildRule, after INLINE_CTE and MergeApplyWithTableFunction
         scheduler.rewriteIterative(tree, rootTaskContext, RewriteUnnestBitmapRule.getInstance());
-
         // After this rule, we shouldn't generate logical project operator
         scheduler.rewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
-
         scheduler.rewriteOnce(tree, rootTaskContext, new EliminateSortColumnWithEqualityPredicateRule());
         scheduler.rewriteOnce(tree, rootTaskContext, new PushDownTopNBelowOuterJoinRule());
         // intersect rewrite depend on statistics
@@ -704,7 +704,6 @@ public class QueryOptimizer extends Optimizer {
         scheduler.rewriteOnce(tree, rootTaskContext, JsonPathRewriteRule.createForOlapScan());
         scheduler.rewriteIterative(tree, rootTaskContext, new RewriteMinMaxByMonotonicFunctionRule());
         scheduler.rewriteOnce(tree, rootTaskContext, RewriteSimpleAggToHDFSScanRule.SCAN_NO_PROJECT);
-
         // NOTE: This rule should be after MV Rewrite because MV Rewrite cannot handle
         // select count(distinct c) from t group by a, b
         // if this rule has applied before MV.
@@ -959,7 +958,6 @@ public class QueryOptimizer extends Optimizer {
     private OptExpression physicalRuleRewrite(ConnectContext connectContext, TaskContext rootTaskContext,
                                               OptExpression result) {
         Preconditions.checkState(result.getOp().isPhysical());
-
         int planCount = result.getPlanCount();
 
         // Since there may be many different plans in the logic phase, it's possible
