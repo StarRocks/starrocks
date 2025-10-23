@@ -18,7 +18,7 @@ This guide is designed to help DBAs and operation engineers monitor the status o
 There are two ways to observe load jobs:
 
 - Using SQL statements **[SHOW ROUTINE LOAD](../../sql-reference/sql-statements/loading_unloading/routine_load/SHOW_ROUTINE_LOAD.md)** and **[SHOW PIPES](../../sql-reference/sql-statements/loading_unloading/pipe/SHOW_PIPES.md)**.
-- Using system views **[information_schema.routine_load_jobs](../../sql-reference/information_schema/routine_load_jobs.md)** and **[information_schema.pipes](../../sql-reference/information_schema/pipes.md)**.
+- Using system views **information_schema.routine_load_jobs** and **[information_schema.pipes](../../sql-reference/information_schema/pipes.md)**.
 
 ## Observe load tasks
 
