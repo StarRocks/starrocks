@@ -26,6 +26,7 @@ import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTraceExtension;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
@@ -34,9 +35,20 @@ import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+<<<<<<< HEAD
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
+=======
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.openjdk.jmh.annotations.Scope;
+import org.openjdk.jmh.annotations.State;
+>>>>>>> 0a08eaa5c4 ([UT] Output trace logs when fe ut fails (#64408))
 
 import java.util.List;
 import java.util.Locale;
@@ -44,6 +56,11 @@ import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+<<<<<<< HEAD
+=======
+@ExtendWith(MVTraceExtension.class)
+@State(Scope.Thread) // Add State annotation with appropriate scope
+>>>>>>> 0a08eaa5c4 ([UT] Output trace logs when fe ut fails (#64408))
 public class MaterializedViewTestBase extends PlanTestBase {
     protected static final Logger LOG = LogManager.getLogger(MaterializedViewTestBase.class);
 
@@ -51,7 +68,7 @@ public class MaterializedViewTestBase extends PlanTestBase {
     protected static final String MATERIALIZED_VIEW_NAME = "mv0";
 
     // You can set it in each unit test for trace mv log: mv/all/"", default is "" which will output nothing.
-    private  String traceLogModule = "";
+    private  String traceLogModule = "MV";
 
     public void setTracLogModule(String module) {
         this.traceLogModule = module;
@@ -81,7 +98,30 @@ public class MaterializedViewTestBase extends PlanTestBase {
                 .useDatabase(MATERIALIZED_DB_NAME);
     }
 
+<<<<<<< HEAD
     @AfterClass
+=======
+    @BeforeEach
+    public void before() throws Exception {
+        super.setUp();
+        if (starRocksAssert != null) {
+            collectTables(starRocksAssert, existedTables);
+        }
+    }
+
+    @AfterEach
+    public void after() throws Exception {
+        if (starRocksAssert != null) {
+            try {
+                cleanup(starRocksAssert, existedTables);
+            } catch (Exception e) {
+                // ignore exception
+            }
+        }
+    }
+
+    @AfterAll
+>>>>>>> 0a08eaa5c4 ([UT] Output trace logs when fe ut fails (#64408))
     public static void afterClass() {
         try {
             starRocksAssert.dropDatabase(MATERIALIZED_DB_NAME);
@@ -145,10 +185,13 @@ public class MaterializedViewTestBase extends PlanTestBase {
                 } else {
                     this.rewritePlan = planAndTrace.first.getExplainString(TExplainLevel.NORMAL);
                 }
+<<<<<<< HEAD
                 if (!Strings.isNullOrEmpty(traceLogModule)) {
                     System.out.println(this.rewritePlan);
                 }
                 this.traceLog = planAndTrace.second;
+=======
+>>>>>>> 0a08eaa5c4 ([UT] Output trace logs when fe ut fails (#64408))
             } catch (Exception e) {
                 LOG.warn("test rewrite failed:", e);
                 this.exception = e;

@@ -45,6 +45,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.mv.MVPlanValidationResult;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.profile.Timer;
@@ -87,7 +88,6 @@ import java.util.PriorityQueue;
 import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
@@ -387,15 +387,44 @@ public class MvRewritePreprocessor {
                 .collect(Collectors.toSet());
     }
 
+<<<<<<< HEAD
     private List<MaterializedViewWrapper> getMVWithContext(MaterializedViewWrapper wrapper) {
+=======
+    /**
+     * Whether to load MV plan even if it's not in the plan cache.
+     * NOTE: to make sure the unit test is stable, we always load the MV plan in unit test.
+     */
+    private boolean isForceLoadMVPlan(MaterializedView mv) {
+        return FeConstants.runningUnitTest
+                || mv.getRefreshScheme().isSync()
+                || connectContext.getSessionVariable().isEnableMaterializedViewForceRewrite();
+    }
+
+    private List<MaterializedViewWrapper> getMVWithContext(MaterializedViewWrapper wrapper,
+                                                           long timeoutMs,
+                                                           boolean isForceLoad) {
+>>>>>>> 0a08eaa5c4 ([UT] Output trace logs when fe ut fails (#64408))
         final MaterializedView mv = wrapper.getMV();
         if (!mv.isActive()) {
             OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), "inactive");
             return null;
         }
+<<<<<<< HEAD
 
         List<MvPlanContext> mvPlanContexts = CachingMvPlanContextBuilder.getInstance()
                 .getPlanContext(connectContext.getSessionVariable(), mv);
+=======
+        // NOTE: To avoid building plan for every mv cost too much time, we should only get plan
+        // when the mv is in the plan cache.
+        List<MvPlanContext> mvPlanContexts;
+        if (isForceLoad) {
+            mvPlanContexts = CachingMvPlanContextBuilder.getInstance()
+                    .getPlanContext(connectContext.getSessionVariable(), mv);
+        } else {
+            mvPlanContexts = CachingMvPlanContextBuilder.getInstance()
+                    .getPlanContextIfPresent(mv, timeoutMs);
+        }
+>>>>>>> 0a08eaa5c4 ([UT] Output trace logs when fe ut fails (#64408))
         if (CollectionUtils.isEmpty(mvPlanContexts)) {
             OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), "invalid query plan");
             return null;
@@ -544,9 +573,18 @@ public class MvRewritePreprocessor {
                                                               Set<MaterializedViewWrapper> relatedMVs,
                                                               OptExpression queryOptExpression) {
         // choose all valid mvs and filter mvs that cannot be rewritten for the query
+<<<<<<< HEAD
         Set<MaterializedViewWrapper> validMVs = relatedMVs.stream()
                 .filter(wrapper ->
                         isMVValidToRewriteQuery(connectContext, wrapper.getMV(), false, queryTables, false).isValid())
+=======
+        int maxRelatedMVsLimit = connectContext.getSessionVariable().getCboMaterializedViewRewriteRelatedMVsLimit();
+        long timeoutMs = getPrepareTimeoutMsPerMV(Math.min(relatedMVs.size(), maxRelatedMVsLimit));
+        // to make unit test more stable, force build mv plan in unit test
+        Set<MaterializedViewWrapper> validMVs = relatedMVs.stream()
+                .filter(wrapper -> isMVValidToRewriteQuery(connectContext, wrapper.getMV(),
+                        queryTables, isForceLoadMVPlan(wrapper.getMV()), false, timeoutMs).isValid())
+>>>>>>> 0a08eaa5c4 ([UT] Output trace logs when fe ut fails (#64408))
                 .collect(Collectors.toSet());
         logMVPrepare(connectContext, "Choose {}/{} valid mvs after checking valid",
                 validMVs.size(), relatedMVs.size());
@@ -563,7 +601,12 @@ public class MvRewritePreprocessor {
         for (MaterializedViewWrapper wrapper : validMVs) {
             MaterializedView mv = wrapper.getMV();
             try {
+<<<<<<< HEAD
                 final List<MaterializedViewWrapper> mvWithPlanContext = getMVWithContext(wrapper);
+=======
+                boolean isForceLoad = isForceLoadMVPlan(mv);
+                final List<MaterializedViewWrapper> mvWithPlanContext = getMVWithContext(wrapper, timeoutMs, isForceLoad);
+>>>>>>> 0a08eaa5c4 ([UT] Output trace logs when fe ut fails (#64408))
                 if (CollectionUtils.isNotEmpty(mvWithPlanContext)) {
                     mvWithPlanContexts.addAll(mvWithPlanContext);
                 }
@@ -752,6 +795,93 @@ public class MvRewritePreprocessor {
     }
 
     /**
+<<<<<<< HEAD
+=======
+     * MV Preprocessing timeout is calculated based on the number of MVs to ensure mv preprocessor does not take too long.
+     * @param mvCount: the number of MVs to process
+     * @return: timeout in milliseconds for each MV preparation
+     */
+    private long getPrepareTimeoutMsPerMV(int mvCount) {
+        long defaultTimeout = connectContext.getSessionVariable().getOptimizerExecuteTimeout() / 2;
+        if (mvCount == 0) {
+            return defaultTimeout;
+        }
+        // Ensure at least 1 second per MV, but not more than the total timeout
+        return Math.max(1000, defaultTimeout / mvCount);
+    }
+
+    /**
+     * Process MVs with individual timeouts to allow continuation even if some timeout.
+     * Each MV gets a timeout of total_timeout / number_of_mvs to ensure fair distribution.
+     * 
+     * @param tracers Tracers for logging
+     * @param queryTables Query tables
+     * @param mvInfos List of MV info pairs to process
+     * @param exec Executor for async processing
+     */
+    private void processMVsWithIndividualTimeouts(Tracers tracers, Set<Table> queryTables,
+                                                 List<Pair<MaterializedViewWrapper, MvUpdateInfo>> mvInfos,
+                                                 Executor exec) {
+        if (mvInfos.isEmpty()) {
+            return;
+        }
+        long individualTimeoutMs = getPrepareTimeoutMsPerMV(mvInfos.size());
+        logMVPrepare(connectContext, "Processing {} MVs with individual timeout of {} ms each", mvInfos.size(),
+                individualTimeoutMs);
+        
+        List<CompletableFuture<Void>> futures = Lists.newArrayListWithExpectedSize(mvInfos.size());
+        List<String> timeoutMvNames = Lists.newArrayList();
+        List<String> failedMvNames = Lists.newArrayList();
+        
+        // Create futures for each MV
+        for (Pair<MaterializedViewWrapper, MvUpdateInfo> mvInfo : mvInfos) {
+            MaterializedView mv = mvInfo.first.getMV();
+            CompletableFuture<Void> future = CompletableFuture.supplyAsync(
+                    () -> prepareMV(tracers, queryTables, mvInfo.first, mvInfo.second), exec)
+                    .thenAccept(result -> {
+                        // Success case - result is already handled in prepareMV
+                    })
+                    .exceptionally(throwable -> {
+                        LOG.warn("Failed to prepare MV {}: {}", mv.getName(), throwable.getMessage());
+                        failedMvNames.add(mv.getName());
+                        return null;
+                    });
+            
+            futures.add(future);
+        }
+        
+        // Process each future with individual timeout
+        for (int i = 0; i < futures.size(); i++) {
+            CompletableFuture<Void> future = futures.get(i);
+            MaterializedView mv = mvInfos.get(i).first.getMV();
+            
+            try {
+                future.get(individualTimeoutMs, TimeUnit.MILLISECONDS);
+            } catch (TimeoutException e) {
+                LOG.warn("MV {} preparation timeout after {} ms", mv.getName(), individualTimeoutMs);
+                timeoutMvNames.add(mv.getName());
+                logMVPrepare("MV {} preparation timed out after {} ms", mv.getName(), individualTimeoutMs);
+                // Don't throw exception, continue with other MVs
+            } catch (InterruptedException e) {
+                LOG.warn("MV {} preparation interrupted", mv.getName());
+                Thread.currentThread().interrupt();
+                throw new RuntimeException("MV preparation interrupted", e);
+            } catch (Exception e) {
+                LOG.warn("MV {} preparation failed with execution exception", mv.getName(), e);
+                logMVPrepare(connectContext, "MV {} preparation failed: {}", mv.getName(), e.getMessage());
+                failedMvNames.add(mv.getName());
+                // Don't throw exception, continue with other MVs
+            }
+        }
+        
+        // Log summary
+        int successCount = mvInfos.size() - timeoutMvNames.size() - failedMvNames.size();
+        logMVPrepare(connectContext, "MV preparation summary: {} successful, {} timeout, {} failed out of {} total: {}",
+                successCount, timeoutMvNames.size(), failedMvNames.size(), mvInfos.size(), failedMvNames);
+    }
+
+    /**
+>>>>>>> 0a08eaa5c4 ([UT] Output trace logs when fe ut fails (#64408))
      * Get mv's partition names to refresh for partitioned MV.
      * @param mv:  input materialized view
      * @param mvPlanContext: the associated materialized view context

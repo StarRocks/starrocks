@@ -85,7 +85,13 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.ClassRule;
 import org.junit.jupiter.api.Assertions;
+<<<<<<< HEAD
 import org.junit.rules.TemporaryFolder;
+=======
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.api.io.TempDir;
+>>>>>>> 0a08eaa5c4 ([UT] Output trace logs when fe ut fails (#64408))
 
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -99,7 +105,25 @@ import java.util.stream.Collectors;
 /**
  * Base class for materialized view tests.
  */
+<<<<<<< HEAD
 public class MVTestBase extends StarRocksTestBase {
+=======
+@ExtendWith(MVTraceExtension.class)
+public abstract class MVTestBase extends StarRocksTestBase {
+
+    public interface ExceptionRunnable {
+        void run() throws Exception;
+    }
+
+    public interface ExecPlanChecker {
+        void check(ExecPlan execPlan) throws Exception;
+    }
+
+    public interface MVActionRunner {
+        void run(MaterializedView mv) throws Exception;
+    }
+
+>>>>>>> 0a08eaa5c4 ([UT] Output trace logs when fe ut fails (#64408))
     protected static final Logger LOG = LogManager.getLogger(MVTestBase.class);
     protected static ConnectContext connectContext;
     protected static PseudoCluster cluster;
@@ -135,9 +159,7 @@ public class MVTestBase extends StarRocksTestBase {
     }
 
     public String getFragmentPlan(String sql) throws Exception {
-        String s = UtFrameUtils.getPlanAndFragment(connectContext, sql).second.
-                getExplainString(TExplainLevel.NORMAL);
-        return s;
+        return getFragmentPlan(sql, "MV");
     }
 
     public String getFragmentPlan(String sql, String traceModule) throws Exception {
@@ -152,10 +174,13 @@ public class MVTestBase extends StarRocksTestBase {
         Pair<String, Pair<ExecPlan, String>> result =
                 UtFrameUtils.getFragmentPlanWithTrace(connectContext, sql, traceModule);
         Pair<ExecPlan, String> execPlanWithQuery = result.second;
+<<<<<<< HEAD
         String traceLog = execPlanWithQuery.second;
         if (!Strings.isNullOrEmpty(traceLog)) {
             System.out.println(traceLog);
         }
+=======
+>>>>>>> 0a08eaa5c4 ([UT] Output trace logs when fe ut fails (#64408))
         return execPlanWithQuery.first.getExplainString(level);
     }
 

@@ -638,5 +638,223 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVTestBase {
                     String tableName = (String) obj;
                     testMVRefreshWithTTLCondition(tableName);
                 });
+<<<<<<< HEAD
+=======
+        connectContext.getSessionVariable().setMaterializedViewRewriteMode("default");
+    }
+
+    @Test
+    public void testMVRefreshWithTTLConditionTT3() {
+        starRocksAssert.withTable(R1,
+                (obj) -> {
+                    String tableName = (String) obj;
+                    testMVRefreshWithTTLCondition(tableName);
+                });
+    }
+
+    @Test
+    public void testMVRefreshWithTTLConditionTT4() {
+        starRocksAssert.withTable(R2,
+                (obj) -> {
+                    String tableName = (String) obj;
+                    testMVRefreshWithTTLCondition(tableName);
+                });
+    }
+
+    @Test
+    public void testMVRefreshWithMultiTables() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE t1 (dt1 date, int1 int)\n" +
+                "PARTITION BY RANGE(dt1)\n" +
+                "(\n" +
+                "PARTITION p202006 VALUES LESS THAN (\"2020-07-01\"),\n" +
+                "PARTITION p202007 VALUES LESS THAN (\"2020-08-01\"),\n" +
+                "PARTITION p202008 VALUES LESS THAN (\"2020-09-01\")\n" +
+                ");");
+        starRocksAssert.withTable("CREATE TABLE t2 (dt2 date, int2 int);");
+        executeInsertSql("INSERT INTO t2 VALUES (\"2020-06-23\",1),(\"2020-07-23\",1),(\"2020-07-23\",1)" +
+                ",(\"2020-08-23\",1),(null,null);\n");
+        executeInsertSql("INSERT INTO t1 VALUES (\"2020-06-23\",1);\n");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv2 PARTITION BY dt1 " +
+                "REFRESH DEFERRED MANUAL PROPERTIES (\"partition_refresh_number\"=\"1\")\n" +
+                "AS SELECT dt1,sum(int1) from t1 group by dt1 union all\n" +
+                "SELECT dt2,sum(int2) from t2 group by dt2;");
+        String mvName = "mv2";
+        MaterializedView mv = starRocksAssert.getMv("test", mvName);
+        ExecuteOption executeOption = new ExecuteOption(70, false, new HashMap<>());
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Task task = TaskBuilder.buildMvTask(mv, testDb.getFullName());
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).setExecuteOption(executeOption).build();
+        initAndExecuteTaskRun(taskRun);
+        MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
+        MvTaskRunContext mvTaskRunContext = processor.getMvContext();
+        Assertions.assertTrue(mvTaskRunContext.getExecPlan() != null);
+        ExecPlan execPlan = mvTaskRunContext.getExecPlan();
+        assertPlanContains(execPlan, "     TABLE: t2\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 4: dt2 >= '2020-08-01', 4: dt2 < '2020-09-01'");
+        assertPlanContains(execPlan, "     TABLE: t1\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=1/3");
+    }
+
+    @Test
+    public void testMVRefreshWithMultiTables2() throws Exception {
+        String partitionTable = "CREATE TABLE partition_table (dt1 date, int1 int)\n" +
+                "PARTITION BY RANGE(dt1)\n" +
+                "(\n" +
+                "PARTITION p202006 VALUES LESS THAN (\"2020-07-01\"),\n" +
+                "PARTITION p202007 VALUES LESS THAN (\"2020-08-01\"),\n" +
+                "PARTITION p202008 VALUES LESS THAN (\"2020-09-01\")\n" +
+                ");";
+        String partitionTableValue = "INSERT INTO partition_table VALUES (\"2020-06-23\",1);\n";
+        String mvQuery = "CREATE MATERIALIZED VIEW mv2 " +
+                "PARTITION BY date_trunc('day', dt1) " +
+                "REFRESH DEFERRED MANUAL PROPERTIES (\"partition_refresh_number\"=\"1\")\n" +
+                "AS SELECT dt1,sum(int1) from partition_table group by dt1 union all\n" +
+                "SELECT dt2,sum(int2) from non_partition_table group by dt2;";
+        testMVRefreshWithOnePartitionAndOneUnPartitionTable(partitionTable, partitionTableValue, mvQuery,
+                "     TABLE: partition_table\n" +
+                        "     PREAGGREGATION: ON\n" +
+                        "     PREDICATES: (1: dt1 < '2020-09-01') OR (1: dt1 IS NULL)\n" +
+                        "     partitions=3/3",
+                "     TABLE: non_partition_table\n" +
+                        "     PREAGGREGATION: ON\n" +
+                        "     PREDICATES: (4: dt2 < '2020-09-01') OR (4: dt2 IS NULL)\n" +
+                        "     partitions=1/1");
+    }
+
+    @Test
+    public void testMVRefreshWithMultiTables1() throws Exception {
+        String partitionTable = "CREATE TABLE partition_table (dt1 date, int1 int)\n" +
+                "PARTITION BY date_trunc('day', dt1)";
+        starRocksAssert.withTable(partitionTable);
+        addRangePartition("partition_table", "p1", "2024-01-04", "2024-01-05");
+
+        String partitionTableValue = "INSERT INTO partition_table VALUES (\"2024-01-04\",1);\n";
+        String mvQuery = "CREATE MATERIALIZED VIEW mv2 " +
+                "PARTITION BY date_trunc('day', dt1) " +
+                "REFRESH DEFERRED MANUAL PROPERTIES (\"partition_refresh_number\"=\"1\")\n" +
+                "AS SELECT dt1,sum(int1) from partition_table group by dt1 union all\n" +
+                "SELECT dt2,sum(int2) from non_partition_table group by dt2;";
+
+        testMVRefreshWithOnePartitionAndOneUnPartitionTable("", partitionTableValue, mvQuery,
+                "     TABLE: non_partition_table\n" +
+                        "     PREAGGREGATION: ON\n" +
+                        "     PREDICATES: 4: dt2 >= '2024-01-04', 4: dt2 < '2024-01-05'\n" +
+                        "     partitions=1/1",
+                "     TABLE: partition_table\n" +
+                        "     PREAGGREGATION: ON\n" +
+                        "     partitions=1/1");
+    }
+
+    @Test
+    public void testMVWithEmptyRefresh1() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE t1 (dt1 date, int1 int)\n" +
+                "PARTITION BY RANGE(dt1)\n" +
+                "(\n" +
+                "PARTITION p202006 VALUES LESS THAN (\"2020-07-01\"),\n" +
+                "PARTITION p202007 VALUES LESS THAN (\"2020-08-01\"),\n" +
+                "PARTITION p202008 VALUES LESS THAN (\"2020-09-01\")\n" +
+                ");");
+        starRocksAssert.withTable("CREATE TABLE t2 (dt2 date, int2 int);");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv2 PARTITION BY dt1 " +
+                "REFRESH DEFERRED MANUAL PROPERTIES (\"partition_refresh_number\"=\"1\")\n" +
+                "AS SELECT dt1,sum(int1) from t1 group by dt1 union all\n" +
+                "SELECT dt2,sum(int2) from t2 group by dt2;");
+        String mvName = "mv2";
+        MaterializedView mv = starRocksAssert.getMv("test", mvName);
+        ExecuteOption executeOption = new ExecuteOption(70, false, new HashMap<>());
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Task task = TaskBuilder.buildMvTask(mv, testDb.getFullName());
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).setExecuteOption(executeOption).build();
+        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+        Constants.TaskRunState state = taskRun.executeTaskRun();
+        Assertions.assertEquals(Constants.TaskRunState.SKIPPED, state);
+    }
+
+    @Test
+    public void testMVWithEmptyRefresh2() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE t1 (dt1 date, int1 int)\n" +
+                "PARTITION BY RANGE(dt1)\n" +
+                "(\n" +
+                "PARTITION p202006 VALUES LESS THAN (\"2020-07-01\"),\n" +
+                "PARTITION p202007 VALUES LESS THAN (\"2020-08-01\"),\n" +
+                "PARTITION p202008 VALUES LESS THAN (\"2020-09-01\")\n" +
+                ");");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv2 PARTITION BY dt1 " +
+                "REFRESH DEFERRED MANUAL PROPERTIES (\"partition_refresh_number\"=\"1\")\n" +
+                "AS SELECT dt1,sum(int1) from t1 group by dt1;");
+        String mvName = "mv2";
+        MaterializedView mv = starRocksAssert.getMv("test", mvName);
+        ExecuteOption executeOption = new ExecuteOption(70, false, new HashMap<>());
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Task task = TaskBuilder.buildMvTask(mv, testDb.getFullName());
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).setExecuteOption(executeOption).build();
+        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+        Constants.TaskRunState state = taskRun.executeTaskRun();
+        Assertions.assertEquals(Constants.TaskRunState.SKIPPED, state);
+    }
+
+    @Test
+    public void testExplainMVRefresh1() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE t1 (dt1 date, int1 int)\n" +
+                "PARTITION BY RANGE(dt1)\n" +
+                "(\n" +
+                "   PARTITION p202006 VALUES LESS THAN (\"2020-07-01\"),\n" +
+                "   PARTITION p202007 VALUES LESS THAN (\"2020-08-01\"),\n" +
+                "   PARTITION p202008 VALUES LESS THAN (\"2020-09-01\")\n" +
+                ");");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test_mv1 PARTITION BY dt1 " +
+                "REFRESH DEFERRED MANUAL PROPERTIES (\"partition_refresh_number\"=\"1\")\n" +
+                "AS SELECT dt1,sum(int1) from t1 group by dt1;");
+        MaterializedView mv = getMv("test_mv1");
+        List<String> explainQueries = List.of(
+                "explain refresh materialized view test_mv1",
+                "explain verbose refresh materialized view test.test_mv1",
+                "explain costs refresh materialized view `test`.`test_mv1`",
+                "explain refresh materialized view `test`.`test_mv1` force"
+        );
+        List<String> traceQueries = List.of(
+                "trace logs optimizer refresh materialized view test.test_mv1",
+                "trace times refresh materialized view `test`.`test_mv1`",
+                "trace times optimizer refresh materialized view `test`.`test_mv1`",
+                "trace logs optimizer refresh materialized view test_mv1 force",
+                "trace times refresh materialized view `test`.`test_mv1` force",
+                "trace times optimizer refresh materialized view `test`.`test_mv1` force"
+        );
+        for (String query : explainQueries) {
+            // skip run
+            ExecPlan execPlan = getMVRefreshExecPlan(mv, query);
+            if (query.contains("force")) {
+                Assertions.assertNotNull(execPlan, execPlan.getExplainString(StatementBase.ExplainLevel.NORMAL));
+            } else {
+                Assertions.assertNull(execPlan);
+            }
+        }
+        for (String query : traceQueries) {
+            // skip run
+            ExecPlan execPlan = getMVRefreshExecPlan(mv, query);
+            if (query.contains("force")) {
+                Assertions.assertNotNull(execPlan, execPlan.getExplainString(StatementBase.ExplainLevel.NORMAL));
+            } else {
+                Assertions.assertNull(execPlan);
+            }
+        }
+
+        executeInsertSql("INSERT INTO t1 VALUES (\"2020-06-23\",1);\n");
+        for (String query : explainQueries) {
+            String plan = explainMVRefreshExecPlan(mv, query);
+            PlanTestBase.assertContains(plan, "  OLAP TABLE SINK\n" +
+                    "    TABLE: test_mv1");
+
+            if (query.contains("verbose")) {
+                PlanTestBase.assertContains(plan, "MVToRefreshedPartitions", "p202008");
+            }
+        }
+        for (String query : traceQueries) {
+            String plan = explainMVRefreshExecPlan(mv, query);
+            Assertions.assertFalse(plan.isEmpty());
+        }
+>>>>>>> 0a08eaa5c4 ([UT] Output trace logs when fe ut fails (#64408))
     }
 }
