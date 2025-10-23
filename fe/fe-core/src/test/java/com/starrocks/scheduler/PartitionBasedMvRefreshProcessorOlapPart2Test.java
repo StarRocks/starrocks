@@ -638,9 +638,6 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVTestBase {
                     String tableName = (String) obj;
                     testMVRefreshWithTTLCondition(tableName);
                 });
-<<<<<<< HEAD
-=======
-        connectContext.getSessionVariable().setMaterializedViewRewriteMode("default");
     }
 
     @Test

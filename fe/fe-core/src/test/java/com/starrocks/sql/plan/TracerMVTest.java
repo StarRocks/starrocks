@@ -182,11 +182,7 @@ public class TracerMVTest extends MaterializedViewTestBase {
         Tracers.toRuntimeProfile(runtimeProfile);
 
         Map<String, String> result = runtimeProfile.getInfoStrings();
-<<<<<<< HEAD
-        Assert.assertTrue(result.isEmpty());
-=======
-        Assertions.assertFalse(result.isEmpty());
->>>>>>> 0a08eaa5c4 ([UT] Output trace logs when fe ut fails (#64408))
+        Assert.assertFalse(result.isEmpty());
     }
 
     @Test

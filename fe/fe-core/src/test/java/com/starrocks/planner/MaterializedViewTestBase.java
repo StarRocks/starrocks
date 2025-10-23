@@ -37,20 +37,11 @@ import com.starrocks.utframe.StarRocksTestBase;
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-<<<<<<< HEAD
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
-=======
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.extension.ExtendWith;
 import org.openjdk.jmh.annotations.Scope;
 import org.openjdk.jmh.annotations.State;
-
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -100,9 +91,7 @@ public class MaterializedViewTestBase extends PlanTestBase {
                 .useDatabase(MATERIALIZED_DB_NAME);
     }
 
-<<<<<<< HEAD
-    @AfterClass
-=======
+
     @BeforeEach
     public void before() throws Exception {
         super.setUp();
@@ -122,8 +111,7 @@ public class MaterializedViewTestBase extends PlanTestBase {
         }
     }
 
-    @AfterAll
->>>>>>> 0a08eaa5c4 ([UT] Output trace logs when fe ut fails (#64408))
+    @AfterClass
     public static void afterClass() {
         try {
             starRocksAssert.dropDatabase(MATERIALIZED_DB_NAME);

@@ -84,14 +84,8 @@ import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.ClassRule;
-import org.junit.jupiter.api.Assertions;
-<<<<<<< HEAD
-import org.junit.rules.TemporaryFolder;
-=======
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.junit.jupiter.api.io.TempDir;
->>>>>>> 0a08eaa5c4 ([UT] Output trace logs when fe ut fails (#64408))
+import org.junit.rules.TemporaryFolder;
 
 import java.sql.SQLException;
 import java.util.ArrayList;
