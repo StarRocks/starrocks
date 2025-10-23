@@ -8551,9 +8551,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-<<<<<<< HEAD
-    public ParseNode visitRefreshSchemeDesc(StarRocksParser.RefreshSchemeDescContext context) {
-=======
     public ParseNode visitAlterModifyDefaultBuckets(
             com.starrocks.sql.parser.StarRocksParser.AlterModifyDefaultBucketsContext context) {
         NodePosition pos = createPos(context);
@@ -8567,8 +8564,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitRefreshSchemeDesc(com.starrocks.sql.parser.StarRocksParser.RefreshSchemeDescContext context) {
->>>>>>> 14b4b70e1a ([Enhancement] Add ALTER TABLE MODIFY DEFAULT BUCKETS support (#63795))
+    public ParseNode visitRefreshSchemeDesc(StarRocksParser.RefreshSchemeDescContext context) {
         LocalDateTime startTime = LocalDateTime.now();
         IntervalLiteral intervalLiteral = null;
         NodePosition pos = createPos(context);
