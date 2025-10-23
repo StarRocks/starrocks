@@ -56,14 +56,10 @@ import com.starrocks.common.util.concurrent.lock.LockManager;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
-<<<<<<< HEAD
-=======
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.NodeMgr;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
->>>>>>> e04cf282a3 ([BugFix] Consider the replica status when choosing a replica for backup (#64319))
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
