@@ -513,6 +513,8 @@ Status ScalarColumnReader::_read_range_impl(const Range<uint64_t>& range, const 
         } else {
             if (_tmp_intermediate_column == nullptr) {
                 _tmp_intermediate_column = _converter->create_src_column();
+            } else {
+                _tmp_intermediate_column->resize(0);
             }
             _tmp_intermediate_column->reserve(range.span_size());
             {

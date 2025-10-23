@@ -305,7 +305,7 @@ size_t Chunk::filter(const Buffer<uint8_t>& selection, bool force) {
         return num_rows();
     }
     for (auto& column : _columns) {
-        MutableColumnPtr mutable_column = std::move(*column).mutate();
+        MutableColumnPtr mutable_column = Column::mutate(column);
         mutable_column->filter(selection);
         column = std::move(mutable_column);
     }
@@ -314,7 +314,7 @@ size_t Chunk::filter(const Buffer<uint8_t>& selection, bool force) {
 
 size_t Chunk::filter_range(const Buffer<uint8_t>& selection, size_t from, size_t to) {
     for (auto& column : _columns) {
-        MutableColumnPtr mutable_column = std::move(*column).mutate();
+        MutableColumnPtr mutable_column = Column::mutate(column);
         mutable_column->filter_range(selection, from, to);
         column = std::move(mutable_column);
     }
