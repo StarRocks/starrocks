@@ -20,6 +20,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.JDBCResource;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
@@ -505,9 +506,19 @@ public class MysqlSchemaResolverTest {
         
         Type type = resolver.convertColumnType(java.sql.Types.LONGVARCHAR, "JSON", 1073741824, 0);
         Assertions.assertEquals(PrimitiveType.VARCHAR, type.getPrimitiveType());
+        Assertions.assertEquals(1073741824, ((ScalarType) type).getLength());
+        
+        type = resolver.convertColumnType(java.sql.Types.LONGVARCHAR, "JSON", 0, 0);
+        Assertions.assertEquals(PrimitiveType.VARCHAR, type.getPrimitiveType());
+        Assertions.assertEquals(1073741824, ((ScalarType) type).getLength());
         
         type = resolver.convertColumnType(java.sql.Types.OTHER, "JSON", 1073741824, 0);
         Assertions.assertEquals(PrimitiveType.VARCHAR, type.getPrimitiveType());
+        Assertions.assertEquals(1073741824, ((ScalarType) type).getLength());
+        
+        type = resolver.convertColumnType(java.sql.Types.OTHER, "JSON", 0, 0);
+        Assertions.assertEquals(PrimitiveType.VARCHAR, type.getPrimitiveType());
+        Assertions.assertEquals(1073741824, ((ScalarType) type).getLength());
     }
 
     @Test
