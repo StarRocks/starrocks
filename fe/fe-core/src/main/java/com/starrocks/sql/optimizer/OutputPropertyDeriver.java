@@ -54,6 +54,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalNestLoopJoinOperato
 import com.starrocks.sql.optimizer.operator.physical.PhysicalNoCTEOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalRawValuesOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalRepeatOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalSchemaScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalSetOperation;
@@ -615,6 +616,13 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
         return createGatherPropertySet();
     }
 
+<<<<<<< HEAD
+=======
+    @Override
+    public PhysicalPropertySet visitPhysicalRawValues(PhysicalRawValuesOperator node, ExpressionContext context) {
+        return createGatherPropertySet();
+    }
+>>>>>>> 46b658ae6d ([Enhancement] optimize large in predicate (#64194))
 
     private void updatePropertyWithProjection(Projection projection, PhysicalPropertySet oldProperty) {
         if (projection == null) {

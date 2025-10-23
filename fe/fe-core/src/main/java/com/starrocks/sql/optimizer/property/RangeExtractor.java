@@ -20,11 +20,17 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
+<<<<<<< HEAD
 import com.starrocks.analysis.BinaryType;
+=======
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.common.LargeInPredicateException;
+>>>>>>> 46b658ae6d ([Enhancement] optimize large in predicate (#64194))
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LargeInPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 
@@ -78,10 +84,24 @@ public class RangeExtractor extends ScalarOperatorVisitor<Void, Void> {
             return visit(predicate, context);
         }
 
+<<<<<<< HEAD
         Map<ScalarOperator, ValueDescriptor> leftMap =
                 new RangeExtractor().apply(predicate.getChild(0), context);
         Map<ScalarOperator, ValueDescriptor> rightMap =
                 new RangeExtractor().apply(predicate.getChild(1), context);
+=======
+        @Override
+        public Void visitLargeInPredicate(LargeInPredicateOperator predicate, Void context) {
+            throw new LargeInPredicateException("not support large in predicate in the RangeValueExtractor");
+        }
+
+        @Override
+        public Void visitInPredicate(InPredicateOperator predicate, Void context) {
+            if (!predicate.isNotIn() && predicate.allValuesMatch(ScalarOperator::isConstantRef)) {
+                Preconditions.checkState(!descMap.containsKey(predicate.getChild(0)));
+                descMap.put(predicate.getChild(0), ValueDescriptor.in(predicate));
+            }
+>>>>>>> 46b658ae6d ([Enhancement] optimize large in predicate (#64194))
 
         HashMap<ScalarOperator, ValueDescriptor> intersectMap = Maps.newHashMap();
         Set<ScalarOperator> intersectKeys = Sets.intersection(leftMap.keySet(), rightMap.keySet());

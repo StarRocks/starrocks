@@ -101,6 +101,59 @@ import com.starrocks.sql.ast.LambdaFunctionExpr;
 import com.starrocks.sql.ast.MapExpr;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.UserVariable;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.expression.AnalyticExpr;
+import com.starrocks.sql.ast.expression.ArithmeticExpr;
+import com.starrocks.sql.ast.expression.ArrayExpr;
+import com.starrocks.sql.ast.expression.ArraySliceExpr;
+import com.starrocks.sql.ast.expression.ArrowExpr;
+import com.starrocks.sql.ast.expression.BetweenPredicate;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.BoolLiteral;
+import com.starrocks.sql.ast.expression.CaseExpr;
+import com.starrocks.sql.ast.expression.CastExpr;
+import com.starrocks.sql.ast.expression.CloneExpr;
+import com.starrocks.sql.ast.expression.CollectionElementExpr;
+import com.starrocks.sql.ast.expression.CompoundPredicate;
+import com.starrocks.sql.ast.expression.DefaultValueExpr;
+import com.starrocks.sql.ast.expression.DictQueryExpr;
+import com.starrocks.sql.ast.expression.DictionaryGetExpr;
+import com.starrocks.sql.ast.expression.ExistsPredicate;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprId;
+import com.starrocks.sql.ast.expression.FieldReference;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.FunctionName;
+import com.starrocks.sql.ast.expression.GroupingFunctionCallExpr;
+import com.starrocks.sql.ast.expression.InPredicate;
+import com.starrocks.sql.ast.expression.InformationFunction;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.IsNullPredicate;
+import com.starrocks.sql.ast.expression.LambdaArgument;
+import com.starrocks.sql.ast.expression.LambdaFunctionExpr;
+import com.starrocks.sql.ast.expression.LargeInPredicate;
+import com.starrocks.sql.ast.expression.LargeIntLiteral;
+import com.starrocks.sql.ast.expression.LikePredicate;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.MapExpr;
+import com.starrocks.sql.ast.expression.MatchExpr;
+import com.starrocks.sql.ast.expression.MultiInPredicate;
+import com.starrocks.sql.ast.expression.NamedArgument;
+import com.starrocks.sql.ast.expression.NullLiteral;
+import com.starrocks.sql.ast.expression.Parameter;
+import com.starrocks.sql.ast.expression.PlaceHolderExpr;
+import com.starrocks.sql.ast.expression.Predicate;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.ast.expression.SubfieldExpr;
+import com.starrocks.sql.ast.expression.Subquery;
+import com.starrocks.sql.ast.expression.TableName;
+import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
+import com.starrocks.sql.ast.expression.UserVariableExpr;
+import com.starrocks.sql.ast.expression.VariableExpr;
+import com.starrocks.sql.common.LargeInPredicateException;
+>>>>>>> 46b658ae6d ([Enhancement] optimize large in predicate (#64194))
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.thrift.TDictQueryExpr;
 import com.starrocks.thrift.TFunctionBinaryType;
@@ -866,6 +919,47 @@ public class ExpressionAnalyzer {
                                     + " is invalid", child.getPos());
                 }
             }
+
+            return null;
+        }
+
+        @Override
+        public Void visitLargeInPredicate(LargeInPredicate node, Scope scope) {
+            predicateBaseAndCheck(node);
+            // check compatible type
+            List<Type> list = node.getChildren().stream().map(Expr::getType).collect(Collectors.toList());
+            Type compatibleType = TypeManager.getCompatibleTypeForBetweenAndIn(list, false);
+
+            if (compatibleType == Type.INVALID) {
+                throw new SemanticException("The input types (" + list.stream().map(Type::toSql).collect(
+                        Collectors.joining(",")) + ") of in predict are not compatible", node.getPos());
+            }
+
+            for (Expr child : node.getChildren()) {
+                Type type = child.getType();
+                if (!Type.canCastTo(type, compatibleType)) {
+                    throw new SemanticException(
+                            "in predicate type " + type.toSql() + " with type " + compatibleType.toSql()
+                                    + " is invalid", child.getPos());
+                }
+            }
+
+            Type columnType = node.getChildren().get(0).getType();
+            Type constantType = node.getChildren().get(1).getType();
+
+            // Only support: (1) columnType is IntegerType and constantType is bigint
+            //               (2) both column and value are string types
+            boolean isIntegerTypeBigint = columnType.isIntegerType() && constantType.isBigint();
+            boolean isBothString = columnType.isStringType() && constantType.isStringType();
+
+            if (!isIntegerTypeBigint && !isBothString) {
+                throw new LargeInPredicateException(
+                        "LargeInPredicate only supports: (1) compare type is IntegerType and constant type is BIGINT, " +
+                        "(2) both compare and constant are STRING types. Current types: compareType=%s, constantValueType=%s",
+                        columnType.toSql(), constantType.toSql());
+            }
+
+            node.setConstantType(constantType);
 
             return null;
         }

@@ -2505,7 +2505,9 @@ tupleInSubquery
     ;
 
 predicateOperations [ParserRuleContext value]
-    : NOT? IN '(' queryRelation ')'                                                       #inSubquery
+    : NOT? IN integerList                                                                 #inIntegerList
+    | NOT? IN stringList                                                                  #inStringList
+    | NOT? IN '(' queryRelation ')'                                                       #inSubquery
     | NOT? IN '(' expressionList ')'                                                      #inList
     | NOT? BETWEEN lower = valueExpression AND upper = predicate                          #between
     | NOT? (LIKE | RLIKE | REGEXP) pattern=valueExpression                                #like
@@ -2562,9 +2564,9 @@ primaryExpression
     ;
 
 literalExpression
-    : NULL                                                                                #nullLiteral
+    : number                                                                              #numericLiteral
+    | NULL                                                                                #nullLiteral
     | booleanValue                                                                        #booleanLiteral
-    | number                                                                              #numericLiteral
     | (DATE | DATETIME) string                                                            #dateLiteral
     | string                                                                              #stringLiteral
     | interval                                                                            #intervalLiteral
@@ -2769,6 +2771,10 @@ listPartitionValue
 
 stringList
     : '(' string (',' string)* ')'
+    ;
+
+integerList
+    : '(' INTEGER_VALUE (',' INTEGER_VALUE)* ')'
     ;
 
 literalExpressionList
@@ -3045,9 +3051,9 @@ assignmentList
     ;
 
 number
-    : DECIMAL_VALUE  #decimalValue
+    : INTEGER_VALUE  #integerValue
+    | DECIMAL_VALUE  #decimalValue
     | DOUBLE_VALUE   #doubleValue
-    | INTEGER_VALUE  #integerValue
     ;
 
 nonReserved

@@ -192,4 +192,31 @@ public class NonDeterministicVisitor extends OptExpressionVisitor<Boolean, Void>
         }
         return visitChildren(optExpression);
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    public Boolean visitLogicalValues(OptExpression optExpression, Void context) {
+        if (checkCommon(optExpression)) {
+            return true;
+        }
+        LogicalValuesOperator values = optExpression.getOp().cast();
+        for (List<ScalarOperator> row : values.getRows()) {
+            for (ScalarOperator scalarOperator : row) {
+                if (hasNonDeterministicFunc(scalarOperator)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    @Override
+    public Boolean visitLogicalRawValues(OptExpression optExpression, Void context) {
+        if (checkCommon(optExpression)) {
+            return true;
+        }
+        return false;
+    }
+>>>>>>> 46b658ae6d ([Enhancement] optimize large in predicate (#64194))
 }

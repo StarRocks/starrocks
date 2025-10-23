@@ -246,6 +246,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String MAX_PUSHDOWN_CONDITIONS_PER_COLUMN = "max_pushdown_conditions_per_column";
 
     public static final String ENABLE_LAMBDA_PUSHDOWN = "enable_lambda_pushdown";
+    
+    // Large IN predicate optimization: special fast path for queries with large IN constant lists.
+    // When enabled, IN predicates with many constants will be converted to a special streamlined format
+    // to avoid high overhead in FE parse/Analyzer/Planner/Deploy phases.
+    // LargeInPredicate will be transformed to Left semi/anti join for execution.
+    public static final String ENABLE_LARGE_IN_PREDICATE = "enable_large_in_predicate";
+    // Threshold for converting regular IN predicate to LargeInPredicate.
+    // When the number of constant elements in an IN predicate exceeds this threshold,
+    // it will be converted to LargeInPredicate for optimized processing.
+    public static final String LARGE_IN_PREDICATE_THRESHOLD = "large_in_predicate_threshold";
+
     // use new execution engine instead of the old one if enable_pipeline_engine is true,
     // the new execution engine split a fragment into pipelines, then create several drivers
     // from the pipeline for parallel executing, threads from global pool pick out the
@@ -976,6 +987,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_LOCAL_SHUFFLE_AGG)
     private boolean enableLocalShuffleAgg = true;
+
+    @VariableMgr.VarAttr(name = ENABLE_LARGE_IN_PREDICATE)
+    private boolean enableLargeInPredicate = true;
+
+    @VariableMgr.VarAttr(name = LARGE_IN_PREDICATE_THRESHOLD)
+    private int largeInPredicateThreshold = 100000;
 
     @VariableMgr.VarAttr(name = USE_COMPUTE_NODES)
     private int useComputeNodes = -1;
@@ -2781,6 +2798,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setDistinctColumnBuckets(int buckets) {
         distinctColumnBuckets = buckets;
+    }
+
+    public boolean enableLargeInPredicate() {
+        return enableLargeInPredicate;
+    }
+
+    public void setEnableLargeInPredicate(boolean enableLargeInPredicate) {
+        this.enableLargeInPredicate = enableLargeInPredicate;
+    }
+
+    public int getLargeInPredicateThreshold() {
+        return largeInPredicateThreshold;
+    }
+
+    public void setLargeInPredicateThreshold(int largeInPredicateThreshold) {
+        this.largeInPredicateThreshold = largeInPredicateThreshold;
     }
 
     public int getDistinctColumnBuckets() {
