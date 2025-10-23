@@ -32,6 +32,7 @@ import com.starrocks.planner.ResultSink;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.TableFunctionTableSink;
 import com.starrocks.qe.scheduler.DefaultWorkerProvider;
+import com.starrocks.qe.scheduler.LazyWorkerProvider;
 import com.starrocks.qe.scheduler.TFragmentInstanceFactory;
 import com.starrocks.qe.scheduler.WorkerProvider;
 import com.starrocks.qe.scheduler.assignment.FragmentAssignmentStrategyFactory;
@@ -79,7 +80,7 @@ public class CoordinatorPreprocessor {
     private final ExecutionDAG executionDAG;
 
     private final WorkerProvider.Factory workerProviderFactory;
-    private WorkerProvider workerProvider;
+    private LazyWorkerProvider lazyWorkerProvider;
 
     private final FragmentAssignmentStrategyFactory fragmentAssignmentStrategyFactory;
 
@@ -93,10 +94,10 @@ public class CoordinatorPreprocessor {
         this.executionDAG = ExecutionDAG.build(jobSpec);
 
         SessionVariable sessionVariable = connectContext.getSessionVariable();
-        this.workerProvider = workerProviderFactory.captureAvailableWorkers(
+        this.lazyWorkerProvider = LazyWorkerProvider.of(() -> workerProviderFactory.captureAvailableWorkers(
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
                 sessionVariable.isPreferComputeNode(), sessionVariable.getUseComputeNodes(),
-                sessionVariable.getComputationFragmentSchedulingPolicy(), jobSpec.getComputeResource());
+                sessionVariable.getComputationFragmentSchedulingPolicy(), jobSpec.getComputeResource()));
 
         this.fragmentAssignmentStrategyFactory = new FragmentAssignmentStrategyFactory(connectContext, jobSpec, executionDAG);
 
@@ -114,10 +115,10 @@ public class CoordinatorPreprocessor {
         this.executionDAG = ExecutionDAG.build(jobSpec);
 
         SessionVariable sessionVariable = connectContext.getSessionVariable();
-        this.workerProvider = workerProviderFactory.captureAvailableWorkers(
+        this.lazyWorkerProvider = LazyWorkerProvider.of(() -> workerProviderFactory.captureAvailableWorkers(
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
                 sessionVariable.isPreferComputeNode(), sessionVariable.getUseComputeNodes(),
-                sessionVariable.getComputationFragmentSchedulingPolicy(), jobSpec.getComputeResource());
+                sessionVariable.getComputationFragmentSchedulingPolicy(), jobSpec.getComputeResource()));
 
         Map<PlanFragmentId, PlanFragment> fragmentMap =
                 fragments.stream().collect(Collectors.toMap(PlanFragment::getFragmentId, Function.identity()));
@@ -181,20 +182,28 @@ public class CoordinatorPreprocessor {
     }
 
     public TNetworkAddress getBrpcAddress(long workerId) {
-        return workerProvider.getWorkerById(workerId).getBrpcAddress();
+        return getWorkerProvider().getWorkerById(workerId).getBrpcAddress();
     }
 
     public TNetworkAddress getBrpcIpAddress(long workerId) {
-        return workerProvider.getWorkerById(workerId).getBrpcIpAddress();
+        return getWorkerProvider().getWorkerById(workerId).getBrpcIpAddress();
     }
 
     public TNetworkAddress getAddress(long workerId) {
-        ComputeNode worker = workerProvider.getWorkerById(workerId);
+        ComputeNode worker = getWorkerProvider().getWorkerById(workerId);
         return worker.getAddress();
     }
 
+    /**
+     * getWorkerProvider will trigger to load compute resource acquire, use LazyWorkerProvider instead if possible.
+     */
+    @Deprecated
     public WorkerProvider getWorkerProvider() {
-        return workerProvider;
+        return lazyWorkerProvider.get();
+    }
+
+    public LazyWorkerProvider getLazyWorkerProvider() {
+        return lazyWorkerProvider;
     }
 
     public TWorkGroup getResourceGroup() {
@@ -212,10 +221,10 @@ public class CoordinatorPreprocessor {
      */
     private void resetExec() throws StarRocksException {
         SessionVariable sessionVariable = connectContext.getSessionVariable();
-        workerProvider = workerProviderFactory.captureAvailableWorkers(
+        lazyWorkerProvider = LazyWorkerProvider.of(() -> workerProviderFactory.captureAvailableWorkers(
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
                 sessionVariable.isPreferComputeNode(), sessionVariable.getUseComputeNodes(),
-                sessionVariable.getComputationFragmentSchedulingPolicy(), jobSpec.getComputeResource());
+                sessionVariable.getComputationFragmentSchedulingPolicy(), jobSpec.getComputeResource()));
 
         jobSpec.getFragments().forEach(PlanFragment::reset);
     }
@@ -247,7 +256,7 @@ public class CoordinatorPreprocessor {
     @VisibleForTesting
     void computeFragmentInstances() throws StarRocksException {
         for (ExecutionFragment execFragment : executionDAG.getFragmentsInPostorder()) {
-            fragmentAssignmentStrategyFactory.create(execFragment, workerProvider).assignFragmentToWorker(execFragment);
+            fragmentAssignmentStrategyFactory.create(execFragment, lazyWorkerProvider.get()).assignFragmentToWorker(execFragment);
         }
         if (LOG.isDebugEnabled()) {
             executionDAG.getFragmentsInPreorder().forEach(
@@ -267,7 +276,7 @@ public class CoordinatorPreprocessor {
         for (FragmentInstance instance : execFragment.getInstances()) {
             instance.resetAllScanRanges();
         }
-        fragmentAssignmentStrategyFactory.create(execFragment, workerProvider).assignFragmentToWorker(execFragment);
+        fragmentAssignmentStrategyFactory.create(execFragment, lazyWorkerProvider.get()).assignFragmentToWorker(execFragment);
     }
 
     private void validateExecutionDAG() throws StarRocksPlannerException {

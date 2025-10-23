@@ -30,8 +30,8 @@ import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanNode;
 import com.starrocks.planner.ProjectNode;
 import com.starrocks.proto.PExecShortCircuitResult;
+import com.starrocks.qe.scheduler.LazyWorkerProvider;
 import com.starrocks.qe.scheduler.NonRecoverableException;
-import com.starrocks.qe.scheduler.WorkerProvider;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.ConfigurableSerDesFactory;
 import com.starrocks.rpc.PBackendService;
@@ -76,7 +76,7 @@ public class ShortCircuitHybridExecutor extends ShortCircuitExecutor {
     public ShortCircuitHybridExecutor(ConnectContext context, PlanFragment planFragment,
                                       List<TScanRangeLocations> scanRangeLocations, TDescriptorTable tDescriptorTable,
                                       boolean isBinaryRow, boolean enableProfile, String protocol,
-                                      WorkerProvider workerProvider) {
+                                      LazyWorkerProvider workerProvider) {
         super(context, planFragment, scanRangeLocations, tDescriptorTable, isBinaryRow, enableProfile,
                 protocol, workerProvider);
     }
@@ -220,7 +220,7 @@ public class ShortCircuitHybridExecutor extends ShortCircuitExecutor {
 
             Optional<Backend> be = pick(scanBackendIds, aliveIdToBackends);
             if (be.isEmpty()) {
-                workerProvider.reportWorkerNotFoundException();
+                workerProvider.get().reportWorkerNotFoundException();
             }
             be.ifPresent(backend -> backend2Tablets.put(be.get().getBrpcAddress(), tabletWithVersion));
         }
