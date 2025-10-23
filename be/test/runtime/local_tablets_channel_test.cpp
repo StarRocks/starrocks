@@ -258,11 +258,46 @@ TEST_F(LocalTabletsChannelTest, test_add_chunk_not_exist_tablet) {
     add_chunk_request.set_eos(true);
     add_chunk_request.set_packet_seq(0);
 
+    // NOTE: this is a malformed request, because the chunk is nullptr but tablet_ids is not empty().
     auto non_exist_tablet_id = _tablet->tablet_id() + 1;
     add_chunk_request.add_tablet_ids(non_exist_tablet_id);
 
     PTabletWriterAddBatchResult add_chunk_response;
     _tablets_channel->add_chunk(nullptr, add_chunk_request, &add_chunk_response);
+    ASSERT_EQ(TStatusCode::INTERNAL_ERROR, add_chunk_response.status().status_code()) << add_chunk_response.status();
+    _tablets_channel->abort();
+}
+
+TEST_F(LocalTabletsChannelTest, test_add_chunk_not_exist_tablet_for_chunk_rows) {
+    auto open_request = _open_single_replica_request;
+    ASSERT_OK(_tablets_channel->open(open_request, &_open_response, _schema_param, false));
+
+    PTabletWriterAddChunkRequest add_chunk_request;
+    PTabletWriterAddBatchResult add_chunk_response;
+
+    add_chunk_request.mutable_id()->CopyFrom(_load_id);
+    add_chunk_request.set_index_id(_index_id);
+    add_chunk_request.set_sender_id(0);
+    add_chunk_request.set_eos(false);
+    add_chunk_request.set_packet_seq(0);
+    add_chunk_request.set_timeout_ms(60000);
+    {
+        int num_rows = 10;
+        auto chunk = generate_data(num_rows);
+        for (int i = 0; i < num_rows; i++) {
+            if (i > num_rows / 2) {
+                // invalid tablet id, the channel is not opened
+                add_chunk_request.add_tablet_ids(_tablet_id + 1);
+            } else {
+                // valid tablet id, the channel is opened
+                add_chunk_request.add_tablet_ids(_tablet_id);
+            }
+            add_chunk_request.add_partition_ids(_partition_id);
+        }
+        _tablets_channel->add_chunk(&chunk, add_chunk_request, &add_chunk_response);
+        // chunk is released when out of the scope, simulating the resource release after RPC done.
+    }
+
     ASSERT_EQ(TStatusCode::INTERNAL_ERROR, add_chunk_response.status().status_code()) << add_chunk_response.status();
     _tablets_channel->abort();
 }

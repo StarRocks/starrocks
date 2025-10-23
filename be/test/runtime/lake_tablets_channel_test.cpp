@@ -600,11 +600,10 @@ TEST_F(LakeTabletsChannelTest, test_tablet_not_existed) {
     auto open_request = _open_request;
     open_request.set_num_senders(1);
 
+    // 4 tablets opened: 10086/10087/10088/10089
     ASSERT_OK(_tablets_channel->open(open_request, &_open_response, _schema_param, false));
 
-    constexpr int kChunkSize = 128;
-    constexpr int kChunkSizePerTablet = kChunkSize / 4;
-    auto chunk = generate_data(kChunkSize);
+    constexpr int num_rows = 128;
     PTabletWriterAddChunkRequest add_chunk_request;
     PTabletWriterAddBatchResult add_chunk_response;
     add_chunk_request.set_index_id(kIndexId);
@@ -612,22 +611,23 @@ TEST_F(LakeTabletsChannelTest, test_tablet_not_existed) {
     add_chunk_request.set_eos(false);
     add_chunk_request.set_packet_seq(0);
 
-    for (int i = 0; i < kChunkSize; i++) {
-        int64_t tablet_id = 10086 + (i / kChunkSizePerTablet);
+    for (int i = 0; i < num_rows; i++) {
+        // generate tablet_id: [10086,10087,10088,10089,10090], 10090 not opened in open_request
+        int64_t tablet_id = 10086 + i % 5;
         add_chunk_request.add_tablet_ids(tablet_id);
         add_chunk_request.add_partition_ids(tablet_id < 10088 ? 10 : 11);
     }
 
-    ASSIGN_OR_ABORT(auto chunk_pb, serde::ProtobufChunkSerde::serialize(chunk));
-    add_chunk_request.mutable_chunk()->Swap(&chunk_pb);
-
-    add_chunk_request.add_tablet_ids(10000); // Not existed tablet id
-
-    _tablets_channel->add_chunk(&chunk, add_chunk_request, &add_chunk_response);
-    ASSERT_NE(TStatusCode::INTERNAL_ERROR, add_chunk_response.status().status_code());
+    {
+        // `chunk` is only available inside the scope, will be released out of the scope to simulate resource release after RPC done.
+        auto chunk = generate_data(num_rows);
+        ASSIGN_OR_ABORT(auto chunk_pb, serde::ProtobufChunkSerde::serialize(chunk));
+        add_chunk_request.mutable_chunk()->Swap(&chunk_pb);
+        _tablets_channel->add_chunk(&chunk, add_chunk_request, &add_chunk_response);
+        ASSERT_EQ(TStatusCode::INTERNAL_ERROR, add_chunk_response.status().status_code());
+    }
 
     _tablets_channel->abort();
-
     ASSERT_FALSE(fs::path_exist(_tablet_manager->txn_log_location(10086, kTxnId)));
     ASSERT_FALSE(fs::path_exist(_tablet_manager->txn_log_location(10087, kTxnId)));
     ASSERT_FALSE(fs::path_exist(_tablet_manager->txn_log_location(10088, kTxnId)));
