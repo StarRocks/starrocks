@@ -40,10 +40,14 @@ PROPERTIES (
     "replication_num"="1"
 );
 
+<<<<<<< HEAD
 set enable_optimize_skew_join_by_query_rewrite=false;
 set enable_optimize_skew_join_by_broadcast_skew_values=true;
 -- large enough so global rf must deploy
 set runtime_filter_scan_wait_time=100000;
+=======
+set enable_optimize_skew_join_v2=true;
+>>>>>>> 9b7d952f55 ([Enhancement] rename session variable for skew join (#60659))
 
 -- tinyint
 truncate table t1;

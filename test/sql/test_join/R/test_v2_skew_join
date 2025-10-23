@@ -41,10 +41,7 @@ PROPERTIES (
 );
 -- result:
 -- !result
-set enable_optimize_skew_join_by_query_rewrite=false;
--- result:
--- !result
-set enable_optimize_skew_join_by_broadcast_skew_values=true;
+set enable_optimize_skew_join_v2=true;
 -- result:
 -- !result
 set runtime_filter_scan_wait_time=100000;
