@@ -1491,7 +1491,7 @@ public class QueryAnalyzer {
      * A lightweight visitor that only resolves FileTableFunctionRelation so that
      * files() schema can be inferred without acquiring DB/table locks. Normal tables/views are skipped.
      */
-    private class FilesOnlyVisitor implements AstVisitorExtendInterface<Scope, Scope> {
+    private class FilesOnlyVisitor implements AstVisitor<Scope, Scope> {
         public FilesOnlyVisitor() {}
 
         public Scope process(ParseNode node, Scope scope) {
