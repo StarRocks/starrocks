@@ -6,7 +6,7 @@ import os
 import shutil
 import subprocess
 
-io_netty_clean_version = "4.1.125.Final"
+io_netty_clean_version = "4.1.128.Final"
 
 fixed_poms = [
     ("com.fasterxml.jackson.core:jackson-core", "2.15.0"),
@@ -15,6 +15,7 @@ fixed_poms = [
     ("io.netty:netty-codec-http2", io_netty_clean_version),
     ("io.netty:netty-codec-http", io_netty_clean_version),
     ("io.netty:netty-codec-haproxy", io_netty_clean_version),
+    ("io.netty:netty-codec-smtp", io_netty_clean_version),
     ("io.netty:netty-common", io_netty_clean_version),
     ("io.netty:netty-all", io_netty_clean_version),
     ("com.google.protobuf:protobuf-java", "3.25.5"),
@@ -32,7 +33,7 @@ fixed_poms = [
 fixed_jars = [
     # common jars
     "kudu-client-1.17.1.jar",
-    "paimon-bundle-1.0.1.jar",
+    "paimon-bundle-1.2.0.jar",
     "bundle-2.29.52.jar",
     "hadoop-client-runtime-3.4.1.jar",
     "gcs-connector-hadoop3-2.2.26-shaded.jar",
