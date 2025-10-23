@@ -45,6 +45,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.mv.MVPlanValidationResult;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.profile.Timer;
@@ -87,7 +88,6 @@ import java.util.PriorityQueue;
 import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -389,8 +389,19 @@ public class MvRewritePreprocessor {
                 .collect(Collectors.toSet());
     }
 
+    /**
+     * Whether to load MV plan even if it's not in the plan cache.
+     * NOTE: to make sure the unit test is stable, we always load the MV plan in unit test.
+     */
+    private boolean isForceLoadMVPlan(MaterializedView mv) {
+        return FeConstants.runningUnitTest
+                || mv.getRefreshScheme().isSync()
+                || connectContext.getSessionVariable().isEnableMaterializedViewForceRewrite();
+    }
+
     private List<MaterializedViewWrapper> getMVWithContext(MaterializedViewWrapper wrapper,
-                                                           long timeoutMs) {
+                                                           long timeoutMs,
+                                                           boolean isForceLoad) {
         final MaterializedView mv = wrapper.getMV();
         if (!mv.isActive()) {
             OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), "inactive");
@@ -399,7 +410,7 @@ public class MvRewritePreprocessor {
         // NOTE: To avoid building plan for every mv cost too much time, we should only get plan
         // when the mv is in the plan cache.
         List<MvPlanContext> mvPlanContexts;
-        if (mv.getRefreshScheme().isSync() || connectContext.getSessionVariable().isEnableMaterializedViewForceRewrite()) {
+        if (isForceLoad) {
             mvPlanContexts = CachingMvPlanContextBuilder.getInstance()
                     .getPlanContext(connectContext.getSessionVariable(), mv);
         } else {
@@ -556,9 +567,10 @@ public class MvRewritePreprocessor {
         // choose all valid mvs and filter mvs that cannot be rewritten for the query
         int maxRelatedMVsLimit = connectContext.getSessionVariable().getCboMaterializedViewRewriteRelatedMVsLimit();
         long timeoutMs = getPrepareTimeoutMsPerMV(Math.min(relatedMVs.size(), maxRelatedMVsLimit));
+        // to make unit test more stable, force build mv plan in unit test
         Set<MaterializedViewWrapper> validMVs = relatedMVs.stream()
                 .filter(wrapper -> isMVValidToRewriteQuery(connectContext, wrapper.getMV(),
-                        queryTables, false, false, timeoutMs).isValid())
+                        queryTables, isForceLoadMVPlan(wrapper.getMV()), false, timeoutMs).isValid())
                 .collect(Collectors.toSet());
         logMVPrepare(connectContext, "Choose {}/{} valid mvs after checking valid",
                 validMVs.size(), relatedMVs.size());
@@ -575,7 +587,8 @@ public class MvRewritePreprocessor {
         for (MaterializedViewWrapper wrapper : validMVs) {
             MaterializedView mv = wrapper.getMV();
             try {
-                final List<MaterializedViewWrapper> mvWithPlanContext = getMVWithContext(wrapper, timeoutMs);
+                boolean isForceLoad = isForceLoadMVPlan(mv);
+                final List<MaterializedViewWrapper> mvWithPlanContext = getMVWithContext(wrapper, timeoutMs, isForceLoad);
                 if (CollectionUtils.isNotEmpty(mvWithPlanContext)) {
                     mvWithPlanContexts.addAll(mvWithPlanContext);
                 }
@@ -822,13 +835,15 @@ public class MvRewritePreprocessor {
             } catch (TimeoutException e) {
                 LOG.warn("MV {} preparation timeout after {} ms", mv.getName(), individualTimeoutMs);
                 timeoutMvNames.add(mv.getName());
+                logMVPrepare("MV {} preparation timed out after {} ms", mv.getName(), individualTimeoutMs);
                 // Don't throw exception, continue with other MVs
             } catch (InterruptedException e) {
                 LOG.warn("MV {} preparation interrupted", mv.getName());
                 Thread.currentThread().interrupt();
                 throw new RuntimeException("MV preparation interrupted", e);
-            } catch (ExecutionException e) {
+            } catch (Exception e) {
                 LOG.warn("MV {} preparation failed with execution exception", mv.getName(), e);
+                logMVPrepare(connectContext, "MV {} preparation failed: {}", mv.getName(), e.getMessage());
                 failedMvNames.add(mv.getName());
                 // Don't throw exception, continue with other MVs
             }
