@@ -38,7 +38,7 @@ public class MVTraceExtension implements BeforeEachCallback, AfterEachCallback, 
                 connectContext = new ConnectContext();
             }
             Tracers.register(connectContext);
-            Tracers.init(connectContext, "LOGS", "MV");
+            Tracers.init(connectContext, Tracers.Mode.LOGS, "MV");
         }
     }
 
