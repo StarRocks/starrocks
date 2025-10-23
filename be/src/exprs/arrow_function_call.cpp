@@ -100,7 +100,7 @@ Status ArrowFunctionCallExpr::open(RuntimeState* state, ExprContext* context,
         auto function_cache = UserFunctionCache::instance();
         UserFunctionCache::FunctionCacheDesc desc(_fn.fid, _fn.hdfs_location, _fn.checksum, _fn.binary_type, _fn.cloud_configuration);
         if (_fn.hdfs_location != "inline") {
-            RETURN_IF_ERROR(function_cache->get_libpath(desc, &_lib_path, _fn.cloud_configuration));
+            RETURN_IF_ERROR(function_cache->get_libpath(desc, &_lib_path));
         } else {
             _lib_path = "inline";
         }

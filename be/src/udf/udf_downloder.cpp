@@ -44,13 +44,15 @@ Status udf_downloder::setup_local_file_path(const std::string& local_path) {
 Status udf_downloder::do_download(const std::string& remotePath, std::string& localPath, const FSOptions& options) {
     LOG(INFO) << fmt::format("[udf_downloder] do_download() start: remote={}, local={}", remotePath, localPath);
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateUniqueFromString(remotePath, options));
+    ASSIGN_OR_RETURN(auto source_file, fs->new_sequential_file(remotePath));
+    ASSIGN_OR_RETURN(auto local_file, FileSystem::Default()->new_writable_file(localPath));
     if (!fs) {
         LOG(ERROR) << fmt::format("[udf_downloder] No matching filesystem for {}", remotePath);
         return Status::NotFound(fmt::format("No matching filesystem available for {}", remotePath));
     }
     LOG(INFO) << "[udf_downloder] Filesystem initialized successfully";
     LOG(INFO) << "[udf_downloder] Starting file copy...";
-    auto res = fs::copy_file(remotePath, localPath, 1024 * 1024);
+    auto res = fs::copy(source_file.get(), local_file.get(), 1024 * 1024);
     if (!res.ok()) {
         LOG(ERROR) << fmt::format("[udf_downloder] Failed to download from {} to {}", remotePath, localPath);
         return res.status();

@@ -240,7 +240,7 @@ Status JavaFunctionCallExpr::open(RuntimeState* state, ExprContext* context,
             _func_desc = std::any_cast<std::shared_ptr<JavaUDFContext>>(desc);
         } else {
             std::string libpath;
-            RETURN_IF_ERROR(function_cache->get_libpath(func_cache_desc, &libpath , _fn.cloud_configuration));
+            RETURN_IF_ERROR(function_cache->get_libpath(func_cache_desc, &libpath));
             ASSIGN_OR_RETURN(auto desc, get_func_desc(libpath));
             _func_desc = std::any_cast<std::shared_ptr<JavaUDFContext>>(desc);
         }

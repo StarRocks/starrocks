@@ -31,6 +31,7 @@ import com.starrocks.common.util.UDFInternalClassLoader;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.FunctionArgsDef;
 import com.starrocks.sql.ast.HdfsURI;
@@ -110,10 +111,15 @@ public class CreateFunctionAnalyzer {
 
     private String getJUdfUrl(String url) throws IOException {
         String fileName = url.substring(url.lastIndexOf("/") + 1);
-        StorageVolume sv = GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolumeByName(this.storageVolumeName);
+        StorageVolumeMgr storageVolumeMgr = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
+        if (storageVolumeMgr == null) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                    "StorageVolumeMgr is not initialized");
+        }
+        StorageVolume  sv = storageVolumeMgr.getStorageVolumeByName(this.storageVolumeName);
         if (sv == null) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
-                    "No corresponding cloud storage volume. Please create a cloud storage volume and choose it");
+                    String.format("Storage volume '%s' not found. Please create it first.", this.storageVolumeName));
         }
         String targetPath = String.format("%s/%s", STARROCKS_HOME_DIR + "/plugins/java_udf", fileName);
         String targetUrl = String.format("file://%s", targetPath);
