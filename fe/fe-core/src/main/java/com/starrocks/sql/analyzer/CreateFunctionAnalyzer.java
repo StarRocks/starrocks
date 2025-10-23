@@ -240,7 +240,9 @@ public class CreateFunctionAnalyzer {
         String objectFile = stmt.getProperties().get(CreateFunctionStmt.FILE_KEY);
         String isolation = stmt.getProperties().get(CreateFunctionStmt.ISOLATION_KEY);
         String storageVolumeName = stmt.getProperties().get(STORAGE_VOLUME_NAME_KEY);
-        StorageVolume storageVolume = GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolumeByName(storageVolumeName);
+        StorageVolume storageVolume = GlobalStateMgr.getCurrentState()
+                .getStorageVolumeMgr()
+                .getStorageVolumeByName(storageVolumeName);
         CloudConfiguration cloudConfiguration = storageVolume == null ? null : storageVolume.getCloudConfiguration();
         Function function = ScalarFunction.createUdf(
                 functionName, argsDef.getArgTypes(),
@@ -370,6 +372,11 @@ public class CreateFunctionAnalyzer {
         FunctionArgsDef argsDef = stmt.getArgsDef();
         TypeDef returnType = stmt.getReturnType();
         String objectFile = stmt.getProperties().get(CreateFunctionStmt.FILE_KEY);
+        String storageVolumeName = stmt.getProperties().get(STORAGE_VOLUME_NAME_KEY);
+        StorageVolume storageVolume = GlobalStateMgr.getCurrentState()
+                .getStorageVolumeMgr()
+                .getStorageVolumeByName(storageVolumeName);
+        CloudConfiguration cloudConfiguration = storageVolume == null ? null : storageVolume.getCloudConfiguration();
         {
             // TYPE[] process(INPUT)
             Method method = mainClass.getMethod(CreateFunctionStmt.PROCESS_METHOD_NAME, true);
@@ -388,6 +395,7 @@ public class CreateFunctionAnalyzer {
         tableFunction.setChecksum(checksum);
         tableFunction.setLocation(new HdfsURI(objectFile));
         tableFunction.setSymbolName(mainClass.getCanonicalName());
+        tableFunction.setCloudConfiguration(cloudConfiguration);
         return tableFunction;
     }
 

@@ -46,6 +46,8 @@ import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.sql.ast.HdfsURI;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.common.TypeManager;
+import com.starrocks.sql.ast.expression.FunctionName;
+import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TFunction;
 import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.thrift.TTypeDesc;
@@ -761,7 +763,11 @@ public class Function implements Writable {
         if (location != null) {
             fn.setHdfs_location(location.toString());
         }
-
+        if (cloudConfiguration != null) {
+            TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();
+            cloudConfiguration.toThrift(tCloudConfiguration);
+            fn.setCloud_configuration(tCloudConfiguration);
+        }
         ArrayList<TTypeDesc> result = Lists.newArrayList();
         for (Type t : argTypes) {
             result.add(TypeSerializer.toThrift(t));
