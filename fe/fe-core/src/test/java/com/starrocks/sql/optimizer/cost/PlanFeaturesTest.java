@@ -55,10 +55,10 @@ class PlanFeaturesTest extends PlanTestBase {
                     "| 41,0,0,0,0,0,0,0,42,0,0,0,0,0,0,0,0,0,0,43,0,0,0,0,0,0,0,0,0,45,0,0,0,0,0",
             "select * from (select * from ods_order join mysql_table where k1  = 'a' and order_dt = 'c') t1 where t1.k2 = 'c'" +
                     "| tables=[0,db1.tbl1,test.ods_order] " +
-                    "| 41,1,9,8,11,11,0,1,42,0,0,0,0,0,0,0,0,0,0,43,0,0,0,0,0,0,0,0,0,45",
+                    "| 41,1,0,8,2,2,0,1,42,0,0,0,0,0,0,0,0,0,0,43,0,0,0,0,0,0,0,0,0,45,",
             "select * from ods_order join mysql_table where k1  = 'a' and order_dt = 'c'" +
                     "| tables=[0,db1.tbl1,test.ods_order] " +
-                    "| 41,1,9,8,11,11,0,1,42,0,0,0,0,0,0,0,0,0,0,43,0,0,0,0,0,0,0,0,0,45",
+                    "| 41,1,0,8,2,2,0,1,42,0,0,0,0,0,0,0,0,0,0,43,0,0,0,0,0,0,0,0,0,45,",
 
     })
     public void testBasic(String query, String expectedTables, String expected) throws Exception {
