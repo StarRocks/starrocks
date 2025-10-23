@@ -148,7 +148,7 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
                 return ScalarType.createVarcharType(columnSize);
             case Types.LONGVARCHAR:
                 if (lowerTypeName.equals("json")) {
-                    return ScalarType.createVarcharType(columnSize);
+                    return ScalarType.createVarcharType(1073741824);
                 } else if (lowerTypeName.startsWith("tiny") || lowerTypeName.startsWith("medium") ||
                         lowerTypeName.equals("text") || lowerTypeName.startsWith("long")) {
                     return ScalarType.createVarcharType(columnSize);
@@ -186,7 +186,7 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
                 break;
             default:
                 if (lowerTypeName.equals("json")) {
-                    return ScalarType.createVarcharType(columnSize);
+                    return ScalarType.createVarcharType(1073741824);
                 } else if (lowerTypeName.contains("geometry") || lowerTypeName.contains("point") ||
                         lowerTypeName.contains("linestring") || lowerTypeName.contains("polygon") ||
                         lowerTypeName.contains("multipoint") || lowerTypeName.contains("multilinestring") ||
