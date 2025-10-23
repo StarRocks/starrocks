@@ -15,7 +15,6 @@
 package com.starrocks.sql.plan;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.AggregateFunction;
@@ -461,8 +460,6 @@ public class PlanFragmentBuilder {
         private final List<Integer> collectExecStatsIds = Lists.newArrayList();
         private ExecGroup currentExecGroup = execGroups.newExecGroup();
 
-        private boolean canUseLocalShuffleAgg = true;
-
         public PhysicalPlanTranslator(ColumnRefFactory columnRefFactory) {
             this.columnRefFactory = columnRefFactory;
         }
@@ -520,7 +517,6 @@ public class PlanFragmentBuilder {
 
         @Override
         public PlanFragment visit(OptExpression optExpression, ExecPlan context) {
-            canUseLocalShuffleAgg &= optExpression.arity() <= 1;
             PlanFragment fragment = optExpression.getOp().accept(this, optExpression, context);
             Projection projection = (optExpression.getOp()).getProjection();
 
@@ -609,7 +605,6 @@ public class PlanFragmentBuilder {
             for (ScalarOperator predicate : predicates) {
                 predicateColumns.union(predicate.getUsedColumns());
             }
-
 
             // ------------------------------------------------------------------------------------
             // unused Columns = required columns - predicate columns.
@@ -1472,7 +1467,6 @@ public class PlanFragmentBuilder {
             return buildIcebergScanNode(optExpression, context);
         }
 
-
         public PlanFragment buildIcebergScanNode(OptExpression expression, ExecPlan context) {
             PhysicalScanOperator node = expression.getOp().cast();
             Table referenceTable = node.getTable();
@@ -2039,7 +2033,7 @@ public class PlanFragmentBuilder {
             tupleDescriptor.computeMemLayout();
 
             RawValuesNode rawValuesNode = new RawValuesNode(
-                    context.getNextNodeId(), 
+                    context.getNextNodeId(),
                     tupleDescriptor.getId(),
                     rawValuesOperator.getConstantType(),
                     rawValuesOperator.getRawText(),
@@ -2089,78 +2083,6 @@ public class PlanFragmentBuilder {
             }
 
             return true;
-        }
-
-        /**
-         * Remove ExchangeNode between AggNode and ScanNode for the single backend.
-         * <p>
-         * This is used to generate "ScanNode->LocalShuffle->OnePhaseLocalAgg" for the single backend,
-         * which contains two steps:
-         * 1. Ignore the network cost for ExchangeNode when estimating cost model.
-         * 2. Remove ExchangeNode between AggNode and ScanNode when building fragments.
-         * <p>
-         * Specifically, transfer
-         * (AggNode->ExchangeNode)->([ProjectNode->]ScanNode)
-         * -      *inputFragment         sourceFragment
-         * to
-         * (AggNode->[ProjectNode->]ScanNode)
-         * -      *sourceFragment
-         * That is, when matching this fragment pattern, remove inputFragment and return sourceFragment.
-         *
-         * @param inputFragment The input fragment to match the above pattern.
-         * @param context       The context of building fragment, which contains all the fragments.
-         * @return SourceFragment if it matches th pattern, otherwise the original inputFragment.
-         */
-        private PlanFragment removeExchangeNodeForLocalShuffleAgg(PlanFragment inputFragment, ExecPlan context) {
-            if (ConnectContext.get() == null) {
-                return inputFragment;
-            }
-            if (!canUseLocalShuffleAgg) {
-                return inputFragment;
-            }
-            SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
-            boolean enableLocalShuffleAgg = sessionVariable.isEnableLocalShuffleAgg()
-                    && sessionVariable.isEnablePipelineEngine()
-                    && GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().isSingleBackendAndComputeNode();
-            if (!enableLocalShuffleAgg) {
-                return inputFragment;
-            }
-
-            // InputFragment should match "AggNode->ExchangeNode" pattern, where AggNode is the caller of this method.
-            if (!(inputFragment.getPlanRoot() instanceof ExchangeNode)) {
-                return inputFragment;
-            }
-
-            ExchangeNode node = (ExchangeNode) inputFragment.getPlanRoot();
-            if (node.isMerge()) {
-                return inputFragment;
-            }
-
-            // SourceFragment should match "[ProjectNode->]ScanNode" pattern.
-            PlanNode sourceFragmentRoot = inputFragment.getPlanRoot().getChild(0);
-            if (!onlyContainNodeTypes(sourceFragmentRoot, ImmutableList.of(ScanNode.class, ProjectNode.class))) {
-                return inputFragment;
-            }
-
-            // If ExchangeSink is CTE MultiCastPlanFragment, we cannot remove this ExchangeNode.
-            PlanFragment sourceFragment = sourceFragmentRoot.getFragment();
-            if (sourceFragment instanceof MultiCastPlanFragment) {
-                return inputFragment;
-            }
-
-            // Traverse fragment in reverse to delete inputFragment,
-            // because the last fragment is inputFragment for the most cases.
-            ArrayList<PlanFragment> fragments = context.getFragments();
-            for (int i = fragments.size() - 1; i >= 0; --i) {
-                if (fragments.get(i).equals(inputFragment)) {
-                    fragments.remove(i);
-                    break;
-                }
-            }
-
-            sourceFragment.clearDestination();
-            sourceFragment.clearOutputPartition();
-            return sourceFragment;
         }
 
         private static class AggregateExprInfo {
@@ -2264,10 +2186,12 @@ public class PlanFragmentBuilder {
         @Override
         public PlanFragment visitPhysicalHashAggregate(OptExpression optExpr, ExecPlan context) {
             PhysicalHashAggregateOperator node = (PhysicalHashAggregateOperator) optExpr.getOp();
-            PlanFragment originalInputFragment = visit(optExpr.inputAt(0), context);
+            PlanFragment inputFragment = visit(optExpr.inputAt(0), context);
 
-            PlanFragment inputFragment = removeExchangeNodeForLocalShuffleAgg(originalInputFragment, context);
-            boolean withLocalShuffle = inputFragment != originalInputFragment || inputFragment.isWithLocalShuffle();
+            final boolean withLocalShuffle = node.isWithLocalShuffle() || inputFragment.isWithLocalShuffle();
+            if (node.isWithLocalShuffle()) {
+                inputFragment.setWithLocalShuffleIfTrue(true);
+            }
 
             Map<ColumnRefOperator, CallOperator> aggregations = node.getAggregations();
             List<ColumnRefOperator> groupBys = node.getGroupBys();
@@ -2403,7 +2327,8 @@ public class PlanFragmentBuilder {
             aggregationNode.computeStatistics(optExpr.getStatistics());
             aggregationNode.setGroupByMinMaxStats(node.getGroupByMinMaxStatistic());
 
-            if (node.isOnePhaseAgg() || node.isMergedLocalAgg() || node.getType().isDistinctGlobal()) {
+            if (node.isOnePhaseAgg() || node.isMergedLocalAgg() || node.getType().isDistinctGlobal() ||
+                    node.getType().isGlobal()) {
                 // For ScanNode->LocalShuffle->AggNode, we needn't assign scan ranges per driver sequence.
                 inputFragment.setAssignScanRangesPerDriverSeq(!withLocalShuffle);
                 inputFragment.setWithLocalShuffleIfTrue(withLocalShuffle);
@@ -2427,8 +2352,8 @@ public class PlanFragmentBuilder {
             }
             inputFragment.setPlanRoot(aggregationNode);
             inputFragment.getPlanRoot().forceCollectExecStats();
-            inputFragment.mergeQueryDictExprs(originalInputFragment.getQueryGlobalDictExprs());
-            inputFragment.mergeQueryGlobalDicts(originalInputFragment.getQueryGlobalDicts());
+            inputFragment.mergeQueryDictExprs(inputFragment.getQueryGlobalDictExprs());
+            inputFragment.mergeQueryGlobalDicts(inputFragment.getQueryGlobalDicts());
             return inputFragment;
         }
 
@@ -2655,7 +2580,6 @@ public class PlanFragmentBuilder {
             List<Expr> preAggFnCallExprs = new ArrayList<>();
             List<SlotId> preAggOutputColumnIds = new ArrayList<>();
             TupleDescriptor preAggTuple = context.getDescTbl().createTupleDescriptor();
-
 
             if (preAggFnCalls != null) {
                 for (Map.Entry<ColumnRefOperator, CallOperator> entry : preAggFnCalls.entrySet()) {
@@ -3498,7 +3422,6 @@ public class PlanFragmentBuilder {
 
             Map<SlotId, Expr> commonSubOperatorMap = buildCommonSubExprMap(filter.getPredicateCommonOperators(), context);
 
-
             List<Expr> predicates = Utils.extractConjuncts(filter.getPredicate()).stream()
                     .map(d -> ScalarOperatorToExpr.buildExecExpression(d,
                             new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
@@ -3637,8 +3560,6 @@ public class PlanFragmentBuilder {
                     .map(ColumnRefOperator::getId).distinct().collect(Collectors.toList()));
             exchangeNode.setDataPartition(cteFragment.getDataPartition());
             exchangeNode.forceCollectExecStats();
-
-
 
             PlanFragment consumeFragment = new PlanFragment(context.getNextFragmentId(), exchangeNode,
                     cteFragment.getDataPartition());
