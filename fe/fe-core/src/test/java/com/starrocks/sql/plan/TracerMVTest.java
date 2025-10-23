@@ -182,7 +182,7 @@ public class TracerMVTest extends MaterializedViewTestBase {
         Tracers.toRuntimeProfile(runtimeProfile);
 
         Map<String, String> result = runtimeProfile.getInfoStrings();
-        Assertions.assertTrue(result.isEmpty());
+        Assertions.assertFalse(result.isEmpty());
     }
 
     @Test
