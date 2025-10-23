@@ -93,6 +93,7 @@ import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWorkGroup;
 import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.cngroup.ComputeResource;
+import com.starrocks.warehouse.cngroup.LazyComputeResource;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -1008,7 +1009,8 @@ public class ConnectContext {
         // try to acquire cn group id once the warehouse is set
         final long warehouseId = this.getCurrentWarehouseId();
         final WarehouseManager warehouseManager = globalStateMgr.getWarehouseMgr();
-        this.computeResource = warehouseManager.acquireComputeResource(warehouseId, this.computeResource);
+        this.computeResource = LazyComputeResource.of(warehouseId, () ->
+                warehouseManager.acquireComputeResource(warehouseId, this.computeResource));
     }
 
     /**
@@ -1090,13 +1092,8 @@ public class ConnectContext {
         if (!RunMode.isSharedDataMode() || this.computeResource == null) {
             return;
         }
-        final WarehouseManager warehouseManager = globalStateMgr.getWarehouseMgr();
-        if (!warehouseManager.isResourceAvailable(computeResource)) {
-            this.computeResource = warehouseManager.acquireComputeResource(this.getCurrentWarehouseId());
-        } else {
-            // acquire compute resource again to for better-schedule balance
-            acquireComputeResource();
-        }
+        // acquire compute resource again for better schedule balance
+        acquireComputeResource();
     }
 
     public void setParentConnectContext(ConnectContext parent) {
