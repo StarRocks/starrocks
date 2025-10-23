@@ -53,6 +53,8 @@ import io.netty.util.ReferenceCountUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.net.URI;
+
 public class HttpServerHandler extends ChannelInboundHandlerAdapter {
     private static final Logger LOG = LogManager.getLogger(HttpServerHandler.class);
     // keep connectContext when channel is open
@@ -164,10 +166,11 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
 
     private BaseAction getAction(BaseRequest request) {
         String uri = request.getRequest().uri();
+        String baseUri = URI.create(uri).getPath();
         // ignore this request, which is a default request from client's browser.
-        if (uri.endsWith("/favicon.ico")) {
+        if (baseUri.endsWith("/favicon.ico")) {
             return NotFoundAction.getNotFoundAction();
-        } else if (uri.equals("/")) {
+        } else if (baseUri.equals("/")) {
             return new IndexAction(controller);
         }
 
