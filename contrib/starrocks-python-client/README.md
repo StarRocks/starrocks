@@ -263,15 +263,23 @@ In addition to the StarRocks-specific tests, you can run the comprehensive test 
 
    # ... other imports
 
-   # To run the full SQLAlchemy test suite, uncomment the following line:
+   # To run the test_suite.py and full SQLAlchemy test suite, uncomment the following line:
    from sqlalchemy.testing.plugin.pytestplugin import *
    ```
 
+   > NOTE: If you enable this line, StarRocks-specific tests will not run. We will modify the StarRocks-specific tests using SQLAlchemy's test framework in the future.
+
+   You can enable SQLAlchemy's tests from the file `test/test_suite.py` by uncomment the following line:
+
+   ```python
+   # To run the full SQLAlchemy test suite, uncomment the following line:
+   from sqlalchemy.testing.suite import *
+   ```
+
 2. **Run the tests:**
-   With the plugin enabled and your `STARROCKS_URL` configured, run pytest:
 
    ```bash
-   pytest test/test_suite.py --DBURI=${STARROCKS_URL}
+   pytest test/test_suite.py
    ```
 
 This will run the standard SQLAlchemy dialect test suite as well as StarRocks-specific tests. For more details, please check [SQLAlchemy's guide for dialect development](https://github.com/sqlalchemy/sqlalchemy/blob/main/README.dialects.rst).
