@@ -738,9 +738,6 @@ endif()
 set(CXX_GCC_FLAGS "${CXX_GCC_FLAGS} -g -Wno-unused-local-typedefs")
 
 if (WITH_GCOV)
-    # To generate flags to code coverage
-    set(CXX_GCC_FLAGS "${CXX_GCC_FLAGS} -fprofile-arcs -ftest-coverage")
-
     # Handle incremental gcov
     message(STATUS "Incremental gcov enabled")
     if (GCOV_INCREMENTAL_FILES)
@@ -748,18 +745,16 @@ if (WITH_GCOV)
         string(REPLACE ";" " " GCOV_FILES_LIST "${GCOV_INCREMENTAL_FILES}")
         message(STATUS "Files for incremental coverage: ${GCOV_FILES_LIST}")
         
-        # Check if debug file exists and log its location
-        set(GCOV_DEBUG_FILE "${CMAKE_SOURCE_DIR}/.gcov_incremental_debug.txt")
-        if (EXISTS "${GCOV_DEBUG_FILE}")
-            message(STATUS "GCOV debug file available at: ${GCOV_DEBUG_FILE}")
-        endif()
-        
-        # Apply coverage flags to specific files
+        # Apply coverage flags to specific files only
         set(INSTRUMENTED_COUNT 0)
         foreach(file IN LISTS GCOV_FILES_LIST)
             if (file)
+                # Strip leading/trailing whitespace from file path
+                string(STRIP "${file}" file)
+                
                 # Convert relative path to absolute path
-                set(ABSOLUTE_FILE "${CMAKE_CURRENT_SOURCE_DIR}/src/${file}")
+                set(ABSOLUTE_FILE "${CMAKE_CURRENT_SOURCE_DIR}/${file}")
+                
                 if (EXISTS "${ABSOLUTE_FILE}")
                     set_source_files_properties("${ABSOLUTE_FILE}" PROPERTIES 
                         COMPILE_FLAGS "-fprofile-arcs -ftest-coverage")
@@ -773,6 +768,7 @@ if (WITH_GCOV)
         message(STATUS "Total files instrumented for incremental coverage: ${INSTRUMENTED_COUNT}")
     else()
         message(WARNING "Incremental gcov enabled but no files specified, falling back to full coverage")
+        # Apply coverage flags to all files (full coverage mode)
         set(CXX_GCC_FLAGS "${CXX_GCC_FLAGS} -fprofile-arcs -ftest-coverage")
     endif()
 endif()

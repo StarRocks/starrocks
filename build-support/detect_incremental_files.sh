@@ -70,7 +70,8 @@ detect_incremental_files() {
     fi
     
     # Convert to CMake-friendly format (relative to be/ directory)
-    GCOV_INCREMENTAL_FILES=$(echo "$CHANGED_FILES" | sed 's|^be/||' | tr '\n' ';')
+    # Remove be/ prefix, strip whitespace, and join with semicolons
+    GCOV_INCREMENTAL_FILES=$(echo "$CHANGED_FILES" | sed 's|^be/||' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | tr '\n' ';' | sed 's/;$//')
     echo "Incremental coverage will instrument $FILE_COUNT files"
     echo "Changed files: $(echo "$CHANGED_FILES" | tr '\n' ' ')"
     
