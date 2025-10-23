@@ -415,18 +415,44 @@ std::string Chunk::rebuild_csv_row(size_t index, const std::string& delimiter) c
 
 std::string Chunk::debug_columns() const {
     std::stringstream os;
-    os << "nullable[";
-    for (size_t col = 0; col < _columns.size() - 1; ++col) {
-        os << _columns[col]->is_nullable();
-        os << ", ";
+    if (_columns.empty()) {
+        os << "empty columns[]";
+    } else {
+        os << "nullable[";
+        for (size_t col = 0; col < _columns.size() - 1; ++col) {
+            os << _columns[col]->is_nullable();
+            os << ", ";
+        }
+        os << _columns[_columns.size() - 1]->is_nullable() << "]";
+        os << " const[";
+        for (size_t col = 0; col < _columns.size() - 1; ++col) {
+            os << _columns[col]->is_constant();
+            os << ", ";
+        }
+        os << _columns[_columns.size() - 1]->is_constant() << "]";
+        os << " name[";
+        for (size_t col = 0; col < _columns.size() - 1; ++col) {
+            os << _columns[col]->get_name();
+            os << ", ";
+        }
+        os << _columns[_columns.size() - 1]->get_name() << "]";
+        os << " size[";
+        for (size_t col = 0; col < _columns.size() - 1; ++col) {
+            os << _columns[col]->size();
+            os << ", ";
+        }
+        os << _columns[_columns.size() - 1]->size() << "]";
+        os << " slot_id_to_index[";
+        for (const auto& [slot_id, idx] : _slot_id_to_index) {
+            os << slot_id << ":" << idx << ", ";
+        }
+        os << "]";
+        os << " column_id_to_index[";
+        for (const auto& [column_id, idx] : _cid_to_index) {
+            os << column_id << ":" << idx << ", ";
+        }
+        os << "]";
     }
-    os << _columns[_columns.size() - 1]->is_nullable() << "]";
-    os << " const[";
-    for (size_t col = 0; col < _columns.size() - 1; ++col) {
-        os << _columns[col]->is_constant();
-        os << ", ";
-    }
-    os << _columns[_columns.size() - 1]->is_constant() << "]";
     return os.str();
 }
 

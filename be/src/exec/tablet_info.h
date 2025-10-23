@@ -163,6 +163,17 @@ public:
             }
         }
     }
+    const std::unordered_map<int64_t, NodeInfo>& get_nodes() const { return _nodes; }
+
+    std::string debug_string() const {
+        std::stringstream ss;
+        ss << "nodes[";
+        for (const auto& [id, info] : _nodes) {
+            ss << id << "=>" << info.host << ":" << info.brpc_port << ",";
+        }
+        ss << "]";
+        return ss.str();
+    }
 
 private:
     std::unordered_map<int64_t, NodeInfo> _nodes;
