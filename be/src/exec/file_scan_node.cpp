@@ -18,11 +18,17 @@
 #include <sstream>
 
 #include "column/chunk.h"
+#ifndef __APPLE__
 #include "exec/file_scanner/avro_scanner.h"
+#endif
 #include "exec/file_scanner/csv_scanner.h"
 #include "exec/file_scanner/json_scanner.h"
+#ifndef __APPLE__
 #include "exec/file_scanner/orc_scanner.h"
+#endif
+#ifndef __APPLE__
 #include "exec/file_scanner/parquet_scanner.h"
+#endif
 #include "exprs/expr.h"
 #include "fs/fs.h"
 #include "runtime/current_thread.h"
@@ -203,15 +209,23 @@ void FileScanNode::debug_string(int ident_level, std::stringstream* out) const {
 
 std::unique_ptr<FileScanner> FileScanNode::_create_scanner(const TBrokerScanRange& scan_range,
                                                            ScannerCounter* counter) {
-    if (scan_range.ranges[0].format_type == TFileFormatType::FORMAT_ORC) {
+    TFileFormatType::type format_type = scan_range.ranges[0].format_type;
+    switch (format_type) {
+#ifndef __APPLE__
+    case TFileFormatType::FORMAT_ORC:
         return std::make_unique<ORCScanner>(runtime_state(), runtime_profile(), scan_range, counter);
-    } else if (scan_range.ranges[0].format_type == TFileFormatType::FORMAT_PARQUET) {
+#endif
+#ifndef __APPLE__
+    case TFileFormatType::FORMAT_PARQUET:
         return std::make_unique<ParquetScanner>(runtime_state(), runtime_profile(), scan_range, counter);
-    } else if (scan_range.ranges[0].format_type == TFileFormatType::FORMAT_JSON) {
+#endif
+    case TFileFormatType::FORMAT_JSON:
         return std::make_unique<JsonScanner>(runtime_state(), runtime_profile(), scan_range, counter);
-    } else if (scan_range.ranges[0].format_type == TFileFormatType::FORMAT_AVRO) {
+#ifndef __APPLE__
+    case TFileFormatType::FORMAT_AVRO:
         return std::make_unique<AvroScanner>(runtime_state(), runtime_profile(), scan_range, counter);
-    } else {
+#endif
+    default:
         return std::make_unique<CSVScanner>(runtime_state(), runtime_profile(), scan_range, counter);
     }
 }

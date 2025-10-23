@@ -385,34 +385,9 @@ set_target_properties(lz4 PROPERTIES
     IMPORTED_LOCATION ${LZ4_LIB}
     INTERFACE_INCLUDE_DIRECTORIES /opt/homebrew/opt/lz4/include)
 
-# Create a symlink in build directory to satisfy lz4/lz4.h include pattern
-execute_process(COMMAND ${CMAKE_COMMAND} -E make_directory
-    ${CMAKE_BINARY_DIR}/lz4_symlinks/lz4
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
-
-# Create symlinks for LZ4 headers to satisfy lz4/lz4.h include pattern
-execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink
-    /opt/homebrew/opt/lz4/include/lz4.h
-    ${CMAKE_BINARY_DIR}/lz4_symlinks/lz4/lz4.h
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
-
-execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink
-    /opt/homebrew/opt/lz4/include/lz4hc.h
-    ${CMAKE_BINARY_DIR}/lz4_symlinks/lz4/lz4hc.h
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
-
-execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink
-    /opt/homebrew/opt/lz4/include/lz4frame.h
-    ${CMAKE_BINARY_DIR}/lz4_symlinks/lz4/lz4frame.h
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
-
-execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink
-    /opt/homebrew/opt/lz4/include/lz4file.h
-    ${CMAKE_BINARY_DIR}/lz4_symlinks/lz4/lz4file.h
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
-
-# Add the symlink directory to include paths
-include_directories(${CMAKE_BINARY_DIR}/lz4_symlinks)
+# On macOS, Homebrew installs headers without subdirectory
+# Add macro to use direct includes instead of subdirectory includes
+add_compile_definitions(STARROCKS_MACOS_USE_FLAT_INCLUDES=1)
 
 # Homebrew libraries - zstd
 find_library(ZSTD_LIB NAMES zstd PATHS /opt/homebrew/lib REQUIRED)
@@ -420,19 +395,6 @@ add_library(zstd STATIC IMPORTED GLOBAL)
 set_target_properties(zstd PROPERTIES
     IMPORTED_LOCATION ${ZSTD_LIB}
     INTERFACE_INCLUDE_DIRECTORIES /opt/homebrew/opt/zstd/include)
-
-# Create symlinks for zstd headers to satisfy zstd/zstd.h include pattern
-execute_process(COMMAND ${CMAKE_COMMAND} -E make_directory
-    ${CMAKE_BINARY_DIR}/zstd_symlinks/zstd
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
-
-execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink
-    /opt/homebrew/opt/zstd/include/zstd.h
-    ${CMAKE_BINARY_DIR}/zstd_symlinks/zstd/zstd.h
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
-
-# Add the symlink directory to include paths
-include_directories(${CMAKE_BINARY_DIR}/zstd_symlinks)
 
 # zlib (from homebrew) - use dynamic lookup
 find_library(ZLIB_LIB NAMES z PATHS
@@ -477,6 +439,11 @@ add_library(vectorscan STATIC IMPORTED GLOBAL)
 set_target_properties(vectorscan PROPERTIES
     IMPORTED_LOCATION ${THIRDPARTY_DIR}/installed/lib/libhs.a
     INTERFACE_INCLUDE_DIRECTORIES ${THIRDPARTY_DIR}/installed/include)
+
+# roaring bitmap - use only compiled static library from thirdparty
+find_library(ROARING_LIB NAMES libroaring.a PATHS
+    ${THIRDPARTY_DIR}/installed/lib
+    NO_DEFAULT_PATH)
 
 # roaring bitmap - use only compiled static library from thirdparty
 find_library(ROARING_LIB NAMES libroaring.a PATHS
@@ -1102,12 +1069,9 @@ list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/exec/pipeline/sink/connector_sin
 set(MACOS_SHIM_SOURCES
     "${CMAKE_CURRENT_LIST_DIR}/shims/src/gperftools_stubs.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/shims/src/bitset_resize.cpp"
-    "${CMAKE_CURRENT_LIST_DIR}/shims/src/bitshuffle_shims.cpp"
-    "${CMAKE_CURRENT_LIST_DIR}/shims/src/symbol_provider.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/shims/src/variant_shims.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/shims/src/sinks_shim.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/shims/src/connector_shims.cpp"
-    "${CMAKE_CURRENT_LIST_DIR}/shims/src/connector_core_shim.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/shims/src/disabled_components_shim.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/shims/src/tracer_shim.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/shims/src/lake_manager_stub.cpp"

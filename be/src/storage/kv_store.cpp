@@ -94,14 +94,18 @@ int64_t KVStore::calc_rocksdb_write_buffer_size(MemTracker* mem_tracker) {
     int64_t total_mem_bytes = mem_tracker->limit();
     // 3. Calculate the write buffer memory bytes
     int64_t write_buffer_mem_bytes =
-            total_mem_bytes * std::max(std::min(100L, config::rocksdb_write_buffer_memory_percent), 0L) / 100L;
+            total_mem_bytes *
+            std::max(std::min(static_cast<int64_t>(100),
+                              static_cast<int64_t>(config::rocksdb_write_buffer_memory_percent)),
+                     static_cast<int64_t>(0)) /
+            100;
     // 4. Calculate the write buffer size for each disk, and there will be 2 memtables by default,
     //    so we will divide it by 2
-    int64_t write_buffer_mem_bytes_per_disk = write_buffer_mem_bytes / std::max(disk_cnt, 1L) / 2;
+    int64_t write_buffer_mem_bytes_per_disk = write_buffer_mem_bytes / std::max(disk_cnt, static_cast<int64_t>(1)) / 2;
 
     // should be around 64MB ~ 1GB rocksdb_max_write_buffer_memory_bytes
-    int64_t res = std::min(std::max(67108864L, write_buffer_mem_bytes_per_disk),
-                           config::rocksdb_max_write_buffer_memory_bytes);
+    int64_t res = std::min(std::max(static_cast<int64_t>(67108864), write_buffer_mem_bytes_per_disk),
+                           static_cast<int64_t>(config::rocksdb_max_write_buffer_memory_bytes));
 
     LOG(INFO) << "rocksdb write buffer size: " << res << ", total memory: " << total_mem_bytes
               << ", disk count: " << disk_cnt;

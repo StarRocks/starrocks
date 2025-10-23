@@ -38,6 +38,12 @@
 #include <sched.h>
 #include <sys/types.h>
 #include <unistd.h>
+#ifdef __APPLE__
+#include <pthread.h>
+#else
+#include <sys/syscall.h>
+#endif
+#include <sched.h>
 
 #include <boost/asio/spawn.hpp>
 #include <cstring>
@@ -148,33 +154,39 @@ void ThreadMgr::set_thread_name(const std::string& name, int64_t tid) {
 
 void ThreadMgr::add_thread(const pthread_t& pthread_id, const std::string& name, const std::string& category,
                            int64_t tid) {
-    // These annotations cause TSAN to ignore the synchronization on lock_
-    // without causing the subsequent mutations to be treated as data races
-    // in and of themselves (that's what IGNORE_READS_AND_WRITES does).
-    //
-    // Why do we need them here and in SuperviseThread()? TSAN operates by
-    // observing synchronization events and using them to establish "happens
-    // before" relationships between threads. Where these relationships are
-    // not built, shared state access constitutes a data race. The
-    // synchronization events here, in RemoveThread(), and in
-    // SuperviseThread() may cause TSAN to establish a "happens before"
-    // relationship between thread functors, ignoring potential data races.
-    // The annotations prevent this from happening.
+// These annotations cause TSAN to ignore the synchronization on lock_
+// without causing the subsequent mutations to be treated as data races
+// in and of themselves (that's what IGNORE_READS_AND_WRITES does).
+//
+// Why do we need them here and in SuperviseThread()? TSAN operates by
+// observing synchronization events and using them to establish "happens
+// before" relationships between threads. Where these relationships are
+// not built, shared state access constitutes a data race. The
+// synchronization events here, in RemoveThread(), and in
+// SuperviseThread() may cause TSAN to establish a "happens before"
+// relationship between thread functors, ignoring potential data races.
+// The annotations prevent this from happening.
+#ifndef __APPLE__
     ANNOTATE_IGNORE_SYNC_BEGIN();
     ANNOTATE_IGNORE_READS_AND_WRITES_BEGIN();
+#endif
     {
         std::lock_guard l(_lock);
         _thread_categories[category][pthread_id] = ThreadDescriptor(category, name, tid, Thread::current_thread());
         _threads_running_metric++;
         _threads_started_metric++;
     }
+#ifndef __APPLE__
     ANNOTATE_IGNORE_SYNC_END();
     ANNOTATE_IGNORE_READS_AND_WRITES_END();
+#endif
 }
 
 void ThreadMgr::remove_thread(const pthread_t& pthread_id, const std::string& category) {
+#ifndef __APPLE__
     ANNOTATE_IGNORE_SYNC_BEGIN();
     ANNOTATE_IGNORE_READS_AND_WRITES_BEGIN();
+#endif
     {
         std::lock_guard l(_lock);
         auto category_it = _thread_categories.find(category);
@@ -182,8 +194,10 @@ void ThreadMgr::remove_thread(const pthread_t& pthread_id, const std::string& ca
         category_it->second.erase(pthread_id);
         _threads_running_metric--;
     }
+#ifndef __APPLE__
     ANNOTATE_IGNORE_SYNC_END();
     ANNOTATE_IGNORE_READS_AND_WRITES_END();
+#endif
 }
 
 void ThreadMgr::get_thread_infos(std::vector<BeThreadInfo>& infos) {
@@ -193,7 +207,11 @@ void ThreadMgr::get_thread_infos(std::vector<BeThreadInfo>& infos) {
             BeThreadInfo& info = infos.emplace_back();
             info.group = thread.second.category();
             info.name = thread.second.name();
+#ifdef __APPLE__
+            info.pthread_id = reinterpret_cast<int64_t>(thread.first);
+#else
             info.pthread_id = static_cast<int64_t>(thread.first);
+#endif
             info.tid = thread.second.thread_id();
             info.idle = thread.second.thread()->idle();
             info.finished_tasks = thread.second.thread()->finished_tasks();
@@ -247,38 +265,43 @@ Thread* Thread::current_thread() {
 }
 
 int64_t Thread::unique_thread_id() {
+#ifdef __APPLE__
+    return static_cast<int64_t>(reinterpret_cast<intptr_t>(pthread_self()));
+#else
     return static_cast<int64_t>(pthread_self());
+#endif
 }
 
 int64_t Thread::current_thread_id() {
+#ifdef __APPLE__
+    uint64_t tid;
+    pthread_threadid_np(nullptr, &tid);
+    return static_cast<int64_t>(tid);
+#else
     return syscall(SYS_gettid);
+#endif
 }
 
 void Thread::set_thread_name(pthread_t t, const std::string& name) {
     // pthread_setname_np's length is restricted to 16 bytes, including the terminating null byte ('\0')
     int ret;
-#ifdef __APPLE__
-    // macOS version only takes one argument (name for current thread)
-    if (t == pthread_self()) {
-        std::string str = name;
-        if (str.length() >= 16) {
-            str.at(15) = '\0';
-        }
-        ret = pthread_setname_np(str.data());
-    } else {
-        // Cannot set name for other threads on macOS
-        ret = 0;
-    }
-#else
-    // Linux version takes thread id and name
     if (name.length() < 16) {
+#ifdef __APPLE__
+        (void)t;
+        ret = pthread_setname_np(name.data());
+#else
         ret = pthread_setname_np(t, name.data());
+#endif
     } else {
         std::string str = name;
         str.at(15) = '\0';
+#ifdef __APPLE__
+        (void)t;
+        ret = pthread_setname_np(str.data());
+#else
         ret = pthread_setname_np(t, str.data());
-    }
 #endif
+    }
     if (ret) {
         LOG(WARNING) << "failed to set thread name: " << name;
     }
@@ -289,12 +312,12 @@ void Thread::set_thread_name(std::thread& t, std::string name) {
     if (name.length() >= 16) {
         name.at(15) = '\0';
     }
+    int ret;
 #ifdef __APPLE__
-    // On macOS, can only set name for current thread
-    int ret = pthread_setname_np(name.data());
+    (void)t;
+    ret = pthread_setname_np(name.data());
 #else
-    // On Linux, can set name for any thread
-    int ret = pthread_setname_np(t.native_handle(), name.data());
+    ret = pthread_setname_np(t.native_handle(), name.data());
 #endif
     if (ret) {
         LOG(WARNING) << "failed to set thread name: " << name;
@@ -360,10 +383,14 @@ void* Thread::supervise_thread(void* arg) {
     int64_t system_tid = Thread::current_thread_id();
     PCHECK(system_tid != -1);
 
-    // Take an additional reference to the thread manager, which we'll need below.
+// Take an additional reference to the thread manager, which we'll need below.
+#ifndef __APPLE__
     ANNOTATE_IGNORE_SYNC_BEGIN();
+#endif
     std::shared_ptr<ThreadMgr> thread_mgr_ref = thread_manager;
+#ifndef __APPLE__
     ANNOTATE_IGNORE_SYNC_END();
+#endif
 
     // Set up the TLS.
     //
@@ -466,6 +493,18 @@ Status ThreadJoiner::join() {
         }
 
         int wait_for = std::min(remaining_before_giveup, remaining_before_next_warn);
+// On macOS, absl's dynamic annotation macros differ from gutil ones.
+// To avoid signature mismatches, turn them into no-ops for this file.
+#ifdef __APPLE__
+#undef ANNOTATE_IGNORE_SYNC_BEGIN
+#undef ANNOTATE_IGNORE_SYNC_END
+#undef ANNOTATE_IGNORE_READS_AND_WRITES_BEGIN
+#undef ANNOTATE_IGNORE_READS_AND_WRITES_END
+#define ANNOTATE_IGNORE_SYNC_BEGIN()
+#define ANNOTATE_IGNORE_SYNC_END()
+#define ANNOTATE_IGNORE_READS_AND_WRITES_BEGIN()
+#define ANNOTATE_IGNORE_READS_AND_WRITES_END()
+#endif
 
         if (_thread->_done.wait_for(MonoDelta::FromMilliseconds(wait_for))) {
             // Unconditionally join before returning, to guarantee that any TLS
