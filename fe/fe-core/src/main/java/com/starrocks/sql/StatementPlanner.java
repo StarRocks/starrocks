@@ -33,7 +33,6 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.LabelAlreadyUsedException;
-import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.http.HttpConnectContext;
@@ -359,7 +358,7 @@ public class StatementPlanner {
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
         boolean isSchemaValid = true;
 
-        Pair<Integer, Integer> tablesCount = collectReferenceTables(session, queryStmt);
+        int sourceTablesCount = collectSourceTablesCount(session, queryStmt);
 
         // TODO: double check relatedMvs for OlapTable
         // only collect once to save the original olapTable info
@@ -397,7 +396,7 @@ public class StatementPlanner {
                 }
                 optimizerContext.setMvTransformerContext(mvTransformerContext);
                 optimizerContext.setStatement(queryStmt);
-                optimizerContext.setTablesCount(tablesCount);
+                optimizerContext.setSourceTablesCount(sourceTablesCount);
 
                 Optimizer optimizer = OptimizerFactory.create(optimizerContext);
                 optimizedPlan = optimizer.optimize(logicalPlan.getRoot(), new PhysicalPropertySet(),
@@ -447,11 +446,10 @@ public class StatementPlanner {
         }
     }
 
-    public static Pair<Integer, Integer> collectReferenceTables(ConnectContext session, StatementBase queryStmt) {
-        Set<Table> updatedTables = Sets.newHashSet();
+    public static int collectSourceTablesCount(ConnectContext session, StatementBase queryStmt) {
         Set<Table> sourceTables = Sets.newHashSet();
-        AnalyzerUtils.collectReferenceTables(queryStmt, updatedTables, sourceTables);
-        return Pair.create(updatedTables.size(), sourceTables.size());
+        AnalyzerUtils.collectSourceTables(queryStmt, sourceTables);
+        return sourceTables.size();
     }
 
     public static Set<OlapTable> reAnalyzeStmt(StatementBase queryStmt, ConnectContext session, PlannerMetaLocker locker) {

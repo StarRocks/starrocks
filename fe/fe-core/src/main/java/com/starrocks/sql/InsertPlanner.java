@@ -127,7 +127,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.DefaultExpr.isValidDefaultFunction;
-import static com.starrocks.sql.StatementPlanner.collectReferenceTables;
+import static com.starrocks.sql.StatementPlanner.collectSourceTablesCount;
 import static com.starrocks.sql.optimizer.rule.mv.MVUtils.MATERIALIZED_VIEW_NAME_PREFIX;
 
 public class InsertPlanner {
@@ -565,11 +565,11 @@ public class InsertPlanner {
                 session.getSessionVariable());
         OptExpression optimizedPlan;
 
-        Pair<Integer, Integer> tablesCount = collectReferenceTables(session, insertStmt);
+        int sourceTablesCount = collectSourceTablesCount(session, insertStmt);
 
         try (Timer ignore2 = Tracers.watchScope("Optimizer")) {
             OptimizerContext optimizerContext = OptimizerFactory.initContext(session, columnRefFactory);
-            optimizerContext.setTablesCount(tablesCount);
+            optimizerContext.setSourceTablesCount(sourceTablesCount);
             Optimizer optimizer = OptimizerFactory.create(optimizerContext);
             optimizedPlan = optimizer.optimize(
                     logicalPlan.getRoot(),

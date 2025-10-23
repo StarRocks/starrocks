@@ -839,8 +839,8 @@ public class AnalyzerUtils {
         new AnalyzerUtils.OlapTableCollector(olapTables).visit(statementBase);
     }
 
-    public static void collectReferenceTables(StatementBase statementBase, Set<Table> updatedTables, Set<Table> sourceTables) {
-        new AnalyzerUtils.ReferenceTablesCollector(updatedTables, sourceTables).visit(statementBase);
+    public static void collectSourceTables(StatementBase statementBase, Set<Table> sourceTables) {
+        new SourceTablesCollector(sourceTables).visit(statementBase);
     }
 
     public static void collectSpecifyExternalTables(StatementBase statementBase, List<Table> tables,
@@ -1030,21 +1030,12 @@ public class AnalyzerUtils {
         }
     }
 
-    private static class ReferenceTablesCollector extends TableCollector {
-        private Set<Table> updateTables;
+    private static class SourceTablesCollector extends TableCollector {
         private Set<Table> sourceTables;
 
-        public ReferenceTablesCollector(Set<Table> updateTables, Set<Table> sourceTables) {
+        public SourceTablesCollector(Set<Table> sourceTables) {
             super();
-            this.updateTables = updateTables;
             this.sourceTables = sourceTables;
-        }
-
-        @Override
-        public Void visitInsertStatement(InsertStmt node, Void context) {
-            super.visitInsertStatement(node, context);
-            updateTables.add(node.getTargetTable());
-            return null;
         }
 
         @Override
