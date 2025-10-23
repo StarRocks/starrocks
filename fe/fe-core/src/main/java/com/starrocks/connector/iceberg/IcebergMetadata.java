@@ -1132,7 +1132,7 @@ public class IcebergMetadata implements ConnectorMetadata {
                                          ScalarOperator predicate,
                                          long limit,
                                          TvrVersionRange version) {
-        if (!properties.enableGetTableStatsFromExternalMetadata()) {
+        if (!properties.enableGetTableStatsFromExternalMetadata() || session.getSourceTablesCount() == 1) {
             return StatisticsUtils.buildDefaultStatistics(columns.keySet());
         }
         IcebergTable icebergTable = (IcebergTable) table;
