@@ -103,12 +103,8 @@ import java.util.stream.Collectors;
 /**
  * Base class for materialized view tests.
  */
-<<<<<<< HEAD
-public class MVTestBase extends StarRocksTestBase {
-=======
 @ExtendWith(MVTraceExtension.class)
 public abstract class MVTestBase extends StarRocksTestBase {
-
     public interface ExceptionRunnable {
         void run() throws Exception;
     }
@@ -121,7 +117,6 @@ public abstract class MVTestBase extends StarRocksTestBase {
         void run(MaterializedView mv) throws Exception;
     }
 
->>>>>>> 0a08eaa5c4 ([UT] Output trace logs when fe ut fails (#64408))
     protected static final Logger LOG = LogManager.getLogger(MVTestBase.class);
     protected static ConnectContext connectContext;
     protected static PseudoCluster cluster;
@@ -586,10 +581,6 @@ public abstract class MVTestBase extends StarRocksTestBase {
         public void onAfterCase(ConnectContext connectContext) {
             connectContext.getSessionVariable().setEnableMaterializedViewMultiStagesRewrite(val);
         }
-    }
-
-    public interface ExceptionRunnable {
-        public abstract void run() throws Exception;
     }
 
     protected void doTest(List<TestListener> listeners, ExceptionRunnable testCase) {
