@@ -36,6 +36,7 @@ OPTS=$(getopt \
     -l numa: \
     -l 'check_mem_leak' \
     -l 'jemalloc_debug' \
+    -l 'enable-profile:' \
 -- "$@")
 
 eval set -- "$OPTS"
@@ -48,6 +49,7 @@ RUN_LOG_CONSOLE=0
 RUN_META_TOOL=0
 RUN_CHECK_MEM_LEAK=0
 RUN_JEMALLOC_DEBUG=0
+ENABLE_PROFILE=1
 
 while true; do
     case "$1" in
@@ -59,6 +61,7 @@ while true; do
         --meta_tool) RUN_META_TOOL=1 ; shift ;;
         --check_mem_leak) RUN_CHECK_MEM_LEAK=1 ; shift ;;
         --jemalloc_debug) RUN_JEMALLOC_DEBUG=1 ; shift ;;
+        --enable-profile) ENABLE_PROFILE=$2 ; shift 2 ;;
         --) shift ;  break ;;
         *) echo "Internal error" ; exit 1 ;;
     esac
@@ -230,8 +233,7 @@ if [ ${RUN_DAEMON} -eq 1 ]; then
     BE_PID=$!
     echo $BE_PID > $pidfile
     
-    # Start profile collection daemon for BE
-    if [ ${RUN_BE} -eq 1 ]; then
+    if [ ${ENABLE_PROFILE} -eq 1 ]; then
         ${STARROCKS_HOME}/bin/collect_be_profile.sh --daemon
         echo "Profile collection daemon started"
     fi

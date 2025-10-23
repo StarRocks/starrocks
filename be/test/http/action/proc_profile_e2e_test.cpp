@@ -100,25 +100,10 @@ TEST_F(ProcProfileE2ETest, TestProcProfilePageDisplay) {
     WebPageHandler::ArgumentMap args;
     std::stringstream output;
 
-    // Debug: check if files were created
-    std::cout << "=== DEBUG: Checking test directory ===" << std::endl;
-    std::cout << "Test directory: " << test_dir << std::endl;
-    std::cout << "Config sys_log_dir: " << config::sys_log_dir << std::endl;
-
-    for (const auto& entry : std::filesystem::directory_iterator(test_dir)) {
-        std::cout << "Found file: " << entry.path().filename().string() << std::endl;
-    }
-    std::cout << "=== END DEBUG ===" << std::endl;
-
     // Call the proc_profile_handler
     proc_profile_handler(args, &output);
 
     std::string result = output.str();
-
-    // Debug: print the actual output
-    std::cout << "=== DEBUG: Actual output from proc_profile_handler ===" << std::endl;
-    std::cout << result << std::endl;
-    std::cout << "=== END DEBUG ===" << std::endl;
 
     // Check that the page contains expected elements
     EXPECT_TRUE(result.find("<h2>Process Profiles</h2>") != std::string::npos);
