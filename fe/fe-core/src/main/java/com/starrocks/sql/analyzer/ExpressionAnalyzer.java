@@ -82,6 +82,7 @@ import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.IsNullPredicate;
 import com.starrocks.sql.ast.expression.LambdaArgument;
 import com.starrocks.sql.ast.expression.LambdaFunctionExpr;
+import com.starrocks.sql.ast.expression.LargeInPredicate;
 import com.starrocks.sql.ast.expression.LargeIntLiteral;
 import com.starrocks.sql.ast.expression.LikePredicate;
 import com.starrocks.sql.ast.expression.LiteralExpr;
@@ -101,6 +102,7 @@ import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
 import com.starrocks.sql.ast.expression.UserVariableExpr;
 import com.starrocks.sql.ast.expression.VariableExpr;
+import com.starrocks.sql.common.LargeInPredicateException;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.thrift.TDictQueryExpr;
 import com.starrocks.thrift.TFunctionBinaryType;
@@ -866,6 +868,47 @@ public class ExpressionAnalyzer {
                                     + " is invalid", child.getPos());
                 }
             }
+
+            return null;
+        }
+
+        @Override
+        public Void visitLargeInPredicate(LargeInPredicate node, Scope scope) {
+            predicateBaseAndCheck(node);
+            // check compatible type
+            List<Type> list = node.getChildren().stream().map(Expr::getType).collect(Collectors.toList());
+            Type compatibleType = TypeManager.getCompatibleTypeForBetweenAndIn(list, false);
+
+            if (compatibleType == Type.INVALID) {
+                throw new SemanticException("The input types (" + list.stream().map(Type::toSql).collect(
+                        Collectors.joining(",")) + ") of in predict are not compatible", node.getPos());
+            }
+
+            for (Expr child : node.getChildren()) {
+                Type type = child.getType();
+                if (!Type.canCastTo(type, compatibleType)) {
+                    throw new SemanticException(
+                            "in predicate type " + type.toSql() + " with type " + compatibleType.toSql()
+                                    + " is invalid", child.getPos());
+                }
+            }
+
+            Type columnType = node.getChildren().get(0).getType();
+            Type constantType = node.getChildren().get(1).getType();
+
+            // Only support: (1) columnType is IntegerType and constantType is bigint
+            //               (2) both column and value are string types
+            boolean isIntegerTypeBigint = columnType.isIntegerType() && constantType.isBigint();
+            boolean isBothString = columnType.isStringType() && constantType.isStringType();
+
+            if (!isIntegerTypeBigint && !isBothString) {
+                throw new LargeInPredicateException(
+                        "LargeInPredicate only supports: (1) compare type is IntegerType and constant type is BIGINT, " +
+                        "(2) both compare and constant are STRING types. Current types: compareType=%s, constantValueType=%s",
+                        columnType.toSql(), constantType.toSql());
+            }
+
+            node.setConstantType(constantType);
 
             return null;
         }

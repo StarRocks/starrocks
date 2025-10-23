@@ -65,4 +65,22 @@ public class PostProcessListener extends StarRocksBaseListener {
             throw new ParsingException(PARSER_ERROR_MSG.insertRowsExceedLimit(childCount, maxExprChildCount), pos);
         }
     }
+
+    @Override
+    public void exitIntegerList(StarRocksParser.IntegerListContext ctx) {
+        long childCount = ctx.INTEGER_VALUE().size();
+        if (childCount > maxExprChildCount) {
+            NodePosition pos = new NodePosition(ctx.start, ctx.stop);
+            throw new ParsingException(PARSER_ERROR_MSG.argsOfExprExceedLimit(childCount, maxExprChildCount), pos);
+        }
+    }
+
+    @Override
+    public void exitStringList(StarRocksParser.StringListContext ctx) {
+        long childCount = ctx.string().size();
+        if (childCount > maxExprChildCount) {
+            NodePosition pos = new NodePosition(ctx.start, ctx.stop);
+            throw new ParsingException(PARSER_ERROR_MSG.argsOfExprExceedLimit(childCount, maxExprChildCount), pos);
+        }
+    }
 }

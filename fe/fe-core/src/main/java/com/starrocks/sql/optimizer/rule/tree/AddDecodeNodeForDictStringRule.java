@@ -59,6 +59,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LargeInPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
@@ -1125,6 +1126,11 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
 
             predicate.getChild(0).accept(this, context);
             context.worthApplied |= context.canDictOptBeApplied;
+            return null;
+        }
+
+        @Override
+        public Void visitLargeInPredicate(LargeInPredicateOperator predicate, CouldApplyDictOptimizeContext context) {
             return null;
         }
 

@@ -108,6 +108,7 @@ import com.starrocks.sql.ast.expression.InPredicate;
 import com.starrocks.sql.ast.expression.InformationFunction;
 import com.starrocks.sql.ast.expression.IsNullPredicate;
 import com.starrocks.sql.ast.expression.LambdaFunctionExpr;
+import com.starrocks.sql.ast.expression.LargeInPredicate;
 import com.starrocks.sql.ast.expression.LargeStringLiteral;
 import com.starrocks.sql.ast.expression.LikePredicate;
 import com.starrocks.sql.ast.expression.LimitElement;
@@ -1263,6 +1264,18 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
             strBuilder.append((i + 1 != node.getChildren().size()) ? ", " : "");
         }
         strBuilder.append(")");
+        return strBuilder.toString();
+    }
+
+    @Override
+    public String visitLargeInPredicate(LargeInPredicate node, Void context) {
+        StringBuilder strBuilder = new StringBuilder();
+        String notStr = (node.isNotIn()) ? "NOT " : "";
+        
+        strBuilder.append(printWithParentheses(node.getCompareExpr())).append(" ").append(notStr).append("IN (");
+        strBuilder.append(node.getRawText());
+        strBuilder.append(")");
+        
         return strBuilder.toString();
     }
 
