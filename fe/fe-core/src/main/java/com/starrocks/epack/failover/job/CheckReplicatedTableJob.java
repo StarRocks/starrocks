@@ -9,6 +9,7 @@ import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.ListPartitionInfo;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
@@ -279,6 +280,15 @@ public class CheckReplicatedTableJob extends FailoverGroupJob {
             LOG.warn("Local table {}.{} has different distribution column {} with remote table distribution column {}",
                     localDatabase.getFullName(), localTable.getName(),
                     localTable.getDistributionColumnNames(), remoteTable.getDistributionColumnNames());
+            return false;
+        }
+
+        MaterializedIndexMeta localBaseIndexMeta = localTable.getIndexMetaByIndexId(localTable.getBaseIndexId());
+        MaterializedIndexMeta remoteBaseIndexMeta = remoteTable.getIndexMetaByIndexId(remoteTable.getBaseIndexId());
+        if (localBaseIndexMeta.getSchemaVersion() != remoteBaseIndexMeta.getSchemaVersion()) {
+            LOG.warn("Local table {}.{} has different schema version {} with remote table schema version {}",
+                    localDatabase.getFullName(), localTable.getName(),
+                    localBaseIndexMeta.getSchemaVersion(), remoteBaseIndexMeta.getSchemaVersion());
             return false;
         }
 

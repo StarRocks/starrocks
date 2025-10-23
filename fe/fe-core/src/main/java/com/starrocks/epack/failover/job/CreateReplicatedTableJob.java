@@ -294,6 +294,9 @@ public class CreateReplicatedTableJob extends FailoverGroupJob {
 
     private static Map<String, String> getProperties(OlapTable table) {
         Map<String, String> properties = table.getProperties();
+        // add schema_version
+        MaterializedIndexMeta baseIndexMeta = table.getIndexMetaByIndexId(table.getBaseIndexId());
+        properties.put(PropertyAnalyzer.PROPERTIES_SCHEMA_VERSION, String.valueOf(baseIndexMeta.getSchemaVersion()));
         // labels.location is not supported now
         properties.remove(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION);
         // colocate_with is not supported now
