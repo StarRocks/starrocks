@@ -135,6 +135,9 @@ StatusOr<std::shared_ptr<FileSystem>> FileSystem::CreateSharedFromString(std::st
     if (fs::is_s3_uri(uri)) {
         return get_tls_fs_s3();
     }
+    if (options.azure_use_native_sdk() && fs::is_azblob_uri(uri)) {
+        return new_fs_azblob(options);
+    }
 #if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
     if (is_starlet_uri(uri)) {
         return get_tls_fs_starlet();
