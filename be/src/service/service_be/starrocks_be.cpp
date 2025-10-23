@@ -90,7 +90,7 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     daemon->init(as_cn, paths);
     LOG(INFO) << process_name << " start step " << start_step++ << ": daemon threads start successfully";
 
-#if defined(WITH_JDBC)
+#ifndef __APPLE__
     // init jdbc driver manager
     EXIT_IF_ERROR(JDBCDriverManager::getInstance()->init(std::string(getenv("STARROCKS_HOME")) + "/lib/jdbc_drivers"));
     LOG(INFO) << process_name << " start step " << start_step++ << ": jdbc driver manager init successfully";
