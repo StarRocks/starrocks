@@ -41,16 +41,29 @@ public class ProcProfileCollector extends FrontendDaemon {
 
     private final SimpleDateFormat profileTimeFormat = new SimpleDateFormat("yyyyMMdd-HHmmss");
     private final String profileLogDir;
+    private final boolean isPlatformSupported;
 
     private long lastLogTime = -1;
 
     public ProcProfileCollector() {
         super("ProcProfileCollector", 1000L);
         profileLogDir = Config.sys_log_dir + "/proc_profile";
+        isPlatformSupported = PlatformSupportChecker.isAsyncProfilerSupported();
+        
+        // Log platform compatibility information
+        PlatformSupportChecker.logPlatformInfo();
     }
 
     @Override
     protected void runAfterCatalogReady() {
+        // Check platform support before attempting to collect profiles
+        if (!isPlatformSupported) {
+            checkAndLog(() -> LOG.warn("Profiling is disabled due to unsupported platform: {}. " +
+                    "AsyncProfiler only supports Linux and macOS platforms.", 
+                    PlatformSupportChecker.getPlatformDescription()));
+            return;
+        }
+
         File file = new File(profileLogDir);
         file.mkdirs();
 
@@ -74,6 +87,15 @@ public class ProcProfileCollector extends FrontendDaemon {
             Thread.sleep(Config.proc_profile_collect_time_s * 1000L);
             profiler.execute(String.format("stop,file=%s", profileLogDir + "/" + fileName));
         } catch (Exception e) {
+            // Check if this is a platform-related exception
+            if (isPlatformUnsupportedException(e)) {
+                checkAndLog(() -> LOG.warn("Memory profiling is not supported on this platform: {}. " +
+                        "Disabling memory profiling. Reason: {}", 
+                        PlatformSupportChecker.getPlatformDescription(), e.getMessage()));
+                // Stop the daemon to prevent repeated failures
+                stop();
+                return;
+            }
             checkAndLog(() -> LOG.warn("collect memory profile failed, reason: {}", e.getMessage()));
             throw new RuntimeException("Failed to collect memory profile", e);
         }
@@ -95,6 +117,15 @@ public class ProcProfileCollector extends FrontendDaemon {
             Thread.sleep(Config.proc_profile_collect_time_s * 1000L);
             profiler.execute(String.format("stop,file=%s", profileLogDir + "/" + fileName));
         } catch (Exception e) {
+            // Check if this is a platform-related exception
+            if (isPlatformUnsupportedException(e)) {
+                checkAndLog(() -> LOG.warn("CPU profiling is not supported on this platform: {}. " +
+                        "Disabling CPU profiling. Reason: {}", 
+                        PlatformSupportChecker.getPlatformDescription(), e.getMessage()));
+                // Stop the daemon to prevent repeated failures
+                stop();
+                return;
+            }
             checkAndLog(() -> LOG.warn("collect cpu profile failed, reason: {}", e.getMessage()));
             throw new RuntimeException("Failed to collect CPU profile", e);
         }
@@ -182,5 +213,31 @@ public class ProcProfileCollector extends FrontendDaemon {
             runnable.run();
             lastLogTime = System.currentTimeMillis();
         }
+    }
+
+    /**
+     * Check if the given exception is related to platform unsupported issues.
+     * AsyncProfiler may throw various exceptions when the platform is not supported.
+     * 
+     * @param e the exception to check
+     * @return true if this appears to be a platform-related exception
+     */
+    private boolean isPlatformUnsupportedException(Exception e) {
+        String message = e.getMessage();
+        if (message == null) {
+            return false;
+        }
+        
+        String lowerMessage = message.toLowerCase();
+        return lowerMessage.contains("unsupported") ||
+               lowerMessage.contains("not supported") ||
+               lowerMessage.contains("platform") ||
+               lowerMessage.contains("architecture") ||
+               lowerMessage.contains("os") ||
+               lowerMessage.contains("operating system") ||
+               lowerMessage.contains("native") ||
+               lowerMessage.contains("jni") ||
+               lowerMessage.contains("library") ||
+               lowerMessage.contains("load");
     }
 }
