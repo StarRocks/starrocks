@@ -5315,3 +5315,14 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Is mutable: Yes
 - Description: The interval that the secondary replica checks it's status on the primary replica if the last check rpc fails.
 - Introduced in: 3.5.1
+
+##### enable_resolve_hostname_to_ip_in_load_error_url
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: For `error_urls` debugging, whether to allow operators to choose between using original hostnames from FE heartbeat or forcing resolution to IP addresses based on their environment needs.
+  - `true`: Resolve hostnames to IPs.
+  - `false` (Default): Keeps the original hostname in the error URL.
+- Introduced in: v4.0.1
