@@ -167,13 +167,6 @@ public abstract class MVTestBase extends StarRocksTestBase {
         Pair<String, Pair<ExecPlan, String>> result =
                 UtFrameUtils.getFragmentPlanWithTrace(connectContext, sql, traceModule);
         Pair<ExecPlan, String> execPlanWithQuery = result.second;
-<<<<<<< HEAD
-        String traceLog = execPlanWithQuery.second;
-        if (!Strings.isNullOrEmpty(traceLog)) {
-            System.out.println(traceLog);
-        }
-=======
->>>>>>> 0a08eaa5c4 ([UT] Output trace logs when fe ut fails (#64408))
         return execPlanWithQuery.first.getExplainString(level);
     }
 

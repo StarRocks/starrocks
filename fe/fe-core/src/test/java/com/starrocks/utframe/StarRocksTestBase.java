@@ -36,14 +36,11 @@ import java.util.Set;
 public abstract class StarRocksTestBase {
     protected static final Logger LOG = LogManager.getLogger(StarRocksTestBase.class);
 
-<<<<<<< HEAD
-=======
     // Whether print log to system out
     protected static boolean isOutputSystemOut = false;
     // Whether output trace log by default
     protected static boolean isOutputTraceLog = false;
 
->>>>>>> 0a08eaa5c4 ([UT] Output trace logs when fe ut fails (#64408))
     // StarRocksAssert is a class that provides methods to interact with StarRocks.
     public static StarRocksAssert starRocksAssert;
     // existedTables is a set that contains all tables that have been created.

@@ -582,18 +582,12 @@ public class UtFrameUtils {
             } catch (Exception e) {
                 throw e;
             } finally {
-<<<<<<< HEAD
-                String pr = Tracers.printLogs();
-                if (!Strings.isNullOrEmpty(pr)) {
-                    System.out.println(pr);
-=======
                 // only output trace log in specific case
                 if (StarRocksTestBase.isOutputTraceLog) {
                     String pr = Tracers.printLogs();
                     if (!Strings.isNullOrEmpty(pr)) {
-                        StarRocksTestBase.logSysInfo(pr);
+                        System.out.println(pr);
                     }
->>>>>>> 0a08eaa5c4 ([UT] Output trace logs when fe ut fails (#64408))
                 }
             }
         }
