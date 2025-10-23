@@ -1501,7 +1501,13 @@ public class QueryAnalyzer {
 
         @Override
         public Scope visitQueryStatement(QueryStatement node, Scope parent) {
-            return process(node.getQueryRelation(), parent);
+            QueryRelation queryRelation = node.getQueryRelation();
+            if (queryRelation != null && !queryRelation.getCteRelations().isEmpty()) {
+                for (CTERelation cteRelation : queryRelation.getCteRelations()) {
+                    process(cteRelation.getCteQueryStatement(), parent);
+                }
+            }
+            return process(queryRelation, parent);
         }
 
         @Override
