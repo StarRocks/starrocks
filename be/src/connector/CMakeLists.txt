@@ -35,4 +35,5 @@ add_library(Connector STATIC
         connector_sink_executor.cpp
         deletion_vector/deletion_vector.cpp
         deletion_vector/deletion_bitmap.cpp
+        redis_connector.cpp
 )
