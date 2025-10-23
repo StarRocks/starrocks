@@ -38,6 +38,7 @@ import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.TableVersionRange;
@@ -466,7 +467,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         }
 
         if (partitionStatistics.size() == 1) {
-            Statistics partitionStats =  partitionStatistics.values().iterator().next();
+            Statistics partitionStats = partitionStatistics.values().iterator().next();
             columnMap.keySet().forEach(column ->
                     statistics.addColumnStatistic(column, partitionStats.getColumnStatistic(column)));
         }
@@ -772,7 +773,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     private Void computeNormalExternalTableScanNode(Operator node, ExpressionContext context, Table table,
                                                     Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
-                                                    int outputRowCount) {
+                                                    long outputRowCount) {
         Statistics.Builder builder = StatisticsCalcUtils.estimateScanColumns(table, colRefToColumnMetaMap, optimizerContext);
         builder.setOutputRowCount(outputRowCount);
 
@@ -783,25 +784,25 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     @Override
     public Void visitLogicalMysqlScan(LogicalMysqlScanOperator node, ExpressionContext context) {
         return computeNormalExternalTableScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap(),
-                StatisticsEstimateCoefficient.DEFAULT_MYSQL_OUTPUT_ROWS);
+                Config.default_statistics_output_row_count);
     }
 
     @Override
     public Void visitPhysicalMysqlScan(PhysicalMysqlScanOperator node, ExpressionContext context) {
         return computeNormalExternalTableScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap(),
-                StatisticsEstimateCoefficient.DEFAULT_MYSQL_OUTPUT_ROWS);
+                Config.default_statistics_output_row_count);
     }
 
     @Override
     public Void visitLogicalEsScan(LogicalEsScanOperator node, ExpressionContext context) {
         return computeNormalExternalTableScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap(),
-                StatisticsEstimateCoefficient.DEFAULT_ES_OUTPUT_ROWS);
+                Config.default_statistics_output_row_count);
     }
 
     @Override
     public Void visitPhysicalEsScan(PhysicalEsScanOperator node, ExpressionContext context) {
         return computeNormalExternalTableScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap(),
-                StatisticsEstimateCoefficient.DEFAULT_ES_OUTPUT_ROWS);
+                Config.default_statistics_output_row_count);
     }
 
     @Override
@@ -849,13 +850,13 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     @Override
     public Void visitLogicalJDBCScan(LogicalJDBCScanOperator node, ExpressionContext context) {
         return computeNormalExternalTableScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap(),
-                StatisticsEstimateCoefficient.DEFAULT_JDBC_OUTPUT_ROWS);
+                Config.default_statistics_output_row_count);
     }
 
     @Override
     public Void visitPhysicalJDBCScan(PhysicalJDBCScanOperator node, ExpressionContext context) {
         return computeNormalExternalTableScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap(),
-                StatisticsEstimateCoefficient.DEFAULT_JDBC_OUTPUT_ROWS);
+                Config.default_statistics_output_row_count);
     }
 
     /**

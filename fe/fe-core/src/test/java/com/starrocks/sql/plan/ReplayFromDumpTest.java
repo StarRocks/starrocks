@@ -94,6 +94,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 getCostPlanFragment(getDumpInfoFromFile("query_dump/join_eliminate_nulls"), sessionVariable);
         Assertions.assertTrue(replayPair.second.contains("11:NESTLOOP JOIN\n" +
                 "  |  join op: INNER JOIN\n" +
+<<<<<<< HEAD
                 "  |  other join predicates: CASE 174: type WHEN '1' THEN concat('ocms_', 90: name) = " +
                 "'ocms_fengyang56' " +
                 "WHEN '0' THEN TRUE ELSE FALSE END\n" +
@@ -103,6 +104,17 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 "  |  equal join conjunct: [tid, BIGINT, true] = [5: customer_id, BIGINT, true]\n" +
                 "  |  build runtime filters:\n" +
                 "  |  - filter_id = 0, build_expr = (5: customer_id), remote = true"), replayPair.second);
+=======
+                "  |  other join predicates: CASE [174: type, VARCHAR, true] WHEN '1' THEN concat[('ocms_', [90: name, VARCHAR,"
+                + " true]); args: VARCHAR; result: VARCHAR; args nullable: true; result nullable: true] = 'ocms_fengyang56' "
+                + "WHEN '0' THEN TRUE ELSE FALSE END\n"
+                + "  |  limit: 10"), replayPair.second);
+        Assertions.assertTrue(replayPair.second.contains("  4:HASH JOIN\n" +
+                "  |  join op: LEFT OUTER JOIN (PARTITIONED)\n" +
+                "  |  equal join conjunct: [5: customer_id, BIGINT, true] = [tid, BIGINT, true]\n" +
+                "  |  output columns: 3, 90\n" +
+                "  |  cardinality: 1"), replayPair.second);
+>>>>>>> 957e63e662 ([Enhancement] unify jdbc/es/mysql default row count (#64446))
         sessionVariable.setNewPlanerAggStage(0);
     }
 
@@ -289,10 +301,10 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/cross_reorder"), null, TExplainLevel.NORMAL);
         Assertions.assertTrue(replayPair.second.contains("  13:NESTLOOP JOIN\n" +
-                "  |  join op: INNER JOIN\n" +
-                "  |  colocate: false, reason: \n" +
-                "  |  other join predicates: CAST(CASE WHEN CAST(6: v3 AS BOOLEAN) THEN CAST(11: v2 AS VARCHAR) " +
-                "WHEN CAST(3: v3 AS BOOLEAN) THEN '123' ELSE CAST(12: v3 AS VARCHAR) END AS DOUBLE) > " +
+                        "  |  join op: INNER JOIN\n" +
+                        "  |  colocate: false, reason: \n" +
+                        "  |  other join predicates: CAST(CASE WHEN CAST(6: v3 AS BOOLEAN) THEN CAST(11: v2 AS VARCHAR) " +
+                        "WHEN CAST(3: v3 AS BOOLEAN) THEN '123' ELSE CAST(12: v3 AS VARCHAR) END AS DOUBLE) > " +
                         "1.0, (CAST(2: v2 AS DECIMAL128(38,9)) = CAST(8: v2 AS DECIMAL128(38,9))) OR (3: v3 = 8: v2)\n"),
                 replayPair.second);
         connectContext.getSessionVariable().setEnableLocalShuffleAgg(true);
@@ -1017,8 +1029,8 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 TExplainLevel.NORMAL);
         Assertions.assertTrue(replayPair.second.contains(
                 "get_json_string(107: mock_031, '$.\"fY21_Territory_Score__c\"')\n" +
-                "  |  \n" +
-                "  9:OlapScanNode\n" +
+                        "  |  \n" +
+                        "  9:OlapScanNode\n" +
                         "     TABLE: tbl_mock_103"), replayPair.second);
     }
 
