@@ -996,6 +996,8 @@ public class CTEPlanTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan, "  6:SELECT\n" +
                 "  |  predicates: 1: v1 + 4: v4 > 10");
+
+        connectContext.getSessionVariable().setReplacePredicateWithFilter(false);
     }
 
     @ParameterizedTest
@@ -1008,6 +1010,7 @@ public class CTEPlanTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan, "  1:SELECT\n" +
                 "  |  predicates: 1: v1 > 10");
+        connectContext.getSessionVariable().setReplacePredicateWithFilter(false);
     }
 
     @ParameterizedTest
@@ -1023,6 +1026,8 @@ public class CTEPlanTest extends PlanTestBase {
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 1: v1 = 4: v4\n" +
                 "  |  other join predicates: 1: v1 + 4: v4 > 10");
+
+        connectContext.getSessionVariable().setReplacePredicateWithFilter(false);
     }
 
     @ParameterizedTest
@@ -1036,6 +1041,7 @@ public class CTEPlanTest extends PlanTestBase {
         assertContains(plan, " 1:SELECT\n" +
                 "  |  predicates: 1: v1 = 10\n" +
                 "  |  ");
+        connectContext.getSessionVariable().setReplacePredicateWithFilter(false);
     }
 
     @ParameterizedTest
@@ -1050,6 +1056,8 @@ public class CTEPlanTest extends PlanTestBase {
                 "     TABLE: t0\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 1: v1 = 10");
+
+        connectContext.getSessionVariable().setReplacePredicateWithFilter(false);
     }
 
     @ParameterizedTest
