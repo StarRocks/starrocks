@@ -40,7 +40,11 @@ import com.starrocks.backup.BackupJob.BackupJobState;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.LocalTablet;
+import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.View;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
@@ -51,7 +55,11 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.TableRefPersist;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
+import com.starrocks.server.NodeMgr;
 import com.starrocks.sql.ast.expression.TableName;
+import com.starrocks.system.Backend;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -77,9 +85,11 @@ import org.junit.jupiter.api.Test;
 
 import java.io.File;
 import java.io.IOException;
+import java.lang.reflect.Method;
 import java.nio.file.FileVisitOption;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -106,9 +116,14 @@ public class BackupJobTest {
     @Mocked
     private GlobalStateMgr globalStateMgr;
 
+    @Mocked
+    private LocalMetastore localMetastore;
+
     private MockBackupHandler backupHandler;
 
     private MockRepositoryMgr repoMgr;
+
+    private int schemaHash = 1;
 
     // Thread is not mockable in Jmockit, use subclass instead
     private final class MockBackupHandler extends BackupHandler {
@@ -175,6 +190,15 @@ public class BackupJobTest {
 
         LockManager lockManager = new LockManager();
 
+        // Setup default NodeMgr with SystemInfoService
+        SystemInfoService infoService = new SystemInfoService();
+        Backend backend = new Backend(backendId, "127.0.0.1", 9050);
+        backend.setAlive(true);
+        infoService.addBackend(backend);
+        
+        NodeMgr nodeMgr = new NodeMgr();
+        Deencapsulation.setField(nodeMgr, "systemInfo", infoService);
+
         new Expectations(globalStateMgr) {
             {
                 globalStateMgr.getLockManager();
@@ -185,11 +209,13 @@ public class BackupJobTest {
                 minTimes = 0;
                 result = new GtidGenerator();
 
-                globalStateMgr.getLocalMetastore().getDb(anyLong);
+                globalStateMgr.getLocalMetastore();
                 minTimes = 0;
-                result = db;
+                result = localMetastore;
 
-
+                globalStateMgr.getNodeMgr();
+                minTimes = 0;
+                result = nodeMgr;
 
                 globalStateMgr.getNextId();
                 minTimes = 0;
@@ -198,16 +224,24 @@ public class BackupJobTest {
                 globalStateMgr.getEditLog();
                 minTimes = 0;
                 result = editLog;
+            }
+        };
 
-                globalStateMgr.getLocalMetastore().getTable("testDb", "testTable");
+        new Expectations(localMetastore) {
+            {
+                localMetastore.getDb(anyLong);
+                minTimes = 0;
+                result = db;
+
+                localMetastore.getTable("testDb", "testTable");
                 minTimes = 0;
                 result = db.getTable(tblId);
 
-                globalStateMgr.getLocalMetastore().getTable("testDb", UnitTestUtil.VIEW_NAME);
+                localMetastore.getTable("testDb", UnitTestUtil.VIEW_NAME);
                 minTimes = 0;
                 result = db.getTable(viewId);
 
-                globalStateMgr.getLocalMetastore().getTable("testDb", "unknown_tbl");
+                localMetastore.getTable("testDb", "unknown_tbl");
                 minTimes = 0;
                 result = null;
             }
@@ -460,6 +494,358 @@ public class BackupJobTest {
             // test get backup info
             jobView.getInfo();
         } catch (Exception ignore) {
+        }
+    }
+
+    /**
+     * Test Replica.computeReplicaStatus() returns OK status when:
+     * - Backend is available
+     * - Replica version >= visible version
+     * - No failed versions
+     * - Schema hash matches
+     */
+    @Test
+    public void testComputeReplicaStatusOk() {
+        SystemInfoService infoService = new SystemInfoService();
+        Backend backend = new Backend(backendId, "127.0.0.1", 9050);
+        backend.setAlive(true);
+        infoService.addBackend(backend);
+
+        Replica replica = new Replica(1L, backendId, 10L, schemaHash, 0L, 0L,
+                Replica.ReplicaState.NORMAL, -1L, -1L);
+
+        Replica.ReplicaStatus status = replica.computeReplicaStatus(infoService, 10L, schemaHash);
+        Assertions.assertEquals(Replica.ReplicaStatus.OK, status);
+
+        // Test with higher replica version
+        status = replica.computeReplicaStatus(infoService, 8L, schemaHash);
+        Assertions.assertEquals(Replica.ReplicaStatus.OK, status);
+    }
+
+    /**
+     * Test Replica.computeReplicaStatus() returns DEAD status when:
+     * - Backend is null
+     * - Backend is not available
+     * - Replica is marked as bad
+     */
+    @Test
+    public void testComputeReplicaStatusDead() {
+        SystemInfoService infoService = new SystemInfoService();
+
+        // Case 1: Backend is null
+        Replica replica = new Replica(1L, backendId, 10L, schemaHash, 0L, 0L,
+                Replica.ReplicaState.NORMAL, -1L, -1L);
+        Replica.ReplicaStatus status = replica.computeReplicaStatus(infoService, 10L, schemaHash);
+        Assertions.assertEquals(Replica.ReplicaStatus.DEAD, status);
+
+        // Case 2: Backend is not available (not alive)
+        Backend backend = new Backend(backendId, "127.0.0.1", 9050);
+        backend.setAlive(false);
+        infoService.addBackend(backend);
+        status = replica.computeReplicaStatus(infoService, 10L, schemaHash);
+        Assertions.assertEquals(Replica.ReplicaStatus.DEAD, status);
+
+        // Case 3: Backend is available but replica is bad
+        backend.setAlive(true);
+        replica.setBad(true);
+        status = replica.computeReplicaStatus(infoService, 10L, schemaHash);
+        Assertions.assertEquals(Replica.ReplicaStatus.DEAD, status);
+    }
+
+    /**
+     * Test Replica.computeReplicaStatus() returns VERSION_ERROR status when:
+     * - Replica version < visible version
+     * - Replica has failed version (lastFailedVersion > 0)
+     */
+    @Test
+    public void testComputeReplicaStatusVersionError() {
+        SystemInfoService infoService = new SystemInfoService();
+        Backend backend = new Backend(backendId, "127.0.0.1", 9050);
+        backend.setAlive(true);
+        infoService.addBackend(backend);
+
+        // Case 1: Replica version < visible version
+        Replica replica = new Replica(1L, backendId, 5L, schemaHash, 0L, 0L,
+                Replica.ReplicaState.NORMAL, -1L, -1L);
+        Replica.ReplicaStatus status = replica.computeReplicaStatus(infoService, 10L, schemaHash);
+        Assertions.assertEquals(Replica.ReplicaStatus.VERSION_ERROR, status);
+
+        // Case 2: Replica has failed version
+        Replica replica2 = new Replica(2L, backendId, 10L, schemaHash, 0L, 0L,
+                Replica.ReplicaState.NORMAL, 8L, -1L);
+        status = replica2.computeReplicaStatus(infoService, 10L, schemaHash);
+        Assertions.assertEquals(Replica.ReplicaStatus.VERSION_ERROR, status);
+    }
+
+    /**
+     * Test Replica.computeReplicaStatus() returns SCHEMA_ERROR status when:
+     * - Schema hash does not match (and schema hash is not -1)
+     */
+    @Test
+    public void testComputeReplicaStatusSchemaError() {
+        SystemInfoService infoService = new SystemInfoService();
+        Backend backend = new Backend(backendId, "127.0.0.1", 9050);
+        backend.setAlive(true);
+        infoService.addBackend(backend);
+
+        Replica replica = new Replica(1L, backendId, 10L, 12345, 0L, 0L,
+                Replica.ReplicaState.NORMAL, -1L, -1L);
+
+        Replica.ReplicaStatus status = replica.computeReplicaStatus(infoService, 10L, 67890);
+        Assertions.assertEquals(Replica.ReplicaStatus.SCHEMA_ERROR, status);
+
+        // Test that -1 schema hash is treated as OK (not checked)
+        Replica replica2 = new Replica(2L, backendId, 10L, -1, 0L, 0L,
+                Replica.ReplicaState.NORMAL, -1L, -1L);
+        status = replica2.computeReplicaStatus(infoService, 10L, 67890);
+        Assertions.assertEquals(Replica.ReplicaStatus.OK, status);
+    }
+
+    /**
+     * Test that chooseReplica correctly chooses a healthy replica and skips bad replicas.
+     * This test creates a tablet with multiple replicas in different states and verifies
+     * that BackupJob.prepareSnapshotTask() chooses only the healthy one.
+     */
+    @Test
+    public void testChooseReplicaSkipsBadReplicas() {
+        // Get the existing NodeMgr and modify its SystemInfoService
+        NodeMgr existingNodeMgr = globalStateMgr.getNodeMgr();
+        SystemInfoService infoService = Deencapsulation.getField(existingNodeMgr, "systemInfo");
+        
+        // Clear existing backends and add test-specific ones
+        Map<Long, Backend> backends = Deencapsulation.getField(infoService, "idToBackendRef");
+        backends.clear();
+        
+        // Setup multiple backends
+        long backendId1 = 10001;
+        long backendId2 = 10002;
+        long backendId3 = 10003;
+        long backendId4 = 10004;
+        
+        // Backend 1: not available (DEAD replica)
+        Backend backend1 = new Backend(backendId1, "127.0.0.1", 9050);
+        backend1.setAlive(false);
+        infoService.addBackend(backend1);
+        
+        // Backend 2: available but replica has version error
+        Backend backend2 = new Backend(backendId2, "127.0.0.2", 9050);
+        backend2.setAlive(true);
+        infoService.addBackend(backend2);
+        
+        // Backend 3: available and healthy (should be chosen)
+        Backend backend3 = new Backend(backendId3, "127.0.0.3", 9050);
+        backend3.setAlive(true);
+        infoService.addBackend(backend3);
+        
+        // Backend 4: available but replica is marked as bad
+        Backend backend4 = new Backend(backendId4, "127.0.0.4", 9050);
+        backend4.setAlive(true);
+        infoService.addBackend(backend4);
+
+        // Create a tablet with multiple replicas
+        LocalTablet tablet = new LocalTablet(tabletId);
+        
+        // Replica 1: DEAD (backend not available)
+        Replica replica1 = new Replica(1L, backendId1, 10L, schemaHash, 0L, 0L,
+                Replica.ReplicaState.NORMAL, -1L, -1L);
+        
+        // Replica 2: VERSION_ERROR (version too old)
+        Replica replica2 = new Replica(2L, backendId2, 5L, schemaHash, 0L, 0L,
+                Replica.ReplicaState.NORMAL, -1L, -1L);
+        
+        // Replica 3: OK (should be chosen)
+        Replica replica3 = new Replica(3L, backendId3, 10L, schemaHash, 0L, 0L,
+                Replica.ReplicaState.NORMAL, -1L, -1L);
+        
+        // Replica 4: DEAD (marked as bad)
+        Replica replica4 = new Replica(4L, backendId4, 10L, schemaHash, 0L, 0L,
+                Replica.ReplicaState.NORMAL, -1L, -1L);
+        replica4.setBad(true);
+        
+        // Use reflection to add replicas to avoid TabletInvertedIndex issues
+        List<Replica> replicas = Lists.newArrayList(replica1, replica2, replica3, replica4);
+        Deencapsulation.setField(tablet, "replicas", replicas);
+        Deencapsulation.setField(tablet, "immutableReplicas", Collections.unmodifiableList(replicas));
+
+        // Test chooseReplica through reflection since it's private
+        try {
+            Method chooseReplicaMethod = BackupJob.class.getDeclaredMethod("chooseReplica",
+                    LocalTablet.class, long.class, int.class);
+            chooseReplicaMethod.setAccessible(true);
+            
+            Replica chosenReplica = (Replica) chooseReplicaMethod.invoke(job, tablet, 10L, schemaHash);
+            
+            // Should choose replica3 which is healthy
+            Assertions.assertNotNull(chosenReplica);
+            Assertions.assertEquals(3L, chosenReplica.getId());
+            Assertions.assertEquals(backendId3, chosenReplica.getBackendId());
+        } catch (Exception e) {
+            e.printStackTrace();
+            Assertions.fail("Failed to test chooseReplica: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Test that chooseReplica returns null when no healthy replica exists.
+     */
+    @Test
+    public void testChooseReplicaReturnsNullWhenNoHealthyReplica() {
+        // Get the existing NodeMgr and modify its SystemInfoService
+        NodeMgr existingNodeMgr = globalStateMgr.getNodeMgr();
+        SystemInfoService infoService = Deencapsulation.getField(existingNodeMgr, "systemInfo");
+        
+        // Clear existing backends and add test-specific one
+        Map<Long, Backend> backends = Deencapsulation.getField(infoService, "idToBackendRef");
+        backends.clear();
+        
+        // Use a different backend ID to avoid conflicts
+        long testBackendId = 20001;
+        
+        // Setup backend that is not available
+        Backend backend = new Backend(testBackendId, "127.0.0.1", 9050);
+        backend.setAlive(false);
+        infoService.addBackend(backend);
+
+        // Create a tablet with only bad replicas
+        LocalTablet tablet = new LocalTablet(tabletId);
+        
+        // All replicas are DEAD
+        Replica replica1 = new Replica(1L, testBackendId, 10L, schemaHash, 0L, 0L,
+                Replica.ReplicaState.NORMAL, -1L, -1L);
+        
+        // Use reflection to add replicas to avoid TabletInvertedIndex issues
+        List<Replica> replicas = Lists.newArrayList(replica1);
+        Deencapsulation.setField(tablet, "replicas", replicas);
+        Deencapsulation.setField(tablet, "immutableReplicas", Collections.unmodifiableList(replicas));
+
+        // Test chooseReplica through reflection
+        try {
+            Method chooseReplicaMethod = BackupJob.class.getDeclaredMethod("chooseReplica",
+                    LocalTablet.class, long.class, int.class);
+            chooseReplicaMethod.setAccessible(true);
+            
+            Replica chosenReplica = (Replica) chooseReplicaMethod.invoke(job, tablet, 10L, schemaHash);
+            
+            // Should return null when no healthy replica exists
+            Assertions.assertNull(chosenReplica);
+        } catch (Exception e) {
+            e.printStackTrace();
+            Assertions.fail("Failed to test chooseReplica: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Test that prepareSnapshotTask fails with proper error when no healthy replica exists.
+     * This ensures the bug fix properly handles the case where all replicas are bad.
+     */
+    @Test
+    public void testPrepareSnapshotTaskFailsWhenNoHealthyReplica() {
+        // Get the existing NodeMgr and modify its SystemInfoService
+        NodeMgr existingNodeMgr = globalStateMgr.getNodeMgr();
+        SystemInfoService infoService = Deencapsulation.getField(existingNodeMgr, "systemInfo");
+        
+        // Clear existing backends and add test-specific one
+        Map<Long, Backend> backends = Deencapsulation.getField(infoService, "idToBackendRef");
+        backends.clear();
+        
+        // Setup backend that is not available
+        Backend backend = new Backend(backendId, "127.0.0.1", 9050);
+        backend.setAlive(false);
+        infoService.addBackend(backend);
+
+        // Get the table and its components
+        // Note: UnitTestUtil creates partition with physical partition ID = partId + 100
+        OlapTable table = (OlapTable) db.getTable(tblId);
+        PhysicalPartition partition = table.getPhysicalPartition(partId + 100);
+        MaterializedIndex index = partition.getIndex(idxId);
+        LocalTablet tablet = (LocalTablet) index.getTablet(tabletId);
+
+        // Test prepareSnapshotTask through reflection
+        try {
+            Method prepareSnapshotTaskMethod = BackupJob.class.getDeclaredMethod("prepareSnapshotTask",
+                    PhysicalPartition.class, com.starrocks.catalog.Table.class, 
+                    com.starrocks.catalog.Tablet.class, MaterializedIndex.class,
+                    long.class, int.class);
+            prepareSnapshotTaskMethod.setAccessible(true);
+            
+            // Before calling prepareSnapshotTask, job should be OK
+            Assertions.assertEquals(Status.OK, job.getStatus());
+            
+            prepareSnapshotTaskMethod.invoke(job, partition, table, tablet, index, version, schemaHash);
+            
+            // After calling with no healthy replica, job status should be error
+            Assertions.assertNotEquals(Status.OK, job.getStatus());
+            Assertions.assertTrue(job.getStatus().getErrMsg().contains("failed to choose replica"));
+        } catch (Exception e) {
+            e.printStackTrace();
+            Assertions.fail("Failed to test prepareSnapshotTask: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Test that chooseReplica chooses replicas in order by replica ID.
+     * This ensures deterministic behavior in backup job.
+     */
+    @Test
+    public void testChooseReplicaOrderByReplicaId() {
+        // Get the existing NodeMgr and modify its SystemInfoService
+        NodeMgr existingNodeMgr = globalStateMgr.getNodeMgr();
+        SystemInfoService infoService = Deencapsulation.getField(existingNodeMgr, "systemInfo");
+        
+        // Clear existing backends and add test-specific ones
+        Map<Long, Backend> backends = Deencapsulation.getField(infoService, "idToBackendRef");
+        backends.clear();
+        
+        // Setup multiple healthy backends
+        long backendId1 = 10001;
+        long backendId2 = 10002;
+        long backendId3 = 10003;
+        
+        Backend backend1 = new Backend(backendId1, "127.0.0.1", 9050);
+        backend1.setAlive(true);
+        infoService.addBackend(backend1);
+        
+        Backend backend2 = new Backend(backendId2, "127.0.0.2", 9050);
+        backend2.setAlive(true);
+        infoService.addBackend(backend2);
+        
+        Backend backend3 = new Backend(backendId3, "127.0.0.3", 9050);
+        backend3.setAlive(true);
+        infoService.addBackend(backend3);
+
+        // Create a tablet with multiple healthy replicas (add in non-sorted order)
+        LocalTablet tablet = new LocalTablet(tabletId);
+        
+        // Create replicas in non-sorted order: 3, 1, 2
+        Replica replica3 = new Replica(30L, backendId3, 10L, schemaHash, 0L, 0L,
+                Replica.ReplicaState.NORMAL, -1L, -1L);
+        
+        Replica replica1 = new Replica(10L, backendId1, 10L, schemaHash, 0L, 0L,
+                Replica.ReplicaState.NORMAL, -1L, -1L);
+        
+        Replica replica2 = new Replica(20L, backendId2, 10L, schemaHash, 0L, 0L,
+                Replica.ReplicaState.NORMAL, -1L, -1L);
+        
+        // Use reflection to add replicas to avoid TabletInvertedIndex issues
+        List<Replica> replicas = Lists.newArrayList(replica3, replica1, replica2);
+        Deencapsulation.setField(tablet, "replicas", replicas);
+        Deencapsulation.setField(tablet, "immutableReplicas", Collections.unmodifiableList(replicas));
+
+        // Test chooseReplica through reflection
+        try {
+            Method chooseReplicaMethod = BackupJob.class.getDeclaredMethod("chooseReplica",
+                    LocalTablet.class, long.class, int.class);
+            chooseReplicaMethod.setAccessible(true);
+            
+            Replica chosenReplica = (Replica) chooseReplicaMethod.invoke(job, tablet, 10L, schemaHash);
+            
+            // Should choose replica with smallest ID (replica1 with ID 10)
+            Assertions.assertNotNull(chosenReplica);
+            Assertions.assertEquals(10L, chosenReplica.getId());
+            Assertions.assertEquals(backendId1, chosenReplica.getBackendId());
+        } catch (Exception e) {
+            e.printStackTrace();
+            Assertions.fail("Failed to test chooseReplica: " + e.getMessage());
         }
     }
 }
