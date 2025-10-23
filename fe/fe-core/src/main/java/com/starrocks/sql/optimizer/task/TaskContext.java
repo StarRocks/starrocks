@@ -18,6 +18,7 @@ package com.starrocks.sql.optimizer.task;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
+import com.starrocks.sql.optimizer.validate.PlanValidator;
 
 // The context for optimizer task
 public class TaskContext {
@@ -25,6 +26,7 @@ public class TaskContext {
     private final PhysicalPropertySet requiredProperty;
     private ColumnRefSet requiredColumns;
     private double upperBoundCost;
+    private final PlanValidator planValidator;
 
     public TaskContext(OptimizerContext context,
                        PhysicalPropertySet physicalPropertySet,
@@ -34,6 +36,11 @@ public class TaskContext {
         this.requiredProperty = physicalPropertySet;
         this.requiredColumns = requiredColumns;
         this.upperBoundCost = cost;
+        this.planValidator = new PlanValidator();
+    }
+
+    public PlanValidator getPlanValidator() {
+        return planValidator;
     }
 
     public OptimizerContext getOptimizerContext() {
