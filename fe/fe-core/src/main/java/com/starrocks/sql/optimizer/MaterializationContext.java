@@ -23,6 +23,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.StringLiteral;
@@ -54,6 +55,7 @@ import java.util.stream.Collectors;
 import static com.starrocks.catalog.TableProperty.QueryRewriteConsistencyMode.CHECKED;
 import static com.starrocks.sql.common.TimeUnitUtils.DATE_TRUNC_SUPPORTED_TIME_MAP;
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
+import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite1;
 
 public class MaterializationContext {
     private final MaterializedView mv;
@@ -230,14 +232,17 @@ public class MaterializationContext {
         final List<Table> queryTables = MvUtils.getAllTables(queryExpression);
         final List<Table> mvTables = getBaseTables();
         final OperatorType queryOp = queryExpression.getOp().getOpType();
+        final ConnectContext connectContext = ctx.getConnectContext();
 
         // if a query has been applied this mv, return false directly.
         List<LogicalScanOperator> scanOperators = MvUtils.getScanOperator(queryExpression);
         if (scanOperators.stream().anyMatch(op -> op.isOpAppliedMV(mv.getId()))) {
+            logMVRewrite1(connectContext, mvName, "mv pruned: mv has been applied in query scan operators");
             return false;
         }
 
         if (!checkOperatorCompatible(queryOp)) {
+            logMVRewrite1(connectContext, mvName, "mv pruned: operator type is not compatible, queryOp: {}", queryOp);
             return false;
         }
 
@@ -254,7 +259,7 @@ public class MaterializationContext {
                 for (OptExpression child : queryExpression.getInputs()) {
                     final List<Table> childTables = MvUtils.getAllTables(child);
                     if (Sets.newHashSet(childTables).contains(mvTables)) {
-                        logMVRewrite(mvName, "MV is pruned since subjoin could be rewritten");
+                        logMVRewrite(mvName, "mv pruned: MV is pruned since subjoin could be rewritten");
                         return false;
                     }
                 }
@@ -273,7 +278,7 @@ public class MaterializationContext {
             }
 
             if (!MvUtils.isSupportViewDelta(queryExpression)) {
-                logMVRewrite(mvName, "MV is not applicable in view delta mode: " +
+                logMVRewrite(mvName, "mv pruned: MV is not applicable in view delta mode: " +
                         "only support inner/left outer join type for now");
                 return false;
             }
@@ -287,7 +292,7 @@ public class MaterializationContext {
             for (TableScanDesc queryScanDesc : queryTableScanDescs) {
                 if (queryScanDesc.getJoinOptExpression() != null
                         && mvTableScanDescs.stream().noneMatch(scanDesc -> scanDesc.isCompatible(queryScanDesc))) {
-                    logMVRewrite(mvName, "MV is not applicable in view delta mode: " +
+                    logMVRewrite(mvName, "mv pruned: MV is not applicable in view delta mode: " +
                             "at least one same join type should be existed");
                     return false;
                 }
@@ -298,7 +303,7 @@ public class MaterializationContext {
 
         // If table lists do not intersect, can not be rewritten
         if (Collections.disjoint(queryTables, mvTables)) {
-            logMVRewrite(mvName, "MV is not applicable: query tables are disjoint with mvs' tables");
+            logMVRewrite(mvName, "mv pruned: query tables are disjoint with mvs' tables");
             return false;
         }
         return true;
