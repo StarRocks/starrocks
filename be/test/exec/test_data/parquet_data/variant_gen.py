@@ -64,7 +64,7 @@ INSERT INTO T VALUES ('primitive_boolean_false', false::Variant);
 INSERT INTO T VALUES ('primitive_int8', 42::Byte::Variant);
 INSERT INTO T VALUES ('primitive_int16', 1234::Short::Variant);
 INSERT INTO T VALUES ('primitive_int32', 123456::Integer::Variant);
-INSERT INTO T VALUES ('primitive_int64', 1234567890123456789::Long::Variant); -- must be be too large to fit in int32: https://github.com/apache/parquet-testing/issues/82
+INSERT INTO T VALUES ('primitive_int64', 1234567890123456789::Long::Variant); -- must be too large to fit in int32: https://github.com/apache/parquet-testing/issues/82
 INSERT INTO T VALUES ('primitive_double', 1234567890.1234::Double::Variant);
 INSERT INTO T VALUES ('primitive_decimal4', 12.34::Decimal(8,2)::Variant);
 INSERT INTO T VALUES ('primitive_decimal8', 12345678.90::Decimal(12,2)::Variant);
