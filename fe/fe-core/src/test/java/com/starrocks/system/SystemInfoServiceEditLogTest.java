@@ -17,7 +17,6 @@ package com.starrocks.system;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.Pair;
 import com.starrocks.leader.CheckpointController;
 import com.starrocks.persist.CancelDecommissionDiskInfo;
 import com.starrocks.persist.DecommissionDiskInfo;
@@ -37,6 +36,7 @@ import com.starrocks.sql.ast.CancelAlterSystemStmt;
 import com.starrocks.sql.ast.DecommissionBackendClause;
 import com.starrocks.sql.ast.DropBackendClause;
 import com.starrocks.sql.ast.DropComputeNodeClause;
+import com.starrocks.sql.ast.HostPort;
 import com.starrocks.sql.ast.ModifyBackendClause;
 import com.starrocks.thrift.TDisk;
 import com.starrocks.thrift.TStorageMedium;
@@ -89,8 +89,8 @@ public class SystemInfoServiceEditLogTest {
         List<String> hostPorts = Arrays.asList("192.168.1.100:9050", "192.168.1.101:9051");
 
         AddComputeNodeClause addComputeNodeClause = new AddComputeNodeClause(hostPorts, warehouse, cnGroupName, null);
-        addComputeNodeClause.getHostPortPairs().add(Pair.create("192.168.1.100", 9050));
-        addComputeNodeClause.getHostPortPairs().add(Pair.create("192.168.1.101", 9051));
+        addComputeNodeClause.getHostPortPairs().add(new HostPort("192.168.1.100", 9050));
+        addComputeNodeClause.getHostPortPairs().add(new HostPort("192.168.1.101", 9051));
 
         // 2. Verify initial state
         Assertions.assertEquals(0, masterSystemInfoService.getComputeNodes().size());
@@ -157,7 +157,7 @@ public class SystemInfoServiceEditLogTest {
         List<String> hostPorts = List.of("192.168.1.200:9050");
 
         AddComputeNodeClause addComputeNodeClause = new AddComputeNodeClause(hostPorts, warehouse, cnGroupName, null);
-        addComputeNodeClause.getHostPortPairs().add(Pair.create("192.168.1.200", 9050));
+        addComputeNodeClause.getHostPortPairs().add(new HostPort("192.168.1.200", 9050));
 
         // 2. Create a separate SystemInfoService for exception testing
         SystemInfoService exceptionSystemInfoService = new SystemInfoService();
@@ -193,9 +193,9 @@ public class SystemInfoServiceEditLogTest {
         List<String> hostPorts = Arrays.asList("192.168.1.100:9050", "192.168.1.101:9051", "192.168.1.102:9052");
 
         AddComputeNodeClause addComputeNodeClause = new AddComputeNodeClause(hostPorts, warehouse, cnGroupName, null);
-        addComputeNodeClause.getHostPortPairs().add(Pair.create("192.168.1.100", 9050));
-        addComputeNodeClause.getHostPortPairs().add(Pair.create("192.168.1.101", 9051));
-        addComputeNodeClause.getHostPortPairs().add(Pair.create("192.168.1.102", 9052));
+        addComputeNodeClause.getHostPortPairs().add(new HostPort("192.168.1.100", 9050));
+        addComputeNodeClause.getHostPortPairs().add(new HostPort("192.168.1.101", 9051));
+        addComputeNodeClause.getHostPortPairs().add(new HostPort("192.168.1.102", 9052));
         masterSystemInfoService.addComputeNodes(addComputeNodeClause);
 
         // 2. Verify all compute nodes are added
@@ -218,9 +218,9 @@ public class SystemInfoServiceEditLogTest {
         List<String> hostPorts = Arrays.asList("192.168.1.100:9050", "192.168.1.101:9051", "192.168.1.102:9052");
 
         AddComputeNodeClause addComputeNodeClause = new AddComputeNodeClause(hostPorts, warehouse, cnGroupName, null);
-        addComputeNodeClause.getHostPortPairs().add(Pair.create("192.168.1.100", 9050));
-        addComputeNodeClause.getHostPortPairs().add(Pair.create("192.168.1.101", 9051));
-        addComputeNodeClause.getHostPortPairs().add(Pair.create("192.168.1.102", 9052));
+        addComputeNodeClause.getHostPortPairs().add(new HostPort("192.168.1.100", 9050));
+        addComputeNodeClause.getHostPortPairs().add(new HostPort("192.168.1.101", 9051));
+        addComputeNodeClause.getHostPortPairs().add(new HostPort("192.168.1.102", 9052));
         masterSystemInfoService.addComputeNodes(addComputeNodeClause);
 
         // 2. Verify follower initial state
@@ -260,8 +260,8 @@ public class SystemInfoServiceEditLogTest {
         String cnGroupName = "";
         
         AddBackendClause addBackendClause = new AddBackendClause(hostPorts, warehouse, cnGroupName, null);
-        addBackendClause.getHostPortPairs().add(Pair.create("192.168.1.100", 9060));
-        addBackendClause.getHostPortPairs().add(Pair.create("192.168.1.101", 9061));
+        addBackendClause.getHostPortPairs().add(new HostPort("192.168.1.100", 9060));
+        addBackendClause.getHostPortPairs().add(new HostPort("192.168.1.101", 9061));
 
         // 2. Verify initial state
         Assertions.assertEquals(0, masterSystemInfoService.getBackends().size());
@@ -334,7 +334,7 @@ public class SystemInfoServiceEditLogTest {
         String cnGroupName = "";
         
         AddBackendClause addBackendClause = new AddBackendClause(hostPorts, warehouse, cnGroupName, null);
-        addBackendClause.getHostPortPairs().add(Pair.create("192.168.1.200", 9060));
+        addBackendClause.getHostPortPairs().add(new HostPort("192.168.1.200", 9060));
 
         // 2. Create a separate SystemInfoService for exception testing
         SystemInfoService exceptionSystemInfoService = new SystemInfoService();
@@ -372,9 +372,9 @@ public class SystemInfoServiceEditLogTest {
         String cnGroupName = "";
         
         AddBackendClause addBackendClause = new AddBackendClause(hostPorts, warehouse, cnGroupName, null);
-        addBackendClause.getHostPortPairs().add(Pair.create("192.168.1.100", 9060));
-        addBackendClause.getHostPortPairs().add(Pair.create("192.168.1.101", 9061));
-        addBackendClause.getHostPortPairs().add(Pair.create("192.168.1.102", 9062));
+        addBackendClause.getHostPortPairs().add(new HostPort("192.168.1.100", 9060));
+        addBackendClause.getHostPortPairs().add(new HostPort("192.168.1.101", 9061));
+        addBackendClause.getHostPortPairs().add(new HostPort("192.168.1.102", 9062));
         masterSystemInfoService.addBackends(addBackendClause);
 
         // 2. Verify all backends are added
@@ -400,9 +400,9 @@ public class SystemInfoServiceEditLogTest {
         String cnGroupName = "";
         
         AddBackendClause addBackendClause = new AddBackendClause(hostPorts, warehouse, cnGroupName, null);
-        addBackendClause.getHostPortPairs().add(Pair.create("192.168.1.100", 9060));
-        addBackendClause.getHostPortPairs().add(Pair.create("192.168.1.101", 9061));
-        addBackendClause.getHostPortPairs().add(Pair.create("192.168.1.102", 9062));
+        addBackendClause.getHostPortPairs().add(new HostPort("192.168.1.100", 9060));
+        addBackendClause.getHostPortPairs().add(new HostPort("192.168.1.101", 9061));
+        addBackendClause.getHostPortPairs().add(new HostPort("192.168.1.102", 9062));
         masterSystemInfoService.addBackends(addBackendClause);
 
         // 2. Verify follower initial state
@@ -443,8 +443,8 @@ public class SystemInfoServiceEditLogTest {
         String cnGroupName = "";
         
         AddBackendClause addBackendClause = new AddBackendClause(hostPorts, warehouse, cnGroupName, null);
-        addBackendClause.getHostPortPairs().add(Pair.create("192.168.1.200", 9060));
-        addBackendClause.getHostPortPairs().add(Pair.create("192.168.1.201", 9061));
+        addBackendClause.getHostPortPairs().add(new HostPort("192.168.1.200", 9060));
+        addBackendClause.getHostPortPairs().add(new HostPort("192.168.1.201", 9061));
         masterSystemInfoService.addBackends(addBackendClause);
         Assertions.assertEquals(2, masterSystemInfoService.getBackends().size());
 
@@ -460,7 +460,7 @@ public class SystemInfoServiceEditLogTest {
         // 3. Execute dropBackends operation (master side)
         List<String> dropHostPorts = Arrays.asList("192.168.1.200:9060");
         DropBackendClause dropBackendClause = new DropBackendClause(dropHostPorts, false, warehouse, cnGroupName, null);
-        dropBackendClause.getHostPortPairs().add(Pair.create("192.168.1.200", 9060));
+        dropBackendClause.getHostPortPairs().add(new HostPort("192.168.1.200", 9060));
         masterSystemInfoService.dropBackends(dropBackendClause);
 
         // 4. Verify master state after dropping
@@ -505,7 +505,7 @@ public class SystemInfoServiceEditLogTest {
         String cnGroupName = "";
         
         AddBackendClause addBackendClause = new AddBackendClause(hostPorts, warehouse, cnGroupName, null);
-        addBackendClause.getHostPortPairs().add(Pair.create("192.168.1.300", 9060));
+        addBackendClause.getHostPortPairs().add(new HostPort("192.168.1.300", 9060));
 
         // 2. Create a separate SystemInfoService for exception testing
         SystemInfoService exceptionSystemInfoService = new SystemInfoService();
@@ -523,7 +523,7 @@ public class SystemInfoServiceEditLogTest {
         // 3. Execute dropBackends operation and expect exception
         List<String> dropHostPorts = Arrays.asList("192.168.1.300:9060");
         DropBackendClause dropBackendClause = new DropBackendClause(dropHostPorts, false, warehouse, cnGroupName, null);
-        dropBackendClause.getHostPortPairs().add(Pair.create("192.168.1.300", 9060));
+        dropBackendClause.getHostPortPairs().add(new HostPort("192.168.1.300", 9060));
         RuntimeException exception = Assertions.assertThrows(RuntimeException.class, () -> {
             exceptionSystemInfoService.dropBackends(dropBackendClause);
         });
@@ -551,7 +551,7 @@ public class SystemInfoServiceEditLogTest {
 
         // 3. Execute dropBackends operation and expect DdlException
         DropBackendClause dropBackendClause = new DropBackendClause(dropHostPorts, false, warehouse, cnGroupName, null);
-        dropBackendClause.getHostPortPairs().add(Pair.create("192.168.1.400", 9060));
+        dropBackendClause.getHostPortPairs().add(new HostPort("192.168.1.400", 9060));
         DdlException exception = Assertions.assertThrows(DdlException.class, () -> {
             masterSystemInfoService.dropBackends(dropBackendClause);
         });
@@ -569,7 +569,7 @@ public class SystemInfoServiceEditLogTest {
         String cnGroupName = "";
         
         AddBackendClause addBackendClause = new AddBackendClause(hostPorts, warehouse, cnGroupName, null);
-        addBackendClause.getHostPortPairs().add(Pair.create("192.168.1.500", 9060));
+        addBackendClause.getHostPortPairs().add(new HostPort("192.168.1.500", 9060));
         masterSystemInfoService.addBackends(addBackendClause);
         Assertions.assertEquals(1, masterSystemInfoService.getBackends().size());
 
@@ -577,7 +577,7 @@ public class SystemInfoServiceEditLogTest {
         String wrongWarehouse = "wrong_warehouse";
         List<String> dropHostPorts = Arrays.asList("192.168.1.500:9060");
         DropBackendClause dropBackendClause = new DropBackendClause(dropHostPorts, false, wrongWarehouse, cnGroupName, null);
-        dropBackendClause.getHostPortPairs().add(Pair.create("192.168.1.500", 9060));
+        dropBackendClause.getHostPortPairs().add(new HostPort("192.168.1.500", 9060));
 
         // 3. Expect DdlException to be thrown
         Assertions.assertThrows(DdlException.class, () -> {
@@ -599,16 +599,16 @@ public class SystemInfoServiceEditLogTest {
         String cnGroupName = "";
         
         AddBackendClause addBackendClause = new AddBackendClause(hostPorts, warehouse, cnGroupName, null);
-        addBackendClause.getHostPortPairs().add(Pair.create("192.168.1.100", 9060));
-        addBackendClause.getHostPortPairs().add(Pair.create("192.168.1.101", 9061));
-        addBackendClause.getHostPortPairs().add(Pair.create("192.168.1.102", 9062));
+        addBackendClause.getHostPortPairs().add(new HostPort("192.168.1.100", 9060));
+        addBackendClause.getHostPortPairs().add(new HostPort("192.168.1.101", 9061));
+        addBackendClause.getHostPortPairs().add(new HostPort("192.168.1.102", 9062));
         masterSystemInfoService.addBackends(addBackendClause);
         Assertions.assertEquals(3, masterSystemInfoService.getBackends().size());
 
         // 2. Drop one backend
         List<String> dropHostPorts = Arrays.asList("192.168.1.100:9060");
         DropBackendClause dropBackendClause = new DropBackendClause(dropHostPorts, false, warehouse, cnGroupName, null);
-        dropBackendClause.getHostPortPairs().add(Pair.create("192.168.1.100", 9060));
+        dropBackendClause.getHostPortPairs().add(new HostPort("192.168.1.100", 9060));
         masterSystemInfoService.dropBackends(dropBackendClause);
         Assertions.assertEquals(2, masterSystemInfoService.getBackends().size());
 
@@ -639,16 +639,16 @@ public class SystemInfoServiceEditLogTest {
         String cnGroupName = "";
         
         AddBackendClause addBackendClause = new AddBackendClause(hostPorts, warehouse, cnGroupName, null);
-        addBackendClause.getHostPortPairs().add(Pair.create("192.168.1.100", 9060));
-        addBackendClause.getHostPortPairs().add(Pair.create("192.168.1.101", 9061));
-        addBackendClause.getHostPortPairs().add(Pair.create("192.168.1.102", 9062));
+        addBackendClause.getHostPortPairs().add(new HostPort("192.168.1.100", 9060));
+        addBackendClause.getHostPortPairs().add(new HostPort("192.168.1.101", 9061));
+        addBackendClause.getHostPortPairs().add(new HostPort("192.168.1.102", 9062));
         masterSystemInfoService.addBackends(addBackendClause);
         Assertions.assertEquals(3, masterSystemInfoService.getBackends().size());
 
         // 2. Drop one backend
         List<String> dropHostPorts = Arrays.asList("192.168.1.100:9060");
         DropBackendClause dropBackendClause = new DropBackendClause(dropHostPorts, false, warehouse, cnGroupName, null);
-        dropBackendClause.getHostPortPairs().add(Pair.create("192.168.1.100", 9060));
+        dropBackendClause.getHostPortPairs().add(new HostPort("192.168.1.100", 9060));
         masterSystemInfoService.dropBackends(dropBackendClause);
         Assertions.assertEquals(2, masterSystemInfoService.getBackends().size());
 
@@ -699,8 +699,8 @@ public class SystemInfoServiceEditLogTest {
         // 2. Add some compute nodes first
         List<String> hostPorts = Arrays.asList("192.168.1.100:9050", "192.168.1.101:9051");
         AddComputeNodeClause addComputeNodeClause = new AddComputeNodeClause(hostPorts, warehouse, cnGroupName, null);
-        addComputeNodeClause.getHostPortPairs().add(Pair.create("192.168.1.100", 9050));
-        addComputeNodeClause.getHostPortPairs().add(Pair.create("192.168.1.101", 9051));
+        addComputeNodeClause.getHostPortPairs().add(new HostPort("192.168.1.100", 9050));
+        addComputeNodeClause.getHostPortPairs().add(new HostPort("192.168.1.101", 9051));
         masterSystemInfoService.addComputeNodes(addComputeNodeClause);
         Assertions.assertEquals(2, masterSystemInfoService.getComputeNodes().size());
 
@@ -745,7 +745,7 @@ public class SystemInfoServiceEditLogTest {
         // 2. Add some compute nodes first
         List<String> hostPorts = Arrays.asList("192.168.1.200:9050");
         AddComputeNodeClause addComputeNodeClause = new AddComputeNodeClause(hostPorts, warehouse, cnGroupName, null);
-        addComputeNodeClause.getHostPortPairs().add(Pair.create("192.168.1.200", 9050));
+        addComputeNodeClause.getHostPortPairs().add(new HostPort("192.168.1.200", 9050));
 
         // 3. Create a separate SystemInfoService for exception testing
         SystemInfoService exceptionSystemInfoService = new SystemInfoService();
@@ -810,8 +810,8 @@ public class SystemInfoServiceEditLogTest {
         // 2. Add some backends first
         List<String> hostPorts = Arrays.asList("192.168.1.100:9060", "192.168.1.101:9061");
         AddBackendClause addBackendClause = new AddBackendClause(hostPorts, warehouse, cnGroupName, null);
-        addBackendClause.getHostPortPairs().add(Pair.create("192.168.1.100", 9060));
-        addBackendClause.getHostPortPairs().add(Pair.create("192.168.1.101", 9061));
+        addBackendClause.getHostPortPairs().add(new HostPort("192.168.1.100", 9060));
+        addBackendClause.getHostPortPairs().add(new HostPort("192.168.1.101", 9061));
         masterSystemInfoService.addBackends(addBackendClause);
         Assertions.assertEquals(2, masterSystemInfoService.getBackends().size());
 
@@ -854,7 +854,7 @@ public class SystemInfoServiceEditLogTest {
         // 2. Add some backends first
         List<String> hostPorts = Arrays.asList("192.168.1.200:9060");
         AddBackendClause addBackendClause = new AddBackendClause(hostPorts, warehouse, cnGroupName, null);
-        addBackendClause.getHostPortPairs().add(Pair.create("192.168.1.200", 9060));
+        addBackendClause.getHostPortPairs().add(new HostPort("192.168.1.200", 9060));
 
         // 3. Create a separate SystemInfoService for exception testing
         SystemInfoService exceptionSystemInfoService = new SystemInfoService();
@@ -920,12 +920,12 @@ public class SystemInfoServiceEditLogTest {
         // 2. Add compute nodes and backends
         List<String> computeHostPorts = Arrays.asList("192.168.1.100:9050");
         AddComputeNodeClause addComputeNodeClause = new AddComputeNodeClause(computeHostPorts, warehouse, cnGroupName, null);
-        addComputeNodeClause.getHostPortPairs().add(Pair.create("192.168.1.100", 9050));
+        addComputeNodeClause.getHostPortPairs().add(new HostPort("192.168.1.100", 9050));
         masterSystemInfoService.addComputeNodes(addComputeNodeClause);
 
         List<String> backendHostPorts = Arrays.asList("192.168.1.200:9060");
         AddBackendClause addBackendClause = new AddBackendClause(backendHostPorts, warehouse, cnGroupName, null);
-        addBackendClause.getHostPortPairs().add(Pair.create("192.168.1.200", 9060));
+        addBackendClause.getHostPortPairs().add(new HostPort("192.168.1.200", 9060));
         masterSystemInfoService.addBackends(addBackendClause);
 
         // 3. Execute multiple historical node updates
@@ -980,7 +980,7 @@ public class SystemInfoServiceEditLogTest {
         
         List<String> hostPorts = Arrays.asList(originalHost + ":" + heartbeatPort);
         AddBackendClause addBackendClause = new AddBackendClause(hostPorts, warehouse, cnGroupName, null);
-        addBackendClause.getHostPortPairs().add(Pair.create(originalHost, heartbeatPort));
+        addBackendClause.getHostPortPairs().add(new HostPort(originalHost, heartbeatPort));
         masterSystemInfoService.addBackends(addBackendClause);
         Assertions.assertEquals(1, masterSystemInfoService.getBackends().size());
 
@@ -1033,7 +1033,7 @@ public class SystemInfoServiceEditLogTest {
         
         List<String> hostPorts = Arrays.asList(originalHost + ":" + heartbeatPort);
         AddBackendClause addBackendClause = new AddBackendClause(hostPorts, warehouse, cnGroupName, null);
-        addBackendClause.getHostPortPairs().add(Pair.create(originalHost, heartbeatPort));
+        addBackendClause.getHostPortPairs().add(new HostPort(originalHost, heartbeatPort));
 
         // 2. Create a separate SystemInfoService for exception testing
         SystemInfoService exceptionSystemInfoService = new SystemInfoService();
@@ -1070,7 +1070,7 @@ public class SystemInfoServiceEditLogTest {
         
         List<String> hostPorts = Arrays.asList(host + ":" + heartbeatPort);
         AddBackendClause addBackendClause = new AddBackendClause(hostPorts, warehouse, cnGroupName, null);
-        addBackendClause.getHostPortPairs().add(Pair.create(host, heartbeatPort));
+        addBackendClause.getHostPortPairs().add(new HostPort(host, heartbeatPort));
         masterSystemInfoService.addBackends(addBackendClause);
         Assertions.assertEquals(1, masterSystemInfoService.getBackends().size());
 
@@ -1129,7 +1129,7 @@ public class SystemInfoServiceEditLogTest {
         
         List<String> hostPorts = Arrays.asList(host + ":" + heartbeatPort);
         AddBackendClause addBackendClause = new AddBackendClause(hostPorts, warehouse, cnGroupName, null);
-        addBackendClause.getHostPortPairs().add(Pair.create(host, heartbeatPort));
+        addBackendClause.getHostPortPairs().add(new HostPort(host, heartbeatPort));
 
         // 2. Create a separate SystemInfoService for exception testing
         SystemInfoService exceptionSystemInfoService = new SystemInfoService();
@@ -1171,7 +1171,7 @@ public class SystemInfoServiceEditLogTest {
         
         List<String> hostPorts = Arrays.asList(host + ":" + heartbeatPort);
         AddBackendClause addBackendClause = new AddBackendClause(hostPorts, warehouse, cnGroupName, null);
-        addBackendClause.getHostPortPairs().add(Pair.create(host, heartbeatPort));
+        addBackendClause.getHostPortPairs().add(new HostPort(host, heartbeatPort));
         masterSystemInfoService.addBackends(addBackendClause);
         Assertions.assertEquals(1, masterSystemInfoService.getBackends().size());
 
@@ -1185,7 +1185,7 @@ public class SystemInfoServiceEditLogTest {
         // 3. Execute decommissionBackend operation (master side)
         List<String> decommissionHostPorts = Arrays.asList(host + ":" + heartbeatPort);
         DecommissionBackendClause decommissionBackendClause = new DecommissionBackendClause(decommissionHostPorts);
-        decommissionBackendClause.getHostPortPairs().add(Pair.create(host, heartbeatPort));
+        decommissionBackendClause.getHostPortPairs().add(new HostPort(host, heartbeatPort));
         masterSystemInfoService.decommissionBackend(decommissionBackendClause);
 
         // 4. Verify master state after decommission
@@ -1228,7 +1228,7 @@ public class SystemInfoServiceEditLogTest {
         
         List<String> hostPorts = Arrays.asList(host + ":" + heartbeatPort);
         AddBackendClause addBackendClause = new AddBackendClause(hostPorts, warehouse, cnGroupName, null);
-        addBackendClause.getHostPortPairs().add(Pair.create(host, heartbeatPort));
+        addBackendClause.getHostPortPairs().add(new HostPort(host, heartbeatPort));
 
         // 2. Create a separate SystemInfoService for exception testing
         SystemInfoService exceptionSystemInfoService = new SystemInfoService();
@@ -1246,7 +1246,7 @@ public class SystemInfoServiceEditLogTest {
         // 3. Execute decommissionBackend operation and expect exception
         List<String> decommissionHostPorts = Arrays.asList(host + ":" + heartbeatPort);
         DecommissionBackendClause decommissionBackendClause = new DecommissionBackendClause(decommissionHostPorts);
-        decommissionBackendClause.getHostPortPairs().add(Pair.create(host, heartbeatPort));
+        decommissionBackendClause.getHostPortPairs().add(new HostPort(host, heartbeatPort));
         RuntimeException exception = Assertions.assertThrows(RuntimeException.class, () -> {
             exceptionSystemInfoService.decommissionBackend(decommissionBackendClause);
         });
@@ -1268,7 +1268,7 @@ public class SystemInfoServiceEditLogTest {
         
         List<String> hostPorts = Arrays.asList(host + ":" + heartbeatPort);
         AddBackendClause addBackendClause = new AddBackendClause(hostPorts, warehouse, cnGroupName, null);
-        addBackendClause.getHostPortPairs().add(Pair.create(host, heartbeatPort));
+        addBackendClause.getHostPortPairs().add(new HostPort(host, heartbeatPort));
         masterSystemInfoService.addBackends(addBackendClause);
         Assertions.assertEquals(1, masterSystemInfoService.getBackends().size());
 
@@ -1280,7 +1280,7 @@ public class SystemInfoServiceEditLogTest {
         // 3. Execute cancelDecommissionBackend operation (master side)
         List<String> cancelHostPorts = Arrays.asList(host + ":" + heartbeatPort);
         CancelAlterSystemStmt cancelAlterSystemStmt = new CancelAlterSystemStmt(cancelHostPorts);
-        cancelAlterSystemStmt.getHostPortPairs().add(Pair.create(host, heartbeatPort));
+        cancelAlterSystemStmt.getHostPortPairs().add(new HostPort(host, heartbeatPort));
         masterSystemInfoService.cancelDecommissionBackend(cancelAlterSystemStmt);
 
         // 4. Verify master state after cancel decommission
@@ -1323,12 +1323,12 @@ public class SystemInfoServiceEditLogTest {
         
         List<String> hostPorts = Arrays.asList(host + ":" + heartbeatPort);
         AddBackendClause addBackendClause = new AddBackendClause(hostPorts, warehouse, cnGroupName, null);
-        addBackendClause.getHostPortPairs().add(Pair.create(host, heartbeatPort));
+        addBackendClause.getHostPortPairs().add(new HostPort(host, heartbeatPort));
 
         // 2. Decommission the backend first
         List<String> decommissionHostPorts = Arrays.asList(host + ":" + heartbeatPort);
         DecommissionBackendClause decommissionBackendClause = new DecommissionBackendClause(decommissionHostPorts);
-        decommissionBackendClause.getHostPortPairs().add(Pair.create(host, heartbeatPort));
+        decommissionBackendClause.getHostPortPairs().add(new HostPort(host, heartbeatPort));
 
         // 3. Create a separate SystemInfoService for exception testing
         SystemInfoService exceptionSystemInfoService = new SystemInfoService();
@@ -1347,7 +1347,7 @@ public class SystemInfoServiceEditLogTest {
         // 4. Execute cancelDecommissionBackend operation and expect exception
         List<String> cancelHostPorts = Arrays.asList(host + ":" + heartbeatPort);
         CancelAlterSystemStmt cancelAlterSystemStmt = new CancelAlterSystemStmt(cancelHostPorts);
-        cancelAlterSystemStmt.getHostPortPairs().add(Pair.create(host, heartbeatPort));
+        cancelAlterSystemStmt.getHostPortPairs().add(new HostPort(host, heartbeatPort));
         RuntimeException exception = Assertions.assertThrows(RuntimeException.class, () -> {
             exceptionSystemInfoService.cancelDecommissionBackend(cancelAlterSystemStmt);
         });
@@ -1369,7 +1369,7 @@ public class SystemInfoServiceEditLogTest {
         List<String> hostPorts = Arrays.asList("192.168.1.200:9050");
 
         AddComputeNodeClause addComputeNodeClause = new AddComputeNodeClause(hostPorts, warehouse, cnGroupName, null);
-        addComputeNodeClause.getHostPortPairs().add(Pair.create("192.168.1.200", 9050));
+        addComputeNodeClause.getHostPortPairs().add(new HostPort("192.168.1.200", 9050));
         masterSystemInfoService.addComputeNodes(addComputeNodeClause);
         Assertions.assertEquals(1, masterSystemInfoService.getComputeNodes().size());
 
@@ -1381,7 +1381,7 @@ public class SystemInfoServiceEditLogTest {
 
         // 3. Execute dropComputeNodes operation (master side)
         DropComputeNodeClause dropComputeNodeClause = new DropComputeNodeClause(hostPorts, warehouse, cnGroupName, null);
-        dropComputeNodeClause.getHostPortPairs().add(Pair.create("192.168.1.200", 9050));
+        dropComputeNodeClause.getHostPortPairs().add(new HostPort("192.168.1.200", 9050));
         masterSystemInfoService.dropComputeNodes(dropComputeNodeClause);
 
         // 4. Verify master state after dropping
@@ -1415,7 +1415,7 @@ public class SystemInfoServiceEditLogTest {
         List<String> hostPorts = Arrays.asList("192.168.1.300:9050");
 
         AddComputeNodeClause addComputeNodeClause = new AddComputeNodeClause(hostPorts, warehouse, cnGroupName, null);
-        addComputeNodeClause.getHostPortPairs().add(Pair.create("192.168.1.300", 9050));
+        addComputeNodeClause.getHostPortPairs().add(new HostPort("192.168.1.300", 9050));
         masterSystemInfoService.addComputeNodes(addComputeNodeClause);
         Assertions.assertEquals(1, masterSystemInfoService.getComputeNodes().size());
 
@@ -1434,7 +1434,7 @@ public class SystemInfoServiceEditLogTest {
 
         // 3. Execute dropComputeNodes operation and expect exception
         DropComputeNodeClause dropComputeNodeClause = new DropComputeNodeClause(hostPorts, warehouse, cnGroupName, null);
-        dropComputeNodeClause.getHostPortPairs().add(Pair.create("192.168.1.300", 9050));
+        dropComputeNodeClause.getHostPortPairs().add(new HostPort("192.168.1.300", 9050));
         RuntimeException exception = Assertions.assertThrows(RuntimeException.class, () -> {
             exceptionSystemInfoService.dropComputeNodes(dropComputeNodeClause);
         });
@@ -1460,7 +1460,7 @@ public class SystemInfoServiceEditLogTest {
 
         // 3. Execute dropComputeNodes operation and expect DdlException
         DropComputeNodeClause dropComputeNodeClause = new DropComputeNodeClause(hostPorts, warehouse, cnGroupName, null);
-        dropComputeNodeClause.getHostPortPairs().add(Pair.create("192.168.1.400", 9050));
+        dropComputeNodeClause.getHostPortPairs().add(new HostPort("192.168.1.400", 9050));
         DdlException exception = Assertions.assertThrows(DdlException.class, () -> {
             masterSystemInfoService.dropComputeNodes(dropComputeNodeClause);
         });
@@ -1476,14 +1476,14 @@ public class SystemInfoServiceEditLogTest {
         List<String> hostPorts = Arrays.asList("192.168.1.500:9050");
 
         AddComputeNodeClause addComputeNodeClause = new AddComputeNodeClause(hostPorts, warehouse, cnGroupName, null);
-        addComputeNodeClause.getHostPortPairs().add(Pair.create("192.168.1.500", 9050));
+        addComputeNodeClause.getHostPortPairs().add(new HostPort("192.168.1.500", 9050));
         masterSystemInfoService.addComputeNodes(addComputeNodeClause);
         Assertions.assertEquals(1, masterSystemInfoService.getComputeNodes().size());
 
         // 2. Try to drop with wrong warehouse
         String wrongWarehouse = "wrong_warehouse";
         DropComputeNodeClause dropComputeNodeClause = new DropComputeNodeClause(hostPorts, wrongWarehouse, cnGroupName, null);
-        dropComputeNodeClause.getHostPortPairs().add(Pair.create("192.168.1.500", 9050));
+        dropComputeNodeClause.getHostPortPairs().add(new HostPort("192.168.1.500", 9050));
 
         // 3. Expect DdlException to be thrown
         DdlException exception = Assertions.assertThrows(DdlException.class, () -> {
@@ -1503,16 +1503,16 @@ public class SystemInfoServiceEditLogTest {
         List<String> hostPorts = Arrays.asList("192.168.1.100:9050", "192.168.1.101:9051", "192.168.1.102:9052");
 
         AddComputeNodeClause addComputeNodeClause = new AddComputeNodeClause(hostPorts, warehouse, cnGroupName, null);
-        addComputeNodeClause.getHostPortPairs().add(Pair.create("192.168.1.100", 9050));
-        addComputeNodeClause.getHostPortPairs().add(Pair.create("192.168.1.101", 9051));
-        addComputeNodeClause.getHostPortPairs().add(Pair.create("192.168.1.102", 9052));
+        addComputeNodeClause.getHostPortPairs().add(new HostPort("192.168.1.100", 9050));
+        addComputeNodeClause.getHostPortPairs().add(new HostPort("192.168.1.101", 9051));
+        addComputeNodeClause.getHostPortPairs().add(new HostPort("192.168.1.102", 9052));
         masterSystemInfoService.addComputeNodes(addComputeNodeClause);
         Assertions.assertEquals(3, masterSystemInfoService.getComputeNodes().size());
 
         // 2. Drop one compute node
         List<String> dropHostPorts = Arrays.asList("192.168.1.100:9050");
         DropComputeNodeClause dropComputeNodeClause = new DropComputeNodeClause(dropHostPorts, warehouse, cnGroupName, null);
-        dropComputeNodeClause.getHostPortPairs().add(Pair.create("192.168.1.100", 9050));
+        dropComputeNodeClause.getHostPortPairs().add(new HostPort("192.168.1.100", 9050));
         masterSystemInfoService.dropComputeNodes(dropComputeNodeClause);
         Assertions.assertEquals(2, masterSystemInfoService.getComputeNodes().size());
 
@@ -1540,16 +1540,16 @@ public class SystemInfoServiceEditLogTest {
         // 1. Add multiple compute nodes to master
         List<String> hostPorts = Arrays.asList("192.168.1.100:9050", "192.168.1.101:9051", "192.168.1.102:9052");
         AddComputeNodeClause addComputeNodeClause = new AddComputeNodeClause(hostPorts, warehouse, cnGroupName, null);
-        addComputeNodeClause.getHostPortPairs().add(Pair.create("192.168.1.100", 9050));
-        addComputeNodeClause.getHostPortPairs().add(Pair.create("192.168.1.101", 9051));
-        addComputeNodeClause.getHostPortPairs().add(Pair.create("192.168.1.102", 9052));
+        addComputeNodeClause.getHostPortPairs().add(new HostPort("192.168.1.100", 9050));
+        addComputeNodeClause.getHostPortPairs().add(new HostPort("192.168.1.101", 9051));
+        addComputeNodeClause.getHostPortPairs().add(new HostPort("192.168.1.102", 9052));
         masterSystemInfoService.addComputeNodes(addComputeNodeClause);
         Assertions.assertEquals(3, masterSystemInfoService.getComputeNodes().size());
 
         // 2. Drop one compute node
         List<String> dropHostPorts = Arrays.asList("192.168.1.100:9050");
         DropComputeNodeClause dropComputeNodeClause = new DropComputeNodeClause(dropHostPorts, warehouse, cnGroupName, null);
-        dropComputeNodeClause.getHostPortPairs().add(Pair.create("192.168.1.100", 9050));
+        dropComputeNodeClause.getHostPortPairs().add(new HostPort("192.168.1.100", 9050));
         masterSystemInfoService.dropComputeNodes(dropComputeNodeClause);
         Assertions.assertEquals(2, masterSystemInfoService.getComputeNodes().size());
 
@@ -1599,7 +1599,7 @@ public class SystemInfoServiceEditLogTest {
         
         List<String> hostPorts = Arrays.asList(beHostPort);
         AddBackendClause addBackendClause = new AddBackendClause(hostPorts, warehouse, cnGroupName, null);
-        addBackendClause.getHostPortPairs().add(Pair.create(host, heartbeatPort));
+        addBackendClause.getHostPortPairs().add(new HostPort(host, heartbeatPort));
         masterSystemInfoService.addBackends(addBackendClause);
         Assertions.assertEquals(1, masterSystemInfoService.getBackends().size());
 
@@ -1645,7 +1645,7 @@ public class SystemInfoServiceEditLogTest {
         
         List<String> hostPorts = Arrays.asList(beHostPort);
         AddBackendClause addBackendClause = new AddBackendClause(hostPorts, warehouse, cnGroupName, null);
-        addBackendClause.getHostPortPairs().add(Pair.create(host, heartbeatPort));
+        addBackendClause.getHostPortPairs().add(new HostPort(host, heartbeatPort));
 
         // 2. Create a separate SystemInfoService for exception testing
         SystemInfoService exceptionSystemInfoService = new SystemInfoService();
@@ -1686,7 +1686,7 @@ public class SystemInfoServiceEditLogTest {
         
         List<String> hostPorts = Arrays.asList(beHostPort);
         AddBackendClause addBackendClause = new AddBackendClause(hostPorts, warehouse, cnGroupName, null);
-        addBackendClause.getHostPortPairs().add(Pair.create(host, heartbeatPort));
+        addBackendClause.getHostPortPairs().add(new HostPort(host, heartbeatPort));
         masterSystemInfoService.addBackends(addBackendClause);
         Assertions.assertEquals(1, masterSystemInfoService.getBackends().size());
 
@@ -1734,7 +1734,7 @@ public class SystemInfoServiceEditLogTest {
         
         List<String> hostPorts = Arrays.asList(beHostPort);
         AddBackendClause addBackendClause = new AddBackendClause(hostPorts, warehouse, cnGroupName, null);
-        addBackendClause.getHostPortPairs().add(Pair.create(host, heartbeatPort));
+        addBackendClause.getHostPortPairs().add(new HostPort(host, heartbeatPort));
 
         // 2. Create a separate SystemInfoService for exception testing
         SystemInfoService exceptionSystemInfoService = new SystemInfoService();
@@ -1776,7 +1776,7 @@ public class SystemInfoServiceEditLogTest {
         
         List<String> hostPorts = Arrays.asList(beHostPort);
         AddBackendClause addBackendClause = new AddBackendClause(hostPorts, warehouse, cnGroupName, null);
-        addBackendClause.getHostPortPairs().add(Pair.create(host, heartbeatPort));
+        addBackendClause.getHostPortPairs().add(new HostPort(host, heartbeatPort));
         masterSystemInfoService.addBackends(addBackendClause);
         Assertions.assertEquals(1, masterSystemInfoService.getBackends().size());
 
@@ -1823,7 +1823,7 @@ public class SystemInfoServiceEditLogTest {
         
         List<String> hostPorts = Arrays.asList(beHostPort);
         AddBackendClause addBackendClause = new AddBackendClause(hostPorts, warehouse, cnGroupName, null);
-        addBackendClause.getHostPortPairs().add(Pair.create(host, heartbeatPort));
+        addBackendClause.getHostPortPairs().add(new HostPort(host, heartbeatPort));
 
         // 2. Create a separate SystemInfoService for exception testing
         SystemInfoService exceptionSystemInfoService = new SystemInfoService();
@@ -1866,7 +1866,7 @@ public class SystemInfoServiceEditLogTest {
 
         List<String> hostPorts = Arrays.asList(beHostPort);
         AddBackendClause addBackendClause = new AddBackendClause(hostPorts, warehouse, cnGroupName, null);
-        addBackendClause.getHostPortPairs().add(Pair.create(host, heartbeatPort));
+        addBackendClause.getHostPortPairs().add(new HostPort(host, heartbeatPort));
         masterSystemInfoService.addBackends(addBackendClause);
         Assertions.assertEquals(1, masterSystemInfoService.getBackends().size());
 
@@ -1961,7 +1961,7 @@ public class SystemInfoServiceEditLogTest {
         
         List<String> hostPorts = Arrays.asList(beHostPort);
         AddBackendClause addBackendClause = new AddBackendClause(hostPorts, warehouse, cnGroupName, null);
-        addBackendClause.getHostPortPairs().add(Pair.create(host, heartbeatPort));
+        addBackendClause.getHostPortPairs().add(new HostPort(host, heartbeatPort));
 
         // 2. Create a separate SystemInfoService for exception testing
         SystemInfoService exceptionSystemInfoService = new SystemInfoService();
@@ -2014,7 +2014,7 @@ public class SystemInfoServiceEditLogTest {
 
         List<String> hostPorts = Arrays.asList(beHostPort);
         AddBackendClause addBackendClause = new AddBackendClause(hostPorts, warehouse, cnGroupName, null);
-        addBackendClause.getHostPortPairs().add(Pair.create(host, heartbeatPort));
+        addBackendClause.getHostPortPairs().add(new HostPort(host, heartbeatPort));
         masterSystemInfoService.addBackends(addBackendClause);
         Assertions.assertEquals(1, masterSystemInfoService.getBackends().size());
 
@@ -2094,7 +2094,7 @@ public class SystemInfoServiceEditLogTest {
 
         List<String> hostPorts = Arrays.asList(beHostPort);
         AddBackendClause addBackendClause = new AddBackendClause(hostPorts, warehouse, cnGroupName, null);
-        addBackendClause.getHostPortPairs().add(Pair.create(host, heartbeatPort));
+        addBackendClause.getHostPortPairs().add(new HostPort(host, heartbeatPort));
         masterSystemInfoService.addBackends(addBackendClause);
         Assertions.assertEquals(1, masterSystemInfoService.getBackends().size());
 
@@ -2175,7 +2175,7 @@ public class SystemInfoServiceEditLogTest {
 
         List<String> hostPorts = Arrays.asList(beHostPort);
         AddBackendClause addBackendClause = new AddBackendClause(hostPorts, warehouse, cnGroupName, null);
-        addBackendClause.getHostPortPairs().add(Pair.create(host, heartbeatPort));
+        addBackendClause.getHostPortPairs().add(new HostPort(host, heartbeatPort));
         masterSystemInfoService.addBackends(addBackendClause);
         Assertions.assertEquals(1, masterSystemInfoService.getBackends().size());
 
@@ -2252,5 +2252,19 @@ public class SystemInfoServiceEditLogTest {
         // Verify remaining disk properties
         Assertions.assertEquals(DiskInfo.DiskState.ONLINE, followerDisk1.getState());
         Assertions.assertEquals(DiskInfo.DiskState.ONLINE, followerDisk3.getState());
+    }
+
+    @Test
+    public void testReplayDropBackendNotExit() {
+        DropBackendInfo dropBackendInfo = new DropBackendInfo(10000);
+        // should not throw any exception
+        followerSystemInfoService.replayDropBackend(dropBackendInfo);
+    }
+
+    @Test
+    public void testReplayDropComputeNodeNotExit() {
+        DropComputeNodeLog dropComputeNodeInfo = new DropComputeNodeLog(10000);
+        // should not throw any exception
+        followerSystemInfoService.replayDropComputeNode(dropComputeNodeInfo);
     }
 }

@@ -41,6 +41,10 @@
 #include <event2/http_struct.h>
 #include <event2/keyvalq_struct.h>
 
+#ifdef __APPLE__
+#include "starrocks_macos_libevent_shims.h"
+#endif
+
 #include <memory>
 #include <sstream>
 #include <utility>
@@ -290,6 +294,7 @@ int EvHttpServer::on_header(struct evhttp_request* ev_req) {
         evhttp_request_set_chunked_cb(ev_req, on_chunked);
     }
 
+    // Free request when evhttp_request is done; also stash pointer via on_free_cb_arg
     evhttp_request_set_on_free_cb(ev_req, on_free, request.release());
     return 0;
 }

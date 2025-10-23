@@ -971,6 +971,7 @@ alterClause
     | addPartitionClause
     | dropPartitionClause
     | distributionClause
+    | alterModifyDefaultBuckets
     | truncatePartitionClause
     | modifyPartitionClause
     | replacePartitionClause
@@ -2921,6 +2922,10 @@ distributionDesc
     | DISTRIBUTED BY RANDOM (BUCKETS INTEGER_VALUE)?
     ;
 
+alterModifyDefaultBuckets
+    : DISTRIBUTED BY HASH identifierList DEFAULT BUCKETS INTEGER_VALUE
+    ;
+
 refreshSchemeDesc
     : REFRESH (IMMEDIATE | DEFERRED)? (ASYNC
     | ASYNC (START '(' string ')')? EVERY '(' interval ')'
@@ -3081,6 +3086,7 @@ baseType
     | HLL
     | PERCENTILE
     | JSON
+    | VARIANT
     | VARBINARY typeParameter?
     | BINARY typeParameter?
     ;

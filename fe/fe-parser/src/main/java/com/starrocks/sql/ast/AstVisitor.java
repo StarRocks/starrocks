@@ -111,6 +111,10 @@ public interface AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
+    default R visitDropTaskStmt(DropTaskStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
     default R visitAdminShowConfigStatement(AdminShowConfigStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
@@ -266,20 +270,65 @@ public interface AstVisitor<R, C> {
     }
 
     default R visitAddFollowerClause(AddFollowerClause clause, C context) {
-        return visitNode(clause, context);
+        return visitFrontendClause(clause, context);
     }
 
     default R visitDropFollowerClause(DropFollowerClause clause, C context) {
-        return visitNode(clause, context);
+        return visitFrontendClause(clause, context);
     }
 
     default R visitAddObserverClause(AddObserverClause clause, C context) {
-        return visitNode(clause, context);
+        return visitFrontendClause(clause, context);
     }
 
     default R visitDropObserverClause(DropObserverClause clause, C context) {
+        return visitFrontendClause(clause, context);
+    }
+
+    default R visitModifyFrontendHostClause(ModifyFrontendAddressClause clause, C context) {
+        return visitFrontendClause(clause, context);
+    }
+
+    default R visitModifyBrokerClause(ModifyBrokerClause clause, C context) {
         return visitNode(clause, context);
     }
+
+    default R visitCancelAlterSystemStatement(CancelAlterSystemStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitBackendClause(BackendClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    default R visitAddBackendClause(AddBackendClause clause, C context) {
+        return visitBackendClause(clause, context);
+    }
+
+    default R visitDropBackendClause(DropBackendClause clause, C context) {
+        return visitBackendClause(clause, context);
+    }
+
+    default R visitModifyBackendClause(ModifyBackendClause clause, C context) {
+        return visitBackendClause(clause, context);
+    }
+
+    default R visitDecommissionBackendClause(DecommissionBackendClause clause, C context) {
+        return visitBackendClause(clause, context);
+    }
+
+    default R visitComputeNodeClause(ComputeNodeClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    default R visitAddComputeNodeClause(AddComputeNodeClause clause, C context) {
+        return visitComputeNodeClause(clause, context);
+    }
+
+    default R visitDropComputeNodeClause(DropComputeNodeClause clause, C context) {
+        return visitComputeNodeClause(clause, context);
+    }
+
 
     // ------------------------------------------- Basic Node Types ----------------------------------------------------
 
@@ -398,6 +447,10 @@ public interface AstVisitor<R, C> {
         return visitNode(clause, context);
     }
 
+    default R visitDropTagClause(DropTagClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
     default R visitDropPersistentIndexClause(DropPersistentIndexClause clause, C context) {
         return visitNode(clause, context);
     }
@@ -440,6 +493,18 @@ public interface AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    default R visitUseCatalogStatement(UseCatalogStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    default R visitSetCatalogStatement(SetCatalogStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    default R visitDropCatalogStatement(DropCatalogStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
     default R visitCreateDbStatement(CreateDbStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
@@ -447,6 +512,7 @@ public interface AstVisitor<R, C> {
     default R visitDropDbStatement(DropDbStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
+
 
     // ------------------------------------------- User Statement ----------------------------------------------------
 
@@ -572,6 +638,30 @@ public interface AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
+    default R visitShowCreateDbStatement(ShowCreateDbStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitRecoverDbStatement(RecoverDbStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitTruncateTableStatement(TruncateTableStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitAdminRepairTableStatement(AdminRepairTableStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitAdminCancelRepairTableStatement(AdminCancelRepairTableStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitAdminShowReplicaDistributionStatement(AdminShowReplicaDistributionStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
     default R visitDropCNGroupStatement(DropCnGroupStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
@@ -593,6 +683,22 @@ public interface AstVisitor<R, C> {
     }
 
     default R visitShowSecurityIntegrationStatement(ShowSecurityIntegrationStatement statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitCreateCatalogStatement(CreateCatalogStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitShowCreateExternalCatalogStatement(ShowCreateExternalCatalogStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitAlterCatalogStatement(AlterCatalogStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitShowDataDistributionStatement(ShowDataDistributionStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
 }

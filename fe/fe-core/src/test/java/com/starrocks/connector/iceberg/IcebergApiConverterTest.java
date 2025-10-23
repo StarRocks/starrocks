@@ -41,6 +41,7 @@ import org.apache.iceberg.SortField;
 import org.apache.iceberg.SortOrder;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.types.Types;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.nio.ByteBuffer;
@@ -106,6 +107,13 @@ public class IcebergApiConverterTest {
         assertEquals(fromIcebergType(Types.ListType.ofRequired(136,
                         Types.ListType.ofRequired(136, Types.IntegerType.get()))),
                 new ArrayType(new ArrayType(ScalarType.createType(PrimitiveType.INT))));
+    }
+
+    @Test
+    public void testVariant() {
+        Type variantType = fromIcebergType(Types.VariantType.get());
+        Assertions.assertTrue(variantType.isVariantType());
+        Assertions.assertEquals(ScalarType.createType(PrimitiveType.VARIANT), variantType);
     }
 
     @Test
@@ -213,6 +221,7 @@ public class IcebergApiConverterTest {
         columns.add(new Column("c14", new MapType(Type.INT, Type.INT)));
         columns.add(new Column("c15", new StructType(ImmutableList.of(Type.INT))));
         columns.add(new Column("c16", Type.TIME));
+        columns.add(new Column("c17", Type.VARIANT));
 
         Schema schema = IcebergApiConverter.toIcebergApiSchema(columns);
         assertEquals("table {\n" +
@@ -230,8 +239,9 @@ public class IcebergApiConverterTest {
                 "  12: c12: required decimal(-1, -1)\n" +
                 "  13: c13: required list<int>\n" +
                 "  14: c14: required map<int, int>\n" +
-                "  15: c15: required struct<20: col1: optional int>\n" +
+                "  15: c15: required struct<21: col1: optional int>\n" +
                 "  16: c16: required time\n" +
+                "  17: c17: required variant\n" +
                 "}", schema.toString());
         ListPartitionDesc partDesc = new ListPartitionDesc(Lists.newArrayList("c1"), null);
         PartitionSpec spec = IcebergApiConverter.parsePartitionFields(schema, partDesc);

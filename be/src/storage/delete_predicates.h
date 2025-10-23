@@ -35,7 +35,7 @@ private:
     struct VersionAndPredicate {
         VersionAndPredicate(int32_t v, ConjunctivePredicates preds) : _version(v), _preds(std::move(preds)) {}
 
-        bool operator<(const VersionAndPredicate& rhs) { return _version < rhs._version; }
+        bool operator<(const VersionAndPredicate& rhs) const { return _version < rhs._version; }
 
         int32_t _version; // filter version
         ConjunctivePredicates _preds;

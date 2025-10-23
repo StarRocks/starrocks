@@ -24,6 +24,15 @@
 
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
+#include "gutil/port.h"
+
+// Fix for ulong type on macOS
+#ifdef __APPLE__
+#ifndef HAVE_ULONG
+#define HAVE_ULONG 1
+typedef unsigned long ulong;
+#endif
+#endif
 #include "exprs/binary_function.h"
 #include "exprs/unary_function.h"
 #include "runtime/datetime_value.h"
@@ -302,6 +311,12 @@ StatusOr<ColumnPtr> TimeFunctions::timestamp(FunctionContext* context, const Col
 }
 
 static const std::vector<int> NOW_PRECISION_FACTORS = {1000000, 100000, 10000, 1000, 100, 10, 1};
+
+StatusOr<ColumnPtr> TimeFunctions::current_timezone(FunctionContext* context, const Columns& columns) {
+    starrocks::RuntimeState* state = context->state();
+    const std::string& timezone = state->timezone();
+    return ColumnHelper::create_const_column<TYPE_VARCHAR>(timezone, 1);
+}
 
 StatusOr<ColumnPtr> TimeFunctions::now(FunctionContext* context, const Columns& columns) {
     starrocks::RuntimeState* state = context->state();
@@ -731,7 +746,7 @@ Status TimeFunctions::to_tera_date_prepare(FunctionContext* context, FunctionCon
     auto format_col = context->get_constant_column(1);
     auto format_str = ColumnHelper::get_const_value<TYPE_VARCHAR>(format_col);
     if (!state->formatter->prepare(format_str)) {
-        return Status::NotSupported(fmt::format("The format parameter {} is invalid", format_str));
+        return Status::NotSupported(fmt::format("The format parameter {} is invalid", format_str.to_string()));
     }
     return Status::OK();
 }
@@ -792,7 +807,7 @@ Status TimeFunctions::to_tera_timestamp_prepare(FunctionContext* context, Functi
     auto format_col = context->get_constant_column(1);
     auto format_str = ColumnHelper::get_const_value<TYPE_VARCHAR>(format_col);
     if (!state->formatter->prepare(format_str)) {
-        return Status::NotSupported(fmt::format("The format parameter {} is invalid", format_str));
+        return Status::NotSupported(fmt::format("The format parameter {} is invalid", format_str.to_string()));
     }
     return Status::OK();
 }
@@ -1619,7 +1634,7 @@ StatusOr<ColumnPtr> TimeFunctions::hour_from_unixtime(FunctionContext* context, 
         }
 
         cctz::time_point<cctz::sys_seconds> t = epoch + cctz::seconds(date);
-        int offset = ctz.lookup_offset(t).offset;
+        int offset = ctz.lookup(t).offset;
         int hour = impl_hour_from_unixtime(date + offset);
         result.append(hour);
     }
@@ -3892,6 +3907,39 @@ StatusOr<ColumnPtr> TimeFunctions::time_format(FunctionContext* context, const s
         }
 
         builder.append(result.str());
+    }
+
+    return builder.build(ColumnHelper::is_all_const(columns));
+}
+
+constexpr static const int64_t MAX_TIME = 3023999L;
+
+static int64_t from_seconds_with_limit(int64_t time) {
+    if (time > MAX_TIME) {
+        return MAX_TIME;
+    }
+    if (time < -MAX_TIME) {
+        return -MAX_TIME;
+    }
+    return time;
+}
+
+StatusOr<ColumnPtr> TimeFunctions::sec_to_time(FunctionContext* context, const starrocks::Columns& columns) {
+    const auto& bigint_column = columns[0];
+
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    auto bigint_viewer = ColumnViewer<TYPE_BIGINT>(bigint_column);
+    const size_t size = bigint_column->size();
+    auto builder = ColumnBuilder<TYPE_TIME>(size);
+
+    for (size_t i = 0; i < size; ++i) {
+        if (bigint_viewer.is_null(i)) {
+            builder.append_null();
+            continue;
+        }
+        auto time = static_cast<double>(from_seconds_with_limit(bigint_viewer.value(i)));
+        builder.append(time);
     }
 
     return builder.build(ColumnHelper::is_all_const(columns));

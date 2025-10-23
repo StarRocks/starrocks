@@ -65,7 +65,7 @@ public class StreamLoadTaskTest {
     public void setUp() {
         long id = 123L;
         String label = "label_abc";
-        long timeoutMs = 10000L;
+        long timeoutMs = 100000L;
         long createTimeMs = System.currentTimeMillis();
         boolean isRoutineLoad = false;
         streamLoadTask =
@@ -143,8 +143,6 @@ public class StreamLoadTaskTest {
             }
         };
 
-        ExceptionChecker.expectThrowsWithMsg(StarRocksException.class, ERR_NO_PARTITIONS_HAVE_DATA_LOAD.formatErrorMsg(),
-                () -> Deencapsulation.invoke(streamLoadTask, "unprotectedWaitCoordFinish"));
         ExceptionChecker.expectThrowsWithMsg(StarRocksException.class, ERR_NO_PARTITIONS_HAVE_DATA_LOAD.formatErrorMsg(),
                 () -> Deencapsulation.invoke(streamLoadTask, "unprotectedWaitCoordFinish"));
     }

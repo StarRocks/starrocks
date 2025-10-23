@@ -18,7 +18,7 @@ package com.starrocks.sql.ast;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.sql.ast.expression.TableRef;
+import com.starrocks.persist.TableRefPersist;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -38,7 +38,7 @@ public class AbstractBackupStmt extends DdlStmt {
 
     protected LabelName labelName;
     protected String repoName;
-    protected List<TableRef> tblRefs;
+    protected List<TableRefPersist> tblRefs;
     protected List<FunctionRef> fnRefs;
     protected List<CatalogRef> externalCatalogRefs;
 
@@ -54,7 +54,7 @@ public class AbstractBackupStmt extends DdlStmt {
 
     protected long timeoutMs;
 
-    public AbstractBackupStmt(LabelName labelName, String repoName, List<TableRef> tableRefs,
+    public AbstractBackupStmt(LabelName labelName, String repoName, List<TableRefPersist> tableRefs,
                               List<FunctionRef> fnRefs, List<CatalogRef> externalCatalogRefs, Set<BackupObjectType> allMarker,
                               boolean withOnClause, String originDbName, Map<String, String> properties, NodePosition pos) {
         super(pos);
@@ -98,7 +98,7 @@ public class AbstractBackupStmt extends DdlStmt {
         return repoName;
     }
 
-    public List<TableRef> getTableRefs() {
+    public List<TableRefPersist> getTableRefs() {
         return tblRefs;
     }
 

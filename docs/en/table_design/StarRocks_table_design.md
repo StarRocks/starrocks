@@ -5,7 +5,7 @@ sidebar_position: 10
 
 # Table overview
 
-import Replicanum from '../_assets/commonMarkdown/replicanum.md'
+import Replicanum from '../_assets/commonMarkdown/replicanum.mdx'
 
 Tables are units of data storage. Understanding the table structure in StarRocks and how to design an efficient table structure helps optimize data organization and enhance query efficiency. Also, compared to traditional databases, StarRocks can store complex semi-structured data such as JSON, ARRAY, in a columnar manner to improve query performance.
 
@@ -167,7 +167,7 @@ While the usage of temporary tables is similar to that of native tables, there a
 - ALTER TABLE statements are not supported.
 - Creating views and materialized views based on temporary tables is not supported.
 - EXPORT statements are not supported.
-- Submitting asynchronous tasks with SUBMIT TASK for creating temporary tables is not supported.
+- Creating temporary tables or loading data from/into them with asynchronous tasks using SUBMIT TASK is not supported.
 
 ### More features
 

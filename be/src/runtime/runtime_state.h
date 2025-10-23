@@ -44,8 +44,8 @@
 #include <unordered_map>
 #include <vector>
 
-#include "cache/block_cache/block_cache.h"
 #include "cache/datacache_utils.h"
+#include "cache/disk_cache/block_cache.h"
 #include "cctz/time_zone.h"
 #include "common/global_types.h"
 #include "common/object_pool.h"
@@ -445,6 +445,11 @@ public:
     bool enable_hash_join_linear_chained_opt() const {
         return _query_options.__isset.enable_hash_join_linear_chained_opt &&
                _query_options.enable_hash_join_linear_chained_opt;
+    }
+
+    bool enable_hash_join_serialize_fixed_size_string() const {
+        return _query_options.__isset.enable_hash_join_serialize_fixed_size_string &&
+               _query_options.enable_hash_join_serialize_fixed_size_string;
     }
 
     const std::vector<TTabletCommitInfo>& tablet_commit_infos() const { return _tablet_commit_infos; }

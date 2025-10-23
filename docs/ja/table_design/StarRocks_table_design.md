@@ -5,7 +5,7 @@ sidebar_position: 10
 
 # テーブル概要
 
-import Replicanum from '../_assets/commonMarkdown/replicanum.md'
+import Replicanum from '../_assets/commonMarkdown/replicanum.mdx'
 
 テーブルはデータストレージの単位です。StarRocks でのテーブル構造を理解し、効率的なテーブル構造を設計することは、データの整理を最適化し、クエリ効率を向上させるのに役立ちます。また、従来のデータベースと比較して、StarRocks は JSON や ARRAY などの複雑な半構造化データをカラム形式で保存し、クエリパフォーマンスを向上させることができます。
 
@@ -167,7 +167,7 @@ StarRocks は組み込みのインデックスを提供しており、プレフ�
 - ALTER TABLE ステートメントはサポートされていません。
 - 一時テーブルに基づくビューおよびマテリアライズドビューの作成はサポートされていません。
 - EXPORT ステートメントはサポートされていません。
-- 一時テーブルの作成に対する非同期タスクの SUBMIT TASK はサポートされていません。
+- SUBMIT TASK を使用した非同期タスクによる一時テーブルの作成、またはそれらからのデータ読み込み／書き込みはサポートされていません。
 
 ### その他の機能
 

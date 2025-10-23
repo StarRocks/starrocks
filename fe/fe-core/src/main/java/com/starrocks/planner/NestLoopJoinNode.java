@@ -22,7 +22,6 @@ import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.JoinOperator;
 import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.sql.ast.expression.TableRef;
 import com.starrocks.thrift.TNestLoopJoinNode;
 import com.starrocks.thrift.TNormalNestLoopJoinNode;
 import com.starrocks.thrift.TNormalPlanNode;
@@ -44,7 +43,7 @@ public class NestLoopJoinNode extends JoinNode implements RuntimeFilterBuildNode
 
     private static final Logger LOG = LogManager.getLogger(NestLoopJoinNode.class);
 
-    public NestLoopJoinNode(PlanNodeId id, PlanNode outer, PlanNode inner, TableRef innerRef,
+    public NestLoopJoinNode(PlanNodeId id, PlanNode outer, PlanNode inner,
                             JoinOperator joinOp, List<Expr> eqJoinConjuncts, List<Expr> joinConjuncts) {
         super("NESTLOOP JOIN", id, outer, inner, joinOp, eqJoinConjuncts, joinConjuncts);
     }

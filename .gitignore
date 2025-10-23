@@ -33,11 +33,12 @@ fe_plugins/output
 fe/mocked
 fe/ut_ports
 fe/*/target
+fe/*/bin
 fe/plugin/*/target/
-fe/fe-core/gen
 fe/fe-grammar/gen
+fe/fe-grammar/src/main/antlr/com/starrocks/grammar/gen
+fe/fe-core/gen
 fe/fe-common/.classpath
-fe/fe-core/src/main/java/com/starrocks/sql/parser/gen
 fe/fe-core/src/main/java/com/starrocks/builtins
 fe/fe-core/src/main/java/com/starrocks/common/Version.java
 fe/fe-core/src/main/java/com/starrocks/proto
@@ -97,3 +98,16 @@ CMakeLists.txt
 .claude
 CLAUDE.md
 .clangd
+.cursor/
+
+
+!build-mac/CMakeLists.txt
+# build-mac generated files
+build-mac/.ninja_deps
+build-mac/.ninja_lock
+build-mac/.ninja_log
+build-mac/CMakeCache.txt
+build-mac/CMakeFiles/
+build-mac/build.ninja
+build-mac/build_version.cc
+build-mac/cmake_install.cmake

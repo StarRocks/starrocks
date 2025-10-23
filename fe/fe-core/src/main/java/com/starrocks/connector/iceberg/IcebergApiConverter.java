@@ -47,6 +47,7 @@ import com.starrocks.thrift.TIcebergDataFile;
 import com.starrocks.thrift.TIcebergSchema;
 import com.starrocks.thrift.TIcebergSchemaField;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.ManifestFile;
 import org.apache.iceberg.Metrics;
@@ -120,7 +121,7 @@ public class IcebergApiConverter {
                 .setCatalogTableName(remoteTableName)
                 .setComment(nativeTbl.properties().getOrDefault("common", ""))
                 .setNativeTable(nativeTbl)
-                .setFullSchema(toFullSchemas(nativeTbl.schema()))
+                .setFullSchema(toFullSchemas(nativeTbl.schema(), nativeTbl))
                 .setIcebergProperties(toIcebergProps(
                         nativeTbl.properties() != null ? Optional.of(copyOf(nativeTbl.properties())) : Optional.empty(),
                         nativeCatalogType));
@@ -265,6 +266,8 @@ public class IcebergApiConverter {
                     return Types.DecimalType.of(scalarType.getScalarPrecision(), scalarType.getScalarScale());
                 case TIME:
                     return Types.TimeType.get();
+                case VARIANT:
+                    return Types.VariantType.get();
                 default:
                     throw new StarRocksConnectorException("Unsupported primitive column type %s", primitiveType);
             }
@@ -296,6 +299,21 @@ public class IcebergApiConverter {
         }
 
         throw new StarRocksConnectorException("Unsupported complex column type %s", type);
+    }
+
+    public static List<Column> toFullSchemas(Schema schema, Table table) {
+        List<Column> fullSchema = toFullSchemas(schema);
+        if (table instanceof BaseTable) {
+            if (((BaseTable) table).operations().current().formatVersion() >= 3) {
+                boolean hasRowId = fullSchema.stream().anyMatch(column -> column.getName().equals(IcebergTable.ROW_ID));
+                if (!hasRowId) {
+                    Column column = new Column(IcebergTable.ROW_ID, Type.BIGINT, true);
+                    column.setIsHidden(true);
+                    fullSchema.add(column);
+                }
+            }
+        }
+        return fullSchema;
     }
 
     public static List<Column> toFullSchemas(Schema schema) {

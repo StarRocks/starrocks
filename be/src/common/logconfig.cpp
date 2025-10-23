@@ -18,6 +18,12 @@
 #include <glog/logging.h>
 #include <glog/vlog_is_on.h>
 #include <jemalloc/jemalloc.h>
+#ifdef __APPLE__
+#include <mach/mach_init.h>
+#include <mach/mach_port.h>
+#include <mach/thread_act.h>
+#include <pthread.h>
+#endif
 
 #include <cerrno>
 #include <cstdio>
@@ -27,7 +33,7 @@
 #include <mutex>
 
 #include "cache/datacache.h"
-#include "cache/object_cache/page_cache.h"
+#include "cache/mem_cache/page_cache.h"
 #include "common/config.h"
 #include "gutil/endian.h"
 #include "gutil/stringprintf.h"
@@ -128,7 +134,12 @@ static void dontdump_unused_pages() {
     static bool start_dump = false;
     struct timeval tv;
     gettimeofday(&tv, nullptr);
+    // On macOS, pthread_t is an opaque pointer; convert to a numeric id for fmt
+#ifdef __APPLE__
+    uint64_t tid = static_cast<uint64_t>(pthread_mach_thread_np(pthread_self()));
+#else
     pthread_t tid = pthread_self();
+#endif
     const uint32_t MAX_BUFFER_SIZE = 1024;
     char buffer[MAX_BUFFER_SIZE] = {};
     // memory_buffer allocate 500 bytes from stack
@@ -136,7 +147,13 @@ static void dontdump_unused_pages() {
     if (!start_dump) {
         int res = snprintf(buffer, MAX_BUFFER_SIZE, "arena.%d.purge", MALLCTL_ARENAS_ALL);
         buffer[res] = '\0';
-        int ret = je_mallctl(buffer, nullptr, nullptr, nullptr, 0);
+        int ret =
+#ifdef __APPLE__
+                mallctl
+#else
+                je_mallctl
+#endif
+                (buffer, nullptr, nullptr, nullptr, 0);
 
         if (ret != 0) {
             FMT_LOG("je_mallctl execute purge failed, errno:{}", ret);
@@ -146,7 +163,13 @@ static void dontdump_unused_pages() {
 
         res = snprintf(buffer, MAX_BUFFER_SIZE, "arena.%d.dontdump", MALLCTL_ARENAS_ALL);
         buffer[res] = '\0';
-        ret = je_mallctl(buffer, nullptr, nullptr, nullptr, 0);
+        ret =
+#ifdef __APPLE__
+                mallctl
+#else
+                je_mallctl
+#endif
+                (buffer, nullptr, nullptr, nullptr, 0);
 
         if (ret != 0) {
             FMT_LOG("je_mallctl execute dontdump failed, errno:{}", ret);
@@ -199,8 +222,10 @@ bool init_glog(const char* basename, bool install_signal_handler) {
     FLAGS_logbuflevel = 0;
     // Buffer log messages for at most this many seconds.
     FLAGS_logbufsecs = 30;
-    // Set roll num.
+    // Set roll num. Not available with Homebrew glog on macOS.
+#ifndef __APPLE__
     FLAGS_log_filenum_quota = config::sys_log_roll_num;
+#endif
 
     // Set log level.
     std::string loglevel = config::sys_log_level;
@@ -230,13 +255,19 @@ bool init_glog(const char* basename, bool install_signal_handler) {
     std::string sizeflag = "SIZE-MB-";
     bool ok = false;
     if (rollmode.compare("TIME-DAY") == 0) {
+#ifndef __APPLE__
         FLAGS_log_split_method = "day";
+#endif
         ok = true;
     } else if (rollmode.compare("TIME-HOUR") == 0) {
+#ifndef __APPLE__
         FLAGS_log_split_method = "hour";
+#endif
         ok = true;
     } else if (rollmode.substr(0, sizeflag.length()).compare(sizeflag) == 0) {
+#ifndef __APPLE__
         FLAGS_log_split_method = "size";
+#endif
         std::string sizestr = rollmode.substr(sizeflag.size(), rollmode.size() - sizeflag.size());
         if (sizestr.size() != 0) {
             char* end = nullptr;
@@ -278,7 +309,10 @@ bool init_glog(const char* basename, bool install_signal_handler) {
     if (config::dump_trace_info) {
         google::InstallFailureWriter(failure_writer);
         google::InstallFailureFunction((google::logging_fail_func_t)failure_function);
+#ifndef MACOS_DISABLE_GLOG_STACKTRACE
+        // This symbol may be unavailable on macOS builds using system glog.
         google::InstallFailureHandlerAfterOutputLog(failure_handler_after_output_log);
+#endif
     }
 
     logging_initialized = true;

@@ -1,4 +1,4 @@
--- name: test_range_predicate_rewrite
+-- name: test_range_predicate_rewrite @slow
 create database db_${uuid0};
 -- result:
 -- !result

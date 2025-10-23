@@ -465,13 +465,16 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
         int64_t tablet_id = tablet_ids[row_indexes[from]];
         auto delta_writer_iter = _delta_writers.find(tablet_id);
         if (delta_writer_iter == _delta_writers.end()) {
-            LOG(WARNING) << "LakeTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(request.id())
-                         << " not found tablet_id: " << tablet_id;
-            response->mutable_status()->set_status_code(TStatusCode::INTERNAL_ERROR);
-            response->mutable_status()->add_error_msgs(
-                    fmt::format("Failed to add_chunk since tablet_id {} not exists, txn_id: {}, load_id: {}", tablet_id,
-                                _txn_id, print_id(request.id())));
-            return;
+            // SHOULD NEVER HAPPEN! The check is already done in _create_write_context() when chunk != nullptr.
+            auto msg = fmt::format(
+                    "Failed to add chunk because the DeltaWriter for the tablet is not found, txn_id: "
+                    "{}, load_id: {}, tablet_id: {}",
+                    _txn_id, print_id(request.id()), tablet_id);
+            LOG(WARNING) << msg;
+            context->update_status(Status::InternalError(msg));
+            count_down_latch.count_down(channel_size - i);
+            // DO NOT return!!!
+            break;
         }
 
         // back pressure OlapTableSink since there are too many memtables need to flush
@@ -748,13 +751,30 @@ Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest&
 
     std::vector<int64_t> tablet_ids;
     tablet_ids.reserve(params.tablets_size());
+    bool multi_stmt = _is_multi_statements_txn(params);
     for (const PTabletWithPartition& tablet : params.tablets()) {
         BundleWritableFileContext* bundle_writable_file_context = nullptr;
-        if (_is_data_file_bundle_enabled(params)) {
+        // Do NOT enable bundle write for a multi-statements transaction.
+        // Rationale:
+        //   A multi-statements txn may invoke multiple open/add_chunk cycles and flush segments in batches.
+        //   If some early segments are appended into a bundle file while later segments are flushed as
+        //   standalone segment files (because a subsequent writer/open does not attach to the previous
+        //   bundle context), the final Rowset metadata will contain a mixed set: a subset of segments with
+        //   bundle offsets recorded and the remaining without any offsets. Downstream rowset load logic
+        //   assumes a 1:1 correspondence between the 'segments' list and 'bundle_file_offsets' when the
+        //   latter is present. A partial list therefore triggers size mismatch errors when loading.
+        // Mitigation Strategy:
+        //   Disable bundling entirely for multi-statements txns so every segment is materialized as an
+        //   independent file, guaranteeing consistent metadata and eliminating offset mismatch risk.
+        // NOTE: If future optimization desires bundling + multi-stmt, it must introduce an atomic merge
+        //   mechanism ensuring offsets array completeness before publish.
+        if (!multi_stmt && _is_data_file_bundle_enabled(params)) {
             if (_bundle_wfile_ctx_by_partition.count(tablet.partition_id()) == 0) {
                 _bundle_wfile_ctx_by_partition[tablet.partition_id()] = std::make_unique<BundleWritableFileContext>();
             }
             bundle_writable_file_context = _bundle_wfile_ctx_by_partition[tablet.partition_id()].get();
+        } else if (multi_stmt && _is_data_file_bundle_enabled(params)) {
+            VLOG(1) << "disable bundle write for multi statements txn partition=" << tablet.partition_id();
         }
         if (_delta_writers.count(tablet.tablet_id()) != 0) {
             // already created for the tablet, usually in incremental open case
@@ -778,7 +798,7 @@ Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest&
                                               .set_profile(_profile)
                                               .set_bundle_writable_file_context(bundle_writable_file_context)
                                               .set_global_dicts(&_global_dicts)
-                                              .set_is_multi_statements_txn(_is_multi_statements_txn(params))
+                                              .set_is_multi_statements_txn(multi_stmt)
                                               .build());
         _delta_writers.emplace(tablet.tablet_id(), std::move(writer));
         tablet_ids.emplace_back(tablet.tablet_id());
@@ -837,8 +857,17 @@ StatusOr<std::unique_ptr<LakeTabletsChannel::WriteContext>> LakeTabletsChannel::
     auto tablet_ids_size = request.tablet_ids_size();
     // compute row indexes for each channel
     for (uint32_t i = 0; i < tablet_ids_size; ++i) {
-        uint32_t channel_index = _tablet_id_to_sorted_indexes[tablet_ids[i]];
-        channel_row_idx_start_points[channel_index]++;
+        auto tablet_id = tablet_ids[i];
+        auto it = _tablet_id_to_sorted_indexes.find(tablet_id);
+        if (UNLIKELY(it == _tablet_id_to_sorted_indexes.end())) {
+            auto msg = fmt::format(
+                    "Failed in _create_write_context because the channel for the tablet is not found, txn_id: "
+                    "{}, load_id: {}, tablet_id: {}",
+                    _txn_id, print_id(request.id()), tablet_id);
+            LOG(WARNING) << msg;
+            return Status::InternalError(msg);
+        }
+        channel_row_idx_start_points[it->second]++;
     }
 
     // NOTE: we make the last item equal with number of rows of this chunk
@@ -848,11 +877,9 @@ StatusOr<std::unique_ptr<LakeTabletsChannel::WriteContext>> LakeTabletsChannel::
 
     for (int i = tablet_ids_size - 1; i >= 0; --i) {
         const auto& tablet_id = tablet_ids[i];
-        auto it = _tablet_id_to_sorted_indexes.find(tablet_id);
-        if (UNLIKELY(it == _tablet_id_to_sorted_indexes.end())) {
-            return Status::InternalError("invalid tablet id");
-        }
-        uint32_t channel_index = it->second;
+        // Already checked in previous loop, so use DCHECK here just in case.
+        DCHECK(_tablet_id_to_sorted_indexes.find(tablet_id) != _tablet_id_to_sorted_indexes.end());
+        uint32_t channel_index = _tablet_id_to_sorted_indexes[tablet_id];
         row_indexes[channel_row_idx_start_points[channel_index] - 1] = i;
         channel_row_idx_start_points[channel_index]--;
     }

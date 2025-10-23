@@ -3,11 +3,11 @@ displayed_sidebar: docs
 keywords: ['Canshu']
 ---
 
-import BEConfigMethod from '../../_assets/commonMarkdown/BE_config_method.md'
+import BEConfigMethod from '../../_assets/commonMarkdown/BE_config_method.mdx'
 
-import PostBEConfig from '../../_assets/commonMarkdown/BE_dynamic_note.md'
+import PostBEConfig from '../../_assets/commonMarkdown/BE_dynamic_note.mdx'
 
-import StaticBEConfigNote from '../../_assets/commonMarkdown/StaticBE_config_note.md'
+import StaticBEConfigNote from '../../_assets/commonMarkdown/StaticBE_config_note.mdx'
 
 # BE 配置项
 
@@ -264,7 +264,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 -->
 
 <!--
-##### enable_auto_adjust_pagecache
+##### enable_datacache_mem_auto_adjust
 
 - 默认值：true
 - 类型：Boolean
@@ -297,7 +297,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 -->
 
 <!--
-##### pagecache_adjust_period
+##### datacache_mem_adjust_period
 
 - 默认值：20
 - 类型：Int
@@ -308,7 +308,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 -->
 
 <!--
-##### auto_adjust_pagecache_interval_seconds
+##### datacache_mem_adjust_interval_seconds
 
 - 默认值：10
 - 类型：Int
@@ -1228,7 +1228,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### enable_pk_parallel_execution
 
-- 默认值：false
+- 默认值：true
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
@@ -4011,40 +4011,40 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：单个磁盘缓存数据量的上限，可设为比例上限（如 `80%`）或物理上限（如 `2T`, `500G` 等）。假设系统使用了两块磁盘进行缓存，并设置 `datacache_disk_size` 参数值为 `21474836480`，即 20 GB，那么最多可缓存 40 GB 的磁盘数据。默认值为 `0`，即仅使用内存作为缓存介质，不使用磁盘。
 - 引入版本：-
 
-##### datacache_auto_adjust_enable
+##### enable_datacache_disk_auto_adjust
 
-- 默认值：false
+- 默认值：true
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：Data Cache 磁盘容量自动调整开关，启用后会根据当前磁盘使用率动态调整缓存容量。
+- 描述：Data Cache 磁盘容量自动调整开关，启用后会根据当前磁盘使用率动态调整缓存容量。该参数自 v4.0 起由 `datacache_auto_adjust_enable` 更名为 `enable_datacache_disk_auto_adjust`。
 - 引入版本：v3.3.0
 
-##### datacache_disk_high_level
+##### disk_high_level
 
 - 默认值：90
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述：Data Cache 磁盘高水位（百分比）。当磁盘使用率高于该值时，系统自动淘汰 Data Cache 中的缓存数据。自 v3.4.0 起，该参数默认值由 `80` 变更为 `90`。
+- 描述：磁盘高水位（百分比）。当磁盘使用率高于该值时，系统自动淘汰 Data Cache 中的缓存数据。自 v3.4.0 起，该参数默认值由 `80` 变更为 `90`。该参数自 v4.0 起由 `datacache_disk_high_level` 更名为 `disk_high_level`。
 - 引入版本：v3.3.0
 
-##### datacache_disk_safe_level
+##### disk_safe_level
 
 - 默认值：80
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述：Data Cache 磁盘安全水位（百分比）。当 Data Cache 进行缓存自动扩缩容时，系统将尽可能以该阈值为磁盘使用率目标调整缓存容量。自 v3.4.0 起，该参数默认值由 `70` 变更为 `80`。
+- 描述：磁盘安全水位（百分比）。当 Data Cache 进行缓存自动扩缩容时，系统将尽可能以该阈值为磁盘使用率目标调整缓存容量。自 v3.4.0 起，该参数默认值由 `70` 变更为 `80`。该参数自 v4.0 起由 `datacache_disk_safe_level` 更名为 `disk_safe_level`。
 - 引入版本：v3.3.0
 
-##### datacache_disk_low_level
+##### disk_low_level
 
 - 默认值：60
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述：Data Cache 磁盘低水位（百分比）。当磁盘使用率在 `datacache_disk_idle_seconds_for_expansion` 指定的时间内持续低于该值，且用于缓存数据的空间已经写满时，系统将自动进行缓存扩容，增加缓存上限。
+- 描述：磁盘低水位（百分比）。当磁盘使用率在 `datacache_disk_idle_seconds_for_expansion` 指定的时间内持续低于该值，且用于缓存数据的空间已经写满时，系统将自动进行缓存扩容，增加缓存上限。该参数自 v4.0 起由 `datacache_disk_low_level` 更名为 `disk_low_level`。
 - 引入版本：v3.3.0
 
 ##### datacache_disk_adjust_interval_seconds
@@ -4082,15 +4082,6 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 是否动态：否
 - 描述：是否启用 Block Buffer 优化 Data Cache 效率。当启用 Block Buffer 时，系统会从 Data Cache 中读取完整的 Block 数据并缓存在临时 Buffer 中，从而减少频繁读取缓存带来的额外开销。
 - 引入版本：v3.2.0
-
-##### datacache_tiered_cache_enable
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：否
-- 描述：是否为 Data Cache 启用分层模式。当启用分层模式时，Data Cache 配置的的内存和磁盘构成两级缓存，磁盘数据变为热数据时会自动载入到内存缓存，内存缓存中的数据变冷时自动落至磁盘。当不启用分层模式时，为 Data Cache 配置的内存和磁盘构成两个独立的缓存空间，并分别缓存不同类型数据，两者之间不进行数据流动。
-- 引入版本：v3.2.5
 
 ##### datacache_eviction_policy
 
@@ -4204,20 +4195,9 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 <!--
 ##### datacache_max_flying_memory_mb
 
-- 默认值：256
+- 默认值：2
 - 类型：Int
 - 单位：MB
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### datacache_adaptor_enable
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
 - 是否动态：否
 - 描述：
 - 引入版本：-
@@ -4246,17 +4226,6 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 -->
 
 <!--
-##### datacache_engine
-
-- 默认值：空字符串
-- 类型：String
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
 ##### report_datacache_metrics_interval_ms
 
 - 默认值：60000
@@ -4270,7 +4239,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 <!--
 ##### block_cache_enable
 
-- 默认值：false
+- 默认值：true
 - 类型：Boolean
 - 单位：-
 - 是否动态：否
@@ -4281,40 +4250,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 <!--
 ##### block_cache_disk_size
 
-- 默认值：0
-- 类型：Int
-- 单位：
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### block_cache_disk_path
-
-- 默认值：`${STARROCKS_HOME}/block_cache/`
-- 类型：String
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### block_cache_meta_path
-
-- 默认值：`${STARROCKS_HOME}/block_cache/`
-- 类型：String
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### block_cache_block_size
-
-- 默认值：262144
+- 默认值：-1
 - 类型：Int
 - 单位：
 - 是否动态：否
@@ -4325,7 +4261,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 <!--
 ##### block_cache_mem_size
 
-- 默认值：2147483648
+- 默认值：0
 - 类型：Int
 - 单位：
 - 是否动态：否
@@ -4334,43 +4270,10 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 -->
 
 <!--
-##### block_cache_max_concurrent_inserts
-
-- 默认值：1500000
-- 类型：Int
-- 单位：
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### block_cache_checksum_enable
+##### datacache_direct_io_enable
 
 - 默认值：false
 - 类型：Boolean
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### block_cache_direct_io_enable
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### block_cache_engine
-
-- 默认值：空字符串
-- 类型：String
 - 单位：-
 - 是否动态：否
 - 描述：
@@ -4702,6 +4605,24 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 是否动态：是
 - 描述：存算分离集群下，是否允许 Vertical Compaction 任务在执行时缓存数据到本地磁盘上。`true` 表示启用，`false` 表示不启用。
 - 引入版本：v3.1.7, v3.2.3
+
+##### lake_clear_corrupted_cache_meta
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群下，是否允许自动清理损坏的元数据缓存。
+- 引入版本：v3.3
+
+##### lake_clear_corrupted_cache_data
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群下，是否允许自动清理损坏的数据缓存。
+- 引入版本：v3.4
 
 <!--
 ##### dictionary_cache_refresh_timeout_ms

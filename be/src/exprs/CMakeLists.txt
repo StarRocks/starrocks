@@ -110,6 +110,7 @@ set(EXPR_FILES
   bit_functions.cpp
   hash_functions.cpp
   gin_functions.cpp
+  ai_functions.cpp
 )
 
 if(STARROCKS_JIT_ENABLE)

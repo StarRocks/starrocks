@@ -480,6 +480,7 @@ In most cases, if your Hive data is updated at a granularity of 1 hour or less, 
 | metastore_cache_ttl_sec                | No       | The time interval at which StarRocks automatically discards the metadata of Hive tables or partitions cached in itself. Unit: seconds. Default value: `86400`, which is 24 hours. |
 | remote_file_cache_ttl_sec              | No       | The time interval at which StarRocks automatically discards the metadata of the underlying data files of Hive tables or partitions cached in itself. Unit: seconds. Default value: `129600`, which is 36 hours. |
 | enable_cache_list_names                | No       | Specifies whether StarRocks caches Hive partition names. Valid values: `true` and `false`. Default value: `true`. The value `true` enables the cache, and the value `false` disables the cache. |
+| remote_file_cache_memory_ratio         | No       | The maximum memory usage ratio for the remote file cache. Default value: `0.1`, which is 10%. Supported from v3.5.6 onwards. |
 
 ### Examples
 

@@ -6,7 +6,7 @@ keywords: ['linshi']
 
 # 表概览
 
-import Replicanum from '../_assets/commonMarkdown/replicanum.md'
+import Replicanum from '../_assets/commonMarkdown/replicanum.mdx'
 
 表是数据存储单元。理解 StarRocks 中的表结构，以及如何设计合理的表结构，有利于优化数据组织，提高查询效率。相比于传统的数据库，StarRocks 会以列的方式存储 JSON、ARRAY 等复杂的半结构化数据，保证高效查询。
 本文由浅入深介绍表结构。
@@ -169,7 +169,7 @@ StarRocks 提供内置索引，包括前缀索引、Ordinal 索引和 ZoneMap �
 - 不支持 ALTER TABLE 语句。
 - 不支持基于临时表创建视图和物化视图。
 - 不支持 EXPORT 语句导出。
-- 不支持基于临时表通过 SUBMIT TASK 语句提交异步任务。
+- 不支持通过异步任务创建临时表或向其中导入/导出数据（通过 SUBMIT TASK 语句）。
 
 ###  更多特性
 

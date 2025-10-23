@@ -2281,7 +2281,7 @@ Status ShardByLengthMutableIndex::load(const MutableIndexMetaPB& meta) {
     // read wals and build hash map
     for (int i = 0; i < n; i++) {
         const auto& page_pointer_pb = meta.wals(i).data();
-        auto offset = page_pointer_pb.offset();
+        size_t offset = page_pointer_pb.offset();
         const auto end = offset + page_pointer_pb.size();
         std::string buff;
         raw::stl_string_resize_uninitialized(&buff, 4);

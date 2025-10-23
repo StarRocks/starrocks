@@ -21,7 +21,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.common.util.UUIDUtil;
-import com.starrocks.scheduler.mv.MVPCTBasedRefreshProcessor;
+import com.starrocks.scheduler.mv.pct.MVPCTBasedRefreshProcessor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.sql.common.DmlException;
@@ -37,8 +37,6 @@ import org.junit.jupiter.api.MethodOrderer.MethodName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
 
-import java.io.File;
-import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -188,8 +186,8 @@ public class PartitionBasedMvRefreshTest extends MVTestBase {
                     ")" +
                     "as " +
                     " select * from t1 union all select * from t2;";
-        List<Integer> t1PartitionNums = ImmutableList.of(0, 0, 0, 0, 1, 1, 1);
-        List<Integer> t2PartitionNums = ImmutableList.of(1, 1, 1, 1, 1, 0, 0);
+        List<Integer> t1PartitionNums = ImmutableList.of(1, 1, 1, 0, 0, 0, 0);
+        List<Integer> t2PartitionNums = ImmutableList.of(0, 0, 1, 1, 1, 1, 1);
         testRefreshUnionAllWithDefaultRefreshNumber(sql, t1PartitionNums, t2PartitionNums);
     }
 
@@ -204,8 +202,8 @@ public class PartitionBasedMvRefreshTest extends MVTestBase {
                     ")" +
                     "as " +
                     " select * from t2 union all select * from t1;";
-        List<Integer> t1PartitionNums = ImmutableList.of(0, 0, 0, 0, 1, 1, 1);
-        List<Integer> t2PartitionNums = ImmutableList.of(1, 1, 1, 1, 1, 0, 0);
+        List<Integer> t1PartitionNums = ImmutableList.of(1, 1, 1, 0, 0, 0, 0);
+        List<Integer> t2PartitionNums = ImmutableList.of(0, 0, 1, 1, 1, 1, 1);
         testRefreshUnionAllWithDefaultRefreshNumber(sql, t1PartitionNums, t2PartitionNums);
     }
 
@@ -271,7 +269,7 @@ public class PartitionBasedMvRefreshTest extends MVTestBase {
 
                         Task task = TaskBuilder.buildMvTask(mv, testDb.getFullName());
                         int mvRefreshTimes = 3;
-                        List<Integer> t1PartitionNums = ImmutableList.of(0, 0, 1);
+                        List<Integer> t1PartitionNums = ImmutableList.of(1, 0, 0);
                         List<Integer> t2PartitionNums = ImmutableList.of(1, 1, 1);
                         TaskRun taskRun = null;
                         for (int i = 0; i < mvRefreshTimes; i++) {
@@ -379,14 +377,5 @@ public class PartitionBasedMvRefreshTest extends MVTestBase {
         starRocksAssert.dropTable("join_base_t1");
         starRocksAssert.dropTable("join_base_t2");
         starRocksAssert.dropMaterializedView("join_mv1");
-    }
-
-    private static File newFolder(File root, String... subDirs) throws IOException {
-        String subFolder = String.join("/", subDirs);
-        File result = new File(root, subFolder);
-        if (!result.mkdirs()) {
-            throw new IOException("Couldn't create folders " + root);
-        }
-        return result;
     }
 }

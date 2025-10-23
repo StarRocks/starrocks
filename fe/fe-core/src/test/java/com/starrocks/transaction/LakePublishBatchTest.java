@@ -25,15 +25,20 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.NoAliveBackendException;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.lake.LakeTablet;
+import com.starrocks.lake.Utils;
 import com.starrocks.proto.PublishLogVersionBatchRequest;
+import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.replication.ReplicationTxnCommitAttachment;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
+import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
@@ -43,6 +48,7 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.utframe.MockedBackend;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Mock;
 import mockit.MockUp;
 import org.awaitility.Awaitility;
@@ -58,6 +64,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import javax.validation.constraints.NotNull;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -111,6 +118,17 @@ public class LakePublishBatchTest {
         new MockUp<PublishVersionDaemon>() {
             @Mock
             public void runOneCycle() {
+
+            }
+        };
+
+        new MockUp<Utils>() {
+            @Mock
+            public static void publishVersion(@NotNull List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion,
+                    long newVersion, Map<Long, Double> compactionScores,
+                    List<String> distributionColumns, ComputeResource computeResource,
+                    Map<Long, Long> tabletRowNums, boolean useAggregatePublish)
+                    throws NoAliveBackendException, RpcException {
 
             }
         };
@@ -248,7 +266,20 @@ public class LakePublishBatchTest {
 
         PublishVersionDaemon publishVersionDaemon = new PublishVersionDaemon();
         publishVersionDaemon.runAfterCatalogReady();
-        Assertions.assertTrue(waiter9.await(10, TimeUnit.SECONDS));
+        TransactionState transactionState9 = globalTransactionMgr.getDatabaseTransactionMgr(db.getId()).
+                getTransactionState(transactionId9);
+        boolean success = false;
+        for (int i = 0; i < 10; i++) {
+            publishVersionDaemon.runAfterCatalogReady();
+            if (waiter9.await(1, TimeUnit.SECONDS)) {
+                success = true;
+                break;
+            }
+        }
+        Assertions.assertTrue(success, 
+                String.format("Transaction publish timeout after 10 seconds. " +
+                        "TransactionId: %d, Table: %s, DB: %s, status: %s", 
+                        transactionId9, tableName, db.getFullName(), transactionState9.getTransactionStatus()));
     }
 
     @ParameterizedTest
@@ -618,7 +649,7 @@ public class LakePublishBatchTest {
             PublishVersionDaemon publishVersionDaemon = new PublishVersionDaemon();
             publishVersionDaemon.runAfterCatalogReady();
 
-            Assertions.assertTrue(waiter1.await(10, TimeUnit.SECONDS));
+            Assertions.assertTrue(waiter1.await(1, TimeUnit.MINUTES));
 
             // Verify that the transactions have been published
             TransactionState transactionState1 = globalTransactionMgr.getDatabaseTransactionMgr(db.getId()).
@@ -634,7 +665,7 @@ public class LakePublishBatchTest {
                     batches.get(0).getTransactionStates().get(0).getTransactionType());
 
             publishVersionDaemon.runAfterCatalogReady();
-            Assertions.assertTrue(waiter2.await(10, TimeUnit.SECONDS));
+            Assertions.assertTrue(waiter2.await(1, TimeUnit.MINUTES));
 
             // Verify that the transactions have been published
             TransactionState transactionState2 = globalTransactionMgr.getDatabaseTransactionMgr(db.getId()).

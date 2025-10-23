@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.AuthorizationMgr;
@@ -43,6 +44,7 @@ import com.starrocks.load.ExportJob;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.loadv2.SparkLoadJob;
 import com.starrocks.load.routineload.RoutineLoadJob;
+import com.starrocks.persist.TableRefPersist;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.CatalogMgr;
@@ -213,7 +215,6 @@ import com.starrocks.sql.ast.UserRef;
 import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.sql.ast.expression.SetVarHint;
 import com.starrocks.sql.ast.expression.TableName;
-import com.starrocks.sql.ast.expression.TableRef;
 import com.starrocks.sql.ast.group.CreateGroupProviderStmt;
 import com.starrocks.sql.ast.group.DropGroupProviderStmt;
 import com.starrocks.sql.ast.group.ShowCreateGroupProviderStmt;
@@ -250,6 +251,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
+
+import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 
 public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
     // For show tablet detail command, if user has any privilege on the corresponding table, user can run it
@@ -541,12 +544,16 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
 
     @Override
     public Void visitShowCreateDbStatement(ShowCreateDbStmt statement, ConnectContext context) {
+        String catalogName = context.getCurrentCatalog();
+        if (Strings.isNullOrEmpty(catalogName)) {
+            throw new SemanticException(PARSER_ERROR_MSG.noCatalogSelected());
+        }
+
         try {
-            Authorizer.checkAnyActionOnDb(context,
-                    statement.getCatalogName(), statement.getDb());
+            Authorizer.checkAnyActionOnDb(context, catalogName, statement.getDb());
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(
-                    statement.getCatalogName(),
+                    catalogName,
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     PrivilegeType.ANY.name(), ObjectType.DATABASE.name(), statement.getDb());
         }
@@ -555,15 +562,18 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
 
     @Override
     public Void visitRecoverDbStatement(RecoverDbStmt statement, ConnectContext context) {
-        // Need to check the `CREATE_DATABASE` action on corresponding catalog
+        String catalogName = context.getCurrentCatalog();
+        if (Strings.isNullOrEmpty(catalogName)) {
+            throw new SemanticException(PARSER_ERROR_MSG.noCatalogSelected());
+        }
+
         try {
-            Authorizer.checkCatalogAction(context,
-                    statement.getCatalogName(), PrivilegeType.CREATE_DATABASE);
+            Authorizer.checkCatalogAction(context, catalogName, PrivilegeType.CREATE_DATABASE);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(
-                    statement.getCatalogName(),
+                    catalogName,
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeType.CREATE_DATABASE.name(), ObjectType.CATALOG.name(), statement.getCatalogName());
+                    PrivilegeType.CREATE_DATABASE.name(), ObjectType.CATALOG.name(), catalogName);
         }
         return null;
     }
@@ -1781,8 +1791,13 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
     @Override
     public Void visitTruncateTableStatement(TruncateTableStmt statement, ConnectContext context) {
         try {
+            String dbName = statement.getDbName();
+            if (dbName == null) {
+                dbName = context.getDatabase();
+            }
+
             Authorizer.checkTableAction(context,
-                    new TableName(context.getCurrentCatalog(), statement.getDbName(), statement.getTblName()),
+                    new TableName(context.getCurrentCatalog(), dbName, statement.getTblName()),
                     PrivilegeType.DELETE);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(
@@ -2320,7 +2335,7 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
                     PrivilegeType.REPOSITORY.name(), ObjectType.SYSTEM.name(), null);
         }
         if (!statement.containsExternalCatalog()) {
-            List<TableRef> tableRefs = statement.getTableRefs();
+            List<TableRefPersist> tableRefs = statement.getTableRefs();
             List<FunctionRef> functionRefs = statement.getFnRefs();
             if (tableRefs.isEmpty() && functionRefs.isEmpty()) {
                 String dBName = statement.getDbName();
@@ -2414,7 +2429,7 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
         }
         if (job instanceof BackupJob) {
             BackupJob backupJob = (BackupJob) job;
-            List<TableRef> tableRefs = backupJob.getTableRef();
+            List<TableRefPersist> tableRefs = backupJob.getTableRef();
             tableRefs.forEach(tableRef -> {
                 TableName tableName = tableRef.getName();
                 try {
@@ -2457,7 +2472,7 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
             return null;
         }
 
-        List<TableRef> tableRefs = statement.getTableRefs();
+        List<TableRefPersist> tableRefs = statement.getTableRefs();
         // check create_database on current catalog if we're going to restore the whole database
         if (!statement.withOnClause()) {
             try {
@@ -2487,7 +2502,7 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
                                 PrivilegeType.CREATE_TABLE.name(), ObjectType.DATABASE.name(), db.getFullName());
                     }
                     // check insert on specified table
-                    for (TableRef tableRef : tableRefs) {
+                    for (TableRefPersist tableRef : tableRefs) {
                         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
                                 .getTable(db.getFullName(), tableRef.getName().getTbl());
                         if (table != null) {

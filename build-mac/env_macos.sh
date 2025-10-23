@@ -116,7 +116,7 @@ export OPT_FLAGS="-O3 -DNDEBUG"
 export CFLAGS="${ARM64_FLAGS} ${OPT_FLAGS}"
 
 # C++ flags - use libc++ (not libstdc++)
-export CXXFLAGS="${ARM64_FLAGS} ${OPT_FLAGS} -stdlib=libc++ -std=c++17"
+export CXXFLAGS="${ARM64_FLAGS} ${OPT_FLAGS} -stdlib=libc++ -std=gnu++20"
 
 # Add Homebrew include/lib paths
 export CPPFLAGS="-I${HOMEBREW_PREFIX}/include ${CPPFLAGS:-}"

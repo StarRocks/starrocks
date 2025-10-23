@@ -15,8 +15,8 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.persist.TableRefPersist;
 import com.starrocks.server.RunMode;
-import com.starrocks.sql.ast.expression.TableRef;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -30,14 +30,14 @@ public class RestoreStmt extends AbstractBackupStmt {
     private int metaVersion = -1;
     private int starrocksMetaVersion = -1;
 
-    public RestoreStmt(LabelName labelName, String repoName, List<TableRef> tblRefs,
+    public RestoreStmt(LabelName labelName, String repoName, List<TableRefPersist> tblRefs,
                        List<FunctionRef> fnRefs, List<CatalogRef> externalCatalogRefs, Set<BackupObjectType> allMarker,
                        boolean withOnClause, String originDbName, Map<String, String> properties) {
         this(labelName, repoName, tblRefs, fnRefs, externalCatalogRefs,
                 allMarker, withOnClause, originDbName, properties, NodePosition.ZERO);
     }
 
-    public RestoreStmt(LabelName labelName, String repoName, List<TableRef> tblRefs,
+    public RestoreStmt(LabelName labelName, String repoName, List<TableRefPersist> tblRefs,
                        List<FunctionRef> fnRefs, List<CatalogRef> externalCatalogRefs, Set<BackupObjectType> allMarker,
                        boolean withOnClause, String originDbName,
                        Map<String, String> properties, NodePosition pos) {

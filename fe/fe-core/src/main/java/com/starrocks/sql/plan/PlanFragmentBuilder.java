@@ -2498,6 +2498,29 @@ public class PlanFragmentBuilder {
             return fragment;
         }
 
+        private boolean isUseParallelMerge(OptExpression optExpr, long limit, long offset) {
+            long inputRowCount = Optional.ofNullable(optExpr.inputAt(0).getStatistics())
+                    .map(stat -> (long) stat.getOutputRowCount()).orElse(-1L);
+
+            long topN = limit == Operator.DEFAULT_LIMIT ? Operator.DEFAULT_LIMIT : limit + offset;
+            int parallelMergeInputRowsThreshold = Optional.ofNullable(ConnectContext.get())
+                    .map(ConnectContext::getSessionVariable)
+                    .map(sv ->
+                            sv.isEnableParallelMerge() ? sv.getDegreeOfParallelism() * sv.getChunkSize() : -1
+                    ).orElse(-1);
+            // this threshold == -1 indidcates that enable_parallel_merge is off
+            if (parallelMergeInputRowsThreshold == -1) {
+                return false;
+            } else if (topN == Operator.DEFAULT_LIMIT) {
+                // for full-sort (topN == Operator.DEFAULT_LIMIT indicates full-sort), if inputRowCount
+                // is unknown from statisitics or it is greater than threshold, then use parallel_merge.
+                return inputRowCount == -1 || inputRowCount > parallelMergeInputRowsThreshold;
+            } else {
+                // for topN-sort, if n > threshold, then use parallel_merge, otherwise do not use.
+                return topN > parallelMergeInputRowsThreshold;
+            }
+        }
+
         @Override
         public PlanFragment visitPhysicalTopN(OptExpression optExpr, ExecPlan context) {
             ExecGroup lastExecGroup = currentExecGroup;
@@ -2532,6 +2555,7 @@ public class PlanFragmentBuilder {
             sortNode.setTopNType(topNType);
             exchangeNode.setMergeInfo(sortNode.getSortInfo(), offset);
             exchangeNode.computeStatistics(optExpr.getStatistics());
+            exchangeNode.setUseParallelMerge(isUseParallelMerge(optExpr, limit, offset));
             currentExecGroup.add(exchangeNode, true);
 
             if (TopNType.ROW_NUMBER.equals(topNType)) {
@@ -2595,6 +2619,8 @@ public class PlanFragmentBuilder {
             List<Expr> preAggFnCallExprs = new ArrayList<>();
             List<SlotId> preAggOutputColumnIds = new ArrayList<>();
             TupleDescriptor preAggTuple = context.getDescTbl().createTupleDescriptor();
+
+
             if (preAggFnCalls != null) {
                 for (Map.Entry<ColumnRefOperator, CallOperator> entry : preAggFnCalls.entrySet()) {
                     Expr preAggFunction = ScalarOperatorToExpr.buildExecExpression(entry.getValue(),
@@ -2661,6 +2687,9 @@ public class PlanFragmentBuilder {
             sortNode.resolvedTupleExprs = resolvedTupleExprs;
             sortNode.setHasNullableGenerateChild();
             sortNode.computeStatistics(optExpr.getStatistics());
+
+            sortNode.setUseParallelMerge(isUseParallelMerge(optExpr, limit, offset));
+
             currentExecGroup.add(sortNode, true);
             if (shouldBuildGlobalRuntimeFilter()) {
                 sortNode.buildRuntimeFilters(runtimeFilterIdIdGenerator, context.getDescTbl(), execGroups);
@@ -2756,7 +2785,7 @@ public class PlanFragmentBuilder {
 
             NestLoopJoinNode joinNode = new NestLoopJoinNode(context.getNextNodeId(),
                     leftFragment.getPlanRoot(), rightFragment.getPlanRoot(),
-                    null, node.getJoinType(), Lists.newArrayList(), joinOnConjuncts);
+                    node.getJoinType(), Lists.newArrayList(), joinOnConjuncts);
             joinNode.setCommonSlotMap(commonSubExprMap);
 
             joinNode.setLimit(node.getLimit());

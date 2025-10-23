@@ -107,6 +107,7 @@ CREATE EXTERNAL CATALOG <catalog_name>
 PROPERTIES
 (
     "type" = "iceberg",
+    [SecurityParams],
     MetastoreParams,
     StorageCredentialParams,
     MetadataRelatedParams
@@ -131,6 +132,20 @@ The description of the Iceberg catalog. This parameter is optional.
 #### type
 
 The type of your data source. Set the value to `iceberg`.
+
+#### SecurityParams
+
+Parameter(s) about how StarRocks manages data access to the catalog.
+
+For detailed instructions on managing data access for Iceberg Catalogs, see [Security Setup for Iceberg REST Catalog](./iceberg_rest_security.md).
+
+##### catalog.access.control
+
+The data access control policy. Valid values:
+
+- `native` (Default): The StarRocks built-in data access control system is used.
+- `allowall`: All data access checks are delegated to the Catalog itself.
+- `ranger`: Data access checks are delegated to Apache Ranger.
 
 #### MetastoreParams
 
@@ -746,8 +761,10 @@ From v3.3.3 onwards, StarRocks supports the [periodic metadata refresh strategy]
 | :-------------------------------------------- | :-------------------- | :----------------------------------------------------------- |
 | enable_iceberg_metadata_cache                 | true                  | Whether to cache Iceberg-related metadata, including Table Cache, Partition Name Cache, and the Data File Cache and Delete Data File Cache in Manifest. |
 | iceberg_manifest_cache_with_column_statistics | false                 | Whether to cache the statistics of columns.                  |
-| iceberg_manifest_cache_max_num                | 100000                | The maximum number of Manifest files that can be cached.     |
 | refresh_iceberg_manifest_min_length           | 2 * 1024 * 1024       | The minimum Manifest file length that triggers a Data File Cache refresh. |
+| iceberg_data_file_cache_memory_usage_ratio    | 0.1                   | The maximum memory usage ratio for the data file Manifest cache. Supported from v3.5.6 onwards. |
+| iceberg_delete_file_cache_memory_usage_ratio  | 0.1                   | The maximum memory usage ratio for the delete file Manifest cache. Supported from v3.5.6 onwards. |
+| iceberg_table_cache_refresh_interval_sec      | 60                    | The interval (in seconds) at which the asynchronous refresh of the Iceberg table cache is triggered. Supported from v3.5.7 onwards. |
 
 Starting from v3.4, StarRocks can obtain statistics of Iceberg tables by reading Iceberg metadata through setting the following parameters, without actively triggering the collection of Iceberg table statistics.
 
@@ -1315,7 +1332,7 @@ DROP DATABASE <database_name>;
 
 ### Create an Iceberg table
 
-Similar to the internal databases of StarRocks, if you have the [CREATE TABLE](../../../administration/user_privs/authorization/privilege_item.md#database) privilege on an Iceberg database, you can use the [CREATE TABLE](../../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) or [CREATE TABLE AS SELECT ../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.mdELECT.md) statement to create a table in that Iceberg database. This feature is supported from v3.1 onwards.
+Similar to the internal databases of StarRocks, if you have the [CREATE TABLE](../../../administration/user_privs/authorization/privilege_item.md#database) privilege on an Iceberg database, you can use the [CREATE TABLE](../../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) or [CREATE TABLE AS SELECT](../../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) statement to create a table in that Iceberg database. This feature is supported from v3.1 onwards.
 
 [Switch to an Iceberg catalog and a database in it](#switch-to-an-iceberg-catalog-and-a-database-in-it), and then use the following syntax to create an Iceberg table in that database.
 

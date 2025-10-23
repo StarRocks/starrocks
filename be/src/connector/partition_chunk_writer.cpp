@@ -72,16 +72,20 @@ Status BufferPartitionChunkWriter::init() {
     return Status::OK();
 }
 
-Status BufferPartitionChunkWriter::write(Chunk* chunk) {
-    RETURN_IF_ERROR(create_file_writer_if_needed());
-    if (_file_writer->get_written_bytes() >= _max_file_size) {
+Status BufferPartitionChunkWriter::write(const ChunkPtr& chunk) {
+    if (_file_writer && _file_writer->get_written_bytes() >= _max_file_size) {
         commit_file();
     }
-    return _file_writer->write(chunk);
+    RETURN_IF_ERROR(create_file_writer_if_needed());
+    return _file_writer->write(chunk.get());
 }
 
 Status BufferPartitionChunkWriter::flush() {
     commit_file();
+    return Status::OK();
+}
+
+Status BufferPartitionChunkWriter::wait_flush() {
     return Status::OK();
 }
 
@@ -102,6 +106,7 @@ SpillPartitionChunkWriter::SpillPartitionChunkWriter(std::string partition,
     _block_merge_token = StorageEngine::instance()->load_spill_block_merge_executor()->create_token();
     _tuple_desc = ctx->tuple_desc;
     _writer_id = generate_uuid();
+    _spill_mode = _sort_ordering != nullptr;
 }
 
 SpillPartitionChunkWriter::~SpillPartitionChunkWriter() {
@@ -120,16 +125,16 @@ Status SpillPartitionChunkWriter::init() {
     RETURN_IF_ERROR(_load_spill_block_mgr->init());
     _load_chunk_spiller = std::make_unique<LoadChunkSpiller>(_load_spill_block_mgr.get(),
                                                              _fragment_context->runtime_state()->runtime_profile());
-    if (_column_evaluators) {
-        RETURN_IF_ERROR(ColumnEvaluator::init(*_column_evaluators));
-    }
     return Status::OK();
 }
 
-Status SpillPartitionChunkWriter::write(Chunk* chunk) {
+Status SpillPartitionChunkWriter::write(const ChunkPtr& chunk) {
     RETURN_IF_ERROR(create_file_writer_if_needed());
+    if (!_spill_mode) {
+        return _write_chunk(chunk.get());
+    }
 
-    _chunks.push_back(chunk->clone_unique());
+    _chunks.push_back(chunk);
     _chunk_bytes_usage += chunk->bytes_usage();
     if (!_base_chunk) {
         _base_chunk = _chunks.back();
@@ -149,11 +154,21 @@ Status SpillPartitionChunkWriter::write(Chunk* chunk) {
 
 Status SpillPartitionChunkWriter::flush() {
     RETURN_IF(!_file_writer, Status::OK());
+    // Change to spill mode if memory is insufficent.
+    if (!_spill_mode) {
+        _spill_mode = true;
+        commit_file();
+        return Status::OK();
+    }
     return _spill();
 }
 
-Status SpillPartitionChunkWriter::finish() {
+Status SpillPartitionChunkWriter::wait_flush() {
     _chunk_spill_token->wait();
+    return Status::OK();
+}
+
+Status SpillPartitionChunkWriter::finish() {
     // If no chunks have been spilled, flush data to remote file directly.
     if (_load_chunk_spiller->empty()) {
         VLOG(2) << "flush to remote directly when finish, query_id: " << print_id(_fragment_context->query_id())
@@ -169,7 +184,8 @@ Status SpillPartitionChunkWriter::finish() {
         _handle_err(st);
         commit_file();
     };
-    auto merge_task = std::make_shared<MergeBlockTask>(this, cb);
+    auto merge_task = std::make_shared<MergeBlockTask>(this, _fragment_context->runtime_state()->instance_mem_tracker(),
+                                                       std::move(cb));
     return _block_merge_token->submit(merge_task);
 }
 
@@ -182,9 +198,7 @@ bool SpillPartitionChunkWriter::is_finished() {
 }
 
 Status SpillPartitionChunkWriter::merge_blocks() {
-    RETURN_IF_ERROR(flush());
     _chunk_spill_token->wait();
-
     auto write_func = [this](Chunk* chunk) { return _flush_chunk(chunk, false); };
     auto flush_func = [this]() {
         // Commit file after each merge function to ensure the data written to one file is ordered,
@@ -239,10 +253,13 @@ Status SpillPartitionChunkWriter::_spill() {
         }
         _spilling_bytes_usage.fetch_sub(chunk->bytes_usage(), std::memory_order_relaxed);
     };
-    auto spill_task = std::make_shared<ChunkSpillTask>(_load_chunk_spiller.get(), _result_chunk, callback);
+    auto spill_task = std::make_shared<ChunkSpillTask>(_load_chunk_spiller.get(), _result_chunk,
+                                                       _fragment_context->runtime_state()->instance_mem_tracker(),
+                                                       std::move(callback));
     RETURN_IF_ERROR(_chunk_spill_token->submit(spill_task));
     _spilling_bytes_usage.fetch_add(_result_chunk->bytes_usage(), std::memory_order_relaxed);
     _chunk_bytes_usage = 0;
+    _result_chunk.reset();
     return Status::OK();
 }
 
@@ -330,7 +347,6 @@ Status SpillPartitionChunkWriter::_merge_chunks() {
                 }
             }
         }
-
         chunk.reset();
     }
 

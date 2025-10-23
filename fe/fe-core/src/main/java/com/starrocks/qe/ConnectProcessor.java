@@ -74,23 +74,17 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.AstTraverser;
-import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.ExecuteStmt;
-import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.NullLiteral;
-import com.starrocks.sql.ast.txn.BeginStmt;
-import com.starrocks.sql.ast.txn.CommitStmt;
-import com.starrocks.sql.ast.txn.RollbackStmt;
 import com.starrocks.sql.common.AuditEncryptionChecker;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.formatter.FormatOptions;
@@ -99,6 +93,7 @@ import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TMasterOpRequest;
 import com.starrocks.thrift.TMasterOpResult;
 import com.starrocks.thrift.TQueryOptions;
+import com.starrocks.transaction.ExplicitTxnStatementValidator;
 import org.apache.commons.codec.binary.Hex;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -304,7 +299,9 @@ public class ConnectProcessor {
                 return "this is a desensitized invalid sql";
             }
             return SqlCredentialRedactor.redact(origStmt);
-        } else if (AuditEncryptionChecker.needEncrypt(parsedStmt) || Config.enable_sql_desensitize_in_log) {
+        } else if (AuditEncryptionChecker.needEncrypt(parsedStmt)) {
+            return SqlCredentialRedactor.redact(origStmt);
+        } else if (Config.enable_sql_desensitize_in_log) {
             // Some information like username, password in the stmt should not be printed.
             return AstToSQLBuilder.toSQL(parsedStmt, FormatOptions.allEnable()
                             .setColumnSimplifyTableName(false)
@@ -403,16 +400,8 @@ public class ConnectProcessor {
                 parsedStmt.setOrigStmt(new OriginStatement(originStmt, i));
                 Tracers.init(ctx, parsedStmt.getTraceMode(), parsedStmt.getTraceModule());
 
-                if (ctx.getTxnId() != 0 &&
-                        !((parsedStmt instanceof InsertStmt && !((InsertStmt) parsedStmt).isOverwrite()) ||
-                                parsedStmt instanceof BeginStmt ||
-                                parsedStmt instanceof CommitStmt ||
-                                parsedStmt instanceof UpdateStmt ||
-                                parsedStmt instanceof DeleteStmt ||
-                                parsedStmt instanceof RollbackStmt)) {
-                    ErrorReport.report(ErrorCode.ERR_EXPLICIT_TXN_NOT_SUPPORT_STMT);
-                    ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
-                    return;
+                if (ctx.getTxnId() != 0) {
+                    ExplicitTxnStatementValidator.validate(parsedStmt, ctx);
                 }
 
                 try {
@@ -601,11 +590,25 @@ public class ConnectProcessor {
             String originStmt = executeStmt.toSql();
             executeStmt.setOrigStmt(new OriginStatement(originStmt, 0));
 
-            executor = new StmtExecutor(ctx, executeStmt);
-            ctx.setExecutor(executor);
-
             boolean isQuery = ctx.isQueryStmt(executeStmt);
             ctx.getState().setIsQuery(isQuery);
+
+            if (isQuery) {
+                // for query stmt, we should register and init tracer.
+                Tracers.register(ctx);
+                Tracers.init(ctx, executeStmt.getTraceMode(), executeStmt.getTraceModule());
+                // set original statement to original query
+                PrepareStmtContext prepareStmtContext = ctx.getPreparedStmt(executeStmt.getStmtName());
+                if (prepareStmtContext != null) {
+                    if (prepareStmtContext.getStmt().getInnerStmt() instanceof QueryStatement) {
+                        originStmt = AstToSQLBuilder.toSQL(prepareStmtContext.getStmt().getInnerStmt());
+                        executeStmt.setOrigStmt(new OriginStatement(originStmt, 0));
+                    }
+                }
+            }
+
+            executor = new StmtExecutor(ctx, executeStmt);
+            ctx.setExecutor(executor);
 
             if (enableAudit && isQuery) {
                 executor.addRunningQueryDetail(executeStmt);

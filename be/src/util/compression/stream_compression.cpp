@@ -39,7 +39,11 @@
 #include <snappy/snappy.h>
 #include <zlib.h>
 #include <zstd/zstd.h>
+#ifdef __APPLE__
+#include <zstd_errors.h>
+#else
 #include <zstd/zstd_errors.h>
+#endif
 
 #include <memory>
 

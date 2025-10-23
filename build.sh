@@ -33,6 +33,15 @@
 # compiled and installed correctly.
 ##############################################################
 startTime=$(date +%s)
+
+format_time() {
+    local epoch="$1"
+    if [[ "$OSTYPE" == darwin* ]]; then
+        date -r "${epoch}" '+%Y-%m-%d %H:%M:%S'
+    else
+        date -d "@${epoch}" '+%Y-%m-%d %H:%M:%S'
+    fi
+}
 ROOT=`dirname "$0"`
 ROOT=`cd "$ROOT"; pwd`
 MACHINE_TYPE=$(uname -m)
@@ -127,7 +136,24 @@ Usage: $0 <options>
   exit 1
 }
 
-OPTS=$(getopt \
+GETOPT_BIN="getopt"
+if [[ "$OSTYPE" == darwin* ]]; then
+    # Try to detect gnu-getopt path dynamically
+    if command -v brew &> /dev/null; then
+        GNU_GETOPT_PREFIX=$(brew --prefix gnu-getopt 2>/dev/null)
+        if [[ -n "${GNU_GETOPT_PREFIX}" ]] && [[ -x "${GNU_GETOPT_PREFIX}/bin/getopt" ]]; then
+            GETOPT_BIN="${GNU_GETOPT_PREFIX}/bin/getopt"
+        else
+            echo "gnu-getopt is required on macOS. Please install it with 'brew install gnu-getopt'."
+            exit 1
+        fi
+    else
+        echo "Homebrew is required on macOS to install gnu-getopt. Please install Homebrew first."
+        exit 1
+    fi
+fi
+
+OPTS=$(${GETOPT_BIN} \
   -n $0 \
   -o 'hj:' \
   -l 'be' \
@@ -619,6 +645,12 @@ if [ ${BUILD_BE} -eq 1 ]; then
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/jemalloc-debug/lib/libjemalloc.so.2 ${STARROCKS_OUTPUT}/be/lib/libjemalloc-dbg.so.2
     ln -s ./libjemalloc.so.2 ${STARROCKS_OUTPUT}/be/lib/libjemalloc.so
 
+    # Copy pprof and FlameGraph tools
+    if [ -d "${STARROCKS_THIRDPARTY}/installed/flamegraph" ]; then
+        mkdir -p ${STARROCKS_OUTPUT}/be/bin/flamegraph/
+        cp -r -p ${STARROCKS_THIRDPARTY}/installed/flamegraph/* ${STARROCKS_OUTPUT}/be/bin/flamegraph/
+    fi
+
     # format $BUILD_TYPE to lower case
     ibuildtype=`echo ${BUILD_TYPE} | tr 'A-Z' 'a-z'`
     if [ "${ibuildtype}" == "release" ] ; then
@@ -680,7 +712,7 @@ endTime=$(date +%s)
 totalTime=$((endTime - startTime))
 
 echo "***************************************"
-echo "Successfully build StarRocks ${MSG} ; StartTime:$(date -d @$startTime '+%Y-%m-%d %H:%M:%S'), EndTime:$(date -d @$endTime '+%Y-%m-%d %H:%M:%S'), TotalTime:${totalTime}s"
+echo "Successfully build StarRocks ${MSG} ; StartTime:$(format_time "${startTime}"), EndTime:$(format_time "${endTime}"), TotalTime:${totalTime}s"
 echo "***************************************"
 
 if [[ ! -z ${STARROCKS_POST_BUILD_HOOK} ]]; then

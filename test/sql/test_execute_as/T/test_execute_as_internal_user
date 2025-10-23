@@ -32,7 +32,6 @@ select current_group();
 select current_role();
 
 execute as u1 with no revert;
-show databases;
 select current_group();
 select current_role();
 
@@ -41,7 +40,6 @@ select current_group();
 select current_role();
 
 execute as u2 with no revert;
-show databases;
 select current_group();
 select current_role();
 

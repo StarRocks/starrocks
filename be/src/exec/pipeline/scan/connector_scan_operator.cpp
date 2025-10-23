@@ -14,9 +14,11 @@
 
 #include "exec/pipeline/scan/connector_scan_operator.h"
 
+#include "connector/lake_connector.h"
 #include "exec/connector_scan_node.h"
 #include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
+#include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 
@@ -581,6 +583,27 @@ Status ConnectorScanOperator::append_morsels(std::vector<MorselPtr>&& morsels) {
     return Status::OK();
 }
 
+int64_t ConnectorScanOperator::get_scan_table_id() const {
+    auto* scan_node = down_cast<ConnectorScanNode*>(_scan_node);
+
+    if (scan_node->connector_type() != connector::ConnectorType::LAKE) {
+        return -1;
+    }
+
+    const auto& tuple_ids = scan_node->get_tuple_ids();
+    if (tuple_ids.empty()) {
+        return -1;
+    }
+
+    TupleId tuple_id = tuple_ids[0];
+    const TupleDescriptor* tuple_desc = runtime_state()->desc_tbl().get_tuple_descriptor(tuple_id);
+    if (tuple_desc != nullptr && tuple_desc->table_desc() != nullptr) {
+        return tuple_desc->table_desc()->table_id();
+    }
+
+    return -1;
+}
+
 // ==================== ConnectorChunkSource ====================
 ConnectorChunkSource::ConnectorChunkSource(ScanOperator* op, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
                                            ConnectorScanNode* scan_node, BalancedChunkBuffer& chunk_buffer,
@@ -763,7 +786,7 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
         RETURN_IF_ERROR(_open_data_source(state, &mem_alloc_failed));
         if (mem_alloc_failed) {
             _mem_alloc_failed_count += 1;
-            return Status::TimedOut("");
+            return Status::EAgain("");
         }
         if (state->is_cancelled()) {
             return Status::Cancelled("canceled state");
