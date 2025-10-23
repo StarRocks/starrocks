@@ -725,6 +725,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_PLAN_VALIDATION = "enable_plan_validation";
 
+    public static final String ENABLE_OPTIMIZER_RULE_DEBUG = "enable_optimizer_rule_debug";
+
     public static final String ENABLE_STRICT_TYPE = "enable_strict_type";
 
     public static final String PARTIAL_UPDATE_MODE = "partial_update_mode";
@@ -2194,6 +2196,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_PLAN_VALIDATION, flag = VariableMgr.INVISIBLE)
     private boolean enablePlanValidation = true;
+
+    @VarAttr(name = ENABLE_OPTIMIZER_RULE_DEBUG)
+    private boolean enableOptimizerRuleDebug = false;
 
     @VarAttr(name = SCAN_OR_TO_UNION_LIMIT, flag = VariableMgr.INVISIBLE)
     private int scanOrToUnionLimit = 4;
@@ -4295,6 +4300,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnablePlanValidation(boolean val) {
         this.enablePlanValidation = val;
+    }
+
+    public boolean enableOptimizerRuleDebug() {
+        return this.enableOptimizerRuleDebug;
+    }
+
+    public void setEnableOptimizerRuleDebug(boolean enableOptimizerRuleDebug) {
+        this.enableOptimizerRuleDebug = enableOptimizerRuleDebug;
     }
 
     public boolean isCboPruneSubfield() {

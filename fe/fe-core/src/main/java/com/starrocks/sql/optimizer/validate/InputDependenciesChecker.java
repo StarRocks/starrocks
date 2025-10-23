@@ -199,7 +199,7 @@ public class InputDependenciesChecker implements PlanValidator.Checker {
             ColumnRefSet missedCols = usedCols.clone();
             missedCols.except(inputCols);
             if (!missedCols.isEmpty()) {
-                String message = String.format("Invalid plan:%s%s%s The required cols %s cannot obtain from input cols %s.",
+                String message = String.format("Invalid plan:%s%s\n%s \nThe required cols %s cannot obtain from input cols %s.",
                         System.lineSeparator(), optExpr.debugString(), PREFIX, missedCols, inputCols);
                 throw new StarRocksPlannerException(message, ErrorType.INTERNAL_ERROR);
             }
@@ -207,7 +207,7 @@ public class InputDependenciesChecker implements PlanValidator.Checker {
 
         private void checkInputType(ColumnRefOperator inputCol, ColumnRefOperator outputCol, OptExpression optExpression) {
             if (!outputCol.getType().isFullyCompatible(inputCol.getType())) {
-                String message = String.format("Invalid plan:%s%s%s Type of output col %s is not fully compatible with " +
+                String message = String.format("Invalid plan:%s%s\n%s \nType of output col %s is not fully compatible with " +
                                 "type of input col %s.",
                         System.lineSeparator(), optExpression.debugString(), PREFIX, outputCol, inputCol);
                 throw new StarRocksPlannerException(message, ErrorType.INTERNAL_ERROR);
@@ -216,7 +216,7 @@ public class InputDependenciesChecker implements PlanValidator.Checker {
 
         private void checkChildNumberOfSet(int inputSize, int requiredSize, OptExpression optExpression) {
             if (inputSize != requiredSize) {
-                String message = String.format("Invalid plan:%s%s%s. The required number of children is %d but found %d.",
+                String message = String.format("Invalid plan:%s%s\n%s. \nThe required number of children is %d but found %d.",
                         System.lineSeparator(), optExpression.debugString(), PREFIX, requiredSize, inputSize);
                 throw new StarRocksPlannerException(message, ErrorType.INTERNAL_ERROR);
             }

@@ -23,6 +23,7 @@ import com.starrocks.sql.optimizer.OptimizerTraceUtil;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.rule.Rule;
+import com.starrocks.sql.optimizer.validate.PlanValidator;
 
 import java.util.List;
 
@@ -54,8 +55,29 @@ public class RewriteTreeTask extends OptimizerTask {
 
     @Override
     public void execute() {
+<<<<<<< HEAD
+=======
+        if (rules.stream().allMatch(rule -> context.getOptimizerContext()
+                .getOptimizerOptions().isRuleDisable(rule.type()))) {
+            return;
+        }
+
+        // Save whole tree state before rule group execution for validation
+        OptExpression wholePlanBefore = null;
+        if (context.getOptimizerContext().getSessionVariable().enableOptimizerRuleDebug()) {
+            wholePlanBefore = planTree.getInputs().get(0);
+        }
+
+>>>>>>> 6a318c2507 ([Enhancement] Add enable_optimizer_rule_debug session variable for rule failure diagnosis (#63693))
         // first node must be RewriteAnchorNode
         rewrite(planTree, 0, planTree.getInputs().get(0));
+
+        // Validate after the entire rule group execution
+        if (wholePlanBefore != null && change > 0) {
+            OptExpression wholePlanAfter = planTree.getInputs().get(0);
+            PlanValidator.validateAfterRule(wholePlanBefore, wholePlanAfter, rules.get(0), context);
+        }
+        
         // pushdownNotNullPredicates should task-bind, reset it before another RewriteTreeTask
         // TODO: refactor TaskContext to make it local to support this requirement better?
         context.getOptimizerContext().clearNotNullPredicates();
@@ -83,6 +105,7 @@ public class RewriteTreeTask extends OptimizerTask {
             }
 
             OptimizerTraceUtil.logApplyRuleBefore(context.getOptimizerContext(), rule, root);
+            
             List<OptExpression> result;
             try (Timer ignore = Tracers.watchScope(Tracers.Module.OPTIMIZER, rule.getClass().getSimpleName())) {
                 result = rule.transform(root, context.getOptimizerContext());

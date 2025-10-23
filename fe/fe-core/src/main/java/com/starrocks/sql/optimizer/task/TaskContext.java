@@ -18,10 +18,14 @@ package com.starrocks.sql.optimizer.task;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
+<<<<<<< HEAD
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 
 import java.util.Collections;
 import java.util.List;
+=======
+import com.starrocks.sql.optimizer.validate.PlanValidator;
+>>>>>>> 6a318c2507 ([Enhancement] Add enable_optimizer_rule_debug session variable for rule failure diagnosis (#63693))
 
 // The context for optimizer task
 public class TaskContext {
@@ -29,7 +33,11 @@ public class TaskContext {
     private final PhysicalPropertySet requiredProperty;
     private ColumnRefSet requiredColumns;
     private double upperBoundCost;
+<<<<<<< HEAD
     private List<PhysicalOlapScanOperator> allPhysicalOlapScanOperators;
+=======
+    private final PlanValidator planValidator;
+>>>>>>> 6a318c2507 ([Enhancement] Add enable_optimizer_rule_debug session variable for rule failure diagnosis (#63693))
 
     public TaskContext(OptimizerContext context,
                        PhysicalPropertySet physicalPropertySet,
@@ -39,7 +47,15 @@ public class TaskContext {
         this.requiredProperty = physicalPropertySet;
         this.requiredColumns = requiredColumns;
         this.upperBoundCost = cost;
+<<<<<<< HEAD
         this.allPhysicalOlapScanOperators = Collections.emptyList();
+=======
+        this.planValidator = new PlanValidator();
+    }
+
+    public PlanValidator getPlanValidator() {
+        return planValidator;
+>>>>>>> 6a318c2507 ([Enhancement] Add enable_optimizer_rule_debug session variable for rule failure diagnosis (#63693))
     }
 
     public OptimizerContext getOptimizerContext() {
