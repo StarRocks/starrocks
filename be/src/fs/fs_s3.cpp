@@ -270,73 +270,58 @@ static std::shared_ptr<Aws::S3::S3Client> new_s3client(
         S3ClientFactory::OperationType operation_type = S3ClientFactory::OperationType::UNKNOWN) {
     Aws::Client::ClientConfiguration config = S3ClientFactory::getClientConfig();
     const THdfsProperties* hdfs_properties = opts.hdfs_properties();
-
-    LOG(INFO) << "[S3ClientInit] new_s3client() called for uri=" << uri.bucket() + uri.region() + uri.key()
-              << ", operation_type=" << static_cast<int>(operation_type);
-
+    // TODO(SmithCruise) If CloudType is DEFAULT, we should use hadoop sdk to access file,
+    // otherwise user's core-site.xml will not take effect in s3 sdk
     if ((hdfs_properties != nullptr && hdfs_properties->__isset.cloud_configuration) ||
         (opts.cloud_configuration != nullptr && opts.cloud_configuration->cloud_type != TCloudType::DEFAULT)) {
-        LOG(INFO) << "[S3ClientInit] Using CloudConfiguration for S3Client creation";
+        // Use CloudConfiguration instead of original logic
         const TCloudConfiguration& tCloudConfiguration = (opts.cloud_configuration != nullptr)
                                                                  ? *opts.cloud_configuration
                                                                  : hdfs_properties->cloud_configuration;
         return S3ClientFactory::instance().new_client(tCloudConfiguration, operation_type);
     } else if (hdfs_properties != nullptr) {
-        LOG(INFO) << "[S3ClientInit] Using hdfs_properties for S3Client creation";
+        DCHECK(hdfs_properties->__isset.end_point);
         if (hdfs_properties->__isset.end_point) {
             config.endpointOverride = hdfs_properties->end_point;
-            LOG(INFO) << "[S3ClientInit] hdfs_properties.endpoint=" << config.endpointOverride;
         }
         if (hdfs_properties->__isset.region) {
             config.region = hdfs_properties->region;
-            LOG(INFO) << "[S3ClientInit] hdfs_properties.region=" << config.region;
         }
         if (hdfs_properties->__isset.ssl_enable) {
             config.scheme = hdfs_properties->ssl_enable ? Aws::Http::Scheme::HTTPS : Aws::Http::Scheme::HTTP;
-            LOG(INFO) << "[S3ClientInit] hdfs_properties.ssl_enable=" << hdfs_properties->ssl_enable;
         }
         if (hdfs_properties->__isset.max_connection) {
             config.maxConnections = hdfs_properties->max_connection;
         } else {
             config.maxConnections = config::object_storage_max_connection;
         }
-        LOG(INFO) << "[S3ClientInit] maxConnections=" << config.maxConnections;
     } else {
-        LOG(INFO) << "[S3ClientInit] Using opts._fs_options for S3Client creation";
-
-        // endpoint
+        // resolve endpoint
         auto itr = opts._fs_options.find(FSOptions::FS_S3_ENDPOINT);
+        auto ssl_itr = opts._fs_options.find(FSOptions::FS_S3_CONNECTION_SSL_ENABLED);
+
         if (itr != opts._fs_options.end() && !itr->second.empty()) {
             config.endpointOverride = itr->second;
-            LOG(INFO) << "[S3ClientInit] FSOptions endpointOverride=" << config.endpointOverride;
         } else if (!config::object_storage_endpoint.empty()) {
             config.endpointOverride = config::object_storage_endpoint;
-            LOG(INFO) << "[S3ClientInit] Using global object_storage_endpoint=" << config.endpointOverride;
-        }
-
-        // ssl
-        auto ssl_itr = opts._fs_options.find(FSOptions::FS_S3_CONNECTION_SSL_ENABLED);
-        if (ssl_itr != opts._fs_options.end()) {
-            bool ssl_enabled = ssl_itr->second == "true";
-            config.scheme = ssl_enabled ? Aws::Http::Scheme::HTTPS : Aws::Http::Scheme::HTTP;
-            LOG(INFO) << "[S3ClientInit] FSOptions ssl_enabled=" << ssl_enabled;
+        } else if (ssl_itr != opts._fs_options.end()) {
+            config.scheme = itr->second.compare("true") == 0 ? Aws::Http::Scheme::HTTPS : Aws::Http::Scheme::HTTP;
+        } else if (config::object_storage_endpoint_use_https) {
+            config.scheme = Aws::Http::Scheme::HTTPS;
         } else {
-            config.scheme = config::object_storage_endpoint_use_https ? Aws::Http::Scheme::HTTPS
-                                                                      : Aws::Http::Scheme::HTTP;
-            LOG(INFO) << "[S3ClientInit] Using default scheme=" << (config.scheme == Aws::Http::Scheme::HTTPS ? "HTTPS" : "HTTP");
+            config.scheme = Aws::Http::Scheme::HTTP;
         }
 
-        // region
+        // resolve region
         itr = opts._fs_options.find(FSOptions::FS_S3_ENDPOINT_REGION);
         if (itr != opts._fs_options.end() && !itr->second.empty()) {
             config.region = itr->second;
-            LOG(INFO) << "[S3ClientInit] FSOptions region=" << config.region;
         } else if (!config::object_storage_region.empty()) {
             config.region = config::object_storage_region;
-            LOG(INFO) << "[S3ClientInit] Using global region=" << config.region;
         }
+        config.maxConnections = config::object_storage_max_connection;
 
-        // retry
+        // resolve retry
         int64_t s3client_max_retries = config::object_storage_max_retries;
         itr = opts._fs_options.find(FSOptions::FS_S3_RETRY_LIMIT);
         if (itr != opts._fs_options.end() && !itr->second.empty()) {
@@ -347,28 +332,27 @@ static std::shared_ptr<Aws::S3::S3Client> new_s3client(
         if (itr != opts._fs_options.end() && !itr->second.empty()) {
             s3client_retry_scale_factor = std::stoi(itr->second);
         }
-        LOG(INFO) << "[S3ClientInit] retry_limit=" << s3client_max_retries
-                  << ", retry_interval=" << s3client_retry_scale_factor;
-
         config.retryStrategy = std::make_shared<Aws::Client::SpecifiedRetryableErrorsRetryStrategy>(
                 retryable_errors, s3client_max_retries, s3client_retry_scale_factor);
     }
 
     if (!uri.endpoint().empty()) {
         config.endpointOverride = uri.endpoint();
-        LOG(INFO) << "[S3ClientInit] Overriding endpoint from URI: " << config.endpointOverride;
+    }
+    if (config::object_storage_connect_timeout_ms > 0) {
+        config.connectTimeoutMs = config::object_storage_connect_timeout_ms;
     }
 
-    LOG(INFO) << "[S3ClientInit] Final S3Client Config: "
-              << "endpoint=" << config.endpointOverride
-              << ", region=" << config.region
-              << ", scheme=" << (config.scheme == Aws::Http::Scheme::HTTPS ? "HTTPS" : "HTTP")
-              << ", connectTimeoutMs=" << config.connectTimeoutMs
-              << ", requestTimeoutMs=" << config.requestTimeoutMs
-              << ", maxConnections=" << config.maxConnections;
+    if (operation_type == S3ClientFactory::OperationType::RENAME_FILE &&
+        config::object_storage_rename_file_request_timeout_ms >= 0) {
+        config.requestTimeoutMs = config::object_storage_rename_file_request_timeout_ms;
+    } else if (config::object_storage_request_timeout_ms >= 0) {
+        // 0 is meaningful for object_storage_request_timeout_ms
+        config.requestTimeoutMs = config::object_storage_request_timeout_ms;
+    }
 
     return S3ClientFactory::instance().new_client(config, opts);
-}
+} // namespace starrocks
 
 class S3FileSystem : public FileSystem {
 public:
