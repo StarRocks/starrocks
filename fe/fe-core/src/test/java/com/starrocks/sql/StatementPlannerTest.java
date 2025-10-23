@@ -299,7 +299,7 @@ class StatementPlannerTest extends PlanTestBase {
                     + "FROM files(\"path\" = \"xx\", \"format\" = \"csv\") ) "
                     + "SELECT d.profile_id FROM incr_batch_data d JOIN t0 ON d.profile_id = t0.v1";
 
-            StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            StatementBase stmt = UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sql, connectContext);
             QueryStatement queryStatement = (QueryStatement) stmt;
 
             List<FileTableFunctionRelation> relations =
