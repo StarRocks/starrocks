@@ -18,12 +18,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.FeConstants;
-<<<<<<< HEAD
-import com.starrocks.sql.analyzer.PlannerMetaLocker;
-import com.starrocks.sql.ast.StatementBase;
-=======
-import com.starrocks.planner.OlapTableSink;
-import com.starrocks.planner.PlanFragment;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.PlannerMetaLocker;
 import com.starrocks.sql.analyzer.QueryAnalyzer;
@@ -38,14 +32,10 @@ import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.ValuesRelation;
-import com.starrocks.sql.plan.ExecPlan;
->>>>>>> 790f5a95d0 ([BugFix] Guard mixed files() inserts with planner lock (#64274))
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Test;
 
-<<<<<<< HEAD
-=======
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -53,7 +43,6 @@ import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
->>>>>>> 790f5a95d0 ([BugFix] Guard mixed files() inserts with planner lock (#64274))
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -87,8 +76,6 @@ public class StatementPlannerTest extends PlanTestBase {
         }
     }
 
-<<<<<<< HEAD
-=======
     @Test
     public void testFilesTableMixedWithNormalTableForcesLockAndCachesSchema() throws Exception {
         boolean originalRunningUnitTest = FeConstants.runningUnitTest;
@@ -297,44 +284,4 @@ public class StatementPlannerTest extends PlanTestBase {
             FeConstants.runningUnitTest = originalRunningUnitTest;
         }
     }
-
-    @Test
-    public void testInsertPartialUpdateMode() throws Exception {
-        {
-            FeConstants.runningUnitTest = true;
-            connectContext.getSessionVariable().setPartialUpdateMode("column");
-            String sql = "insert into tprimary_multi_cols (pk, v1) values (1, '1')";
-            StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            InsertPlanner planner = new InsertPlanner();
-            ExecPlan plan = planner.plan((InsertStmt) stmt, connectContext);
-            assertEquals(TPartialUpdateMode.COLUMN_UPSERT_MODE, getPartialUpdateMode(plan));
-        }
-
-        {
-            FeConstants.runningUnitTest = true;
-            connectContext.getSessionVariable().setPartialUpdateMode("auto");
-            String sql = "insert into tprimary_multi_cols (pk, v1) values (1, '1')";
-            StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            InsertPlanner planner = new InsertPlanner();
-            ExecPlan plan = planner.plan((InsertStmt) stmt, connectContext);
-            assertEquals(TPartialUpdateMode.COLUMN_UPSERT_MODE, getPartialUpdateMode(plan));
-        }
-
-        {
-            FeConstants.runningUnitTest = true;
-            connectContext.getSessionVariable().setPartialUpdateMode("auto");
-            String sql = "insert into tprimary_multi_cols (pk, v1, v2) values (1, '1', 1)";
-            StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            InsertPlanner planner = new InsertPlanner();
-            ExecPlan plan = planner.plan((InsertStmt) stmt, connectContext);
-            assertEquals(TPartialUpdateMode.AUTO_MODE, getPartialUpdateMode(plan));
-        }
-    }
-
-    private TPartialUpdateMode getPartialUpdateMode(ExecPlan plan) {
-        PlanFragment fragment = plan.getFragments().get(0);
-        OlapTableSink sink = (OlapTableSink) fragment.getSink();
-        return sink.getPartialUpdateMode();
-    }
->>>>>>> 790f5a95d0 ([BugFix] Guard mixed files() inserts with planner lock (#64274))
 }
