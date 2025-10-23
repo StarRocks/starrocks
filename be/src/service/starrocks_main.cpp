@@ -43,7 +43,7 @@
 #include <curl/curl.h>
 #include <thrift/TOutput.h>
 
-#if defined(WITH_S3) || defined(WITH_AZURE)
+#ifndef __APPLE__
 #include <aws/core/Aws.h>
 
 #include "fs/s3/poco_http_client_factory.h"
@@ -96,7 +96,7 @@ static void thrift_output(const char* x) {
 }
 } // namespace starrocks
 
-#if defined(WITH_S3) || defined(WITH_AZURE)
+#ifndef __APPLE__
 static Aws::Utils::Logging::LogLevel parse_aws_sdk_log_level(const std::string& s) {
     Aws::Utils::Logging::LogLevel levels[] = {
             Aws::Utils::Logging::LogLevel::Off,   Aws::Utils::Logging::LogLevel::Fatal,
@@ -207,7 +207,7 @@ int main(int argc, char** argv) {
         exit(-1);
     }
 
-#if defined(WITH_S3) || defined(WITH_AZURE)
+#ifndef __APPLE__
     Aws::SDKOptions aws_sdk_options;
     // it is already initialized beforehead
     aws_sdk_options.httpOptions.initAndCleanupCurl = false;
@@ -270,7 +270,7 @@ int main(int argc, char** argv) {
         exit(0);
     }
 
-#if defined(WITH_S3) || defined(WITH_AZURE)
+#ifndef __APPLE__
     Aws::ShutdownAPI(aws_sdk_options);
 #endif
 
