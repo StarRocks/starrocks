@@ -51,17 +51,7 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
 import com.starrocks.sql.ast.PartitionNames;
-<<<<<<< HEAD
 import com.starrocks.sql.ast.ShowDataDistributionStmt;
-import com.starrocks.system.Backend;
-=======
-import com.starrocks.sql.ast.PartitionRef;
-import com.starrocks.sql.ast.expression.BinaryPredicate;
-import com.starrocks.sql.ast.expression.BinaryType;
-import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.sql.ast.expression.StringLiteral;
->>>>>>> e04cf282a3 ([BugFix] Consider the replica status when choosing a replica for backup (#64319))
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.warehouse.Warehouse;
 
