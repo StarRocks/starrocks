@@ -96,7 +96,7 @@ LoadChannel::LoadChannel(LoadChannelMgr* mgr, LakeTabletManager* lake_tablet_mgr
 }
 
 LoadChannel::~LoadChannel() {
-    _span->SetAttribute("num_chunk", static_cast<unsigned long>(_num_chunk));
+    _span->SetAttribute("num_chunk", static_cast<uint64_t>(_num_chunk));
     _span->End();
 }
 
@@ -144,12 +144,19 @@ void LoadChannel::open(const LoadChannelOpenContext& open_context) {
         auto it = _tablets_channels.find(key);
         if (it == _tablets_channels.end()) {
             if (is_lake_tablet) {
+#ifdef __APPLE__
+                channel = nullptr;
+                st = Status::NotSupported("lake tablet is not supported on MacOS");
+#else
                 channel = new_lake_tablets_channel(this, _lake_tablet_mgr, key, _mem_tracker.get(), _profile);
+#endif
             } else {
                 channel = new_local_tablets_channel(this, key, _mem_tracker.get(), _profile);
             }
-            if (st = channel->open(request, response, _schema, request.is_incremental()); st.ok()) {
-                _tablets_channels.insert({key, std::move(channel)});
+            if (st.ok()) {
+                if (st = channel->open(request, response, _schema, request.is_incremental()); st.ok()) {
+                    _tablets_channels.insert({key, std::move(channel)});
+                }
             }
             COUNTER_UPDATE(_index_num, 1);
         } else if (request.is_incremental()) {

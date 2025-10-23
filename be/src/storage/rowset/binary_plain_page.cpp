@@ -166,6 +166,14 @@ bool BinaryPlainPageDecoder<Type>::append_range(uint32_t idx, uint32_t end, Colu
 
 template <LogicalType Type>
 void BinaryPlainPageDecoder<Type>::batch_string_at_index(Slice* dst, const int32_t* idx, size_t size) const {
+    // On macOS ARM64 with ASAN, the _parsed_datas optimization causes issues
+    // where cached Slices may point to freed memory. Disable the optimization
+    // and always use string_at_index for safety.
+#ifdef __APPLE__
+    for (int i = 0; i < size; ++i) {
+        dst[i] = string_at_index(idx[i]);
+    }
+#else
     if (_parsed_datas.has_value()) {
         const std::vector<Slice>& parsed_data = *_parsed_datas;
         static_assert(sizeof(Slice) == sizeof(__int128));
@@ -183,12 +191,12 @@ void BinaryPlainPageDecoder<Type>::batch_string_at_index(Slice* dst, const int32
             dst[i] = parsed_data[idx[i]];
         }
 #endif
-
     } else {
         for (int i = 0; i < size; ++i) {
             dst[i] = string_at_index(idx[i]);
         }
     }
+#endif
 }
 
 template class BinaryPlainPageDecoder<TYPE_CHAR>;

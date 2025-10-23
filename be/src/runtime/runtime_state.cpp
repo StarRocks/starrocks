@@ -503,6 +503,7 @@ bool RuntimeState::is_jit_enabled() const {
 }
 
 void RuntimeState::update_load_datacache_metrics(TReportExecStatusParams* load_params) const {
+#ifndef __APPLE__
     if (!_query_options.__isset.catalog) {
         return;
     }
@@ -539,6 +540,7 @@ void RuntimeState::update_load_datacache_metrics(TReportExecStatusParams* load_p
             load_params->__set_load_datacache_metrics(metrics);
         }
     }
+#endif // __APPLE__
 }
 
 } // end namespace starrocks

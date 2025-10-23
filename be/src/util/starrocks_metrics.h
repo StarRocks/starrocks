@@ -40,7 +40,7 @@
 #include <vector>
 
 #include "exec/pipeline/pipeline_metrics.h"
-#ifndef MACOS_DISABLE_JAVA
+#ifndef __APPLE__
 #include "util/jvm_metrics.h"
 #endif
 #include "util/metrics.h"
@@ -430,7 +430,7 @@ private:
 
     MetricRegistry _metrics;
     SystemMetrics _system_metrics;
-#ifndef MACOS_DISABLE_JAVA
+#ifndef __APPLE__
     JVMMetrics _jvm_metrics;
 #endif
     TableMetricsManager _table_metrics_mgr;

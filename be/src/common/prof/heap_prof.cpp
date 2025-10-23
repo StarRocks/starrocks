@@ -72,22 +72,31 @@ bool dump_snapshot(const std::string& filename) {
 std::string exec(const std::string& cmd);
 
 void HeapProf::enable_prof() {
+#ifndef __APPLE__
     LOG(INFO) << "try to enable the heap profiling";
     std::lock_guard guard(_mutex);
     set_jemalloc_profiling(true);
+#endif
 }
 
 void HeapProf::disable_prof() {
+#ifndef __APPLE__
     LOG(INFO) << "try to disable the heap profiling";
     std::lock_guard guard(_mutex);
     set_jemalloc_profiling(false);
+#endif
 }
 
 bool HeapProf::has_enable() {
+#ifndef __APPLE__
     return has_enable_heap_profile();
+#else
+    return false;
+#endif
 }
 
 std::string HeapProf::snapshot() {
+#ifndef __APPLE__
     std::string output_name = fmt::format("{}/heap_profile.{}.{}", config::pprof_profile_dir, getpid(), rand());
     LOG(INFO) << "try to dump the heap profile " << output_name;
     //
@@ -97,6 +106,9 @@ std::string HeapProf::snapshot() {
     } else {
         return "";
     }
+#else
+    return "";
+#endif
 }
 
 std::string HeapProf::to_dot_format(const std::string& heapdump_filename) {
@@ -106,7 +118,11 @@ std::string HeapProf::to_dot_format(const std::string& heapdump_filename) {
     auto base_home = getenv("STARROCKS_HOME");
     std::string jeprof = fmt::format("{}/bin/jeprof", base_home);
     std::string binary = fmt::format("{}/lib/starrocks_be", base_home);
+#ifdef __APPLE__
+    return "not support on MacOS";
+#else
     return exec(fmt::format("{} --dot {} {}", jeprof, binary, heapdump_filename));
+#endif
 }
 
 } // namespace starrocks
