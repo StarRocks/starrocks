@@ -266,7 +266,7 @@ class StatementPlannerTest extends PlanTestBase {
             FeConstants.runningUnitTest = false;
             String sql = "select * from (select * from files(\"path\"=\"fake://a\", \"format\"=\"csv\") "
                     + "union all select * from files(\"path\"=\"fake://b\", \"format\"=\"csv\")) as u";
-            StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            StatementBase stmt = UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sql, connectContext);
             QueryStatement queryStatement = (QueryStatement) stmt;
 
             new QueryAnalyzer(connectContext).analyzeFilesOnly(queryStatement);
