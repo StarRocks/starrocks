@@ -221,6 +221,27 @@ public class CreateRoutineLoadStmtTest {
             }
             Assertions.assertEquals(true, false);
         }
+
+        {
+            String sql = "CREATE ROUTINE LOAD job ON tbl " +
+                    "COLUMNS TERMINATED BY ';', " +
+                    "ROWS TERMINATED BY '\n', " +
+                    "COLUMNS(`a`, `b`, `c`=1), " +
+                    "TEMPORARY PARTITION(`p1`, `p2`), " +
+                    "WHERE a = 1 " +
+                    "WHERE b = 10 " +
+                    "PROPERTIES (\"desired_concurrent_number\"=\"3\") " +
+                    "FROM KAFKA (\"kafka_topic\" = \"my_topic\")";
+            List<StatementBase> stmts = com.starrocks.sql.parser.SqlParser.parse(sql, 32);
+            CreateRoutineLoadStmt createRoutineLoadStmt = (CreateRoutineLoadStmt)stmts.get(0);
+            try {
+                CreateRoutineLoadAnalyzer.analyze(createRoutineLoadStmt, connectContext);
+            } catch (Exception e) {
+                Assertions.assertEquals(true, e.getMessage().contains("repeat setting of where predicate"));
+                return;
+            }
+            Assertions.assertEquals(true, false);
+        }
     }
 
     @Test
@@ -260,6 +281,27 @@ public class CreateRoutineLoadStmtTest {
                 CreateRoutineLoadAnalyzer.analyze(createRoutineLoadStmt, connectContext);
             } catch (Exception e) {
                 Assertions.assertTrue(e.getMessage().contains("the preceding filter cannot contain subqueries"));
+                return;
+            }
+            Assertions.fail();
+        }
+
+        {
+            String sql = "CREATE ROUTINE LOAD job ON tbl " +
+                    "COLUMNS TERMINATED BY ';', " +
+                    "ROWS TERMINATED BY '\n', " +
+                    "COLUMNS(`a`, `b`, `c`=1), " +
+                    "TEMPORARY PARTITION(`p1`, `p2`), " +
+                    "PRECEDING FILTER a = 0 " +
+                    "PRECEDING FILTER b = 10" +
+                    "PROPERTIES (\"desired_concurrent_number\"=\"3\") " +
+                    "FROM KAFKA (\"kafka_topic\" = \"my_topic\")";
+            List<StatementBase> stmts = com.starrocks.sql.parser.SqlParser.parse(sql, 32);
+            CreateRoutineLoadStmt createRoutineLoadStmt = (CreateRoutineLoadStmt)stmts.get(0);
+            try {
+                CreateRoutineLoadAnalyzer.analyze(createRoutineLoadStmt, connectContext);
+            } catch (Exception e) {
+                Assertions.assertTrue(e.getMessage().contains("repeat setting of preceding where predicate"));
                 return;
             }
             Assertions.fail();
