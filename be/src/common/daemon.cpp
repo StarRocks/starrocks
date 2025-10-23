@@ -65,6 +65,7 @@
 #include "util/disk_info.h"
 #include "util/logging.h"
 #include "util/mem_info.h"
+#include "util/memory_lock.h"
 #include "util/misc.h"
 #include "util/monotime.h"
 #include "util/network_util.h"
@@ -300,6 +301,8 @@ void Daemon::init(bool as_cn, const std::vector<StorePath>& paths) {
     }
 
     LOG(INFO) << get_version_string(false);
+
+    starrocks::mlock_modules();
 
     init_thrift_logging();
     CpuInfo::init();
