@@ -85,8 +85,8 @@ public:
         FuncType function_type;
         TCloudConfiguration cloud_configuration;
     };
-    Status get_libpath(const FunctionCacheDesc& desc, std::string* libpath, const TCloudConfiguration& cloud_configuration) {
-        return get_libpath(desc.fid, desc.url, desc.checksum, desc.function_type, libpath, cloud_configuration);
+    Status get_libpath(const FunctionCacheDesc& desc, std::string* libpath) {
+        return get_libpath(desc.fid, desc.url, desc.checksum, desc.function_type, libpath, desc.cloud_configuration);
     }
     Status get_libpath(int64_t fid, const std::string& url, const std::string& checksum, FuncType function_type,
                        std::string* libpath, const TCloudConfiguration& cloud_configuration);
