@@ -74,7 +74,7 @@ public class ProfilingExecPlanTest {
                         "EMPTY_SET", "HUDI_SCAN", "HASH_JOIN", "ES_SCAN", "SCHEMA_SCAN", "ASSERT_NUM_ROWS", "SELECT",
                         "STREAM_LOAD_SCAN", "ANALYTIC_EVAL", "ICEBERG_SCAN", "AGGREGATION", "FILE_SCAN", "EXCHANGE",
                         "META_SCAN", "OLAP_SCAN", "ODPS_SCAN", "ICEBERG_METADATA_SCAN", "KUDU_SCAN", "CAPTURE_VERSION",
-                        "ICEBERG_EQUALITY_DELETE_SCAN");
+                        "ICEBERG_EQUALITY_DELETE_SCAN", "RAW_VALUES");
 
         Method method = ProfilingExecPlan.class.getDeclaredMethod("normalizeNodeName", Class.class);
         method.setAccessible(true);

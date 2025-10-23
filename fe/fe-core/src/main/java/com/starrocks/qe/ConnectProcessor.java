@@ -87,6 +87,7 @@ import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.common.AuditEncryptionChecker;
 import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.LargeInPredicateException;
 import com.starrocks.sql.formatter.FormatOptions;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.parser.SqlParser;
@@ -361,102 +362,12 @@ public class ConnectProcessor {
         ctx.getState().setIsQuery(true);
 
         // execute this query.
-        StatementBase parsedStmt = null;
-        boolean onlySetStmt = true;
+        boolean allStatementsAreSet = true;
         try {
-            ctx.setQueryId(UUIDUtil.genUUID());
-            ctx.setExecutionId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
-            if (Config.enable_print_sql) {
-                LOG.info("Begin to execute sql, type: query, query id:{}, sql:{}", ctx.getQueryId(), originStmt);
-            }
-            List<StatementBase> stmts;
-            try (Timer ignored = Tracers.watchScope(Tracers.Module.PARSER, "Parser")) {
-                stmts = com.starrocks.sql.parser.SqlParser.parse(originStmt, ctx.getSessionVariable());
-            } catch (ParsingException parsingException) {
-                throw new AnalysisException(parsingException.getMessage());
-            }
-
-            for (int i = 0; i < stmts.size(); ++i) {
-                ctx.getState().reset();
-                if (i > 0) {
-                    ctx.resetReturnRows();
-                    ctx.setQueryId(UUIDUtil.genUUID());
-                }
-                parsedStmt = stmts.get(i);
-                // from jdbc no params like that. COM_STMT_PREPARE + select 1
-                if (ctx.getCommand() == MysqlCommand.COM_STMT_PREPARE && !(parsedStmt instanceof PrepareStmt)) {
-                    parsedStmt = new PrepareStmt("", parsedStmt, new ArrayList<>());
-                }
-                // only for JDBC, COM_STMT_PREPARE bundled with jdbc
-                if (ctx.getCommand() == MysqlCommand.COM_STMT_PREPARE && (parsedStmt instanceof PrepareStmt)) {
-                    ((PrepareStmt) parsedStmt).setName(String.valueOf(ctx.getStmtId()));
-                    if (!(((PrepareStmt) parsedStmt).getInnerStmt() instanceof QueryStatement)) {
-                        ErrorReport.reportAnalysisException(ErrorCode.ERR_UNSUPPORTED_PS, ErrorType.UNSUPPORTED);
-                    }
-                }
-                if (!(parsedStmt instanceof SetStmt)) {
-                    onlySetStmt = false;
-                }
-                parsedStmt.setOrigStmt(new OriginStatement(originStmt, i));
-                Tracers.init(ctx, parsedStmt.getTraceMode(), parsedStmt.getTraceModule());
-
-                if (ctx.getTxnId() != 0) {
-                    ExplicitTxnStatementValidator.validate(parsedStmt, ctx);
-                }
-
-                try {
-                    AuthenticationProvider authenticationProvider = ctx.getAuthenticationProvider();
-                    if (authenticationProvider == null) {
-                        ErrorReport.report("Unknown authentication method");
-                        ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
-                        return;
-                    }
-
-                    authenticationProvider.checkLoginSuccess(ctx.getConnectionId(), ctx.getAccessControlContext());
-                } catch (AuthenticationException authenticationException) {
-                    if (authenticationException.getErrorCode() != null) {
-                        ErrorReport.report(authenticationException.getErrorCode(), authenticationException.getMessage());
-                    } else {
-                        ErrorReport.report(ErrorCode.ERR_ACCESS_DENIED, authenticationException.getMessage());
-                    }
-                    ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
-                    return;
-                }
-
-                executor = new StmtExecutor(ctx, parsedStmt);
-                ctx.setExecutor(executor);
-
-                ctx.setIsLastStmt(i == stmts.size() - 1);
-
-                //Build View SQL without Policy Rewrite
-                new AstTraverser<Void, Void>() {
-                    @Override
-                    public Void visitRelation(Relation relation, Void context) {
-                        relation.setNeedRewrittenByPolicy(true);
-                        return null;
-                    }
-                }.visit(parsedStmt);
-
-                // Only add the last running stmt for multi statement,
-                // because the audit log will only show the last stmt.
-                if (ctx.getIsLastStmt()) {
-                    executor.addRunningQueryDetail(parsedStmt);
-                }
-                executor.execute();
-
-                // do not execute following stmt when current stmt failed, this is consistent with mysql server
-                if (ctx.getState().getStateType() == QueryState.MysqlStateType.ERR) {
-                    break;
-                }
-
-                if (i != stmts.size() - 1) {
-                    // NOTE: set serverStatus after executor.execute(),
-                    //      because when execute() throws exception, the following stmt will not execute
-                    //      and the serverStatus with MysqlServerStatusFlag.SERVER_MORE_RESULTS_EXISTS will
-                    //      cause client error: Packet sequence number wrong
-                    ctx.getState().serverStatus |= MysqlServerStatusFlag.SERVER_MORE_RESULTS_EXISTS;
-                    finalizeCommand();
-                }
+            QueryAttemptResult attemptResult = runWithParserStageRetry(originStmt);
+            allStatementsAreSet = attemptResult.allStatementsAreSet;
+            if (attemptResult.shouldTerminate) {
+                return;
             }
         } catch (AnalysisException e) {
             LOG.warn("Failed to parse SQL: " + SqlCredentialRedactor.redact(originStmt) + ", because.", e);
@@ -471,7 +382,7 @@ public class ConnectProcessor {
             ctx.getState().setErrType(QueryState.ErrType.INTERNAL_ERR);
         } finally {
             Tracers.close();
-            if (!onlySetStmt) {
+            if (!allStatementsAreSet) {
                 // custom_query_id session is temporary, should be cleared after query finished
                 ctx.getSessionVariable().setCustomQueryId("");
             }
@@ -488,6 +399,149 @@ public class ConnectProcessor {
             // executor can be null if we encounter analysis error.
             auditAfterExec(originStmt, null, null);
         }
+    }
+
+    /**
+     * Execute query with parser-stage retry support.
+     *
+     * This method provides a retry mechanism starting from the parser stage, which is necessary for
+     * certain optimizations that require different AST structures based on session variables or configs.
+     * Some scenarios that need parser-stage retry include:
+     * - LargeInPredicate optimization: When enable_large_in_predicate=true, the parser uses raw constant
+     *   values instead of expressions. If this optimization fails, we must re-parse with the flag disabled
+     *   to get a traditional expression-based AST. Additionally, mid-pipeline rewrites of expressions or
+     *   operators (e.g., during analyzer/optimizer phases) may bypass critical processing steps; therefore
+     *   a full re-parse is required to ensure all semantic checks and transformations are executed.
+     * - Other future optimizations that modify parsing behavior based on session/config settings.
+     *
+     * This is different from execution-level retries because it requires re-parsing the SQL to get
+     * a different AST structure, not just re-executing the same plan.
+     */
+    private QueryAttemptResult runWithParserStageRetry(String originStmt) throws Throwable {
+        try {
+            return executeQueryAttempt(originStmt);
+        } catch (LargeInPredicateException e) {
+            boolean originalEnableLargeInPredicate = ctx.getSessionVariable().enableLargeInPredicate();
+            try {
+                ctx.getSessionVariable().setEnableLargeInPredicate(false);
+                LOG.warn("Retrying query with enable_large_in_predicate=false");
+                Tracers.record(Tracers.Module.BASE, "retry_with_large_in_predicate_exception", "true");
+                return executeQueryAttempt(originStmt);
+            } finally {
+                ctx.getSessionVariable().setEnableLargeInPredicate(originalEnableLargeInPredicate);
+            }
+        }
+    }
+
+    private static class QueryAttemptResult {
+        final boolean allStatementsAreSet;
+        final boolean shouldTerminate;
+
+        QueryAttemptResult(boolean allStatementsAreSet, boolean shouldTerminate) {
+            this.allStatementsAreSet = allStatementsAreSet;
+            this.shouldTerminate = shouldTerminate;
+        }
+    }
+
+    private QueryAttemptResult executeQueryAttempt(String originStmt) throws Throwable {
+        boolean allStatementsAreSet = true;
+
+        ctx.setQueryId(UUIDUtil.genUUID());
+        ctx.setExecutionId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
+        if (Config.enable_print_sql) {
+            LOG.info("Begin to execute sql, type: query, query id:{}, sql:{}", ctx.getQueryId(), originStmt);
+        }
+        List<StatementBase> stmts;
+        try (Timer ignored = Tracers.watchScope(Tracers.Module.PARSER, "Parser")) {
+            stmts = com.starrocks.sql.parser.SqlParser.parse(originStmt, ctx.getSessionVariable());
+        } catch (ParsingException parsingException) {
+            throw new AnalysisException(parsingException.getMessage());
+        }
+
+        for (int i = 0; i < stmts.size(); ++i) {
+            ctx.getState().reset();
+            if (i > 0) {
+                ctx.resetReturnRows();
+                ctx.setQueryId(UUIDUtil.genUUID());
+            }
+            StatementBase parsedStmt = stmts.get(i);
+            // from jdbc no params like that. COM_STMT_PREPARE + select 1
+            if (ctx.getCommand() == MysqlCommand.COM_STMT_PREPARE && !(parsedStmt instanceof PrepareStmt)) {
+                parsedStmt = new PrepareStmt("", parsedStmt, new ArrayList<>());
+            }
+            // only for JDBC, COM_STMT_PREPARE bundled with jdbc
+            if (ctx.getCommand() == MysqlCommand.COM_STMT_PREPARE && (parsedStmt instanceof PrepareStmt)) {
+                ((PrepareStmt) parsedStmt).setName(String.valueOf(ctx.getStmtId()));
+                if (!(((PrepareStmt) parsedStmt).getInnerStmt() instanceof QueryStatement)) {
+                    ErrorReport.reportAnalysisException(ErrorCode.ERR_UNSUPPORTED_PS, ErrorType.UNSUPPORTED);
+                }
+            }
+            if (!(parsedStmt instanceof SetStmt)) {
+                allStatementsAreSet = false;
+            }
+            parsedStmt.setOrigStmt(new OriginStatement(originStmt, i));
+            Tracers.init(ctx, parsedStmt.getTraceMode(), parsedStmt.getTraceModule());
+
+            if (ctx.getTxnId() != 0) {
+                ExplicitTxnStatementValidator.validate(parsedStmt, ctx);
+            }
+
+            try {
+                AuthenticationProvider authenticationProvider = ctx.getAuthenticationProvider();
+                if (authenticationProvider == null) {
+                    ErrorReport.report("Unknown authentication method");
+                    ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
+                    return new QueryAttemptResult(allStatementsAreSet, true);
+                }
+
+                authenticationProvider.checkLoginSuccess(ctx.getConnectionId(), ctx.getAccessControlContext());
+            } catch (AuthenticationException authenticationException) {
+                if (authenticationException.getErrorCode() != null) {
+                    ErrorReport.report(authenticationException.getErrorCode(), authenticationException.getMessage());
+                } else {
+                    ErrorReport.report(ErrorCode.ERR_ACCESS_DENIED, authenticationException.getMessage());
+                }
+                ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
+                return new QueryAttemptResult(allStatementsAreSet, true);
+            }
+
+            executor = new StmtExecutor(ctx, parsedStmt);
+            ctx.setExecutor(executor);
+
+            ctx.setIsLastStmt(i == stmts.size() - 1);
+
+            //Build View SQL without Policy Rewrite
+            new AstTraverser<Void, Void>() {
+                @Override
+                public Void visitRelation(Relation relation, Void context) {
+                    relation.setNeedRewrittenByPolicy(true);
+                    return null;
+                }
+            }.visit(parsedStmt);
+
+            // Only add the last running stmt for multi statement,
+            // because the audit log will only show the last stmt.
+            if (ctx.getIsLastStmt()) {
+                executor.addRunningQueryDetail(parsedStmt);
+            }
+            executor.execute();
+
+            // do not execute following stmt when current stmt failed, this is consistent with mysql server
+            if (ctx.getState().getStateType() == QueryState.MysqlStateType.ERR) {
+                break;
+            }
+
+            if (i != stmts.size() - 1) {
+                // NOTE: set serverStatus after executor.execute(),
+                // because when execute() throws exception, the following stmt will not execute
+                // and the serverStatus with MysqlServerStatusFlag.SERVER_MORE_RESULTS_EXISTS will
+                // cause client error: Packet sequence number wrong
+                ctx.getState().serverStatus |= MysqlServerStatusFlag.SERVER_MORE_RESULTS_EXISTS;
+                finalizeCommand();
+            }
+        }
+
+        return new QueryAttemptResult(allStatementsAreSet, false);
     }
 
     // Get the column definitions of a table
