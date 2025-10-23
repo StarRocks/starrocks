@@ -23,8 +23,8 @@ class ProfileUtils {
 public:
     // Extracts timestamp from the profile filename.
     // Supports filename patterns such as:
-    //   - cpu-profile-20231201-143022-flame.html.tar.gz
-    //   - contention-profile-20231201-143022-pprof.tar.gz
+    //   - cpu-profile-20231201-143022-flame.html.gz
+    //   - contention-profile-20231201-143022-pprof.gz
     // Returns the extracted timestamp in the format "YYYYMMDD-HHmmss",
     // or an empty string if not found. The input is the profile filename.
     static std::string extract_timestamp_from_filename(const std::string& filename);
