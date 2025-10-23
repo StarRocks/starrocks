@@ -50,7 +50,7 @@ under the License.
         <async.profiler.arg></async.profiler.arg>
         
         <!-- JaCoCo incremental coverage properties -->
-        <jacoco.base.branch>${env.JACOCO_BASE_BRANCH:-HEAD~1}</jacoco.base.branch>
+        <jacoco.base.branch>${env.JACOCO_BASE_BRANCH:-main}</jacoco.base.branch>
         <jacoco.includes>${env.JACOCO_INCLUDES:-com/starrocks/**}</jacoco.includes>
     </properties>
 
