@@ -18,7 +18,7 @@ sidebar_label: Troubleshooting
 ロードジョブを観察する方法は2つあります：
 
 - SQL ステートメント **[SHOW ROUTINE LOAD](../../sql-reference/sql-statements/loading_unloading/routine_load/SHOW_ROUTINE_LOAD.md)** および **[SHOW PIPES](../../sql-reference/sql-statements/loading_unloading/pipe/SHOW_PIPES.md)** を使用する。
-- システムビュー **[information_schema.routine_load_jobs](../../sql-reference/information_schema/routine_load_jobs.md)** および **[information_schema.pipes](../../sql-reference/information_schema/pipes.md)** を使用する。
+- システムビュー **information_schema.routine_load_jobs** および **[information_schema.pipes](../../sql-reference/information_schema/pipes.md)** を使用する。
 
 ## ロードタスクの観察
 
