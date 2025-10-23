@@ -145,7 +145,7 @@ public class FlussTable extends Table {
     public TTableDescriptor toThrift(List<DescriptorTable.ReferencedPartitionInfo> partitions) {
         TFlussTable tFlussTable = new TFlussTable();
 
-        Configuration conf = new Configuration();
+        Configuration conf = this.configuration;
         for (Map.Entry<String, String> entry : tableProperties.entrySet()) {
             conf.setString(entry.getKey(), entry.getValue());
         }

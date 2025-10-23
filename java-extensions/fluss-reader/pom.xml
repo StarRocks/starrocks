@@ -14,7 +14,6 @@
     <properties>
         <java-extensions.home>${basedir}/../</java-extensions.home>
         <fluss.version>jdk8-0.8-sr-SNAPSHOT</fluss.version>
-        <paimon.version>1-ali-15.2</paimon.version>
     </properties>
 
     <dependencies>
@@ -60,36 +59,6 @@
             <groupId>org.apache.flink</groupId>
             <artifactId>flink-core</artifactId>
             <version>1.20.1</version>
-        </dependency>
-
-        <dependency>
-            <groupId>org.apache.paimon</groupId>
-            <artifactId>paimon-bundle</artifactId>
-            <version>${paimon.version}</version>
-        </dependency>
-
-        <dependency>
-            <groupId>org.apache.paimon</groupId>
-            <artifactId>paimon-core</artifactId>
-            <version>${paimon.version}</version>
-        </dependency>
-
-        <dependency>
-            <groupId>org.apache.paimon</groupId>
-            <artifactId>paimon-flink-common</artifactId>
-            <version>${paimon.version}</version>
-        </dependency>
-
-        <dependency>
-            <groupId>org.apache.paimon</groupId>
-            <artifactId>paimon-s3</artifactId>
-            <version>${paimon.version}</version>
-        </dependency>
-
-        <dependency>
-            <groupId>org.apache.paimon</groupId>
-            <artifactId>paimon-jindo</artifactId>
-            <version>${paimon.version}</version>
         </dependency>
 
         <dependency>
