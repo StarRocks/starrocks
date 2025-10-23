@@ -257,6 +257,53 @@ TEST_P(LakeVacuumTest, test_vacuum_full) {
     EXPECT_FALSE(file_exist("0000000000000002_a542ff5a-bff5-48a7-a3a7-2ed05691b58c.dat"));
 }
 
+// Ensure full vacuum does not fail when initial metadata 0_1.meta exists and
+// there is at least one expired metadata. Previously, trying to read 0_1.meta
+// would cause NotFound and fail the whole vacuum. Now it should succeed.
+// NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_vacuum_full_with_initial_meta_no_failure) {
+    // Create a physically present but invalid 0_1.meta so that any attempt to read it fails.
+    // This ensures pre-fix implementation (which reads 0_1.meta) will fail, while the fixed
+    // implementation will skip reading it and succeed.
+    {
+        auto initial_meta_path = join_path(join_path(kTestDir, kMetadataDirectoryName), tablet_initial_metadata_filename());
+        ASSIGN_OR_ABORT(auto f, FileSystem::Default()->new_writable_file(initial_meta_path));
+        ASSERT_OK(f->append("not-a-valid-protobuf"));
+        ASSERT_OK(f->close());
+    }
+
+    // Create an expired normal metadata which will be deleted by vacuum_full
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 77001,
+        "version": 2,
+        "rowsets": [],
+        "commit_time": 1
+        }
+        )DEL")));
+
+    // Sanity: files exist before vacuum
+    EXPECT_TRUE(file_exist(tablet_initial_metadata_filename()));
+    EXPECT_TRUE(file_exist(tablet_metadata_filename(77001, 2)));
+
+    VacuumFullRequest request;
+    request.set_partition_id(1);
+    request.set_tablet_id(77000);
+    request.set_min_active_txn_id(10);
+    request.set_grace_timestamp(100);
+    request.set_min_check_version(0);
+    request.set_max_check_version(10);
+
+    VacuumFullResponse response;
+    vacuum_full(_tablet_mgr.get(), request, &response);
+
+    ASSERT_TRUE(response.has_status());
+    EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+
+    // The expired normal metadata must be deleted
+    EXPECT_FALSE(file_exist(tablet_metadata_filename(77001, 2)));
+}
+
 // NOLINTNEXTLINE
 TEST_P(LakeVacuumTest, test_vacuum_full_with_bundle) {
     create_data_file("0000000000000005_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat");
