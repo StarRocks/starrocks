@@ -92,7 +92,7 @@ public class OptimizerContext {
         this.cteContext.setInlineCTERatio(getSessionVariable().getCboCTERuseRatio());
         this.cteContext.setMaxCTELimit(getSessionVariable().getCboCTEMaxLimit());
 
-        this.optimizerOptions = OptimizerOptions.defaultOpt();
+        this.optimizerOptions = new OptimizerOptions();
         this.enableJoinIsNullPredicateDerive = getSessionVariable().isCboDeriveJoinIsNullPredicate();
     }
 

@@ -249,7 +249,7 @@ public abstract class MVTestBase extends StarRocksTestBase {
     }
 
     public static OptExpression getOptimizedPlan(String sql, ConnectContext connectContext) {
-        return getOptimizedPlan(sql, connectContext, OptimizerOptions.defaultOpt());
+        return getOptimizedPlan(sql, connectContext, new OptimizerOptions());
     }
 
     public static StatementBase getAnalyzedPlan(String sql, ConnectContext connectContext) {
