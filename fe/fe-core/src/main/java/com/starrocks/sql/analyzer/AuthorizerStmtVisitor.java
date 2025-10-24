@@ -206,6 +206,7 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.StopRoutineLoadStmt;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.SystemVariable;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.UninstallPluginStmt;
 import com.starrocks.sql.ast.UpdateStmt;
@@ -2335,7 +2336,7 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
                     PrivilegeType.REPOSITORY.name(), ObjectType.SYSTEM.name(), null);
         }
         if (!statement.containsExternalCatalog()) {
-            List<TableRefPersist> tableRefs = statement.getTableRefs();
+            List<TableRef> tableRefs = statement.getTableRefs();
             List<FunctionRef> functionRefs = statement.getFnRefs();
             if (tableRefs.isEmpty() && functionRefs.isEmpty()) {
                 String dBName = statement.getDbName();
@@ -2344,10 +2345,15 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
 
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(statement.getDbName());
             tableRefs.forEach(tableRef -> {
-                TableName tableName = tableRef.getName();
+                String dbName = statement.getDbName();
+                if (dbName == null) {
+                    dbName = context.getDatabase();
+                }
+                String tblName = tableRef.getTableName();
+                TableName tableName = new TableName(context.getCurrentCatalog(), dbName, tblName);
+
                 try {
-                    Authorizer.checkTableAction(context, tableName,
-                            PrivilegeType.EXPORT);
+                    Authorizer.checkTableAction(context, tableName, PrivilegeType.EXPORT);
                 } catch (AccessDeniedException e) {
                     AccessDeniedException.reportAccessDenied(
                             tableName.getCatalog(),
@@ -2472,7 +2478,7 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
             return null;
         }
 
-        List<TableRefPersist> tableRefs = statement.getTableRefs();
+        List<TableRef> tableRefs = statement.getTableRefs();
         // check create_database on current catalog if we're going to restore the whole database
         if (!statement.withOnClause()) {
             try {
@@ -2502,19 +2508,19 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
                                 PrivilegeType.CREATE_TABLE.name(), ObjectType.DATABASE.name(), db.getFullName());
                     }
                     // check insert on specified table
-                    for (TableRefPersist tableRef : tableRefs) {
+                    for (TableRef tableRef : tableRefs) {
                         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
-                                .getTable(db.getFullName(), tableRef.getName().getTbl());
+                                .getTable(db.getFullName(), tableRef.getTableName());
                         if (table != null) {
                             try {
                                 Authorizer.checkTableAction(context,
-                                        new TableName(statement.getDbName(), tableRef.getName().getTbl()), PrivilegeType.INSERT);
+                                        new TableName(statement.getDbName(), tableRef.getTableName()), PrivilegeType.INSERT);
                             } catch (AccessDeniedException e) {
                                 AccessDeniedException.reportAccessDenied(
                                         InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                                         context.getCurrentUserIdentity(),
                                         context.getCurrentRoleIds(), PrivilegeType.INSERT.name(), ObjectType.TABLE.name(),
-                                        tableRef.getName().getTbl());
+                                        tableRef.getTableName());
                             }
                         }
                     }

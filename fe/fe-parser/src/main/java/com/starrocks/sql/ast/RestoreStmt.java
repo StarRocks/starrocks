@@ -12,11 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
-import com.starrocks.persist.TableRefPersist;
-import com.starrocks.server.RunMode;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -25,32 +22,26 @@ import java.util.Set;
 
 public class RestoreStmt extends AbstractBackupStmt {
     private boolean allowLoad = false;
-    private int replicationNum = RunMode.defaultReplicationNum();
     private String backupTimestamp = null;
     private int metaVersion = -1;
     private int starrocksMetaVersion = -1;
 
-    public RestoreStmt(LabelName labelName, String repoName, List<TableRefPersist> tblRefs,
-                       List<FunctionRef> fnRefs, List<CatalogRef> externalCatalogRefs, Set<BackupObjectType> allMarker,
-                       boolean withOnClause, String originDbName, Map<String, String> properties) {
-        this(labelName, repoName, tblRefs, fnRefs, externalCatalogRefs,
-                allMarker, withOnClause, originDbName, properties, NodePosition.ZERO);
-    }
-
-    public RestoreStmt(LabelName labelName, String repoName, List<TableRefPersist> tblRefs,
-                       List<FunctionRef> fnRefs, List<CatalogRef> externalCatalogRefs, Set<BackupObjectType> allMarker,
-                       boolean withOnClause, String originDbName,
-                       Map<String, String> properties, NodePosition pos) {
+    public RestoreStmt(LabelName labelName,
+                       String repoName,
+                       List<TableRef> tblRefs,
+                       List<FunctionRef> fnRefs,
+                       List<CatalogRef> externalCatalogRefs,
+                       Set<BackupObjectType> allMarker,
+                       boolean withOnClause,
+                       String originDbName,
+                       Map<String, String> properties,
+                       NodePosition pos) {
         super(labelName, repoName, tblRefs, fnRefs, externalCatalogRefs,
                 allMarker, withOnClause, originDbName, properties, pos);
     }
 
     public boolean allowLoad() {
         return allowLoad;
-    }
-
-    public int getReplicationNum() {
-        return replicationNum;
     }
 
     public String getBackupTimestamp() {
@@ -67,7 +58,7 @@ public class RestoreStmt extends AbstractBackupStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitRestoreStatement(this, context);
+        return visitor.visitRestoreStatement(this, context);
     }
 
     public void setTimeoutMs(long timeoutMs) {
@@ -76,10 +67,6 @@ public class RestoreStmt extends AbstractBackupStmt {
 
     public void setAllowLoad(boolean allowLoad) {
         this.allowLoad = allowLoad;
-    }
-
-    public void setReplicationNum(int replicationNum) {
-        this.replicationNum = replicationNum;
     }
 
     public void setBackupTimestamp(String backupTimestamp) {

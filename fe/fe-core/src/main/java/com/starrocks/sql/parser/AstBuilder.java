@@ -3779,15 +3779,17 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         return new FunctionRef(qn, alias, position);
     }
 
-    private ParseNode getTableRef(com.starrocks.sql.parser.StarRocksParser.QualifiedNameContext qualifiedNameContext,
-                                  com.starrocks.sql.parser.StarRocksParser.PartitionNamesContext partitionNamesContext,
-                                  String alias, NodePosition position) {
-        TableName tableName = qualifiedNameToTableName(getQualifiedName(qualifiedNameContext));
-        PartitionNames partitionNames = null;
+    private TableRef getTableRef(com.starrocks.sql.parser.StarRocksParser.QualifiedNameContext qualifiedNameContext,
+                                 com.starrocks.sql.parser.StarRocksParser.PartitionNamesContext partitionNamesContext,
+                                 String alias, NodePosition position) {
+        QualifiedName qualifiedName = getQualifiedName(qualifiedNameContext);
+        PartitionRef partitionRef = null;
         if (partitionNamesContext != null) {
-            partitionNames = (PartitionNames) visit(partitionNamesContext);
+            PartitionNames partitionNames = (PartitionNames) visit(partitionNamesContext);
+            partitionRef = new PartitionRef(partitionNames.getPartitionNames(), partitionNames.isTemp(),
+                    partitionNames.getPos());
         }
-        return new TableRefPersist(tableName, alias, partitionNames, position);
+        return new TableRef(qualifiedName, partitionRef, alias, position);
     }
 
     private ParseNode parseBackupRestoreStatement(ParserRuleContext context) {
@@ -3842,10 +3844,10 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
         boolean withOnClause = false;
 
-        List<TableRefPersist> tblRefs = new ArrayList<>();
-        List<TableRefPersist> mvRefs = new ArrayList<>();
-        List<TableRefPersist> viewRefs = new ArrayList<>();
-        List<TableRefPersist> mixTblRefs = new ArrayList<>();
+        List<TableRef> tblRefs = new ArrayList<>();
+        List<TableRef> mvRefs = new ArrayList<>();
+        List<TableRef> viewRefs = new ArrayList<>();
+        List<TableRef> mixTblRefs = new ArrayList<>();
         List<FunctionRef> fnRefs = new ArrayList<>();
         Set<BackupObjectType> allMarker = Sets.newHashSet();
 
@@ -3861,8 +3863,9 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             }
 
             originDb = getIdentifierName(backupContext != null ? backupContext.dbName : restoreContext.dbName);
+            originDb = normalizeName(originDb);
             if (restoreContext != null && restoreContext.AS() != null) {
-                dbAlias = getIdentifierName(restoreContext.dbAlias);
+                dbAlias = normalizeName(getIdentifierName(restoreContext.dbAlias));
             }
 
             labelName.setDbName(dbAlias != null ? dbAlias : originDb);
@@ -3916,7 +3919,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                     continue;
                 }
 
-                mvRefs.add((TableRefPersist) getTableRef(backupRestoreObjectDescContext.qualifiedName(),
+                mvRefs.add(getTableRef(backupRestoreObjectDescContext.qualifiedName(),
                         null, alias, createPos(backupRestoreObjectDescContext)));
             } else if (specifiedView) {
                 if (backupRestoreObjectDescContext.ALL() != null) {
@@ -3924,7 +3927,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                     continue;
                 }
 
-                viewRefs.add((TableRefPersist) getTableRef(backupRestoreObjectDescContext.qualifiedName(),
+                viewRefs.add(getTableRef(backupRestoreObjectDescContext.qualifiedName(),
                         null, alias, createPos(backupRestoreObjectDescContext)));
             } else if (specifiedTable) {
                 if (backupRestoreObjectDescContext.ALL() != null) {
@@ -3932,11 +3935,11 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                     continue;
                 }
 
-                tblRefs.add((TableRefPersist) getTableRef(backupRestoreObjectDescContext.backupRestoreTableDesc().qualifiedName(),
+                tblRefs.add(getTableRef(backupRestoreObjectDescContext.backupRestoreTableDesc().qualifiedName(),
                         backupRestoreObjectDescContext.backupRestoreTableDesc().partitionNames(),
                         alias, createPos(backupRestoreObjectDescContext)));
             } else {
-                mixTblRefs.add((TableRefPersist) getTableRef(
+                mixTblRefs.add(getTableRef(
                         backupRestoreObjectDescContext.backupRestoreTableDesc().qualifiedName(),
                         backupRestoreObjectDescContext.backupRestoreTableDesc().partitionNames(),
                         alias, createPos(backupRestoreObjectDescContext)));
