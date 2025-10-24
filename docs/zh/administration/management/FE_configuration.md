@@ -114,28 +114,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：系统日志文件的保留时长。默认值 `7d` 表示系统日志文件可以保留 7 天，保留时长超过 7 天的系统日志文件会被删除。
 - 引入版本：-
 
-<!--
-##### sys_log_roll_mode (Deprecated)
-
-- 默认值：SIZE-MB-1024
-- 类型：String
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### sys_log_to_console
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
 ##### audit_log_dir
 
 - 默认值：StarRocksFE.STARROCKS_HOME_DIR + "/log"
@@ -192,94 +170,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：审计日志文件的保留时长。默认值 `30d` 表示审计日志文件可以保留 30 天，保留时长超过 30 天的审计日志文件会被删除。
 - 引入版本：-
 
-<!--
-##### slow_lock_threshold_ms
-
-- 默认值：3000
-- 类型：Long
-- 单位：Milliseconds
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### slow_lock_log_every_ms
-
-- 默认值：3000
-- 类型：Long
-- 单位：Milliseconds
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### custom_config_dir
-
-- 默认值：/conf
-- 类型：String
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### internal_log_dir
-
-- 默认值：StarRocksFE.STARROCKS_HOME_DIR + "/log"
-- 类型：String
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### internal_log_roll_num
-
-- 默认值：90
-- 类型：Int
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### internal_log_modules
-
-- 默认值：{"base", "statistic"}
-- 类型：String
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### internal_log_roll_interval
-
-- 默认值：DAY
-- 类型：String
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### internal_log_delete_age
-
-- 默认值：7d
-- 类型：String
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
 ##### dump_log_dir
 
 - 默认值：StarRocksFE.STARROCKS_HOME_DIR + "/log"
@@ -327,84 +217,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：Dump 日志文件的保留时长。默认值 `7d` 表示 Dump 日志文件可以保留 7 天，保留时长超过 7 天的 Dump 日志文件会被删除。
 - 引入版本：-
 
-<!--
-##### big_query_log_dir
-
-- 默认值：StarRocksFE.STARROCKS_HOME_DIR + "/log"
-- 类型：String
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### big_query_log_roll_num
-
-- 默认值：10
-- 类型：Int
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### big_query_log_modules
-
-- 默认值：query
-- 类型：String[]
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### big_query_log_roll_interval
-
-- 默认值：DAY
-- 类型：String
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### big_query_log_delete_age
-
-- 默认值：7d
-- 类型：String
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### log_plan_cancelled_by_crash_be
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：是否在查询异常结束时，打印 COSTS 计划到日志中。只有在 `enable_collect_query_detail_info` 为 `false` 时有效，因为 `enable_collect_query_detail_info` 为 `true` 时，plan 会被记录到 query detail 中。
-- 引入版本：v3.1
--->
-
-<!--
-##### log_register_and_unregister_query_id
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-### Server
+### 服务器
 
 ##### frontend_address
 
@@ -442,6 +255,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：FE 节点上 HTTP 服务器的端口。
 - 引入版本：-
 
+##### https_port
+
+- 默认值：8443
+- 类型：Int
+- 单位：-
+- 是否动态：No
+- 描述：FE 节点中 HTTPS 服务器监听的端口。
+- 引入版本：v4.0
+
+##### enable_https
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：No
+- 描述：是否在 FE 节点上同时启用 HTTPS 服务器和 HTTP 服务器。
+- 引入版本：v4.0
+
 ##### http_worker_threads_num
 
 - 默认值：0
@@ -459,61 +290,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否动态：否
 - 描述：HTTP 服务器支持的 Backlog 队列长度。
 - 引入版本：-
-
-<!--
-##### http_max_initial_line_length
-
-- 默认值：4096
-- 类型：Int
-- Unit:
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### http_max_header_size
-
-- 默认值：32768
-- 类型：Int
-- Unit:
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### http_max_chunk_size
-
-- 默认值：8192
-- 类型：Int
-- Unit:
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### http_web_page_display_hardware
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### enable_http_detail_metrics
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
 
 ##### enable_http_async_handler
 
@@ -533,24 +309,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：用于异步处理 HTTP 请求的线程池大小。别名为 `max_http_sql_service_task_threads_num`。
 - 引入版本：4.0.0
 
-##### enable_https
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：No
-- 描述：是否在 FE 节点上同时启用 HTTPS 服务器和 HTTP 服务器。
-- 引入版本：v4.0
-
-##### https_port
-
-- 默认值：8443
-- 类型：Int
-- 单位：-
-- 是否动态：No
-- 描述：FE 节点中 HTTPS 服务器监听的端口。
-- 引入版本：v4.0
-
 ##### cluster_name
 
 - 默认值：StarRocks Cluster
@@ -567,24 +325,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位：-
 - 是否动态：否
 - 描述：FE 节点上 Thrift 服务器的端口。
-- 引入版本：-
-
-##### thrift_server_max_worker_threads
-
-- 默认值：4096
-- 类型：Int
-- 单位：-
-- 是否动态：是
-- 描述：Thrift 服务器支持的最大工作线程数。
-- 引入版本：-
-
-##### thrift_server_queue_size
-
-- 默认值：4096
-- 类型：Int
-- 单位：-
-- 是否动态：否
-- 描述：Thrift 服务器 pending 队列长度。如果当前处理线程数量超过了配置项 `thrift_server_max_worker_threads` 的值，则将超出的线程加入 Pending 队列。
 - 引入版本：-
 
 ##### thrift_client_timeout_ms
@@ -604,61 +344,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否动态：否
 - 描述：Thrift 服务器支持的 Backlog 队列长度。
 - 引入版本：-
-
-<!--
-##### thrift_rpc_timeout_ms
-
-- 默认值：10000
-- 类型：Int
-- 单位：Milliseconds
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### thrift_rpc_retry_times
-
-- 默认值：3
-- 类型：Int
-- Unit:
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### thrift_rpc_strict_mode
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### thrift_rpc_max_body_size
-
-- 默认值：-1
-- 类型：Int
-- Unit:
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### brpc_connection_pool_size
-
-- 默认值：16
-- 类型：Int
-- Unit:
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
 
 ##### brpc_idle_wait_max_time
 
@@ -717,6 +402,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
   3. 全局变量 `version` 的取值 (`show variables like 'version';`)
 - 引入版本：-
 
+##### thrift_server_max_worker_threads
+
+- 默认值：4096
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：Thrift 服务器支持的最大工作线程数。
+- 引入版本：-
+
+##### thrift_server_queue_size
+
+- 默认值：4096
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：Thrift 服务器 pending 队列长度。如果当前处理线程数量超过了配置项 `thrift_server_max_worker_threads` 的值，则将超出的线程加入 Pending 队列。
+- 引入版本：-
+
 ##### qe_max_connection
 
 - 默认值：4096
@@ -727,15 +430,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 引入版本：-
 
 ### 元数据与集群管理
-
-##### cluster_id
-
-- 默认值：-1
-- 类型：Int
-- 单位：-
-- 是否动态：否
-- 描述：FE 所在 StarRocks 集群的 ID。具有相同集群 ID 的 FE 或 BE 属于同一个 StarRocks 集群。取值范围：正整数。默认值 `-1` 表示在 Leader FE 首次启动时随机生成一个。
-- 引入版本：-
 
 ##### meta_dir
 
@@ -772,60 +466,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否动态：是
 - 描述：该参数用于控制日志文件的大小，指定了每写多少条元数据日志，执行一次日志滚动操作来为这些日志生成新的日志文件。新日志文件会写入到 BDBJE Database。
 - 引入版本：-
-
-<!--
-##### edit_log_write_slow_log_threshold_ms
-
-- 默认值：2000
-- 类型：Int
-- 单位：Milliseconds
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-##### metadata_ignore_unknown_operation_type
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：是否忽略未知的 logID。当 FE 回滚到低版本时，可能存在低版本 FE 无法识别的 logID。如果设置为 `TRUE`，则 FE 会忽略这些 logID；否则 FE 会退出。
-- 引入版本：-
-
-<!--
-##### hdfs_read_buffer_size_kb
-
-- 默认值：8192
-- 类型：Int
-- 单位：KB
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### hdfs_write_buffer_size_kb
-
-- 默认值：1024
-- 类型：Int
-- 单位：KB
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### hdfs_file_system_expire_seconds
-
-- 默认值：300
-- 别名：hdfs_file_sytem_expire_seconds
-- 类型：Int
-- 单位：Seconds
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
 
 ##### meta_delay_toleration_second
 
@@ -899,15 +539,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：BDB JE 操作的锁超时时间。
 - 引入版本：-
 
-##### bdbje_reset_election_group
-
-- 默认值：false
-- 类型：String
-- 单位：-
-- 是否动态：否
-- 描述：是否重置 BDBJE 复制组。如果设置为 `TRUE`，FE 将重置 BDBJE 复制组（即删除所有 FE 节点的信息）并以 Leader 身份启动。重置后，该 FE 将成为集群中唯一的成员，其他 FE 节点通过 `ALTER SYSTEM ADD/DROP FOLLOWER/OBSERVER 'xxx'` 重新加入该集群。仅当无法成功选举出 leader FE 时（因为大部分 follower FE 数据已损坏）才使用此配置。该参数用来替代 `metadata_failure_recovery`。
-- 引入版本：-
-
 ##### max_bdbje_clock_delta_ms
 
 - 默认值：5000
@@ -916,50 +547,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否动态：否
 - 描述：FE 所在 StarRocks 集群中 Leader FE 与非 Leader FE 之间能够容忍的最大时钟偏移。
 - 引入版本：-
-
-<!--
-##### bdbje_log_level
-
-- 默认值：INFO
-- 类型：String
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### bdbje_cleaner_threads
-
-- 默认值：1
-- 类型：Int
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### bdbje_replay_cost_percent
-
-- 默认值：150
-- 类型：Int
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### bdbje_reserved_disk_size
-
-- 默认值：512 * 1024 * 1024
-- 类型：Long
-- Unit:
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
 
 ##### txn_rollback_limit
 
@@ -988,23 +575,14 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：Heartbeat Manager 中存储心跳任务的阻塞队列大小。
 - 引入版本：-
 
-##### catalog_try_lock_timeout_ms
-
-- 默认值：5000
-- 类型：Long
-- 单位：Milliseconds
-- 是否动态：是
-- 描述：全局锁（Global Lock）获取的超时时长。
-- 引入版本：-
-
-##### ignore_materialized_view_error
+##### bdbje_reset_election_group
 
 - 默认值：false
-- 类型：Boolean
+- 类型：String
 - 单位：-
-- 是否动态：是
-- 描述：是否忽略因物化视图错误导致的元数据异常。如果 FE 因为物化视图错误导致的元数据异常而无法启动，您可以通过将该参数设置为 `true` 以忽略错误。
-- 引入版本：v2.5.10
+- 是否动态：否
+- 描述：是否重置 BDBJE 复制组。如果设置为 `TRUE`，FE 将重置 BDBJE 复制组（即删除所有 FE 节点的信息）并以 Leader 身份启动。重置后，该 FE 将成为集群中唯一的成员，其他 FE 节点通过 `ALTER SYSTEM ADD/DROP FOLLOWER/OBSERVER 'xxx'` 重新加入该集群。仅当无法成功选举出 leader FE 时（因为大部分 follower FE 数据已损坏）才使用此配置。该参数用来替代 `metadata_failure_recovery`。
+- 引入版本：-
 
 ##### ignore_meta_check
 
@@ -1024,23 +602,32 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：BE 被下线后，是否删除该 BE。true 代表 BE 被下线后会立即删除该 BE。False 代表下线完成后不删除 BE。
 - 引入版本：-
 
-##### enable_collect_query_detail_info
+##### ignore_materialized_view_error
 
 - 默认值：false
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：是否收集查询的 Profile 信息。设置为 `true` 时，系统会收集查询的 Profile。设置为 `false` 时，系统不会收集查询的 profile。
+- 描述：是否忽略因物化视图错误导致的元数据异常。如果 FE 因为物化视图错误导致的元数据异常而无法启动，您可以通过将该参数设置为 `true` 以忽略错误。
+- 引入版本：v2.5.10
+
+##### catalog_try_lock_timeout_ms
+
+- 默认值：5000
+- 类型：Long
+- 单位：Milliseconds
+- 是否动态：是
+- 描述：全局锁（Global Lock）获取的超时时长。
 - 引入版本：-
 
-##### profile_info_format
+##### enable_statistics_collect_profile
 
-- 默认值：default
-- 类型：String
+- 默认值：false
+- 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：系统输出 Profile 的格式。有效值：`default` 和 `json`。设置为 `default` 时，Profile 为默认格式。设置为 `json` 时，系统输出 JSON 格式 Profile。
-- 引入版本：V2.5
+- 描述：统计信息查询时是否生成 Profile。您可以将此项设置为 `true`，以允许 StarRocks 为系统统计查询生成 Profile。
+- 引入版本：v3.1.5
 
 ##### enable_background_refresh_connector_metadata
 
@@ -1050,28 +637,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否动态：是
 - 描述：是否开启 Hive 元数据缓存周期性刷新。开启后，StarRocks 会轮询 Hive 集群的元数据服务（Hive Metastore 或 AWS Glue），并刷新经常访问的 Hive 外部数据目录的元数据缓存，以感知数据更新。`true` 代表开启，`false` 代表关闭。
 - 引入版本：v2.5.5
-
-<!--
-##### enable_background_refresh_resource_table_metadata
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### background_refresh_file_metadata_concurrency
-
-- 默认值：4
-- 类型：Int
-- Unit:
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
 
 ##### background_refresh_metadata_interval_millis
 
@@ -1091,41 +656,41 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：Hive 元数据缓存刷新任务过期时间。对于已被访问过的 Hive Catalog，如果超过该时间没有被访问，则停止刷新其元数据缓存。对于未被访问过的 Hive Catalog，StarRocks 不会刷新其元数据缓存。
 - 引入版本：v2.5.5
 
-##### enable_statistics_collect_profile
+##### enable_collect_query_detail_info
 
 - 默认值：false
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：统计信息查询时是否生成 Profile。您可以将此项设置为 `true`，以允许 StarRocks 为系统统计查询生成 Profile。
-- 引入版本：v3.1.5
+- 描述：是否收集查询的 Profile 信息。设置为 `true` 时，系统会收集查询的 Profile。设置为 `false` 时，系统不会收集查询的 profile。
+- 引入版本：-
 
-#### metadata_enable_recovery_mode
+##### metadata_ignore_unknown_operation_type
 
 - 默认值：false
 - 类型：Boolean
 - 单位：-
-- 是否动态：否
-- 描述：是否开启元数据恢复模式。开启此模式后，在部分元数据丢失的情况下，系统会根据 BE 上的信息恢复元数据。当前仅支持恢复分区的版本信息。
-- 引入版本：v3.3.0
+- 是否动态：是
+- 描述：是否忽略未知的 logID。当 FE 回滚到低版本时，可能存在低版本 FE 无法识别的 logID。如果设置为 `TRUE`，则 FE 会忽略这些 logID；否则 FE 会退出。
+- 引入版本：-
 
-#### lock_manager_enabled
+##### profile_info_format
 
-- 默认值：true
+- 默认值：default
+- 类型：String
+- 单位：-
+- 是否动态：是
+- 描述：系统输出 Profile 的格式。有效值：`default` 和 `json`。设置为 `default` 时，Profile 为默认格式。设置为 `json` 时，系统输出 JSON 格式 Profile。
+- 引入版本：V2.5
+
+##### enable_legacy_compatibility_for_replication
+
+- 默认值：false
 - 类型：Boolean
 - 单位：-
-- 是否动态：否
-- 描述：是否开启锁管理。lock manager 可以对锁实现集中管理，例如控制是否将元数据锁的粒度从库级别细化为表级别。
-- 引入版本：v3.3.0
-
-##### lock_manager_enable_using_fine_granularity_lock
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：否
-- 描述：是否将元数据锁的粒度从库级别细化为表级别。元数据锁细化为表级别后，可以减小锁冲突和竞争，提高导入和查询的并发性能。该参数只在 `lock_manager_enabled` 开启的前提下生效。
-- 引入版本：v3.3.0
+- 是否动态：是
+- 描述：是否为跨集群数据迁移开启旧版本兼容。新旧版本的集群间可能存在行为差异，从而导致跨集群数据迁移时出现问题。因此在数据迁移前，您需要为目标集群开启旧版本兼容，并在数据迁移完成后关闭。`true` 表示开启兼容。
+- 引入版本：v3.1.10, v3.2.6
 
 ##### black_host_history_sec
 
@@ -1144,15 +709,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否动态：是
 - 描述：黑名单中的 BE 节点允许连接失败的上限。如果一个 BE 节点被自动添加到 BE 黑名单中，StarRocks 将评估其连接状态，并判断是否可以将其从 BE 黑名单中移除。在 `black_host_history_sec` 内，只有当黑名单中的 BE 节点的连接失败次数少于 `black_host_connect_failures_within_time` 中设置的阈值时，StarRocks 才会将其从 BE 黑名单中移除。
 - 引入版本：v3.3.0
-
-##### enable_legacy_compatibility_for_replication
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：是否为跨集群数据迁移开启旧版本兼容。新旧版本的集群间可能存在行为差异，从而导致跨集群数据迁移时出现问题。因此在数据迁移前，您需要为目标集群开启旧版本兼容，并在数据迁移完成后关闭。`true` 表示开启兼容。
-- 引入版本：v3.1.10, v3.2.6
 
 ##### automated_cluster_snapshot_interval_seconds
 
@@ -1197,6 +753,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ### 查询引擎
 
+##### http_slow_request_threshold_ms
+
+- 默认值：5000
+- 类型：Int
+- 单位：Milliseconds
+- 是否动态：是
+- 描述：如果一条 HTTP 请求的时间超过了该参数指定的时长，会生成日志来跟踪该请求。
+- 引入版本：v2.5.15，v3.1.5
+
 ##### publish_version_interval_ms
 
 - 默认值：10
@@ -1204,24 +769,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位：Milliseconds
 - 是否动态：否
 - 描述：两个版本发布操作之间的时间间隔。
-- 引入版本：-
-
-##### statistic_cache_columns
-
-- 默认值：100000
-- 类型：Long
-- 单位：-
-- 是否动态：否
-- 描述：缓存统计信息表的最大行数。
-- 引入版本：-
-
-##### statistic_cache_thread_pool_size
-
-- 默认值：10
-- 类型：Int
-- 单位：-
-- 是否动态：否
-- 描述：用于刷新统计缓存的线程池大小。
 - 引入版本：-
 
 ##### max_allowed_in_element_num_of_delete
@@ -1251,75 +798,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：是否为物化视图的刷新任务开启中间结果落盘功能。
 - 引入版本：v3.1.1
 
-##### enable_backup_materialized_view
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：在数据库的备份操作中，是否对数据库中的异步物化视图进行备份。如果设置为 `false`，将跳过对异步物化视图的备份。
-- 引入版本：v3.2.0
-
-<!--
-##### enable_show_materialized_views_include_all_task_runs
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### materialized_view_min_refresh_interval
-
-- 默认值：60
-- 类型：Int
-- Unit:
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### skip_whole_phase_lock_mv_limit
-
-- 默认值：5
-- 类型：Int
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-##### enable_experimental_mv
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：是否开启异步物化视图功能。`TRUE` 表示开启。从 2.5.2 版本开始，该功能默认开启。2.5.2 版本之前默认值为 `FALSE`。
-- 引入版本：v2.4
-
-##### enable_colocate_mv_index
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：在创建同步物化视图时，是否将同步物化视图的索引与基表加入到相同的 Colocate Group。如果设置为 `true`，TabletSink 将加速同步物化视图的写入性能。
-- 引入版本：v3.2.0
-
-##### default_mv_refresh_immediate
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：创建异步物化视图后，是否立即刷新该物化视图。当设置为 `true` 时，异步物化视图创建后会立即刷新。
-- 引入版本：v3.2.3
-
 ##### enable_materialized_view_metrics_collect
 
 - 默认值：true
@@ -1338,53 +816,14 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：是否默认启用基于文本的查询改写。如果此项设置为 `true`，则系统在创建异步物化视图时构建抽象语法树。
 - 引入版本：v3.2.5
 
-##### enable_mv_automatic_active_check
+##### enable_backup_materialized_view
 
-- 默认值：true
+- 默认值：false
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：是否允许系统自动检查和重新激活异步物化视图。启用此功能后，系统将会自动激活因基表（或视图）Schema Change 或重建而失效（Inactive）的物化视图。请注意，此功能不会激活由用户手动设置为 Inactive 的物化视图。
-- 引入版本：v3.1.6
-
-##### enable_active_materialized_view_schema_strict_check
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：在激活失效物化视图时是否严格检查数据类型长度一致性。当设置为 `false` 时，如基表的数据类型长度有变化，也不影响物化视图的激活。
-- 引入版本：v3.3.4
-
-##### mv_active_checker_interval_seconds
-
-- 默认值：60
-- 类型：Long
-- 单位：Seconds
-- 是否动态：是
-- 描述：当开启后台 active_checker 线程后，系统将定期自动检查并激活因基表（或视图）发生 Schema 变更或重建而变为失效状态（Inactive）的物化视图。该参数用于控制该线程的调度执行间隔，单位为秒。默认值为系统设定的时间间隔。
-- 引入版本：v3.1.6
-
-##### default_mv_partition_refresh_number
-
-- 默认值：1
-- 类型：Int
-- 单位：-
-- 是否动态：是
-- 描述： 当一次物化视图刷新涉及多个分区时，该参数用于控制默认每次刷新多少个分区。
-从 3.3.0 版本开始，系统默认每次仅刷新一个分区，以避免内存占用过高的问题；而在此前的版本中，系统会尝试一次性刷新所有分区，这可能导致刷新任务因内存不足（OOM）而失败。但也需注意：当每次物化视图刷新涉及大量分区时，默认每次仅刷新一个分区可能导致调度频繁、整体刷新耗时较长，甚至生成过多的刷新记录。因此，在特定场景下，可适当调整该参数值，以提升刷新效率并控制调度开销。
-- 引入版本：v3.3.0
-
-<!--
-##### mv_auto_analyze_async
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
+- 描述：在数据库的备份操作中，是否对数据库中的异步物化视图进行备份。如果设置为 `false`，将跳过对异步物化视图的备份。
+- 引入版本：v3.2.0
 
 ##### enable_udf
 
@@ -1431,50 +870,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：动态分区检查的时间周期。如果有新数据生成，会自动生成分区。
 - 引入版本：-
 
-<!--
-##### max_dynamic_partition_num
-
-- 默认值：500
-- 类型：Int
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### memory_tracker_enable
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### memory_tracker_interval_seconds
-
-- 默认值：60
-- 类型：Long
-- 单位：Seconds
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### enable_create_partial_partition_in_batch
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
 ##### max_query_retry_time
 
 - 默认值：2
@@ -1500,24 +895,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位：-
 - 是否动态：是
 - 描述：串行创建副本的最大数量。如果实际副本数量超过此值，副本将并发创建。如果建表需要长时间才能完成，请尝试减少此值。
-- 引入版本：-
-
-##### http_slow_request_threshold_ms
-
-- 默认值：5000
-- 类型：Int
-- 单位：Milliseconds
-- 是否动态：是
-- 描述：如果一条 HTTP 请求的时间超过了该参数指定的时长，会生成日志来跟踪该请求。
-- 引入版本：v2.5.15，v3.1.5
-
-##### max_partitions_in_one_batch
-
-- 默认值：4096
-- 类型：Long
-- 单位：-
-- 是否动态：是
-- 描述：批量创建分区时，分区数目的最大值。
 - 引入版本：-
 
 ##### max_running_rollup_job_num_per_table
@@ -1583,17 +960,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：当空表第一次导入数据时，是否自动触发统计信息采集。如果一张表包含多个分区，只要是某个空的分区第一次导入数据，都会触发该分区的统计信息采集。如果系统频繁创建新表并且导入数据，会存在一定内存和 CPU 开销。
 - 引入版本：v3.1
 
-<!--
-##### semi_sync_collect_statistic_await_seconds
-
-- 默认值：30
-- 类型：Long
-- 单位：Seconds
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
 ##### statistic_auto_analyze_start_time
 
 - 默认值：00:00:00
@@ -1612,17 +978,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：用于配置自动全量采集的结束时间。取值范围：`00:00:00` ~ `23:59:59`。
 - 引入版本：-
 
-<!--
-##### statistic_manager_sleep_time_sec
-
-- 默认值：60
-- 类型：Long
-- 单位：Seconds
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
 ##### statistic_analyze_status_keep_second
 
 - 默认值：3 * 24 * 3600
@@ -1631,17 +986,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否动态：是
 - 描述：统计信息采集任务的记录保留时间，默认为 3 天。
 - 引入版本：-
-
-<!--
-##### statistic_check_expire_partition
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
 
 ##### statistic_collect_interval_sec
 
@@ -1652,49 +996,32 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：自动定期采集任务中，检测数据更新的间隔时间。
 - 引入版本：-
 
-<!--
-##### statistic_analyze_task_pool_size
-
-- 默认值：3
-- 类型：Int
-- Unit:
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### statistic_collect_query_timeout
-
-- 默认值：3600
-- 类型：Long
-- Unit:
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### slot_manager_response_thread_pool_size
-
-- 默认值：16
-- 类型：Int
-- Unit:
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### statistic_dict_columns
+##### statistic_cache_columns
 
 - 默认值：100000
 - 类型：Long
-- Unit:
+- 单位：-
 - 是否动态：否
-- 描述：
+- 描述：缓存统计信息表的最大行数。
 - 引入版本：-
--->
+
+##### statistic_cache_thread_pool_size
+
+- 默认值：10
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：用于刷新统计缓存的线程池大小。
+- 引入版本：-
+
+##### low_cardinality_threshold
+
+- 默认值：255
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：低基数字典阈值。
+- 引入版本：v3.5.0
 
 ##### statistic_update_interval_sec
 
@@ -1704,17 +1031,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否动态：是
 - 描述：统计信息内存 Cache 失效时间。
 - 引入版本：-
-
-<!--
-##### statistic_collect_too_many_version_sleep
-
-- 默认值：600000
-- 类型：Long
-- Unit:
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
 
 ##### enable_collect_full_statistic
 
@@ -1734,39 +1050,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：自动统计信息的健康度阈值。如果统计信息的健康度小于该阈值，则触发自动采集。
 - 引入版本：-
 
-<!--
-##### statistic_full_collect_buffer
-
-- 默认值：1024 * 1024 * 20
-- 类型：Long
-- Unit:
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### statistic_auto_collect_sample_threshold
-
-- 默认值：0.3
-- 类型：Double
-- Unit:
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### statistic_auto_collect_small_table_size
-
-- 默认值：5 * 1024 * 1024 * 1024
-- 类型：Long
-- Unit:
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
 ##### statistic_auto_collect_small_table_rows
 
 - 默认值：10000000
@@ -1775,28 +1058,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否动态：是
 - 描述：自动收集中，用于判断外部数据源下的表 (Hive, Iceberg, Hudi) 是否为小表的行数门限。
 - 引入版本：v3.2
-
-<!--
-##### statistic_auto_collect_small_table_interval
-
-- 默认值：0
-- 类型：Long
-- Unit:
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### statistic_auto_collect_large_table_interval
-
-- 默认值：3600 * 12
-- 类型：Long
-- Unit:
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
 
 ##### statistic_max_full_collect_data_size
 
@@ -1807,15 +1068,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：自动统计信息采集的单次任务最大数据量。如果超过该值，则放弃全量采集，转为对该表进行抽样采集。
 - 引入版本：-
 
-##### statistic_collect_max_row_count_per_query
-
-- 默认值：5000000000
-- 类型：Long
-- 单位：-
-- 是否动态：是
-- 描述：单个 ANALYZE 任务查询的最大行数。如果超过此值， ANALYZE 任务将被拆分为多个查询。
-- 引入版本：-
-
 ##### statistic_sample_collect_rows
 
 - 默认值：200000
@@ -1824,6 +1076,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否动态：是
 - 描述：最小采样行数。如果指定了采集类型为抽样采集（SAMPLE），需要设置该参数。如果参数取值超过了实际的表行数，默认进行全量采集。
 - 引入版本：-
+
+##### enable_manual_collect_array_ndv
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否允许手动采集 ARRAY 类型列的 NDV 信息。
+- 引入版本：v4.0
+
+##### enable_auto_collect_array_ndv
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否允许自动采集 ARRAY 类型列的 NDV 信息。
+- 引入版本：v4.0
 
 ##### histogram_buckets_size
 
@@ -1861,15 +1131,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：直方图最大采样行数。
 - 引入版本：-
 
-##### connector_table_query_trigger_task_schedule_interval
-
-- 默认值：30
-- 类型：Int
-- 单位：秒
-- 是否动态：是
-- 描述：Schedule 线程调度查询触发的后台任务的周期。该项用于取代 v3.4.0 中引入的 `connector_table_query_trigger_analyze_schedule_interval`。此处后台任务是指 v3.4 中的 `ANALYZE` 任务，以及 v3.4 之后版本中引入的低基数列字典的收集任务。
-- 引入版本：v3.4.2
-
 ##### connector_table_query_trigger_analyze_small_table_rows
 
 - 默认值：10000000
@@ -1897,6 +1158,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：查询触发 ANALYZE 任务的大表采集间隔。
 - 引入版本：v3.4.0
 
+##### connector_table_query_trigger_analyze_max_running_task_num
+
+- 默认值：2
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：FE 中处于 Running 状态的查询触发 ANALYZE 任务的最大数量。
+- 引入版本：v3.4.0
+
 ##### connector_table_query_trigger_analyze_max_pending_task_num
 
 - 默认值：100
@@ -1906,14 +1176,14 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：FE 中处于 Pending 状态的查询触发 ANALYZE 任务的最大数量。
 - 引入版本：v3.4.0
 
-##### connector_table_query_trigger_analyze_max_running_task_num
+##### connector_table_query_trigger_task_schedule_interval
 
-- 默认值：2
+- 默认值：30
 - 类型：Int
-- 单位：-
+- 单位：秒
 - 是否动态：是
-- 描述：FE 中处于 Running 状态的查询触发 ANALYZE 任务的最大数量。
-- 引入版本：v3.4.0
+- 描述：Schedule 线程调度查询触发的后台任务的周期。该项用于取代 v3.4.0 中引入的 `connector_table_query_trigger_analyze_schedule_interval`。此处后台任务是指 v3.4 中的 `ANALYZE` 任务，以及 v3.4 之后版本中引入的低基数列字典的收集任务。
+- 引入版本：v3.4.2
 
 ##### enable_local_replica_selection
 
@@ -1933,6 +1203,79 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：: 分区裁剪允许的最大递归深度。增加递归深度可以裁剪更多元素但同时增加 CPU 资源消耗。
 - 引入版本：-
 
+##### max_partitions_in_one_batch
+
+- 默认值：4096
+- 类型：Long
+- 单位：-
+- 是否动态：是
+- 描述：批量创建分区时，分区数目的最大值。
+- 引入版本：-
+
+##### enable_experimental_mv
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否开启异步物化视图功能。`TRUE` 表示开启。从 2.5.2 版本开始，该功能默认开启。2.5.2 版本之前默认值为 `FALSE`。
+- 引入版本：v2.4
+
+##### enable_colocate_mv_index
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：在创建同步物化视图时，是否将同步物化视图的索引与基表加入到相同的 Colocate Group。如果设置为 `true`，TabletSink 将加速同步物化视图的写入性能。
+- 引入版本：v3.2.0
+
+##### mv_active_checker_interval_seconds
+
+- 默认值：60
+- 类型：Long
+- 单位：Seconds
+- 是否动态：是
+- 描述：当开启后台 active_checker 线程后，系统将定期自动检查并激活因基表（或视图）发生 Schema 变更或重建而变为失效状态（Inactive）的物化视图。该参数用于控制该线程的调度执行间隔，单位为秒。默认值为系统设定的时间间隔。
+- 引入版本：v3.1.6
+
+##### enable_mv_automatic_active_check
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否允许系统自动检查和重新激活异步物化视图。启用此功能后，系统将会自动激活因基表（或视图）Schema Change 或重建而失效（Inactive）的物化视图。请注意，此功能不会激活由用户手动设置为 Inactive 的物化视图。
+- 引入版本：v3.1.6
+
+##### default_mv_partition_refresh_number
+
+- 默认值：1
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述： 当一次物化视图刷新涉及多个分区时，该参数用于控制默认每次刷新多少个分区。
+从 3.3.0 版本开始，系统默认每次仅刷新一个分区，以避免内存占用过高的问题；而在此前的版本中，系统会尝试一次性刷新所有分区，这可能导致刷新任务因内存不足（OOM）而失败。但也需注意：当每次物化视图刷新涉及大量分区时，默认每次仅刷新一个分区可能导致调度频繁、整体刷新耗时较长，甚至生成过多的刷新记录。因此，在特定场景下，可适当调整该参数值，以提升刷新效率并控制调度开销。
+- 引入版本：v3.3.0
+
+##### enable_active_materialized_view_schema_strict_check
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：在激活失效物化视图时是否严格检查数据类型长度一致性。当设置为 `false` 时，如基表的数据类型长度有变化，也不影响物化视图的激活。
+- 引入版本：v3.3.4
+
+##### default_mv_refresh_immediate
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：创建异步物化视图后，是否立即刷新该物化视图。当设置为 `true` 时，异步物化视图创建后会立即刷新。
+- 引入版本：v3.2.3
+
 ##### slow_query_analyze_threshold
 
 - 默认值：5
@@ -1942,34 +1285,52 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：查询触发 Query Feedback 分析的执行时间阈值。
 - 引入版本：v3.4.0
 
-##### low_cardinality_threshold
+### 导入导出
 
-- 默认值：255
+##### label_keep_max_second
+
+- 默认值：3 * 24 * 3600
+- 类型：Int
+- 单位：Seconds
+- 是否动态：是
+- 描述：已经完成、且处于 FINISHED 或 CANCELLED 状态的导入作业记录在 StarRocks 系统 label 的保留时长，默认值为 3 天。该参数配置适用于所有模式的导入作业。设定过大将会消耗大量内存。
+- 引入版本：-
+
+##### label_keep_max_num
+
+- 默认值：1000
 - 类型：Int
 - 单位：-
+- 是否动态：是
+- 描述：一定时间内所保留导入任务的最大数量。超过之后历史导入作业的信息会被删除。
+- 引入版本：-
+
+##### label_clean_interval_second
+
+- 默认值：4 * 3600
+- 类型：Int
+- 单位：Seconds
 - 是否动态：否
-- 描述：低基数字典阈值。
-- 引入版本：v3.5.0
+- 描述：作业标签的清理间隔。建议清理间隔尽量短，从而确保历史作业的标签能够及时清理掉。
+- 引入版本：-
 
-##### enable_manual_collect_array_ndv
+##### history_job_keep_max_second
 
-- 默认值：false
-- 类型：Boolean
-- 单位：-
+- 默认值：7 * 24 * 3600
+- 类型：Int
+- 单位：Seconds
 - 是否动态：是
-- 描述：是否允许手动采集 ARRAY 类型列的 NDV 信息。
-- 引入版本：v4.0
+- 描述：历史任务最大的保留时长，例如 Schema Change 任务。
+- 引入版本：-
 
-##### enable_auto_collect_array_ndv
+##### transaction_clean_interval_second
 
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：是否允许自动采集 ARRAY 类型列的 NDV 信息。
-- 引入版本：v4.0
-
-### 导入导出
+- 默认值：30
+- 类型：Int
+- 单位：Seconds
+- 是否动态：否
+- 描述：已结束事务的清理间隔。建议清理间隔尽量短，从而确保已完成的事务能够及时清理掉。
+- 引入版本：-
 
 ##### load_straggler_wait_second
 
@@ -1989,28 +1350,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：导入作业的轮询间隔。
 - 引入版本：-
 
-<!--
-##### lock_checker_interval_second
-
-- 默认值：30
-- 类型：Long
-- 单位：Seconds
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### lock_checker_enable_deadlock_check
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
 ##### broker_load_default_timeout_second
 
 - 默认值：14400
@@ -2019,17 +1358,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否动态：是
 - 描述：Broker Load 的超时时间。
 - 引入版本：-
-
-<!--
-##### spark_load_submit_timeout_second
-
-- 默认值：300
-- 类型：Long
-- 单位：Seconds
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
 
 ##### min_bytes_per_broker_scanner
 
@@ -2067,27 +1395,32 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：Stream Load 的最大超时时间。
 - 引入版本：-
 
-<!--
-##### max_stream_load_batch_size_mb
+##### transaction_stream_load_coordinator_cache_capacity
 
-- 默认值：100
+- 默认值：4096
 - 类型：Int
-- 单位：MB
+- 单位：-
 - 是否动态：是
-- 描述：
+- 描述：存储事务标签到coordinator节点映射的缓存容量。
 - 引入版本：-
--->
 
-<!--
-##### stream_load_max_txn_num_per_be
+##### transaction_stream_load_coordinator_cache_expire_seconds
 
-- 默认值：-1
+- 默认值：900
 - 类型：Int
-- Unit:
+- 单位：-
 - 是否动态：是
-- 描述：
+- 描述：事务标签与coordinator节点映射关系在缓存中的存活时间(TTL)。
 - 引入版本：-
--->
+
+##### prepared_transaction_default_timeout_second
+
+- 默认值：86400
+- 类型：Int
+- 单位：Seconds
+- 是否动态：是
+- 描述：预提交事务的默认超时时间。
+- 引入版本：-
 
 ##### max_load_timeout_second
 
@@ -2105,15 +1438,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位：Seconds
 - 是否动态：是
 - 描述：导入作业的最小超时时间，适用于所有导入。
-- 引入版本：-
-
-##### prepared_transaction_default_timeout_second
-
-- 默认值：86400
-- 类型：Int
-- 单位：Seconds
-- 是否动态：是
-- 描述：预提交事务的默认超时时间。
 - 引入版本：-
 
 ##### spark_dpp_version
@@ -2207,13 +1531,49 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：StarRocks 集群中可以并行执行的 Broker Load 作业的最大数量。本参数仅适用于 Broker Load。取值必须小于 `max_running_txn_num_per_db`。从 2.5 版本开始，该参数默认值从 `10` 变为 `5`。
 - 引入版本：-
 
-##### load_parallel_instance_num (Deprecated)
+##### export_checker_interval_second
 
-- 默认值：1
+- 默认值：5
+- 类型：Int
+- 单位：Seconds
+- 是否动态：否
+- 描述：导出作业调度器的调度间隔。
+- 引入版本：-
+
+##### export_running_job_num_limit
+
+- 默认值：5
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述：单个 BE 上每个作业允许的最大并发实例数。自 3.1 版本起弃用。
+- 描述：导出作业最大的运行数目。
+- 引入版本：-
+
+##### export_task_default_timeout_second
+
+- 默认值：2 * 3600
+- 类型：Int
+- 单位：Seconds
+- 是否动态：是
+- 描述：导出作业的超时时长。
+- 引入版本：-
+
+##### export_max_bytes_per_be_per_task
+
+- 默认值：268435456
+- 类型：Long
+- 单位：Bytes
+- 是否动态：是
+- 描述：单个导出任务在单个 BE 上导出的最大数据量。
+- 引入版本：-
+
+##### export_task_pool_size
+
+- 默认值：5
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：导出任务线程池的大小。
 - 引入版本：-
 
 ##### disable_load_job
@@ -2223,33 +1583,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位：-
 - 是否动态：是
 - 描述：当集群遇到错误时是否禁用导入。这可以防止因集群错误而造成的任何损失。默认值为 `FALSE`，表示导入未禁用。`TRUE` 表示导入已禁用，集群处于只读状态。
-- 引入版本：-
-
-##### history_job_keep_max_second
-
-- 默认值：7 * 24 * 3600
-- 类型：Int
-- 单位：Seconds
-- 是否动态：是
-- 描述：历史任务最大的保留时长，例如 Schema Change 任务。
-- 引入版本：-
-
-##### label_keep_max_second
-
-- 默认值：3 * 24 * 3600
-- 类型：Int
-- 单位：Seconds
-- 是否动态：是
-- 描述：已经完成、且处于 FINISHED 或 CANCELLED 状态的导入作业记录在 StarRocks 系统 label 的保留时长，默认值为 3 天。该参数配置适用于所有模式的导入作业。设定过大将会消耗大量内存。
-- 引入版本：-
-
-##### label_keep_max_num
-
-- 默认值：1000
-- 类型：Int
-- 单位：-
-- 是否动态：是
-- 描述：一定时间内所保留导入任务的最大数量。超过之后历史导入作业的信息会被删除。
 - 引入版本：-
 
 ##### max_routine_load_task_concurrent_num
@@ -2297,35 +1630,22 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：集群内每个 Routine Load 导入任务超时时间，自 v3.1.0 起，Routine Load 导入作业 [job_properties](../../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md#job_properties) 新增参数 `task_timeout_second`，作用于单个 Routine Load 导入作业内的任务，更加灵活。
 - 引入版本：-
 
-<!--
-##### routine_load_kafka_timeout_second
+##### max_tolerable_backend_down_num
 
-- 默认值：12
-- 类型：Long
-- 单位：Seconds
+- 默认值：0
+- 类型：Int
+- 单位：-
 - 是否动态：是
-- 描述：
+- 描述：允许的最大故障 BE 数。如果故障的 BE 节点数超过该阈值，则不能自动恢复 Routine Load 作业。
 - 引入版本：-
--->
 
-<!--
-##### routine_load_pulsar_timeout_second
+##### period_of_auto_resume_min
 
-- 默认值：12
-- 类型：Long
-- 单位：Seconds
+- 默认值：5
+- 类型：Int
+- 单位：Minutes
 - 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-##### routine_load_unstable_threshold_second
-
-- 默认值：3600
-- 类型：Long
-- 单位：Seconds
-- 是否动态：是
-- 描述：Routine Load 导入作业的任一导入任务消费延迟，即正在消费的消息时间戳与当前时间的差值超过该阈值，且数据源中存在未被消费的消息，则导入作业置为 UNSTABLE 状态。
+- 描述：自动恢复 Routine Load 的时间间隔。
 - 引入版本：-
 
 ##### enable_routine_load_lag_metrics
@@ -2346,69 +1666,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：要在监控指标中显示的 Routine Load 任务的最小 Offset Lag。Offset Lag 大于此值的 Routine Load 任务将显示在指标中。
 - 引入版本：-
 
-##### max_tolerable_backend_down_num
-
-- 默认值：0
-- 类型：Int
-- 单位：-
-- 是否动态：是
-- 描述：允许的最大故障 BE 数。如果故障的 BE 节点数超过该阈值，则不能自动恢复 Routine Load 作业。
-- 引入版本：-
-
-##### period_of_auto_resume_min
-
-- 默认值：5
-- 类型：Int
-- 单位：Minutes
-- 是否动态：是
-- 描述：自动恢复 Routine Load 的时间间隔。
-- 引入版本：-
-
-##### export_task_default_timeout_second
-
-- 默认值：2 * 3600
-- 类型：Int
-- 单位：Seconds
-- 是否动态：是
-- 描述：导出作业的超时时长。
-- 引入版本：-
-
-##### export_max_bytes_per_be_per_task
-
-- 默认值：268435456
-- 类型：Long
-- 单位：Bytes
-- 是否动态：是
-- 描述：单个导出任务在单个 BE 上导出的最大数据量。
-- 引入版本：-
-
-##### export_task_pool_size
-
-- 默认值：5
-- 类型：Int
-- 单位：-
-- 是否动态：否
-- 描述：导出任务线程池的大小。
-- 引入版本：-
-
-##### export_checker_interval_second
-
-- 默认值：5
-- 类型：Int
-- 单位：Seconds
-- 是否动态：否
-- 描述：导出作业调度器的调度间隔。
-- 引入版本：-
-
-##### export_running_job_num_limit
-
-- 默认值：5
-- 类型：Int
-- 单位：-
-- 是否动态：是
-- 描述：导出作业最大的运行数目。
-- 引入版本：-
-
 ##### empty_load_as_error
 
 - 默认值：true
@@ -2418,15 +1675,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：导入数据为空时，是否返回报错提示 `all partitions have no load data`。有效值：
   - `true`：当导入数据为空时，显示导入失败，并返回报错提示 `all partitions have no load data`。
   - `false`：当导入数据为空时，显示导入成功，并返回 `OK`，不返回报错提示。
-- 引入版本：-
-
-##### external_table_commit_timeout_ms
-
-- 默认值：10000
-- 类型：Int
-- 单位：Milliseconds
-- 是否动态：是
-- 描述：发布写事务到 StarRocks 外表的超时时长，单位为毫秒。默认值 `10000` 表示超时时长为 10 秒。
 - 引入版本：-
 
 ##### enable_sync_publish
@@ -2440,107 +1688,13 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
   - `FALSE`：在导入事务 publish 阶段异步执行 apply 任务，即在导入事务 publish 阶段 apply 任务提交之后立即返回导入事务 publish 成功，然而此时导入数据并不真正可查。这时并发的查询需要等到 apply 任务完成或者超时，才能继续执行。因此当导入任务一次导入的数据量比较大，或者导入频率较高时，关闭该参数会影响查询性能和稳定性。
 - 引入版本：v3.2.0
 
-<!--
-##### stream_load_task_keep_max_num
-
-- 默认值：1000
-- 类型：Int
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### stream_load_task_keep_max_second
-
-- 默认值：3 * 24 * 3600
-- 类型：Int
-- 单位：Seconds
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-##### label_clean_interval_second
-
-- 默认值：4 * 3600
-- 类型：Int
-- 单位：Seconds
-- 是否动态：否
-- 描述：作业标签的清理间隔。建议清理间隔尽量短，从而确保历史作业的标签能够及时清理掉。
-- 引入版本：-
-
-<!--
-##### task_check_interval_second
-
-- 默认值：3600
-- 类型：Int
-- 单位：Seconds
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### task_ttl_second
-
-- 默认值：24 * 3600
-- 类型：Int
-- 单位：Seconds
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### task_runs_ttl_second
-
-- 默认值：24 * 3600
-- 类型：Int
-- 单位：Seconds
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### task_runs_max_history_number
+##### external_table_commit_timeout_ms
 
 - 默认值：10000
 - 类型：Int
-- 单位：-
+- 单位：Milliseconds
 - 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-##### transaction_clean_interval_second
-
-- 默认值：30
-- 类型：Int
-- 单位：Seconds
-- 是否动态：否
-- 描述：已结束事务的清理间隔。建议清理间隔尽量短，从而确保已完成的事务能够及时清理掉。
-- 引入版本：-
-
-
-##### transaction_stream_load_coordinator_cache_capacity
-
-- 默认值：4096
-- 类型：Int
-- 单位：-
-- 是否动态：是
-- 描述：存储事务标签到coordinator节点映射的缓存容量。
-- 引入版本：-
-
-##### transaction_stream_load_coordinator_cache_expire_seconds
-
-- 默认值：900
-- 类型：Int
-- 单位：-
-- 是否动态：是
-- 描述：事务标签与coordinator节点映射关系在缓存中的存活时间(TTL)。
+- 描述：发布写事务到 StarRocks 外表的超时时长，单位为毫秒。默认值 `10000` 表示超时时长为 10 秒。
 - 引入版本：-
 
 ##### enable_file_bundling
@@ -2552,15 +1706,42 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：是否为云原生表启用 File Bundling 优化功能。当启用该功能（设置为 `true`）时，系统会自动将导入、Compaction 或 Publish 操作生成的数据文件进行打包，从而减少因频繁访问外部存储系统而产生的 API 成本。您还可以通过 CREATE TABLE 语句的 `file_bundling` 属性在表级别控制此行为。有关详细说明，请参阅 [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md)。
 - 引入版本：v4.0
 
+##### routine_load_unstable_threshold_second
+
+- 默认值：3600
+- 类型：Long
+- 单位：Seconds
+- 是否动态：是
+- 描述：Routine Load 导入作业的任一导入任务消费延迟，即正在消费的消息时间戳与当前时间的差值超过该阈值，且数据源中存在未被消费的消息，则导入作业置为 UNSTABLE 状态。
+- 引入版本：-
+
 ### 存储
 
-##### default_replication_num
+##### tablet_create_timeout_second
 
-- 默认值：3
-- 类型：Short
-- 单位：-
+- 默认值：10
+- 类型：Int
+- 单位：Seconds
 - 是否动态：是
-- 描述：用于配置分区默认的副本数。如果建表时指定了 `replication_num` 属性，则该属性优先生效；如果建表时未指定 `replication_num`，则配置的 `default_replication_num` 生效。建议该参数的取值不要超过集群内 BE 节点数。
+- 描述：创建 tablet 的超时时长。自 v3.1 版本起，默认值由 1 改为 10。
+- 引入版本：-
+
+##### tablet_delete_timeout_second
+
+- 默认值：2
+- 类型：Int
+- 单位：Seconds
+- 是否动态：是
+- 描述：删除 tablet 的超时时长。
+- 引入版本：-
+
+##### alter_table_timeout_second
+
+- 默认值：86400
+- 类型：Int
+- 单位：Seconds
+- 是否动态：是
+- 描述：Schema Change 超时时间。
 - 引入版本：-
 
 ##### enable_strict_storage_medium_check
@@ -2581,35 +1762,14 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：删除表/数据库之后，元数据在回收站中保留的时长，超过这个时长，数据就不可以通过[RECOVER](../../sql-reference/sql-statements/backup_restore/RECOVER.md) 语句恢复。
 - 引入版本：-
 
-##### enable_auto_tablet_distribution
+##### check_consistency_default_timeout_second
 
-- 默认值：true
-- 类型：Boolean
-- 单位：-
+- 默认值：600
+- 类型：Long
+- 单位：Seconds
 - 是否动态：是
-- 描述：是否开启自动设置分桶功能。
-  - 设置为 `true` 表示开启，您在建表或新增分区时无需指定分桶数目，StarRocks 自动决定分桶数量。自动设置分桶数目的策略，请参见[设置分桶数量](../../table_design/data_distribution/Data_distribution.md#设置分桶数量)。
-  - 设置为 `false` 表示关闭，您在建表时需要手动指定分桶数量。
-  - 新增分区时，如果您不指定分桶数量，则新分区的分桶数量继承建表时候的分桶数量。当然您也可以手动指定新增分区的分桶数量。
-- 引入版本：v2.5.7
-
-##### enable_experimental_rowstore
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：是否开启[行列混存表](../../table_design/hybrid_table.md)功能。
-- 引入版本：v3.2.3
-
-##### enable_experimental_gin
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：是否开启[全文倒排索引](../../table_design/indexes/inverted_index.md)功能。
-- 引入版本：v3.3.0
+- 描述：副本一致性检测的超时时间。
+- 引入版本：-
 
 ##### storage_usage_soft_limit_percent
 
@@ -2651,63 +1811,13 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：单个 BE 存储目录剩余空间硬限制。如果 BE 存储目录下剩余空间小于该值且空间使用率超过 `storage_usage_hard_limit_percent`，StarRocks 会拒绝 Load 和 Restore 作业。需要同步修改 BE 配置 `storage_flood_stage_left_capacity_bytes` 以使其生效。
 - 引入版本：-
 
-##### alter_table_timeout_second
+##### tablet_stat_update_interval_second
 
-- 默认值：86400
+- 默认值：300
 - 类型：Int
 - 单位：Seconds
-- 是否动态：是
-- 描述：Schema Change 超时时间。
-- 引入版本：-
-
-##### enable_fast_schema_evolution
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：是否开启集群内所有表的 fast schema evolution，取值：`TRUE` 或 `FALSE`。开启后增删列时可以提高 Schema Change 速度并降低资源使用。
-- 引入版本：v3.2.0
-
-> **说明**
->
-> - StarRocks 存算分离集群自 v3.3.0 起支持该参数。
-> - 如果您需要为某张表设置该配置，例如关闭该表的 fast schema evolution，则可以在建表时设置表属性 [`fast_schema_evolution`](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md#设置-fast-schema-evolution)。
-
-##### recover_with_empty_tablet
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：在 Tablet 副本丢失/损坏时，是否使用空的 Tablet 代替。这样可以保证在有 Tablet 副本丢失/损坏时，查询依然能被执行（但是由于缺失了数据，结果可能是错误的）。默认为 `false`，表示不进行替代，查询会失败。
-- 引入版本：-
-
-##### tablet_create_timeout_second
-
-- 默认值：10
-- 类型：Int
-- 单位：Seconds
-- 是否动态：是
-- 描述：创建 tablet 的超时时长。自 v3.1 版本起，默认值由 1 改为 10。
-- 引入版本：-
-
-##### tablet_delete_timeout_second
-
-- 默认值：2
-- 类型：Int
-- 单位：Seconds
-- 是否动态：是
-- 描述：删除 tablet 的超时时长。
-- 引入版本：-
-
-##### check_consistency_default_timeout_second
-
-- 默认值：600
-- 类型：Long
-- 单位：Seconds
-- 是否动态：是
-- 描述：副本一致性检测的超时时间。
+- 是否动态：否
+- 描述：FE 向每个 BE 请求收集 Tablet 统计信息的时间间隔。
 - 引入版本：-
 
 ##### tablet_sched_slot_num_per_path
@@ -2750,39 +1860,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：是否禁用 Colocate Table 的副本均衡。
 - 引入版本：-
 
-<!--
-##### tablet_sched_disable_colocate_overall_balance
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### tablet_sched_colocate_balance_high_prio_backends
-
-- 默认值：{}
-- 类型：Long[]
-- Unit:
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### tablet_sched_always_force_decommission_replica
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
 ##### tablet_sched_be_down_tolerate_time_s
 
 - 默认值：900
@@ -2791,17 +1868,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否动态：是
 - 描述：调度器容忍 BE 节点保持不存活状态的最长时间。超时之后该节点上的 Tablet 会被迁移到其他存活的 BE 节点上。
 - 引入版本：2.5.7
-
-<!--
-##### tablet_sched_colocate_be_down_tolerate_time_s
-
-- 默认值：12 * 3600
-- 类型：Long
-- 单位：Seconds
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
 
 ##### tablet_sched_max_balancing_tablets
 
@@ -2841,16 +1907,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否动态：是
 - 描述：用于判断 BE 负载是否均衡的百分比阈值。如果一个 BE 的负载低于所有 BE 的平均负载，且差值大于该阈值，则认为该 BE 处于低负载状态。相反，如果一个 BE 的负载比平均负载高且差值大于该阈值，则认为该 BE 处于高负载状态。
 - 引入版本：-
-
-##### tablet_sched_num_based_balance_threshold_ratio
-
-- 默认值：0.5
-- 别名：-
-- 类型：Double
-- 单位：-
-- 是否动态：是
-- 描述：做分布均衡时可能会打破磁盘大小均衡，但磁盘间的最大差距不能超过tablet_sched_num_based_balance_threshold_ratio * table_sched_balance_load_score_threshold。 如果集群中存在不断从 A 到 B、从 B 到 A 的克隆，请减小该值。 如果希望tablet分布更加均衡，请调大该值。
-- 引入版本：3.1
 
 ##### tablet_sched_balance_load_disk_safe_threshold
 
@@ -2892,87 +1948,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：克隆 Tablet 的最大超时时间。
 - 引入版本：-
 
-<!--
-##### tablet_sched_checker_interval_seconds
+##### tablet_sched_num_based_balance_threshold_ratio
 
-- 默认值：20
-- 类型：Int
-- 单位：Seconds
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### tablet_sched_max_migration_task_sent_once
-
-- 默认值：1000
-- 类型：Int
-- Unit:
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### tablet_sched_consecutive_full_clone_delay_sec
-
-- 默认值：180
-- 类型：Long
-- 单位：Seconds
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### tablet_report_drop_tablet_delay_sec
-
-- 默认值：120
-- 类型：Long
-- 单位：Seconds
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### tablet_checker_partition_batch_num
-
-- 默认值：500
-- 类型：Int
+- 默认值：0.5
+- 别名：-
+- 类型：Double
 - 单位：-
 - 是否动态：是
-- 描述：
-- 引入版本：-
--->
+- 描述：做分布均衡时可能会打破磁盘大小均衡，但磁盘间的最大差距不能超过tablet_sched_num_based_balance_threshold_ratio * table_sched_balance_load_score_threshold。 如果集群中存在不断从 A 到 B、从 B 到 A 的克隆，请减小该值。 如果希望tablet分布更加均衡，请调大该值。
+- 引入版本：3.1
 
-##### tablet_stat_update_interval_second
+##### recover_with_empty_tablet
 
-- 默认值：300
-- 类型：Int
-- 单位：Seconds
-- 是否动态：否
-- 描述：FE 向每个 BE 请求收集 Tablet 统计信息的时间间隔。
-- 引入版本：-
-
-##### max_automatic_partition_number
-
-- 默认值：4096
-- 类型：Int
+- 默认值：false
+- 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：系统自动创建分区数量上限。
-- 引入版本：v3.1
-
-##### auto_partition_max_creation_number_per_load
-
-- 默认值：4096
-- 类型：Int
-- 单位：-
-- 是否动态：是
-- 描述：单个导入任务在表达式分区表中最多可以创建的分区数量。
-- 引入版本：v3.3.2
+- 描述：在 Tablet 副本丢失/损坏时，是否使用空的 Tablet 代替。这样可以保证在有 Tablet 副本丢失/损坏时，查询依然能被执行（但是由于缺失了数据，结果可能是错误的）。默认为 `false`，表示不进行替代，查询会失败。
+- 引入版本：-
 
 ##### max_partition_number_per_table
 
@@ -2982,6 +1975,50 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否动态：是
 - 描述：单个表中最多可以创建的分区数量。
 - 引入版本：v3.3.2
+
+##### enable_experimental_rowstore
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否开启[行列混存表](../../table_design/hybrid_table.md)功能。
+- 引入版本：v3.2.3
+
+##### enable_auto_tablet_distribution
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否开启自动设置分桶功能。
+  - 设置为 `true` 表示开启，您在建表或新增分区时无需指定分桶数目，StarRocks 自动决定分桶数量。自动设置分桶数目的策略，请参见[设置分桶数量](../../table_design/data_distribution/Data_distribution.md#设置分桶数量)。
+  - 设置为 `false` 表示关闭，您在建表时需要手动指定分桶数量。
+  - 新增分区时，如果您不指定分桶数量，则新分区的分桶数量继承建表时候的分桶数量。当然您也可以手动指定新增分区的分桶数量。
+- 引入版本：v2.5.7
+
+##### default_replication_num
+
+- 默认值：3
+- 类型：Short
+- 单位：-
+- 是否动态：是
+- 描述：用于配置分区默认的副本数。如果建表时指定了 `replication_num` 属性，则该属性优先生效；如果建表时未指定 `replication_num`，则配置的 `default_replication_num` 生效。建议该参数的取值不要超过集群内 BE 节点数。
+- 引入版本：-
+
+##### enable_fast_schema_evolution
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否开启集群内所有表的 fast schema evolution，取值：`TRUE` 或 `FALSE`。开启后增删列时可以提高 Schema Change 速度并降低资源使用。
+- 引入版本：v3.2.0
+
+> **说明**
+>
+> - StarRocks 存算分离集群自 v3.3.0 起支持该参数。
+> - 如果您需要为某张表设置该配置，例如关闭该表的 fast schema evolution，则可以在建表时设置表属性 [`fast_schema_evolution`](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md#设置-fast-schema-evolution)。
 
 ##### max_bucket_number_per_partition
 
@@ -3020,6 +2057,32 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 - 引入版本：-
 
+##### shard_group_clean_threshold_sec
+
+- 默认值：3600
+- 类型：Long
+- 单位：秒
+- 是否动态：是
+- 描述：存算分离集群中，FE 清理未使用的 Tablet 和 Shard Group 的时间阈值。在此时间阈值内创建的 Tablet 和 Shard Group 不会被自动清理。
+- 引入版本：-
+
+##### star_mgr_meta_sync_interval_sec
+
+- 默认值：600
+- 类型：Long
+- 单位：秒
+- 是否动态：否
+- 描述：存算分离集群下 FE 与 StarMgr 定期同步元数据的时间间隔。
+- 引入版本：-
+
+##### meta_sync_force_delete_shard_meta
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否允许直接删除存算分离集群元数据，不清理远程存储上对应的数据。建议只在存算分离集群中待清理 Shard 数量过多，导致 FE 节点 JVM 内存压力过大的情况下将此项设为 `true`。注意，开启此功能会导致元数据被清理的 Shard 对应在远程存储上的数据文件无法被自动清理。
+- 引入版本：v3.2.10, v3.3.3
 
 ##### cloud_native_meta_port
 
@@ -3030,7 +2093,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：云原生元数据服务监听端口。
 - 引入版本：-
 
-
 ##### enable_load_volume_from_conf
 
 - 默认值：false
@@ -3039,7 +2101,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否动态：否
 - 描述：是否允许 StarRocks 使用 FE 配置文件中指定的存储相关属性创建默认存储卷。自 v3.4.1 起，默认值由 `true` 变为 `false`。
 - 引入版本：v3.1.0
-
 
 ##### cloud_native_storage_type
 
@@ -3243,15 +2304,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：用于授权 Azure Data Lake Storage Gen2 请求的 Managed Identity 的 Client ID。
 - 引入版本：v3.4.4
 
-##### azure_use_native_sdk
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：是否使用 Native SDK 访问 Azure Blob Storage，从而允许使用 Managed Identity 和 Service Principal 进行身份验证。如果该项设置为 `false`，则只允许使用 Shared Key 和 SAS 令牌进行身份验证。
-- 引入版本：v3.4.4
-
 ##### gcp_gcs_path
 
 - 默认值：空字符串
@@ -3259,42 +2311,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位：-
 - 是否动态：否
 - 描述：用于存储数据的 Google Storage 路径。它由 Google Storage 存储桶的名称及其下的子路径（如有）组成，例如，`testbucket/subpath`。
-- 引入版本：v3.5.1
-
-##### gcp_gcs_service_account_email
-
-- 默认值：空字符串
-- 类型：String
-- 单位：-
-- 是否动态：否
-- 描述：创建 Service Account 时生成的 JSON 文件中的 Email。示例：`user@hello.iam.gserviceaccount.com`。
-- 引入版本：v3.5.1
-
-##### gcp_gcs_service_account_private_key_id
-
-- 默认值：空字符串
-- 类型：String
-- 单位：-
-- 是否动态：否
-- 描述：创建 Service Account 时生成的 JSON 文件中的 Private Key ID。
-- 引入版本：v3.5.1
-
-##### gcp_gcs_service_account_private_key
-
-- 默认值：空字符串
-- 类型：String
-- 单位：-
-- 是否动态：否
-- 描述：创建 Service Account 时生成的 JSON 文件中的 Private Key。示例：`-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n`。
-- 引入版本：v3.5.1
-
-##### gcp_gcs_impersonation_service_account
-
-- 默认值：空字符串
-- 类型：String
-- 单位：-
-- 是否动态：否
-- 描述：如果使用基于模拟身份的身份验证，需要要模拟的 Service Account。
 - 引入版本：v3.5.1
 
 ##### gcp_gcs_use_compute_engine_service_account
@@ -3306,16 +2322,50 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：是否使用 Compute Engine 上面绑定的 Service Account。
 - 引入版本：v3.5.1
 
-<!--
-##### starmgr_grpc_timeout_seconds
+##### gcp_gcs_service_account_email
 
-- 默认值：5
-- 类型：Int
-- 单位：Seconds
+- 默认值：空字符串
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：创建 Service Account 时生成的 JSON 文件中的 Email。示例：`user@hello.iam.gserviceaccount.com`。
+- 引入版本：v3.5.1
+
+##### gcp_gcs_service_account_private_key
+
+- 默认值：空字符串
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：创建 Service Account 时生成的 JSON 文件中的 Private Key。示例：`-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n`。
+- 引入版本：v3.5.1
+
+##### gcp_gcs_service_account_private_key_id
+
+- 默认值：空字符串
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：创建 Service Account 时生成的 JSON 文件中的 Private Key ID。
+- 引入版本：v3.5.1
+
+##### gcp_gcs_impersonation_service_account
+
+- 默认值：空字符串
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：如果使用基于模拟身份的身份验证，需要要模拟的 Service Account。
+- 引入版本：v3.5.1
+
+##### azure_use_native_sdk
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
 - 是否动态：是
-- 描述：
-- 引入版本：-
--->
+- 描述：是否使用 Native SDK 访问 Azure Blob Storage，从而允许使用 Managed Identity 和 Service Principal 进行身份验证。如果该项设置为 `false`，则只允许使用 Shared Key 和 SAS 令牌进行身份验证。
+- 引入版本：v3.4.4
 
 ##### lake_compaction_score_selector_min_score
 
@@ -3346,6 +2396,15 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 描述：存算分离集群下在 Leader FE 节点内存中保留多少条最近成功的 Compaction 任务历史记录。您可以通过 `SHOW PROC '/compactions'` 命令查看最近成功的 Compaction 任务记录。请注意，Compaction 历史记录是保存在 FE 进程内存中的，FE 进程重启后历史记录会丢失。
 - 引入版本：v3.1.0
 
+##### lake_compaction_disable_ids
+
+- 默认值：""
+- 类型：String
+- 单位：-
+- 是否动态：是
+- 描述：禁止存算分离内表 compaction 的 table 或 partition id 名单。格式为 `tableId1;partitionId2`，id 之间用分号隔开，例如 `12345;98765`。
+- 引入版本：v3.4.4
+
 ##### lake_publish_version_max_threads
 
 - 默认值：512
@@ -3355,38 +2414,23 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 描述：存算分离集群下发送生效版本（Publish Version）任务的最大线程数。
 - 引入版本：v3.2.0
 
-<!--
-##### lake_publish_delete_txnlog_max_threads
+##### lake_enable_balance_tablets_between_workers
 
-- 默认值：16
-- 类型：Int
+- 默认值：true
+- 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：
-- 引入版本：-
--->
+- 描述：是否在存算分离集群内表的 Tablet 调度过程中平衡 CN 节点之间的 Tablet 数量。`true` 表示启用平衡 Tablet 数量，`false` 表示禁用此功能。
+- 引入版本：v3.3.4
 
-<!--
-##### lake_compaction_default_timeout_second
+##### lake_compaction_allow_partial_success
 
-- 默认值：86400
-- 类型：Int
-- 单位：Seconds
+- 默认值: true
+- 类型：Boolean
+- 单位：-
 - 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### lake_autovacuum_max_previous_versions
-
-- 默认值：0
-- 类型：Int
-- Unit:
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
+- 描述：如果该项设置为 `true`，存算分离集群中的 Compaction 操作即使只有其中一个子任务成功，系统也将认为操作成功。
+- 引入版本：v3.5.2
 
 ##### lake_autovacuum_parallel_partitions
 
@@ -3446,24 +2490,6 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 >
 > 当 `lake_ingest_slowdown_threshold` 比配置项 `lake_compaction_score_selector_min_score` 小时，实际生效的阈值会是 `lake_compaction_score_selector_min_score`。
 
-##### lake_ingest_slowdown_ratio
-
-- 默认值：0.1
-- 类型：Double
-- 单位：-
-- 是否动态：是
-- 描述：导入限速比例。
-
-  数据导入任务可以分为数据写入和数据提交（COMMIT）两个阶段，导入限速是通过延迟数据提交来达到限速的目的的，延迟比例计算公式为：`(compaction_score - lake_ingest_slowdown_threshold) * lake_ingest_slowdown_ratio`。例如，数据写入阶段耗时为 5 分钟，`lake_ingest_slowdown_ratio` 为 0.1，Compaction Score 比 `lake_ingest_slowdown_threshold` 多 10，那么延迟提交的时间为 `5 * 10 * 0.1 = 5` 分钟，相当于写入阶段的耗时由 5 分钟增加到了 10 分钟，平均导入速度下降了一倍。
-
-- 引入版本：v3.2.0
-
-> **说明**
->
-> - 如果一个导入任务同时向多个分区写入，那么会取所有分区的 Compaction Score 的最大值来计算延迟提交时间。
-> - 延迟提交的时间是在第一次尝试提交时计算的，一旦确定便不会更改，延迟时间一到，只要 Compaction Score 不超过 `lake_compaction_score_upper_bound`，系统都会执行数据提交（COMMIT）操作。
-> - 如果延迟之后的提交时间超过了导入任务的超时时间，那么导入任务会直接失败。
-
 ##### lake_compaction_score_upper_bound
 
 - 默认值：2000
@@ -3473,79 +2499,7 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 描述：表分区的 Compaction Score 的上限, `0` 表示没有上限。只有当 `lake_enable_ingest_slowdown` 设置为 `true` 后，该配置项才会生效。当表分区 Compaction Score 达到或超过该上限后，新的导入会被拒绝。自 v3.3.6 起，默认值由 `0` 变为 `2000`。
 - 引入版本：v3.2.0
 
-##### lake_compaction_disable_ids
-
-- 默认值：""
-- 类型：String
-- 单位：-
-- 是否动态：是
-- 描述：禁止存算分离内表 compaction 的 table 或 partition id 名单。格式为 `tableId1;partitionId2`，id 之间用分号隔开，例如 `12345;98765`。
-- 引入版本：v3.4.4
-
-##### lake_compaction_allow_partial_success
-
-- 默认值: true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：如果该项设置为 `true`，存算分离集群中的 Compaction 操作即使只有其中一个子任务成功，系统也将认为操作成功。
-- 引入版本：v3.5.2
-
-##### lake_enable_balance_tablets_between_workers
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：是否在存算分离集群内表的 Tablet 调度过程中平衡 CN 节点之间的 Tablet 数量。`true` 表示启用平衡 Tablet 数量，`false` 表示禁用此功能。
-- 引入版本：v3.3.4
-
-##### lake_balance_tablets_threshold
-
-- 默认值：0.15
-- 类型：Double
-- 单位：-
-- 是否动态：是
-- 描述：系统用于判断存算分离集群中 Worker 之间 Tablet 分布平衡的阈值，不平衡因子的计算公式为 `f = (MAX(tablets) - MIN(tablets)) / AVERAGE(tablets)`。如果该因子大于 `lake_balance_tablets_threshold`，则会触发节点间 Tablet 调度。此配置项仅在 `lake_enable_balance_tablets_between_workers` 设为 `true`时生效。
-- 引入版本：v3.3.4
-
-##### shard_group_clean_threshold_sec
-
-- 默认值：3600
-- 类型：Long
-- 单位：秒
-- 是否动态：是
-- 描述：存算分离集群中，FE 清理未使用的 Tablet 和 Shard Group 的时间阈值。在此时间阈值内创建的 Tablet 和 Shard Group 不会被自动清理。
-- 引入版本：-
-
-##### star_mgr_meta_sync_interval_sec
-
-- 默认值：600
-- 类型：Long
-- 单位：秒
-- 是否动态：否
-- 描述：存算分离集群下 FE 与 StarMgr 定期同步元数据的时间间隔。
-- 引入版本：-
-
-##### meta_sync_force_delete_shard_meta
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：是否允许直接删除存算分离集群元数据，不清理远程存储上对应的数据。建议只在存算分离集群中待清理 Shard 数量过多，导致 FE 节点 JVM 内存压力过大的情况下将此项设为 `true`。注意，开启此功能会导致元数据被清理的 Shard 对应在远程存储上的数据文件无法被自动清理。
-- 引入版本：v3.2.10, v3.3.3
-
 ### 其他
-
-##### tmp_dir
-
-- 默认值：StarRocksFE.STARROCKS_HOME_DIR + "/temp_dir"
-- 类型：String
-- 单位：-
-- 是否动态：否
-- 描述：临时文件的保存目录，例如备份和恢复过程中产生的临时文件。<br />这些过程完成以后，所产生的临时文件会被清除掉。
-- 引入版本：-
 
 ##### plugin_dir
 
@@ -3565,27 +2519,14 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 描述：是否开启了插件功能。只能在 Leader FE 安装/卸载插件。
 - 引入版本：-
 
-<!--
-##### profile_process_threads_num
+##### tmp_dir
 
-- 默认值：2
-- 类型：Int
+- 默认值：StarRocksFE.STARROCKS_HOME_DIR + "/temp_dir"
+- 类型：String
 - 单位：-
 - 是否动态：否
-- 描述：
+- 描述：临时文件的保存目录，例如备份和恢复过程中产生的临时文件。<br />这些过程完成以后，所产生的临时文件会被清除掉。
 - 引入版本：-
--->
-
-<!--
-##### profile_process_blocking_queue_size
-
-- 默认值：profile_process_threads_num * 128
-- 类型：Int
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
 
 ##### max_agent_task_threads_num
 
@@ -3605,170 +2546,25 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 描述：Agent task 重新发送前的等待时间。当代理任务的创建时间已设置，并且距离现在超过该值，才能重新发送代理任务。该参数用于防止过于频繁的代理任务发送。
 - 引入版本：-
 
-<!--
-##### start_with_incomplete_meta
+##### mv_create_partition_batch_interval_ms
 
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### max_backend_down_time_second
-
-- 默认值：3600
-- 类型：Int
-- 单位：Seconds
+- 默认值：1000
+- 类型：布尔值
+- 单位：ms
 - 是否动态：是
-- 描述：
-- 引入版本：-
--->
+- 描述：在物化视图刷新时，如果需要一次性创建多个分区，系统将每 64 个分区划分为一个批次进行创建。为了降低因频繁创建导致失败的风险，系统在不同批次之间设置了默认的间隔时间（单位为毫秒），用于控制创建频率。
+- 引入版本：v3.3.0
 
-<!--
-##### lake_enable_batch_publish_version 
+##### transform_type_prefer_string_for_varchar
 
 - 默认值：true
-- 类型：Boolean
+- 类型：布尔值
 - 单位：-
 - 是否动态：是
-- 描述：
-- 引入版本：-
--->
+- 描述：在物化视图创建和 CTAS 操作中，是否优先对固定长度的 VARCHAR 列使用 STRING 类型。
+- 引入版本：v4.0.0
 
-<!--
-##### lake_batch_publish_max_version_num
-
-- 默认值：10
-- 类型：Int
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### lake_batch_publish_min_version_num
-
-- 默认值：1
-- 类型：Int
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### capacity_used_percent_high_water
-
-- 默认值：0.75
-- 类型：Double
-- Unit:
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### alter_max_worker_threads
-
-- 默认值：4
-- 类型：Int
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### alter_max_worker_queue_size
-
-- 默认值：4096
-- 类型：Int
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### task_runs_queue_length
-
-- 默认值：500
-- 类型：Int
-- Unit:
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### task_runs_concurrency
-
-- 默认值：4
-- 类型：Int
-- Unit:
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### max_task_runs_threads_num
-
-- 默认值：512
-- 类型：Int
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### consistency_check_start_time
-
-- 默认值：23
-- 类型：String
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### consistency_check_end_time
-
-- 默认值：4
-- 类型：String
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### consistency_tablet_meta_check_interval_ms
-
-- 默认值：2 * 3600 * 1000
-- 类型：Long
-- 单位：Milliseconds
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### backup_plugin_path (Deprecated)
-
-- 默认值：/tools/trans_file_tool/trans_files.sh
-- 类型：String
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
+<EditionSpecificFEItem />
 
 ##### backup_job_default_timeout_ms
 
@@ -3788,37 +2584,6 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 描述：FE 所使用的字符集。
 - 引入版本：-
 
-<!--
-##### db_used_data_quota_update_interval_secs
-
-- 默认值：300
-- 类型：Int
-- Unit:
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### disable_hadoop_load
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-##### report_queue_size (Deprecated)
-
-- 默认值：100
-- 类型：Int
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
-
 ##### enable_metric_calculator
 
 - 默认值：true
@@ -3827,28 +2592,6 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 是否动态：否
 - 描述：是否开启定期收集指标 (Metrics) 的功能。取值范围：`TRUE` 和 `FALSE`。`TRUE` 表示开该功能。`FALSE`表示关闭该功能。
 - 引入版本：-
-
-<!--
-##### enable_replicated_storage_as_default_engine
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### enable_schedule_insert_query_by_row_count
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
 
 ##### max_small_file_number
 
@@ -3876,39 +2619,6 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 是否动态：否
 - 描述：小文件的根目录。
 - 引入版本：-
-
-<!--
-##### enable_starrocks_external_table_auth_check
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### authorization_enable_column_level_privilege
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### authentication_chain
-
-- 默认值：{AUTHENTICATION_CHAIN_MECHANISM_NATIVE}
-- 类型：String[]
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
 
 ##### authentication_ldap_simple_server_host
 
@@ -3963,6 +2673,312 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 是否动态：是
 - 描述：检索用户时，使用的管理员账号的密码。
 - 引入版本：-
+
+##### auth_token
+
+- 默认值：空字符串
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：用于内部身份验证的集群令牌。为空则在 Leader FE 第一次启动时随机生成一个。
+- 引入版本：-
+
+##### hive_meta_load_concurrency
+
+- 默认值：4
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：Hive 元数据支持的最大并发线程数。
+- 引入版本：-
+
+##### hive_meta_cache_refresh_interval_s
+
+- 默认值：3600 * 2
+- 类型：Long
+- 单位：Seconds
+- 是否动态：否
+- 描述：刷新 Hive 外表元数据缓存的时间间隔。
+- 引入版本：-
+
+##### hive_meta_store_timeout_s
+
+- 默认值：10
+- 类型：Long
+- 单位：Seconds
+- 是否动态：否
+- 描述：连接 Hive Metastore 的超时时间。
+- 引入版本：-
+
+##### es_state_sync_interval_second
+
+- 默认值：10
+- 类型：Long
+- 单位：Seconds
+- 是否动态：否
+- 描述：FE 获取 Elasticsearch Index 和同步 StarRocks 外部表元数据的时间间隔。
+- 引入版本：-
+
+##### query_detail_explain_level
+
+- 默认值：COSTS
+- 类型：String
+- 单位：-
+- 是否动态：是
+- 描述：EXPLAIN 语句返回的查询计划的解释级别。有效值：COSTS、NORMAL、VERBOSE。
+- 引入版本：v3.2.12，v3.3.5
+
+##### max_upload_task_per_be
+
+- 默认值：0
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：单次 BACKUP 操作下，系统向单个 BE 节点下发的最大上传任务数。设置为小于或等于 0 时表示不限制任务数。
+- 引入版本：v3.1.0
+
+##### max_download_task_per_be
+
+- 默认值：0
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：单次 RESTORE 操作下，系统向单个 BE 节点下发的最大下载任务数。设置为小于或等于 0 时表示不限制任务数。
+- 引入版本：v3.1.0
+
+##### max_mv_check_base_table_change_retry_times
+
+- 默认值：10
+- 类型：整数
+- 单位：-
+- 是否动态：是
+- 描述：刷新物化视图时，检测基表变更的最大重试次数。
+- 引入版本：v3.3.0
+
+##### max_mv_refresh_failure_retry_times
+
+- 默认值：1
+- 类型：整数
+- 单位：-
+- 是否动态：是
+- 描述：物化视图刷新失败时的最大重试次数。
+- 引入版本：v3.3.0
+
+##### max_mv_refresh_try_lock_failure_retry_times
+
+- 默认值：3
+- 类型：整数
+- 单位：-
+- 是否动态：是
+- 描述：物化视图刷新过程中尝试加锁失败时的最大重试次数。
+- 引入版本：v3.3.0
+
+##### mv_refresh_try_lock_timeout_ms
+
+- 默认值：30000
+- 类型：整数
+- 单位：ms
+- 是否动态：是
+- 描述：物化视图刷新尝试获取基表或物化视图数据库锁的默认超时时间（单位为毫秒）。
+- 引入版本：v3.3.0
+
+##### enable_mv_refresh_collect_profile
+
+- 默认值：false
+- 类型：布尔值
+- 单位：-
+- 是否动态：是
+- 描述：是否为所有物化视图默认启用刷新时的 Profile 信息收集。
+- 引入版本：v3.3.0
+
+##### enable_mv_refresh_extra_prefix_logging
+
+- 默认值：true
+- 类型：布尔值
+- 单位：-
+- 是否动态：是
+- 描述：是否启用附加物化视图名称前缀的日志记录，用于提升调试能力。
+- 引入版本：v3.4.0
+
+##### enable_mv_query_context_cache
+
+- 默认值：true
+- 类型：Boolean
+- Unit:
+- 是否动态：是
+- 描述：是否开启Query级别的用于透明加速改写的物化视图Cache，用于加速改写性能。
+- 引入版本： v3.3
+
+##### mv_refresh_fail_on_filter_data
+
+- 默认值：true
+- 类型：布尔值
+- 单位：-
+- 是否动态：是
+- 描述：当物化视图刷新过程中存在被过滤的数据时，刷新会失败（默认值为 true）。如果设置为 false，则会忽略被过滤的数据并返回刷新成功。
+- 引入版本：-
+
+##### mv_refresh_default_planner_optimize_timeout
+
+- 默认值：30000
+- 类型：整数
+- 单位：ms
+- 是否动态：是
+- 描述：刷新物化视图时优化器规划阶段的默认超时时间（单位为毫秒），默认 30 秒。
+- 引入版本：v3.3.0
+
+##### enable_mv_refresh_query_rewrite
+
+- 默认值：false
+- 类型：布尔值
+- 单位：-
+- 是否动态：是
+- 描述：是否开启物化视图刷新时的查询改写功能，从而可以使用重写后的物化视图代替原始基表以提升性能。
+- 引入版本：v3.3.0
+
+##### enable_mv_post_image_reload_cache
+
+- 默认值：true
+- 类型：布尔值
+- 单位：-
+- 是否动态：是
+- 描述：FE 加载镜像后是否进行重载标志检测。如果某个 Base MV 已完成重载，其他依赖它的 MV 则无需再次重载。
+- 引入版本：v3.5.0
+
+##### mv_plan_cache_expire_interval_sec
+
+- 默认值：24 * 60 * 60
+- 类型：Long
+- 单位：Seconds
+- 是否动态：是
+- 描述：用于MV Plan缓存过期时间间隔（单位：秒），默认一天。
+- 引入版本： v3.2
+
+##### mv_plan_cache_thread_pool_size
+
+- 默认值：3
+- 类型：Int
+- Unit:
+- 是否动态：是
+- 描述：用于物化视图改写的 MV 计划缓存的默认线程池大小，默认3个。
+- 引入版本： v3.2
+
+##### mv_plan_cache_max_size
+
+- 默认值：1000
+- 类型：Long
+- Unit:
+- 是否动态：是
+- 描述：用于物化视图改写的 MV 计划缓存的最大大小。如果存在大量用于透明改写的物化视图，可以考虑增加此配置项的大小。默认1000个。
+- 引入版本： v3.2
+
+##### allow_system_reserved_names
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否允许用户创建以 `__op` 或 `__row` 开头命名的列。TRUE 表示启用此功能。请注意，在 StarRocks 中，这样的列名被保留用于特殊目的，创建这样的列可能导致未知行为，因此系统默认禁止使用这类名字。
+- 引入版本：v3.2.0
+
+##### replication_interval_ms
+
+- 默认值：100
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：调度执行同步任务的最小时间间隔。
+- 引入版本：v3.3.5
+
+##### replication_max_parallel_table_count
+
+- 默认值：100
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：允许并发执行的数据同步任务数。StarRocks 为一张表创建一个同步任务。
+- 引入版本：v3.3.5
+
+##### replication_max_parallel_replica_count
+
+- 默认值：10240
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：允许并发同步的 Tablet 副本数。
+- 引入版本：v3.3.5
+
+##### replication_max_parallel_data_size_mb
+
+- 默认值：1048576
+- 类型：Int
+- 单位：MB
+- 是否动态：是
+- 描述：允许并发同步的数据量。
+- 引入版本：v3.3.5
+
+##### replication_transaction_timeout_sec
+
+- 默认值：86400
+- 类型：Int
+- 单位：Seconds
+- 是否动态：是
+- 描述：同步任务的超时时间。
+- 引入版本：v3.3.5
+
+##### jdbc_meta_default_cache_enable
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：JDBC Catalog 元数据缓存是否开启的默认值。当设置为 `TRUE` 时，新创建的 JDBC Catalog 会默认开启元数据缓存。
+- 引入版本：-
+
+##### jdbc_meta_default_cache_expire_sec
+
+- 默认值：600
+- 类型：Long
+- 单位：Seconds
+- 是否动态：是
+- 描述：JDBC Catalog 元数据缓存的默认过期时间。当 `jdbc_meta_default_cache_enable` 设置为 `TRUE` 时，新创建的 JDBC Catalog 会默认设置元数据缓存的过期时间。
+- 引入版本：-
+
+##### jdbc_connection_pool_size
+
+- 默认值：8
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：访问 JDBC Catalog 时，JDBC Connection Pool 的容量上限。
+- 引入版本：-
+
+##### jdbc_minimum_idle_connections
+
+- 默认值：1
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：访问 JDBC Catalog 时，JDBC Connection Pool 中处于 idle 状态的连接最低数量。
+- 引入版本：-
+
+##### jdbc_connection_idle_timeout_ms
+
+- 默认值：600000
+- 类型：Int
+- 单位：Milliseconds
+- 是否动态：否
+- 描述：访问 JDBC Catalog 时，连接建立的超时时长。超过参数取值时间的连接被认为是 idle 状态。
+- 引入版本：-
+
+##### enable_colocate_restore
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否为 Colocate 表启用备份恢复。`true` 表示启用 Colocate 表备份恢复，`false` 表示禁用。
+- 引入版本：v3.2.10、v3.3.3
 
 ##### jwt_jwks_url
 
@@ -4081,1450 +3097,8 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 描述：用于标识 JWT 中受众 (`aud`) 的字符串列表。仅当列表中的某个值与 JWT 受众匹配时，JWT 才被视为有效。
 - 引入版本：v3.5.0
 
-<!--
-##### enable_token_check
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-##### auth_token
-
-- 默认值：空字符串
-- 类型：String
-- 单位：-
-- 是否动态：否
-- 描述：用于内部身份验证的集群令牌。为空则在 Leader FE 第一次启动时随机生成一个。
-- 引入版本：-
-
-<!--
-##### enable_authentication_kerberos
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### authentication_kerberos_service_principal
-
-- 默认值：空字符串
-- 类型：String
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### authentication_kerberos_service_key_tab
-
-- 默认值：空字符串
-- 类型：String
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### authorization_enable_admin_user_protection
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### authorization_enable_priv_collection_cache
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### max_partition_number_per_table
-
-- 默认值：100000
-- 类型：Long
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### enable_automatic_bucket
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### default_automatic_bucket_size
-
-- 默认值：4 * 1024 * 1024 * 1024
-- 类型：Long
-- Unit:
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### max_agent_tasks_send_per_be
-
-- 默认值：10000
-- 类型：Int
-- Unit:
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### hive_meta_cache_refresh_min_threads
-
-- 默认值：50
-- 类型：Int
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-##### hive_meta_load_concurrency
-
-- 默认值：4
-- 类型：Int
-- 单位：-
-- 是否动态：否
-- 描述：Hive 元数据支持的最大并发线程数。
-- 引入版本：-
-
-##### hive_meta_cache_refresh_interval_s
-
-- 默认值：3600 * 2
-- 类型：Long
-- 单位：Seconds
-- 是否动态：否
-- 描述：刷新 Hive 外表元数据缓存的时间间隔。
-- 引入版本：-
-
-<!--
-##### hive_meta_cache_ttl_s
-
-- 默认值：3600 * 24
-- 类型：Long
-- 单位：Seconds
-- 是否动态：否
-- 描述：Hive 外表元数据缓存的失效时间。
-- 引入版本：-
--->
-
-<!--
-##### remote_file_cache_ttl_s
-
-- 默认值：3600 * 36
-- 类型：Long
-- 单位：Seconds
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### max_hive_partitions_per_rpc
-
-- 默认值：5000
-- 类型：Int
-- Unit:
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### remote_file_cache_refresh_interval_s
-
-- 默认值：60
-- 类型：Long
-- 单位：Seconds
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### remote_file_metadata_load_concurrency
-
-- 默认值：32
-- 类型：Int
-- Unit:
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-##### hive_meta_store_timeout_s
-
-- 默认值：10
-- 类型：Long
-- 单位：Seconds
-- 是否动态：否
-- 描述：连接 Hive Metastore 的超时时间。
-- 引入版本：-
-
-<!--
-##### enable_hms_events_incremental_sync
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### hms_events_polling_interval_ms
-
-- 默认值：5000
-- 类型：Int
-- 单位：Milliseconds
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### hms_events_batch_size_per_rpc
-
-- 默认值：500
-- 类型：Int
-- Unit:
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### enable_hms_parallel_process_evens
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### hms_process_events_parallel_num
-
-- 默认值：4
-- 类型：Int
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### hive_max_split_size
-
-- 默认值：64 * 1024 * 1024
-- 类型：Long
-- Unit:
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### enable_refresh_hive_partitions_statistics
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### enable_iceberg_custom_worker_thread
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### iceberg_worker_num_threads
-
-- 默认值：Runtime.getRuntime().availableProcessors()
-- 类型：Long
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### iceberg_table_refresh_threads
-
-- 默认值：128
-- 类型：Int
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### iceberg_table_refresh_expire_sec
-
-- 默认值：86400
-- 类型：Int
-- 单位：Seconds
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### iceberg_metadata_cache_disk_path
-
-- 默认值：StarRocksFE.STARROCKS_HOME_DIR + "/caches/iceberg"
-- 类型：String
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### iceberg_metadata_memory_cache_capacity
-
-- 默认值：536870912
-- 类型：Long
-- Unit:
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### iceberg_metadata_memory_cache_expiration_seconds
-
-- 默认值：86500
-- 类型：Long
-- 单位：Seconds
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### enable_iceberg_metadata_disk_cache
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### iceberg_metadata_disk_cache_capacity
-
-- 默认值：2147483648
-- 类型：Long
-- Unit:
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### iceberg_metadata_disk_cache_expiration_seconds
-
-- 默认值：7 * 24 * 60 * 60
-- 类型：Long
-- 单位：Seconds
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### iceberg_metadata_cache_max_entry_size
-
-- 默认值：8388608
-- 类型：Long
-- Unit:
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-##### es_state_sync_interval_second
-
-- 默认值：10
-- 类型：Long
-- 单位：Seconds
-- 是否动态：否
-- 描述：FE 获取 Elasticsearch Index 和同步 StarRocks 外部表元数据的时间间隔。
-- 引入版本：-
-
-<!--
-##### broker_client_timeout_ms
-
-- 默认值：120000
-- 类型：Int
-- 单位：Milliseconds
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### vectorized_load_enable (Deprecated)
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### enable_pipeline_load (Deprecated)
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### enable_shuffle_load
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### eliminate_shuffle_load_by_replicated_storage
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### enable_vectorized_file_load (Deprecated)
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### enable_routine_load_lag_metrics
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### query_detail_cache_time_nanosecond
-
-- 默认值：30000000000
-- 类型：Long
-- Unit:
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### min_routine_load_lag_for_metrics
-
-- 默认值：10000
-- 类型：Long
-- Unit:
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### heartbeat_timeout_second
-
-- 默认值：5
-- 类型：Int
-- 单位：Seconds
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### heartbeat_retry_times
-
-- 默认值：3
-- 类型：Int
-- Unit:
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### enable_display_shadow_partitions
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### enable_dict_optimize_routine_load
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### enable_dict_optimize_stream_load
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### enable_validate_password
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### enable_password_reuse
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### quorum_publish_wait_time_ms
-
-- 默认值：5000
-- 别名：quorom_publish_wait_time_ms
-- 类型：Int
-- 单位：Milliseconds
-- 是否动态：是
-- 描述：等待该参数指定的时间后，才能执行 Quorum publish。可以增加该参数值来避免不必要的 Clone。
-- 引入版本：v3.1
--->
-
-<!--
-##### metadata_journal_queue_size
-
-- 默认值：1000
-- 类型：Int
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### metadata_journal_max_batch_size_mb
-
-- 默认值：10
-- 类型：Int
-- 单位：MB
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### metadata_journal_max_batch_cnt
-
-- 默认值：100
-- 类型：Int
-- Unit:
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### jaeger_grpc_endpoint
-
-- 默认值：空字符串
-- 类型：String
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### lake_compaction_selector
-
-- 默认值：ScoreSelector
-- 类型：String
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### lake_compaction_sorter
-
-- 默认值：ScoreSorter
-- 类型：String
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### lake_compaction_simple_selector_min_versions
-
-- 默认值：3
-- 类型：Long
-- Unit:
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### lake_compaction_simple_selector_threshold_versions
-
-- 默认值：10
-- 类型：Long
-- Unit:
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### lake_compaction_simple_selector_threshold_seconds
-
-- 默认值：300
-- 类型：Long
-- 单位：Seconds
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### enable_new_publish_mechanism
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### metadata_journal_skip_bad_journal_ids
-
-- 默认值：空字符串
-- 类型：String
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### profile_info_reserved_num
-
-- 默认值：500
-- 类型：Int
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### load_profile_info_reserved_num
-
-- 默认值：500
-- 类型：Int
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### ignore_invalid_privilege_authentications
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### ssl_keystore_location
-
-- 默认值：空字符串
-- 类型：String
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### ssl_keystore_password
-
-- 默认值：空字符串
-- 类型：String
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### ssl_key_password
-
-- 默认值：空字符串
-- 类型：String
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### ssl_truststore_location
-
-- 默认值：空字符串
-- 类型：String
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### ssl_truststore_password
-
-- 默认值：空字符串
-- 类型：String
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### enable_check_db_state
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### binlog_ttl_second
-
-- 默认值：60 * 30
-- 类型：Long
-- 单位：Seconds
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### binlog_max_size
-
-- 默认值：Long.MAX_VALUE
-- 类型：Long
-- Unit:
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### enable_safe_mode
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### safe_mode_checker_interval_sec
-
-- 默认值：5
-- 类型：Long
-- 单位：Seconds
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### auto_increment_cache_size
-
-- 默认值：100000
-- 类型：Int
-- Unit:
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### enable_experimental_temporary_table
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### max_per_node_grep_log_limit
-
-- 默认值：500000
-- 类型：Long
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### enable_execute_script_on_frontend
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### alter_scheduler_interval_millisecond
-
-- 默认值：10000
-- 类型：Int
-- Unit:
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### routine_load_scheduler_interval_millisecond
-
-- 默认值：10000
-- 类型：Int
-- Unit:
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### stream_load_profile_collect_threshold_second
-
-- 默认值：0
-- 类型：Long
-- 单位：Seconds
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-##### max_upload_task_per_be
-
-- 默认值：0
-- 类型：Int
-- 单位：-
-- 是否动态：是
-- 描述：单次 BACKUP 操作下，系统向单个 BE 节点下发的最大上传任务数。设置为小于或等于 0 时表示不限制任务数。
-- 引入版本：v3.1.0
-
-##### max_download_task_per_be
-
-- 默认值：0
-- 类型：Int
-- 单位：-
-- 是否动态：是
-- 描述：单次 RESTORE 操作下，系统向单个 BE 节点下发的最大下载任务数。设置为小于或等于 0 时表示不限制任务数。
-- 引入版本：v3.1.0
-
-##### enable_colocate_restore
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：是否为 Colocate 表启用备份恢复。`true` 表示启用 Colocate 表备份恢复，`false` 表示禁用。
-- 引入版本：v3.2.10、v3.3.3
-
-<!--
-##### enable_persistent_index_by_default
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### experimental_enable_fast_schema_evolution_in_shared_data
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### pipe_listener_interval_millis
-
-- 默认值：1000
-- 类型：Int
-- 单位：Milliseconds
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### pipe_scheduler_interval_millis
-
-- 默认值：1000
-- 类型：Int
-- 单位：Milliseconds
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### enable_show_external_catalog_privilege
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### primary_key_disk_schedule_time
-
-- 默认值：3600
-- 类型：Int
-- Unit:
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### access_control
-
-- 默认值：native
-- 类型：String
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### ranger_user_ugi
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### catalog_metadata_cache_size
-
-- 默认值：500
-- 类型：Int
-- Unit:
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-##### mv_plan_cache_expire_interval_sec
-
-- 默认值：24 * 60 * 60
-- 类型：Long
-- 单位：Seconds
-- 是否动态：是
-- 描述：用于MV Plan缓存过期时间间隔（单位：秒），默认一天。
-- 引入版本： v3.2
-
-##### mv_plan_cache_thread_pool_size
-
-- 默认值：3
-- 类型：Int
-- Unit:
-- 是否动态：是
-- 描述：用于物化视图改写的 MV 计划缓存的默认线程池大小，默认3个。
-- 引入版本： v3.2
-
-##### mv_plan_cache_max_size
-
-- 默认值：1000
-- 类型：Long
-- Unit:
-- 是否动态：是
-- 描述：用于物化视图改写的 MV 计划缓存的最大大小。如果存在大量用于透明改写的物化视图，可以考虑增加此配置项的大小。默认1000个。
-- 引入版本： v3.2
-
-
-##### enable_mv_query_context_cache
-
-- 默认值：true
-- 类型：Boolean
-- Unit:
-- 是否动态：是
-- 描述：是否开启Query级别的用于透明加速改写的物化视图Cache，用于加速改写性能。
-- 引入版本： v3.3
-
-
-##### mv_query_context_cache_max_size
-
-- 默认值：1000
-- 类型：Long
-- Unit:
-- 是否动态：是
-- 描述： 单个查询生命周期内，物化视图改写缓存的最大大小。该缓存可以避免重复计算，从而减少优化器在物化视图改写阶段的耗时，但可能会占用一定的前端（FE）内存。当存在较多相关物化视图（超过 10 个）或查询较为复杂（如多表关联）时，该配置将带来更好的性能表现。
-- 引入版本： v3.3
-
-<!--
-##### port_connectivity_check_interval_sec
-
-- 默认值：60
-- 类型：Long
-- 单位：Seconds
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### port_connectivity_check_retry_times
-
-- 默认值：3
-- 类型：Long
-- Unit:
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### port_connectivity_check_timeout_ms
-
-- 默认值：10000
-- 类型：Int
-- 单位：Milliseconds
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### json_file_size_limit
-
-- 默认值：4294967296
-- 类型：Long
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-##### allow_system_reserved_names
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：是否允许用户创建以 `__op` 或 `__row` 开头命名的列。TRUE 表示启用此功能。请注意，在 StarRocks 中，这样的列名被保留用于特殊目的，创建这样的列可能导致未知行为，因此系统默认禁止使用这类名字。
-- 引入版本：v3.2.0
-
-<!--
-##### use_lock_manager
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### lock_table_num
-
-- 默认值：32
-- 类型：Int
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### lock_manager_enable_resolve_deadlock
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### lock_manager_dead_lock_detection_delay_time_ms
-
-- 默认值：3000
-- 类型：Long
-- 单位：Milliseconds
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### refresh_dictionary_cache_thread_num
-
-- 默认值：2
-- 类型：Int
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-##### replication_interval_ms
-
-- 默认值：100
-- 类型：Int
-- 单位：-
-- 是否动态：否
-- 描述：调度执行同步任务的最小时间间隔。
-- 引入版本：v3.3.5
-
-##### replication_max_parallel_table_count
-
-- 默认值：100
-- 类型：Int
-- 单位：-
-- 是否动态：是
-- 描述：允许并发执行的数据同步任务数。StarRocks 为一张表创建一个同步任务。
-- 引入版本：v3.3.5
-
-##### replication_max_parallel_replica_count
-
-- 默认值：10240
-- 类型：Int
-- 单位：-
-- 是否动态：是
-- 描述：允许并发同步的 Tablet 副本数。
-- 引入版本：v3.3.5
-
-##### replication_max_parallel_data_size_mb
-
-- 默认值：1048576
-- 类型：Int
-- 单位：MB
-- 是否动态：是
-- 描述：允许并发同步的数据量。
-- 引入版本：v3.3.5
-
-##### replication_transaction_timeout_sec
-
-- 默认值：86400
-- 类型：Int
-- 单位：Seconds
-- 是否动态：是
-- 描述：同步任务的超时时间。
-- 引入版本：v3.3.5
-
-##### jdbc_meta_default_cache_enable
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：JDBC Catalog 元数据缓存是否开启的默认值。当设置为 `TRUE` 时，新创建的 JDBC Catalog 会默认开启元数据缓存。
-- 引入版本：-
-
-##### jdbc_meta_default_cache_expire_sec
-
-- 默认值：600
-- 类型：Long
-- 单位：Seconds
-- 是否动态：是
-- 描述：JDBC Catalog 元数据缓存的默认过期时间。当 `jdbc_meta_default_cache_enable` 设置为 `TRUE` 时，新创建的 JDBC Catalog 会默认设置元数据缓存的过期时间。
-- 引入版本：-
-
-##### jdbc_connection_pool_size
-
-- 默认值：8
-- 类型：Int
-- 单位：-
-- 是否动态：否
-- 描述：访问 JDBC Catalog 时，JDBC Connection Pool 的容量上限。
-- 引入版本：-
-
-##### jdbc_minimum_idle_connections
-
-- 默认值：1
-- 类型：Int
-- 单位：-
-- 是否动态：否
-- 描述：访问 JDBC Catalog 时，JDBC Connection Pool 中处于 idle 状态的连接最低数量。
-- 引入版本：-
-
-##### jdbc_connection_idle_timeout_ms
-
-- 默认值：600000
-- 类型：Int
-- 单位：Milliseconds
-- 是否动态：否
-- 描述：访问 JDBC Catalog 时，连接建立的超时时长。超过参数取值时间的连接被认为是 idle 状态。
-- 引入版本：-
-
-##### query_detail_explain_level
-
-- 默认值：COSTS
-- 类型：String
-- 单位：-
-- 是否动态：是
-- 描述：EXPLAIN 语句返回的查询计划的解释级别。有效值：COSTS、NORMAL、VERBOSE。
-- 引入版本：v3.2.12，v3.3.5
-
-<!--
-##### max_varchar_length
-
-- 默认值：1048576
-- 类型：Int
-- Unit:
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-##### mv_refresh_fail_on_filter_data
-- 默认值：true
-- 类型：布尔值
-- 单位：-
-- 是否动态：是
-- 描述：当物化视图刷新过程中存在被过滤的数据时，刷新会失败（默认值为 true）。如果设置为 false，则会忽略被过滤的数据并返回刷新成功。
-- 引入版本：-
-
-##### mv_create_partition_batch_interval_ms
-- 默认值：1000
-- 类型：布尔值
-- 单位：ms
-- 是否动态：是
-- 描述：在物化视图刷新时，如果需要一次性创建多个分区，系统将每 64 个分区划分为一个批次进行创建。为了降低因频繁创建导致失败的风险，系统在不同批次之间设置了默认的间隔时间（单位为毫秒），用于控制创建频率。
-- 引入版本：v3.3
-
-##### max_mv_refresh_failure_retry_times
-- 默认值：1
-- 类型：整数
-- 单位：-
-- 是否动态：是
-- 描述：物化视图刷新失败时的最大重试次数。
-- 引入版本：v3.3.0
-
-##### max_mv_refresh_try_lock_failure_retry_times
-- 默认值：3
-- 类型：整数
-- 单位：-
-- 是否动态：是
-- 描述：物化视图刷新过程中尝试加锁失败时的最大重试次数。
-- 引入版本：v3.3.0
-
-##### mv_refresh_try_lock_timeout_ms
-- 默认值：30000
-- 类型：整数
-- 单位：ms
-- 是否动态：是
-- 描述：物化视图刷新尝试获取基表或物化视图数据库锁的默认超时时间（单位为毫秒）。
-- 引入版本：v3.3.0
-
-##### enable_mv_refresh_collect_profile
-- 默认值：false
-- 类型：布尔值
-- 单位：-
-- 是否动态：是
-- 描述：是否为所有物化视图默认启用刷新时的 Profile 信息收集。
-- 引入版本：v3.3.0
-
-##### max_mv_task_run_meta_message_values_length
-- 默认值：16
-- 类型：整数
-- 单位：-
-- 是否动态：是
-- 描述：控制物化视图任务运行时附加信息中 set/map 类型字段值的最大长度，避免占用过多元数据内存。
-- 引入版本：v3.3.0
-
-##### max_mv_check_base_table_change_retry_times
-- 默认值：10
-- 类型：整数
-- 单位：-
-- 是否动态：是
-- 描述：刷新物化视图时，检测基表变更的最大重试次数。
-- 引入版本：v3.3.0
-
-##### mv_refresh_default_planner_optimize_timeout
-- 默认值：30000
-- 类型：整数
-- 单位：ms
-- 是否动态：是
-- 描述：刷新物化视图时优化器规划阶段的默认超时时间（单位为毫秒），默认 30 秒。
-- 引入版本：v3.3.0
-
-##### enable_mv_refresh_query_rewrite
-- 默认值：false
-- 类型：布尔值
-- 单位：-
-- 是否动态：是
-- 描述：是否开启物化视图刷新时的查询改写功能，从而可以使用重写后的物化视图代替原始基表以提升性能。
-- 引入版本：v3.3.0
-
-##### mv_create_partition_batch_interval_ms
-- 默认值：1000
-- 类型：布尔值
-- 单位：ms
-- 是否动态：是
-- 描述：在物化视图刷新时，如果需要一次性创建多个分区，系统将每 64 个分区划分为一个批次进行创建。为了降低因频繁创建导致失败的风险，系统在不同批次之间设置了默认的间隔时间（单位为毫秒），用于控制创建频率。
-- 引入版本：v3.3.0
-
-##### enable_mv_refresh_extra_prefix_logging
-- 默认值：true
-- 类型：布尔值
-- 单位：-
-- 是否动态：是
-- 描述：是否启用附加物化视图名称前缀的日志记录，用于提升调试能力。
-- 引入版本：v3.4.0
-
-##### enable_mv_post_image_reload_cache
-- 默认值：true
-- 类型：布尔值
-- 单位：-
-- 是否动态：是
-- 描述：FE 加载镜像后是否进行重载标志检测。如果某个 Base MV 已完成重载，其他依赖它的 MV 则无需再次重载。
-- 引入版本：v3.5.0
-
 ##### enable_trace_historical_node
+
 - 默认值：false
 - 类型：布尔值
 - 单位：-
@@ -5533,12 +3107,6 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 引入版本：v3.5.1
 
 
-##### transform_type_prefer_string_for_varchar
-- 默认值：true
-- 类型：布尔值
-- 单位：-
-- 是否动态：是
-- 描述：在物化视图创建和 CTAS 操作中，是否优先对固定长度的 VARCHAR 列使用 STRING 类型。
-- 引入版本：v4.0.0
+
 
 <EditionSpecificFEItem />

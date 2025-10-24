@@ -113,28 +113,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The retention period of system log files. The default value `7d` specifies that each system log file can be retained for 7 days. StarRocks checks each system log file and deletes those that were generated 7 days ago.
 - Introduced in: -
 
-<!--
-##### sys_log_roll_mode (Deprecated)
-
-- Default: SIZE-MB-1024
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### sys_log_to_console
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
 ##### audit_log_dir
 
 - Default: StarRocksFE.STARROCKS_HOME_DIR + "/log"
@@ -191,94 +169,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The retention period of audit log files. The default value `30d` specifies that each audit log file can be retained for 30 days. StarRocks checks each audit log file and deletes those that were generated 30 days ago.
 - Introduced in: -
 
-<!--
-##### slow_lock_threshold_ms
-
-- Default: 3000
-- Type: Long
-- Unit: Milliseconds
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### slow_lock_log_every_ms
-
-- Default: 3000
-- Type: Long
-- Unit: Milliseconds
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### custom_config_dir
-
-- Default: /conf
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### internal_log_dir
-
-- Default: StarRocksFE.STARROCKS_HOME_DIR + "/log"
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### internal_log_roll_num
-
-- Default: 90
-- Type: Int
-- Unit: -
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### internal_log_modules
-
-- Default: {"base", "statistic"}
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### internal_log_roll_interval
-
-- Default: DAY
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### internal_log_delete_age
-
-- Default: 7d
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
 ##### dump_log_dir
 
 - Default: StarRocksFE.STARROCKS_HOME_DIR + "/log"
@@ -326,83 +216,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The retention period of dump log files. The default value `7d` specifies that each dump log file can be retained for 7 days. StarRocks checks each dump log file and deletes those that were generated 7 days ago.
 - Introduced in: -
 
-<!--
-##### big_query_log_dir
-
-- Default: StarRocksFE.STARROCKS_HOME_DIR + "/log"
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### big_query_log_roll_num
-
-- Default: 10
-- Type: Int
-- Unit: -
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### big_query_log_modules
-
-- Default: query
-- Type: String[]
-- Unit: -
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### big_query_log_roll_interval
-
-- Default: DAY
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### big_query_log_delete_age
-
-- Default: 7d
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### log_plan_cancelled_by_crash_be
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether to log the COSTS plan if the query is cancelled due to a BE crash or RpcException. This parameter is effective only when `enable_collect_query_detail_info` is set to `false`. When `enable_collect_query_detail_info` is set to `true`, the plan will be recorded in the query detail.
-- Introduced in: v3.1
--->
-
-<!--
-##### log_register_and_unregister_query_id
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
 ### Server
 
 ##### frontend_address
@@ -441,87 +254,14 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The port on which the HTTP server in the FE node listens.
 - Introduced in: -
 
-##### http_worker_threads_num
+##### https_port
 
-- Default: 0
+- Default: 8443
 - Type: Int
 - Unit: -
 - Is mutable: No
-- Description: Number of worker threads for http server to deal with http requests. For a negative or 0 value, the number of threads will be twice the number of cpu cores.
-- Introduced in: v2.5.18, v3.0.10, v3.1.7, v3.2.2
-
-##### http_backlog_num
-
-- Default: 1024
-- Type: Int
-- Unit: -
-- Is mutable: No
-- Description: The length of the backlog queue held by the HTTP server in the FE node.
-- Introduced in: -
-
-<!--
-##### http_max_initial_line_length
-
-- Default: 4096
-- Type: Int
-- Unit:
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### http_max_header_size
-
-- Default: 32768
-- Type: Int
-- Unit:
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### http_max_chunk_size
-
-- Default: 8192
-- Type: Int
-- Unit:
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### http_web_page_display_hardware
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### enable_http_detail_metrics
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-##### enable_http_async_handler
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether to allow the system to process HTTP requests asynchronously. If this feature is enabled, an HTTP request received by Netty worker threads will then be submitted to a separate thread pool for service logic handling to avoid blocking the HTTP server. If disabled, Netty workers will handle the service logic.
-- Introduced in: 4.0.0
+- Description: The port on which the HTTPS server in the FE node listens.
+- Introduced in: v4.0
 
 ##### enable_https
 
@@ -530,15 +270,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Unit: -
 - Is mutable: No
 - Description: Whether to enable HTTPS server alongside HTTP server in FE nodes.
-- Introduced in: v4.0
-
-##### https_port
-
-- Default: 8443
-- Type: Int
-- Unit: -
-- Is mutable: No
-- Description: The port on which the HTTPS server in the FE node listens.
 - Introduced in: v4.0
 
 ##### ssl_cipher_whitelist
@@ -558,6 +289,33 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Is mutable: No
 - Description: Comma separated list, with regex support to blacklist ssl cipher suites by IANA names. If both whitelist and blacklist are set, blacklist takes precedence.
 - Introduced in: v4.0
+
+##### http_worker_threads_num
+
+- Default: 0
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: Number of worker threads for http server to deal with http requests. For a negative or 0 value, the number of threads will be twice the number of cpu cores.
+- Introduced in: v2.5.18, v3.0.10, v3.1.7, v3.2.2
+
+##### http_backlog_num
+
+- Default: 1024
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: The length of the backlog queue held by the HTTP server in the FE node.
+- Introduced in: -
+
+##### enable_http_async_handler
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to allow the system to process HTTP requests asynchronously. If this feature is enabled, an HTTP request received by Netty worker threads will then be submitted to a separate thread pool for service logic handling to avoid blocking the HTTP server. If disabled, Netty workers will handle the service logic.
+- Introduced in: 4.0.0
 
 ##### http_async_threads_num
 
@@ -586,24 +344,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The port on which the Thrift server in the FE node listens.
 - Introduced in: -
 
-##### thrift_server_max_worker_threads
-
-- Default: 4096
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: The maximum number of worker threads that are supported by the Thrift server in the FE node.
-- Introduced in: -
-
-##### thrift_server_queue_size
-
-- Default: 4096
-- Type: Int
-- Unit: -
-- Is mutable: No
-- Description: The length of queue where requests are pending. If the number of threads that are being processed in the thrift server exceeds the value specified in `thrift_server_max_worker_threads`, new requests are added to the pending queue.
-- Introduced in: -
-
 ##### thrift_client_timeout_ms
 
 - Default: 5000
@@ -621,61 +361,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Is mutable: No
 - Description: The length of the backlog queue held by the Thrift server in the FE node.
 - Introduced in: -
-
-<!--
-##### thrift_rpc_timeout_ms
-
-- Default: 10000
-- Type: Int
-- Unit: Milliseconds
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### thrift_rpc_retry_times
-
-- Default: 3
-- Type: Int
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### thrift_rpc_strict_mode
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### thrift_rpc_max_body_size
-
-- Default: -1
-- Type: Int
-- Unit:
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### brpc_connection_pool_size
-
-- Default: 16
-- Type: Int
-- Unit:
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
 
 ##### brpc_idle_wait_max_time
 
@@ -704,15 +389,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The length of the backlog queue held by the MySQL server in the FE node.
 - Introduced in: -
 
-##### mysql_service_nio_enable_keep_alive
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: No
-- Description: Enable TCP Keep-Alive for MySQL connections. Useful for long-idled connections behind load balancers.
-- Introduced in: -
-
 ##### mysql_service_io_threads_num
 
 - Default: 4
@@ -720,6 +396,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Unit: -
 - Is mutable: No
 - Description: The maximum number of threads that can be run by the MySQL server in the FE node to process I/O events.
+- Introduced in: -
+
+##### mysql_service_nio_enable_keep_alive
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Enable TCP Keep-Alive for MySQL connections. Useful for long-idled connections behind load balancers.
 - Introduced in: -
 
 ##### max_mysql_service_task_threads_num
@@ -743,6 +428,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
   3. Value of the global variable `version` (`show variables like 'version';`)
 - Introduced in: -
 
+##### thrift_server_max_worker_threads
+
+- Default: 4096
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of worker threads that are supported by the Thrift server in the FE node.
+- Introduced in: -
+
+##### thrift_server_queue_size
+
+- Default: 4096
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: The length of queue where requests are pending. If the number of threads that are being processed in the thrift server exceeds the value specified in `thrift_server_max_worker_threads`, new requests are added to the pending queue.
+- Introduced in: -
+
 ##### qe_max_connection
 
 - Default: 4096
@@ -753,15 +456,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Introduced in: -
 
 ### Metadata and cluster management
-
-##### cluster_id
-
-- Default: -1
-- Type: Int
-- Unit: -
-- Is mutable: No
-- Description: The ID of the StarRocks cluster to which the FE belongs. FEs or BEs that have the same cluster ID belong to the same StarRocks cluster. Valid values: any positive integer. The default value `-1` specifies that StarRocks will generate a random cluster ID for the StarRocks cluster at the time when the leader FE of the cluster is started for the first time.
-- Introduced in: -
 
 ##### meta_dir
 
@@ -798,60 +492,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Is mutable: Yes
 - Description: The maximum number of metadata log entries that can be written before a log file is created for these log entries. This parameter is used to control the size of log files. The new log file is written to the BDBJE database.
 - Introduced in: -
-
-<!--
-##### edit_log_write_slow_log_threshold_ms
-
-- Default: 2000
-- Type: Int
-- Unit: Milliseconds
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-##### metadata_ignore_unknown_operation_type
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether to ignore an unknown log ID. When an FE is rolled back, the FEs of the earlier version may be unable to recognize some log IDs. If the value is `TRUE`, the FE ignores unknown log IDs. If the value is `FALSE`, the FE exits.
-- Introduced in: -
-
-<!--
-##### hdfs_read_buffer_size_kb
-
-- Default: 8192
-- Type: Int
-- Unit: KB
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### hdfs_write_buffer_size_kb
-
-- Default: 1024
-- Type: Int
-- Unit: KB
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### hdfs_file_system_expire_seconds
-
-- Default: 300
-- Alias: hdfs_file_sytem_expire_seconds
-- Type: Int
-- Unit: Seconds
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
 
 ##### meta_delay_toleration_second
 
@@ -925,15 +565,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The amount of time after which a lock in the BDB JE-based FE times out.
 - Introduced in: -
 
-##### bdbje_reset_election_group
-
-- Default: false
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description: Whether to reset the BDBJE replication group. If this parameter is set to `TRUE`, the FE will reset the BDBJE replication group (that is, remove the information of all electable FE nodes) and start as the leader FE. After the reset, this FE will be the only member in the cluster, and other FEs can rejoin this cluster by using `ALTER SYSTEM ADD/DROP FOLLOWER/OBSERVER 'xxx'`. Use this setting only when no leader FE can be elected because the data of most follower FEs have been damaged. `reset_election_group` is used to replace `metadata_failure_recovery`.
-- Introduced in: -
-
 ##### max_bdbje_clock_delta_ms
 
 - Default: 5000
@@ -942,50 +573,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Is mutable: No
 - Description: The maximum clock offset that is allowed between the leader FE and the follower or observer FEs in the StarRocks cluster.
 - Introduced in: -
-
-<!--
-##### bdbje_log_level
-
-- Default: INFO
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### bdbje_cleaner_threads
-
-- Default: 1
-- Type: Int
-- Unit: -
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### bdbje_replay_cost_percent
-
-- Default: 150
-- Type: Int
-- Unit: -
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### bdbje_reserved_disk_size
-
-- Default: 512 * 1024 * 1024
-- Type: Long
-- Unit:
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
 
 ##### txn_rollback_limit
 
@@ -1014,23 +601,14 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The size of the blocking queue that stores heartbeat tasks run by the Heartbeat Manager.
 - Introduced in: -
 
-##### catalog_try_lock_timeout_ms
-
-- Default: 5000
-- Type: Long
-- Unit: Milliseconds
-- Is mutable: Yes
-- Description: The timeout duration to obtain the global lock.
-- Introduced in: -
-
-##### ignore_materialized_view_error
+##### bdbje_reset_election_group
 
 - Default: false
-- Type: Boolean
+- Type: String
 - Unit: -
-- Is mutable: Yes
-- Description: Whether FE ignores the metadata exception caused by materialized view errors. If FE fails to start due to the metadata exception caused by materialized view errors, you can set this parameter to `true` to allow FE to ignore the exception.
-- Introduced in: v2.5.10
+- Is mutable: No
+- Description: Whether to reset the BDBJE replication group. If this parameter is set to `TRUE`, the FE will reset the BDBJE replication group (that is, remove the information of all electable FE nodes) and start as the leader FE. After the reset, this FE will be the only member in the cluster, and other FEs can rejoin this cluster by using `ALTER SYSTEM ADD/DROP FOLLOWER/OBSERVER 'xxx'`. Use this setting only when no leader FE can be elected because the data of most follower FEs have been damaged. `reset_election_group` is used to replace `metadata_failure_recovery`.
+- Introduced in: -
 
 ##### ignore_meta_check
 
@@ -1050,23 +628,32 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: Whether to delete a BE after the BE is decommissioned. `TRUE` indicates that the BE is deleted immediately after it is decommissioned. `FALSE` indicates that the BE is not deleted after it is decommissioned.
 - Introduced in: -
 
-##### enable_collect_query_detail_info
+##### ignore_materialized_view_error
 
 - Default: false
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether to collect the profile of a query. If this parameter is set to `TRUE`, the system collects the profile of the query. If this parameter is set to `FALSE`, the system does not collect the profile of the query.
+- Description: Whether FE ignores the metadata exception caused by materialized view errors. If FE fails to start due to the metadata exception caused by materialized view errors, you can set this parameter to `true` to allow FE to ignore the exception.
+- Introduced in: v2.5.10
+
+##### catalog_try_lock_timeout_ms
+
+- Default: 5000
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: The timeout duration to obtain the global lock.
 - Introduced in: -
 
-##### profile_info_format
+##### enable_statistics_collect_profile
 
-- Default: default
-- Type: String
+- Default: false
+- Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: The format of the Profile output by the system. Valid values: `default` and `json`. When set to `default`, Profile is of the default format. When set to `json`, the system outputs Profile in JSON format.
-- Introduced in: v2.5
+- Description: Whether to generate profiles for statistics queries. You can set this item to `true` to allow StarRocks to generate query profiles for queries on system statistics.
+- Introduced in: v3.1.5
 
 ##### enable_background_refresh_connector_metadata
 
@@ -1076,28 +663,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Is mutable: Yes
 - Description: Whether to enable the periodic Hive metadata cache refresh. After it is enabled, StarRocks polls the metastore (Hive Metastore or AWS Glue) of your Hive cluster, and refreshes the cached metadata of the frequently accessed Hive catalogs to perceive data changes. `true` indicates to enable the Hive metadata cache refresh, and `false` indicates to disable it.
 - Introduced in: v2.5.5
-
-<!--
-##### enable_background_refresh_resource_table_metadata
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### background_refresh_file_metadata_concurrency
-
-- Default: 4
-- Type: Int
-- Unit:
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
 
 ##### background_refresh_metadata_interval_millis
 
@@ -1117,23 +682,41 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The expiration time of a Hive metadata cache refresh task. For the Hive catalog that has been accessed, if it has not been accessed for more than the specified time, StarRocks stops refreshing its cached metadata. For the Hive catalog that has not been accessed, StarRocks will not refresh its cached metadata.
 - Introduced in: v2.5.5
 
-##### enable_statistics_collect_profile
+##### enable_collect_query_detail_info
 
 - Default: false
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether to generate profiles for statistics queries. You can set this item to `true` to allow StarRocks to generate query profiles for queries on system statistics.
-- Introduced in: v3.1.5
+- Description: Whether to collect the profile of a query. If this parameter is set to `TRUE`, the system collects the profile of the query. If this parameter is set to `FALSE`, the system does not collect the profile of the query.
+- Introduced in: -
 
-#### metadata_enable_recovery_mode
+##### metadata_ignore_unknown_operation_type
 
 - Default: false
 - Type: Boolean
 - Unit: -
-- Is mutable: No
-- Description: Whether to enable the metadata recovery mode. When this mode is enabled, if part of the cluster metadata is lost, it can be restored based on the information from BE. Currently, only the version information of partitions can be restored.
-- Introduced in: v3.3.0
+- Is mutable: Yes
+- Description: Whether to ignore an unknown log ID. When an FE is rolled back, the FEs of the earlier version may be unable to recognize some log IDs. If the value is `TRUE`, the FE ignores unknown log IDs. If the value is `FALSE`, the FE exits.
+- Introduced in: -
+
+##### profile_info_format
+
+- Default: default
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: The format of the Profile output by the system. Valid values: `default` and `json`. When set to `default`, Profile is of the default format. When set to `json`, the system outputs Profile in JSON format.
+- Introduced in: v2.5
+
+##### enable_legacy_compatibility_for_replication
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable the Legacy Compatibility for Replication. StarRocks may behave differently between the old and new versions, causing problems during cross-cluster data migration. Therefore, you must enable Legacy Compatibility for the target cluster before data migration and disable it after data migration is completed. `true` indicates enabling this mode.
+- Introduced in: v3.1.10, v3.2.6
 
 ##### black_host_history_sec
 
@@ -1152,33 +735,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Is mutable: Yes
 - Description: The threshold of connection failures allowed for a blacklisted BE node. If a BE node is added to the BE Blacklist automatically, StarRocks will assess its connectivity and judge whether it can be removed from the BE Blacklist. Within `black_host_history_sec`, only if a blacklisted BE node has fewer connection failures than the threshold set in `black_host_connect_failures_within_time`, it can be removed from the BE Blacklist.
 - Introduced in: v3.3.0
-
-#### lock_manager_enabled
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: No
-- Description: Whether to enable the lock manager. The lock manager performs central management for locks. For example, it can control whether to refine the granularity of metadata locks from the database level to the table level.
-- Introduced in: v3.3.0
-
-##### lock_manager_enable_using_fine_granularity_lock
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: No
-- Description: Whether to refine the granularity of metadata locks from the database level to the table level. After metadata locks are refined to the table level, lock conflicts and contentions can be reduced, which improves load and query concurrency. This parameter only takes effect when `lock_manager_enabled` is enabled.
-- Introduced in: v3.3.0
-
-##### enable_legacy_compatibility_for_replication
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether to enable the Legacy Compatibility for Replication. StarRocks may behave differently between the old and new versions, causing problems during cross-cluster data migration. Therefore, you must enable Legacy Compatibility for the target cluster before data migration and disable it after data migration is completed. `true` indicates enabling this mode.
-- Introduced in: v3.1.10, v3.2.6
 
 ##### automated_cluster_snapshot_interval_seconds
 
@@ -1223,6 +779,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ### Query engine
 
+##### http_slow_request_threshold_ms
+
+- Default: 5000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: If the response time for an HTTP request exceeds the value specified by this parameter, a log is generated to track this request.
+- Introduced in: v2.5.15, v3.1.5
+
 ##### publish_version_interval_ms
 
 - Default: 10
@@ -1230,24 +795,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Unit: Milliseconds
 - Is mutable: No
 - Description: The time interval at which release validation tasks are issued.
-- Introduced in: -
-
-##### statistic_cache_columns
-
-- Default: 100000
-- Type: Long
-- Unit: -
-- Is mutable: No
-- Description: The number of rows that can be cached for the statistics table.
-- Introduced in: -
-
-##### statistic_cache_thread_pool_size
-
-- Default: 10
-- Type: Int
-- Unit: -
-- Is mutable: No
-- Description: The size of the thread-pool which will be used to refresh statistic caches.
 - Introduced in: -
 
 ##### max_allowed_in_element_num_of_delete
@@ -1277,75 +824,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: Whether to enable Intermediate Result Spilling for materialized view refresh tasks.
 - Introduced in: v3.1.1
 
-##### enable_backup_materialized_view
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether to enable the BACKUP and RESTORE of asynchronous materialized views when backing up or restoring a specific database. If this item is set to `false`, StarRocks will skip backing up asynchronous materialized views.
-- Introduced in: v3.2.0
-
-<!--
-##### enable_show_materialized_views_include_all_task_runs
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### materialized_view_min_refresh_interval
-
-- Default: 60
-- Type: Int
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### skip_whole_phase_lock_mv_limit
-
-- Default: 5
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-##### enable_experimental_mv
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether to enable the asynchronous materialized view feature. TRUE indicates this feature is enabled. From v2.5.2 onwards, this feature is enabled by default. For versions earlier than v2.5.2, this feature is disabled by default.
-- Introduced in: v2.4
-
-##### enable_colocate_mv_index
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether to support colocating the synchronous materialized view index with the base table when creating a synchronous materialized view. If this item is set to `true`, tablet sink will speed up the write performance of synchronous materialized views.
-- Introduced in: v3.2.0
-
-##### default_mv_refresh_immediate
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether to refresh an asynchronous materialized view immediately after creation. When this item is set to `true`, newly created materialized view will be refreshed immediately.
-- Introduced in: v3.2.3
-
 ##### enable_materialized_view_metrics_collect
 
 - Default: true
@@ -1364,53 +842,14 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: Whether to enable text-based query rewrite by default. If this item is set to `true`, the system builds the abstract syntax tree while creating an asynchronous materialized view.
 - Introduced in: v3.2.5
 
-##### enable_mv_automatic_active_check
+##### enable_backup_materialized_view
 
-- Default: true
+- Default: false
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether to enable the system to automatically check and re-activate the asynchronous materialized views that are set inactive because their base tables (views) had undergone Schema Change or had been dropped and re-created. Please note that this feature will not re-activate the materialized views that are manually set inactive by users.
-- Introduced in: v3.1.6
-
-##### enable_active_materialized_view_schema_strict_check
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether to strictly check the length consistency of data types when activating an inactive materialized view. When this item is set to `false`, the activation of the materialized view is not affected if the length of the data types has changed in the base table.
-- Introduced in: v3.3.4
-
-##### mv_active_checker_interval_seconds
-
-- Default: 60
-- Type: Long
-- Unit: Seconds
-- Is mutable: Yes
-- Description: When the background active_checker thread is enabled, the system will periodically detect and automatically reactivate materialized views that became Inactive due to schema changes or rebuilds of their base tables (or views). This parameter controls the scheduling interval of the checker thread, in seconds. The default value is system-defined.
-- Introduced in: v3.1.6
-
-##### default_mv_partition_refresh_number
-
-- Default: 1
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: When a materialized view refresh involves multiple partitions, this parameter controls how many partitions are refreshed in a single batch by default.
-Starting from version 3.3.0, the system defaults to refreshing one partition at a time to avoid potential out-of-memory (OOM) issues. In earlier versions, all partitions were refreshed at once by default, which could lead to memory exhaustion and task failure. However, note that when a materialized view refresh involves a large number of partitions, refreshing only one partition at a time may lead to excessive scheduling overhead, longer overall refresh time, and a large number of refresh records. In such cases, it is recommended to adjust this parameter appropriately to improve refresh efficiency and reduce scheduling costs.
-- Introduced in: v3.3.0
-
-<!--
-##### mv_auto_analyze_async
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
+- Description: Whether to enable the BACKUP and RESTORE of asynchronous materialized views when backing up or restoring a specific database. If this item is set to `false`, StarRocks will skip backing up asynchronous materialized views.
+- Introduced in: v3.2.0
 
 ##### enable_udf
 
@@ -1457,50 +896,6 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The interval at which new data is checked. If new data is detected, StarRocks automatically creates partitions for the data.
 - Introduced in: -
 
-<!--
-##### max_dynamic_partition_num
-
-- Default: 500
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### memory_tracker_enable
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### memory_tracker_interval_seconds
-
-- Default: 60
-- Type: Long
-- Unit: Seconds
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### enable_create_partial_partition_in_batch
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
 ##### max_query_retry_time
 
 - Default: 2
@@ -1526,24 +921,6 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Unit: -
 - Is mutable: Yes
 - Description: The maximum number of replicas to create serially. If actual replica count exceeds this value, replicas will be created concurrently. Try to reduce this value if table creation is taking a long time to complete.
-- Introduced in: -
-
-##### http_slow_request_threshold_ms
-
-- Default: 5000
-- Type: Int
-- Unit: Milliseconds
-- Is mutable: Yes
-- Description: If the response time for an HTTP request exceeds the value specified by this parameter, a log is generated to track this request.
-- Introduced in: v2.5.15, v3.1.5
-
-##### max_partitions_in_one_batch
-
-- Default: 4096
-- Type: Long
-- Unit: -
-- Is mutable: Yes
-- Description: The maximum number of partitions that can be created when you bulk create partitions.
 - Introduced in: -
 
 ##### max_running_rollup_job_num_per_table
@@ -1609,17 +986,6 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: Whether to automatically collect statistics when data is loaded into a table for the first time. If a table has multiple partitions, any data loading into an empty partition of this table will trigger automatic statistics collection on this partition. If new tables are frequently created and data is frequently loaded, the memory and CPU overhead will increase.
 - Introduced in: v3.1
 
-<!--
-##### semi_sync_collect_statistic_await_seconds
-
-- Default: 30
-- Type: Long
-- Unit: Seconds
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
 ##### statistic_auto_analyze_start_time
 
 - Default: 00:00:00
@@ -1638,17 +1004,6 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The end time of automatic collection. Value range: `00:00:00` - `23:59:59`.
 - Introduced in: -
 
-<!--
-##### statistic_manager_sleep_time_sec
-
-- Default: 60
-- Type: Long
-- Unit: Seconds
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
 ##### statistic_analyze_status_keep_second
 
 - Default: 3 * 24 * 3600
@@ -1657,17 +1012,6 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Is mutable: Yes
 - Description: The duration to retain the history of collection tasks. The default value is 3 days.
 - Introduced in: -
-
-<!--
-##### statistic_check_expire_partition
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
 
 ##### statistic_collect_interval_sec
 
@@ -1678,49 +1022,32 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The interval for checking data updates during automatic collection.
 - Introduced in: -
 
-<!--
-##### statistic_analyze_task_pool_size
-
-- Default: 3
-- Type: Int
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### statistic_collect_query_timeout
-
-- Default: 3600
-- Type: Long
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### slot_manager_response_thread_pool_size
-
-- Default: 16
-- Type: Int
-- Unit:
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### statistic_dict_columns
+##### statistic_cache_columns
 
 - Default: 100000
 - Type: Long
-- Unit:
+- Unit: -
 - Is mutable: No
-- Description:
+- Description: The number of rows that can be cached for the statistics table.
 - Introduced in: -
--->
+
+##### statistic_cache_thread_pool_size
+
+- Default: 10
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: The size of the thread-pool which will be used to refresh statistic caches.
+- Introduced in: -
+
+##### low_cardinality_threshold
+
+- Default: 255
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: Threshold of low cardinality dictionary.
+- Introduced in: v3.5.0
 
 ##### statistic_update_interval_sec
 
@@ -1730,17 +1057,6 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Is mutable: Yes
 - Description: The interval at which the cache of statistical information is updated.
 - Introduced in: -
-
-<!--
-##### statistic_collect_too_many_version_sleep
-
-- Default: 600000
-- Type: Long
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
 
 ##### enable_collect_full_statistic
 
@@ -1760,39 +1076,6 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The threshold for determining whether the statistics for automatic collection are healthy. If statistics health is below this threshold, automatic collection is triggered.
 - Introduced in: -
 
-<!--
-##### statistic_full_collect_buffer
-
-- Default: 1024 * 1024 * 20
-- Type: Long
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### statistic_auto_collect_sample_threshold
-
-- Default: 0.3
-- Type: Double
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### statistic_auto_collect_small_table_size
-
-- Default: 5 * 1024 * 1024 * 1024
-- Type: Long
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
 ##### statistic_auto_collect_small_table_rows
 
 - Default: 10000000
@@ -1801,28 +1084,6 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Is mutable: Yes
 - Description: Threshold to determine whether a table in an external data source (Hive, Iceberg, Hudi) is a small table during automatic collection. If the table has rows less than this value, the table is considered a small table.
 - Introduced in: v3.2
-
-<!--
-##### statistic_auto_collect_small_table_interval
-
-- Default: 0
-- Type: Long
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### statistic_auto_collect_large_table_interval
-
-- Default: 3600 * 12
-- Type: Long
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
 
 ##### statistic_max_full_collect_data_size
 
@@ -1833,15 +1094,6 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The data size threshold for the automatic collection of statistics. If the total size exceeds this value, then sampled collection is performed instead of full.
 - Introduced in: -
 
-##### statistic_collect_max_row_count_per_query
-
-- Default: 5000000000
-- Type: Long
-- Unit: -
-- Is mutable: Yes
-- Description: The maximum number of rows to query for a single analyze task. An analyze task will be split into multiple queries if this value is exceeded.
-- Introduced in: -
-
 ##### statistic_sample_collect_rows
 
 - Default: 200000
@@ -1850,6 +1102,24 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Is mutable: Yes
 - Description: The minimum number of rows to collect for sampled collection. If the parameter value exceeds the actual number of rows in your table, full collection is performed.
 - Introduced in: -
+
+##### enable_manual_collect_array_ndv
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable manual collection for the NDV information of the ARRAY type.
+- Introduced in: v4.0
+
+##### enable_auto_collect_array_ndv
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable automatic collection for the NDV information of the ARRAY type.
+- Introduced in: v4.0
 
 ##### histogram_buckets_size
 
@@ -1887,15 +1157,6 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The maximum number of rows to collect for a histogram.
 - Introduced in: -
 
-##### connector_table_query_trigger_task_schedule_interval
-
-- Default: 30
-- Type: Int
-- Unit: Second
-- Is mutable: Yes
-- Description: The interval at which the Scheduler thread schedules the query-trigger background tasks. This item is to replace `connector_table_query_trigger_analyze_schedule_interval` introduced in v3.4.0. Here, the background tasks refer `ANALYZE` tasks in v3.4，and the collection task of low-cardinality columns' dictionary in versions later than v3.4.  
-- Introduced in: v3.4.2
-
 ##### connector_table_query_trigger_analyze_small_table_rows
 
 - Default: 10000000
@@ -1923,6 +1184,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The interval for query-trigger ANALYZE tasks of large tables.
 - Introduced in: v3.4.0
 
+##### connector_table_query_trigger_analyze_max_running_task_num
+
+- Default: 2
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Maximum number of query-trigger ANALYZE tasks that are in Running state on the FE.
+- Introduced in: v3.4.0
+
 ##### connector_table_query_trigger_analyze_max_pending_task_num
 
 - Default: 100
@@ -1932,14 +1202,14 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: Maximum number of query-trigger ANALYZE tasks that are in Pending state on the FE.
 - Introduced in: v3.4.0
 
-##### connector_table_query_trigger_analyze_max_running_task_num
+##### connector_table_query_trigger_task_schedule_interval
 
-- Default: 2
+- Default: 30
 - Type: Int
-- Unit: -
+- Unit: Second
 - Is mutable: Yes
-- Description: Maximum number of query-trigger ANALYZE tasks that are in Running state on the FE.
-- Introduced in: v3.4.0
+- Description: The interval at which the Scheduler thread schedules the query-trigger background tasks. This item is to replace `connector_table_query_trigger_analyze_schedule_interval` introduced in v3.4.0. Here, the background tasks refer `ANALYZE` tasks in v3.4，and the collection task of low-cardinality columns' dictionary in versions later than v3.4.  
+- Introduced in: v3.4.2
 
 ##### enable_local_replica_selection
 
@@ -1959,6 +1229,79 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description:: The maximum recursion depth allowed by the partition pruner. Increasing the recursion depth can prune more elements but also increases CPU consumption.
 - Introduced in: -
 
+##### max_partitions_in_one_batch
+
+- Default: 4096
+- Type: Long
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of partitions that can be created when you bulk create partitions.
+- Introduced in: -
+
+##### enable_experimental_mv
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable the asynchronous materialized view feature. TRUE indicates this feature is enabled. From v2.5.2 onwards, this feature is enabled by default. For versions earlier than v2.5.2, this feature is disabled by default.
+- Introduced in: v2.4
+
+##### enable_colocate_mv_index
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to support colocating the synchronous materialized view index with the base table when creating a synchronous materialized view. If this item is set to `true`, tablet sink will speed up the write performance of synchronous materialized views.
+- Introduced in: v3.2.0
+
+##### mv_active_checker_interval_seconds
+
+- Default: 60
+- Type: Long
+- Unit: Seconds
+- Is mutable: Yes
+- Description: When the background active_checker thread is enabled, the system will periodically detect and automatically reactivate materialized views that became Inactive due to schema changes or rebuilds of their base tables (or views). This parameter controls the scheduling interval of the checker thread, in seconds. The default value is system-defined.
+- Introduced in: v3.1.6
+
+##### enable_mv_automatic_active_check
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable the system to automatically check and re-activate the asynchronous materialized views that are set inactive because their base tables (views) had undergone Schema Change or had been dropped and re-created. Please note that this feature will not re-activate the materialized views that are manually set inactive by users.
+- Introduced in: v3.1.6
+
+##### default_mv_partition_refresh_number
+
+- Default: 1
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: When a materialized view refresh involves multiple partitions, this parameter controls how many partitions are refreshed in a single batch by default.
+Starting from version 3.3.0, the system defaults to refreshing one partition at a time to avoid potential out-of-memory (OOM) issues. In earlier versions, all partitions were refreshed at once by default, which could lead to memory exhaustion and task failure. However, note that when a materialized view refresh involves a large number of partitions, refreshing only one partition at a time may lead to excessive scheduling overhead, longer overall refresh time, and a large number of refresh records. In such cases, it is recommended to adjust this parameter appropriately to improve refresh efficiency and reduce scheduling costs.
+- Introduced in: v3.3.0
+
+##### enable_active_materialized_view_schema_strict_check
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to strictly check the length consistency of data types when activating an inactive materialized view. When this item is set to `false`, the activation of the materialized view is not affected if the length of the data types has changed in the base table.
+- Introduced in: v3.3.4
+
+##### default_mv_refresh_immediate
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to refresh an asynchronous materialized view immediately after creation. When this item is set to `true`, newly created materialized view will be refreshed immediately.
+- Introduced in: v3.2.3
+
 ##### slow_query_analyze_threshold
 
 - Default: 5
@@ -1968,34 +1311,52 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description:: The execution time threshold for queries to trigger the analysis of Query Feedback.
 - Introduced in: v3.4.0
 
-##### low_cardinality_threshold
+### Loading and unloading
 
-- Default: 255
+##### label_keep_max_second
+
+- Default: 3 * 24 * 3600
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The maximum duration in seconds to keep the labels of load jobs that have been completed and are in the FINISHED or CANCELLED state. The default value is 3 days. After this duration expires, the labels will be deleted. This parameter applies to all types of load jobs. A value too large consumes a lot of memory.
+- Introduced in: -
+
+##### label_keep_max_num
+
+- Default: 1000
 - Type: Int
 - Unit: -
+- Is mutable: Yes
+- Description: The maximum number of load jobs that can be retained within a period of time. If this number is exceeded, the information of historical jobs will be deleted.
+- Introduced in: -
+
+##### label_clean_interval_second
+
+- Default: 4 * 3600
+- Type: Int
+- Unit: Seconds
 - Is mutable: No
-- Description: Threshold of low cardinality dictionary.
-- Introduced in: v3.5.0
+- Description: The time interval at which labels are cleaned up. Unit: second. We recommend that you specify a short time interval to ensure that historical labels can be cleaned up in a timely manner.
+- Introduced in: -
 
-##### enable_manual_collect_array_ndv
+##### history_job_keep_max_second
 
-- Default: false
-- Type: Boolean
-- Unit: -
+- Default: 7 * 24 * 3600
+- Type: Int
+- Unit: Seconds
 - Is mutable: Yes
-- Description: Whether to enable manual collection for the NDV information of the ARRAY type.
-- Introduced in: v4.0
+- Description: The maximum duration a historical job can be retained, such as schema change jobs.
+- Introduced in: -
 
-##### enable_auto_collect_array_ndv
+##### transaction_clean_interval_second
 
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether to enable automatic collection for the NDV information of the ARRAY type.
-- Introduced in: v4.0
-
-### Loading and unloading
+- Default: 30
+- Type: Int
+- Unit: Seconds
+- Is mutable: No
+- Description: The time interval at which finished transactions are cleaned up. Unit: second. We recommend that you specify a short time interval to ensure that finished transactions can be cleaned up in a timely manner.
+- Introduced in: -
 
 ##### load_straggler_wait_second
 
@@ -2015,28 +1376,6 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The time interval at which load jobs are processed on a rolling basis.
 - Introduced in: -
 
-<!--
-##### lock_checker_interval_second
-
-- Default: 30
-- Type: Long
-- Unit: Seconds
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### lock_checker_enable_deadlock_check
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
 ##### broker_load_default_timeout_second
 
 - Default: 14400
@@ -2045,17 +1384,6 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Is mutable: Yes
 - Description: The timeout duration for a Broker Load job.
 - Introduced in: -
-
-<!--
-##### spark_load_submit_timeout_second
-
-- Default: 300
-- Type: Long
-- Unit: Seconds
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
 
 ##### min_bytes_per_broker_scanner
 
@@ -2093,44 +1421,22 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The maximum allowed timeout duration for a Stream Load job.
 - Introduced in: -
 
-<!--
-##### max_stream_load_batch_size_mb
+##### transaction_stream_load_coordinator_cache_capacity
 
-- Default: 100
+- Default: 4096
 - Type: Int
-- Unit: MB
+- Unit: -
 - Is mutable: Yes
-- Description:
+- Description: The capacity of the cache that stores the mapping from transaction label to coordinator node.
 - Introduced in: -
--->
 
-<!--
-##### stream_load_max_txn_num_per_be
+##### transaction_stream_load_coordinator_cache_expire_seconds
 
-- Default: -1
-- Type: Int
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-##### max_load_timeout_second
-
-- Default: 259200
+- Default: 900
 - Type: Int
 - Unit: Seconds
 - Is mutable: Yes
-- Description: The maximum timeout duration allowed for a load job. The load job fails if this limit is exceeded. This limit applies to all types of load jobs.
-- Introduced in: -
-
-##### min_load_timeout_second
-
-- Default: 1
-- Type: Int
-- Unit: Seconds
-- Is mutable: Yes
-- Description: The minimum timeout duration allowed for a load job. This limit applies to all types of load jobs.
+- Description: The time to keep the coordinator mapping in the cache before it's evicted(TTL).
 - Introduced in: -
 
 ##### prepared_transaction_default_timeout_second
@@ -2150,6 +1456,24 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Is mutable: Yes
 - Description: The default timeout for acquiring the db and table lock during finishing transaction.
 - Introduced in: v4.0.0, v3.5.8
+
+##### max_load_timeout_second
+
+- Default: 259200
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The maximum timeout duration allowed for a load job. The load job fails if this limit is exceeded. This limit applies to all types of load jobs.
+- Introduced in: -
+
+##### min_load_timeout_second
+
+- Default: 1
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The minimum timeout duration allowed for a load job. This limit applies to all types of load jobs.
+- Introduced in: -
 
 ##### spark_dpp_version
 
@@ -2242,13 +1566,49 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The maximum number of concurrent Broker Load jobs allowed within the StarRocks cluster. This parameter is valid only for Broker Load. The value of this parameter must be less than the value of `max_running_txn_num_per_db`. From v2.5 onwards, the default value is changed from `10` to `5`.
 - Introduced in: -
 
-##### load_parallel_instance_num (Deprecated)
+##### export_checker_interval_second
 
-- Default: 1
+- Default: 5
+- Type: Int
+- Unit: Seconds
+- Is mutable: No
+- Description: The time interval at which load jobs are scheduled.
+- Introduced in: -
+
+##### export_running_job_num_limit
+
+- Default: 5
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The maximum number of concurrent loading instances for each load job on a BE. This item is deprecated from v3.1 onwards.
+- Description: The maximum number of data exporting tasks that can run in parallel.
+- Introduced in: -
+
+##### export_task_default_timeout_second
+
+- Default: 2 * 3600
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The timeout duration for a data exporting task.
+- Introduced in: -
+
+##### export_max_bytes_per_be_per_task
+
+- Default: 268435456
+- Type: Long
+- Unit: Bytes
+- Is mutable: Yes
+- Description: The maximum amount of data that can be exported from a single BE by a single data unload task.
+- Introduced in: -
+
+##### export_task_pool_size
+
+- Default: 5
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: The size of the unload task thread pool.
 - Introduced in: -
 
 ##### disable_load_job
@@ -2258,33 +1618,6 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Unit: -
 - Is mutable: Yes
 - Description: Whether to disable loading when the cluster encounters an error. This prevents any loss caused by cluster errors. The default value is `FALSE`, indicating that loading is not disabled. `TRUE` indicates loading is disabled and the cluster is in read-only state.
-- Introduced in: -
-
-##### history_job_keep_max_second
-
-- Default: 7 * 24 * 3600
-- Type: Int
-- Unit: Seconds
-- Is mutable: Yes
-- Description: The maximum duration a historical job can be retained, such as schema change jobs.
-- Introduced in: -
-
-##### label_keep_max_second
-
-- Default: 3 * 24 * 3600
-- Type: Int
-- Unit: Seconds
-- Is mutable: Yes
-- Description: The maximum duration in seconds to keep the labels of load jobs that have been completed and are in the FINISHED or CANCELLED state. The default value is 3 days. After this duration expires, the labels will be deleted. This parameter applies to all types of load jobs. A value too large consumes a lot of memory.
-- Introduced in: -
-
-##### label_keep_max_num
-
-- Default: 1000
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: The maximum number of load jobs that can be retained within a period of time. If this number is exceeded, the information of historical jobs will be deleted.
 - Introduced in: -
 
 ##### max_routine_load_task_concurrent_num
@@ -2332,35 +1665,22 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The timeout duration for each Routine Load task within the cluster. Since v3.1.0, Routine Load job supports a new parameter `task_timeout_second` in [job_properties](../../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md#job_properties). This parameter applies to individual load tasks within a Routine Load job, which is more flexible.
 - Introduced in: -
 
-<!--
-##### routine_load_kafka_timeout_second
+##### max_tolerable_backend_down_num
 
-- Default: 12
-- Type: Long
-- Unit: Seconds
+- Default: 0
+- Type: Int
+- Unit: -
 - Is mutable: Yes
-- Description:
+- Description: The maximum number of faulty BE nodes allowed. If this number is exceeded, Routine Load jobs cannot be automatically recovered.
 - Introduced in: -
--->
 
-<!--
-##### routine_load_pulsar_timeout_second
+##### period_of_auto_resume_min
 
-- Default: 12
-- Type: Long
-- Unit: Seconds
+- Default: 5
+- Type: Int
+- Unit: Minutes
 - Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-##### routine_load_unstable_threshold_second
-
-- Default: 3600
-- Type: Long
-- Unit: Seconds
-- Is mutable: Yes
-- Description: Routine Load job is set to the UNSTABLE state if any task within the Routine Load job lags. To be specific, the difference between the timestamp of the message being consumed and the current time exceeds this threshold, and unconsumed messages exist in the data source.
+- Description: The interval at which Routine Load jobs are automatically recovered.
 - Introduced in: -
 
 ##### enable_routine_load_lag_metrics
@@ -2381,69 +1701,6 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The minimum offset lag of Routine Load jobs to be shown in monitoring metrics. Routine Load jobs whose offset lags are greater than this value will be displayed in the metrics.
 - Introduced in: -
 
-##### max_tolerable_backend_down_num
-
-- Default: 0
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: The maximum number of faulty BE nodes allowed. If this number is exceeded, Routine Load jobs cannot be automatically recovered.
-- Introduced in: -
-
-##### period_of_auto_resume_min
-
-- Default: 5
-- Type: Int
-- Unit: Minutes
-- Is mutable: Yes
-- Description: The interval at which Routine Load jobs are automatically recovered.
-- Introduced in: -
-
-##### export_task_default_timeout_second
-
-- Default: 2 * 3600
-- Type: Int
-- Unit: Seconds
-- Is mutable: Yes
-- Description: The timeout duration for a data exporting task.
-- Introduced in: -
-
-##### export_max_bytes_per_be_per_task
-
-- Default: 268435456
-- Type: Long
-- Unit: Bytes
-- Is mutable: Yes
-- Description: The maximum amount of data that can be exported from a single BE by a single data unload task.
-- Introduced in: -
-
-##### export_task_pool_size
-
-- Default: 5
-- Type: Int
-- Unit: -
-- Is mutable: No
-- Description: The size of the unload task thread pool.
-- Introduced in: -
-
-##### export_checker_interval_second
-
-- Default: 5
-- Type: Int
-- Unit: Seconds
-- Is mutable: No
-- Description: The time interval at which load jobs are scheduled.
-- Introduced in: -
-
-##### export_running_job_num_limit
-
-- Default: 5
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: The maximum number of data exporting tasks that can run in parallel.
-- Introduced in: -
-
 ##### empty_load_as_error
 
 - Default: true
@@ -2453,15 +1710,6 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: Whether to return an error message "all partitions have no load data" if no data is loaded. Valid values:
   - `true`: If no data is loaded, the system displays a failure message and returns an error "all partitions have no load data".
   - `false`: If no data is loaded, the system displays a success message and returns OK, instead of an error.
-- Introduced in: -
-
-##### external_table_commit_timeout_ms
-
-- Default: 10000
-- Type: Int
-- Unit: Milliseconds
-- Is mutable: Yes
-- Description: The timeout duration for committing (publishing) a write transaction to a StarRocks external table. The default value `10000` indicates a 10-second timeout duration.
 - Introduced in: -
 
 ##### enable_sync_publish
@@ -2475,106 +1723,13 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
   - `FALSE`: The apply task is asynchronously executed at the publish phase of a load transaction. It means that the load transaction is reported as successful after the apply task is submitted, but the loaded data cannot be immediately queried. In this case, concurrent queries need to wait for the apply task to complete or time out before they can continue. When a task loads a large volume of data at a time or loads data frequently, setting this parameter to `false` may affect query performance and stability.
 - Introduced in: v3.2.0
 
-<!--
-##### stream_load_task_keep_max_num
-
-- Default: 1000
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### stream_load_task_keep_max_second
-
-- Default: 3 * 24 * 3600
-- Type: Int
-- Unit: Seconds
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-##### label_clean_interval_second
-
-- Default: 4 * 3600
-- Type: Int
-- Unit: Seconds
-- Is mutable: No
-- Description: The time interval at which labels are cleaned up. Unit: second. We recommend that you specify a short time interval to ensure that historical labels can be cleaned up in a timely manner.
-- Introduced in: -
-
-<!--
-##### task_check_interval_second
-
-- Default: 3600
-- Type: Int
-- Unit: Seconds
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### task_ttl_second
-
-- Default: 24 * 3600
-- Type: Int
-- Unit: Seconds
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### task_runs_ttl_second
-
-- Default: 24 * 3600
-- Type: Int
-- Unit: Seconds
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### task_runs_max_history_number
+##### external_table_commit_timeout_ms
 
 - Default: 10000
 - Type: Int
-- Unit: -
+- Unit: Milliseconds
 - Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-##### transaction_clean_interval_second
-
-- Default: 30
-- Type: Int
-- Unit: Seconds
-- Is mutable: No
-- Description: The time interval at which finished transactions are cleaned up. Unit: second. We recommend that you specify a short time interval to ensure that finished transactions can be cleaned up in a timely manner.
-- Introduced in: -
-
-##### transaction_stream_load_coordinator_cache_capacity
-
-- Default: 4096
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: The capacity of the cache that stores the mapping from transaction label to coordinator node.
-- Introduced in: -
-
-##### transaction_stream_load_coordinator_cache_expire_seconds
-
-- Default: 900
-- Type: Int
-- Unit: Seconds
-- Is mutable: Yes
-- Description: The time to keep the coordinator mapping in the cache before it's evicted(TTL).
+- Description: The timeout duration for committing (publishing) a write transaction to a StarRocks external table. The default value `10000` indicates a 10-second timeout duration.
 - Introduced in: -
 
 ##### enable_file_bundling
@@ -2586,15 +1741,42 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: Whether to enable the File Bundling optimization for the cloud-native table. When this feature is enabled (set to `true`), the system automatically bundles the data files generated by loading, Compaction, or Publish operations, thereby reducing the API cost caused by high-frequency access to the external storage system. You can also control this behavior on the table level using the CREATE TABLE property `file_bundling`. For detailed instructions, see [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md).
 - Introduced in: v4.0
 
+##### routine_load_unstable_threshold_second
+
+- Default: 3600
+- Type: Long
+- Unit: Seconds
+- Is mutable: Yes
+- Description: Routine Load job is set to the UNSTABLE state if any task within the Routine Load job lags. To be specific, the difference between the timestamp of the message being consumed and the current time exceeds this threshold, and unconsumed messages exist in the data source.
+- Introduced in: -
+
 ### Storage
 
-##### default_replication_num
+##### tablet_create_timeout_second
 
-- Default: 3
-- Type: Short
-- Unit: -
+- Default: 10
+- Type: Int
+- Unit: Seconds
 - Is mutable: Yes
-- Description: Sets the default number of replicas for each data partition when creating a table in StarRocks. This setting can be overridden when creating a table by specifying `replication_num=x` in the CREATE TABLE DDL.
+- Description: The timeout duration for creating a tablet. The default value is changed from 1 to 10 from v3.1 onwards.
+- Introduced in: -
+
+##### tablet_delete_timeout_second
+
+- Default: 2
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The timeout duration for deleting a tablet.
+- Introduced in: -
+
+##### alter_table_timeout_second
+
+- Default: 86400
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The timeout duration for the schema change operation (ALTER TABLE).
 - Introduced in: -
 
 ##### enable_strict_storage_medium_check
@@ -2615,34 +1797,14 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The longest duration the metadata can be retained after a database, table, or partition is dropped. If this duration expires, the data will be deleted and cannot be recovered through the [RECOVER](../../sql-reference/sql-statements/backup_restore/RECOVER.md) command.
 - Introduced in: -
 
-##### enable_auto_tablet_distribution
+##### check_consistency_default_timeout_second
 
-- Default: true
-- Type: Boolean
-- Unit: -
+- Default: 600
+- Type: Long
+- Unit: Seconds
 - Is mutable: Yes
-- Description: Whether to automatically set the number of buckets.
-  - If this parameter is set to `TRUE`, you don't need to specify the number of buckets when you create a table or add a partition. StarRocks automatically determines the number of buckets.
-  - If this parameter is set to `FALSE`, you need to manually specify the number of buckets when you create a table or add a partition. If you do not specify the bucket count when adding a new partition to a table, the new partition inherits the bucket count set at the creation of the table. However, you can also manually specify the number of buckets for the new partition.
-- Introduced in: v2.5.7
-
-##### enable_experimental_rowstore
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether to enable the [hybrid row-column storage](../../table_design/hybrid_table.md) feature.
-- Introduced in: v3.2.3
-
-#### enable_experimental_gin
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether to enable the [full-text inverted index](../../table_design/indexes/inverted_index.md) feature.
-- Introduced in: v3.3.0
+- Description: The timeout duration for a replica consistency check. You can set this parameter based on the size of your tablet.
+- Introduced in: -
 
 ##### storage_usage_soft_limit_percent
 
@@ -2684,63 +1846,13 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: Hard limit of the remaining storage space in a BE directory. If the remaining storage space in the BE storage directory is less than this value and the storage usage (in percentage) exceeds `storage_usage_hard_limit_percent`, Load and Restore jobs are rejected. You need to set this item together with the BE configuration item `storage_flood_stage_left_capacity_bytes` to allow the configurations to take effect.
 - Introduced in: -
 
-##### alter_table_timeout_second
+##### tablet_stat_update_interval_second
 
-- Default: 86400
+- Default: 300
 - Type: Int
 - Unit: Seconds
-- Is mutable: Yes
-- Description: The timeout duration for the schema change operation (ALTER TABLE).
-- Introduced in: -
-
-##### enable_fast_schema_evolution
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether to enable fast schema evolution for all tables within the StarRocks cluster. Valid values are `TRUE` and `FALSE` (default). Enabling fast schema evolution can increase the speed of schema changes and reduce resource usage when columns are added or dropped.
-- Introduced in: v3.2.0
-
-> **NOTE**
->
-> - StarRocks shared-data clusters supports this parameter from v3.3.0.
-> - If you need to configure the fast schema evolution for a specific table, such as disabling fast schema evolution for a specific table, you can set the table property [`fast_schema_evolution`](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md#set-fast-schema-evolution) at table creation.
-
-##### recover_with_empty_tablet
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether to replace a lost or corrupted tablet replica with an empty one. If a tablet replica is lost or corrupted, data queries on this tablet or other healthy tablets may fail. Replacing the lost or corrupted tablet replica with an empty tablet ensures that the query can still be executed. However, the result may be incorrect because data is lost. The default value is `FALSE`, which means lost or corrupted tablet replicas are not replaced with empty ones, and the query fails.
-- Introduced in: -
-
-##### tablet_create_timeout_second
-
-- Default: 10
-- Type: Int
-- Unit: Seconds
-- Is mutable: Yes
-- Description: The timeout duration for creating a tablet. The default value is changed from 1 to 10 from v3.1 onwards.
-- Introduced in: -
-
-##### tablet_delete_timeout_second
-
-- Default: 2
-- Type: Int
-- Unit: Seconds
-- Is mutable: Yes
-- Description: The timeout duration for deleting a tablet.
-- Introduced in: -
-
-##### check_consistency_default_timeout_second
-
-- Default: 600
-- Type: Long
-- Unit: Seconds
-- Is mutable: Yes
-- Description: The timeout duration for a replica consistency check. You can set this parameter based on the size of your tablet.
+- Is mutable: No
+- Description: The time interval at which the FE retrieves tablet statistics from each BE.
 - Introduced in: -
 
 ##### tablet_sched_slot_num_per_path
@@ -2783,39 +1895,6 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: Whether to disable replica balancing for Colocate Table. `TRUE` indicates replica balancing is disabled. `FALSE` indicates replica balancing is enabled.
 - Introduced in: -
 
-<!--
-##### tablet_sched_disable_colocate_overall_balance
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### tablet_sched_colocate_balance_high_prio_backends
-
-- Default: {}
-- Type: Long[]
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### tablet_sched_always_force_decommission_replica
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
 ##### tablet_sched_be_down_tolerate_time_s
 
 - Default: 900
@@ -2824,17 +1903,6 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Is mutable: Yes
 - Description: The maximum duration the scheduler allows for a BE node to remain inactive. After the time threshold is reached, tablets on that BE node will be migrated to other active BE nodes.
 - Introduced in: v2.5.7
-
-<!--
-##### tablet_sched_colocate_be_down_tolerate_time_s
-
-- Default: 12 * 3600
-- Type: Long
-- Unit: Seconds
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
 
 ##### tablet_sched_max_balancing_tablets
 
@@ -2874,16 +1942,6 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Is mutable: Yes
 - Description: The percentage threshold for determining whether the load of a BE is balanced. If a BE has a lower load than the average load of all BEs and the difference is greater than this value, this BE is in a low load state. On the contrary, if a BE has a higher load than the average load and the difference is greater than this value, this BE is in a high load state.
 - Introduced in: -
-
-##### tablet_sched_num_based_balance_threshold_ratio
-
-- Default: 0.5
-- Alias: -
-- Type: Double
-- Unit: -
-- Is mutable: Yes
-- Description: Doing num based balance may break the disk size balance, but the maximum gap between disks cannot exceed tablet_sched_num_based_balance_threshold_ratio * tablet_sched_balance_load_score_threshold. If there are tablets in the cluster that are constantly balancing from A to B and B to A, reduce this value. If you want the tablet distribution to be more balanced, increase this value.
-- Introduced in: - 3.1
 
 ##### tablet_sched_balance_load_disk_safe_threshold
 
@@ -2925,87 +1983,24 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description:The maximum timeout duration for cloning a tablet.
 - Introduced in: -
 
-<!--
-##### tablet_sched_checker_interval_seconds
+##### tablet_sched_num_based_balance_threshold_ratio
 
-- Default: 20
-- Type: Int
-- Unit: Seconds
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### tablet_sched_max_migration_task_sent_once
-
-- Default: 1000
-- Type: Int
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### tablet_sched_consecutive_full_clone_delay_sec
-
-- Default: 180
-- Type: Long
-- Unit: Seconds
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### tablet_report_drop_tablet_delay_sec
-
-- Default: 120
-- Type: Long
-- Unit: Seconds
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### tablet_checker_partition_batch_num
-
-- Default: 500
-- Type: Int
+- Default: 0.5
+- Alias: -
+- Type: Double
 - Unit: -
 - Is mutable: Yes
-- Description:
-- Introduced in: -
--->
+- Description: Doing num based balance may break the disk size balance, but the maximum gap between disks cannot exceed tablet_sched_num_based_balance_threshold_ratio * tablet_sched_balance_load_score_threshold. If there are tablets in the cluster that are constantly balancing from A to B and B to A, reduce this value. If you want the tablet distribution to be more balanced, increase this value.
+- Introduced in: - 3.1
 
-##### tablet_stat_update_interval_second
+##### recover_with_empty_tablet
 
-- Default: 300
-- Type: Int
-- Unit: Seconds
-- Is mutable: No
-- Description: The time interval at which the FE retrieves tablet statistics from each BE.
-- Introduced in: -
-
-##### max_automatic_partition_number
-
-- Default: 4096
-- Type: Int
+- Default: false
+- Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: The maximum number of automatically created partitions.
-- Introduced in: v3.1
-
-##### auto_partition_max_creation_number_per_load
-
-- Default: 4096
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: The maximum number of partitions can be created in a table (with Expression Partitioning strategy) by a loading task.
-- Introduced in: v3.3.2
+- Description: Whether to replace a lost or corrupted tablet replica with an empty one. If a tablet replica is lost or corrupted, data queries on this tablet or other healthy tablets may fail. Replacing the lost or corrupted tablet replica with an empty tablet ensures that the query can still be executed. However, the result may be incorrect because data is lost. The default value is `FALSE`, which means lost or corrupted tablet replicas are not replaced with empty ones, and the query fails.
+- Introduced in: -
 
 ##### max_partition_number_per_table
 
@@ -3015,6 +2010,49 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Is mutable: Yes
 - Description: The maximum number of partitions can be created in a table.
 - Introduced in: v3.3.2
+
+##### enable_experimental_rowstore
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable the [hybrid row-column storage](../../table_design/hybrid_table.md) feature.
+- Introduced in: v3.2.3
+
+##### enable_auto_tablet_distribution
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to automatically set the number of buckets.
+  - If this parameter is set to `TRUE`, you don't need to specify the number of buckets when you create a table or add a partition. StarRocks automatically determines the number of buckets.
+  - If this parameter is set to `FALSE`, you need to manually specify the number of buckets when you create a table or add a partition. If you do not specify the bucket count when adding a new partition to a table, the new partition inherits the bucket count set at the creation of the table. However, you can also manually specify the number of buckets for the new partition.
+- Introduced in: v2.5.7
+
+##### default_replication_num
+
+- Default: 3
+- Type: Short
+- Unit: -
+- Is mutable: Yes
+- Description: Sets the default number of replicas for each data partition when creating a table in StarRocks. This setting can be overridden when creating a table by specifying `replication_num=x` in the CREATE TABLE DDL.
+- Introduced in: -
+
+##### enable_fast_schema_evolution
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable fast schema evolution for all tables within the StarRocks cluster. Valid values are `TRUE` and `FALSE` (default). Enabling fast schema evolution can increase the speed of schema changes and reduce resource usage when columns are added or dropped.
+- Introduced in: v3.2.0
+
+> **NOTE**
+>
+> - StarRocks shared-data clusters supports this parameter from v3.3.0.
+> - If you need to configure the fast schema evolution for a specific table, such as disabling fast schema evolution for a specific table, you can set the table property [`fast_schema_evolution`](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md#set-fast-schema-evolution) at table creation.
 
 ##### max_bucket_number_per_partition
 
@@ -3053,6 +2091,32 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 
 - Introduced in: -
 
+##### shard_group_clean_threshold_sec
+
+- Default: 3600
+- Type: Long
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The time before FE cleans the unused tablet and shard groups in a shared-data cluster. Tablets and shard groups created within this threshold will not be cleaned.
+- Introduced in: -
+
+##### star_mgr_meta_sync_interval_sec
+
+- Default: 600
+- Type: Long
+- Unit: Seconds
+- Is mutable: No
+- Description: The interval at which FE runs the periodical metadata synchronization with StarMgr in a shared-data cluster.
+- Introduced in: -
+
+##### meta_sync_force_delete_shard_meta
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to allow deleting the metadata of the shared-data cluster directly, bypassing cleaning the remote storage files. It is recommended to set this item to `true` only when there is an excessive number of shards to be cleaned, which leads to extreme memory pressure on the FE JVM. Note that the data files belonging to the shards or tablets cannot be automatically cleaned after this feature is enabled.
+- Introduced in: v3.2.10, v3.3.3
 
 ##### cloud_native_meta_port
 
@@ -3063,7 +2127,6 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: FE cloud-native metadata server RPC listen port.
 - Introduced in: -
 
-
 ##### enable_load_volume_from_conf
 
 - Default: false
@@ -3072,7 +2135,6 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Is mutable: No
 - Description: Whether to allow StarRocks to create the built-in storage volume by using the object storage-related properties specified in the FE configuration file. The default value is changed from `true` to `false` from v3.4.1 onwards.
 - Introduced in: v3.1.0
-
 
 ##### cloud_native_storage_type
 
@@ -3276,15 +2338,6 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The Client ID of the Managed Identity used to authorize requests for your Azure Data Lake Storage Gen2.
 - Introduced in: v3.4.4
 
-##### azure_use_native_sdk
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether to use the native SDK to access Azure Blob Storage, thus allowing authentication with Managed Identities and Service Principals. If this item is set to `false`, only authentication with Shared Key and SAS Token is allowed.
-- Introduced in: v3.4.4
-
 ##### gcp_gcs_path
 
 - Default: Empty string
@@ -3292,6 +2345,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Unit: -
 - Is mutable: No
 - Description: The Google Cloud path used to store data. It consists of the name of your Google Cloud bucket and the sub-path (if any) under it, for example, `testbucket/subpath`.
+- Introduced in: v3.5.1
+
+##### gcp_gcs_use_compute_engine_service_account
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether to use the Service Account that is bound to your Compute Engine.
 - Introduced in: v3.5.1
 
 ##### gcp_gcs_service_account_email
@@ -3303,15 +2365,6 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The email address in the JSON file generated at the creation of the Service Account, for example, `user@hello.iam.gserviceaccount.com`.
 - Introduced in: v3.5.1
 
-##### gcp_gcs_service_account_private_key_id
-
-- Default: Empty string
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description: The Private Key ID in the JSON file generated at the creation of the Service Account.
-- Introduced in: v3.5.1
-
 ##### gcp_gcs_service_account_private_key
 
 - Default: Empty string
@@ -3321,6 +2374,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The Private Key in the JSON file generated at the creation of the Service Account, for example, `-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n`.
 - Introduced in: v3.5.1
 
+##### gcp_gcs_service_account_private_key_id
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The Private Key ID in the JSON file generated at the creation of the Service Account.
+- Introduced in: v3.5.1
+
 ##### gcp_gcs_impersonation_service_account
 
 - Default: Empty string
@@ -3328,15 +2390,6 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Unit: -
 - Is mutable: No
 - Description: The Service Account that you want to impersonate if you use the impersonation-based authentication to access Google Storage.
-- Introduced in: v3.5.1
-
-##### gcp_gcs_use_compute_engine_service_account
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: No
-- Description: Whether to use the Service Account that is bound to your Compute Engine.
 - Introduced in: v3.5.1
 
 ##### starmgr_grpc_timeout_seconds
@@ -3356,6 +2409,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Is mutable: Yes
 - Description: The maximum number of worker threads that are used by the grpc server in the FE starmgr module.
 - Introduced in: v4.0.0, v3.5.8
+
+##### azure_use_native_sdk
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to use the native SDK to access Azure Blob Storage, thus allowing authentication with Managed Identities and Service Principals. If this item is set to `false`, only authentication with Shared Key and SAS Token is allowed.
+- Introduced in: v3.4.4
 
 ##### lake_compaction_score_selector_min_score
 
@@ -3384,6 +2446,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The number of recent successful Compaction task records to keep in the memory of the Leader FE node in a shared-data cluster. You can view recent successful Compaction task records using the `SHOW PROC '/compactions'` command. Note that the Compaction history is stored in the FE process memory, and it will be lost if the FE process is restarted.
 - Introduced in: v3.1.0
 
+##### lake_compaction_disable_ids
+
+- Default: ""
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: The table or partition list of which compaction is disabled in shared-data mode. The format is `tableId1;partitionId2`, seperated by semicolon, for example, `12345;98765`.
+- Introduced in: v3.4.4
+
 ##### lake_publish_version_max_threads
 
 - Default: 512
@@ -3393,38 +2464,23 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The maximum number of threads for Version Publish tasks in a shared-data cluster.
 - Introduced in: v3.2.0
 
-<!--
-##### lake_publish_delete_txnlog_max_threads
+##### lake_enable_balance_tablets_between_workers
 
-- Default: 16
-- Type: Int
+- Default: true
+- Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description:
-- Introduced in: -
--->
+- Description: Whether to balance the number of tablets among Compute Nodes during the tablet migration of cloud-native tables in a shared-data cluster. `true` indicates to balance the tablets among Compute Nodes, and `false` indicates to disabling this feature.
+- Introduced in: v3.3.4
 
-<!--
-##### lake_compaction_default_timeout_second
+##### lake_compaction_allow_partial_success
 
-- Default: 86400
-- Type: Int
-- Unit: Seconds
+- Default: true
+- Type: Boolean
+- Unit: -
 - Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### lake_autovacuum_max_previous_versions
-
-- Default: 0
-- Type: Int
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
+- Description: If this item is set to `true`, the system will consider the Compaction operation in a shared-data cluster as successful when one of the sub-tasks succeeds.
+- Introduced in: v3.5.2
 
 ##### lake_autovacuum_parallel_partitions
 
@@ -3480,24 +2536,6 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The Compaction Score threshold that triggers Data Ingestion Slowdown in a shared-data cluster. This configuration only takes effect when `lake_enable_ingest_slowdown` is set to `true`.
 - Introduced in: v3.2.0
 
-##### lake_ingest_slowdown_ratio
-
-- Default: 0.1
-- Type: Double
-- Unit: -
-- Is mutable: Yes
-- Description: The ratio of the loading rate slowdown when Data Ingestion Slowdown is triggered.
-
-  Data loading tasks consist of two phases: data writing and data committing (COMMIT). Data Ingestion Slowdown is achieved by delaying data committing. The delay ratio is calculated using the following formula: `(compaction_score - lake_ingest_slowdown_threshold) * lake_ingest_slowdown_ratio`. For example, if the data writing phase takes 5 minutes, `lake_ingest_slowdown_ratio` is 0.1, and the Compaction Score is 10 higher than `lake_ingest_slowdown_threshold`, the delay in data committing time is `5 * 10 * 0.1 = 5` minutes, which means the average loading speed is halved.
-
-- Introduced in: v3.2.0
-
-> **NOTE**
->
-> - If a loading task writes to multiple partitions simultaneously, the maximum Compaction Score among all partitions is used to calculate the delay in committing time.
-> - The delay in committing time is calculated during the first attempt to commit. Once set, it will not change. Once the delay time is up, as long as the Compaction Score is not above `lake_compaction_score_upper_bound`, the system will perform the data committing operation.
-> - If the delay in committing time exceeds the timeout of the loading task, the task will fail directly.
-
 ##### lake_compaction_score_upper_bound
 
 - Default: 2000
@@ -3507,79 +2545,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The upper limit of the Compaction Score for a partition in a shared-data cluster. `0` indicates no upper limit. This item only takes effect when `lake_enable_ingest_slowdown` is set to `true`. When the Compaction Score of a partition reaches or exceeds this upper limit, incoming loading tasks will be rejected. From v3.3.6 onwards, the default value is changed from `0` to `2000`.
 - Introduced in: v3.2.0
 
-##### lake_compaction_disable_ids
-
-- Default: ""
-- Type: String
-- Unit: -
-- Is mutable: Yes
-- Description: The table or partition list of which compaction is disabled in shared-data mode. The format is `tableId1;partitionId2`, seperated by semicolon, for example, `12345;98765`.
-- Introduced in: v3.4.4
-
-##### lake_compaction_allow_partial_success
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: If this item is set to `true`, the system will consider the Compaction operation in a shared-data cluster as successful when one of the sub-tasks succeeds.
-- Introduced in: v3.5.2
-
-##### lake_enable_balance_tablets_between_workers
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether to balance the number of tablets among Compute Nodes during the tablet migration of cloud-native tables in a shared-data cluster. `true` indicates to balance the tablets among Compute Nodes, and `false` indicates to disabling this feature.
-- Introduced in: v3.3.4
-
-##### lake_balance_tablets_threshold
-
-- Default: 0.15
-- Type: Double
-- Unit: -
-- Is mutable: Yes
-- Description: The threshold the system used to judge the tablet balance among workers in a shared-data cluster, The imbalance factor is calculated as `f = (MAX(tablets) - MIN(tablets)) / AVERAGE(tablets)`. If the factor is greater than `lake_balance_tablets_threshold`, a tablet balance will be triggered. This item takes effect only when `lake_enable_balance_tablets_between_workers` is set to `true`.
-- Introduced in: v3.3.4
-
-##### shard_group_clean_threshold_sec
-
-- Default: 3600
-- Type: Long
-- Unit: Seconds
-- Is mutable: Yes
-- Description: The time before FE cleans the unused tablet and shard groups in a shared-data cluster. Tablets and shard groups created within this threshold will not be cleaned.
-- Introduced in: -
-
-##### star_mgr_meta_sync_interval_sec
-
-- Default: 600
-- Type: Long
-- Unit: Seconds
-- Is mutable: No
-- Description: The interval at which FE runs the periodical metadata synchronization with StarMgr in a shared-data cluster.
-- Introduced in: -
-
-##### meta_sync_force_delete_shard_meta
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether to allow deleting the metadata of the shared-data cluster directly, bypassing cleaning the remote storage files. It is recommended to set this item to `true` only when there is an excessive number of shards to be cleaned, which leads to extreme memory pressure on the FE JVM. Note that the data files belonging to the shards or tablets cannot be automatically cleaned after this feature is enabled.
-- Introduced in: v3.2.10, v3.3.3
-
 ### Other
-
-##### tmp_dir
-
-- Default: StarRocksFE.STARROCKS_HOME_DIR + "/temp_dir"
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description: The directory that stores temporary files such as files generated during backup and restore procedures. After these procedures finish, the generated temporary files are deleted.
-- Introduced in: -
 
 ##### plugin_dir
 
@@ -3599,27 +2565,14 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: Whether plugins can be installed on FEs. Plugins can be installed or uninstalled only on the Leader FE.
 - Introduced in: -
 
-<!--
-##### profile_process_threads_num
+##### tmp_dir
 
-- Default: 2
-- Type: Int
+- Default: StarRocksFE.STARROCKS_HOME_DIR + "/temp_dir"
+- Type: String
 - Unit: -
 - Is mutable: No
-- Description:
+- Description: The directory that stores temporary files such as files generated during backup and restore procedures. After these procedures finish, the generated temporary files are deleted.
 - Introduced in: -
--->
-
-<!--
-##### profile_process_blocking_queue_size
-
-- Default: profile_process_threads_num * 128
-- Type: Int
-- Unit: -
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
 
 ##### max_agent_task_threads_num
 
@@ -3639,170 +2592,25 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The duration the FE must wait before it can resend an agent task. An agent task can be resent only when the gap between the task creation time and the current time exceeds the value of this parameter. This parameter is used to prevent repetitive sending of agent tasks.
 - Introduced in: -
 
-<!--
-##### start_with_incomplete_meta
+##### mv_create_partition_batch_interval_ms
 
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### max_backend_down_time_second
-
-- Default: 3600
+- Default: 1000
 - Type: Int
-- Unit: Seconds
+- Unit: ms
 - Is mutable: Yes
-- Description:
-- Introduced in: -
--->
+- Description: During materialized view refresh, if multiple partitions need to be created in bulk, the system divides them into batches of 64 partitions each. To reduce the risk of failures caused by frequent partition creation, a default interval (in milliseconds) is set between each batch to control the creation frequency.
+- Introduced in: v3.3
 
-<!--
-##### lake_enable_batch_publish_version 
+##### transform_type_prefer_string_for_varchar
 
 - Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description:
-- Introduced in: -
--->
+- Description: Whether to prefer string type for fixed length varchar columns in materialized view creation and CTAS operations.
+- Introduced in: v4.0.0
 
-<!--
-##### lake_batch_publish_max_version_num
-
-- Default: 10
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### lake_batch_publish_min_version_num
-
-- Default: 1
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### capacity_used_percent_high_water
-
-- Default: 0.75
-- Type: Double
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### alter_max_worker_threads
-
-- Default: 4
-- Type: Int
-- Unit: -
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### alter_max_worker_queue_size
-
-- Default: 4096
-- Type: Int
-- Unit: -
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### task_runs_queue_length
-
-- Default: 500
-- Type: Int
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### task_runs_concurrency
-
-- Default: 4
-- Type: Int
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### max_task_runs_threads_num
-
-- Default: 512
-- Type: Int
-- Unit: -
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### consistency_check_start_time
-
-- Default: 23
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### consistency_check_end_time
-
-- Default: 4
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### consistency_tablet_meta_check_interval_ms
-
-- Default: 2 * 3600 * 1000
-- Type: Long
-- Unit: Milliseconds
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### backup_plugin_path (Deprecated)
-
-- Default: /tools/trans_file_tool/trans_files.sh
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
+<EditionSpecificFEItem />
 
 ##### backup_job_default_timeout_ms
 
@@ -3822,37 +2630,6 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The character set that is used by the FE.
 - Introduced in: -
 
-<!--
-##### db_used_data_quota_update_interval_secs
-
-- Default: 300
-- Type: Int
-- Unit:
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### disable_hadoop_load
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-##### report_queue_size (Deprecated)
-
-- Default: 100
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: The maximum number of jobs that can wait in a report queue. The report is about disk, task, and tablet information of BEs. If too many report jobs are piling up in a queue, OOM will occur.
-- Introduced in: -
-
 ##### enable_collect_tablet_num_in_show_proc_backend_disk_path
 
 - Default: true
@@ -3870,28 +2647,6 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Is mutable: No
 - Description: Specifies whether to enable the feature that is used to periodically collect metrics. Valid values: `TRUE` and `FALSE`. `TRUE` specifies to enable this feature, and `FALSE` specifies to disable this feature.
 - Introduced in: -
-
-<!--
-##### enable_replicated_storage_as_default_engine
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### enable_schedule_insert_query_by_row_count
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
 
 ##### max_small_file_number
 
@@ -3919,39 +2674,6 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Is mutable: No
 - Description: The root directory of small files.
 - Introduced in: -
-
-<!--
-##### enable_starrocks_external_table_auth_check
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### authorization_enable_column_level_privilege
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### authentication_chain
-
-- Default: {AUTHENTICATION_CHAIN_MECHANISM_NATIVE}
-- Type: String[]
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
 
 ##### authentication_ldap_simple_server_host
 
@@ -4006,6 +2728,321 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Is mutable: Yes
 - Description: The password of the administrator used to search for users' authentication information.
 - Introduced in: -
+
+##### auth_token
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The token that is used for identity authentication within the StarRocks cluster to which the FE belongs. If this parameter is left unspecified, StarRocks generates a random token for the cluster at the time when the leader FE of the cluster is started for the first time.
+- Introduced in: -
+
+##### hive_meta_load_concurrency
+
+- Default: 4
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: The maximum number of concurrent threads that are supported for Hive metadata.
+- Introduced in: -
+
+##### hive_meta_cache_refresh_interval_s
+
+- Default: 3600 * 2
+- Type: Long
+- Unit: Seconds
+- Is mutable: No
+- Description: The time interval at which the cached metadata of Hive external tables is updated.
+- Introduced in: -
+
+##### hive_meta_store_timeout_s
+
+- Default: 10
+- Type: Long
+- Unit: Seconds
+- Is mutable: No
+- Description: The amount of time after which a connection to a Hive metastore times out.
+- Introduced in: -
+
+##### es_state_sync_interval_second
+
+- Default: 10
+- Type: Long
+- Unit: Seconds
+- Is mutable: No
+- Description: The time interval at which the FE obtains Elasticsearch indexes and synchronizes the metadata of StarRocks external tables.
+- Introduced in: -
+
+##### query_detail_explain_level
+
+- Default: COSTS
+- Type: String
+- Unit: -
+- Is mutable: true
+- Description: The detail level of query plan returned by the EXPLAIN statement. Valid values: COSTS, NORMAL, VERBOSE.
+- Introduced in: v3.2.12, v3.3.5
+
+##### max_upload_task_per_be
+
+- Default: 0
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: In each BACKUP operation, the maximum number of upload tasks StarRocks assigned to a BE node. When this item is set to less than or equal to 0, no limit is imposed on the task number.
+- Introduced in: v3.1.0
+
+##### max_download_task_per_be
+
+- Default: 0
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: In each RESTORE operation, the maximum number of download tasks StarRocks assigned to a BE node. When this item is set to less than or equal to 0, no limit is imposed on the task number.
+- Introduced in: v3.1.0
+
+##### max_mv_check_base_table_change_retry_times
+
+- Default: 10
+- Type: -
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum retry times for detecting base table change when refreshing materialized views.
+- Introduced in: v3.3.0
+
+##### max_mv_refresh_failure_retry_times
+
+- Default: 1
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum retry times when materialized view fails to refresh.
+- Introduced in: v3.3.0
+
+##### max_mv_refresh_try_lock_failure_retry_times
+
+- Default: 3
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum retry times of try lock when materialized view fails to refresh.
+- Introduced in: v3.3.0
+
+##### mv_refresh_try_lock_timeout_ms
+
+- Default: 30000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: The default try lock timeout for materialized view refresh to try the DB lock of its base table/materialized view.
+- Introduced in: v3.3.0
+
+##### enable_mv_refresh_collect_profile
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable profile in refreshing materialized view by default for all materialized views.
+- Introduced in: v3.3.0
+
+##### enable_mv_refresh_extra_prefix_logging
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable prefixes with materialized view names in logs for better debug.
+- Introduced in: v3.4.0
+
+##### enable_mv_query_context_cache
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable query-level materialized view rewrite cache to improve query rewrite performance.
+- Introduced in: v3.3
+
+##### mv_refresh_fail_on_filter_data
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Mv refresh fails if there is filtered data in refreshing, true by default, otherwise return success by ignoring the filtered data.
+- Introduced in: -
+
+##### mv_refresh_default_planner_optimize_timeout
+
+- Default: 30000
+- Type: -
+- Unit: -
+- Is mutable: Yes
+- Description: The default timeout for the planning phase of the optimizer when refresh materialized views.
+- Introduced in: v3.3.0
+
+##### enable_mv_refresh_query_rewrite
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable rewrite query during materialized view refresh so that the query can use the rewritten mv directly rather than the base table to improve query performance.
+- Introduced in: v3.3
+
+##### enable_mv_post_image_reload_cache
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to perform reload flag check after FE loaded an image. If the check is performed for a base materialized view, it is not needed for other materialized views that related to it.
+- Introduced in: v3.5.0
+
+##### mv_plan_cache_expire_interval_sec
+
+- Default: 24 * 60 * 60
+- Type: Long
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The valid time of materialized view plan cache (which is used for materialized view rewrite) before expiry. The default value is 1 day.
+- Introduced in: v3.2
+
+##### mv_plan_cache_thread_pool_size
+
+- Default: 3
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The default thread pool size of materialized view plan cache (which is used for materialized view rewrite).
+- Introduced in: v3.2
+
+##### mv_plan_cache_max_size
+
+- Default: 1000
+- Type: Long
+- Unit:
+- Is mutable: Yes
+- Description: The maximum size of materialized view plan cache (which is used for materialized view rewrite). If there are many materialized views used for transparent query rewrite, you may increase this value.
+- Introduced in: v3.2
+
+##### enable_materialized_view_concurrent_prepare
+
+- Default: true
+- Type: Boolean
+- Unit:
+- Is mutable: Yes
+- Description: Whether to prepare materialized view concurrently to improve performance.
+- Introduced in: v3.4.4
+
+##### allow_system_reserved_names
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to allow users to create columns whose names are initiated with `__op` and `__row`. To enable this feature, set this parameter to `TRUE`. Please note that these name formats are reserved for special purposes in StarRocks and creating such columns may result in undefined behavior. Therefore this feature is disabled by default.
+- Introduced in: v3.2.0
+
+##### replication_interval_ms
+
+- Default: 100
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: The minimum time interval at which the replication tasks are scheduled.
+- Introduced in: v3.3.5
+
+##### replication_max_parallel_table_count
+
+- Default: 100
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of concurrent data synchronization tasks allowed. StarRocks creates one synchronization task for each table.
+- Introduced in: v3.3.5
+
+##### replication_max_parallel_replica_count
+
+- Default: 10240
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of tablet replicas allowed for concurrent synchronization.
+- Introduced in: v3.3.5
+
+##### replication_max_parallel_data_size_mb
+
+- Default: 1048576
+- Type: Int
+- Unit: MB
+- Is mutable: Yes
+- Description: The maximum size of data allowed for concurrent synchronization.
+- Introduced in: v3.3.5
+
+##### replication_transaction_timeout_sec
+
+- Default: 86400
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The timeout duration for synchronization tasks.
+- Introduced in: v3.3.5
+
+##### jdbc_meta_default_cache_enable
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: The default value for whether the JDBC Catalog metadata cache is enabled. When set to True, newly created JDBC Catalogs will default to metadata caching enabled.
+- Introduced in: -
+
+##### jdbc_meta_default_cache_expire_sec
+
+- Default: 600
+- Type: Long
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The default expiration time for the JDBC Catalog metadata cache. When `jdbc_meta_default_cache_enable` is set to true, newly created JDBC Catalogs will default to setting the expiration time of the metadata cache.
+- Introduced in: -
+
+##### jdbc_connection_pool_size
+
+- Default: 8
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: The maximum capacity of the JDBC connection pool for accessing JDBC catalogs.
+- Introduced in: -
+
+##### jdbc_minimum_idle_connections
+
+- Default: 1
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: The minimum number of idle connections in the JDBC connection pool for accessing JDBC catalogs.
+- Introduced in: -
+
+##### jdbc_connection_idle_timeout_ms
+
+- Default: 600000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: No
+- Description: The maximum amount of time after which a connection for accessing a JDBC catalog times out. Timed-out connections are considered idle.
+- Introduced in: -
+
+##### enable_colocate_restore
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable Backup and Restore for Colocate Tables. `true` indicates enabling Backup and Restore for Colocate Tables and `false` indicates disabling it.
+- Introduced in: v3.2.10, v3.3.3
 
 ##### jwt_jwks_url
 
@@ -4124,1483 +3161,6 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The list of strings used to identify the audience (`aud`) in the JWT. The JWT is considered valid only if one of the values in the list match the JWT audience.
 - Introduced in: v3.5.0
 
-<!--
-##### enable_token_check
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-##### auth_token
-
-- Default: Empty string
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description: The token that is used for identity authentication within the StarRocks cluster to which the FE belongs. If this parameter is left unspecified, StarRocks generates a random token for the cluster at the time when the leader FE of the cluster is started for the first time.
-- Introduced in: -
-
-<!--
-##### enable_authentication_kerberos
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### authentication_kerberos_service_principal
-
-- Default: Empty string
-- Type: String
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### authentication_kerberos_service_key_tab
-
-- Default: Empty string
-- Type: String
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### authorization_enable_admin_user_protection
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### authorization_enable_priv_collection_cache
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### max_partition_number_per_table
-
-- Default: 100000
-- Type: Long
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### enable_automatic_bucket
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### default_automatic_bucket_size
-
-- Default: 0
-- Type: Long
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### max_agent_tasks_send_per_be
-
-- Default: 10000
-- Type: Int
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### hive_meta_cache_refresh_min_threads
-
-- Default: 50
-- Type: Int
-- Unit: -
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-##### hive_meta_load_concurrency
-
-- Default: 4
-- Type: Int
-- Unit: -
-- Is mutable: No
-- Description: The maximum number of concurrent threads that are supported for Hive metadata.
-- Introduced in: -
-
-##### hive_meta_cache_refresh_interval_s
-
-- Default: 3600 * 2
-- Type: Long
-- Unit: Seconds
-- Is mutable: No
-- Description: The time interval at which the cached metadata of Hive external tables is updated.
-- Introduced in: -
-
-<!--
-##### hive_meta_cache_ttl_s
-
-- Default: 3600 * 24
-- Type: Long
-- Unit: Seconds
-- Is mutable: No
-- Description: The amount of time after which the cached metadata of Hive external tables expires.
-- Introduced in: -
--->
-
-<!--
-##### remote_file_cache_ttl_s
-
-- Default: 3600 * 24
-- Type: Long
-- Unit: Seconds
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### max_hive_partitions_per_rpc
-
-- Default: 5000
-- Type: Int
-- Unit:
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### remote_file_cache_refresh_interval_s
-
-- Default: 60
-- Type: Long
-- Unit: Seconds
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### remote_file_metadata_load_concurrency
-
-- Default: 32
-- Type: Int
-- Unit:
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-##### hive_meta_store_timeout_s
-
-- Default: 10
-- Type: Long
-- Unit: Seconds
-- Is mutable: No
-- Description: The amount of time after which a connection to a Hive metastore times out.
-- Introduced in: -
-
-<!--
-##### enable_hms_events_incremental_sync
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### hms_events_polling_interval_ms
-
-- Default: 5000
-- Type: Int
-- Unit: Milliseconds
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### hms_events_batch_size_per_rpc
-
-- Default: 500
-- Type: Int
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### enable_hms_parallel_process_evens
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### hms_process_events_parallel_num
-
-- Default: 4
-- Type: Int
-- Unit: -
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### hive_max_split_size
-
-- Default: 64 * 1024 * 1024
-- Type: Long
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### enable_refresh_hive_partitions_statistics
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### enable_iceberg_custom_worker_thread
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### iceberg_worker_num_threads
-
-- Default: Runtime.getRuntime().availableProcessors()
-- Type: Long
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### iceberg_table_refresh_threads
-
-- Default: 128
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### iceberg_table_refresh_expire_sec
-
-- Default: 86400
-- Type: Int
-- Unit: Seconds
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### iceberg_metadata_cache_disk_path
-
-- Default: StarRocksFE.STARROCKS_HOME_DIR + "/caches/iceberg"
-- Type: String
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### iceberg_metadata_memory_cache_capacity
-
-- Default: 536870912
-- Type: Long
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### iceberg_metadata_memory_cache_expiration_seconds
-
-- Default: 86500
-- Type: Long
-- Unit: Seconds
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### enable_iceberg_metadata_disk_cache
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### iceberg_metadata_disk_cache_capacity
-
-- Default: 2147483648
-- Type: Long
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### iceberg_metadata_disk_cache_expiration_seconds
-
-- Default: 7 * 24 * 60 * 60
-- Type: Long
-- Unit: Seconds
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### iceberg_metadata_cache_max_entry_size
-
-- Default: 8388608
-- Type: Long
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-##### es_state_sync_interval_second
-
-- Default: 10
-- Type: Long
-- Unit: Seconds
-- Is mutable: No
-- Description: The time interval at which the FE obtains Elasticsearch indexes and synchronizes the metadata of StarRocks external tables.
-- Introduced in: -
-
-<!--
-##### broker_client_timeout_ms
-
-- Default: 120000
-- Type: Int
-- Unit: Milliseconds
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### vectorized_load_enable (Deprecated)
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### enable_pipeline_load (Deprecated)
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### enable_shuffle_load
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### eliminate_shuffle_load_by_replicated_storage
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### enable_vectorized_file_load (Deprecated)
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### enable_routine_load_lag_metrics
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### query_detail_cache_time_nanosecond
-
-- Default: 30000000000
-- Type: Long
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### min_routine_load_lag_for_metrics
-
-- Default: 10000
-- Type: Long
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### heartbeat_timeout_second
-
-- Default: 5
-- Type: Int
-- Unit: Seconds
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### heartbeat_retry_times
-
-- Default: 3
-- Type: Int
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### enable_display_shadow_partitions
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### enable_dict_optimize_routine_load
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### enable_dict_optimize_stream_load
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### enable_validate_password
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### enable_password_reuse
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### quorum_publish_wait_time_ms
-
-- Default: 5000
-- Alias: quorom_publish_wait_time_ms
-- Type: Int
-- Unit: Milliseconds
-- Is mutable: Yes
-- Description: The wait time for quorum publish. You can increase the timeout to avoid unnecessary Clone.
-- Introduced in: v3.1
--->
-
-<!--
-##### metadata_journal_queue_size
-
-- Default: 1000
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### metadata_journal_max_batch_size_mb
-
-- Default: 10
-- Type: Int
-- Unit: MB
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### metadata_journal_max_batch_cnt
-
-- Default: 100
-- Type: Int
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### jaeger_grpc_endpoint
-
-- Default: Empty string
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### lake_compaction_selector
-
-- Default: ScoreSelector
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### lake_compaction_sorter
-
-- Default: ScoreSorter
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### lake_compaction_simple_selector_min_versions
-
-- Default: 3
-- Type: Long
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### lake_compaction_simple_selector_threshold_versions
-
-- Default: 10
-- Type: Long
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### lake_compaction_simple_selector_threshold_seconds
-
-- Default: 300
-- Type: Long
-- Unit: Seconds
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### enable_new_publish_mechanism
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### metadata_journal_skip_bad_journal_ids
-
-- Default: Empty string
-- Type: String
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### profile_info_reserved_num
-
-- Default: 500
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### load_profile_info_reserved_num
-
-- Default: 500
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### profile_info_format
-
-- Default: default
-- Type: String
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### ignore_invalid_privilege_authentications
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### ssl_keystore_location
-
-- Default: Empty string
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### ssl_keystore_password
-
-- Default: Empty string
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### ssl_key_password
-
-- Default: Empty string
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### ssl_truststore_location
-
-- Default: Empty string
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### ssl_truststore_password
-
-- Default: Empty string
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### enable_check_db_state
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### binlog_ttl_second
-
-- Default: 60 * 30
-- Type: Long
-- Unit: Seconds
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### binlog_max_size
-
-- Default: Long.MAX_VALUE
-- Type: Long
-- Unit:
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### enable_safe_mode
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### safe_mode_checker_interval_sec
-
-- Default: 5
-- Type: Long
-- Unit: Seconds
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### auto_increment_cache_size
-
-- Default: 100000
-- Type: Int
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### enable_experimental_temporary_table
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### max_per_node_grep_log_limit
-
-- Default: 500000
-- Type: Long
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### enable_execute_script_on_frontend
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### alter_scheduler_interval_millisecond
-
-- Default: 10000
-- Type: Int
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### routine_load_scheduler_interval_millisecond
-
-- Default: 10000
-- Type: Int
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### load_profile_collect_threshold_second
-
-- Default: 0
-- Type: Long
-- Unit: Seconds
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-##### max_upload_task_per_be
-
-- Default: 0
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: In each BACKUP operation, the maximum number of upload tasks StarRocks assigned to a BE node. When this item is set to less than or equal to 0, no limit is imposed on the task number.
-- Introduced in: v3.1.0
-
-##### max_download_task_per_be
-
-- Default: 0
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: In each RESTORE operation, the maximum number of download tasks StarRocks assigned to a BE node. When this item is set to less than or equal to 0, no limit is imposed on the task number.
-- Introduced in: v3.1.0
-
-##### enable_colocate_restore
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether to enable Backup and Restore for Colocate Tables. `true` indicates enabling Backup and Restore for Colocate Tables and `false` indicates disabling it.
-- Introduced in: v3.2.10, v3.3.3
-
-<!--
-##### enable_persistent_index_by_default
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### experimental_enable_fast_schema_evolution_in_shared_data
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### pipe_listener_interval_millis
-
-- Default: 1000
-- Type: Int
-- Unit: Milliseconds
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### pipe_scheduler_interval_millis
-
-- Default: 1000
-- Type: Int
-- Unit: Milliseconds
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### enable_show_external_catalog_privilege
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### primary_key_disk_schedule_time
-
-- Default: 3600
-- Type: Int
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### access_control
-
-- Default: native
-- Type: String
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### ranger_user_ugi
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### catalog_metadata_cache_size
-
-- Default: 500
-- Type: Int
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-##### mv_plan_cache_expire_interval_sec
-
-- Default: 24 * 60 * 60
-- Type: Long
-- Unit: Seconds
-- Is mutable: Yes
-- Description: The valid time of materialized view plan cache (which is used for materialized view rewrite) before expiry. The default value is 1 day.
-- Introduced in: v3.2
-
-##### mv_plan_cache_thread_pool_size
-
-- Default: 3
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: The default thread pool size of materialized view plan cache (which is used for materialized view rewrite).
-- Introduced in: v3.2
-
-##### mv_plan_cache_max_size
-
-- Default: 1000
-- Type: Long
-- Unit:
-- Is mutable: Yes
-- Description: The maximum size of materialized view plan cache (which is used for materialized view rewrite). If there are many materialized views used for transparent query rewrite, you may increase this value.
-- Introduced in: v3.2
-
-##### enable_materialized_view_concurrent_prepare
-
-- Default: true
-- Type: Boolean
-- Unit:
-- Is mutable: Yes
-- Description: Whether to prepare materialized view concurrently to improve performance.
-- Introduced in: v3.4.4
-
-##### enable_mv_query_context_cache
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether to enable query-level materialized view rewrite cache to improve query rewrite performance.
-- Introduced in: v3.3
-
-##### mv_query_context_cache_max_size
-
-- Default: 1000
-- Type: -
-- Unit: -
-- Is mutable: Yes
-- Description: The maximum materialized view rewrite cache size during one query's lifecycle. The cache can be used to avoid repeating compute to reduce optimizer time in materialized view rewrite, but it may occupy some extra FE's memory. It can bring better performance when there are many relative materialized views (more than 10) or query is complex (with joins on multiple tables).
-- Introduced in: v3.3
-
-<!--
-##### port_connectivity_check_interval_sec
-
-- Default: 60
-- Type: Long
-- Unit: Seconds
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### port_connectivity_check_retry_times
-
-- Default: 3
-- Type: Long
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### port_connectivity_check_timeout_ms
-
-- Default: 10000
-- Type: Int
-- Unit: Milliseconds
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### json_file_size_limit
-
-- Default: 4294967296
-- Type: Long
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-##### allow_system_reserved_names
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether to allow users to create columns whose names are initiated with `__op` and `__row`. To enable this feature, set this parameter to `TRUE`. Please note that these name formats are reserved for special purposes in StarRocks and creating such columns may result in undefined behavior. Therefore this feature is disabled by default.
-- Introduced in: v3.2.0
-
-<!--
-##### use_lock_manager
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### lock_table_num
-
-- Default: 32
-- Type: Int
-- Unit: -
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### lock_manager_enable_resolve_deadlock
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### lock_manager_enable_loading_using_fine_granularity_lock
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### lock_manager_dead_lock_detection_delay_time_ms
-
-- Default: 3000
-- Type: Long
-- Unit: Milliseconds
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### refresh_dictionary_cache_thread_num
-
-- Default: 2
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-##### replication_interval_ms
-
-- Default: 100
-- Type: Int
-- Unit: -
-- Is mutable: No
-- Description: The minimum time interval at which the replication tasks are scheduled.
-- Introduced in: v3.3.5
-
-##### replication_max_parallel_table_count
-
-- Default: 100
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: The maximum number of concurrent data synchronization tasks allowed. StarRocks creates one synchronization task for each table.
-- Introduced in: v3.3.5
-
-##### replication_max_parallel_replica_count
-
-- Default: 10240
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: The maximum number of tablet replicas allowed for concurrent synchronization.
-- Introduced in: v3.3.5
-
-##### replication_max_parallel_data_size_mb
-
-- Default: 1048576
-- Type: Int
-- Unit: MB
-- Is mutable: Yes
-- Description: The maximum size of data allowed for concurrent synchronization.
-- Introduced in: v3.3.5
-
-##### replication_transaction_timeout_sec
-
-- Default: 86400
-- Type: Int
-- Unit: Seconds
-- Is mutable: Yes
-- Description: The timeout duration for synchronization tasks.
-- Introduced in: v3.3.5
-
-##### jdbc_meta_default_cache_enable
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: The default value for whether the JDBC Catalog metadata cache is enabled. When set to True, newly created JDBC Catalogs will default to metadata caching enabled.
-- Introduced in: -
-
-##### jdbc_meta_default_cache_expire_sec
-
-- Default: 600
-- Type: Long
-- Unit: Seconds
-- Is mutable: Yes
-- Description: The default expiration time for the JDBC Catalog metadata cache. When `jdbc_meta_default_cache_enable` is set to true, newly created JDBC Catalogs will default to setting the expiration time of the metadata cache.
-- Introduced in: -
-
-##### jdbc_connection_pool_size
-
-- Default: 8
-- Type: Int
-- Unit: -
-- Is mutable: No
-- Description: The maximum capacity of the JDBC connection pool for accessing JDBC catalogs.
-- Introduced in: -
-
-##### jdbc_minimum_idle_connections
-
-- Default: 1
-- Type: Int
-- Unit: -
-- Is mutable: No
-- Description: The minimum number of idle connections in the JDBC connection pool for accessing JDBC catalogs.
-- Introduced in: -
-
-##### jdbc_connection_idle_timeout_ms
-
-- Default: 600000
-- Type: Int
-- Unit: Milliseconds
-- Is mutable: No
-- Description: The maximum amount of time after which a connection for accessing a JDBC catalog times out. Timed-out connections are considered idle.
-- Introduced in: -
-
-##### query_detail_explain_level
-
-- Default: COSTS
-- Type: String
-- Unit: -
-- Is mutable: true
-- Description: The detail level of query plan returned by the EXPLAIN statement. Valid values: COSTS, NORMAL, VERBOSE.
-- Introduced in: v3.2.12, v3.3.5
-
-<!--
-##### max_varchar_length
-
-- Default: 1048576
-- Type: Int
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-##### mv_refresh_fail_on_filter_data
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Mv refresh fails if there is filtered data in refreshing, true by default, otherwise return success by ignoring the filtered data.
-- Introduced in: -
-
-##### mv_create_partition_batch_interval_ms
-
-- Default: 1000
-- Type: Int
-- Unit: ms
-- Is mutable: Yes
-- Description: During materialized view refresh, if multiple partitions need to be created in bulk, the system divides them into batches of 64 partitions each. To reduce the risk of failures caused by frequent partition creation, a default interval (in milliseconds) is set between each batch to control the creation frequency.
-- Introduced in: v3.3
-
-##### max_mv_refresh_failure_retry_times
-
-- Default: 1
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: The maximum retry times when materialized view fails to refresh.
-- Introduced in: v3.3.0
-
-##### max_mv_refresh_try_lock_failure_retry_times
-
-- Default: 3
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: The maximum retry times of try lock when materialized view fails to refresh.
-- Introduced in: v3.3.0
-
-
-##### mv_refresh_try_lock_timeout_ms
-
-- Default: 30000
-- Type: Int
-- Unit: Milliseconds
-- Is mutable: Yes
-- Description: The default try lock timeout for materialized view refresh to try the DB lock of its base table/materialized view.
-- Introduced in: v3.3.0
-
-##### enable_mv_refresh_collect_profile
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether to enable profile in refreshing materialized view by default for all materialized views.
-- Introduced in: v3.3.0
-
-##### max_mv_task_run_meta_message_values_length
-
-- Default: 16
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: The maximum length for the "extra message" values (in set or map) in materialized view task run. You can set this item to avoid occupying too much meta memory.
-- Introduced in: v3.3.0
-
-##### max_mv_check_base_table_change_retry_times
-
-- Default: 10
-- Type: -
-- Unit: -
-- Is mutable: Yes
-- Description: The maximum retry times for detecting base table change when refreshing materialized views.
-- Introduced in: v3.3.0
-
-##### mv_refresh_default_planner_optimize_timeout
-
-- Default: 30000
-- Type: -
-- Unit: -
-- Is mutable: Yes
-- Description: The default timeout for the planning phase of the optimizer when refresh materialized views.
-- Introduced in: v3.3.0
-
-##### enable_mv_refresh_query_rewrite
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether to enable rewrite query during materialized view refresh so that the query can use the rewritten mv directly rather than the base table to improve query performance.
-- Introduced in: v3.3
-
-##### enable_mv_refresh_extra_prefix_logging
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether to enable prefixes with materialized view names in logs for better debug.
-- Introduced in: v3.4.0
-
-##### enable_mv_post_image_reload_cache
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether to perform reload flag check after FE loaded an image. If the check is performed for a base materialized view, it is not needed for other materialized views that related to it.
-- Introduced in: v3.5.0
-
 ##### enable_trace_historical_node
 
 - Default: false
@@ -5610,13 +3170,6 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: Whether to allow the system to trace the historical nodes. By setting this item to `true`, you can enable the Cache Sharing feature and allow the system to choose the right cache nodes during elastic scaling.
 - Introduced in: v3.5.1
 
-##### transform_type_prefer_string_for_varchar
 
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether to prefer string type for fixed length varchar columns in materialized view creation and CTAS operations.
-- Introduced in: v4.0.0
 
 <EditionSpecificFEItem />
