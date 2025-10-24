@@ -43,7 +43,49 @@ Flat JSON 的核心原理是在导入时检测 JSON 数据，将 JSON 数据中�
 
 在导入上述这组 JSON 数据时，`a` 和 `b` 两个字段在大部分的 JSON 数据中都存在并且其数据类型相似（都是 INT），那么可以将 `a`，`b` 两个字段的数据都从 JSON 中读取出来，单独存储为两列 INT。当查询中使用到这两列时，就可以直接读取 `a`，`b` 两列的数据，无需读取 JSON 中额外的字段，在计算时减少对 JSON 结构的处理开销。
 
+<<<<<<< HEAD
 ## 使用说明
+=======
+## 启用 Flat JSON
+
+从 v3.4 版本起，Flat JSON 默认全局启用。对于 v3.4 之前的版本，必须手动启用此功能。
+
+从 v4.0 版本起，此功能可在表级别进行配置。
+
+### 为 v3.4 前版本启用
+
+1. 修改 BE 配置：`enable_json_flat`，在 v3.4 版本之前默认为 `false`。修改方法参考 [配置 BE 参数](../administration/management/BE_configuration.md#configure-be-parameters)。
+2. 启用FE分区裁剪功能：
+
+   ```SQL
+   SET GLOBAL cbo_prune_json_subfield = true;
+   ```
+
+### 在表级别启用 Flat JSON 功能
+
+在表级别设置与 Flat JSON 相关的属性自 v4.0 起支持。
+
+1. 在创建表时，您可以设置 `flat_json.enable` 及其他与 Flat JSON 相关的属性。如需详细说明，请参阅 [CREATE TABLE](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md#在表级别设置-flat-json-属性)。
+
+   或者，您可以使用 [ALTER TABLE](../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md) 语句设置这些属性。
+
+   示例：
+
+   ```SQL
+   ALTER TABLE t1 SET ("flat_json.enable" = "true");
+   ALTER TABLE t1 SET ("flat_json.null.factor" = "0.1");
+   ALTER TABLE t1 SET ("flat_json.sparsity.factor" = "0.8");
+   ALTER TABLE t1 SET ("flat_json.column.max" = "90");
+   ```
+
+2. 启用FE分区裁剪功能：
+
+   ```SQL
+   SET GLOBAL cbo_prune_json_subfield = true;
+   ```
+
+## 验证Flat JSON是否有效
+>>>>>>> 0bbcfda410 ([Doc] Re-organize Flat JSON docs for clarity (#64526))
 
 - StarRocks 存算一体集群自 v3.3.0 起支持 Flat JSON，存算分离集群自 v3.3.3 起支持。
 - StarRocks 所有表类型都支持 Flat JSON。
@@ -163,7 +205,33 @@ SET cbo_prune_json_subfield = true;
    +--------------------------------------+
    ```
 
+<<<<<<< HEAD
 8. 查看 Query Profile 中 Flat JSON 相关指标。可通过以下方式查看 Profile:
+=======
+## 相关变量及配置
+
+### 会话变量
+
+- `cbo_json_v2_rewrite`（默认：true）：启用 JSON v2 路径改写，将 `get_json_*` 等函数改写为直接访问 Flat JSON 子列，从而启用谓词下推和列裁剪。
+- `cbo_json_v2_dict_opt`（默认：true）：为路径改写生成的 Flat JSON 字符串子列启用低基数字典优化，可加速字符串表达式、GROUP BY 和 JOIN。
+
+示例：
+
+```SQL
+SET cbo_json_v2_rewrite = true;
+SET cbo_json_v2_dict_opt = true;
+```
+
+### BE 配置
+
+- [json_flat_null_factor](../administration/management/BE_configuration.md#json_flat_null_factor)
+- [json_flat_column_max](../administration/management/BE_configuration.md#json_flat_column_max)
+- [json_flat_sparsity_factor](../administration/management/BE_configuration.md#json_flat_sparsity_factor)
+- [enable_compaction_flat_json](../administration/management/BE_configuration.md#enable_compaction_flat_json)
+- [enable_lazy_dynamic_flat_json](../administration/management/BE_configuration.md#enable_lazy_dynamic_flat_json)
+
+## 功能限制
+>>>>>>> 0bbcfda410 ([Doc] Re-organize Flat JSON docs for clarity (#64526))
 
    - 通过 `get_query_profile` 函数获取该查询 ID 对应的 profile。
 
@@ -175,6 +243,7 @@ SET cbo_prune_json_subfield = true;
 
      由于 profile 结果比较长，以下截图仅展示几个 Flat JSON 相关的指标结果。
 
+<<<<<<< HEAD
      ![flat_json_profile](../_assets/flat_json.png)
 
 ## 其他可选 BE 配置
@@ -188,3 +257,9 @@ SET cbo_prune_json_subfield = true;
 ## 注意事项
 
 - 开启 Flat JSON 后会加大导入 JSON 的耗时，提取的 JSON 越多，耗时越长。
+=======
+从v3.3.3版本开始：
+- Flat JSON提取的结果分为常用列和保留字段列。当所有JSON Schema一致时，不会生成保留字段列。
+- Flat JSON仅存储常用字段列和保留字段列，不额外存储原始JSON数据。
+- 在加载数据时，常用字段将自动推断为BIGINT/LARGEINT/DOUBLE/STRING类型。无法识别的类型将推断为JSON类型，保留字段列将存储为JSON类型。
+>>>>>>> 0bbcfda410 ([Doc] Re-organize Flat JSON docs for clarity (#64526))

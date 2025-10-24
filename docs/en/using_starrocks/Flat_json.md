@@ -42,7 +42,50 @@ The core principle of Flat JSON is to detect JSON data during data loading and e
 
 The `a` and `b` fields exist in most rows and their data types are similar (both INT). Therefore, the data of the `a` and `b` fields can be read from the JSON data and stored separately as two INT columns. If a query is destined for these two columns, the data can be directly read without the need to read other columns, reducing the processing overhead of JSON structure during computation.
 
+<<<<<<< HEAD
 ## Usage notes
+=======
+## Enable Flat JSON
+
+Flat JSON is enabled globally by default from v3.4 onwards. For versions earlier than v3.4, you must manually enable it.
+
+From v4.0, this feature can be configured on the table level.
+
+### Enable for versions earlier than v3.4
+
+1. Modify BE configuration: `enable_json_flat`, which defaults to `false` before v3.4. For modification methods, refer to
+[Configure BE parameters](../administration/management/BE_configuration.md#configure-be-parameters).
+2. Enable FE pruning feature:
+
+   ```SQL
+   SET GLOBAL cbo_prune_json_subfield = true;
+   ```
+
+### Enable Flat JSON Feature on table level
+
+Setting Flat JSON-related properties on table level is supported from v4.0 onwards.
+
+1. When creating the table, you can set `flat_json.enable` and other Flat JSON-related properties. For detailed instructions, see [CREATE TABLE](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md#set-flat-json-properties-on-table-level).
+
+   Alternatively, you can set these properties using [ALTER TABLE](../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md).
+
+   Example:
+
+   ```SQL
+   ALTER TABLE t1 SET ("flat_json.enable" = "true");
+   ALTER TABLE t1 SET ("flat_json.null.factor" = "0.1");
+   ALTER TABLE t1 SET ("flat_json.sparsity.factor" = "0.8");
+   ALTER TABLE t1 SET ("flat_json.column.max" = "90");
+   ```
+
+2. Enable FE pruning feature:
+
+   ```SQL
+   SET GLOBAL cbo_prune_json_subfield = true;
+   ```
+
+## Verify if Flat JSON is Effective
+>>>>>>> 0bbcfda410 ([Doc] Re-organize Flat JSON docs for clarity (#64526))
 
 - Shared-nothing clusters support Flat JSON from v3.3.0 onwards. Shared-data clusters support Flat JSON from v3.3.3 onwards.
 - All table types in StarRocks support Flat JSON.
@@ -164,7 +207,33 @@ From v3.3.3 onwards
    +--------------------------------------+
    ```
 
+<<<<<<< HEAD
 8. View the Query Profile to check metrics related to Flat JSON.
+=======
+## Related variables and configurations
+
+### Session variables
+
+- `cbo_json_v2_rewrite` (default: true): Enables JSON v2 path rewrite so that expressions like `get_json_*` can be rewritten to direct access of Flat JSON subcolumns, unlocking predicate pushdown and column pruning.
+- `cbo_json_v2_dict_opt` (default: true): Enables low-cardinality dictionary optimization for Flat JSON extended string subcolumns produced by the rewrite, which can speed up string expressions, GROUP BY, and JOIN.
+
+Example:
+
+```SQL
+SET cbo_json_v2_rewrite = true;
+SET cbo_json_v2_dict_opt = true;
+```
+
+### BE Configurations
+
+- [json_flat_null_factor](../administration/management/BE_configuration.md#json_flat_null_factor)
+- [json_flat_column_max](../administration/management/BE_configuration.md#json_flat_column_max)
+- [json_flat_sparsity_factor](../administration/management/BE_configuration.md#json_flat_sparsity_factor)
+- [enable_compaction_flat_json](../administration/management/BE_configuration.md#enable_compaction_flat_json)
+- [enable_lazy_dynamic_flat_json](../administration/management/BE_configuration.md#enable_lazy_dynamic_flat_json)
+
+## Feature Limitations
+>>>>>>> 0bbcfda410 ([Doc] Re-organize Flat JSON docs for clarity (#64526))
 
    You can view the profile of this query using either of the following methods:
 
@@ -176,6 +245,7 @@ From v3.3.3 onwards
 
    2. [View the metrics of the profile through the web page.](https://docs.starrocks.io/docs/administration/query_profile_overview/#obtain-query-profile-via-web-ui)
 
+<<<<<<< HEAD
    The complete profile is long and the following figure shows only Flat JSON-related metrics.
 
    ![flat_json_profile](../_assets/flat_json.png)
@@ -191,3 +261,9 @@ From v3.3.3 onwards
 
 - Enabling Flat JSON will increase the time consumption of JSON data loading. The more JSON sub-fields are extracted, the longer the time consumption.
 - The system variable `cbo_prune_json_subfield` only works when Flat JSON is hit. Otherwise, there may be negative performance gains.
+=======
+Starting from version v3.3.3:
+- The results extracted by Flat JSON are divided into common columns and reserved field columns. When all JSON Schemas are consistent, no reserved field columns are generated.
+- Flat JSON only stores common field columns and reserved field columns, without additionally storing the original JSON data.
+- When loading data, common fields will automatically infer types as BIGINT/LARGEINT/DOUBLE/STRING. Unrecognized types will be inferred as JSON types, and reserved field columns will be stored as JSON types.
+>>>>>>> 0bbcfda410 ([Doc] Re-organize Flat JSON docs for clarity (#64526))
