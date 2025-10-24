@@ -49,7 +49,7 @@ When loading the above JSON data, fields `a` and `b` are present in most JSON da
 
 ## Enable Flat JSON
 
-Flat JSON is enabled globally by default from v3.4 onwards. For versions earlier than v3.4, you must manually enable it
+Flat JSON is enabled globally by default from v3.4 onwards. For versions earlier than v3.4, you must manually enable it.
 
 From v4,0, this feature can be configured on the table level.
 
