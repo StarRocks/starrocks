@@ -15,7 +15,6 @@
 package com.starrocks.scheduler;
 
 import com.starrocks.catalog.MaterializedView;
-import com.starrocks.scheduler.mv.pct.MVPCTBasedRefreshProcessor;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
@@ -134,8 +133,7 @@ public class PCTRefreshRangePartitionOlapTest extends MVTestBase {
         // refresh with force
         ExecPlan execPlan = getMVRefreshExecPlan(taskRun, true);
         Assertions.assertNotNull(execPlan);
-
-        MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
+        PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
         TaskRun nextTaskRun = processor.getNextTaskRun();
         String v = nextTaskRun.getProperties().get(TaskRun.FORCE);
         Assertions.assertEquals("true", v);
