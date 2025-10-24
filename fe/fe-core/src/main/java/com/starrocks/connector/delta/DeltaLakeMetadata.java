@@ -144,8 +144,19 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
     @Override
     public Statistics getTableStatistics(OptimizerContext session, Table table, Map<ColumnRefOperator, Column> columns,
                                          List<PartitionKey> partitionKeys, ScalarOperator predicate, long limit,
+<<<<<<< HEAD
                                          TableVersionRange versionRange) {
+=======
+                                         TvrVersionRange versionRange) {
+        boolean useDefaultStats = false;
+>>>>>>> 2adcb22de4 ([Enhancement] disable collecting table stats when single iceberg/deltalake table (#64443))
         if (!properties.enableGetTableStatsFromExternalMetadata()) {
+            useDefaultStats = true;
+        }
+        if (session.getSessionVariable().disableTableStatsFromMetadataForSingleTable() && session.getSourceTablesCount() == 1) {
+            useDefaultStats = true;
+        }
+        if (useDefaultStats) {
             return StatisticsUtils.buildDefaultStatistics(columns.keySet());
         }
 

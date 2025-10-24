@@ -355,6 +355,8 @@ public class StatementPlanner {
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
         boolean isSchemaValid = true;
 
+        int sourceTablesCount = collectSourceTablesCount(session, queryStmt);
+
         // TODO: double check relatedMvs for OlapTable
         // only collect once to save the original olapTable info
         // the original olapTable in queryStmt had been replaced with the copied olapTable
@@ -391,6 +393,7 @@ public class StatementPlanner {
                 }
                 optimizerContext.setMvTransformerContext(mvTransformerContext);
                 optimizerContext.setStatement(queryStmt);
+                optimizerContext.setSourceTablesCount(sourceTablesCount);
 
                 Optimizer optimizer = OptimizerFactory.create(optimizerContext);
                 optimizedPlan = optimizer.optimize(logicalPlan.getRoot(), new PhysicalPropertySet(),
@@ -438,6 +441,12 @@ public class StatementPlanner {
         } finally {
             unLock(locker);
         }
+    }
+
+    public static int collectSourceTablesCount(ConnectContext session, StatementBase queryStmt) {
+        List<Table> sourceTables = Lists.newArrayList();
+        AnalyzerUtils.collectSourceTables(queryStmt, sourceTables);
+        return sourceTables.size();
     }
 
     public static Set<OlapTable> reAnalyzeStmt(StatementBase queryStmt, ConnectContext session, PlannerMetaLocker locker) {
