@@ -266,7 +266,8 @@ TEST_P(LakeVacuumTest, test_vacuum_full_with_initial_meta_no_failure) {
     // This ensures pre-fix implementation (which reads 0_1.meta) will fail, while the fixed
     // implementation will skip reading it and succeed.
     {
-        auto initial_meta_path = join_path(join_path(kTestDir, kMetadataDirectoryName), tablet_initial_metadata_filename());
+        auto initial_meta_path =
+                join_path(join_path(kTestDir, kMetadataDirectoryName), tablet_initial_metadata_filename());
         ASSIGN_OR_ABORT(auto f, FileSystem::Default()->new_writable_file(initial_meta_path));
         ASSERT_OK(f->append("not-a-valid-protobuf"));
         ASSERT_OK(f->close());
