@@ -453,6 +453,7 @@ struct TAdaptiveDopParam {
 struct TPredicateTreeParams {
   1: optional bool enable_or
   2: optional bool enable_show_in_profile
+  3: optional i32 max_pushdown_or_predicates
 }
 
 // ExecPlanFragment

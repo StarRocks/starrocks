@@ -67,6 +67,7 @@ import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TOverflowMode;
 import com.starrocks.thrift.TPipelineProfileLevel;
+import com.starrocks.thrift.TPredicateTreeParams;
 import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TSpillMode;
 import com.starrocks.thrift.TSpillOptions;
@@ -791,8 +792,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String SCAN_OR_TO_UNION_THRESHOLD = "scan_or_to_union_threshold";
 
     public static final String ENABLE_PUSHDOWN_OR_PREDICATE = "enable_pushdown_or_predicate";
-
     public static final String ENABLE_SHOW_PREDICATE_TREE_IN_PROFILE = "enable_show_predicate_tree_in_profile";
+    public static final String MAX_PUSHDOWN_OR_PREDICATES = "max_pushdown_or_predicates";
 
     public static final String SELECT_RATIO_THRESHOLD = "select_ratio_threshold";
 
@@ -2474,6 +2475,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_SHOW_PREDICATE_TREE_IN_PROFILE, flag = VariableMgr.INVISIBLE)
     private boolean enableShowPredicateTreeInProfile = false;
+
+    @VarAttr(name = MAX_PUSHDOWN_OR_PREDICATES, flag = VariableMgr.INVISIBLE)
+    private int maxPushdownOrPredicates = 32;
 
     @VarAttr(name = SELECT_RATIO_THRESHOLD, flag = VariableMgr.INVISIBLE)
     private double selectRatioThreshold = 0.15;
@@ -4757,12 +4761,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.scanOrToUnionThreshold = scanOrToUnionThreshold;
     }
 
-    public boolean isEnablePushdownOrPredicate() {
-        return enablePushdownOrPredicate;
-    }
-
-    public boolean isEnableShowPredicateTreeInProfile() {
-        return enableShowPredicateTreeInProfile;
+    public TPredicateTreeParams getPredicateTreeParams() {
+        TPredicateTreeParams params = new TPredicateTreeParams();
+        params.setEnable_or(enablePushdownOrPredicate);
+        params.setEnable_show_in_profile(enableShowPredicateTreeInProfile);
+        params.setMax_pushdown_or_predicates(maxPushdownOrPredicates);
+        return params;
     }
 
     public double getSelectRatioThreshold() {
