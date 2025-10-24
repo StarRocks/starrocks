@@ -1021,10 +1021,10 @@ public class ConnectProcessor {
         ctx.getState().reset();
         executor = null;
 
-        packetBuf = req.getByteBuffer();
+        packetBuf = req.byteBuffer();
 
         final MysqlChannel channel = ctx.getMysqlChannel();
-        channel.setSequenceId(req.getPackageId());
+        channel.setSequenceId(req.packageId());
         channel.accSequenceId();
 
         dispatch();

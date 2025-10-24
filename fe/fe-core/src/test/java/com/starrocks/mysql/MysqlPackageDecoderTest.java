@@ -41,7 +41,7 @@ public class MysqlPackageDecoderTest {
         decoder.consume(buf);
         final RequestPackage pkg = decoder.poll();
         Assert.assertTrue(pkg != null);
-        Assert.assertTrue(pkg.getPackageId() == 0);
+        Assert.assertTrue(pkg.packageId() == 0);
     }
 
     @Test
@@ -68,10 +68,10 @@ public class MysqlPackageDecoderTest {
             leftSize -= current;
         }
         final RequestPackage pkg = decoder.poll();
-        Assert.assertTrue(pkg.getByteBuffer().remaining() == packageSize);
-        int remain = pkg.getByteBuffer().remaining();
+        Assert.assertTrue(pkg.byteBuffer().remaining() == packageSize);
+        int remain = pkg.byteBuffer().remaining();
         final byte[] out = new byte[remain];
-        pkg.getByteBuffer().get(out);
+        pkg.byteBuffer().get(out);
         for (int i = 0; i < out.length; i++) {
             if (out[i] != ((byte) i) % (0xFFFFFF + 1)) {
                 break;
