@@ -65,8 +65,8 @@ public:
 
     Status next_batch_with_filter(const SparseRange<>& range, Column* dst,
                                   const std::vector<const ColumnPredicate*>& compound_and_predicates,
-                                  Buffer<uint8_t>* selection, Buffer<uint16_t>* selected_idx,
-                                  bool* data_filtered) override {
+                                  Buffer<uint8_t>* selection, Buffer<uint16_t>* selected_idx, bool* data_filtered,
+                                  size_t* processed_rows) override {
         size_t original_col_size = dst->size();
         RETURN_IF_ERROR(next_batch(range, dst));
         size_t current_col_size = dst->size();

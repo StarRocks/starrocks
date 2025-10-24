@@ -138,7 +138,7 @@ private:
         Status seek_columns(ordinal_t pos, bool predicate_col_late_materialize_read);
         // Read column data from the specified range into the chunk
         // Handles column pruning and delete state tracking
-        Status read_columns(Chunk* chunk, const SparseRange<>& range,  bool predicate_col_late_materialize_read,
+        Status read_columns(Chunk* chunk, const SparseRange<>& range, bool predicate_col_late_materialize_read,
                             Buffer<uint8_t>* selection, Buffer<uint16_t>* selected_idx);
         // Calculate total memory usage of all chunks in this context
         int64_t memory_usage() const;
@@ -198,6 +198,19 @@ private:
         std::vector<ColumnId> _predicate_order;
         ColumnPredicateMap _column_predicate_map;
         bool _is_filtered = false;
+
+        // Selectivity tracking for predicate column late materialization
+        // Maps (score) to column_id, where score = read_time_ns * selectivity
+        // Lower score = better (fast to read, high filtering rate)
+        // Using multimap to allow multiple columns with same selectivity
+        std::multimap<double, ColumnId> _predicate_selectivity_map;
+        // Track evaluated chunk count for periodic selectivity updates (every 32 chunks)
+        size_t _evaluated_chunk_nums = 0;
+
+        // Continuous tracking of first column selectivity for sampling trigger
+        // Accumulated since last reset (either initialization or predicate order change)
+        size_t _first_column_total_rows_read = 0;   // Total rows read for first column
+        size_t _first_column_total_rows_passed = 0; // Total rows passed first column filter
     };
 
     // Vector index related context, only created when needed
@@ -290,6 +303,13 @@ private:
     void _init_column_predicates();
 
     void _init_compound_and_predicates_for_predicate_col_late_material();
+
+    Status trigger_sample_if_necessary(vector<rowid_t>* rowid);
+
+    // Sample and measure all predicate columns to update selectivity and read time
+    // Reads all predicate columns (like _predicate_evaluate_without_late_materialize)
+    // and measures actual read time and filtering effectiveness for each column
+    Status _sample_predicate_columns(vector<rowid_t>* rowid);
 
     Status _init_context();
 
@@ -437,7 +457,7 @@ private:
 
     // Inverted index context - only created when needed
     std::unique_ptr<InvertedIndexContext> _inverted_index_ctx;
-    
+
     bool _enable_predicate_col_late_materialize;
     bool _has_topn_filter;
 };
@@ -452,28 +472,26 @@ void SegmentIterator::ScanContext::close() {
 }
 
 Status SegmentIterator::ScanContext::seek_columns(ordinal_t pos, bool predicate_col_late_materialize_read) {
-    std::vector<ColumnIterator*>& column_iterators = predicate_col_late_materialize_read
-                                                                ? _column_iterators_for_predicate_late_materialize
-                                                                : _column_iterators;
+    std::vector<ColumnIterator*>& column_iterators =
+            predicate_col_late_materialize_read ? _column_iterators_for_predicate_late_materialize : _column_iterators;
     for (auto iter : column_iterators) {
         RETURN_IF_ERROR(iter->seek_to_ordinal(pos));
     }
     return Status::OK();
 }
 
-
-Status SegmentIterator::ScanContext::read_columns(Chunk* chunk, const SparseRange<>& range, bool predicate_col_late_materialize_read,
-                            Buffer<uint8_t>* selection, Buffer<uint16_t>* selected_idx) {
-    std::vector<ColumnIterator*>& column_iterators = predicate_col_late_materialize_read
-                                                                ? _column_iterators_for_predicate_late_materialize
-                                                                : _column_iterators;
+Status SegmentIterator::ScanContext::read_columns(Chunk* chunk, const SparseRange<>& range,
+                                                  bool predicate_col_late_materialize_read, Buffer<uint8_t>* selection,
+                                                  Buffer<uint16_t>* selected_idx) {
+    std::vector<ColumnIterator*>& column_iterators =
+            predicate_col_late_materialize_read ? _column_iterators_for_predicate_late_materialize : _column_iterators;
     bool may_has_del_row = chunk->delete_state() != DEL_NOT_SATISFIED;
     std::vector<size_t> pruned_cols;
     size_t pruned_col_size = 0;
     for (size_t i = 0; i < column_iterators.size(); i++) {
         ColumnPtr& col = predicate_col_late_materialize_read
-                                    ? chunk->get_column_by_id(_column_id_for_predicate_late_materialize[i])
-                                    : chunk->get_column_by_index(i);
+                                 ? chunk->get_column_by_id(_column_id_for_predicate_late_materialize[i])
+                                 : chunk->get_column_by_index(i);
         if (_prune_column_after_index_filter && _prune_cols.count(i)) {
             pruned_cols.push_back(i);
             continue;
@@ -482,9 +500,11 @@ Status SegmentIterator::ScanContext::read_columns(Chunk* chunk, const SparseRang
         if (!predicate_col_late_materialize_read) {
             RETURN_IF_ERROR(column_iterators[i]->next_batch(range, col.get()));
         } else {
+            size_t processed_rows = 0;
             if (i == 0) {
                 // reset _is_filtered every time
                 _is_filtered = false;
+                size_t original_row_num = col->size();
 
                 // for first predicate column, if can filter data in page level
                 // _is_filtered is set to true
@@ -492,12 +512,16 @@ Status SegmentIterator::ScanContext::read_columns(Chunk* chunk, const SparseRang
                 // and only append filtered data in col
                 RETURN_IF_ERROR(column_iterators[i]->next_batch_with_filter(
                         range, col.get(), _column_predicate_map[_predicate_order[0]], selection, selected_idx,
-                        &_is_filtered));
+                        &_is_filtered, &processed_rows));
+                if (_is_filtered) {
+                    _first_column_total_rows_read += processed_rows;
+                    _first_column_total_rows_passed += (col->size() - original_row_num);
+                }
             } else {
                 // for rowId column iterator, apply selection if _is_filtered is true
                 DCHECK(i == 1);
                 RETURN_IF_ERROR(column_iterators[i]->next_batch_with_filter(
-                        range, col.get(), ColumnPredicates(), selection, selected_idx, &_is_filtered));
+                        range, col.get(), ColumnPredicates(), selection, selected_idx, &_is_filtered, &processed_rows));
             }
         }
         if (pruned_col_size == 0) {
@@ -1161,25 +1185,13 @@ void SegmentIterator::_init_compound_and_predicates_for_predicate_col_late_mater
     _context->_enable_predicate_col_late_materialize = _enable_predicate_col_late_materialize;
     if (!_enable_predicate_col_late_materialize) return;
 
-    const ColumnPredicateMap& non_expr_column_predicate_map = _non_expr_pred_tree.get_immediate_column_predicate_map();
-    const ColumnPredicateMap& expr_column_predicate_map = _expr_pred_tree.get_immediate_column_predicate_map();
-    _context->_column_predicate_map.reserve(non_expr_column_predicate_map.size() + expr_column_predicate_map.size());
-    _context->_predicate_order.reserve(non_expr_column_predicate_map.size() + expr_column_predicate_map.size());
-    // add non-expr predicate first, add expr predicate next
-    for (const auto& pair : non_expr_column_predicate_map) {
+    const ColumnPredicateMap& column_predicate_map = _opts.pred_tree.get_immediate_column_predicate_map();
+    _context->_column_predicate_map.reserve(column_predicate_map.size());
+    _context->_predicate_order.reserve(column_predicate_map.size());
+    
+    for (const auto& pair : column_predicate_map) {
         _context->_predicate_order.emplace_back(pair.first);
         _context->_column_predicate_map.emplace(pair.first, pair.second);
-    }
-
-    for (const auto& pair : expr_column_predicate_map) {
-        // if column has non_expr predicate, just append its' expr predicates back
-        if (non_expr_column_predicate_map.contains(pair.first)) {
-            _context->_column_predicate_map[pair.first].insert(_context->_column_predicate_map[pair.first].end(),
-                                                               pair.second.begin(), pair.second.end());
-        } else {
-            _context->_predicate_order.emplace_back(pair.first);
-            _context->_column_predicate_map.emplace(pair.first, pair.second);
-        }
     }
 
     // if column predicate is always true for string column or already used by bitmap index
@@ -1238,6 +1250,143 @@ void SegmentIterator::_init_compound_and_predicates_for_predicate_col_late_mater
     // add row id iterator
     _context->_column_iterators_for_predicate_late_materialize.emplace_back(_context->_column_iterators.back());
     _context->_column_id_for_predicate_late_materialize.emplace_back(_context->_row_id_column_id);
+}
+
+Status SegmentIterator::trigger_sample_if_necessary(vector<rowid_t>* rowid) {
+    // Check every 32 chunks if we should trigger sampling based on selectivity
+    const bool should_check_selectivity = (_context->_evaluated_chunk_nums++ & 31) == 0;
+    if (should_check_selectivity && _context->_enable_predicate_col_late_materialize &&
+        _context->_first_column_total_rows_read > 0) {
+        // Calculate accumulated selectivity
+        double first_column_selectivity = static_cast<double>(_context->_first_column_total_rows_passed) /
+                                          _context->_first_column_total_rows_read;
+
+        // If selectivity > 0.5 (more than 50% of rows passed, bad filtering), trigger sampling
+        // to potentially find an even better predicate order
+        if (first_column_selectivity > 0.5) {
+            ColumnId old_first_column_id = _context->_predicate_order[0];
+
+            // Sample and update predicate selectivity
+            RETURN_IF_ERROR(_sample_predicate_columns(rowid));
+
+            // Check if first column changed after sampling
+            ColumnId new_first_column_id = _context->_predicate_order.front();
+            if (new_first_column_id != old_first_column_id) {
+                // First column changed, reset selectivity statistics
+                _context->_first_column_total_rows_read = 0;
+                _context->_first_column_total_rows_passed = 0;
+            }
+        }
+    }
+}
+
+Status SegmentIterator::_sample_predicate_columns(vector<rowid_t>* rowid) {
+    // Clear previous measurements
+    _context->_predicate_selectivity_map.clear();
+
+    // Read a sample chunk with predicate_col_late_materialize_read = false
+    // This reads ALL predicate columns at once (not using late materialization)
+    const uint32_t sample_size = _reserve_chunk_size;
+
+    Chunk* chunk = _context->_read_chunk.get();
+
+    if (!_range_iter.has_more()) {
+        return Status::OK();
+    }
+
+    // Call _read with predicate_col_late_materialize_read = false to read all columns
+    RETURN_IF_ERROR(_read(chunk, rowid, sample_size, false));
+
+    const size_t chunk_size = chunk->num_rows();
+    if (chunk_size == 0) {
+        return Status::OK();
+    }
+
+    // Similar to RuntimeFilterProbeCollector::update_selectivity
+    // Use two selections:
+    // 1. _selection: for merged result of all predicates (merged_selection)
+    // 2. current_selection: for current predicate result
+    Buffer<uint8_t> current_selection;
+    current_selection.resize(chunk_size);
+
+    bool use_merged_selection = true; // Similar to RuntimeFilter's use_merged_selection flag
+
+    // Collect all columns for filtering later
+    Columns sample_columns;
+    sample_columns.reserve(_context->_predicate_order.size());
+    for (const auto& column_id : _context->_predicate_order) {
+        sample_columns.emplace_back(chunk->get_column_by_id(column_id));
+    }
+
+    // Evaluate each predicate column and measure its selectivity
+    for (const auto& column_id : _context->_predicate_order) {
+        ColumnPtr col = chunk->get_column_by_id(column_id);
+
+        const auto& predicates = _context->_column_predicate_map.at(column_id);
+        DCHECK(predicates.size() > 0);
+
+        // First predicate uses _selection (merged), subsequent use current_selection
+        auto& selection = use_merged_selection ? _selection : current_selection;
+
+        // Use compound_and_predicates_evaluate to evaluate predicates
+        // Similar to RuntimeFilter::evaluate
+        RETURN_IF_ERROR(compound_and_predicates_evaluate(predicates, col.get(), selection.data(), _selected_idx.data(),
+                                                         0, chunk_size));
+
+        // Count rows that passed predicates
+        size_t true_count = SIMD::count_nonzero(selection.data(), chunk_size);
+        double selectivity = static_cast<double>(true_count) / chunk_size;
+
+        // Store selectivity directly as the sorting key (like RuntimeFilter)
+        _context->_predicate_selectivity_map.emplace(selectivity, column_id);
+
+        // Merge selections (similar to RuntimeFilter's logic)
+        if (use_merged_selection) {
+            // First predicate: result is already in _selection (merged_selection)
+            use_merged_selection = false;
+        } else {
+            // Subsequent predicates: AND current selection with merged selection
+            uint8_t* dest = _selection.data();             // merged_selection
+            const uint8_t* src = current_selection.data(); // current result
+            for (size_t j = 0; j < chunk_size; ++j) {
+                dest[j] = src[j] & dest[j];
+            }
+        }
+    }
+
+    // Filter columns based on merged selection
+    // _selection already contains the merged result, use it directly
+
+    // This removes rows that don't pass all predicates
+    _filter_columns_by_selection(sample_columns, rowid, 0, chunk_size);
+
+    // Update predicate order based on selectivity (lower selectivity = higher filtering = better)
+    std::vector<ColumnId> new_order;
+    new_order.reserve(_context->_predicate_order.size());
+
+    for (const auto& kv : _context->_predicate_selectivity_map) {
+        new_order.push_back(kv.second);
+    }
+
+    DCHECK(new_order.size() == _context->_predicate_order.size());
+    if (new_order.size() != _context->_predicate_order.size()) {
+        return Status::InternalError("scan predicate late materializationo error!");
+    }
+
+    const ColumnId old_first_column_id = _context->_predicate_order.front();
+
+    // Update the predicate order
+    _context->_predicate_order = std::move(new_order);
+
+    // Update the first column iterator if it changed
+    const ColumnId new_first_column_id = _context->_predicate_order.front();
+    if (new_first_column_id != old_first_column_id) {
+        _context->_column_iterators_for_predicate_late_materialize[0] =
+                _context->_column_ids_to_column_iterators[new_first_column_id];
+        _context->_column_id_for_predicate_late_materialize[0] = new_first_column_id;
+    }
+
+    return Status::OK();
 }
 
 Status SegmentIterator::_get_row_ranges_by_keys() {
@@ -1880,6 +2029,8 @@ StatusOr<size_t> SegmentIterator::_predicate_evaluate(vector<rowid_t>* rowid) {
 }
 
 StatusOr<size_t> SegmentIterator::_predicate_evaluate_late_materialize(vector<rowid_t>* rowid) {
+    RETURN_IF_ERROR(trigger_sample_if_necessary(rowid));
+
     const uint32_t chunk_capacity = _reserve_chunk_size;
     const uint32_t return_chunk_threshold = std::max<uint32_t>(chunk_capacity - chunk_capacity / 4, 1);
     const bool has_non_expr_predicate = !_non_expr_pred_tree.empty();
@@ -1898,19 +2049,29 @@ StatusOr<size_t> SegmentIterator::_predicate_evaluate_late_materialize(vector<ro
     current_columns.emplace_back(first_col);
     current_columns.emplace_back(rowid_column);
     uint16_t chunk_start = first_col->size();
+
+    size_t original_chunk_size = chunk_start;
     while ((chunk_start < return_chunk_threshold) & _range_iter.has_more()) {
         RETURN_IF_ERROR(_read(chunk, rowid, chunk_capacity - chunk_start, true));
         // chunk->check_or_die();
         size_t next_start = first_col->size();
 
+        // Count how many rowids were read by this _read() call
+        if (!_context->_is_filtered) {
+            size_t rows_read_this_iter = next_start - chunk_start;
+            _context->_first_column_total_rows_read += rows_read_this_iter;
+        }
+
         if (has_non_expr_predicate && !_context->_is_filtered) {
             // use first column's non-expr predicate to filter data
+            // This will filter rowid_column, removing rows that don't match the predicate
             // column-expr-predicate doesn't support [begin, end] interface
             ASSIGN_OR_RETURN(next_start, _filter_by_compound_and_predicates(
                                                  chunk, rowid, chunk_start, next_start,
                                                  non_expr_column_predicate_map.at(first_column_id), current_columns));
             // chunk->check_or_die();
         }
+
         chunk_start = next_start;
         // DCHECK_EQ(chunk_start, chunk->num_rows());
 
@@ -1930,6 +2091,10 @@ StatusOr<size_t> SegmentIterator::_predicate_evaluate_late_materialize(vector<ro
         ASSIGN_OR_RETURN(chunk_size, _filter_by_compound_and_predicates(chunk, rowid, 0, chunk_size,
                                                                         expr_column_predicate_map.at(first_column_id),
                                                                         current_columns));
+    }
+
+    if (!_context->_is_filtered) {
+        _context->_first_column_total_rows_passed += (chunk_size - original_chunk_size);
     }
 
     bool may_has_del_row = chunk->delete_state() != DEL_NOT_SATISFIED;
