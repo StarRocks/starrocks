@@ -15,12 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.google.common.base.Preconditions;
-import com.starrocks.catalog.Catalog;
-import com.starrocks.catalog.InternalCatalog;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.parser.NodePosition;
 
 /**
@@ -28,10 +22,8 @@ import com.starrocks.sql.parser.NodePosition;
  */
 public class CatalogRef implements ParseNode {
     private final NodePosition pos;
-    private String catalogName;
-    private String alias;
-    private Catalog catalog;
-    private boolean isAnalyzed;
+    private final String catalogName;
+    private final String alias;
 
     public CatalogRef(String catalogName) {
         this(catalogName, "");
@@ -40,7 +32,6 @@ public class CatalogRef implements ParseNode {
     public CatalogRef(String catalogName, String alias) {
         this.catalogName = catalogName;
         this.alias = alias;
-        this.isAnalyzed = false;
         this.pos = NodePosition.ZERO;
     }
 
@@ -50,26 +41,6 @@ public class CatalogRef implements ParseNode {
 
     public String getAlias() {
         return this.alias;
-    }
-
-    public Catalog getCatalog() {
-        Preconditions.checkState(isAnalyzed);
-        return this.catalog;
-    }
-
-    public void analyzeForBackup() {
-        if (catalogName.equalsIgnoreCase(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
-                        "Do not support Backup/Restore the entire default catalog");   
-        }
-
-        if (!GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists(catalogName)) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
-                        "external catalog " + catalogName + " does not existed.");
-        }
-
-        catalog = GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogByName(catalogName);
-        isAnalyzed = true;
     }
 
     @Override

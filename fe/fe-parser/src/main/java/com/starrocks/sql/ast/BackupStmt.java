@@ -12,10 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
-import com.starrocks.persist.TableRefPersist;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -29,18 +27,17 @@ public class BackupStmt extends AbstractBackupStmt {
 
     private BackupType type = BackupType.FULL;
 
-    public BackupStmt(LabelName labelName, String repoName, List<TableRefPersist> tblRefs, List<FunctionRef> fnRefs,
-                      List<CatalogRef> externalCatalogRefs, Set<BackupObjectType> allMarker,
-                      boolean withOnClause, String originDbName, Map<String, String> properties) {
-        super(labelName, repoName, tblRefs, fnRefs, externalCatalogRefs,
-                allMarker, withOnClause, originDbName, properties, NodePosition.ZERO);
-    }
-
-    public BackupStmt(LabelName labelName, String repoName, List<TableRefPersist> tblRefs, List<FunctionRef> fnRefs,
-                      List<CatalogRef> externalCatalogRefs, Set<BackupObjectType> allMarker,
-                      boolean withOnClause, String originDbName, Map<String, String> properties, NodePosition pos) {
-        super(labelName, repoName, tblRefs, fnRefs, externalCatalogRefs,
-                allMarker, withOnClause, originDbName, properties, pos);
+    public BackupStmt(LabelName labelName,
+                      String repoName,
+                      List<TableRef> tblRefs,
+                      List<FunctionRef> fnRefs,
+                      List<CatalogRef> externalCatalogRefs,
+                      Set<BackupObjectType> allMarker,
+                      boolean withOnClause,
+                      String originDbName,
+                      Map<String, String> properties,
+                      NodePosition pos) {
+        super(labelName, repoName, tblRefs, fnRefs, externalCatalogRefs, allMarker, withOnClause, originDbName, properties, pos);
     }
 
     public long getTimeoutMs() {
@@ -61,7 +58,6 @@ public class BackupStmt extends AbstractBackupStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitBackupStatement(this, context);
+        return visitor.visitBackupStatement(this, context);
     }
-
 }

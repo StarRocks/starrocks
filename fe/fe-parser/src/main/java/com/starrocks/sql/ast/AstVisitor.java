@@ -701,4 +701,12 @@ public interface AstVisitor<R, C> {
     default R visitShowDataDistributionStatement(ShowDataDistributionStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
+
+    default R visitBackupStatement(BackupStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitRestoreStatement(RestoreStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
 }
