@@ -17,6 +17,7 @@ rm docusaurus/docs/data_source/icebergtutorial.mdx
 rm docusaurus/docs/introduction/StarRocks_intro.md
 cp -r enterprise-temp/docs/enterprise/docs/introduction/* docusaurus/docs/introduction/
 rm docusaurus/docs/administration/stargo.md
+rm docusaurus/docs/administration/administration.mdx
 rm -rf docusaurus/docs/integrations/other_integrations
 rm docusaurus/docs/integrations/streaming.mdx
 rm docusaurus/docs/loading/Json_loading.md
