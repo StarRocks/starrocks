@@ -489,6 +489,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             "enable_read_iceberg_equality_delete_with_partition_evolution";
     public static final String ENABLE_DELTA_LAKE_COLUMN_STATISTICS = "enable_delta_lake_column_statistics";
 
+    public static final String DISABLE_TABLE_STATS_FROM_METADATA_FOR_SINGLE_TABLE =
+            "disable_table_stats_from_metadata_for_single_table";
+
     public static final String ENABLE_QUERY_TRIGGER_ANALYZE = "enable_query_trigger_analyze";
 
     public static final String ENABLE_PAIMON_COLUMN_STATISTICS = "enable_paimon_column_statistics";
@@ -2680,6 +2683,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_DELTA_LAKE_COLUMN_STATISTICS)
     private boolean enableDeltaLakeColumnStatistics = false;
 
+    @VarAttr(name = DISABLE_TABLE_STATS_FROM_METADATA_FOR_SINGLE_TABLE)
+    private boolean disableTableStatsFromMetadataForSingleTable = true;
+
     @VarAttr(name = ENABLE_QUERY_TRIGGER_ANALYZE)
     private boolean enableQueryTriggerAnalyze = true;
 
@@ -2798,6 +2804,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean enableDeltaLakeColumnStatistics() {
         return enableDeltaLakeColumnStatistics;
+    }
+
+    public boolean disableTableStatsFromMetadataForSingleTable() {
+        return disableTableStatsFromMetadataForSingleTable;
     }
 
     public boolean enableIcebergColumnStatistics() {
@@ -3744,7 +3754,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     public boolean isEnableCostBasedMultiStageAgg() {
-        return newPlannerAggStage == SessionVariableConstants.AggregationStage.AUTO.ordinal() &&  enableCostBasedMultiStageAgg;
+        return newPlannerAggStage == SessionVariableConstants.AggregationStage.AUTO.ordinal() && enableCostBasedMultiStageAgg;
     }
 
     public void setMaxTransformReorderJoins(int maxReorderNodeUseExhaustive) {
@@ -5411,7 +5421,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     public void setEnableFullSortUseGermanString(boolean value) {
-        this.enableFullSortUseGermanString  = value;
+        this.enableFullSortUseGermanString = value;
     }
 
     public boolean isEnableFullSortUseGermanString() {
