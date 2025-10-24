@@ -51,34 +51,9 @@ Flat JSON の核心原理は、ロード中に JSON データを検出し、JSON
 
 v3.4 以降では、Flat JSON はデフォルトでグローバルに有効化されています。v3.4 より前のバージョンでは、手動で有効にする必要があります。
 
-v4.0 以降では、この機能はテーブルレベルで設定可能です。
-
 ### v3.4 より前のバージョンで有効にする
 
 1. BE 設定を変更します：`enable_json_flat` はバージョン 3.4 以前はデフォルトで `false` です。変更方法については、[Configure BE parameters](../administration/management/BE_configuration.md#configure-be-parameters) を参照してください。
-2. FE プルーニング機能を有効化します：
-
-   ```SQL
-   SET GLOBAL cbo_prune_json_subfield = true;
-   ```
-
-### テーブルレベルでの Flat JSON 機能の有効化
-
-テーブルレベルでの Flat JSON 関連プロパティの設定は、v4.0 以降でサポートされています。
-
-1. テーブルを作成する際、`flat_json.enable` を含む Flat JSON に関連するプロパティを設定できます。詳細な手順については、[CREATE TABLE](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md#テーブルレベルの-flat-json-プロパティを設定) を参照してください。
-
-   または、これらのプロパティを [ALTER TABLE](../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md) を使用して設定することもできます。
-
-   例：
-
-   ```SQL
-   ALTER TABLE t1 SET ("flat_json.enable" = "true");
-   ALTER TABLE t1 SET ("flat_json.null.factor" = "0.1");
-   ALTER TABLE t1 SET ("flat_json.sparsity.factor" = "0.8");
-   ALTER TABLE t1 SET ("flat_json.column.max" = "90");
-   ```
-
 2. FE プルーニング機能を有効化します：
 
    ```SQL
@@ -229,27 +204,6 @@ StarRocks 共有なしクラスタは v3.3.0 から Flat JSON をサポートし
 - Flat JSON によって抽出された結果は、共通カラムと予約フィールドカラムに分けられます。すべての JSON スキーマが一致する場合、予約フィールドカラムは生成されません。
 - Flat JSON は共通フィールドカラムと予約フィールドカラムのみを保存し、元の JSON データを追加で保存しません。
 - データをロードする際、共通フィールドは自動的に BIGINT/LARGEINT/DOUBLE/STRING として型推論されます。認識されない型は JSON 型として推論され、予約フィールドカラムは JSON 型として保存されます。
-<<<<<<< HEAD
-
-## Flat JSON 機能の有効化（共有なしクラスタのみサポート）
-
-1. テーブル作成時に、`flat_json.enable` プロパティをテーブルパラメータに設定できます。詳細は [Table Creation](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) を参照してください。
-   Flat JSON 機能は、テーブルプロパティを直接変更することで有効化または再設定することもできます。例：
-   ```SQL
-   alter table t1 set ("flat_json.enable" = "true")
-   
-   alter table t1 set ("flat_json.null.factor" = "0.1")
-   
-   alter table t1 set ("flat_json.sparsity.factor" = "0.8")
-   
-   alter table t1 set ("flat_json.column.max" = "90")
-   ```
-2. FE プルーニング機能を有効化します：`SET GLOBAL cbo_prune_json_subfield = true;`
-
-## Flat JSON 機能の有効化（バージョン 3.4 以前）
-
-1. BE 設定を変更します：`enable_json_flat` はバージョン 3.4 以前はデフォルトで `false` です。変更方法については、[Configure BE parameters](../administration/management/BE_configuration.md#configure-be-parameters) を参照してください。
-2. FE プルーニング機能を有効化します：`SET GLOBAL cbo_prune_json_subfield = true;`
 
 ## その他のオプションの BE 設定
 
