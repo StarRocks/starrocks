@@ -804,7 +804,7 @@ PROPERTIES (
 
 - `flat_json.enable` (Optional): Whether to enable the Flat JSON feature. After this feature is enabled, newly loaded JSON data will be automatically flattened, improving JSON query performance.
 - `flat_json.null.factor` (Optional): The proportion threshold of NULL values in the column. A column will not be extracted by Flat JSON if its proportion of NULL values is higher than this threshold. This parameter takes effect only when `flat_json.enable` is set to `true`. Default value: `0.3`.
-- `flat_json.sparsity.factor` (Optional): The proportion threshold of columns with the same name. A column will not be extracted by Flat JSON if the proportion of columns with the same name is lower than this value. This parameter takes effect only when `flat_json.enable` is set to `true`. Default value: `0.9`.
+- `flat_json.sparsity.factor` (Optional): The proportion threshold of columns with the same name. A column will not be extracted by Flat JSON if the proportion of columns with the same name is lower than this value. This parameter takes effect only when `flat_json.enable` is set to `true`. Default value: `0.3`.
 - `flat_json.column.max` (Optional): The maximum number of sub-fields that can be extracted by Flat JSON. This parameter takes effect only when `flat_json.enable` is set to `true`. Default value: `100`.
 
 ## Examples

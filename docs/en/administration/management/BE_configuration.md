@@ -3322,7 +3322,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 
 ##### json_flat_sparsity_factor
 
-- Default: 0.9
+- Default: 0.3
 - Type: Double
 - Unit:
 - Is mutable: Yes
