@@ -54,8 +54,14 @@ class JsonPathDeriverTest
         : public ::testing::TestWithParam<
                   std::tuple<std::string, std::string, bool, std::vector<std::string>, std::vector<LogicalType>>> {
 public:
-    void SetUp() override { config::enable_json_flat_complex_type = true; }
-    void TearDown() override { config::enable_json_flat_complex_type = false; }
+    void SetUp() override {
+        config::enable_json_flat_complex_type = true;
+        config::json_flat_sparsity_factor = 0.9; // Set to 0.9 to extract only paths that exist in all rows
+    }
+    void TearDown() override {
+        config::enable_json_flat_complex_type = false;
+        config::json_flat_sparsity_factor = 0.3; // Reset to default
+    }
 };
 
 TEST_P(JsonPathDeriverTest, json_path_deriver_test) {
