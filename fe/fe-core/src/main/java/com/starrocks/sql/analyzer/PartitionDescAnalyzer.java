@@ -123,7 +123,6 @@ public class PartitionDescAnalyzer {
                                                                      PartitionInfo partitionInfo,
                                                                      Map<ColumnId, Column> idToColumn) {
 
-
         List<Column> partitionColumns = partitionInfo.getPartitionColumns(idToColumn);
         if (partitionColumns.size() != 1) {
             ErrorReport.report(ErrorCode.ERR_MULTI_PARTITION_COLUMN_NOT_SUPPORT_ADD_MULTI_RANGE);
