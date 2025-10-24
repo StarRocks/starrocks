@@ -142,7 +142,7 @@ public class GetRemoteFilesParams {
         private List<PartitionKey> partitionKeys;
         private List<String> partitionNames;
         private List<Object> partitionAttachments;
-        private TableVersionRange tableVersionRange;
+        private TableVersionRange tableVersionRange = TableVersionRange.empty();
         private ScalarOperator predicate;
         private List<String> fieldNames;
         private long limit = -1;
