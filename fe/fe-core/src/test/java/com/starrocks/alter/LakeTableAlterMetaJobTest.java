@@ -50,6 +50,8 @@ import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TUpdateTabletMetaInfoReq;
 import com.starrocks.utframe.MockedWarehouseManager;
 import com.starrocks.utframe.UtFrameUtils;
+import com.starrocks.warehouse.cngroup.ComputeResource;
+import com.starrocks.warehouse.cngroup.WarehouseComputeResourceProvider;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.AfterEach;
@@ -79,10 +81,22 @@ public class LakeTableAlterMetaJobTest {
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
         connectContext = UtFrameUtils.createDefaultCtx();
+        new MockUp<WarehouseComputeResourceProvider>() {
+            @Mock
+            public boolean isResourceAvailable(ComputeResource computeResource) {
+                return true;
+            }
+        };
     }
 
     @BeforeEach
     public void setUp() throws Exception {
+        // Drop database if it already exists from a previous failed test run
+        try {
+            GlobalStateMgr.getCurrentState().getLocalMetastore().dropDb(connectContext, DB_NAME, true);
+        } catch (Exception ignored) {
+        }
+        
         String createDbStmtStr = "create database " + DB_NAME;
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
         GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
@@ -99,10 +113,16 @@ public class LakeTableAlterMetaJobTest {
 
     @AfterEach
     public void tearDown() throws DdlException, MetaNotFoundException {
-        db.dropTable(table.getName());
+        try {
+            if (db != null && table != null) {
+                db.dropTable(table.getName());
+            }
+        } catch (Exception ignored) {
+        }
+        
         try {
             GlobalStateMgr.getCurrentState().getLocalMetastore().dropDb(connectContext, DB_NAME, true);
-        } catch (MetaNotFoundException ignored) {
+        } catch (Exception ignored) {
         }
     }
 
