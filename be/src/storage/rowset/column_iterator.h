@@ -251,11 +251,11 @@ public:
 
     // Return the name of this column iterator for debugging and logging purposes
     virtual std::string name() const { return "ColumnIterator"; }
-    
+
     virtual Status next_batch_with_filter(const SparseRange<>& range, Column* dst,
                                           const std::vector<const ColumnPredicate*>& compound_and_predicates,
                                           Buffer<uint8_t>* selection, Buffer<uint16_t>* selected_idx,
-                                          bool* data_filtered) {
+                                          bool* data_filtered, size_t* processed_rows) {
         *data_filtered = false;
         return next_batch(range, dst);
     }
