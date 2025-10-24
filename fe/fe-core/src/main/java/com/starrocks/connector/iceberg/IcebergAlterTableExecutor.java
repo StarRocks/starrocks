@@ -553,6 +553,7 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
         boolean rewriteAll = clause.isRewriteAll();
         long minFileSizeBytes = clause.getMinFileSizeBytes();
         long batchSize = clause.getBatchSize();
+        long batchParallelism = clause.getBatchSize();
         Expr partitionFilter = clause.getWhere();
         String catalogName = stmt.getCatalogName();
         String dbName = stmt.getDbName();
@@ -585,7 +586,7 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
         );
         String executeStmt = writer.toString();
         IcebergRewriteDataJob job = new IcebergRewriteDataJob(executeStmt, rewriteAll, 
-                minFileSizeBytes, batchSize, context, stmt);
+                minFileSizeBytes, batchSize, batchParallelism, context, stmt);
         try {
             job.prepare();
             job.execute();
