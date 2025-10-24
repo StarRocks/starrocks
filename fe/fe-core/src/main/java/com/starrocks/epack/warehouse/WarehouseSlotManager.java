@@ -17,6 +17,7 @@ package com.starrocks.epack.warehouse;
 import com.google.common.collect.Maps;
 import com.starrocks.epack.warehouse.cngroup.CNGroupMetricEntity;
 import com.starrocks.epack.warehouse.cngroup.CNGroupResource;
+import com.starrocks.epack.warehouse.cngroup.CNGroupUtils;
 import com.starrocks.metric.Metric;
 import com.starrocks.metric.MetricLabel;
 import com.starrocks.metric.MetricVisitor;
@@ -384,10 +385,13 @@ public class WarehouseSlotManager extends BaseSlotManager {
             return;
         }
         ComputeResource computeResource = context.getCurrentComputeResourceNoAcquire();
-        if (computeResource == null || !(computeResource instanceof CNGroupResource)) {
+        if (computeResource == null) {
             return;
         }
-        CNGroupResource cnGroupResource = (CNGroupResource) computeResource;
+        CNGroupResource cnGroupResource = CNGroupUtils.getAcquiredCNGroupResource(computeResource);
+        if (cnGroupResource == null) {
+            return;
+        }
         CNGroupMetricEntity cnGroupMetricEntity = cnGroupMetrics.computeIfAbsent(cnGroupResource, (ingored) -> {
             LocalWarehouse localWarehouse = (LocalWarehouse) getWarehouse(cnGroupResource.getWarehouseId());
             if (localWarehouse == null) {

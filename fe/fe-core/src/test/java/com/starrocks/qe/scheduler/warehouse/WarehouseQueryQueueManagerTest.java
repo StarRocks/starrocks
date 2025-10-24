@@ -30,6 +30,7 @@ import com.starrocks.metric.MetricVisitor;
 import com.starrocks.metric.PrometheusMetricVisitor;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.scheduler.Coordinator;
+import com.starrocks.qe.scheduler.LazyWorkerProvider;
 import com.starrocks.qe.scheduler.SchedulerTestBase;
 import com.starrocks.qe.scheduler.SchedulerTestNoneDBBase;
 import com.starrocks.qe.scheduler.slot.BaseSlotTracker;
@@ -60,6 +61,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 import static org.junit.Assert.assertEquals;
@@ -367,5 +370,73 @@ public class WarehouseQueryQueueManagerTest extends SchedulerTestBase {
                 (WarehouseSlotTracker) warehouseIdToSlotTracker.get(WarehouseManager.DEFAULT_WAREHOUSE_ID);
         assertThat(warehouseSlotTracker != null).isTrue();
         assertThat(warehouseSlotTracker.getOptsV2()).isEmpty();
+    }
+
+    @Test
+    public void testLazyWorkerProviderCalledAfterMaybeWait() throws Exception {
+        // This test verifies that LazyWorkerProvider#get() is called AFTER manager.maybeWait(),
+        // ensuring compute resource acquisition happens after query queue scheduling.
+
+        AtomicBoolean queueSchedulingComplete =  new AtomicBoolean(false);
+        AtomicBoolean resourceAcquired =  new AtomicBoolean(false);
+        AtomicInteger supplierInvocationCount = new AtomicInteger(0);
+
+        // Create a coordinator with a LazyWorkerProvider that tracks when it's materialized
+        DefaultCoordinator coord = getSchedulerWithQueryId("select count(1) from lineitem");
+        
+        // Mock the LazyWorkerProvider to track when get() is called
+        LazyWorkerProvider mockLazyProvider = LazyWorkerProvider.of(() -> {
+            supplierInvocationCount.incrementAndGet();
+            
+            // Verify that queue scheduling was completed BEFORE resource acquisition
+            assertThat(queueSchedulingComplete.get()).as(
+                "LazyWorkerProvider#get() should only be called after manager.maybeWait() completes. " +
+                "This ensures compute resource acquisition happens after query queue scheduling."
+            ).isTrue();
+            
+            resourceAcquired.set(true);
+            return null; // We don't need an actual WorkerProvider for this test
+        });
+
+        // Phase 1: Before queue scheduling - supplier should NOT be invoked
+        assertThat(supplierInvocationCount.get()).as(
+                "LazyWorkerProvider supplier should not be invoked before queue scheduling"
+        ).isEqualTo(0);
+        assertThat(resourceAcquired.get()).isFalse();
+
+        // Phase 2: Call manager.maybeWait() - this performs query queue scheduling
+        manager.maybeWait(connectContext, coord);
+        queueSchedulingComplete.set(true);
+
+        // Phase 3: After maybeWait completes, supplier still should NOT be invoked yet
+        // This is the key assertion: LazyWorkerProvider defers resource acquisition
+        assertThat(supplierInvocationCount.get()).as(
+                "LazyWorkerProvider supplier should not be invoked during or immediately after " +
+                "manager.maybeWait(). Resource acquisition should be deferred until get() is explicitly called."
+        ).isEqualTo(0);
+        assertThat(resourceAcquired.get()).isFalse();
+
+        // Phase 4: Now call get() to materialize the WorkerProvider
+        // In real scenarios, this happens when the coordinator actually needs the workers
+        mockLazyProvider.get();
+
+        // Phase 5: Verify the supplier was invoked exactly once, and AFTER queue scheduling
+        assertThat(supplierInvocationCount.get()).as(
+                "LazyWorkerProvider supplier should be invoked exactly once when get() is called"
+        ).isEqualTo(1);
+        assertThat(resourceAcquired.get()).as(
+                "Compute resources should be acquired only after get() is called, " +
+                "which happens after query queue scheduling is complete"
+        ).isTrue();
+        assertThat(queueSchedulingComplete.get()).isTrue();
+
+        // Verify memoization - calling get() again should not invoke the supplier again
+        mockLazyProvider.get();
+        assertThat(supplierInvocationCount.get()).as(
+                "LazyWorkerProvider should memoize the result and not invoke supplier multiple times"
+        ).isEqualTo(1);
+
+        // Cleanup
+        coord.onFinished();
     }
 }

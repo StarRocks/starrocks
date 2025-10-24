@@ -192,8 +192,8 @@ public class CNGroupResourceProvider implements ComputeResourceProvider  {
                                                           List<Long> ids,
                                                           Set<Long> blackWorkerGroupIds) {
         final ComputeResource prev = acquireContext.getPrevComputeResource();
-        if (prev != null && prev instanceof CNGroupResource) {
-            CNGroupResource prevGroup = (CNGroupResource) prev;
+        final CNGroupResource prevGroup = CNGroupUtils.getAcquiredCNGroupResource(prev);
+        if (prevGroup != null) {
             // if prev resource group's warehouse id is not the same with this request, return.
             if (acquireContext.getWarehouseId() != prevGroup.getWarehouseId()) {
                 return Optional.empty();

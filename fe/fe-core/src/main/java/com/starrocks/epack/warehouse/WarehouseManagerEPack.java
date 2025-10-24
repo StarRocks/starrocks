@@ -16,6 +16,7 @@ import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.epack.warehouse.cngroup.CNGroupResource;
 import com.starrocks.epack.warehouse.cngroup.CNGroupResourceProvider;
+import com.starrocks.epack.warehouse.cngroup.CNGroupUtils;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.persist.DropWarehouseLog;
 import com.starrocks.persist.EditLog;
@@ -104,8 +105,7 @@ public class WarehouseManagerEPack extends WarehouseManager {
     }
 
     public String getWarehouseComputeResourceName(ComputeResource computeResource) {
-        if (RunMode.isSharedNothingMode() || computeResource == null ||
-                !(computeResource instanceof CNGroupResource)) {
+        if (RunMode.isSharedNothingMode() || computeResource == null) {
             return "";
         }
         try {
@@ -118,11 +118,16 @@ public class WarehouseManagerEPack extends WarehouseManager {
     }
 
     public String getComputeResourceName(ComputeResource computeResource) {
-        if (!RunMode.isSharedDataMode() || computeResource == null || !(computeResource instanceof CNGroupResource)) {
+        if (!RunMode.isSharedDataMode() || computeResource == null) {
             return "";
         }
         try {
-            CNGroupResource cnGroupResource = (CNGroupResource) computeResource;
+            CNGroupResource cnGroupResource = CNGroupUtils.getAcquiredCNGroupResource(computeResource);
+            if (cnGroupResource == null) {
+                LOG.warn("Failed to get compute resource name for computeResource: {}, cnGroupResource is null",
+                        computeResource);
+                return "";
+            }
             LocalWarehouse warehouse = (LocalWarehouse) getWarehouse(cnGroupResource.getWarehouseId());
             checkWarehouseState(warehouse);
             Cluster cluster = warehouse.getClusterByWorkGroupId(cnGroupResource.getWorkerGroupId());
