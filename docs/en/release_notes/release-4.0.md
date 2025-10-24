@@ -103,3 +103,4 @@ Release date: October 17, 2025
   - Renamed the `TABLET_STATUS` column to `SCHEDULE_REASON`, the `CLONE_SRC` column to `SRC_BE_ID`, and the `CLONE_DEST` column to `DEST_BE_ID`.
   - The data types of the `CREATE_TIME`, `SCHEDULE_TIME` and `FINISH_TIME` columns have been changed from `DOUBLE` to `DATETIME`.
 - The `is_leader` label has been added to some FE metrics. [#63004](https://github.com/StarRocks/starrocks/pull/63004)
+- Shared-data clusters using Microsoft Azure Blob Storage and Data Lake Storage Gen 2 as object storage will experience Data Cache failure after being upgraded to v4.0. The system will automatically reload the cache.
