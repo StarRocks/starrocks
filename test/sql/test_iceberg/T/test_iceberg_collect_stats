@@ -19,6 +19,8 @@ create table iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t1
     c4 decimal(10,3)
 ) partition by c1,c2,c3,c4;
 
+set disable_table_stats_from_metadata_for_single_table = false;
+
 insert into iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t1 values(1, 2, '2022-01-01', 10.23);
 [UC] analyze table iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t1;
 function: assert_explain_costs_contains('select * from iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t1', 'cardinality=1')
