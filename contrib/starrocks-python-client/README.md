@@ -87,6 +87,10 @@ class table1(Base):
         "starrocks_PRIMARY_KEY": "id",
         "starrocks_engine": "OLAP",
         "starrocks_comment": "table comment",
+        "starrocks_distributed_by": "id",
+        "starrocks_distributed_by_buckets": 5,
+        "starrocks_partition_by": "name",
+        "starrocks_order_by": "created_at",
         "starrocks_properties": (
             ("storage_medium", "SSD"),
             ("storage_cooldown_time", "2025-06-04 00:00:00"),
