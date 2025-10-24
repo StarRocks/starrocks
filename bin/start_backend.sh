@@ -230,8 +230,6 @@ echo "Run with JEMALLOC_CONF: '$JEMALLOC_CONF'"
 
 if [ ${RUN_DAEMON} -eq 1 ]; then
     nohup ${START_BE_CMD} "$@" </dev/null &
-    BE_PID=$!
-    echo $BE_PID > $pidfile
     
     if [ ${ENABLE_PROFILE} -eq 1 ]; then
         ${STARROCKS_HOME}/bin/collect_be_profile.sh --daemon

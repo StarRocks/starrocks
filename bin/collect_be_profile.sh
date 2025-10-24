@@ -149,6 +149,20 @@ get_timestamp() {
     date '+%Y%m%d-%H%M%S'
 }
 
+# Format bytes into human-readable format (portable alternative to numfmt)
+format_bytes() {
+    local bytes=$1
+    local units=("B" "KB" "MB" "GB" "TB")
+    local unit_index=0
+    
+    while [ $bytes -ge 1024 ] && [ $unit_index -lt $((${#units[@]} - 1)) ]; do
+        bytes=$((bytes / 1024))
+        unit_index=$((unit_index + 1))
+    done
+    
+    echo "${bytes}${units[$unit_index]}"
+}
+
 # Generic profile collection function
 collect_profile() {
     local profile_type="$1"  # cpu or contention
@@ -219,7 +233,7 @@ cleanup_old_files() {
     
     # Delete files if total size exceeds limit (oldest first)
     if [ $total_size -gt $CLEANUP_SIZE ]; then
-        log_warn "Total size ($(numfmt --to=iec $total_size)) exceeds limit ($(numfmt --to=iec $CLEANUP_SIZE))"
+        log_warn "Total size ($(format_bytes $total_size)) exceeds limit ($(format_bytes $CLEANUP_SIZE))"
         
         while IFS= read -r -d '' file; do
             if [[ "$file" =~ (cpu-profile-|contention-profile-).*\.gz$ ]]; then
