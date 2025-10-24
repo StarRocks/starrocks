@@ -3,6 +3,10 @@
 
 FROM ubuntu:22.04
 ARG CMAKE_INSTALL_HOME=/opt/cmake
+ARG COMMIT_ID=unset
+
+LABEL org.opencontainers.image.source="https://github.com/StarRocks/starrocks"
+LABEL com.starrocks.commit=${COMMIT_ID}
 
 # Install common libraries and tools that are needed for dev environment
 RUN apt-get update -y && \

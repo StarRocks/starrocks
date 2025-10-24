@@ -13,6 +13,7 @@ ARG MAVEN_INSTALL_HOME=/opt/maven
 ARG BINUTILS_DOWNLOAD_URL=https://ftp.gnu.org/gnu/binutils/binutils-2.30.tar.bz2
 # install epel-release directly from the url link
 ARG EPEL_RPM_URL=https://archives.fedoraproject.org/pub/archive/epel/7/x86_64/Packages/e/epel-release-7-14.noarch.rpm
+ARG COMMIT_ID=unset
 
 FROM centos:centos7 AS fixed-centos7-image
 # Fix the centos mirrorlist, due to official list is gone after EOL
@@ -67,13 +68,16 @@ ARG JDK_INSTALL_HOME
 ARG MAVEN_VERSION
 ARG MAVEN_INSTALL_HOME
 ARG EPEL_RPM_URL
+ARG COMMIT_ID
 
-LABEL org.opencontainers.image.source="https://github.com/starrocks/starrocks"
+LABEL org.opencontainers.image.source="https://github.com/StarRocks/starrocks"
+LABEL com.starrocks.commit=${COMMIT_ID}
 
 RUN yum-config-manager --add-repo https://cli.github.com/packages/rpm/gh-cli.repo && yum install -y gh && \
         yum install -y ${EPEL_RPM_URL} && yum install -y wget unzip bzip2 patch bison byacc flex autoconf automake make \
         libtool which git ccache binutils-devel python3 file less psmisc \
-        perl perl-IPC-Cmd perl-Text-Template  perl-Time-Piece && \
+        perl-IPC-Cmd perl-Time-Piece && \
+        localedef --no-archive -i en_US -f UTF-8 en_US.UTF-8 && \
         yum clean all && rm -rf /var/cache/yum
 
 # install gcc
