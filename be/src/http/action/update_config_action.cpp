@@ -69,6 +69,7 @@
 #include "storage/storage_engine.h"
 #include "storage/update_manager.h"
 #include "util/bthreads/executor.h"
+#include "util/logging.h"
 #include "util/priority_thread_pool.hpp"
 
 #ifdef USE_STAROS
@@ -386,6 +387,14 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             if (batch_write_mgr) {
                 batch_write_mgr->txn_state_cache()->set_capacity(config::merge_commit_txn_state_cache_capacity);
             }
+            return Status::OK();
+        });
+        _config_callback.emplace("sys_log_verbose_modules", [&]() -> Status {
+            update_verbose_logging();
+            return Status::OK();
+        });
+        _config_callback.emplace("sys_log_verbose_level", [&]() -> Status {
+            update_verbose_logging();
             return Status::OK();
         });
 

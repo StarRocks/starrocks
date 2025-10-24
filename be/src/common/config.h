@@ -217,9 +217,9 @@ CONF_String(sys_log_roll_mode, "SIZE-MB-1024");
 // The log roll num.
 CONF_Int32(sys_log_roll_num, "10");
 // Verbose log.
-CONF_Strings(sys_log_verbose_modules, "");
+CONF_mStrings(sys_log_verbose_modules, "");
 // Verbose log level.
-CONF_Int32(sys_log_verbose_level, "10");
+CONF_mInt32(sys_log_verbose_level, "10");
 // The log buffer level.
 CONF_String(log_buffer_level, "");
 
