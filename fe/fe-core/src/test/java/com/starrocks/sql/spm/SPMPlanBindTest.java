@@ -182,6 +182,36 @@ public class SPMPlanBindTest extends PlanTestBase {
     }
 
     @Test
+    public void testLargeInPreicate() {
+        connectContext.getSessionVariable().setLargeInPredicateThreshold(2);
+        CreateBaselinePlanStmt stmt = createBaselinePlanStmt(
+                "select t1.v4, t0.v2 from t0, t1 where t0.v3 = t1.v6 and " +
+                        "t0.v2 in (_spm_const_list(1, 10, 11)) and t1.v5 = _spm_const_var(2, 5)",
+                "SELECT v2, v4 FROM " +
+                        "(SELECT * FROM t0 WHERE t0.v2 in (_spm_const_list(1, 10, 11)) ) t_0 " +
+                        " INNER JOIN[SHUFFLE] " +
+                        " (SELECT * FROM t1 WHERE v5 = _spm_const_var(2, 5)) t_1 ON v3 = v6");
+        SPMPlanBuilder generator = new SPMPlanBuilder(connectContext, stmt);
+        generator.execute();
+        assertContains(generator.getBindSqlDigest(), "SELECT `test`.`t1`.`v4`, `test`.`t0`.`v2` "
+                + "FROM `test`.`t0` , `test`.`t1`  "
+                + "WHERE ((`test`.`t0`.`v3` = `test`.`t1`.`v6`) "
+                + "AND (`test`.`t0`.`v2` IN (?))) AND (`test`.`t1`.`v5` = ?)");
+
+        assertContains(generator.getBindSql(), "SELECT `test`.`t1`.`v4`, `test`.`t0`.`v2` "
+                + "FROM `test`.`t0` , `test`.`t1`  "
+                + "WHERE ((`test`.`t0`.`v3` = `test`.`t1`.`v6`) "
+                + "AND (`test`.`t0`.`v2` IN (_spm_const_list(1, 10, 11)))) "
+                + "AND (`test`.`t1`.`v5` = _spm_const_var(2, 5))");
+
+        assertContains(generator.getPlanStmtSQL(),
+                "SELECT v2, v4 FROM (SELECT * FROM t0 WHERE v2 IN (_spm_const_list(1, 10, 11))) t_0 "
+                        + "INNER JOIN[SHUFFLE] "
+                        + "(SELECT v4, v6 FROM t1 WHERE v5 = _spm_const_var(2, 5)) t_1 ON v3 = v6");
+        connectContext.getSessionVariable().setLargeInPredicateThreshold(100000);
+    }
+
+    @Test
     public void testUserBindPlan() {
         CreateBaselinePlanStmt stmt = createBaselinePlanStmt(
                 "select t1.v4, t0.v2 from t0, t1 where t0.v3 = t1.v6 and " +
