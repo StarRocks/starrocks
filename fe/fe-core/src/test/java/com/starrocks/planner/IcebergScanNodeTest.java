@@ -109,9 +109,16 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+<<<<<<< HEAD
 import javax.swing.text.html.Option;
 import static com.starrocks.common.util.Util.executeCommand;
+=======
+import java.util.concurrent.ConcurrentLinkedQueue;
+>>>>>>> 0a3eb5e25a ([Enhancement] add iceberg compaction batch parallel (#63959))
 import java.util.stream.Stream;
+
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isA;
 
 public class IcebergScanNodeTest {
     public static final HdfsEnvironment HDFS_ENVIRONMENT = new HdfsEnvironment();
@@ -965,6 +972,7 @@ public class IcebergScanNodeTest {
     @Test
     void execute_shouldRunNormally_whenPreparedStateAndTasksExist() throws Exception {
         ConnectContext context = Mockito.mock(ConnectContext.class, Mockito.RETURNS_DEEP_STUBS);
+        SessionVariable sessVar = Mockito.mock(SessionVariable.class);
         AlterTableStmt alter = Mockito.mock(AlterTableStmt.class);
         IcebergRewriteStmt rewriteStmt = Mockito.mock(IcebergRewriteStmt.class);
         ExecPlan execPlan = Mockito.mock(ExecPlan.class);
@@ -977,13 +985,16 @@ public class IcebergScanNodeTest {
         fragments.add(fragment);
         Mockito.when(execPlan.getFragments()).thenReturn(fragments);
         Mockito.when(fragment.collectScanNodes()).thenReturn(scanMap);
-        Mockito.when(rewriteData.hasMoreTaskGroup())
-                .thenReturn(true)
-                .thenReturn(false);
-        List<RemoteFileInfo> oneGroup = Collections.emptyList();
+        Mockito.when(rewriteData.hasMoreTaskGroup()).thenReturn(true).thenReturn(false);
+        List<RemoteFileInfo> oneGroup = new ArrayList<>();
+        RemoteFileInfo rfi = Mockito.mock(RemoteFileInfo.class);
+        oneGroup.add(rfi);
         Mockito.when(rewriteData.nextTaskGroup()).thenReturn(oneGroup);
         Mockito.when(scanNode.getPlanNodeName()).thenReturn("IcebergScanNode");
-        RemoteFileInfo remoteFileInfo = Mockito.mock(RemoteFileInfo.class);
+        Mockito.when(context.getSessionVariable()).thenReturn(sessVar);
+        Mockito.when(sessVar.clone()).thenReturn(sessVar);
+        Mockito.doNothing().when(sessVar).setQueryTimeoutS(Mockito.anyInt());
+    
         // --- Mock DataFile ---
         DataFile dataFile = Mockito.mock(DataFile.class);
         Mockito.when(dataFile.fileSizeInBytes()).thenReturn(500L);
@@ -994,24 +1005,16 @@ public class IcebergScanNodeTest {
         Mockito.when(fileScanTask.deletes()).thenReturn(Collections.emptyList());
 
         // --- Mock IcebergRemoteFileInfo ---
+        RemoteFileInfo remoteFileInfo = Mockito.mock(RemoteFileInfo.class);
         IcebergRemoteFileInfo icebergRemoteFileInfo = Mockito.mock(IcebergRemoteFileInfo.class);
         Mockito.when(icebergRemoteFileInfo.getFileScanTask()).thenReturn(fileScanTask);
         Mockito.when(remoteFileInfo.cast()).thenReturn(icebergRemoteFileInfo);
         RemoteFileInfoSource remoteFileInfoSource = new RemoteFileInfoSource() {
             int count = 0;
-
-            @Override
-            public RemoteFileInfo getOutput() {
-                count++;
-                return remoteFileInfo;
-            }
-
-            @Override
-            public boolean hasMoreOutput() {
-                return count == 0;
-            }
+            @Override public RemoteFileInfo getOutput() { count++; return remoteFileInfo; }
+            @Override public boolean hasMoreOutput() { return count == 0; }
         };
-
+    
         IcebergTable icebergTable = Mockito.mock(IcebergTable.class);
         IcebergMORParams morParams = Mockito.mock(IcebergMORParams.class);
         TupleDescriptor tupleDesc = Mockito.mock(TupleDescriptor.class);
@@ -1026,12 +1029,14 @@ public class IcebergScanNodeTest {
         Mockito.when(scanNode.getSourceRange()).thenReturn(fakeSourceRange);
         StmtExecutor executor = Mockito.mock(StmtExecutor.class);
         new MockUp<StmtExecutor>() {
+            private static StmtExecutor HOLDER;
+            { HOLDER = executor; }
             @Mock
-            public StmtExecutor newInternalExecutor(ConnectContext c, StatementBase s) {
-                return executor;
+            public static StmtExecutor newInternalExecutor(ConnectContext c, StatementBase s) {
+                return HOLDER;
             }
         };
-
+    
         new MockUp<com.starrocks.sql.parser.SqlParser>() {
             @Mock
             public List<com.starrocks.sql.ast.StatementBase> parse(String sql, SessionVariable sessionVariable) {
@@ -1048,16 +1053,7 @@ public class IcebergScanNodeTest {
 
         new MockUp<IcebergScanNode>() {
             @Mock
-            public void rebuildScanRange(List<RemoteFileInfo> splits) {
-                return;
-            }
-        };
-
-        new MockUp<StmtExecutor>() {
-            @Mock
-            public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) {
-                return;
-            }
+            public void rebuildScanRange(List<RemoteFileInfo> splits) { /* no-op */ }
         };
         new MockUp<IcebergRewriteData>() {
             @Mock
@@ -1074,63 +1070,105 @@ public class IcebergScanNodeTest {
         };
 
         IcebergRewriteDataJob job = new IcebergRewriteDataJob(
-                "insert into t select * from t", false, 0L, 10L, context, alter);
+                "insert into t select * from t", false, 0L, 10L, 1L, context, alter);
 
         job.prepare();
         Deencapsulation.setField(job, "execPlan", execPlan);
         Deencapsulation.setField(job, "scanNodes", Arrays.asList(scanNode));
         Deencapsulation.setField(job, "rewriteStmt", rewriteStmt);
         Deencapsulation.setField(job, "rewriteData", rewriteData);
+        
+        ConcurrentLinkedQueue<IcebergRewriteDataJob.FinishArgs> finishArg = new ConcurrentLinkedQueue<>();
+        finishArg.add(job.new FinishArgs(
+                "c", "db", "t",
+                Arrays.asList(new TSinkCommitInfo(), new TSinkCommitInfo()),
+                "main",
+                new IcebergSinkExtra()
+        ));
+        Deencapsulation.setField(job, "collected", finishArg);
+        // ---- run ----
         job.execute();
 
         Mockito.verify(rewriteData, Mockito.times(2)).hasMoreTaskGroup();
         Mockito.verify(rewriteData, Mockito.times(1)).nextTaskGroup();
         Mockito.verify(scanNode, Mockito.times(1)).rebuildScanRange(oneGroup);
-        Mockito.verify(executor, Mockito.times(1)).handleDMLStmt(execPlan, rewriteStmt);
+    
+        Mockito.verify(executor, Mockito.times(1))
+               .handleDMLStmt(eq(execPlan), isA(IcebergRewriteStmt.class));
     }
 
     @Test
     void execute_shouldSetErrorAndReturn_whenExecutorThrows() throws Exception {
         ConnectContext context = Mockito.mock(ConnectContext.class, Mockito.RETURNS_DEEP_STUBS);
+        SessionVariable sessVar = Mockito.mock(SessionVariable.class);
         AlterTableStmt alter = Mockito.mock(AlterTableStmt.class);
         IcebergRewriteStmt rewriteStmt = Mockito.mock(IcebergRewriteStmt.class);
         ExecPlan execPlan = Mockito.mock(ExecPlan.class);
         IcebergScanNode scanNode = Mockito.mock(IcebergScanNode.class);
         IcebergRewriteData rewriteData = Mockito.mock(IcebergRewriteData.class);
+        List<RemoteFileInfo> oneGroup = new ArrayList<>();
+        RemoteFileInfo rfi = Mockito.mock(RemoteFileInfo.class);
+        oneGroup.add(rfi);
+    
+        Mockito.when(rewriteData.hasMoreTaskGroup()).thenReturn(true).thenReturn(false);
+        Mockito.when(rewriteData.nextTaskGroup()).thenReturn(oneGroup);
+        Mockito.when(scanNode.getPlanNodeName()).thenReturn("IcebergScanNode");
+    
+        Mockito.when(context.getQueryId()).thenReturn(java.util.UUID.randomUUID());
+        Mockito.when(context.getSkipFinishSink()).thenReturn(true);
+        Mockito.when(context.getSessionVariable()).thenReturn(sessVar);
+        Mockito.when(sessVar.clone()).thenReturn(sessVar);
+        Mockito.doNothing().when(sessVar).setQueryTimeoutS(Mockito.anyInt());
 
-        Mockito.when(rewriteData.hasMoreTaskGroup())
-                .thenReturn(true)
-                .thenReturn(false);
-        Mockito.when(rewriteData.nextTaskGroup()).thenReturn(Collections.emptyList());
+    
+        PlanFragment fragment = Mockito.mock(PlanFragment.class);
+        ArrayList<PlanFragment> fragments = new ArrayList<>();
+        fragments.add(fragment);
 
-        StmtExecutor executor = Mockito.mock(StmtExecutor.class);
-        Mockito.doThrow(new RuntimeException("boom")).when(executor).handleDMLStmt(execPlan, rewriteStmt);
-
-        new MockUp<StmtExecutor>() {
-            @Mock
-            public StmtExecutor newInternalExecutor(ConnectContext c, StatementBase s) {
-                return executor;
-            }
+        Map<PlanNodeId, ScanNode> scanMap = new HashMap<>();
+        scanMap.put(new PlanNodeId(1), scanNode);
+        Mockito.when(execPlan.getFragments()).thenReturn(fragments);
+        Mockito.when(fragment.collectScanNodes()).thenReturn(scanMap);
+    
+        com.starrocks.sql.ast.InsertStmt parsedInsert = Mockito.mock(com.starrocks.sql.ast.InsertStmt.class);
+    
+        new mockit.MockUp<StatementPlanner>() {
+            @mockit.Mock
+            public ExecPlan plan(StatementBase stmt, ConnectContext session) { return execPlan; }
         };
-
-        new MockUp<IcebergScanNode>() {
-            @Mock
-            public void rebuildScanRange(List<RemoteFileInfo> splits) {
-                return;
-            }
+        new mockit.MockUp<IcebergRewriteStmt>() {
+            @mockit.Mock
+            public void $init(InsertStmt base, boolean rewriteAll) { /* no-op */ }
+        };
+        new mockit.MockUp<IcebergScanNode>() {
+            @mockit.Mock
+            public void rebuildScanRange(List<RemoteFileInfo> splits) { /* no-op */ }
+        };
+    
+        StmtExecutor executor = Mockito.mock(StmtExecutor.class);
+        Mockito.doThrow(new RuntimeException("boom"))
+               .when(executor)
+               .handleDMLStmt(Mockito.eq(execPlan), Mockito.isA(IcebergRewriteStmt.class));
+    
+        new mockit.MockUp<StmtExecutor>() {
+            private static StmtExecutor HOLDER;
+            { HOLDER = executor; }     
+            @mockit.Mock
+            public static StmtExecutor newInternalExecutor(ConnectContext c, StatementBase s) { return HOLDER; }
         };
 
         IcebergRewriteDataJob job = new IcebergRewriteDataJob(
-                "insert into t select 1", false, 0L, 10L, context, alter);
+                "insert into t select 1", false, 0L, 10L, 1L, context, alter);
 
         Deencapsulation.setField(job, "rewriteStmt", rewriteStmt);
+        Deencapsulation.setField(job, "parsedStmt", parsedInsert);
         Deencapsulation.setField(job, "execPlan", execPlan);
         Deencapsulation.setField(job, "scanNodes", Arrays.asList(scanNode));
         Deencapsulation.setField(job, "rewriteData", rewriteData);
 
-        job.execute();
+        StarRocksConnectorException ex = Assertions.assertThrows(StarRocksConnectorException.class, () -> job.execute());
 
-        Mockito.verify(context.getState(), Mockito.times(1)).setError("boom");
+        Assertions.assertEquals("Failed to compact files", ex.getMessage());
         Mockito.verify(scanNode, Mockito.times(1)).rebuildScanRange(Mockito.anyList());
     }
 
