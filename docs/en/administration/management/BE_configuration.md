@@ -1959,7 +1959,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 
 ##### datacache_min_disk_quota_for_adjustment
 
-- Default: 107374182400
+- Default: 10737418240
 - Type: Int
 - Unit: Bytes
 - Is mutable: Yes

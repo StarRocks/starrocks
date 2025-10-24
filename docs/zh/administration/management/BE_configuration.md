@@ -1918,7 +1918,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### datacache_min_disk_quota_for_adjustment
 
-- 默认值：107374182400
+- 默认值：10737418240
 - 类型：Int
 - 单位：Bytes
 - 是否动态：是
