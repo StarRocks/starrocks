@@ -161,6 +161,11 @@ public class QueryProfileAction extends WebBaseAction {
     }
 
     private void appendButtons(StringBuilder buffer) {
+        // Add external CSS and JavaScript files for collapsible profile viewer
+        buffer.append("<link rel=\"stylesheet\" href=\"/static?res=collapsible-profile.css\">");
+        buffer.append("<script type=\"text/javascript\" src=\"/static?res=collapsible-profile.js\"></script>");
+
+        // Original button functions
         buffer.append("<script type=\"text/javascript\">\n" +
                 "function viewProfile() {\n" +
                 "  const params = new URLSearchParams(window.location.search);\n" +
@@ -204,9 +209,13 @@ public class QueryProfileAction extends WebBaseAction {
                 "\n" +
                 "  URL.revokeObjectURL(a.href);\n" +
                 "}" + "</script>");
+        
+        // Add new buttons for collapsible functionality
         buffer.append("<input type=\"button\" onclick=\"viewProfile();\" value=\"View Profile\"></input>");
         buffer.append("<input type=\"button\" onclick=\"formattedSql();\" value=\"Formatted SQL\"></input>");
         buffer.append("<input type=\"button\" onclick=\"analyzeProfile();\" value=\"Analyze Profile\"></input>");
+        buffer.append("<input type=\"button\" onclick=\"expandAll();\" value=\"Expand All\"></input>");
+        buffer.append("<input type=\"button\" onclick=\"collapseAll();\" value=\"Collapse All\"></input>");
         buffer.append("<input type=\"button\" onclick=\"copy();\" value=\"Copy\"></input>");
         buffer.append("<input type=\"button\" onclick=\"download();\" value=\"Download\"></input>");
     }
