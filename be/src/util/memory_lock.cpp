@@ -42,7 +42,7 @@ static void lock_segment(const char* module_name, void* start, void* end) {
     uintptr_t seg_end = page_align_up((uintptr_t)end, page_size);
     size_t seg_len = seg_end - seg_start;
 
-    if (mlock((void*)seg_start, seg_len) != 0) {
+    if (mlock((void*)seg_start, seg_len) != 0) { // NOLINT
         LOG(WARNING) << "mlock failed for " << module_name << " " << seg_start << "-" << seg_end << " (" << seg_len
                      << " bytes): " << strerror(errno);
     } else {
@@ -78,8 +78,8 @@ static int phdr_callback(struct dl_phdr_info* info, size_t size, void* data) {
     for (int i = 0; i < info->dlpi_phnum; i++) {
         const ElfW(Phdr)* ph = &info->dlpi_phdr[i];
         if (ph->p_type == PT_LOAD && (ph->p_flags & PF_X)) {
-            void* seg_start = (void*)(info->dlpi_addr + ph->p_vaddr);
-            void* seg_end = (void*)(info->dlpi_addr + ph->p_vaddr + ph->p_memsz);
+            void* seg_start = (void*)(info->dlpi_addr + ph->p_vaddr);             // NOLINT
+            void* seg_end = (void*)(info->dlpi_addr + ph->p_vaddr + ph->p_memsz); // NOLINT
             lock_segment(info->dlpi_name, seg_start, seg_end);
         }
     }

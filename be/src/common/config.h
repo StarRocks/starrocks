@@ -1756,7 +1756,7 @@ CONF_mInt64(rf_branchless_ratio, "8");
 CONF_mInt32(big_query_sec, "1");
 
 // modules that need to be mlocked, separated by commas
-CONF_Strings(sys_mlock_modules, "main,libc.so.6,libm.so.6");
+CONF_Strings(sys_mlock_modules, "main,linux-vdso.so.1,libjemalloc.so.2,libc.so.6,libm.so.6,ld-linux-x86-64.so.2");
 
 CONF_mInt64(split_exchanger_buffer_chunk_num, "1000");
 

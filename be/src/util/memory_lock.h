@@ -15,5 +15,15 @@
 #pragma once
 
 namespace starrocks {
+// This function is used to lock the memory of specified modules.
+// When memory is locked, it will not be swapped out to disk.
+// Therefore, when available memory is low, these executable pages are not frequently swapped out.
+// This can prevent the operating system from freezing.
+//
+// The modules to be locked can be configured through the configuration item "config::sys_mlock_modules".
+// These code segments of the modules will be locked in memory.
+//
+// Under Release mode, they will lock approximately 170MB of memory,
+// with no significant memory consumption.
 void mlock_modules();
 } // namespace starrocks
