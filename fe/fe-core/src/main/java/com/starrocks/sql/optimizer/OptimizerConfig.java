@@ -15,13 +15,31 @@
 
 package com.starrocks.sql.optimizer;
 
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/sql/optimizer/OptimizerConfig.java
 import com.starrocks.sql.optimizer.rule.RuleSetType;
+=======
+import com.google.common.base.Splitter;
+import com.google.common.base.Strings;
+import com.google.common.collect.Sets;
+import com.starrocks.qe.SessionVariable;
+>>>>>>> 0d91513717 ([Enhancement] Support disabling optimizer rules via cbo_disabled_rules session variable (#64269)):fe/fe-core/src/main/java/com/starrocks/sql/optimizer/OptimizerOptions.java
 import com.starrocks.sql.optimizer.rule.RuleType;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.BitSet;
+import java.util.List;
+import java.util.Set;
 
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/sql/optimizer/OptimizerConfig.java
 public class OptimizerConfig {
     public enum OptimizerAlgorithm {
+=======
+public class OptimizerOptions {
+    private static final Logger LOG = LogManager.getLogger(OptimizerOptions.class);
+    
+    public enum OptimizerStrategy {
+>>>>>>> 0d91513717 ([Enhancement] Support disabling optimizer rules via cbo_disabled_rules session variable (#64269)):fe/fe-core/src/main/java/com/starrocks/sql/optimizer/OptimizerOptions.java
         RULE_BASED,
         COST_BASED
     }
@@ -68,4 +86,67 @@ public class OptimizerConfig {
     public boolean isRuleDisable(RuleType ruleType) {
         return !ruleSwitches.get(ruleType.ordinal());
     }
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/sql/optimizer/OptimizerConfig.java
+=======
+
+    private static final OptimizerOptions DEFAULT_OPTIONS = new OptimizerOptions(OptimizerStrategy.COST_BASED);
+
+    public static OptimizerOptions defaultOpt() {
+        return DEFAULT_OPTIONS;
+    }
+
+    public static OptimizerOptions newRuleBaseOpt() {
+        return new OptimizerOptions(OptimizerStrategy.RULE_BASED);
+    }
+
+    public static OptimizerOptions newShortCircuitOpt() {
+        return new OptimizerOptions(OptimizerStrategy.SHORT_CIRCUIT);
+    }
+
+    public void applyDisableRuleFromSessionVariable(SessionVariable sessionVariable) {
+        if (sessionVariable == null) {
+            return;
+        }
+
+        String disabledRulesStr = sessionVariable.getCboDisabledRules();
+        if (Strings.isNullOrEmpty(disabledRulesStr)) {
+            return;
+        }
+
+        Set<RuleType> disabledRules = parseDisabledRules(disabledRulesStr);
+        for (RuleType ruleType : disabledRules) {
+            ruleSwitches.clear(ruleType.ordinal());
+        }
+    }
+
+    private static Set<RuleType> parseDisabledRules(String rulesStr) {
+        Set<RuleType> result = Sets.newHashSet();
+
+        if (Strings.isNullOrEmpty(rulesStr)) {
+            return result;
+        }
+
+        try {
+            List<String> ruleNames = Splitter.on(',')
+                    .trimResults()
+                    .omitEmptyStrings()
+                    .splitToList(rulesStr);
+
+            for (String ruleName : ruleNames) {
+                try {
+                    RuleType ruleType = RuleType.valueOf(ruleName);
+                    if (ruleType.name().startsWith("TF_") || ruleType.name().startsWith("GP_")) {
+                        result.add(ruleType);
+                    }
+                } catch (IllegalArgumentException e) {
+                    LOG.warn("Ignoring unknown rule name: {} (may be from different version)", ruleName);
+                }
+            }
+        } catch (Exception e) {
+            LOG.error("Unexpected error parsing disabled rules: '{}', returning empty set", rulesStr, e);
+        }
+
+        return result;
+    }
+>>>>>>> 0d91513717 ([Enhancement] Support disabling optimizer rules via cbo_disabled_rules session variable (#64269)):fe/fe-core/src/main/java/com/starrocks/sql/optimizer/OptimizerOptions.java
 }

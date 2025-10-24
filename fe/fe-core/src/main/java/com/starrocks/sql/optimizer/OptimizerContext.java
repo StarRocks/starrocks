@@ -115,10 +115,20 @@ public class OptimizerContext {
         this.currentSqlDbIds = connectContext.getCurrentSqlDbIds();
         this.cteContext = new CTEContext();
         cteContext.reset();
+<<<<<<< HEAD
         this.cteContext.setEnableCTE(sessionVariable.isCboCteReuse());
         this.cteContext.setInlineCTERatio(sessionVariable.getCboCTERuseRatio());
         this.cteContext.setMaxCTELimit(sessionVariable.getCboCTEMaxLimit());
         this.optimizerConfig = optimizerConfig;
+=======
+        this.cteContext.setEnableCTE(getSessionVariable().isCboCteReuse());
+        this.cteContext.setInlineCTERatio(getSessionVariable().getCboCTERuseRatio());
+        this.cteContext.setMaxCTELimit(getSessionVariable().getCboCTEMaxLimit());
+
+        this.optimizerOptions = new OptimizerOptions();
+        this.enableJoinIsNullPredicateDerive = getSessionVariable().isCboDeriveJoinIsNullPredicate();
+        this.tvrOptContext = new TvrOptContext(getSessionVariable());
+>>>>>>> 0d91513717 ([Enhancement] Support disabling optimizer rules via cbo_disabled_rules session variable (#64269))
     }
 
     public Memo getMemo() {

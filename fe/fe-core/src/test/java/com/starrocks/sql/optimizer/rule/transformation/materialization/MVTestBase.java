@@ -231,7 +231,15 @@ public class MVTestBase extends StarRocksTestBase {
     }
 
     public static OptExpression getLogicalOptimizedPlan(String sql) {
+<<<<<<< HEAD
         return getOptimizedPlan(sql, connectContext);
+=======
+        return getOptimizedPlan(sql, connectContext, OptimizerOptions.newRuleBaseOpt());
+    }
+
+    public static OptExpression getOptimizedPlan(String sql, ConnectContext connectContext) {
+        return getOptimizedPlan(sql, connectContext, new OptimizerOptions());
+>>>>>>> 0d91513717 ([Enhancement] Support disabling optimizer rules via cbo_disabled_rules session variable (#64269))
     }
 
     public static StatementBase getAnalyzedPlan(String sql, ConnectContext connectContext) {

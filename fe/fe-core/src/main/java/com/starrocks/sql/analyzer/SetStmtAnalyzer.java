@@ -16,6 +16,7 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Enums;
 import com.google.common.base.Joiner;
+import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.Expr;
@@ -56,6 +57,7 @@ import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.common.QueryDebugOptions;
+import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.system.HeartbeatFlags;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TTabletInternalParallelMode;
@@ -117,6 +119,16 @@ public class SetStmtAnalyzer {
             String value = resolvedExpression.getStringValue();
             if (!value.equalsIgnoreCase("broadcast") && !value.equalsIgnoreCase("shuffle")) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_VALUE_FOR_VAR, "prefer_join_method", value);
+            }
+        }
+
+        if (variable.equalsIgnoreCase(SessionVariable.CBO_DISABLED_RULES)) {
+            String value = resolvedExpression.getStringValue();
+            if (!Strings.isNullOrEmpty(value)) {
+                String errorMsg = validateCboDisabledRules(value);
+                if (errorMsg != null) {
+                    throw new SemanticException(errorMsg);
+                }
             }
         }
 
@@ -329,6 +341,48 @@ public class SetStmtAnalyzer {
         }
 
         var.setResolvedExpression(resolvedExpression);
+    }
+
+    /**
+     * Validate cbo_disabled_rules value - ensures all rule names are valid TF_/GP_ rules
+     * 
+     * @param value comma-separated rule names
+     * @return error message if validation fails, null if valid
+     */
+    private static String validateCboDisabledRules(String value) {
+        try {
+            Splitter splitter = Splitter.on(',').trimResults().omitEmptyStrings();
+            List<String> ruleNames = splitter.splitToList(value);
+            
+            List<String> invalidRules = new ArrayList<>();
+            List<String> nonTfGpRules = new ArrayList<>();
+            
+            for (String ruleName : ruleNames) {
+                try {
+                    RuleType ruleType = RuleType.valueOf(ruleName);
+                    // Only TF_ (Transformation) and GP_ (Group combination) rules can be disabled
+                    if (!ruleType.name().startsWith("TF_") && !ruleType.name().startsWith("GP_")) {
+                        nonTfGpRules.add(ruleName);
+                    }
+                } catch (IllegalArgumentException e) {
+                    invalidRules.add(ruleName);
+                }
+            }
+            
+            // Report all invalid rules at once for better user experience
+            if (!invalidRules.isEmpty()) {
+                return "Unknown rule name(s): " + String.join(", ", invalidRules);
+            }
+            
+            if (!nonTfGpRules.isEmpty()) {
+                return "Only TF_ (Transformation) and GP_ (Group combination) rules can be disabled, invalid: " + 
+                       String.join(", ", nonTfGpRules);
+            }
+            
+            return null;
+        } catch (Exception e) {
+            return "Failed to parse rule names: " + e.getMessage();
+        }
     }
 
     private static void checkRangeLongVariable(LiteralExpr resolvedExpression, String field, Long min, Long max) {
