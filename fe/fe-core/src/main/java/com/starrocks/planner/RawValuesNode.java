@@ -15,6 +15,7 @@
 package com.starrocks.planner;
 
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.TupleId;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Type;
 import com.starrocks.thrift.TRawValuesNode;
@@ -69,7 +70,6 @@ import java.util.List;
  * 
  * @see com.starrocks.sql.optimizer.operator.logical.LogicalRawValuesOperator
  * @see com.starrocks.sql.optimizer.operator.physical.PhysicalRawValuesOperator
- * @see com.starrocks.sql.ast.expression.LargeInPredicate
  */
 public class RawValuesNode extends PlanNode {
     private static final Logger LOG = LogManager.getLogger(RawValuesNode.class);

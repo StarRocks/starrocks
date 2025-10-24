@@ -54,6 +54,7 @@ import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.analysis.LabelName;
+import com.starrocks.analysis.LargeInPredicate;
 import com.starrocks.analysis.LargeIntLiteral;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LimitElement;
@@ -7048,8 +7049,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 return new IntLiteral(intLiteral.longValue(), pos);
             } else if (intLiteral.compareTo(LARGEINT_MAX_ABS) <= 0) {
                 return new LargeIntLiteral(intLiteral.toString(), pos);
-            } else if (intLiteral.compareTo(INT256_MAX_ABS) <= 0) {
-                return new DecimalLiteral(intLiteral.toString(), pos);
             } else {
                 throw new ParsingException(PARSER_ERROR_MSG.numOverflow(intText), pos);
             }

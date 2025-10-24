@@ -15,9 +15,9 @@
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.BinaryType;
+import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Type;
-import com.starrocks.sql.ast.expression.BinaryType;
-import com.starrocks.sql.ast.expression.JoinOperator;
 import com.starrocks.sql.common.LargeInPredicateException;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -41,7 +41,6 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.List;
 
-import static com.starrocks.sql.ast.HintNode.HINT_JOIN_BROADCAST;
 
 /**
  * Transform large IN/NOT IN predicates to semi-join/anti-join for better performance.
@@ -98,7 +97,6 @@ import static com.starrocks.sql.ast.HintNode.HINT_JOIN_BROADCAST;
  * reduces FE memory usage and planning time by using {@link com.starrocks.planner.RawValuesNode}
  * instead of creating individual expression nodes for each constant.
  * 
- * @see com.starrocks.sql.ast.expression.LargeInPredicate
  * @see com.starrocks.planner.RawValuesNode
  * @see com.starrocks.sql.common.LargeInPredicateException
  */
@@ -209,7 +207,7 @@ public class LargeInPredicateToJoinRule extends TransformationRule {
 
         LogicalJoinOperator joinOp = new LogicalJoinOperator.Builder()
                 .setJoinType(joinType)
-                .setJoinHint(HINT_JOIN_BROADCAST)
+                .setJoinHint("BROADCAST")
                 .setOnPredicate(joinPredicate)
                 .build();
 

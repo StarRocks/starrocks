@@ -65,7 +65,6 @@ enum TPlanNodeType {
   FILE_SCAN_NODE,
   EMPTY_SET_NODE,
   UNION_NODE,
-  RAW_VALUES_NODE,
   ES_SCAN_NODE,
   ES_HTTP_SCAN_NODE,
   REPEAT_NODE,
@@ -86,6 +85,7 @@ enum TPlanNodeType {
   STREAM_AGG_NODE,
   LAKE_META_SCAN_NODE,
   CAPTURE_VERSION_NODE,
+  RAW_VALUES_NODE
 }
 
 // phases of an execution node
