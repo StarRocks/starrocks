@@ -1033,7 +1033,7 @@ CONF_mInt32(orc_writer_version, "-1");
 
 // parquet reader
 CONF_mBool(parquet_coalesce_read_enable, "true");
-CONF_Bool(parquet_late_materialization_enable, "true");
+CONF_mBool(parquet_late_materialization_enable, "true");
 CONF_Bool(parquet_page_index_enable, "true");
 CONF_mBool(parquet_reader_bloom_filter_enable, "true");
 CONF_mBool(parquet_statistics_process_more_filter_enable, "true");
