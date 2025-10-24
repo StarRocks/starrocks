@@ -3680,13 +3680,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.newPlannerAggStage = stage;
     }
 
-<<<<<<< HEAD
-=======
-    public boolean isEnableCostBasedMultiStageAgg() {
-        return newPlannerAggStage == SessionVariableConstants.AggregationStage.AUTO.ordinal() && enableCostBasedMultiStageAgg;
-    }
-
->>>>>>> 2adcb22de4 ([Enhancement] disable collecting table stats when single iceberg/deltalake table (#64443))
     public void setMaxTransformReorderJoins(int maxReorderNodeUseExhaustive) {
         this.cboMaxReorderNodeUseExhaustive = maxReorderNodeUseExhaustive;
     }
@@ -5322,17 +5315,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.cboJSONV2DictOpt = value;
     }
 
-<<<<<<< HEAD
-=======
-    public void setEnableFullSortUseGermanString(boolean value) {
-        this.enableFullSortUseGermanString = value;
-    }
-
-    public boolean isEnableFullSortUseGermanString() {
-        return this.enableFullSortUseGermanString;
-    }
-
->>>>>>> 2adcb22de4 ([Enhancement] disable collecting table stats when single iceberg/deltalake table (#64443))
     public boolean isEnableInsertSelectExternalAutoRefresh() {
         return enableInsertSelectExternalAutoRefresh;
     }
