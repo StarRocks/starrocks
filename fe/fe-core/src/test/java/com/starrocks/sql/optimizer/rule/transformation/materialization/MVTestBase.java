@@ -393,6 +393,13 @@ public class MVTestBase extends StarRocksTestBase {
     }
 
     protected static ExecPlan getMVRefreshExecPlan(TaskRun taskRun) throws Exception {
+        return getMVRefreshExecPlan(taskRun, false);
+    }
+
+    protected static ExecPlan getMVRefreshExecPlan(TaskRun taskRun, boolean isForce) throws Exception {
+        if (isForce) {
+            taskRun.getProperties().put(TaskRun.FORCE, "true");
+        }
         initAndExecuteTaskRun(taskRun);
         PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor)
                 taskRun.getProcessor();
