@@ -214,21 +214,8 @@ public enum RuleType {
     TF_VECTOR_REWRITE_RULE,
     TF_HOIST_HEAVY_COST_UPON_TOPN,
     TF_OR_TO_UNION_ALL_JOIN,
-
-<<<<<<< HEAD
-=======
-    TF_INNER_TO_SEMI,
     TF_LARGE_IN_PREDICATE_TO_JOIN,
 
-    // TVR transform rules
-    TF_TVR_TABLE_SCAN,
-    TF_TVR_AGGREGATE,
-    TF_TVR_PROJECT,
-    TF_TVR_FILTER,
-    TF_TVR_JOIN,
-    TF_TVR_UNION_ALL,
-
->>>>>>> 46b658ae6d ([Enhancement] optimize large in predicate (#64194))
     // The following are implementation rules:
     IMPLEMENTATION_RULES,
     IMP_OLAP_LSCAN_TO_PSCAN,

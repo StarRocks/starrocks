@@ -12,12 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.sql.ast.expression;
+package com.starrocks.analysis;
 
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TExprNode;
 
@@ -58,7 +57,7 @@ public class LargeInPredicate extends InPredicate {
     private Type constantType;
 
     public LargeInPredicate(Expr compareExpr, String rawText, List<?> rawConstantList, int constantCount,
-                           boolean isNotIn, List<Expr> inList, NodePosition pos) {
+                            boolean isNotIn, List<Expr> inList, NodePosition pos) {
         super(compareExpr, inList, isNotIn, pos);
         this.rawText = trimParentheses(rawText);
         this.rawConstantList = (List<Object>) rawConstantList;
@@ -190,6 +189,6 @@ public class LargeInPredicate extends InPredicate {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) throws SemanticException {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitLargeInPredicate(this, context);
+        return visitor.visitLargeInPredicate(this, context);
     }
 }
