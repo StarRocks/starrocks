@@ -44,6 +44,8 @@ std::string inverted_index_parser_type_to_string(InvertedIndexParserType parser_
         return INVERTED_INDEX_PARSER_ENGLISH;
     case InvertedIndexParserType::PARSER_CHINESE:
         return INVERTED_INDEX_PARSER_CHINESE;
+    case InvertedIndexParserType::PARSER_JIEBA:
+        return INVERTED_INDEX_PARSER_JIEBA;
     default:
         return INVERTED_INDEX_PARSER_UNKNOWN;
     }

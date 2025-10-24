@@ -13,10 +13,13 @@
 // limitations under the License.
 
 #pragma once
+
 #include <string>
 
 #include "storage/index/inverted/inverted_index_option.h"
 #include "storage/index/inverted/inverted_reader.h"
+#include "storage/index/inverted/tokenizer/tokenizer.h"
+#include "tokenizer/tokenizer_factory.h"
 
 namespace starrocks {
 
@@ -30,6 +33,7 @@ public:
             : _index_meta(index_meta), _reader(reader) {
         _analyser_type = get_inverted_index_parser_type_from_string(
                 get_parser_string_from_properties(_index_meta->index_properties()));
+        _tokenizer = TokenizerFactory::create(_analyser_type);
     }
 
     virtual ~InvertedIndexIterator() = default;
@@ -52,6 +56,7 @@ protected:
     OlapReaderStatistics* _stats;
     InvertedReader* _reader;
     InvertedIndexParserType _analyser_type;
+    std::unique_ptr<Tokenizer> _tokenizer;
 };
 
 } // namespace starrocks

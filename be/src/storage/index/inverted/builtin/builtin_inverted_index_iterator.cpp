@@ -163,14 +163,13 @@ Status BuiltinInvertedIndexIterator::read_from_inverted_index(const std::string&
     }
     case InvertedIndexQueryType::MATCH_ALL_QUERY:
     case InvertedIndexQueryType::MATCH_ANY_QUERY: {
-        std::string search_query_str = search_query->to_string();
-        std::istringstream iss(search_query_str);
-        std::string cur_predicate;
+        ASSIGN_OR_RETURN(const auto words, _tokenizer->tokenize(search_query));
         bool first = true;
-        while (iss >> cur_predicate) {
-            Slice s(cur_predicate);
+        for (const auto& word: words) {
+            const auto& s = word.text;
+
             roaring::Roaring roaring;
-            if (cur_predicate.find('%') != std::string::npos) {
+            if (s.to_string().find('%') != std::string::npos) {
                 RETURN_IF_ERROR(_wildcard_query(&s, &roaring));
             } else {
                 RETURN_IF_ERROR(_equal_query(&s, &roaring));
@@ -186,7 +185,6 @@ Status BuiltinInvertedIndexIterator::read_from_inverted_index(const std::string&
             } else {
                 DCHECK(false) << "do not support query type";
             }
-            cur_predicate.clear();
         }
         break;
     }

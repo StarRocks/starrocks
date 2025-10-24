@@ -14,60 +14,33 @@
 #pragma once
 
 #include <vector>
-#include <memory>
-#include <string>
-#include <string_view>
 
-#include "util/slice.h"
+#include "storage/index/inverted/tokenizer/tokenizer.h"
 
 namespace starrocks {
-
-/**
- * @brief Represents a token extracted from text with its position information.
- */
-struct SliceToken {
-    Slice text;           // Token text data
-    size_t position;      // Position of this token in the sequence
-
-    SliceToken() : text(), position(0) {}
-
-    // Constructor for raw char buffer
-    SliceToken(const char* data, size_t len, size_t pos)
-        : text(data, len), position(pos) {}
-
-    bool empty() const { return text.empty(); }
-
-    // Get string_view for efficient access
-    std::string_view view() const {
-        return std::string_view(text.data, text.size);
-    }
-
-    // Comparison operators
-    bool operator==(const SliceToken& other) const {
-        return text == other.text;
-    }
-};
 
 /**
  * @brief Core tokenizer implementation for simple text analysis
  * Simplified version of CLucene's CharTokenizer using Slice-based tokens
  */
-class SimpleAnalyzer {
+class SimpleAnalyzer : public Tokenizer {
 public:
     /**
      * @brief Constructor
      * @param normalize_case Whether to normalize case (default: false for maximum performance)
      */
     SimpleAnalyzer(bool normalize_case = true);
-    ~SimpleAnalyzer() = default;
+    ~SimpleAnalyzer() override = default;
+
+    StatusOr<std::vector<SliceToken>> tokenize(const Slice* text) override;
 
     /**
      * @brief Tokenize text and output tokens to provided vector
      * @param mutable_text Input text buffer (will be modified for case normalization)
      * @param text_size Size of input text
-     * @param tokens Output vector to store tokens with their positions
+     * @return tokens Output vector to store tokens with their positions
      */
-    void tokenize(char* mutable_text, size_t text_size, std::vector<SliceToken>& tokens) const;
+    StatusOr<std::vector<SliceToken>> tokenize(char* mutable_text, size_t text_size) override;
 
 private:
     static const size_t LOOKUP_SIZE = 256;
@@ -84,7 +57,7 @@ private:
         }
         return _token_char_table[index];
     }
-    
+
     /**
      * @brief Normalize character (e.g., convert to lowercase)
      * @param c Character to normalize

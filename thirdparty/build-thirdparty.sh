@@ -1640,6 +1640,20 @@ build_flamegraph() {
     chmod +x $TP_INSTALL_DIR/flamegraph/*.pl
 }
 
+# limonp
+build_limonp() {
+  check_if_source_exist $JIEBA_SOURCE
+  rm -rf $TP_INSTALL_DIR/include/limonp
+  mkdir -p $TP_INSTALL_DIR/include/limonp
+  cp -r $TP_SOURCE_DIR/$LIMONP_SOURCE/include/limonp/* $TP_INSTALL_DIR/include/limonp
+}
+
+# jieba
+build_jieba() {
+    check_if_source_exist $JIEBA_SOURCE
+    cp -r $TP_SOURCE_DIR/$JIEBA_SOURCE $TP_INSTALL_DIR/jieba
+}
+
 # restore cxxflags/cppflags/cflags to default one
 restore_compile_flags() {
     # c preprocessor flags
@@ -1741,6 +1755,7 @@ declare -a all_packages=(
     azure
     libdivide
     flamegraph
+    jieba
 )
 
 # Machine specific packages

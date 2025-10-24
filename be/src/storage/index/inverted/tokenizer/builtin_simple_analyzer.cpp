@@ -11,15 +11,15 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-#include "storage/index/inverted/builtin/builtin_simple_analyzer.h"
+
+#include "builtin_simple_analyzer.h"
 
 #include <algorithm>
 #include <cctype>
-#include <cstring>
 
 namespace starrocks {
 
-SimpleAnalyzer::SimpleAnalyzer(bool normalize_case) :  _normalize_case(normalize_case) {
+SimpleAnalyzer::SimpleAnalyzer(bool normalize_case) : _normalize_case(normalize_case) {
     // Initialize lookup tables based on ASCII character classification
     for (size_t i = 0; i < LOOKUP_SIZE; ++i) {
         char c = static_cast<char>(i);
@@ -32,13 +32,16 @@ SimpleAnalyzer::SimpleAnalyzer(bool normalize_case) :  _normalize_case(normalize
     }
 }
 
-void SimpleAnalyzer::tokenize(char* mutable_text, size_t text_size, std::vector<SliceToken>& tokens) const {
-    tokens.clear();
+StatusOr<std::vector<SliceToken>> SimpleAnalyzer::tokenize(const Slice* text) {
+    return tokenize(text->data, text->size);
+}
 
+StatusOr<std::vector<SliceToken>> SimpleAnalyzer::tokenize(char* mutable_text, size_t text_size) {
     if (mutable_text == nullptr || text_size == 0) {
-        return;
+        return Status::OK();
     }
-    tokens.reserve(text_size);
+
+    std::vector<SliceToken> tokens;
 
     size_t offset = 0;
     size_t position = 0;
@@ -72,6 +75,7 @@ void SimpleAnalyzer::tokenize(char* mutable_text, size_t text_size, std::vector<
             tokens.emplace_back(mutable_text + token_start, token_length, position++);
         }
     }
+    return std::move(tokens);
 }
 
 } // namespace starrocks
