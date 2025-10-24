@@ -78,6 +78,7 @@ import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -125,6 +126,8 @@ public class BackupJobTest {
 
     private int schemaHash = 1;
 
+    private static boolean origin_enable_metric_calculator_value;
+
     // Thread is not mockable in Jmockit, use subclass instead
     private final class MockBackupHandler extends BackupHandler {
         public MockBackupHandler(GlobalStateMgr globalStateMgr) {
@@ -160,8 +163,6 @@ public class BackupJobTest {
         Config.tmp_dir = "./";
         File backupDir = new File(BackupHandler.BACKUP_ROOT_DIR.toString());
         backupDir.mkdirs();
-
-        MetricRepo.init();
     }
 
     @AfterAll
@@ -286,6 +287,15 @@ public class BackupJobTest {
         List<TableRef> viewRefs = Lists.newArrayList();
         viewRefs.add(new TableRef(new TableName(UnitTestUtil.DB_NAME, UnitTestUtil.VIEW_NAME), null));
         jobView = new BackupJob("label-view", dbId, UnitTestUtil.DB_NAME, viewRefs, 13600 * 1000, globalStateMgr, repo.getId());
+
+        origin_enable_metric_calculator_value = Config.enable_metric_calculator;
+        Config.enable_metric_calculator = false;
+        MetricRepo.init();
+    }
+
+    @AfterEach
+    public void tearDown() {
+        Config.enable_metric_calculator = origin_enable_metric_calculator_value;
     }
 
     @Test
