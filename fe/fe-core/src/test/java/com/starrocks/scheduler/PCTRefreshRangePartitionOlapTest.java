@@ -54,7 +54,6 @@ public class PCTRefreshRangePartitionOlapTest extends MVTestBase {
         starRocksAssert.withMaterializedView(mvQuery);
 
         MaterializedView mv = getMv("test_mv1");
-
         TaskRun taskRun = buildMVTaskRun(mv, "test");
 
         // refresh with force
