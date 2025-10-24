@@ -51,34 +51,9 @@ Flat JSON的核心原理是在导入时检测JSON数据，并从JSON数据中提
 
 从 v3.4 版本起，Flat JSON 默认全局启用。对于 v3.4 之前的版本，必须手动启用此功能。
 
-从 v4.0 版本起，此功能可在表级别进行配置。
-
 ### 为 v3.4 前版本启用
 
 1. 修改 BE 配置：`enable_json_flat`，在 v3.4 版本之前默认为 `false`。修改方法参考 [配置 BE 参数](../administration/management/BE_configuration.md#configure-be-parameters)。
-2. 启用FE分区裁剪功能：
-
-   ```SQL
-   SET GLOBAL cbo_prune_json_subfield = true;
-   ```
-
-### 在表级别启用 Flat JSON 功能
-
-在表级别设置与 Flat JSON 相关的属性自 v4.0 起支持。
-
-1. 在创建表时，您可以设置 `flat_json.enable` 及其他与 Flat JSON 相关的属性。如需详细说明，请参阅 [CREATE TABLE](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md#在表级别设置-flat-json-属性)。
-
-   或者，您可以使用 [ALTER TABLE](../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md) 语句设置这些属性。
-
-   示例：
-
-   ```SQL
-   ALTER TABLE t1 SET ("flat_json.enable" = "true");
-   ALTER TABLE t1 SET ("flat_json.null.factor" = "0.1");
-   ALTER TABLE t1 SET ("flat_json.sparsity.factor" = "0.8");
-   ALTER TABLE t1 SET ("flat_json.column.max" = "90");
-   ```
-
 2. 启用FE分区裁剪功能：
 
    ```SQL
@@ -229,35 +204,3 @@ StarRocks存算一体集群从v3.3.0开始支持Flat JSON，存算分离集群�
 - Flat JSON提取的结果分为常用列和保留字段列。当所有JSON Schema一致时，不会生成保留字段列。
 - Flat JSON仅存储常用字段列和保留字段列，不额外存储原始JSON数据。
 - 在加载数据时，常用字段将自动推断为BIGINT/LARGEINT/DOUBLE/STRING类型。无法识别的类型将推断为JSON类型，保留字段列将存储为JSON类型。
-<<<<<<< HEAD
-
-## 启用Flat JSON功能（仅支持存算一体集群）
-
-1. 在创建表时，可以在表参数中设置`flat_json.enable`属性。参考[表创建](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md)。
-   Flat JSON功能也可以通过直接修改表属性来启用或重新配置。示例：
-   ```SQL
-   alter table t1 set ("flat_json.enable" = "true")
-   
-   alter table t1 set ("flat_json.null.factor" = "0.1")
-   
-   alter table t1 set ("flat_json.sparsity.factor" = "0.8")
-   
-   alter table t1 set ("flat_json.column.max" = "90")
-   ```
-2. 启用FE分区裁剪功能：`SET GLOBAL cbo_prune_json_subfield = true;`
-
-## 启用Flat JSON功能（3.4版本之前）
-
-1. 修改BE配置：`enable_json_flat`，在3.4版本之前默认为`false`。修改方法参考
-[配置BE参数](../administration/management/BE_configuration.md#configure-be-parameters)
-2. 启用FE分区裁剪功能：`SET GLOBAL cbo_prune_json_subfield = true;`
-
-## 其他可选BE配置
-
-- [json_flat_null_factor](../administration/management/BE_configuration.md#json_flat_null_factor)
-- [json_flat_column_max](../administration/management/BE_configuration.md#json_flat_column_max)
-- [json_flat_sparsity_factor](../administration/management/BE_configuration.md#json_flat_sparsity_factor)
-- [enable_compaction_flat_json](../administration/management/BE_configuration.md#enable_compaction_flat_json)
-- [enable_lazy_dynamic_flat_json](../administration/management/BE_configuration.md#enable_lazy_dynamic_flat_json)
-=======
->>>>>>> 0bbcfda410 ([Doc] Re-organize Flat JSON docs for clarity (#64526))
