@@ -337,7 +337,7 @@ partition_names ::=
 
 distribution_desc ::=
     DISTRIBUTED BY RANDOM [ BUCKETS <num> ] |
-    DISTRIBUTED BY HASH ( <column_name> [, <column_name> ...] ) [ BUCKETS <num> ]
+    DISTRIBUTED BY HASH ( <column_name> [, <column_name> ...] ) [ [ DEFAULT ] BUCKETS <num> ]
 ```
 
 Example:
@@ -402,6 +402,16 @@ INSERT INTO details (event_time, event_type, user_id, device_code, channel) VALU
   ```SQL
   ALTER TABLE details DISTRIBUTED BY HASH(user_id) BUCKETS 10;
   ```
+
+- Modify the default number of buckets of the table to 10 from being automatically set by StarRocks **without changing that of existing partitions** (supported from v3.5.8 and v4.0.1 onwards).
+
+  ```SQL
+  ALTER TABLE details DISTRIBUTED BY HASH(user_id) DEFAULT BUCKETS 10;
+  ```
+
+  > **NOTICE**
+  >
+  > You cannot specify both `partition_names` and `DEFAULT`.
 
 - Modify the number of buckets for specified partitions to 15 from being automatically set by StarRocks.
 

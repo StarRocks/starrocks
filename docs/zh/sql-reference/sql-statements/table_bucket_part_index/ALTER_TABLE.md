@@ -339,7 +339,7 @@ partition_names ::=
 
 distribution_desc ::=
     DISTRIBUTED BY RANDOM [ BUCKETS <num> ] |
-    DISTRIBUTED BY HASH ( <column_name> [, <column_name> ...] ) [ BUCKETS <num> ]
+    DISTRIBUTED BY HASH ( <column_name> [, <column_name> ...] ) [ [ DEFAULT ] BUCKETS <num> ]
 ```
 
 示例：
@@ -404,6 +404,16 @@ INSERT INTO details (event_time, event_type, user_id, device_code, channel) VALU
   ```SQL
   ALTER TABLE details DISTRIBUTED BY HASH(user_id) BUCKETS 10;
   ```
+
+- 将表的默认桶数从由StarRocks自动设置的值修改为10，**同时保持现有分区的桶数不变**（该功能自v3.5.8及v4.0.1版本起支持）。
+
+  ```SQL
+  ALTER TABLE details DISTRIBUTED BY HASH(user_id) DEFAULT BUCKETS 10;
+  ```
+
+  > **注意**
+  >
+  > 不能同时指定 `partition_names` 和 `DEFAULT`。
 
 - 将指定分区的桶的数量从StarRocks自动设置修改为15。
 
