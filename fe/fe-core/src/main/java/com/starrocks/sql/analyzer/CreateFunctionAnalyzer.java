@@ -72,14 +72,26 @@ public class CreateFunctionAnalyzer {
 
     private String storageVolumeName;
 
+    private String md5sum;
+
+    private String className;
+
+    private String isAnalytic;
+
+    private String symbol;
+
+    private String inputType;
+
+    private String isolation;
+
     public void analyze(CreateFunctionStmt stmt, ConnectContext context) {
         if (!Config.enable_udf) {
             throw new SemanticException(
                     "UDF is not enabled in FE, please configure enable_udf=true in fe/conf/fe.conf");
         }
+        loadFunctionProperties(stmt);
         analyzeCommon(stmt, context);
         String langType = stmt.getLangType();
-
         if (CreateFunctionStmt.TYPE_STARROCKS_JAR.equalsIgnoreCase(langType)) {
             String checksum = computeMd5(stmt);
             analyzeJavaUDFClass(stmt, checksum);
@@ -89,6 +101,17 @@ public class CreateFunctionAnalyzer {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "unknown lang type");
         }
         // build function
+    }
+
+    private void loadFunctionProperties(CreateFunctionStmt stmt) {
+        this.objectFile = stmt.getProperties().get(CreateFunctionStmt.FILE_KEY);
+        this.storageVolumeName = stmt.getProperties().get(STORAGE_VOLUME_NAME_KEY);
+        this.md5sum = stmt.getProperties().get(CreateFunctionStmt.MD5_CHECKSUM);
+        this.className = stmt.getProperties().get(CreateFunctionStmt.SYMBOL_KEY);
+        this.isAnalytic  = stmt.getProperties().get(CreateFunctionStmt.IS_ANALYTIC_NAME);
+        this.symbol = stmt.getProperties().get(CreateFunctionStmt.SYMBOL_KEY);
+        this.inputType = stmt.getProperties().getOrDefault(CreateFunctionStmt.INPUT_TYPE, "scalar");
+        this.isolation = stmt.getProperties().get(CreateFunctionStmt.ISOLATION_KEY);
     }
 
     private void analyzeCommon(CreateFunctionStmt stmt, ConnectContext context) {
@@ -134,10 +157,6 @@ public class CreateFunctionAnalyzer {
             return checksum;
         }
 
-        Map<String, String> properties = stmt.getProperties();
-
-        objectFile = properties.get(CreateFunctionStmt.FILE_KEY);
-        storageVolumeName = properties.get(STORAGE_VOLUME_NAME_KEY);
         if (Strings.isNullOrEmpty(objectFile)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "No 'object_file' in properties");
         }
@@ -163,7 +182,6 @@ public class CreateFunctionAnalyzer {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "cannot to compute object's checksum", e);
         }
 
-        String md5sum = properties.get(CreateFunctionStmt.MD5_CHECKSUM);
         if (md5sum != null && !md5sum.equalsIgnoreCase(checksum)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                     "library's checksum is not equal with input, checksum=" + checksum);
@@ -173,8 +191,6 @@ public class CreateFunctionAnalyzer {
     }
 
     private void analyzeJavaUDFClass(CreateFunctionStmt stmt, String checksum) {
-        Map<String, String> properties = stmt.getProperties();
-        String className = properties.get(CreateFunctionStmt.SYMBOL_KEY);
         if (Strings.isNullOrEmpty(className)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                     "No '" + CreateFunctionStmt.SYMBOL_KEY + "' in properties");
@@ -243,8 +259,6 @@ public class CreateFunctionAnalyzer {
         FunctionArgsDef argsDef = stmt.getArgsDef();
         TypeDef returnType = stmt.getReturnType();
         String objectFile = stmt.getProperties().get(CreateFunctionStmt.FILE_KEY);
-        String isolation = stmt.getProperties().get(CreateFunctionStmt.ISOLATION_KEY);
-        String storageVolumeName = stmt.getProperties().get(STORAGE_VOLUME_NAME_KEY);
         StorageVolume storageVolume = GlobalStateMgr.getCurrentState()
                 .getStorageVolumeMgr()
                 .getStorageVolumeByName(storageVolumeName);
@@ -282,8 +296,7 @@ public class CreateFunctionAnalyzer {
                                             JavaUDFInternalClass udafStateClass) {
         FunctionArgsDef argsDef = stmt.getArgsDef();
         TypeDef returnType = stmt.getReturnType();
-        Map<String, String> properties = stmt.getProperties();
-        boolean isAnalyticFn = "true".equalsIgnoreCase(properties.get(CreateFunctionStmt.IS_ANALYTIC_NAME));
+        boolean isAnalyticFn = "true".equalsIgnoreCase(isAnalytic);
 
         {
             // State create()
@@ -355,8 +368,7 @@ public class CreateFunctionAnalyzer {
         String objectFile = stmt.getProperties().get(CreateFunctionStmt.FILE_KEY);
         TypeDef intermediateType = TypeDef.createVarchar(ScalarType.getOlapMaxVarcharLength());
         ;
-        Map<String, String> properties = stmt.getProperties();
-        boolean isAnalyticFn = "true".equalsIgnoreCase(properties.get(CreateFunctionStmt.IS_ANALYTIC_NAME));
+        boolean isAnalyticFn = "true".equalsIgnoreCase(isAnalytic);
 
         checkStarrocksJarUdafStateClass(stmt, mainClass, udafStateClass);
         checkStarrocksJarUdafClass(stmt, mainClass, udafStateClass);
@@ -377,7 +389,6 @@ public class CreateFunctionAnalyzer {
         FunctionArgsDef argsDef = stmt.getArgsDef();
         TypeDef returnType = stmt.getReturnType();
         String objectFile = stmt.getProperties().get(CreateFunctionStmt.FILE_KEY);
-        String storageVolumeName = stmt.getProperties().get(STORAGE_VOLUME_NAME_KEY);
         StorageVolume storageVolume = GlobalStateMgr.getCurrentState()
                 .getStorageVolumeMgr()
                 .getStorageVolumeByName(storageVolumeName);
@@ -617,16 +628,12 @@ public class CreateFunctionAnalyzer {
 
     private void analyzePython(CreateFunctionStmt stmt) {
         String content = stmt.getContent();
-        Map<String, String> properties = stmt.getProperties();
         boolean isInline = content != null;
 
         String checksum = "";
         if (!isInline) {
             checksum = computeMd5(stmt);
         }
-        String symbol = properties.get(CreateFunctionStmt.SYMBOL_KEY);
-        String inputType = properties.getOrDefault(CreateFunctionStmt.INPUT_TYPE, "scalar");
-        String objectFile = stmt.getProperties().get(CreateFunctionStmt.FILE_KEY);
 
         if (isInline && !StringUtils.equalsIgnoreCase(objectFile, "inline")) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "inline function file should be 'inline'");
@@ -642,7 +649,6 @@ public class CreateFunctionAnalyzer {
         FunctionName functionName = stmt.getFunctionName();
         FunctionArgsDef argsDef = stmt.getArgsDef();
         TypeDef returnType = stmt.getReturnType();
-        String isolation = stmt.getProperties().get(CreateFunctionStmt.ISOLATION_KEY);
 
         ScalarFunction.ScalarFunctionBuilder scalarFunctionBuilder =
                 ScalarFunction.ScalarFunctionBuilder.createUdfBuilder(TFunctionBinaryType.PYTHON);
