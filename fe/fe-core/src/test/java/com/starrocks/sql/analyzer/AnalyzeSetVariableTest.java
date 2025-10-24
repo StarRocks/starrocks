@@ -29,10 +29,18 @@ import com.starrocks.thrift.TWorkGroup;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import com.uber.m3.util.ImmutableMap;
+<<<<<<< HEAD
 import mockit.Expectations;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+=======
+import mockit.Mock;
+import mockit.MockUp;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+>>>>>>> 558fba5c7e ([UT] Fix unstable UT (#64454))
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSetUserVariableFail;
@@ -232,27 +240,23 @@ public class AnalyzeSetVariableTest {
         analyzeSuccess(sql);
     }
 
+    /**
+     * Mock up {@link ResourceGroupMgr#chooseResourceGroupByID(long)}.
+     */
     @Test
     public void testSetResourceGroupID() {
         long rg1ID = 1;
         TWorkGroup rg1 = new TWorkGroup();
         rg1.setId(rg1ID);
         ResourceGroupMgr mgr = GlobalStateMgr.getCurrentState().getResourceGroupMgr();
-        new Expectations(mgr) {
-            {
-                mgr.chooseResourceGroupByID(rg1ID);
-                result = rg1;
-            }
 
-            {
-                mgr.chooseResourceGroupByID(anyLong);
-                result = null;
-            }
-
-            {
-                mgr.createBuiltinResourceGroupsIfNotExist();
-                result = null;
-                minTimes = 0;
+        new MockUp<ResourceGroupMgr>() {
+            @Mock
+            public TWorkGroup chooseResourceGroupByID(long wgID) {
+                if (wgID == rg1ID) {
+                    return rg1;
+                }
+                return null;
             }
         };
 

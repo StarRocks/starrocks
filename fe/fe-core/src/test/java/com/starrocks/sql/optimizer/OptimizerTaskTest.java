@@ -1314,7 +1314,6 @@ public class OptimizerTaskTest {
                 result = new ColumnRefSet(1);
                 minTimes = 0;
 
-
                 call.getFunction();
                 result = AggregateFunction.createBuiltin(FunctionSet.SUM,
                         Lists.<Type>newArrayList(Type.INT), Type.BIGINT, Type.BIGINT, false, true, false);

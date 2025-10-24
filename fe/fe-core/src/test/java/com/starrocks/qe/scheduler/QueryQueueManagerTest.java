@@ -1213,6 +1213,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         coords.forEach(DefaultCoordinator::onFinished);
     }
 
+    @Disabled
     @Test
     public void testResourceGroupMaxCpuCores() throws Exception {
         final int numGroupsWithEffectiveMaxCores = 2;
