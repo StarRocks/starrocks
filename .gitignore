@@ -29,6 +29,7 @@ custom_env.sh
 ut_dir
 log/
 fe_plugins/*/target
+fe/fe-core/pseudo_cluster_*
 fe_plugins/output
 fe/mocked
 fe/ut_ports
