@@ -26,3 +26,11 @@ The following fields are provided in `task_runs`:
 | PROPERTIES    | Properties of the task.                                      |
 | JOB_ID        | Job ID of the task.                                          |
 | PROCESS_TIME  | Process time of the task.                                    |
+
+A task run records is produced by [SUBMIT TASK](../sql-statements/loading_unloading/ETL/SUBMIT_TASK.md) or [CREATE MATRIALIZED VIEW](../sql-statements/materialized_view/CREATE_MATERIALIZED_VIEW.md).
+
+NOTE:
+- A `MATERIALIZED VIEW REFRESH` may generate multi task runs, each task run represents a refresh sub-task which is split with `partition_refresh_number` config.
+
+## EXTRA_MESSAGE
+For a `MATERIALIZED VIEW REFRESH` task run, `EXTRA_MESSAGE` field will contain the materialized view task run's detail messages, you can find more details in [materialized_view_task_run_details](./materialized_view_task_run_details.md).

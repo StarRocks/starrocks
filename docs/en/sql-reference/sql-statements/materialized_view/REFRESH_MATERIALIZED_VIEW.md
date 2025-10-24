@@ -35,6 +35,13 @@ REFRESH MATERIALIZED VIEW [database.]mv_name
 >
 > When refreshing materialized views created based on the external catalogs, StarRocks refreshes all partitions in the materialized views.
 
+## MONITORING
+After executing `REFRESH MATERIALIZED VIEW`, you can monitor the status and result of the refresh operation in the following ways:
+
+- Use [`SHOW MATERIALIZED VIEWS`](SHOW_MATERIALIZED_VIEW.md) to view the status of the materialized view, including information such as the last refresh time, refresh state, and any error messages.
+- For more detailed execution information, especially for asynchronous refresh tasks, query the [`information_schema.task_runs`](../../information_schema/task_runs.md) metadata table. This table provides task execution records and states (such as PENDING, RUNNING, SUCCESS, FAILED). For materialized view refreshes, the `EXTRA_MESSAGE` field includes detailed information about the partitions and execution details for each refresh sub-task. See [materialized_view_task_run_details](../../information_schema/materialized_view_task_run_details.md) for explanations of these details.
+
+
 ## Examples
 
 Example 1: Manually refresh a specific materialized view via an asynchronous call.

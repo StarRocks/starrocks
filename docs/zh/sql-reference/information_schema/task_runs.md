@@ -26,3 +26,11 @@ displayed_sidebar: docs
 | PROPERTIES    | 任务的属性。                                                 |
 | JOB_ID        | 任务的作业 ID。                                              |
 | PROCESS_TIME  | 任务的处理时间。                                             |
+
+任务运行记录由 [SUBMIT TASK](../sql-statements/loading_unloading/ETL/SUBMIT_TASK.md) 或 [CREATE MATRIALIZED VIEW](../sql-statements/materialized_view/CREATE_MATERIALIZED_VIEW.md) 生成。
+
+注意：
+- 一个 `MATERIALIZED VIEW REFRESH` 可能会生成多个任务运行记录，每个任务运行代表一个根据 `partition_refresh_number` 配置拆分的刷新子任务。
+
+## EXTRA_MESSAGE
+对于 `MATERIALIZED VIEW REFRESH` 任务运行，`EXTRA_MESSAGE` 字段将包含物化视图任务运行的详细消息，您可以在 [materialized_view_task_run_details](./materialized_view_task_run_details.md) 中找到更多详细信息。
