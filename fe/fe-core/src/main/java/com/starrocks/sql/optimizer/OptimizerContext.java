@@ -80,6 +80,9 @@ public class OptimizerContext {
     // which should be kept to be used to convert outer join into inner join.
     private final List<IsNullPredicateOperator> pushdownNotNullPredicates = Lists.newArrayList();
 
+    // source tables count in the query
+    private int sourceTablesCount = 0;
+
     OptimizerContext(ConnectContext context) {
         this.connectContext = context;
         this.ruleSet = new RuleSet();
@@ -238,6 +241,14 @@ public class OptimizerContext {
 
     public boolean isInMemoPhase() {
         return this.inMemoPhase;
+    }
+
+    public int getSourceTablesCount() {
+        return this.sourceTablesCount;
+    }
+
+    public void setSourceTablesCount(int count) {
+        this.sourceTablesCount = count;
     }
 
     /**

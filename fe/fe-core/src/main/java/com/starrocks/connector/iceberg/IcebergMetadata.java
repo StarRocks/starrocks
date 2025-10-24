@@ -1069,7 +1069,14 @@ public class IcebergMetadata implements ConnectorMetadata {
                                          ScalarOperator predicate,
                                          long limit,
                                          TableVersionRange version) {
+        boolean useDefaultStats = false;
         if (!properties.enableGetTableStatsFromExternalMetadata()) {
+            useDefaultStats = true;
+        }
+        if (session.getSessionVariable().disableTableStatsFromMetadataForSingleTable() && session.getSourceTablesCount() == 1) {
+            useDefaultStats = true;
+        }
+        if (useDefaultStats) {
             return StatisticsUtils.buildDefaultStatistics(columns.keySet());
         }
         IcebergTable icebergTable = (IcebergTable) table;
