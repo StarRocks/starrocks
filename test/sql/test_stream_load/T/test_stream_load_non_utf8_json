@@ -1,0 +1,15 @@
+-- name: test_stream_load_non_utf8_json
+create database db_${uuid0};
+use db_${uuid0};
+
+CREATE TABLE `t1` (
+  `c1` int,
+  `c2` STRING
+) PROPERTIES (
+ "replication_num" = "1"
+);
+
+shell: curl --location-trusted -u root: -X PUT -H "format: json" -T ${root_path}/sql/test_stream_load/data/non_utf8.json ${url}/api/db_${uuid0}/t1/_stream_load
+sync;
+
+select c1, hex(c2) from db_${uuid0}.t1;
