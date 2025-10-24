@@ -136,34 +136,18 @@ StatusOr<int64_t> S3InputStream::position() {
 
 StatusOr<int64_t> S3InputStream::get_size() {
     if (_size == -1) {
-        LOG(INFO) << "S3InputStream::get_size() called for bucket=" << _bucket
-                  << ", object=" << _object;
-
         Aws::S3::Model::HeadObjectRequest request;
         request.SetBucket(_bucket);
         request.SetKey(_object);
-
-        LOG(INFO) << "Sending HeadObject request to bucket=" << request.GetBucket()
-                  << ", key=" << request.GetKey();
-
         Aws::S3::Model::HeadObjectOutcome outcome = _s3client->HeadObject(request);
-
-        auto config = _s3client->GetServiceClientName();
-        LOG(INFO) << "S3 client created for service=" << config;
-
         if (outcome.IsSuccess()) {
             _size = outcome.GetResult().GetContentLength();
-            LOG(INFO) << "HeadObject succeeded. Object size=" << _size;
         } else {
-            const auto& err = outcome.GetError();
-            LOG(ERROR) << "HeadObject failed. ExceptionName=" << err.GetExceptionName()
-                       << ", Message=" << err.GetMessage();
             return make_error_status(outcome.GetError());
         }
     }
     return _size;
 }
-
 
 void S3InputStream::set_size(int64_t value) {
     _size = value;
