@@ -499,17 +499,6 @@ public class QueryOptimizer extends Optimizer {
         deriveLogicalProperty(tree);
     }
 
-
-    private OptExpression logicalTvrRuleRewrite(OptExpression tree,
-                                                TaskContext rootTaskContext,
-                                                ColumnRefSet requiredColumns) {
-        new SeparateProjectRule().rewrite(tree, rootTaskContext);
-        scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.TVR_REWRITE_RULES);
-        new SeparateProjectRule().rewrite(tree, rootTaskContext);
-        deriveLogicalProperty(tree);
-        return tree;
-    }
-
     private OptExpression logicalRuleRewrite(
             OptExpression tree,
             TaskContext rootTaskContext) {
@@ -551,7 +540,7 @@ public class QueryOptimizer extends Optimizer {
 
         // tvr rule rewrite
         if (context.getSessionVariable().isEnableIVMRefresh()) {
-            tree = logicalTvrRuleRewrite(tree, rootTaskContext, requiredColumns);
+            scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.TVR_REWRITE_RULES);
         }
 
         if (sessionVariable.isEnableFineGrainedRangePredicate()) {
