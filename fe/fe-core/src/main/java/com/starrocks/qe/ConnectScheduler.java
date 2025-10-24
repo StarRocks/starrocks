@@ -34,6 +34,7 @@
 
 package com.starrocks.qe;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Predicate;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -362,6 +363,11 @@ public class ConnectScheduler {
         return (frontend.getFid() & 0xFF) << 24 | (connectionIdGenerator.incrementAndGet() & 0xFFFFFF);
     }
 
+    @VisibleForTesting
+    public void setNextConnectionId(int connectionId) {
+        connectionIdGenerator.counter.set(connectionId);
+    }
+
     public static class ConnectionIdGenerator {
         // Atomic counter to ensure thread-safe increments
         private final AtomicInteger counter;
@@ -384,8 +390,7 @@ public class ConnectScheduler {
          * @return the updated counter value after incrementing
          */
         public int incrementAndGet() {
-            return counter.updateAndGet(currentValue -> (currentValue + 1 >= threshold) ? 0 : currentValue + 1
-            );
+            return counter.updateAndGet(currentValue -> (currentValue + 1 >= threshold) ? 0 : currentValue + 1);
         }
     }
 }
