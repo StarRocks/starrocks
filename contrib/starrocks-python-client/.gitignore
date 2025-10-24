@@ -1,0 +1,4 @@
+*code-workspace
+*/__pycache__/
+/dist/
+/starrocks.egg-info/

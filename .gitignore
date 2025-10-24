@@ -53,6 +53,7 @@ test/nosetests.xml
 test/common/data
 tags
 .tags
+.ctags
 .cache
 *.vim
 *.swo
