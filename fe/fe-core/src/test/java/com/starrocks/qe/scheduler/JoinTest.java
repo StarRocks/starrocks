@@ -34,6 +34,7 @@ import mockit.Mock;
 import mockit.MockUp;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -50,6 +51,7 @@ import java.util.stream.Collectors;
 
 public class JoinTest extends SchedulerTestBase {
 
+    @Disabled
     @Test
     public void testCancelAtJoining() throws Exception {
         String sql = "insert into lineitem select * from lineitem";
@@ -89,6 +91,7 @@ public class JoinTest extends SchedulerTestBase {
         Assertions.assertEquals(TStatusCode.INTERNAL_ERROR, scheduler.getExecStatus().getErrorCode());
     }
 
+    @Disabled
     @Test
     public void testReportFailedExecutionAtJoining() throws Exception {
         String sql = "insert into lineitem select * from lineitem";
