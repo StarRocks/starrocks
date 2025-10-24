@@ -82,7 +82,7 @@ public class PredicateSearchKey {
 
     @Override
     public int hashCode() {
-        return Objects.hash(databaseName, tableName, params);
+        return Objects.hash(databaseName, tableName, getVersion(), getPredicate(), params.isEnableColumnStats());
     }
 
     @Override
