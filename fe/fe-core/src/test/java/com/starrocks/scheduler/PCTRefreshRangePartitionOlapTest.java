@@ -64,6 +64,5 @@ public class PCTRefreshRangePartitionOlapTest extends MVTestBase {
         TaskRun nextTaskRun = processor.getNextTaskRun();
         String v = nextTaskRun.getProperties().get(TaskRun.FORCE);
         Assertions.assertEquals("true", v);
-
     }
 }
