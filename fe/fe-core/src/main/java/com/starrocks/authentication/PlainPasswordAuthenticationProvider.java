@@ -41,8 +41,7 @@ public class PlainPasswordAuthenticationProvider implements AuthenticationProvid
             AccessControlContext authContext,
             UserIdentity userIdentity,
             byte[] authResponse) throws AuthenticationException {
-        AuthenticationMgrEPack authenticationMgr =
-                (AuthenticationMgrEPack) GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+        AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
         String usePassword = authResponse.length == 0 ? "NO" : "YES";
         byte[] randomString = authContext.getAuthDataSalt();
         // The password sent by mysql client has already been scrambled(encrypted) using random string,
@@ -87,12 +86,14 @@ public class PlainPasswordAuthenticationProvider implements AuthenticationProvid
             }
         }
 
-        if (authenticationMgr.checkUserPasswordExpired(userIdentity)) {
-            authContext.setPasswordExpired(true);
-        }
+        if (authenticationMgr instanceof AuthenticationMgrEPack authenticationMgrEPack) {
+            if (authenticationMgrEPack.checkUserPasswordExpired(userIdentity)) {
+                authContext.setPasswordExpired(true);
+            }
 
-        if (authenticationMgr.checkUserLocked(userIdentity)) {
-            throw new AuthenticationException("user locked!");
+            if (authenticationMgrEPack.checkUserLocked(userIdentity)) {
+                throw new AuthenticationException("user locked!");
+            }
         }
     }
 
