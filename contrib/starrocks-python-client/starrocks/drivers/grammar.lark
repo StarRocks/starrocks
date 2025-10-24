@@ -1,0 +1,43 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+
+?start: data_type | refresh_clause
+
+// -- data type
+?data_type: simple_type | array_type | map_type | struct_type
+
+array_type: "array"i "<" data_type ">"
+map_type: "map"i "<" data_type "," data_type ">"
+struct_type: "struct"i "<" struct_field ("," struct_field)* ">"
+struct_field: CNAME data_type
+
+simple_type: CNAME type_args? CNAME?
+type_args: "(" NUMBER ("," NUMBER)? ")"
+
+// --- Materialized View Refresh Clause ---
+refresh_clause: "REFRESH"i (refresh_moment | refresh_type | (refresh_moment refresh_type))
+
+// Add `!`, not to be inlined optimized
+!refresh_moment: "IMMEDIATE"i | "DEFERRED"i
+
+!refresh_type: async_scheme | "MANUAL"i | "INCREMENTAL"i
+
+async_scheme: "ASYNC"i ASYNC_DETAILS?
+ASYNC_DETAILS: /(?s).+/ // Match any character including newlines
+
+%import common.CNAME
+%import common.NUMBER
+%import common.WS
+%ignore WS
