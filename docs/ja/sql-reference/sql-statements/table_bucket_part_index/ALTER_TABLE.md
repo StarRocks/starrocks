@@ -415,7 +415,7 @@ INSERT INTO details (event_time, event_type, user_id, device_code, channel) VALU
   >
   > `partition_names` と `DEFAULT` を同時に指定することはできません。
 
-- 指定されたパーティションのバケット数を StarRocks によって自動的に設定されるものから 15 に変更します。
+- 指定されたパーティションのバケット数を StarRocks によって自動的に設定されたものから 15 に変更します。
 
   ```SQL
   ALTER TABLE details PARTITIONS (p20231127, p20231128) DISTRIBUTED BY HASH(user_id) BUCKETS 15 ;
