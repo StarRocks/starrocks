@@ -31,6 +31,7 @@ log/
 fe_plugins/*/target
 fe_plugins/output
 fe/mocked
+fe/fe-core/pseudo_cluster_*
 fe/ut_ports
 fe/*/target
 fe/fe-core/gen
