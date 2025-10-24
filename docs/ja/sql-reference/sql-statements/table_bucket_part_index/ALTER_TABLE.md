@@ -339,7 +339,7 @@ partition_names ::=
 
 distribution_desc ::=
     DISTRIBUTED BY RANDOM [ BUCKETS <num> ] |
-    DISTRIBUTED BY HASH ( <column_name> [, <column_name> ...] ) [ BUCKETS <num> ]
+    DISTRIBUTED BY HASH ( <column_name> [, <column_name> ...] ) [ [ DEFAULT ] BUCKETS <num> ]
 ```
 
 例：
@@ -404,6 +404,16 @@ INSERT INTO details (event_time, event_type, user_id, device_code, channel) VALU
   ```SQL
   ALTER TABLE details DISTRIBUTED BY HASH(user_id) BUCKETS 10;
   ```
+
+- テーブルのデフォルトのバケット数を、**既存パーティションのバケット数を変更せずに**、StarRocksによる自動設定から 10 に変更します（v3.5.8 および v4.0.1 以降でサポート）。
+
+  ```SQL
+  ALTER TABLE details DISTRIBUTED BY HASH(user_id) DEFAULT BUCKETS 10;
+  ```
+
+  > **注意**
+  >
+  > `partition_names` と `DEFAULT` を同時に指定することはできません。
 
 - 指定されたパーティションのバケット数を StarRocks によって自動的に設定されたものから 15 に変更します。
 
