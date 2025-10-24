@@ -63,8 +63,8 @@ public:
 
     Status next_batch_with_filter(const SparseRange<>& range, Column* dst,
                                   const std::vector<const ColumnPredicate*>& compound_and_predicates,
-                                  Buffer<uint8_t>* selection, Buffer<uint16_t>* selected_idx,
-                                  bool* data_filtered) override;
+                                  Buffer<uint8_t>* selection, Buffer<uint16_t>* selected_idx, bool* data_filtered,
+                                  size_t* processed_rows) override;
 
     ordinal_t get_current_ordinal() const override { return _current_ordinal; }
 
