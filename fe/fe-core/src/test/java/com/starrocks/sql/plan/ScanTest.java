@@ -542,9 +542,13 @@ public class ScanTest extends PlanTestBase {
                 + "        a.v3 IN (SELECT '123')\n"
                 + ");\n";
 
-        connectContext.getSessionVariable().setOptimizerExecuteTimeout(-1);
-        FeConstants.enablePruneEmptyOutputScan = true;
-        String plan = getFragmentPlan(sql);
-        assertContains(plan, "0:EMPTYSET");
+        try {
+            connectContext.getSessionVariable().setOptimizerExecuteTimeout(-1);
+            FeConstants.enablePruneEmptyOutputScan = true;
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "0:EMPTYSET");
+        } finally {
+            FeConstants.enablePruneEmptyOutputScan = false;
+        }
     }
 }
