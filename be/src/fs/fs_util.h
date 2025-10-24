@@ -121,14 +121,11 @@ inline StatusOr<int64_t> copy(SequentialFile* src, WritableFile* dest, size_t bu
     while (true) {
         ASSIGN_OR_RETURN(auto nread, src->read(buf, buff_size));
         if (nread == 0) {
-            LOG(INFO) << "Reached EOF after copying " << ncopy << " bytes.";
             break;
         }
-        LOG(INFO) << "Read " << nread << " bytes from source file.";
         ncopy += nread;
         RETURN_IF_ERROR(dest->append(Slice(buf, nread)));
     }
-    LOG(INFO) << "Copy completed successfully. Total bytes copied: " << ncopy;
     return ncopy;
 }
 
@@ -161,35 +158,15 @@ inline StatusOr<int64_t> copy_by_range(RandomAccessFile* src, WritableFile* dest
 inline StatusOr<int64_t> copy_file(const std::string& src_path, const std::string& dst_path,
                                    size_t buffer_size = 8192) {
     TEST_ERROR_POINT("fs::copy_file");
-
-    LOG(INFO) << "Starting to copy file from " << src_path << " to " << dst_path
-              << " with buffer size " << buffer_size;
-
     WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
-
     ASSIGN_OR_RETURN(auto src_fs, FileSystem::CreateSharedFromString(src_path));
-    LOG(INFO) << "Source filesystem created successfully for path: " << src_path;
-
     ASSIGN_OR_RETURN(auto dst_fs, FileSystem::CreateSharedFromString(dst_path));
-    LOG(INFO) << "Destination filesystem created successfully for path: " << dst_path;
-
     ASSIGN_OR_RETURN(auto src_file, src_fs->new_sequential_file(src_path));
-    LOG(INFO) << "Opened source file: " << src_path;
-
     ASSIGN_OR_RETURN(auto dst_file, dst_fs->new_writable_file(opts, dst_path));
-    LOG(INFO) << "Opened destination file for writing: " << dst_path;
-
     ASSIGN_OR_RETURN(auto ncopy, copy(src_file.get(), dst_file.get(), buffer_size));
-    LOG(INFO) << "Copied " << ncopy << " bytes from " << src_path << " to " << dst_path;
-
     RETURN_IF_ERROR(dst_file->close());
-    LOG(INFO) << "Destination file closed successfully: " << dst_path;
-
-    LOG(INFO) << "File copy completed successfully.";
     return ncopy;
 }
-
-
 // copy the file range [offset, offset + size] from src path to dest path, it will overwrite the existing files
 inline Status copy_file_by_range(const std::string& src_path, const std::string& dst_path, int64_t offset,
                                  int64_t size) {
