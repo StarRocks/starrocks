@@ -56,13 +56,10 @@ protected:
     void SetUp() override {
         config::enable_json_flat_complex_type = true;
         _meta.reset(new ColumnMetaPB());
-    }
-
-    void TearDown() override {
-        config::enable_json_flat_complex_type = false;
-        config::json_flat_null_factor = 0.3;
         config::json_flat_sparsity_factor = 0.9;
     }
+
+    void TearDown() override { config::enable_json_flat_complex_type = false; }
 
     std::shared_ptr<Segment> create_dummy_segment(const std::shared_ptr<FileSystem>& fs, const std::string& fname) {
         return std::make_shared<Segment>(fs, FileInfo{fname}, 1, _dummy_segment_schema, nullptr);
