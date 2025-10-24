@@ -1920,7 +1920,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### datacache_min_disk_quota_for_adjustment
 
-- デフォルト: 107374182400
+- デフォルト: 10737418240
 - タイプ: Int
 - 単位: バイト
 - 可変: はい
