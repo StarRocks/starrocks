@@ -47,6 +47,20 @@ The core principle of Flat JSON is to detect JSON data during load and extract c
 
 When loading the above JSON data, fields `a` and `b` are present in most JSON data and have similar data types (both INT). Therefore, the data of fields `a` and `b` can be extracted from JSON and stored separately as two INT columns. When these two columns are used in queries, their data can be directly read without needing to process additional JSON fields, reducing the computational overhead of handling JSON structures.
 
+## Enable Flat JSON
+
+Flat JSON is enabled globally by default from v3.4 onwards. For versions earlier than v3.4, you must manually enable it.
+
+### Enable for versions earlier than v3.4
+
+1. Modify BE configuration: `enable_json_flat`, which defaults to `false` before v3.4. For modification methods, refer to
+[Configure BE parameters](../administration/management/BE_configuration.md#configure-be-parameters).
+2. Enable FE pruning feature:
+
+   ```SQL
+   SET GLOBAL cbo_prune_json_subfield = true;
+   ```
+
 ## Verify if Flat JSON is Effective
 
 After loading data, you can query the extracted sub-columns of the corresponding column:
@@ -128,6 +142,28 @@ You can verify whether the executed query benefits from Flat JSON optimization t
       - JsonFlattern: 0ns
    ```
 
+## Related variables and configurations
+
+### Session variables
+
+- `cbo_json_v2_rewrite` (default: true): Enables JSON v2 path rewrite so that expressions like `get_json_*` can be rewritten to direct access of Flat JSON subcolumns, unlocking predicate pushdown and column pruning.
+- `cbo_json_v2_dict_opt` (default: true): Enables low-cardinality dictionary optimization for Flat JSON extended string subcolumns produced by the rewrite, which can speed up string expressions, GROUP BY, and JOIN.
+
+Example:
+
+```SQL
+SET cbo_json_v2_rewrite = true;
+SET cbo_json_v2_dict_opt = true;
+```
+
+### BE Configurations
+
+- [json_flat_null_factor](../administration/management/BE_configuration.md#json_flat_null_factor)
+- [json_flat_column_max](../administration/management/BE_configuration.md#json_flat_column_max)
+- [json_flat_sparsity_factor](../administration/management/BE_configuration.md#json_flat_sparsity_factor)
+- [enable_compaction_flat_json](../administration/management/BE_configuration.md#enable_compaction_flat_json)
+- [enable_lazy_dynamic_flat_json](../administration/management/BE_configuration.md#enable_lazy_dynamic_flat_json)
+
 ## Feature Limitations
 
 - All table types in StarRocks support Flat JSON.
@@ -149,17 +185,3 @@ Starting from version v3.3.3:
 - The results extracted by Flat JSON are divided into common columns and reserved field columns. When all JSON Schemas are consistent, no reserved field columns are generated.
 - Flat JSON only stores common field columns and reserved field columns, without additionally storing the original JSON data.
 - When loading data, common fields will automatically infer types as BIGINT/LARGEINT/DOUBLE/STRING. Unrecognized types will be inferred as JSON types, and reserved field columns will be stored as JSON types.
-
-## Enabling Flat JSON Feature (Before Version 3.4)
-
-1. Modify BE configuration: `enable_json_flat`, which defaults to `false` before version 3.4. For modification methods, refer to
-[Configure BE parameters](../administration/management/BE_configuration.md#configure-be-parameters)
-2. Enable FE pruning feature: `SET GLOBAL cbo_prune_json_subfield = true;`
-
-## Other Optional BE Configurations
-
-- [json_flat_null_factor](../administration/management/BE_configuration.md#json_flat_null_factor)
-- [json_flat_column_max](../administration/management/BE_configuration.md#json_flat_column_max)
-- [json_flat_sparsity_factor](../administration/management/BE_configuration.md#json_flat_sparsity_factor)
-- [enable_compaction_flat_json](../administration/management/BE_configuration.md#enable_compaction_flat_json)
-- [enable_lazy_dynamic_flat_json](../administration/management/BE_configuration.md#enable_lazy_dynamic_flat_json)
