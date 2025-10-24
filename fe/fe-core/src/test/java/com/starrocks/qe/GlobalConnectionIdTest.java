@@ -41,9 +41,7 @@ public class GlobalConnectionIdTest {
 
         ConnectScheduler scheduler = new ConnectScheduler(10);
         int threshold = 1 << 24;
-        for (int i = 1; i < threshold; i++) {
-            scheduler.getNextConnectionId();
-        }
+        scheduler.setNextConnectionId(threshold);
 
         Assertions.assertEquals(0, scheduler.getNextConnectionId());
 
