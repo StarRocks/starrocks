@@ -1743,7 +1743,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### json_flat_sparsity_factor
 
-- デフォルト: 0.9
+- デフォルト: 0.3
 - タイプ: Double
 - 単位: 
 - 可変: はい
