@@ -123,7 +123,10 @@ public:
     ~JsonFlattenerTest() override = default;
 
 protected:
-    void SetUp() override { config::enable_json_flat_complex_type = true; }
+    void SetUp() override {
+        config::enable_json_flat_complex_type = true;
+        config::json_flat_sparsity_factor = 0.9; // Set to 0.9 to extract only paths that exist in all rows
+    }
 
     void TearDown() override {
         config::enable_json_flat_complex_type = false;
