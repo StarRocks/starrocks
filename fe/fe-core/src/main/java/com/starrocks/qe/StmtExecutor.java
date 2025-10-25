@@ -1516,6 +1516,7 @@ public class StmtExecutor {
 
         processQueryStatisticsFromResult(batch, execPlan, isOutfileQuery);
         GlobalStateMgr.getCurrentState().getQueryHistoryMgr().addQueryHistory(context, execPlan);
+        GlobalStateMgr.getCurrentState().getPartitionsScanMgr().addPartitionsScan(context, execPlan);
     }
 
     /**
