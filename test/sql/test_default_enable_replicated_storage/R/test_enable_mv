@@ -39,7 +39,7 @@ DISTRIBUTED BY HASH(`k`) BUCKETS 10
 REFRESH ASYNC
 PROPERTIES (
 "replicated_storage" = "false",
-"replication_num" = "1",
+"replication_num" = "3",
 "storage_medium" = "HDD"
 )
 AS select k, sum(v) from t1 group by k;
