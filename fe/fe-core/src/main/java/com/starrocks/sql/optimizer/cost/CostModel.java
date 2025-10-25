@@ -355,13 +355,8 @@ public class CostModel {
             Statistics statistics = context.getStatistics();
             Preconditions.checkNotNull(statistics);
 
-            Statistics leftStatistics = context.getChildStatistics(0);
-            Statistics rightStatistics = context.getChildStatistics(1);
-
-            List<BinaryPredicateOperator> eqOnPredicates =
-                    JoinHelper.getEqualsPredicate(leftStatistics.getUsedColumns(),
-                            rightStatistics.getUsedColumns(),
-                            Utils.extractConjuncts(join.getOnPredicate()));
+            List<BinaryPredicateOperator> eqOnPredicates = JoinHelper.getEqualsPredicate(context.getChildOutputColumns(0),
+                    context.getChildOutputColumns(1), Utils.extractConjuncts(join.getOnPredicate()));
 
             Preconditions.checkState(!(join.getJoinType().isCrossJoin() || eqOnPredicates.isEmpty()),
                     "should be handled by nestloopjoin");
@@ -408,7 +403,6 @@ public class CostModel {
             double cpuCost = StatisticUtils.multiplyOutputSize(StatisticUtils.multiplyOutputSize(leftSize, rightSize),
                     EXECUTE_COST_PENALTY);
             double memCost = StatisticUtils.multiplyOutputSize(rightSize, EXECUTE_COST_PENALTY * 100D);
-
 
             if (join.getJoinType().isCrossJoin()) {
                 cpuCost = StatisticUtils.multiplyOutputSize(cpuCost, crossJoinCostPenalty);
