@@ -103,6 +103,7 @@ set(EXEC_FILES
         ./exec/json_parser_test.cpp
         ./exec/lake_meta_scanner_test.cpp
         ./exec/multi_olap_table_sink_test.cpp
+        ./exec/parquet_schema_builder_test.cpp
         ./exec/repeat_node_test.cpp
         ./exec/sorting_test.cpp
         ./exec/tablet_sink_index_channel_test.cpp
