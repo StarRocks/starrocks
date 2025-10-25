@@ -26,6 +26,7 @@ import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DynamicPartitionProperty;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
+import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -55,6 +56,7 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.AlterViewInfo;
 import com.starrocks.persist.BatchModifyPartitionsInfo;
 import com.starrocks.persist.ModifyPartitionInfo;
+import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.persist.SwapTableOperationLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -68,6 +70,7 @@ import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterTableAutoIncrementClause;
 import com.starrocks.sql.ast.AlterTableCommentClause;
+import com.starrocks.sql.ast.AlterTableModifyDefaultBucketsClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterViewClause;
 import com.starrocks.sql.ast.AlterViewStmt;
@@ -194,6 +197,32 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
         } else {
             for (AlterClause alterClause : statement.getAlterClauseList()) {
                 visit(alterClause, context);
+            }
+        }
+        return null;
+    }
+
+    @Override
+    public Void visitAlterTableModifyDefaultBucketsClause(AlterTableModifyDefaultBucketsClause clause,
+                                                         ConnectContext context) {
+        if (clause instanceof AlterTableModifyDefaultBucketsClause) {
+            // apply synchronously: update default distribution bucket num
+            AlterTableModifyDefaultBucketsClause c = (AlterTableModifyDefaultBucketsClause) clause;
+            if (table instanceof OlapTable) {
+                OlapTable olap = (OlapTable) table;
+                if (olap.getDefaultDistributionInfo() instanceof HashDistributionInfo) {
+                    try (AutoCloseableLock ignore =
+                                    new AutoCloseableLock(new Locker(), db.getId(),
+                                            Lists.newArrayList(table.getId()), LockType.WRITE)) {
+                        ((HashDistributionInfo) olap.getDefaultDistributionInfo())
+                                .setBucketNum(c.getBucketNum());
+                        // persist change
+                        ModifyTablePropertyOperationLog log =
+                                new ModifyTablePropertyOperationLog(db.getId(), table.getId());
+                        log.getProperties().put("default_bucket_num", String.valueOf(c.getBucketNum()));
+                        GlobalStateMgr.getCurrentState().getEditLog().logModifyDefaultBucketNum(log);
+                    }
+                }
             }
         }
         return null;
