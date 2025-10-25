@@ -36,6 +36,7 @@ import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
 import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.Token;
+import org.antlr.v4.runtime.atn.LexerATNSimulator;
 import org.antlr.v4.runtime.atn.ParserATNSimulator;
 import org.antlr.v4.runtime.atn.PredictionContextCache;
 import org.antlr.v4.runtime.atn.PredictionMode;
@@ -252,6 +253,18 @@ public class SqlParser {
         com.starrocks.sql.parser.StarRocksLexer lexer =
                 new com.starrocks.sql.parser.StarRocksLexer(new CaseInsensitiveStream(CharStreams.fromString(sql)));
         lexer.setSqlMode(sessionVariable.getSqlMode());
+        if (Config.enable_concurrent_parse_optimization) {
+            DFA[] lexerDecisionDFA = new DFA[StarRocksLexer._ATN.getNumberOfDecisions()];
+            for (int i = 0; i < StarRocksLexer._ATN.getNumberOfDecisions(); i++) {
+                lexerDecisionDFA[i] = new DFA(StarRocksLexer._ATN.getDecisionState(i), i);
+            }
+            lexer.setInterpreter(new LexerATNSimulator(
+                    lexer,
+                    StarRocksLexer._ATN,
+                    lexerDecisionDFA,
+                    new PredictionContextCache()
+            ));
+        }
         CommonTokenStream tokenStream = new CommonTokenStream(lexer);
         int exprLimit = Math.max(Config.expr_children_limit, sessionVariable.getExprChildrenLimit());
         int tokenLimit = Math.max(MIN_TOKEN_LIMIT, sessionVariable.getParseTokensLimit());
@@ -260,7 +273,7 @@ public class SqlParser {
         parser.addErrorListener(new ErrorHandler());
         parser.removeParseListeners();
         parser.addParseListener(new PostProcessListener(tokenLimit, exprLimit));
-        if (!Config.enable_parser_context_cache) {
+        if (!Config.enable_parser_context_cache || Config.enable_concurrent_parse_optimization) {
             DFA[] decisionDFA = new DFA[parser.getATN().getNumberOfDecisions()];
             for (int i = 0; i < parser.getATN().getNumberOfDecisions(); i++) {
                 decisionDFA[i] = new DFA(parser.getATN().getDecisionState(i), i);
