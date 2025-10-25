@@ -42,8 +42,15 @@ Status PartitionSortSinkOperator::prepare(RuntimeState* state) {
     _sort_context->ref();
     _sort_context->incr_sinker();
 
-    _chunks_sorter->setup_runtime(state, _unique_metrics.get(), this->mem_tracker());
     _sort_context->attach_sink_observer(state, observer());
+
+    return Status::OK();
+}
+
+Status PartitionSortSinkOperator::prepare_local_state(RuntimeState* state) {
+    RETURN_IF_ERROR(Operator::prepare_local_state(state));
+    DCHECK(this->mem_tracker() != nullptr);
+    _chunks_sorter->setup_runtime(state, _unique_metrics.get(), this->mem_tracker());
 
     return Status::OK();
 }
