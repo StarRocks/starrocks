@@ -390,14 +390,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_ENABLE_SINGLE_NODE_PREFER_TWO_STAGE_AGGREGATE =
             "cbo_enable_single_node_prefer_two_stage_aggregate";
 
-<<<<<<< HEAD
-=======
-    public static final String CBO_JSON_V2_REWRITE = "cbo_json_v2_rewrite";
-    public static final String CBO_JSON_V2_DICT_OPT = "cbo_json_v2_dict_opt";
-
     public static final String CBO_DISABLED_RULES = "cbo_disabled_rules";
-
->>>>>>> 0d91513717 ([Enhancement] Support disabling optimizer rules via cbo_disabled_rules session variable (#64269))
     public static final String CBO_PUSH_DOWN_DISTINCT_BELOW_WINDOW = "cbo_push_down_distinct_below_window";
     public static final String CBO_PUSH_DOWN_AGGREGATE = "cbo_push_down_aggregate";
     public static final String CBO_PUSH_DOWN_GROUPINGSET = "cbo_push_down_groupingset";

@@ -88,13 +88,7 @@ public class OptimizerContext {
         this.cteContext.setInlineCTERatio(getSessionVariable().getCboCTERuseRatio());
         this.cteContext.setMaxCTELimit(getSessionVariable().getCboCTEMaxLimit());
 
-<<<<<<< HEAD
-        this.optimizerOptions = OptimizerOptions.defaultOpt();
-=======
         this.optimizerOptions = new OptimizerOptions();
-        this.enableJoinIsNullPredicateDerive = getSessionVariable().isCboDeriveJoinIsNullPredicate();
-        this.tvrOptContext = new TvrOptContext(getSessionVariable());
->>>>>>> 0d91513717 ([Enhancement] Support disabling optimizer rules via cbo_disabled_rules session variable (#64269))
     }
 
     // ============================ Query ============================
