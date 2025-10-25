@@ -74,6 +74,10 @@ inline bool is_sst(std::string_view file_name) {
     return HasSuffixString(file_name, ".sst");
 }
 
+inline bool is_cols(std::string_view file_name) {
+    return HasSuffixString(file_name, ".cols");
+}
+
 inline std::string tablet_metadata_filename(int64_t tablet_id, int64_t version) {
     return fmt::format("{:016X}_{:016X}.meta", tablet_id, version);
 }
@@ -125,6 +129,73 @@ inline std::string tablet_metadata_lock_filename(int64_t tablet_id, int64_t vers
 
 inline std::string gen_segment_filename(int64_t txn_id) {
     return fmt::format("{:016x}_{}.dat", txn_id, generate_uuid_string());
+}
+
+// Helper function to extract uuid from filename, which is used in shared-data cross cluster migration
+inline std::string extract_uuid_from(std::string_view file_name) {
+    if (file_name.empty()) {
+        return {};
+    }
+
+    const size_t dot_pos = file_name.find_last_of('.');
+    if (dot_pos == std::string_view::npos) {
+        return {};
+    }
+
+    std::string_view extension = file_name.substr(dot_pos);
+
+    // sst file: uuid.sst
+    if (extension == ".sst") {
+        return std::string(file_name.substr(0, dot_pos));
+    }
+
+    // normal case：{:016x}_uuid.ext, with txn_id (16bit) as prefix
+    constexpr size_t TXN_ID_LENGTH = 16;
+    if (file_name.size() < TXN_ID_LENGTH + 2) {
+        return {};
+    }
+
+    if (file_name[TXN_ID_LENGTH] != '_') {
+        return {};
+    }
+
+    // check extension
+    if (extension != ".dat" && extension != ".del" && extension != ".delvec" && extension != ".cols") {
+        return {};
+    }
+
+    const size_t uuid_start = TXN_ID_LENGTH + 1;
+    const size_t uuid_length = dot_pos - uuid_start;
+
+    // standard UUID format: 8-4-4-4-12 = 36 bit
+    if (uuid_length != 36) {
+        LOG(WARNING) << "Invalid UUID length: " << uuid_length << " in file: " << file_name;
+    }
+
+    return std::string(file_name.substr(uuid_start, uuid_length));
+}
+
+// Helper function to generate a new filename from old filename, which is used in shared-data cross cluster migration
+inline std::string gen_filename_from(int64_t txn_id, std::string_view old_file_name) {
+    if (is_sst(old_file_name)) {
+        // sst file's name will keep no change,
+        return std::string(old_file_name);
+    }
+
+    if (UNLIKELY(!is_segment(old_file_name) && !is_del(old_file_name) && !is_delvec(old_file_name)) &&
+        !is_cols(old_file_name)) {
+        // not a valid file
+        return {};
+    }
+
+    auto uuid = extract_uuid_from(old_file_name);
+    if (UNLIKELY(uuid.empty())) {
+        return {};
+    }
+
+    size_t dot_pos = old_file_name.find_last_of('.');
+    std::string_view extension = std::string_view(old_file_name).substr(dot_pos);
+    return fmt::format("{:016x}_{}{}", txn_id, uuid, extension);
 }
 
 inline std::string gen_cols_filename(int64_t txn_id) {
