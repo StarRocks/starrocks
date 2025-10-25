@@ -627,6 +627,11 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
         // nothing to do
     }
 
+    protected boolean hasCommittedNotVisible(long partitionId) {
+        return GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                .existCommittedTxns(dbId, tableId, partitionId);
+    }
+
     private void onFinished(Database db, OlapTable targetTable) throws AlterCancelException {
         try {
             Map<String, Long> partitionLastVersion = Maps.newHashMap();
@@ -663,6 +668,30 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
                         errMsg += rewriteTask.getTempPartitionName() + " rewrite task execute failed, ";
                     } else {
                         errMsg += rewriteTask.getTempPartitionName() + " has ingestion during optimize, ";
+                    }
+                }
+            }
+
+            for (String tempPartitionName : Lists.newArrayList(tempPartitionNameToSourcePartitionNames.keySet())) {
+                Partition tempPartition = targetTable.getPartition(tempPartitionName, true);
+                if (tempPartition == null) {
+                    LOG.warn("merge partitions job {} temp partition {} missing before replace", jobId, tempPartitionName);
+                    tempPartitionNameToSourcePartitionNames.removeAll(tempPartitionName);
+                    hasFailedTask = true;
+                    errMsg += tempPartitionName + " temp partition missing, ";
+                    continue;
+                }
+                if (hasCommittedNotVisible(tempPartition.getId())) {
+                    LOG.warn("merge partitions job {} temp partition {} has committed transactions not visible, drop it",
+                            jobId, tempPartitionName);
+                    tempPartitionNameToSourcePartitionNames.removeAll(tempPartitionName);
+                    targetTable.dropTempPartition(tempPartitionName, true);
+                    hasFailedTask = true;
+                    errMsg += tempPartitionName + " rewrite task not visible, ";
+                    for (OptimizeTask task : rewriteTasks) {
+                        if (tempPartitionName.equals(task.getTempPartitionName())) {
+                            task.setOptimizeTaskState(Constants.TaskRunState.FAILED);
+                        }
                     }
                 }
             }
