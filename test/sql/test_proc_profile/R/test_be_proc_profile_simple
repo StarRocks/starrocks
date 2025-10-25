@@ -1,0 +1,61 @@
+-- name: test_be_proc_profile_simple
+shell: ${mysql_cmd} -e "show backends\G" | grep "IP" | head -1 | awk -F':' '{print $2}' | xargs > be_ip.txt
+-- result:
+0
+
+-- !result
+shell: ${mysql_cmd} -e "show backends\G" | grep "HttpPort" | head -1 | awk -F':' '{print $2}' | xargs > be_http_port.txt
+-- result:
+0
+
+-- !result
+[UC]shell: echo "BE_IP=$(cat be_ip.txt), BE_HTTP_PORT=$(cat be_http_port.txt)"
+-- result:
+0
+BE_IP=172.26.92.227, BE_HTTP_PORT=8042
+-- !result
+shell: curl -s -u root: "http://$(cat be_ip.txt):$(cat be_http_port.txt)/proc_profile" | grep -c "Process Profiles"
+-- result:
+0
+1
+-- !result
+shell: curl -s -u root: "http://$(cat be_ip.txt):$(cat be_http_port.txt)/proc_profile" | grep -o 'filename=[^"]*\.gz' | head -1 | cut -d'=' -f2 > be_profile_file.txt
+-- result:
+0
+
+-- !result
+[UC]shell: cat be_profile_file.txt
+-- result:
+0
+cpu-profile-20251022-105520-pprof.gz
+-- !result
+shell: if [ $(curl -s -u root: "http://$(cat be_ip.txt):$(cat be_http_port.txt)/proc_profile/file?filename=$(cat be_profile_file.txt)" | wc -l) -gt 0 ]; then echo "exist"; else echo "empty"; fi
+-- result:
+0
+exist
+-- !result
+shell: if [ $(curl -s -u root: "http://$(cat be_ip.txt):$(cat be_http_port.txt)/proc_profile/file?filename=$(cat be_profile_file.txt)" | wc -l) -gt 0 ]; then echo "exist"; else echo "empty"; fi
+-- result:
+0
+exist
+-- !result
+shell: curl -s -u root: "http://$(cat be_ip.txt):$(cat be_http_port.txt)/proc_profile/file?filename=invalid_file.tar.gz"
+-- result:
+0
+Invalid filename
+-- !result
+shell: curl -s -u root: "http://$(cat be_ip.txt):$(cat be_http_port.txt)/proc_profile/file?filename=invalid_file"
+-- result:
+0
+Invalid filename
+-- !result
+shell: rm -f be_profile_file.txt
+-- result:
+0
+
+-- !result
+shell: rm -f be_ip.txt be_http_port.txt
+-- result:
+0
+
+-- !result
