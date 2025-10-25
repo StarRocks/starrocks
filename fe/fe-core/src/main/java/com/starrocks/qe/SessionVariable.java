@@ -2117,6 +2117,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableSortAggregate;
     }
 
+    public void setEnablePerBucketComputeOptimize(boolean flag) {
+        this.enablePerBucketComputeOptimize = flag;
+    }
     public boolean isEnablePerBucketComputeOptimize() {
         return enablePerBucketComputeOptimize;
     }

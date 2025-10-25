@@ -1154,6 +1154,14 @@ public class SystemInfoService implements GsonPostProcessable {
         return Lists.newArrayList(idToBackendRef.values());
     }
 
+    public boolean isOnlyBeOfHighEnd() {
+        List<Backend> backends = getBackends();
+        if (backends.size() != 1) {
+            return false;
+        }
+        return backends.get(0).getCpuCores() > 64;
+    }
+
     /**
      * Available: not decommissioned and alive
      */
