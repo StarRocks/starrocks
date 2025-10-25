@@ -33,7 +33,7 @@ ARG DEPLOYDIR=/data/deploy
 ENV SR_HOME=${DEPLOYDIR}/starrocks
 
 RUN apt-get update -y && apt-get install -y --no-install-recommends \
-        binutils-dev openjdk-17-jdk python2 mysql-client curl vim tree net-tools less tzdata linux-tools-common linux-tools-generic supervisor nginx netcat locales && \
+        binutils-dev openjdk-17-jdk python2 mysql-client curl vim tree net-tools less tzdata linux-tools-common linux-tools-generic supervisor nginx netcat locales tini && \
         ln -fs /usr/share/zoneinfo/UTC /etc/localtime && \
         dpkg-reconfigure -f noninteractive tzdata && \
         locale-gen en_US.UTF-8 && \
@@ -58,4 +58,7 @@ RUN cat be.conf >> $DEPLOYDIR/starrocks/be/conf/be.conf && \
     mkdir -p $DEPLOYDIR/starrocks/fe/meta $DEPLOYDIR/starrocks/be/storage && touch /.dockerenv
 
 HEALTHCHECK --interval=30s --timeout=15s --start-period=30s CMD ./health_check.sh
-CMD ./entrypoint.sh
+
+ENTRYPOINT ["/usr/bin/tini-static", "--"]
+
+CMD ["./entrypoint.sh"]

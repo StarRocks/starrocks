@@ -46,7 +46,7 @@ ARG MINIMAL
 # TODO: switch to `openjdk-##-jre` when the starrocks core is ready.
 RUN OPTIONAL_PKGS="" && if [ "x$MINIMAL" = "xfalse" ] ; then OPTIONAL_PKGS="binutils-dev openjdk-17-jdk curl vim tree net-tools less pigz inotify-tools rclone gdb" ; fi && \
         apt-get update -y && apt-get install -y --no-install-recommends \
-        openjdk-17-jdk mysql-client tzdata locales $OPTIONAL_PKGS && \
+        openjdk-17-jdk mysql-client tzdata locales tini $OPTIONAL_PKGS && \
         ln -fs /usr/share/zoneinfo/UTC /etc/localtime && \
         dpkg-reconfigure -f noninteractive tzdata && \
         locale-gen en_US.UTF-8 && \
@@ -74,6 +74,7 @@ COPY --chown=$USER:$GROUP docker/dockerfiles/be/*.sh $STARROCKS_ROOT/
 # Create directory for BE storage, create cn symbolic link to be
 RUN mkdir -p $STARROCKS_ROOT/be/storage && ln -sfT be $STARROCKS_ROOT/cn
 
+ENTRYPOINT ["/usr/bin/tini-static", "--"]
 
 FROM base_image AS runas_minimal_true
 # Nothing to do, the USER is set to $USER in base_image
