@@ -148,5 +148,11 @@ SHOW USERS;
 以下の例では、ユーザー `jack` のプロパティを表示します。
 
 ```SQL
-SHOW PROPERTY FOR jack@'172.10.1.10';
+SHOW PROPERTY FOR 'jack';
+```
+
+または、特定のプロパティを表示するには:
+
+```SQL
+SHOW PROPERTY FOR 'jack' LIKE 'max_user_connections';
 ```

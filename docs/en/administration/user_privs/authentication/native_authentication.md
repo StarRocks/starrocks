@@ -150,6 +150,7 @@ The following example shows the property of the user `jack`:
 ```SQL
 SHOW PROPERTY FOR 'jack';
 ```
+
 Or to view a specific property:
 
 ```SQL
