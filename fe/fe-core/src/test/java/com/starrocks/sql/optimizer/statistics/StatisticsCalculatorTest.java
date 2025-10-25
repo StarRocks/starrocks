@@ -95,6 +95,7 @@ public class StatisticsCalculatorTest {
 
         String dbName = "statistics_test";
         starRocksAssert.withDatabase(dbName).useDatabase(dbName);
+        FeConstants.runningUnitTest = false;
     }
 
     @BeforeEach

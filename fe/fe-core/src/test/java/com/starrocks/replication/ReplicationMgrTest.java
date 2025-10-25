@@ -72,7 +72,6 @@ public class ReplicationMgrTest {
     @BeforeAll
     public static void beforeClass() throws Exception {
         FeConstants.runningUnitTest = true;
-        // UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
         AnalyzeTestUtil.initWithoutTableAndDb(RunMode.SHARED_DATA);
         starRocksAssert = AnalyzeTestUtil.starRocksAssert;
 
