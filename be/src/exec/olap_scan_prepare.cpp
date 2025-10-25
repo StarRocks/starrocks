@@ -283,7 +283,19 @@ StatusOr<bool> ChunkPredicateBuilder<E, Type>::parse_conjuncts() {
 }
 
 template <BoxedExprType E, CompoundNodeType Type>
+size_t ChunkPredicateBuilder<E, Type>::num_predicates() const {
+    size_t num = _normalized_exprs.size();
+    for (const auto& child_builder : _child_builders) {
+        num += std::visit([](auto& c) { return c.num_predicates(); }, child_builder);
+    }
+    return num;
+}
+
+template <BoxedExprType E, CompoundNodeType Type>
 StatusOr<bool> ChunkPredicateBuilder<E, Type>::_normalize_compound_predicates() {
+    size_t num_normalized_preds = SIMD::contain_nonzero(_normalized_exprs);
+
+    std::vector<size_t> normalized_compound_preds;
     const size_t num_preds = _exprs.size();
     for (size_t i = 0; i < num_preds; i++) {
         if (_normalized_exprs[i]) {
@@ -291,10 +303,26 @@ StatusOr<bool> ChunkPredicateBuilder<E, Type>::_normalize_compound_predicates() 
         }
 
         ASSIGN_OR_RETURN(const bool normalized, _normalize_compound_predicate(_exprs[i].root()));
-        if (!normalized && !_is_root_builder) {
+        if (!normalized) {
+            if (_is_root_builder) {
+                continue;
+            } else {
+                // Non-root builder requires all expressions to be normalized, so if one fails, return false directly.
+                return false;
+            }
+        }
+
+        num_normalized_preds += std::visit([](auto& c) { return c.num_predicates(); }, _child_builders.back());
+        if (num_normalized_preds > _opts.pred_tree_params.max_pushdown_or_predicates) {
+            for (size_t compound_pred_idx : normalized_compound_preds) {
+                _normalized_exprs[compound_pred_idx] = false;
+            }
+            _child_builders.clear();
             return false;
         }
-        _normalized_exprs[i] = normalized;
+
+        _normalized_exprs[i] = true;
+        normalized_compound_preds.emplace_back(i);
     }
 
     return true;
