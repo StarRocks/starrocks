@@ -542,6 +542,22 @@ public class FunctionAnalyzer {
             }
         }
 
+        if (fnName.getFunction().equals(FunctionSet.MIN_N) || fnName.getFunction().equals(FunctionSet.MAX_N)) {
+            if (functionCallExpr.hasChild(1)) {
+                Expr nExpr = functionCallExpr.getChild(1);
+                Optional<Long> n = extractIntegerValue(nExpr);
+                if (!n.isPresent() || n.get() <= 0) {
+                    throw new SemanticException(
+                            "The second parameter of " + fnName.getFunction() + " must be a constant positive integer: " +
+                                    functionCallExpr.toSql(), nExpr.getPos());
+                }
+                if (n.get() > 10000) {
+                    throw new SemanticException("The second parameter of " + fnName.getFunction() + 
+                            " cannot exceed 10000: " + functionCallExpr.toSql(), nExpr.getPos());
+                }
+            }
+        }
+
         if (fnName.getFunction().equals(FunctionSet.APPROX_TOP_K)) {
             Optional<Long> k = Optional.empty();
             Optional<Long> counterNum = Optional.empty();
@@ -1142,6 +1158,20 @@ public class FunctionAnalyzer {
             }
             // need to distinct output columns in finalize phase
             ((AggregateFunction) fn).setIsDistinct(isDistinct && (!isAscOrder.isEmpty() || outputConst));
+        } else if (FunctionSet.MIN_N.equalsIgnoreCase(fnName) || FunctionSet.MAX_N.equalsIgnoreCase(fnName)) {
+            // min_n/max_n(value, n) returns array<value_type>
+            // Normalize second argument to INT (handles TINYINT/SMALLINT from literals like '3')
+            if (argumentTypes.length > 1) {
+                argumentTypes[1] = Type.INT;
+            }
+
+            // use IS_IDENTICAL to preserve exact value type (especially FLOAT to avoid promotion to DOUBLE)
+            fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_IDENTICAL);
+            if (fn != null) {
+                fn = fn.copy();
+                // Explicitly set return type to preserve element type (e.g. array<date> not array<int>)
+                fn.setRetType(new ArrayType(argumentTypes[0]));
+            }
         } else if (FunctionSet.PERCENTILE_DISC.equals(fnName) || FunctionSet.LC_PERCENTILE_DISC.equals(fnName)) {
             argumentTypes[1] = Type.DOUBLE;
             fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_IDENTICAL);
