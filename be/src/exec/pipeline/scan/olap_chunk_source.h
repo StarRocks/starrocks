@@ -116,6 +116,8 @@ private:
     // The following are profile meatures
     int64_t _num_rows_read = 0;
 
+    int64_t _total_time = 0;
+
     RuntimeProfile::Counter* _bytes_read_counter = nullptr;
     RuntimeProfile::Counter* _rows_read_counter = nullptr;
 

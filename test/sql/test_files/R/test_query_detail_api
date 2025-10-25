@@ -26,3 +26,13 @@ function: query_detail_check("insert into test_table select * from test_table", 
 -- result:
 {'success': True}
 -- !result
+set pipeline_dop=1;
+-- result:
+-- !result
+set io_tasks_per_scan_operator=1;
+-- result:
+-- !result
+function: query_detail_check("select * from test_table where sleep(1)", 6, 6, 2)
+-- result:
+{'success': True}
+-- !result
