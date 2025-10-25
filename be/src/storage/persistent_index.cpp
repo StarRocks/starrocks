@@ -43,6 +43,7 @@
 #include "util/faststring.h"
 #include "util/filesystem_util.h"
 #include "util/raw_container.h"
+#include "util/stack_util.h"
 #include "util/stopwatch.hpp"
 #include "util/xxh3.h"
 
@@ -3503,8 +3504,9 @@ Status PersistentIndex::_insert_rowsets(TabletLoader* loader, const Schema& pkey
                     Column* pkc = nullptr;
                     if (pk_column != nullptr) {
                         pk_column->reset_column();
-                        TRY_CATCH_BAD_ALLOC(
-                                PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get()));
+                        TRY_CATCH_BAD_ALLOC(PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(),
+                                                                      pk_column.get(),
+                                                                      loader->enable_null_primary_key()));
                         pkc = pk_column.get();
                     } else {
                         pkc = chunk->columns()[0].get();
@@ -5194,14 +5196,13 @@ double PersistentIndex::major_compaction_score(const PersistentIndexMetaPB& inde
 
 Status PersistentIndex::reset(Tablet* tablet, EditVersion version, PersistentIndexMetaPB* index_meta) {
     _cancel_major_compaction = true;
-
     auto tablet_schema_ptr = tablet->tablet_schema();
     vector<ColumnId> pk_columns(tablet_schema_ptr->num_key_columns());
     for (auto i = 0; i < tablet_schema_ptr->num_key_columns(); i++) {
         pk_columns[i] = (ColumnId)i;
     }
     auto pkey_schema = ChunkHelper::convert_schema(tablet_schema_ptr, pk_columns);
-    size_t fix_size = _get_encoded_fixed_size(pkey_schema);
+    size_t fix_size = _get_encoded_fixed_size(pkey_schema, tablet->get_enable_null_primary_key());
 
     if (_l0) {
         _l0.reset();
@@ -5340,7 +5341,7 @@ Status PersistentIndex::_load_by_loader(TabletLoader* loader) {
         }
     }
 
-    size_t fix_size = _get_encoded_fixed_size(pkey_schema);
+    size_t fix_size = _get_encoded_fixed_size(pkey_schema, loader->enable_null_primary_key());
     // Init PersistentIndex
     _key_size = fix_size;
     _size = 0;
@@ -5405,8 +5406,8 @@ Status PersistentIndex::_load_by_loader(TabletLoader* loader) {
     data->set_size(0);
 
     MutableColumnPtr pk_column;
-    if (pkey_schema.num_fields() > 1) {
-        RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
+    if (pkey_schema.num_fields() > 1 || loader->enable_null_primary_key()) {
+        RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, loader->enable_null_primary_key()));
     }
     RETURN_IF_ERROR(_insert_rowsets(loader, pkey_schema, std::move(pk_column)));
     RETURN_IF_ERROR(_build_commit(loader, index_meta));
@@ -5460,8 +5461,8 @@ void PersistentIndex::test_force_dump() {
     _dump_snapshot = true;
 }
 
-size_t PersistentIndex::_get_encoded_fixed_size(const Schema& schema) {
-    size_t fix_size = PrimaryKeyEncoder::get_encoded_fixed_size(schema);
+size_t PersistentIndex::_get_encoded_fixed_size(const Schema& schema, bool enable_null_primary_key) {
+    size_t fix_size = PrimaryKeyEncoder::get_encoded_fixed_size(schema, enable_null_primary_key);
     // if fix_key_size is greater than 128, use SliceMutableIndex because FixedMutableIndex does not support key size greater
     // than 128.
     if (fix_size > 128) {

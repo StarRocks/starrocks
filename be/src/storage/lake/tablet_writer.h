@@ -43,13 +43,15 @@ enum WriterType : int { kHorizontal = 0, kVertical = 1 };
 class TabletWriter {
 public:
     explicit TabletWriter(TabletManager* tablet_mgr, int64_t tablet_id, std::shared_ptr<const TabletSchema> schema,
-                          int64_t txn_id, bool is_compaction, ThreadPool* flush_pool = nullptr)
+                          int64_t txn_id, bool is_compaction, bool enable_null_primary_key,
+                          ThreadPool* flush_pool = nullptr)
             : _tablet_mgr(tablet_mgr),
               _tablet_id(tablet_id),
               _schema(std::move(schema)),
               _txn_id(txn_id),
               _flush_pool(flush_pool),
-              _is_compaction(is_compaction) {}
+              _is_compaction(is_compaction),
+              _enable_null_primary_key(enable_null_primary_key) {}
 
     virtual ~TabletWriter() = default;
 
@@ -170,6 +172,7 @@ protected:
     OlapWriterStatistics _stats;
 
     bool _is_compaction = false;
+    bool _enable_null_primary_key = false;
     DictColumnsValidMap _global_dict_columns_valid_info;
     bool _enable_pk_parallel_execution = false;
 };

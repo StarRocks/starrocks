@@ -204,6 +204,7 @@ Status TabletManager::create_tablet(const TCreateTabletReq& req) {
             }
         }
     }
+    tablet_metadata_pb->set_enable_null_primary_key(req.__isset.enable_null_primary_key && req.enable_null_primary_key);
 
     if (req.__isset.flat_json_config) {
         FlatJsonConfig flat_json_config;

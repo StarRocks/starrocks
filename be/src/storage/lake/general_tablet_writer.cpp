@@ -55,10 +55,12 @@ void collect_writer_stats(OlapWriterStatistics& writer_stats, SegmentWriter* seg
 
 HorizontalGeneralTabletWriter::HorizontalGeneralTabletWriter(TabletManager* tablet_mgr, int64_t tablet_id,
                                                              std::shared_ptr<const TabletSchema> schema, int64_t txn_id,
-                                                             bool is_compaction, ThreadPool* flush_pool,
+                                                             bool is_compaction, bool enable_null_primary_key,
+                                                             ThreadPool* flush_pool,
                                                              BundleWritableFileContext* bundle_file_context,
                                                              GlobalDictByNameMaps* global_dicts)
-        : TabletWriter(tablet_mgr, tablet_id, std::move(schema), txn_id, is_compaction, flush_pool),
+        : TabletWriter(tablet_mgr, tablet_id, std::move(schema), txn_id, is_compaction, enable_null_primary_key,
+                       flush_pool),
           _bundle_file_context(bundle_file_context),
           _global_dicts(global_dicts) {}
 
@@ -195,8 +197,9 @@ Status HorizontalGeneralTabletWriter::flush_segment_writer(SegmentPB* segment) {
 VerticalGeneralTabletWriter::VerticalGeneralTabletWriter(TabletManager* tablet_mgr, int64_t tablet_id,
                                                          std::shared_ptr<const TabletSchema> schema, int64_t txn_id,
                                                          uint32_t max_rows_per_segment, bool is_compaction,
-                                                         ThreadPool* flush_pool)
-        : TabletWriter(tablet_mgr, tablet_id, std::move(schema), txn_id, is_compaction, flush_pool),
+                                                         bool enable_null_primary_key, ThreadPool* flush_pool)
+        : TabletWriter(tablet_mgr, tablet_id, std::move(schema), txn_id, is_compaction, enable_null_primary_key,
+                       flush_pool),
           _max_rows_per_segment(max_rows_per_segment) {}
 
 VerticalGeneralTabletWriter::~VerticalGeneralTabletWriter() {

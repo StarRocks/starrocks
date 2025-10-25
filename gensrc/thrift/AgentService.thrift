@@ -136,6 +136,7 @@ struct TCreateTabletReq {
     24: optional i64 gtid = 0;
     25: optional TFlatJsonConfig flat_json_config;
     26: optional TCompactionStrategy compaction_strategy;
+    27: optional bool enable_null_primary_key;
 }
 
 struct TDropTabletReq {

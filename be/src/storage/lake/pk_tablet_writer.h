@@ -35,7 +35,7 @@ class HorizontalPkTabletWriter : public HorizontalGeneralTabletWriter {
 public:
     explicit HorizontalPkTabletWriter(TabletManager* tablet_mgr, int64_t tablet_id,
                                       std::shared_ptr<const TabletSchema> schema, int64_t txn_id,
-                                      ThreadPool* flush_pool, bool is_compaction,
+                                      ThreadPool* flush_pool, bool is_compaction, bool enable_null_primary_key,
                                       BundleWritableFileContext* bundle_file_context = nullptr,
                                       GlobalDictByNameMaps* _global_dicts = nullptr);
 
@@ -71,7 +71,8 @@ class VerticalPkTabletWriter : public VerticalGeneralTabletWriter {
 public:
     explicit VerticalPkTabletWriter(TabletManager* tablet_mgr, int64_t tablet_id,
                                     std::shared_ptr<const TabletSchema> schema, int64_t txn_id,
-                                    uint32_t max_rows_per_segment, ThreadPool* flush_pool, bool is_compaction);
+                                    uint32_t max_rows_per_segment, ThreadPool* flush_pool, bool is_compaction,
+                                    bool enable_null_primary_key);
 
     ~VerticalPkTabletWriter() override;
 
