@@ -1056,8 +1056,12 @@ public class ExpressionAnalyzer {
                 ExprId exprId = analyzeState.getNextNondeterministicId();
                 node.setNondeterministicId(exprId);
             }
-            Type[] argumentTypes = node.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
             String fnName = node.getFnName().getFunction();
+
+            // Handle backward compatibility parameter conversion
+            handleBackwardCompatibleParameterConversion(fnName, node);
+
+            Type[] argumentTypes = node.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
             // check fn & throw exception direct if analyze failed
             checkFunction(fnName, node, argumentTypes);
             // get function by function expression and argument types
@@ -1075,8 +1079,64 @@ public class ExpressionAnalyzer {
             return null;
         }
 
+        /**
+         * Handle backward compatible parameter conversion for functions.
+         * This method converts old-style function calls to new-style calls to maintain backward compatibility.
+         *
+         * @param fnName the function name
+         * @param node the function call expression node
+         */
+        private void handleBackwardCompatibleParameterConversion(String fnName, FunctionCallExpr node) {
+            // AES encryption/decryption functions: convert 2/3 parameter calls to 4 parameter calls
+            if (FunctionSet.AES_ENCRYPT.equalsIgnoreCase(fnName) ||
+                    FunctionSet.AES_DECRYPT.equalsIgnoreCase(fnName)) {
+                convertAesEncryptionParameters(node);
+            }
+        }
+
+        /**
+         * Convert AES encryption/decryption function parameters for backward compatibility.
+         * - 2 params: (data, key) -> (data, key, NULL, 'AES_128_ECB')
+         * - 3 params: (data, key, iv) -> (data, key, iv, 'AES_128_ECB')
+         * - 4 or 5 params: no conversion needed
+         *
+         * @param node the function call expression node
+         */
+        private void convertAesEncryptionParameters(FunctionCallExpr node) {
+            int paramCount = node.getChildren().size();
+            if (paramCount == 2) {
+                // 2 params: (data, key) -> (data, key, NULL, 'AES_128_ECB')
+                node.addChild(new NullLiteral());
+                node.addChild(new StringLiteral("AES_128_ECB"));
+            } else if (paramCount == 3) {
+                // 3 params: (data, key, iv) -> (data, key, iv, 'AES_128_ECB')
+                node.addChild(new StringLiteral("AES_128_ECB"));
+            }
+            // 4 or 5 params: no conversion needed, validation will be done in checkFunction
+        }
+
         private void checkFunction(String fnName, FunctionCallExpr node, Type[] argumentTypes) {
             switch (fnName) {
+                case FunctionSet.AES_ENCRYPT:
+                case FunctionSet.AES_DECRYPT:
+                    // Validate 5-parameter version: (data, key, iv, mode, aad)
+                    // Only GCM mode supports AAD parameter
+                    if (node.getChildren().size() == 5) {
+                        Expr modeExpr = node.getChild(3);
+                        if (modeExpr instanceof StringLiteral) {
+                            String mode = ((StringLiteral) modeExpr).getValue().toUpperCase();
+                            if (!mode.contains("GCM")) {
+                                throw new SemanticException(
+                                        fnName + " with 5 parameters requires GCM mode to use AAD parameter, " +
+                                                "but got mode: " + mode + ". " +
+                                                "Only GCM modes (AES_128_GCM, AES_192_GCM, AES_256_GCM) support AAD parameter.",
+                                        node.getPos());
+                            }
+                        }
+                        // If mode is not a constant, we cannot validate at analysis time
+                        // The validation will be done at runtime
+                    }
+                    break;
                 case FunctionSet.TIME_SLICE:
                 case FunctionSet.DATE_SLICE:
                     if (!(node.getChild(1) instanceof IntLiteral)) {
