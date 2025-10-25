@@ -162,6 +162,12 @@ public class ResourceGroupMgr implements Writable {
                 classifier.setResourceGroupId(wg.getId());
                 classifier.setId(GlobalStateMgr.getCurrentState().getNextId());
             }
+
+            if (!ResourceGroup.DEFAULT_MEM_POOL.equals(wg.getMemPool()) && !resourceGroupInMemPoolHaveSameMemLimit(wg)) {
+                throw new DdlException(
+                        "Property `mem_limit` must be equal for all resource groups using the mem_pool [" + wg.getMemPool() +
+                                "].");
+            }
             addResourceGroupInternal(wg);
 
             ResourceGroupOpEntry workGroupOp = new ResourceGroupOpEntry(TWorkGroupOpType.WORKGROUP_OP_CREATE, wg);
@@ -193,6 +199,11 @@ public class ResourceGroupMgr implements Writable {
         } finally {
             readUnlock();
         }
+    }
+
+    private boolean resourceGroupInMemPoolHaveSameMemLimit(ResourceGroup wg) {
+        return resourceGroupMap.entrySet().stream().allMatch(entry -> !wg.getMemPool().equals(entry.getValue().getMemPool()) ||
+                wg.getMemLimit().equals(entry.getValue().getMemLimit()));
     }
 
     private String getUnqualifiedUser(ConnectContext ctx) {
@@ -376,6 +387,16 @@ public class ResourceGroupMgr implements Writable {
                 Integer maxCpuCores = changedProperties.getMaxCpuCores();
                 if (maxCpuCores != null) {
                     wg.setMaxCpuCores(maxCpuCores);
+                }
+                if (changedProperties.getMemPool() != null && !changedProperties.getMemPool().equals(wg.getMemPool())) {
+                    throw new DdlException("Property `mem_pool` cannot be altered [" + wg.getMemPool() + "].");
+                }
+                if (!ResourceGroup.DEFAULT_MEM_POOL.equals(wg.getMemPool()) &&
+                        changedProperties.getMemLimit() != null &&
+                        !wg.getMemLimit().equals(changedProperties.getMemLimit())) {
+                    throw new DdlException(
+                            "Property `mem_limit` cannot be altered for resource groups with mem_pool [" +
+                                    wg.getMemPool() + "].");
                 }
                 Double memLimit = changedProperties.getMemLimit();
                 if (memLimit != null) {
