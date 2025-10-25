@@ -140,6 +140,7 @@ import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
+import com.starrocks.sql.optimizer.PhysicalPlanColumnOrderUtil;
 import com.starrocks.sql.optimizer.UKFKConstraintsCollector;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -1961,6 +1962,9 @@ public class PlanFragmentBuilder {
 
         @Override
         public PlanFragment visitPhysicalValues(OptExpression optExpr, ExecPlan context) {
+            PhysicalPlanColumnOrderUtil fixer = new PhysicalPlanColumnOrderUtil(context.getOutputColumns());
+            fixer.fixPhysicalPlan(optExpr, context);
+
             PhysicalValuesOperator valuesOperator = (PhysicalValuesOperator) optExpr.getOp();
 
             TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
