@@ -874,7 +874,16 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
 
     @Override
     public LogicalPlan visitView(ViewRelation node, ExpressionMapping context) {
-        LogicalPlan logicalPlan = transform(node.getQueryStatement().getQueryRelation());
+        LogicalPlan logicalPlan;
+        try {
+            logicalPlan = transform(node.getQueryStatement().getQueryRelation());
+        } catch (Exception e) {
+            String viewName = node.getName() != null ? node.getName().toSql() : "unknown";
+            String errorMsg = String.format("View '%s' has invalid SQL: %s",
+                    viewName, e.getMessage() != null ? e.getMessage() : "syntax error");
+            LOG.warn("View processing failed for '{}': {}", viewName, e.getMessage(), e);
+            throw new StarRocksPlannerException(errorMsg, INTERNAL_ERROR, e);
+        }
 
         boolean isInlineView = isInlineView();
         boolean isEnableViewBasedRewrite = isEnableViewBasedRewrite(node.getView());
@@ -887,14 +896,35 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
                             .getColumnRefToConstOperators()));
             if (isEnableViewBasedRewrite) {
                 List<ColumnRefOperator> newOutputColumns = Lists.newArrayList();
-                LogicalViewScanOperator viewScanOperator = buildViewScan(logicalPlan, node, newOutputColumns, true);
-                builder.getRoot().getOp().setEquivalentOp(viewScanOperator);
+                try {
+                    LogicalViewScanOperator viewScanOperator = buildViewScan(logicalPlan, node, newOutputColumns, true);
+                    builder.getRoot().getOp().setEquivalentOp(viewScanOperator);
+                } catch (StarRocksPlannerException e) {
+                    throw e;
+                } catch (Exception e) {
+                    String viewName = node.getName() != null ? node.getName().toSql() : "unknown";
+                    String errorMsg = String.format("View '%s' scan build failed: %s",
+                            viewName, e.getMessage() != null ? e.getMessage() : "unknown error");
+                    LOG.warn("View scan build failed: {}", errorMsg, e);
+                    throw new StarRocksPlannerException(errorMsg, INTERNAL_ERROR, e);
+                }
             }
             return new LogicalPlan(builder, logicalPlan.getOutputColumn(), logicalPlan.getCorrelation());
         } else {
             // do not expand views in logical plan
             List<ColumnRefOperator> newOutputColumns = Lists.newArrayList();
-            LogicalViewScanOperator viewScanOperator = buildViewScan(logicalPlan, node, newOutputColumns, false);
+            LogicalViewScanOperator viewScanOperator;
+            try {
+                viewScanOperator = buildViewScan(logicalPlan, node, newOutputColumns, false);
+            } catch (StarRocksPlannerException e) {
+                throw e;
+            } catch (Exception e) {
+                String viewName = node.getName() != null ? node.getName().toSql() : "unknown";
+                String errorMsg = String.format("View '%s' scan build failed: %s",
+                        viewName, e.getMessage() != null ? e.getMessage() : "unknown error");
+                LOG.warn("View scan build failed: {}", errorMsg, e);
+                throw new StarRocksPlannerException(errorMsg, INTERNAL_ERROR, e);
+            }
             OptExprBuilder scanBuilder = new OptExprBuilder(viewScanOperator, Collections.emptyList(),
                     new ExpressionMapping(node.getScope(), newOutputColumns));
             return new LogicalPlan(scanBuilder, newOutputColumns, List.of());
@@ -918,7 +948,15 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
 
         List<ColumnRefOperator> outputColumns = logicalPlan.getOutputColumn();
         List<Column> viewSchema = node.getView().getBaseSchema();
-        Preconditions.checkState(outputColumns.size() == viewSchema.size());
+        if (outputColumns.size() != viewSchema.size()) {
+            String viewName = node.getName() != null ? node.getName().toSql() : "unknown";
+            String errorMsg = String.format("View '%s' column count mismatch: query has %d columns, view expects %d. "
+                            + "Check view definition for incomplete SQL (missing WHERE conditions, etc.)",
+                    viewName, outputColumns.size(), viewSchema.size());
+            LOG.warn("View column mismatch for '{}': query={}, view={}",
+                    viewName, outputColumns.size(), viewSchema.size());
+            throw new StarRocksPlannerException(errorMsg, INTERNAL_ERROR);
+        }
         // should add a new relationid for view instead of using original outputColumns directly here,
         // because the original columns are related to the base tables(maybe olap table or others),
         // but the new column refs should be related with views,
