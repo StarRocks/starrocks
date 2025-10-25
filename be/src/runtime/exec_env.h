@@ -131,6 +131,7 @@ public:
 
     MemTracker* process_mem_tracker() { return _process_mem_tracker.get(); }
     MemTracker* query_pool_mem_tracker() { return _query_pool_mem_tracker.get(); }
+    std::shared_ptr<MemTracker> query_pool_mem_tracker_shared() { return _query_pool_mem_tracker; }
     MemTracker* connector_scan_pool_mem_tracker() { return _connector_scan_pool_mem_tracker.get(); }
     MemTracker* load_mem_tracker() { return _load_mem_tracker.get(); }
     MemTracker* metadata_mem_tracker() { return _metadata_mem_tracker.get(); }
