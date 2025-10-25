@@ -13,8 +13,6 @@
 // limitations under the License.
 
 package com.starrocks.connector.iceberg;
-
-import com.starrocks.catalog.Column;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.ConnectorAlterTableExecutor;
 import com.starrocks.connector.HdfsEnvironment;
@@ -29,6 +27,7 @@ import com.starrocks.sql.ast.AlterTableCommentClause;
 import com.starrocks.sql.ast.AlterTableOperationClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.BranchOptions;
+import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.ColumnPosition;
 import com.starrocks.sql.ast.ColumnRenameClause;
 import com.starrocks.sql.ast.CreateOrReplaceBranchClause;
@@ -59,7 +58,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
-import java.util.stream.Collectors;
 
 import static com.starrocks.connector.iceberg.IcebergApiConverter.toIcebergColumnType;
 import static com.starrocks.connector.iceberg.IcebergMetadata.COMMENT;
@@ -101,23 +99,23 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
         actions.add(() -> {
             UpdateSchema updateSchema = this.transaction.updateSchema();
             ColumnPosition pos = clause.getColPos();
-            Column column = Column.fromColumnDef(null, clause.getColumnDef());
+            ColumnDef columnDef = clause.getColumnDef();
 
             // All non-partition columns must use NULL as the default value.
-            if (!column.isAllowNull()) {
+            if (!columnDef.isAllowNull()) {
                 throw new StarRocksConnectorException("column in iceberg table must be nullable.");
             }
             updateSchema.addColumn(
-                    column.getName(),
-                    toIcebergColumnType(column.getType()),
-                    column.getComment());
+                    columnDef.getName(),
+                    toIcebergColumnType(columnDef.getType()),
+                    columnDef.getComment());
 
             // AFTER column / FIRST
             if (pos != null) {
                 if (pos.isFirst()) {
-                    updateSchema.moveFirst(column.getName());
+                    updateSchema.moveFirst(columnDef.getName());
                 } else if (pos.getLastCol() != null) {
-                    updateSchema.moveAfter(column.getName(), pos.getLastCol());
+                    updateSchema.moveAfter(columnDef.getName(), pos.getLastCol());
                 } else {
                     throw new StarRocksConnectorException("Unsupported position: " + pos);
                 }
@@ -132,20 +130,16 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
     public Void visitAddColumnsClause(AddColumnsClause clause, ConnectContext context) {
         actions.add(() -> {
             UpdateSchema updateSchema = this.transaction.updateSchema();
-            List<Column> columns = clause
-                    .getColumnDefs()
-                    .stream()
-                    .map(columnDef -> Column.fromColumnDef(null, columnDef))
-                    .collect(Collectors.toList());
+            List<ColumnDef> columns = clause.getColumnDefs();
 
-            for (Column column : columns) {
-                if (!column.isAllowNull()) {
+            for (ColumnDef columnDef : columns) {
+                if (!columnDef.isAllowNull()) {
                     throw new StarRocksConnectorException("column in iceberg table must be nullable.");
                 }
                 updateSchema.addColumn(
-                        column.getName(),
-                        toIcebergColumnType(column.getType()),
-                        column.getComment());
+                        columnDef.getName(),
+                        toIcebergColumnType(columnDef.getType()),
+                        columnDef.getComment());
             }
             updateSchema.commit();
         });
@@ -177,24 +171,24 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
         actions.add(() -> {
             UpdateSchema updateSchema = this.transaction.updateSchema();
             ColumnPosition colPos = clause.getColPos();
-            Column column = Column.fromColumnDef(null, clause.getColumnDef());
-            org.apache.iceberg.types.Type colType = toIcebergColumnType(column.getType());
+            ColumnDef columnDef = clause.getColumnDef();
+            org.apache.iceberg.types.Type colType = toIcebergColumnType(columnDef.getType());
 
             // UPDATE column type
             if (!colType.isPrimitiveType()) {
                 throw new StarRocksConnectorException(
-                        "Cannot modify " + column.getName() + ", not a primitive type");
+                        "Cannot modify " + columnDef.getName() + ", not a primitive type");
             }
-            updateSchema.updateColumn(column.getName(), colType.asPrimitiveType());
+            updateSchema.updateColumn(columnDef.getName(), colType.asPrimitiveType());
 
             // UPDATE comment
-            if (column.getComment() != null) {
-                updateSchema.updateColumnDoc(column.getName(), column.getComment());
+            if (columnDef.getComment() != null) {
+                updateSchema.updateColumnDoc(columnDef.getName(), columnDef.getComment());
             }
 
             // NOT NULL / NULL
-            if (column.isAllowNull()) {
-                updateSchema.makeColumnOptional(column.getName());
+            if (columnDef.isAllowNull()) {
+                updateSchema.makeColumnOptional(columnDef.getName());
             } else {
                 throw new StarRocksConnectorException(
                         "column in iceberg table must be nullable.");
@@ -203,9 +197,9 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
             // AFTER column / FIRST
             if (colPos != null) {
                 if (colPos.isFirst()) {
-                    updateSchema.moveFirst(column.getName());
+                    updateSchema.moveFirst(columnDef.getName());
                 } else if (colPos.getLastCol() != null) {
-                    updateSchema.moveAfter(column.getName(), colPos.getLastCol());
+                    updateSchema.moveAfter(columnDef.getName(), colPos.getLastCol());
                 } else {
                     throw new StarRocksConnectorException("Unsupported position: " + colPos);
                 }
