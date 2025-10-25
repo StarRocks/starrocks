@@ -413,7 +413,7 @@ Status ScalarColumnIterator::_read_data_page(const OrdinalPageIndexIterator& ite
 
 Status ScalarColumnIterator::get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
                                                         const ColumnPredicate* del_predicate, SparseRange<>* row_ranges,
-                                                        CompoundNodeType pred_relation) {
+                                                        CompoundNodeType pred_relation, const Range<>* src_range) {
     DCHECK(row_ranges->empty());
     if (_reader->has_zone_map()) {
         if (!_delete_partial_satisfied_pages.has_value()) {
@@ -427,7 +427,7 @@ Status ScalarColumnIterator::get_row_ranges_by_zone_map(const std::vector<const 
         opts.read_file = _opts.read_file;
         opts.stats = _opts.stats;
         RETURN_IF_ERROR(_reader->zone_map_filter(predicates, del_predicate, &_delete_partial_satisfied_pages.value(),
-                                                 row_ranges, opts, pred_relation));
+                                                 row_ranges, opts, pred_relation, src_range));
     } else {
         row_ranges->add({0, static_cast<rowid_t>(_reader->num_rows())});
     }
