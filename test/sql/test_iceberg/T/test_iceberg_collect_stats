@@ -64,6 +64,13 @@ insert into iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t5 
 function: assert_explain_costs_contains('select * from iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t5', 'cardinality: 2')
 drop table iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t5 force;
 
+create table iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t6 (
+    c1 decimal(10,3)
+) partition by truncate(c1, 50);
+insert into iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t6 values(1.23), (2.34), (3.45);
+[UC] analyze table iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t6;
+function: assert_explain_costs_contains('select * from iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t6', 'cardinality: 3')
+drop table iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t6 force;
 
 drop database iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0};
 drop catalog iceberg_collect_stats_${uuid0};
