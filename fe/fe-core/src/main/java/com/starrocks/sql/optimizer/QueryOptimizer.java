@@ -102,6 +102,7 @@ import com.starrocks.sql.optimizer.rule.tree.ApplyMinMaxStatisticRule;
 import com.starrocks.sql.optimizer.rule.tree.ApplyTuningGuideRule;
 import com.starrocks.sql.optimizer.rule.tree.CloneDuplicateColRefRule;
 import com.starrocks.sql.optimizer.rule.tree.DataCachePopulateRewriteRule;
+import com.starrocks.sql.optimizer.rule.tree.DisableRuntimeAdaptiveDopRule;
 import com.starrocks.sql.optimizer.rule.tree.EliminateOveruseColumnAccessPathRule;
 import com.starrocks.sql.optimizer.rule.tree.ExchangeSortToMergeRule;
 import com.starrocks.sql.optimizer.rule.tree.ExtractAggregateColumn;
@@ -731,6 +732,7 @@ public class QueryOptimizer extends Optimizer {
         }
 
         tree = SimplifyCaseWhenPredicateRule.INSTANCE.rewrite(tree, rootTaskContext);
+        tree = DisableRuntimeAdaptiveDopRule.INSTANCE.rewrite(tree, rootTaskContext);
         deriveLogicalProperty(tree);
 
         // TODO(packy92)
