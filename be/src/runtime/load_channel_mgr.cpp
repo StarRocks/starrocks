@@ -46,6 +46,7 @@
 #include "runtime/load_channel.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/tablets_channel.h"
+#include "service/backend_options.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/utils.h"
 #include "util/starrocks_metrics.h"
@@ -225,7 +226,9 @@ void LoadChannelMgr::add_chunk(const PTabletWriterAddChunkRequest& request, PTab
         channel->add_chunk(request, response);
     } else {
         response->mutable_status()->set_status_code(TStatusCode::INTERNAL_ERROR);
-        response->mutable_status()->add_error_msgs("no associated load channel " + print_id(request.id()));
+        response->mutable_status()->add_error_msgs(fmt::format("no associated load channel on host {}, load_id: {}",
+                                                               BackendOptions::get_localhost(),
+                                                               print_id(request.id())));
     }
 }
 
@@ -237,7 +240,9 @@ void LoadChannelMgr::add_chunks(const PTabletWriterAddChunksRequest& request, PT
         channel->add_chunks(request, response);
     } else {
         response->mutable_status()->set_status_code(TStatusCode::INTERNAL_ERROR);
-        response->mutable_status()->add_error_msgs("no associated load channel " + print_id(request.id()));
+        response->mutable_status()->add_error_msgs(fmt::format("no associated load channel on host {}, load_id: {}",
+                                                               BackendOptions::get_localhost(),
+                                                               print_id(request.id())));
     }
 }
 
@@ -251,7 +256,9 @@ void LoadChannelMgr::add_segment(brpc::Controller* cntl, const PTabletWriterAddS
         closure_guard.release();
     } else {
         response->mutable_status()->set_status_code(TStatusCode::INTERNAL_ERROR);
-        response->mutable_status()->add_error_msgs("no associated load channel " + print_id(request->id()));
+        response->mutable_status()->add_error_msgs(fmt::format("no associated load channel on host {}, load_id: {}",
+                                                               BackendOptions::get_localhost(),
+                                                               print_id(request->id())));
     }
 }
 
@@ -287,6 +294,7 @@ void LoadChannelMgr::get_load_replica_status(brpc::Controller* cntl, const PLoad
                                              PLoadReplicaStatusResult* response, google::protobuf::Closure* done) {
     ClosureGuard done_guard(done);
     UniqueId load_id(request->load_id());
+    auto start_time = MonotonicMillis();
     auto channel = _find_load_channel(load_id);
     if (channel == nullptr) {
         for (int64_t tablet_id : request->tablet_ids()) {
@@ -299,6 +307,9 @@ void LoadChannelMgr::get_load_replica_status(brpc::Controller* cntl, const PLoad
         std::string remote_ip = butil::ip2str(cntl->remote_side().ip).c_str();
         channel->get_load_replica_status(remote_ip, request, response);
     }
+    std::string remote_ip = butil::ip2str(cntl->remote_side().ip).c_str();
+    LOG(INFO) << "receive get_load_replica_status, load_id: " << load_id << ", txn_id: " << request->txn_id()
+              << ", remote: " << remote_ip << ", cost: " << (MonotonicMillis() - start_time) << "ms";
 }
 
 void LoadChannelMgr::load_diagnose(brpc::Controller* cntl, const PLoadDiagnoseRequest* request,
