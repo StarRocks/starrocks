@@ -16,9 +16,12 @@
 
 #include <gtest/gtest.h>
 
+#include "agent/agent_common.h"
+#include "agent/agent_server.h"
 #include "cache/datacache.h"
 #include "cache/disk_cache/starcache_engine.h"
 #include "cache/disk_cache/test_cache_utils.h"
+#include "common/config.h"
 #include "fs/fs_util.h"
 #include "runtime/exec_env.h"
 #include "storage/persistent_index_load_executor.h"
@@ -100,6 +103,32 @@ TEST_F(UpdateConfigActionTest, test_update_transaction_publish_version_worker_co
     auto st = action.update_config("transaction_publish_version_worker_count", "8");
     CHECK_OK(st);
     ASSERT_EQ(8, ExecEnv::GetInstance()->put_aggregate_metadata_thread_pool()->max_threads());
+}
+
+TEST_F(UpdateConfigActionTest, update_tablet_meta_info_worker_count) {
+    UpdateConfigAction action(ExecEnv::GetInstance());
+
+    auto thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::UPDATE_TABLET_META_INFO);
+    ASSERT_NE(thread_pool, nullptr);
+
+    int initial_max_threads = thread_pool->max_threads();
+    ASSERT_EQ(initial_max_threads, 10);
+
+    Status st = action.update_config("update_tablet_meta_info_worker_count", "5");
+    ASSERT_TRUE(st.ok()) << st.to_string();
+    ASSERT_EQ(thread_pool->max_threads(), 5);
+
+    st = action.update_config("update_tablet_meta_info_worker_count", "10");
+    ASSERT_TRUE(st.ok()) << st.to_string();
+    ASSERT_EQ(thread_pool->max_threads(), 10);
+
+    st = action.update_config("update_tablet_meta_info_worker_count", "1");
+    ASSERT_TRUE(st.ok()) << st.to_string();
+    ASSERT_EQ(thread_pool->max_threads(), 1);
+
+    st = action.update_config("update_tablet_meta_info_worker_count", std::to_string(initial_max_threads));
+    ASSERT_TRUE(st.ok()) << st.to_string();
+    ASSERT_EQ(thread_pool->max_threads(), initial_max_threads);
 }
 
 } // namespace starrocks
