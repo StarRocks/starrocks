@@ -47,6 +47,7 @@ public class TopNImplementationRule extends ImplementationRule {
                         logicalTopN.getTopNType(),
                         logicalTopN.isSplit(),
                         false,
+                        logicalTopN.isPerPipeline(),
                         logicalTopN.getPredicate(),
                         logicalTopN.getProjection(),
                         logicalTopN.getPartitionPreAggCall());
