@@ -75,7 +75,7 @@ LABEL com.starrocks.commit=${COMMIT_ID}
 
 RUN yum-config-manager --add-repo https://cli.github.com/packages/rpm/gh-cli.repo && yum install -y gh && \
         yum install -y ${EPEL_RPM_URL} && yum install -y wget unzip bzip2 patch bison byacc flex autoconf automake make \
-        libtool which git ccache binutils-devel python3 file less psmisc \
+        libtool which git ccache binutils-devel python3 file less psmisc && \
         localedef --no-archive -i en_US -f UTF-8 en_US.UTF-8 && \
         yum clean all && rm -rf /var/cache/yum
 
