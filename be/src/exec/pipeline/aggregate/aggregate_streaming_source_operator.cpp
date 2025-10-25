@@ -33,7 +33,6 @@ bool AggregateStreamingSourceOperator::has_output() const {
     if (_aggregator->is_streaming_all_states()) {
         return true;
     }
-
     // There are four cases where chunk buffer is empty
     // case1: streaming mode is 'FORCE_STREAMING'
     // case2: streaming mode is 'AUTO'
