@@ -155,13 +155,16 @@ public class WindowTest extends PlanTestBase {
         starRocksAssert.query(sql).analysisError("The third parameter of LEAD/LAG can't convert to INT");
 
         sql = "select lead(k3, 3, abs(k3)) over () from baseall";
-        starRocksAssert.query(sql).analysisError("The default parameter (parameter 3) of LAG must be a constant");
+        starRocksAssert.query(sql).analysisError("The type of the third parameter of LEAD/LAG not match the type INT");
 
         sql = "select lead(id2, 1, 1) OVER () from bitmap_table";
         starRocksAssert.query(sql).analysisError("No matching function with signature: lead(bitmap,");
 
         sql = "select lag(id2, 1, 1) OVER () from hll_table";
         starRocksAssert.query(sql).analysisError("No matching function with signature: lag(hll,");
+
+        sql = "select lead(ta, 3, tc) over () from test_laglead";
+        starRocksAssert.query(sql).explainContains("functions: [, lead(1: ta, 3, 3: tc), ]");
     }
 
     @Test
