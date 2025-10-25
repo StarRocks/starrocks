@@ -454,8 +454,8 @@ StatusOr<FileMetaDataPtr> FileMetaDataParser::get_file_metadata() {
     }
 
     PageCacheHandle cache_handle;
-    std::string metacache_key = ParquetUtils::get_file_cache_key(CacheType::META, _file->filename(),
-                                                                 _datacache_options->modification_time, _file_size);
+    std::string metacache_key =
+            get_file_cache_key(CacheType::META, _file->filename(), _datacache_options->modification_time, _file_size);
     {
         SCOPED_RAW_TIMER(&_scanner_ctx->stats->footer_cache_read_ns);
         bool ret = _cache->lookup(metacache_key, &cache_handle);
