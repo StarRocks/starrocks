@@ -294,10 +294,10 @@ public class HttpServer {
                             Config.http_max_header_size,
                             Config.http_max_chunk_size,
                             Config.enable_http_validate_headers))
-                    .addLast(new StarRocksHttpPostObjectAggregator(100 * 65536))
-                    .addLast(new ChunkedWriteHandler())
-                    // add content compressor
                     .addLast(new CustomHttpContentCompressor())
+                    .addLast(new ChunkedWriteHandler())
+                    .addLast(new StarRocksHttpPostObjectAggregator(100 * 65536))
+                    // add content compressor
                     .addLast(new HttpServerHandler(controller, asyncExecutor));
         }
     }
