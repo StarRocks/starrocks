@@ -182,23 +182,22 @@ TEST_F(JsonFunctionsTest, get_json_string_array) {
                         .ok());
 }
 
-TEST_F(JsonFunctionsTest, json_query_filter_simple) {
+class JsonQueryFilterTestFixture : public ::testing::TestWithParam<std::tuple<std::string, std::string, std::string>> {};
+
+TEST_P(JsonQueryFilterTestFixture, json_query_filter) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     JsonColumn::Ptr jsons = JsonColumn::create();
     ColumnBuilder<TYPE_VARCHAR> path_builder(1);
 
-    std::string input = R"({
-        "books": [
-            { "id": 1, "price": 5 },
-            { "id": 2, "price": 20 }
-        ]
-    })";
+    std::string param_json = std::get<0>(GetParam());
+    std::string param_path = std::get<1>(GetParam());
+    std::string param_result = std::get<2>(GetParam());
 
     JsonValue json;
-    ASSERT_TRUE(JsonValue::parse(input, &json).ok());
+    ASSERT_TRUE(JsonValue::parse(param_json, &json).ok());
     jsons->append(&json);
 
-    path_builder.append("$.books[?(@.price > 10)]");
+    path_builder.append(param_path);
     Columns columns{jsons, path_builder.build(true)};
 
     ctx.get()->set_constant_columns(columns);
@@ -215,281 +214,90 @@ TEST_F(JsonFunctionsTest, json_query_filter_simple) {
     ASSERT_FALSE(datum.is_null());
     std::string out = datum.get_json()->to_string().value();
     StripWhiteSpace(&out);
-    std::string expect = R"([{"id": 2, "price": 20}])";
-    StripWhiteSpace(&expect);
-    ASSERT_EQ(expect, out);
+    StripWhiteSpace(&param_result);
+    ASSERT_EQ(param_result, out);
 }
 
-TEST_F(JsonFunctionsTest, json_query_filter_logical) {
-    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
-    JsonColumn::Ptr jsons = JsonColumn::create();
-    ColumnBuilder<TYPE_VARCHAR> path_builder(1);
-
-    std::string input = R"({
-        "books": [
-            { "id": 1, "price": 5 },
-            { "id": 2, "price": 20 }
-        ]
-    })";
-
-    JsonValue json;
-    ASSERT_TRUE(JsonValue::parse(input, &json).ok());
-    jsons->append(&json);
-
-    path_builder.append("$.books[?(@.price > 10 && @.id = 2)]");
-    Columns columns{jsons, path_builder.build(true)};
-
-    ctx.get()->set_constant_columns(columns);
-    std::ignore =
-            JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
-    DeferOp defer([&]() {
-        (void)JsonFunctions::native_json_path_close(
-                ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
-    });
-
-    ColumnPtr result = JsonFunctions::json_query(ctx.get(), columns).value();
-    ASSERT_TRUE(!!result);
-    Datum datum = result->get(0);
-    ASSERT_FALSE(datum.is_null());
-    std::string out = datum.get_json()->to_string().value();
-    StripWhiteSpace(&out);
-    std::string expect = R"([{"id": 2, "price": 20}])";
-    StripWhiteSpace(&expect);
-    ASSERT_EQ(expect, out);
-}
-
-TEST_F(JsonFunctionsTest, json_query_filter_no_match) {
-    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
-    JsonColumn::Ptr jsons = JsonColumn::create();
-    ColumnBuilder<TYPE_VARCHAR> path_builder(1);
-
-    std::string input = R"({
-        "books": [
-            { "id": 1, "price": 5 },
-            { "id": 2, "price": 20 }
-        ]
-    })";
-
-    JsonValue json;
-    ASSERT_TRUE(JsonValue::parse(input, &json).ok());
-    jsons->append(&json);
-
-    path_builder.append("$.books[?(@.unknown_field = 1)]");
-    Columns columns{jsons, path_builder.build(true)};
-
-    ctx.get()->set_constant_columns(columns);
-    std::ignore =
-            JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
-    DeferOp defer([&]() {
-        (void)JsonFunctions::native_json_path_close(
-                ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
-    });
-
-    ColumnPtr result = JsonFunctions::json_query(ctx.get(), columns).value();
-    ASSERT_TRUE(!!result);
-    Datum datum = result->get(0);
-    ASSERT_FALSE(datum.is_null());
-    std::string out = datum.get_json()->to_string().value();
-    StripWhiteSpace(&out);
-    std::string expect = R"([])";
-    StripWhiteSpace(&expect);
-    ASSERT_EQ(expect, out);
-}
-
-TEST_F(JsonFunctionsTest, json_query_filter_string_equality) {
-    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
-    JsonColumn::Ptr jsons = JsonColumn::create();
-    ColumnBuilder<TYPE_VARCHAR> path_builder(1);
-
-    std::string input = R"({
-        "users": [
-            { "name": "Alice", "role": "admin" },
-            { "name": "Bob", "role": "user" },
-            { "name": "Charlie", "role": "admin" }
-        ]
-    })";
-
-    JsonValue json;
-    ASSERT_TRUE(JsonValue::parse(input, &json).ok());
-    jsons->append(&json);
-
-    path_builder.append("$.users[?(@.role = 'admin')]");
-    Columns columns{jsons, path_builder.build(true)};
-
-    ctx.get()->set_constant_columns(columns);
-    std::ignore =
-            JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
-    DeferOp defer([&]() {
-        (void)JsonFunctions::native_json_path_close(
-                ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
-    });
-
-    ColumnPtr result = JsonFunctions::json_query(ctx.get(), columns).value();
-    ASSERT_TRUE(!!result);
-    Datum datum = result->get(0);
-    ASSERT_FALSE(datum.is_null());
-    std::string out = datum.get_json()->to_string().value();
-    StripWhiteSpace(&out);
-    std::string expect = R"([{"name": "Alice", "role": "admin"}, {"name": "Charlie", "role": "admin"}])";
-    StripWhiteSpace(&expect);
-    ASSERT_EQ(expect, out);
-}
-
-TEST_F(JsonFunctionsTest, json_query_filter_less_than_or_equal) {
-    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
-    JsonColumn::Ptr jsons = JsonColumn::create();
-    ColumnBuilder<TYPE_VARCHAR> path_builder(1);
-
-    std::string input = R"({
-        "products": [
-            { "name": "A", "price": 5 },
-            { "name": "B", "price": 10 },
-            { "name": "C", "price": 15 }
-        ]
-    })";
-
-    JsonValue json;
-    ASSERT_TRUE(JsonValue::parse(input, &json).ok());
-    jsons->append(&json);
-
-    path_builder.append("$.products[?(@.price <= 10)]");
-    Columns columns{jsons, path_builder.build(true)};
-
-    ctx.get()->set_constant_columns(columns);
-    std::ignore =
-            JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
-    DeferOp defer([&]() {
-        (void)JsonFunctions::native_json_path_close(
-                ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
-    });
-
-    ColumnPtr result = JsonFunctions::json_query(ctx.get(), columns).value();
-    ASSERT_TRUE(!!result);
-    Datum datum = result->get(0);
-    ASSERT_FALSE(datum.is_null());
-    std::string out = datum.get_json()->to_string().value();
-    StripWhiteSpace(&out);
-    std::string expect = R"([{"name": "A", "price": 5}, {"name": "B", "price": 10}])";
-    StripWhiteSpace(&expect);
-    ASSERT_EQ(expect, out);
-}
-
-TEST_F(JsonFunctionsTest, json_query_filter_or_operator) {
-    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
-    JsonColumn::Ptr jsons = JsonColumn::create();
-    ColumnBuilder<TYPE_VARCHAR> path_builder(1);
-
-    std::string input = R"({
-        "items": [
-            { "id": 1, "category": "A" },
-            { "id": 2, "category": "B" },
-            { "id": 3, "category": "C" }
-        ]
-    })";
-
-    JsonValue json;
-    ASSERT_TRUE(JsonValue::parse(input, &json).ok());
-    jsons->append(&json);
-
-    path_builder.append("$.items[?(@.category = 'A' || @.category = 'C')]");
-    Columns columns{jsons, path_builder.build(true)};
-
-    ctx.get()->set_constant_columns(columns);
-    std::ignore =
-            JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
-    DeferOp defer([&]() {
-        (void)JsonFunctions::native_json_path_close(
-                ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
-    });
-
-    ColumnPtr result = JsonFunctions::json_query(ctx.get(), columns).value();
-    ASSERT_TRUE(!!result);
-    Datum datum = result->get(0);
-    ASSERT_FALSE(datum.is_null());
-    std::string out = datum.get_json()->to_string().value();
-    StripWhiteSpace(&out);
-    std::string expect = R"([{"category": "A", "id": 1}, {"category": "C", "id": 3}])";
-    StripWhiteSpace(&expect);
-    ASSERT_EQ(expect, out);
-}
-
-TEST_F(JsonFunctionsTest, json_query_filter_nested_field) {
-    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
-    JsonColumn::Ptr jsons = JsonColumn::create();
-    ColumnBuilder<TYPE_VARCHAR> path_builder(1);
-
-    std::string input = R"({
-        "employees": [
-            { "name": "Alice", "details": { "age": 30 } },
-            { "name": "Bob", "details": { "age": 25 } },
-            { "name": "Charlie", "details": { "age": 35 } }
-        ]
-    })";
-
-    JsonValue json;
-    ASSERT_TRUE(JsonValue::parse(input, &json).ok());
-    jsons->append(&json);
-
-    path_builder.append("$.employees[?(@.details.age > 28)]");
-    Columns columns{jsons, path_builder.build(true)};
-
-    ctx.get()->set_constant_columns(columns);
-    std::ignore =
-            JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
-    DeferOp defer([&]() {
-        (void)JsonFunctions::native_json_path_close(
-                ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
-    });
-
-    ColumnPtr result = JsonFunctions::json_query(ctx.get(), columns).value();
-    ASSERT_TRUE(!!result);
-    Datum datum = result->get(0);
-    ASSERT_FALSE(datum.is_null());
-    std::string out = datum.get_json()->to_string().value();
-    StripWhiteSpace(&out);
-    std::string expect = R"([{"details": {"age": 30}, "name": "Alice"}, {"details": {"age": 35}, "name": "Charlie"}])";
-    StripWhiteSpace(&expect);
-    ASSERT_EQ(expect, out);
-}
-
-TEST_F(JsonFunctionsTest, json_query_filter_type_mismatch) {
-    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
-    JsonColumn::Ptr jsons = JsonColumn::create();
-    ColumnBuilder<TYPE_VARCHAR> path_builder(1);
-
-    std::string input = R"({
-        "mixed": [
-            { "value": "text" },
-            { "value": 42 },
-            { "value": "another" }
-        ]
-    })";
-
-    JsonValue json;
-    ASSERT_TRUE(JsonValue::parse(input, &json).ok());
-    jsons->append(&json);
-
-    path_builder.append("$.mixed[?(@.value > 30)]");
-    Columns columns{jsons, path_builder.build(true)};
-
-    ctx.get()->set_constant_columns(columns);
-    std::ignore =
-            JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
-    DeferOp defer([&]() {
-        (void)JsonFunctions::native_json_path_close(
-                ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
-    });
-
-    ColumnPtr result = JsonFunctions::json_query(ctx.get(), columns).value();
-    ASSERT_TRUE(!!result);
-    Datum datum = result->get(0);
-    ASSERT_FALSE(datum.is_null());
-    std::string out = datum.get_json()->to_string().value();
-    StripWhiteSpace(&out);
-    std::string expect = R"([{"value": 42}])";
-    StripWhiteSpace(&expect);
-    ASSERT_EQ(expect, out);
-}
+INSTANTIATE_TEST_SUITE_P(
+        JsonQueryFilterTests, JsonQueryFilterTestFixture,
+        ::testing::Values(
+                // clang-format off
+                std::make_tuple(R"({"items": [{"id": 1, "value": 5}, {"id": 2, "value": 15}, {"id": 3, "value": 25}]})",
+                                "$.items[?(@.value > 10)]",
+                                R"([{"id": 2, "value": 15}, {"id": 3, "value": 25}])"),
+                std::make_tuple(R"({"items": [{"id": 1, "value": 5}, {"id": 2, "value": 15}, {"id": 3, "value": 25}]})",
+                                "$.items[?(@.value < 20)]",
+                                R"([{"id": 1, "value": 5}, {"id": 2, "value": 15}])"),
+                std::make_tuple(R"({"items": [{"id": 1, "value": 10}, {"id": 2, "value": 20}, {"id": 3, "value": 30}]})",
+                                "$.items[?(@.value >= 20)]",
+                                R"([{"id": 2, "value": 20}, {"id": 3, "value": 30}])"),
+                std::make_tuple(R"({"items": [{"id": 1, "value": 10}, {"id": 2, "value": 20}, {"id": 3, "value": 30}]})",
+                                "$.items[?(@.value <= 20)]",
+                                R"([{"id": 1, "value": 10}, {"id": 2, "value": 20}])"),
+                std::make_tuple(R"({"items": [{"id": 1, "status": "active"}, {"id": 2, "status": "inactive"}, {"id": 3, "status": "active"}]})",
+                                "$.items[?(@.status = 'active')]",
+                                R"([{"id": 1, "status": "active"}, {"id": 3, "status": "active"}])"),
+                std::make_tuple(R"({"items": [{"id": 1, "status": "active"}, {"id": 2, "status": "inactive"}]})",
+                                "$.items[?(@.status != 'active')]",
+                                R"([{"id": 2, "status": "inactive"}])"),
+                std::make_tuple(R"({"products": [{"name": "A", "price": 10, "stock": 5}, {"name": "B", "price": 20, "stock": 0}, {"name": "C", "price": 15, "stock": 10}]})",
+                                "$.products[?(@.price >= 10 && @.stock > 0)]",
+                                R"([{"name": "A", "price": 10, "stock": 5}, {"name": "C", "price": 15, "stock": 10}])"),
+                std::make_tuple(R"({"items": [{"id": 1, "type": "A"}, {"id": 2, "type": "B"}, {"id": 3, "type": "C"}]})",
+                                "$.items[?(@.type = 'A' || @.type = 'C')]",
+                                R"([{"id": 1, "type": "A"}, {"id": 3, "type": "C"}])"),
+                std::make_tuple(R"({"data": [{"x": 1, "y": 5}, {"x": 10, "y": 2}, {"x": 8, "y": 8}]})",
+                                "$.data[?((@.x > 5 && @.y > 5) || @.x = 1)]",
+                                R"([{"x": 1, "y": 5}, {"x": 8, "y": 8}])"),
+                std::make_tuple(R"({"users": [{"name": "Alice", "role": "admin"}, {"name": "Bob", "role": "user"}, {"name": "Charlie", "role": "admin"}]})",
+                                "$.users[?(@.role = 'admin')]",
+                                R"([{"name": "Alice", "role": "admin"}, {"name": "Charlie", "role": "admin"}])"),
+                std::make_tuple(R"({"items": [{"name": "apple"}, {"name": "banana"}, {"name": "cherry"}]})",
+                                "$.items[?(@.name > 'b')]",
+                                R"([{"name": "banana"}, {"name": "cherry"}])"),
+                std::make_tuple(R"({"employees": [{"name": "Alice", "details": {"age": 30}}, {"name": "Bob", "details": {"age": 25}}]})",
+                                "$.employees[?(@.details.age > 28)]",
+                                R"([{"details": {"age": 30}, "name": "Alice"}])"),
+                std::make_tuple(R"({"data": [{"level1": {"level2": {"level3": 10}}}, {"level1": {"level2": {"level3": 20}}}]})",
+                                "$.data[?(@.level1.level2.level3 >= 15)]",
+                                R"([{"level1": {"level2": {"level3": 20}}}])"),
+                std::make_tuple(R"([{"id": 1, "price": 5}, {"id": 2, "price": 20}, {"id": 3, "price": 15}])",
+                                "$[?(@.price > 10)]",
+                                R"([{"id": 2, "price": 20}, {"id": 3, "price": 15}])"),
+                std::make_tuple(R"([{"name": "Alice", "city": "NYC"}, {"name": "Bob", "city": "LA"}, {"name": "Charlie", "city": "NYC"}])",
+                                "$[?(@.city = 'NYC')]",
+                                R"([{"city": "NYC", "name": "Alice"}, {"city": "NYC", "name": "Charlie"}])"),
+                std::make_tuple(R"({"items": [{"id": 1, "value": 5}, {"id": 2, "value": 10}]})",
+                                "$.items[?(@.value > 100)]",
+                                R"([])"),
+                std::make_tuple(R"({"items": [{"id": 1, "status": "active"}, {"id": 2, "status": "active"}]})",
+                                "$.items[?(@.status = 'active')]",
+                                R"([{"id": 1, "status": "active"}, {"id": 2, "status": "active"}])"),
+                std::make_tuple(R"({"items": [{"id": 1}, {"id": 2}]})",
+                                "$.items[?(@.missing_field = 1)]",
+                                R"([])"),
+                std::make_tuple(R"({"mixed": [{"value": "text"}, {"value": 42}, {"value": "more"}]})",
+                                "$.mixed[?(@.value > 30)]",
+                                R"([{"value": 42}])"),
+                std::make_tuple(R"({"items": []})",
+                                "$.items[?(@.value > 10)]",
+                                R"([])"),
+                std::make_tuple(R"({"items": [{"a": 5, "b": 10, "c": 15}, {"a": 8, "b": 12, "c": 20}, {"a": 3, "b": 8, "c": 25}]})",
+                                "$.items[?(@.a > 4 && @.b > 9 && @.c > 18)]",
+                                R"([{"a": 8, "b": 12, "c": 20}])"),
+                std::make_tuple(R"({"items": [{"type": "A"}, {"type": "B"}, {"type": "C"}, {"type": "D"}]})",
+                                "$.items[?(@.type = 'A' || @.type = 'C' || @.type = 'D')]",
+                                R"([{"type": "A"}, {"type": "C"}, {"type": "D"}])"),
+                std::make_tuple(R"({"temps": [{"city": "A", "temp": -5}, {"city": "B", "temp": 10}, {"city": "C", "temp": -2}]})",
+                                "$.temps[?(@.temp < 0)]",
+                                R"([{"city": "A", "temp": -5}, {"city": "C", "temp": -2}])"),
+                std::make_tuple(R"({"items": [{"id": 1, "rate": 3.14}, {"id": 2, "rate": 2.71}, {"id": 3, "rate": 1.41}]})",
+                                "$.items[?(@.rate > 2.5)]",
+                                R"([{"id": 1, "rate": 3.14}, {"id": 2, "rate": 2.71}])"),
+                std::make_tuple(R"({"items": [{"id": 1, "count": 0}, {"id": 2, "count": 5}, {"id": 3, "count": 0}]})",
+                                "$.items[?(@.count = 0)]",
+                                R"([{"count": 0, "id": 1}, {"count": 0, "id": 3}])")
+                ));
 
 TEST_F(JsonFunctionsTest, get_json_emptyTest) {
     {

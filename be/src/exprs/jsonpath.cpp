@@ -21,6 +21,7 @@
 #include <boost/tokenizer.hpp>
 #include <cctype>
 #include <memory>
+#include <unordered_map>
 
 #include "column/column_viewer.h"
 #include "common/compiler_util.h"
@@ -56,16 +57,10 @@ bool ArraySelectorSlice::match(const std::string& input) {
     return RE2::FullMatch(input, ARRAY_SLICE_SELECTOR);
 }
 
-static inline std::string trim_copy(const std::string& s) {
-    size_t i = 0;
-    while (i < s.size() && std::isspace(static_cast<unsigned char>(s[i]))) i++;
-    size_t j = s.size();
-    while (j > i && std::isspace(static_cast<unsigned char>(s[j - 1]))) j--;
-    return s.substr(i, j - i);
-}
-
 bool ArraySelectorFilter::match(const std::string& input) {
-    return RE2::FullMatch(trim_copy(input), ARRAY_FILTER_SELECTOR);
+    std::string trimmed = input;
+    StripWhiteSpace(&trimmed);
+    return RE2::FullMatch(trimmed, ARRAY_FILTER_SELECTOR);
 }
 
 // Minimal evaluator for filter expressions: ?(@.field op literal) with && and ||, parentheses.
@@ -109,34 +104,40 @@ struct Lexer {
         skip_ws();
         if (i >= s.size()) return {TokenType::END, {}};
         char c = s[i];
-        if (c == '(') {
+        
+        // Simple single-character tokens
+        static const std::unordered_map<char, TokenType> single_char_tokens = {
+            {'(', TokenType::LPAREN},
+            {')', TokenType::RPAREN},
+            {'@', TokenType::AT},
+            {'.', TokenType::DOT}
+        };
+        
+        auto it = single_char_tokens.find(c);
+        if (it != single_char_tokens.end()) {
             i++;
-            return {TokenType::LPAREN, "("};
-        }
-        if (c == ')') {
-            i++;
-            return {TokenType::RPAREN, ")"};
-        }
-        if (c == '@') {
-            i++;
-            return {TokenType::AT, "@"};
-        }
-        if (c == '.') {
-            i++;
-            return {TokenType::DOT, "."};
+            return {it->second, std::string(1, c)};
         }
         if (c == '"' || c == '\'') {
             char quote = c;
             ++i;
             std::string out;
+            bool closed = false;
             while (i < s.size()) {
                 char cc = s[i++];
                 if (cc == '\\' && i < s.size()) {
                     out.push_back(s[i++]);
                     continue;
                 }
-                if (cc == quote) break;
+                if (cc == quote) {
+                    closed = true;
+                    break;
+                }
                 out.push_back(cc);
+            }
+            // If string is not properly closed, return empty token to indicate error
+            if (!closed) {
+                return {TokenType::END, {}};
             }
             return {TokenType::STRING, out};
         }
@@ -324,8 +325,8 @@ struct Parser {
 };
 
 static bool eval_filter_expr(const std::string& inner_expr, vpack::Slice current) {
-    // inner_expr is like ?( ... ), or possibly trimmed already. Strip leading ?( and trailing ) if present.
-    std::string expr = trim_copy(inner_expr);
+    std::string expr = inner_expr;
+    StripWhiteSpace(&expr);
     if (!expr.empty() && expr[0] == '?') {
         size_t p = expr.find('(');
         if (p != std::string::npos && expr.back() == ')') {
@@ -428,14 +429,21 @@ Status JsonPathPiece::parse(const std::string& path_string, std::vector<JsonPath
     //    '$."text.abc"[1].xyz'  ->  [$, text.abc[1], xyz]
     std::vector<std::string> path_exprs;
     // Preprocess: replace '.' within [...] with unit-separator to avoid tokenizing inside filters/indices
+    // We use '\x1F' (ASCII 31, Unit Separator) as a temporary placeholder that won't conflict with
+    // valid JSON path characters. These will be restored to '.' after tokenization.
     std::string preprocessed;
     preprocessed.reserve(path_string.size());
     int bracket_depth = 0;
     for (size_t i = 0; i < path_string.size(); ++i) {
         char c = path_string[i];
-        if (c == '[') bracket_depth++;
-        if (c == ']') bracket_depth = std::max(0, bracket_depth - 1);
+        if (c == '[') {
+            bracket_depth++;
+        }
+        if (c == ']') {
+            bracket_depth = std::max(0, bracket_depth - 1);
+        }
         if (c == '.' && bracket_depth > 0) {
+            // Replace dots inside brackets with unit separator
             preprocessed.push_back('\x1F');
         } else {
             preprocessed.push_back(c);
