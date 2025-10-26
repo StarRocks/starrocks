@@ -143,6 +143,10 @@ public class ClickhouseSchemaResolver extends JDBCSchemaResolver {
                     int scale = Integer.parseInt(precisionAndScale[1]);
                     return ScalarType.createUnifiedDecimalType(precision, scale);
                 }
+            case Types.TIME_WITH_TIMEZONE:
+                // TIME_WITH_TIMEZONE
+            case Types.TIMESTAMP_WITH_TIMEZONE:
+                return ScalarType.createVarcharType(ScalarType.DEFAULT_STRING_LENGTH);
             default:
                 primitiveType = PrimitiveType.UNKNOWN_TYPE;
                 break;
