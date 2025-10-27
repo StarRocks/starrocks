@@ -96,16 +96,6 @@ select page, count(distinct user_id) as uv from table group by page;
     - 在 page_id = 1， visit_date = '2020-06-23 02:30:30' 的数据行，`visit_users` 字段包含 1 个 bitmap 元素（13）；
     - 在 page_id = 2， visit_date = '2020-06-23 01:30:30' 的数据行，`visit_users` 字段包含 1 个 bitmap 元素（23）。
 
-    采用本地文件导入：
-
-    ```shell
-    echo -e '1,2020-06-23 01:30:30,130\n1,2020-06-23 01:30:30,230\n1,2020-06-23 01:30:30,120\n1,2020-06-23 02:30:30,133\n2,2020-06-23 01:30:30,234' > tmp.csv | 
-    curl --location-trusted -u <username>:<password> -H "label:label_1600960288798" \
-        -H "column_separator:," \
-        -H "columns:page_id,visit_date,visit_users, visit_users=to_bitmap(visit_users)" -T tmp.csv \
-        http://StarRocks_be0:8040/api/db0/page_uv/_stream_load
-    ```
-
 3. 统计每个页面的 UV。
 
     ```sql

@@ -98,16 +98,6 @@ Roaring Bitmap の実装については、[specific paper and implementation](ht
     * 行 `page_id = 1, visit_date = '2020-06-23 02:30:30'` では、`visit_users` フィールドに 1 つのビットマップ要素 (13) が含まれています。
     * 行 `page_id = 2, visit_date = '2020-06-23 01:30:30'` では、`visit_users` フィールドに 1 つのビットマップ要素 (23) が含まれています。
 
-   ローカルファイルからデータをロードします:
-
-    ```shell
-    echo -e '1,2020-06-23 01:30:30,130\n1,2020-06-23 01:30:30,230\n1,2020-06-23 01:30:30,120\n1,2020-06-23 02:30:30,133\n2,2020-06-23 01:30:30,234' > tmp.csv | 
-    curl --location-trusted -u <username>:<password> -H "label:label_1600960288798" \
-        -H "column_separator:," \
-        -H "columns:page_id,visit_date,visit_users, visit_users=to_bitmap(visit_users)" -T tmp.csv \
-        http://StarRocks_be0:8040/api/db0/page_uv/_stream_load
-    ```
-
 3. ページ UV を計算します。
 
     ```sql
