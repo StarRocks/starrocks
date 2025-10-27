@@ -15,14 +15,43 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.common.FeConstants;
+import com.starrocks.planner.AnalyticEvalNode;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.utframe.StarRocksAssert;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class WindowTest extends PlanTestBase {
+
+    @BeforeAll
+    public static void beforeClass() throws Exception {
+        PlanTestBase.beforeClass();
+        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+        starRocksAssert.withTable("CREATE TABLE `s1` (    \n" +
+                "  `v1` bigint(20) NULL COMMENT \"\",    \n" +
+                "  `v2` int(11) NULL COMMENT \"\",    \n" +
+                "  `a1` array<varchar(65533)> NULL COMMENT \"\",    \n" +
+                "  `a2` array<varchar(65533)> NULL COMMENT \"\"    \n" +
+                ") ENGINE=OLAP    \n" +
+                "DUPLICATE KEY(`v1`)    \n" +
+                "COMMENT \"OLAP\"    \n" +
+                "DISTRIBUTED BY HASH(`v1`) BUCKETS 10    \n" +
+                "PROPERTIES (    \n" +
+                "\"replication_num\" = \"1\",       \n" +
+                "\"in_memory\" = \"false\",    \n" +
+                "\"enable_persistent_index\" = \"true\",    \n" +
+                "\"replicated_storage\" = \"false\",    \n" +
+                "\"light_schema_change\" = \"true\",    \n" +
+                "\"compression\" = \"LZ4\"    \n" +
+                ");");
+    }
 
     @Test
     public void testLagWindowFunction() throws Exception {
@@ -1640,5 +1669,86 @@ public class WindowTest extends PlanTestBase {
                         " rows between unbounded PRECEDING and unbounded following) from t0";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "window: ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING");
+    }
+
+    @Test
+    public void testFirstValueIgnoreNullsAndFirstValueMerging() throws Exception {
+
+        String sql = "select  \n" +
+                "  v1, v2,\n" +
+                "  first_value(v2 ignore nulls) over(order by v1, v2),\n" +
+                "  first_value(v2) over(order by v1, v2)\n" +
+                "from s1;";
+
+        ExecPlan execPlan = getExecPlan(sql);
+        List<AnalyticEvalNode> analyticNodes = new ArrayList<>();
+        execPlan.getTopFragment().getPlanRoot().collect(AnalyticEvalNode.class, analyticNodes);
+        Assertions.assertFalse(analyticNodes.isEmpty());
+        Assertions.assertEquals(analyticNodes.get(0).getAnalyticFnCalls().size(), 2);
+        Assertions.assertTrue(analyticNodes.get(0).getAnalyticFnCalls().get(0).getIgnoreNulls());
+        Assertions.assertFalse(analyticNodes.get(0).getAnalyticFnCalls().get(1).getIgnoreNulls());
+    }
+
+    @Test
+    public void testFirstValueValueRange() throws Exception {
+
+        String sql = "select v1,v2,v3,\n" +
+                "      first_value(v3 ignore nulls) \n" +
+                "      \tover(partition by v1 order by v2 range between UNBOUNDED preceding and current row)\n" +
+                "from t0;";
+
+        ExecPlan execPlan = getExecPlan(sql);
+        List<AnalyticEvalNode> analyticNodes = new ArrayList<>();
+        execPlan.getTopFragment().getPlanRoot().collect(AnalyticEvalNode.class, analyticNodes);
+        Assertions.assertFalse(analyticNodes.isEmpty());
+    }
+
+    @Test
+    public void testLeadLagUsingArrayAsParameterType() throws Exception {
+
+        String sql = "select  v1, v2," +
+                " lead(a1) over(partition by v1 order by v2),\n" +
+                " lag(a1) over(partition by v1 order by v2),\n" +
+                " lead(a1 ignore nulls) over(partition by v1 order by v2),\n" +
+                " lag(a1 ignore nulls) over(partition by v1 order by v2),\n" +
+                " first_value(a1) over(partition by v1 order by v2),\n" +
+                " last_value(a1) over(partition by v1 order by v2),\n" +
+                " first_value(a1 ignore nulls) over(partition by v1 order by v2),\n" +
+                " last_value(a1 ignore nulls) over(partition by v1 order by v2)\n" +
+                "from s1;";
+        String plan = getVerboseExplain(sql);
+        Assertions.assertTrue(plan.contains("  4:ANALYTIC\n" +
+                "  |  functions: [, first_value[([3: a1, ARRAY<VARCHAR(65533)>, true]); args: INVALID_TYPE;" +
+                " result: ARRAY<VARCHAR>; args nullable: true; result nullable: true], ], " +
+                "[, last_value[([3: a1, ARRAY<VARCHAR(65533)>, true]); args: INVALID_TYPE; " +
+                "result: ARRAY<VARCHAR>; args nullable: true; result nullable: true], ], [, " +
+                "first_value[([3: a1, ARRAY<VARCHAR(65533)>, true]); args: INVALID_TYPE; " +
+                "result: ARRAY<VARCHAR>; args nullable: true; result nullable: true], ], " +
+                "[, last_value[([3: a1, ARRAY<VARCHAR(65533)>, true]); args: INVALID_TYPE; " +
+                "result: ARRAY<VARCHAR>; args nullable: true; result nullable: true], ]\n" +
+                "  |  partition by: [1: v1, BIGINT, true]\n" +
+                "  |  order by: [2: v2, INT, true] ASC\n" +
+                "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  3:ANALYTIC\n" +
+                "  |  functions: [, lag[([3: a1, ARRAY<VARCHAR(65533)>, true], 1, NULL); args: INVALID_TYPE;" +
+                " result: ARRAY<VARCHAR>; args nullable: true; result nullable: true], ], " +
+                "[, lag[([3: a1, ARRAY<VARCHAR(65533)>, true], 1, NULL); args: INVALID_TYPE; " +
+                "result: ARRAY<VARCHAR>; args nullable: true; result nullable: true], ]\n" +
+                "  |  partition by: [1: v1, BIGINT, true]\n" +
+                "  |  order by: [2: v2, INT, true] ASC\n" +
+                "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  2:ANALYTIC\n" +
+                "  |  functions: [, lead[([3: a1, ARRAY<VARCHAR(65533)>, true], 1, NULL); args: INVALID_TYPE;" +
+                " result: ARRAY<VARCHAR>; args nullable: true; result nullable: true], ], " +
+                "[, lead[([3: a1, ARRAY<VARCHAR(65533)>, true], 1, NULL); args: INVALID_TYPE;" +
+                " result: ARRAY<VARCHAR>; args nullable: true; result nullable: true], ]\n" +
+                "  |  partition by: [1: v1, BIGINT, true]\n" +
+                "  |  order by: [2: v2, INT, true] ASC\n" +
+                "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING\n" +
+                "  |  cardinality: 1\n"));
     }
 }

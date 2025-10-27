@@ -138,4 +138,16 @@ public class PredicatePushDownTest extends PlanTestBase {
                 "  |  \n" +
                 "  0:OlapScanNode");
     }
+
+    @Test
+    public void testDisablePredicatePushdown() throws Exception {
+        connectContext.getSessionVariable().setCboDisabledRules("GP_PUSH_DOWN_PREDICATE");
+        String sql = "select * from t0 where coalesce(v1 < 2)";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "1:SELECT\n" +
+                "  |  predicates: 1: v1 < 2\n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
+        connectContext.getSessionVariable().setCboDisabledRules("");
+    }
 }

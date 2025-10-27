@@ -2,13 +2,13 @@
 displayed_sidebar: docs
 ---
 
-import BEConfigMethod from '../../_assets/commonMarkdown/BE_config_method.md'
+import BEConfigMethod from '../../_assets/commonMarkdown/BE_config_method.mdx'
 
-import CNConfigMethod from '../../_assets/commonMarkdown/CN_config_method.md'
+import CNConfigMethod from '../../_assets/commonMarkdown/CN_config_method.mdx'
 
-import PostBEConfig from '../../_assets/commonMarkdown/BE_dynamic_note.md'
+import PostBEConfig from '../../_assets/commonMarkdown/BE_dynamic_note.mdx'
 
-import StaticBEConfigNote from '../../_assets/commonMarkdown/StaticBE_config_note.md'
+import StaticBEConfigNote from '../../_assets/commonMarkdown/StaticBE_config_note.mdx'
 
 # BE Configuration
 
@@ -4705,6 +4705,24 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Is mutable: Yes
 - Description: Whether to allow vertical compaction tasks to cache data on local disks in a shared-data cluster.
 - Introduced in: v3.1.7, v3.2.3
+
+##### lake_clear_corrupted_cache_meta
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to allow the system to clear the corrupted metadata cache in a shared-data cluster.
+- Introduced in: v3.3
+
+##### lake_clear_corrupted_cache_data
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to allow the system to clear the corrupted data cache in a shared-data cluster.
+- Introduced in: v3.4
 
 <!--
 ##### dictionary_cache_refresh_timeout_ms

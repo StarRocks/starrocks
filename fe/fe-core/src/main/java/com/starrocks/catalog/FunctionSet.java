@@ -57,6 +57,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 public class FunctionSet {
@@ -375,6 +376,8 @@ public class FunctionSet {
     // Hash functions:
     public static final String MURMUR_HASH3_32 = "murmur_hash3_32";
     public static final String CRC32_HASH = "crc32_hash";
+    public static final String XX_HASH3_64 = "xx_hash3_64";
+    public static final String XX_HASH3_128 = "xx_hash3_128";
 
     // Percentile functions:
     public static final String PERCENTILE_APPROX_RAW = "percentile_approx_raw";
@@ -1300,12 +1303,7 @@ public class FunctionSet {
         addBuiltin(AggregateFunction.createBuiltin(FLAT_JSON_META, Lists.newArrayList(Type.ANY_ARRAY),
                 Type.ARRAY_VARCHAR, Type.ARRAY_VARCHAR, false, false, false));
 
-        for (Type t : Type.getSupportedTypes()) {
-            // null/char/time is handled through type promotion
-            // TODO: array/json/pseudo is not supported yet
-            if (!t.canBeWindowFunctionArgumentTypes()) {
-                continue;
-            }
+        Consumer<Type> registerLeadLagFunctions = t -> {
             addBuiltin(AggregateFunction.createAnalyticBuiltin(
                     FIRST_VALUE, Lists.newArrayList(t), t, t));
             // Implements FIRST_VALUE for some windows that require rewrites during planning.
@@ -1330,6 +1328,17 @@ public class FunctionSet {
                     LEAD, Lists.newArrayList(t), t, t));
             addBuiltin(AggregateFunction.createAnalyticBuiltin(
                     LEAD, Lists.newArrayList(t, Type.BIGINT), t, t));
+        };
+        for (Type t : Type.getSupportedTypes()) {
+            // null/char/time is handled through type promotion
+            // TODO: array/json/pseudo is not supported yet
+            if (!t.canBeWindowFunctionArgumentTypes()) {
+                continue;
+            }
+
+            Type arrayType = new ArrayType(t);
+            registerLeadLagFunctions.accept(t);
+            registerLeadLagFunctions.accept(arrayType);
         }
 
         for (Type t : HISTOGRAM_TYPE) {

@@ -48,6 +48,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.load.Load;
 import com.starrocks.planner.BlackHoleTableSink;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.HiveTableSink;
@@ -60,6 +61,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeState;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.PlannerMetaLocker;
@@ -70,6 +72,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DefaultValueExpr;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryRelation;
+import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.ValuesRelation;
@@ -185,6 +188,24 @@ public class InsertPlanner {
         return GenColumnDependency.PARTIALLY_DEPEND_ON_TARGET_COLUMNS;
     }
 
+    private static boolean checkIfUseColumnUpsertMode(ConnectContext session,
+                                                      InsertStmt insertStmt,
+                                                      OlapTable olapTable) {
+        String sessionPartialUpdateMode = session.getSessionVariable().getPartialUpdateMode();
+        List<String> targetColumnNames = insertStmt.getTargetColumnNames();
+        int insertColumnCount = targetColumnNames != null ? targetColumnNames.size() :
+                olapTable.getBaseSchemaWithoutGeneratedColumn().size();
+        int totalColumnCount = olapTable.getBaseSchemaWithoutGeneratedColumn().size();
+        // use COLUMN_UPSERT_MODE when explicitly set to column mode
+        if (sessionPartialUpdateMode.equalsIgnoreCase("column")) {
+            return true;
+        } else if (sessionPartialUpdateMode.equalsIgnoreCase("auto")) {
+            // @see com.starrocks.sql.analyzer.UpdateAnalyzer#checkIfUsePartialUpdate
+            return insertColumnCount <= 3 && insertColumnCount < totalColumnCount * 0.3;
+        }
+        return false;
+    }
+
     private void inferOutputSchemaForPartialUpdate(InsertStmt insertStmt) {
         outputBaseSchema = new ArrayList<>();
         outputFullSchema = new ArrayList<>();
@@ -248,6 +269,19 @@ public class InsertPlanner {
         }
     }
 
+    public void refreshExternalTable(QueryStatement queryStatement, ConnectContext session) {
+        SessionVariable currentVariable = (SessionVariable) session.getSessionVariable();
+        if (currentVariable.isEnableInsertSelectExternalAutoRefresh()) {
+            Map<TableName, Table> tables = AnalyzerUtils.collectAllTableWithAlias(queryStatement);
+            for (Map.Entry<TableName, Table> t : tables.entrySet()) {
+                if (t.getValue().isExternalTableWithFileSystem()) {
+                    session.getGlobalStateMgr().getMetadataMgr().refreshTable(t.getKey().getCatalog(),
+                            t.getKey().getDb(), t.getValue(), new ArrayList<>(), false);
+                }
+            }
+        }
+    }
+
     public ExecPlan plan(InsertStmt insertStmt, ConnectContext session) {
         QueryRelation queryRelation = insertStmt.getQueryStatement().getQueryRelation();
         List<ColumnRefOperator> outputColumns = new ArrayList<>();
@@ -259,6 +293,8 @@ public class InsertPlanner {
             outputBaseSchema = targetTable.getBaseSchema();
             outputFullSchema = targetTable.getFullSchema();
         }
+
+        refreshExternalTable(insertStmt.getQueryStatement(), session);
 
         //1. Process the literal value of the insert values type and cast it into the type of the target table
         if (queryRelation instanceof ValuesRelation) {
@@ -383,7 +419,11 @@ public class InsertPlanner {
                         forceReplicatedStorage ? true : olapTable.enableReplicatedStorage(),
                         nullExprInAutoIncrement, enableAutomaticPartition, session.getCurrentWarehouseId());
                 if (insertStmt.usePartialUpdate()) {
-                    ((OlapTableSink) dataSink).setPartialUpdateMode(TPartialUpdateMode.AUTO_MODE);
+                    TPartialUpdateMode partialUpdateMode = TPartialUpdateMode.AUTO_MODE;
+                    if (checkIfUseColumnUpsertMode(session, insertStmt, olapTable)) {
+                        partialUpdateMode = TPartialUpdateMode.COLUMN_UPSERT_MODE;
+                    }
+                    ((OlapTableSink) dataSink).setPartialUpdateMode(partialUpdateMode);
                     if (insertStmt.autoIncrementPartialUpdate()) {
                         ((OlapTableSink) dataSink).setMissAutoIncrementColumn();
                     }
@@ -406,8 +446,10 @@ public class InsertPlanner {
                 Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(session, catalogDbTable.getCatalog(),
                         catalogDbTable.getDb());
                 try {
+                    Load.checkMergeCondition(insertStmt.getMergingCondition(), olapTable, outputFullSchema,
+                            ((OlapTableSink) dataSink).missAutoIncrementColumn());
                     olapTableSink.init(session.getExecutionId(), insertStmt.getTxnId(), db.getId(), session.getExecTimeout());
-                    olapTableSink.complete();
+                    olapTableSink.complete(insertStmt.getMergingCondition());
                 } catch (StarRocksException e) {
                     throw new SemanticException(e.getMessage());
                 }

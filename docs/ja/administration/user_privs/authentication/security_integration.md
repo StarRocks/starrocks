@@ -374,6 +374,14 @@ SHOW CREATE SECURITY INTEGRATION LDAP1；
 `ldap_bind_root_pwd` は SHOW CREATE SECURITY INTEGRATION が実行されたときにマスクされます。
 :::
 
+## セキュリティ統合によるStarRocksへの接続
+
+- LDAP経由でStarRocksに接続する方法については、[LDAP認証 - StarRocksへの接続](./ldap_authentication.md#mysql-クライアントから-ldap-で接続する)を参照してください。
+- JWT 経由で StarRocks に接続する方法については、[JSON Web Token 認証 - StarRocks への接続](./jwt_authentication.md#mysql-クライアントから-jwt-で接続する) を参照してください。
+- OAuth 2.0 経由で StarRocks に接続する方法については、[OAuth 2.0 認証 - StarRocks への接続](./oauth2_authentication.md#jdbc-クライアントからの-oauth-20-接続) を参照してください。
+
+DeepL.com（無料版）で翻訳しました。
+
 ## See also
 
 - StarRocks で LDAP を使用してユーザーを手動で認証する方法については、[LDAP 認証](./ldap_authentication.md) を参照してください。

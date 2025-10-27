@@ -541,6 +541,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
             // 5. generate insert stmt's exec plan, make thread local ctx existed
             try (ConnectContext.ScopeGuard guard = ctx.bindScope(); Timer ignored = Tracers.watchScope("MVRefreshPlanner")) {
+                ctx.getSessionVariable().setEnableInsertSelectExternalAutoRefresh(false); //already refreshed before
                 execPlan = StatementPlanner.planInsertStmt(locker, insertStmt, ctx);
             }
         } finally {
@@ -891,6 +892,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                     mvId, context.ctx.getDatabase()));
         }
         this.mv = (MaterializedView) table;
+        // refresh mv until mv is reloaded.
+        this.mv.waitForReloaded();
         // reinit the logger
         this.logger = MVTraceUtils.getLogger(mv, PartitionBasedMvRefreshProcessor.class);
 
@@ -1195,6 +1198,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         ctx.setStmtId(STMT_ID_GENERATOR.incrementAndGet());
         logger.info("[QueryId:{}] start to refresh mv in DML", ctx.getQueryId());
         try {
+            executor.addRunningQueryDetail(insertStmt);
             executor.handleDMLStmtWithProfile(execPlan, insertStmt);
         } catch (Exception e) {
             logger.warn("[QueryId:{}] refresh mv {} failed in DML", ctx.getQueryId(), e);
@@ -1202,6 +1206,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         } finally {
             logger.info("[QueryId:{}] finished to refresh mv in DML", ctx.getQueryId());
             auditAfterExec(mvContext, executor.getParsedStmt(), executor.getQueryStatisticsForAuditLog());
+            executor.addFinishedQueryDetail();
         }
     }
 

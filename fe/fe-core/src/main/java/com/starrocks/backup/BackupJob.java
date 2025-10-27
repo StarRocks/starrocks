@@ -74,6 +74,7 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -447,7 +448,7 @@ public class BackupJob extends AbstractJob {
 
     protected void prepareSnapshotTask(PhysicalPartition partition, Table tbl, Tablet tablet, MaterializedIndex index,
                                        long visibleVersion, int schemaHash) {
-        Replica replica = chooseReplica((LocalTablet) tablet, visibleVersion);
+        Replica replica = chooseReplica((LocalTablet) tablet, visibleVersion, schemaHash);
         if (replica == null) {
             status = new Status(ErrCode.COMMON_ERROR,
                     "failed to choose replica to make snapshot for tablet " + tablet.getId()
@@ -830,11 +831,12 @@ public class BackupJob extends AbstractJob {
     }
 
     /*
-     * Choose a replica whose version >= visibleVersion and dose not have failed version.
+     * Choose a replica whose status is OK.
      * Iterate replica order by replica id, the reason is to choose the same replica at each backup job.
      */
-    private Replica chooseReplica(LocalTablet tablet, long visibleVersion) {
+    private Replica chooseReplica(LocalTablet tablet, long visibleVersion, int schemaHash) {
         List<Long> replicaIds = Lists.newArrayList();
+        SystemInfoService infoService = globalStateMgr.getNodeMgr().getClusterInfo();
         for (Replica replica : tablet.getImmutableReplicas()) {
             replicaIds.add(replica.getId());
         }
@@ -842,7 +844,7 @@ public class BackupJob extends AbstractJob {
         Collections.sort(replicaIds);
         for (Long replicaId : replicaIds) {
             Replica replica = tablet.getReplicaById(replicaId);
-            if (replica.getLastFailedVersion() < 0 && (replica.getVersion() >= visibleVersion)) {
+            if (replica.computeReplicaStatus(infoService, visibleVersion, schemaHash) == Replica.ReplicaStatus.OK) {
                 return replica;
             }
         }

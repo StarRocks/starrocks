@@ -4,7 +4,7 @@ displayed_sidebar: docs
 
 # Load data using INSERT
 
-import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
+import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.mdx'
 
 This topic describes how to load data into StarRocks by using a SQL statement - INSERT.
 

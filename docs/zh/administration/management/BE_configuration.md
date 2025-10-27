@@ -3,11 +3,11 @@ displayed_sidebar: docs
 keywords: ['Canshu']
 ---
 
-import BEConfigMethod from '../../_assets/commonMarkdown/BE_config_method.md'
+import BEConfigMethod from '../../_assets/commonMarkdown/BE_config_method.mdx'
 
-import PostBEConfig from '../../_assets/commonMarkdown/BE_dynamic_note.md'
+import PostBEConfig from '../../_assets/commonMarkdown/BE_dynamic_note.mdx'
 
-import StaticBEConfigNote from '../../_assets/commonMarkdown/StaticBE_config_note.md'
+import StaticBEConfigNote from '../../_assets/commonMarkdown/StaticBE_config_note.mdx'
 
 # BE 配置项
 
@@ -4664,6 +4664,24 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 是否动态：是
 - 描述：存算分离集群下，是否允许 Vertical Compaction 任务在执行时缓存数据到本地磁盘上。`true` 表示启用，`false` 表示不启用。
 - 引入版本：v3.1.7, v3.2.3
+
+##### lake_clear_corrupted_cache_meta
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群下，是否允许自动清理损坏的元数据缓存。
+- 引入版本：v3.3
+
+##### lake_clear_corrupted_cache_data
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群下，是否允许自动清理损坏的数据缓存。
+- 引入版本：v3.4
 
 <!--
 ##### dictionary_cache_refresh_timeout_ms

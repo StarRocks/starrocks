@@ -44,16 +44,18 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.function.Supplier;
 
 public class CachingMvPlanContextBuilder {
     private static final Logger LOG = LogManager.getLogger(CachingMvPlanContextBuilder.class);
 
     private static final CachingMvPlanContextBuilder INSTANCE = new CachingMvPlanContextBuilder();
 
-    private static final Executor MV_PLAN_CACHE_EXECUTOR = Executors.newFixedThreadPool(
+    private static final ExecutorService MV_PLAN_CACHE_EXECUTOR = Executors.newFixedThreadPool(
             Config.mv_plan_cache_thread_pool_size,
             new ThreadFactoryBuilder().setDaemon(true).setNameFormat("mv-plan-cache-%d").build());
 
@@ -377,5 +379,23 @@ public class CachingMvPlanContextBuilder {
             keys.add(cacheKey);
         }
         return keys;
+    }
+
+    /**
+     * Submit an async task to be executed in MV plan cache executor.
+     * @param taskName: the name of the task.
+     * @param task: the task to be executed.
+     */
+    public static void submitAsyncTask(String taskName, Supplier<Void> task) {
+        CompletableFuture<?> future = CompletableFuture.supplyAsync(task, MV_PLAN_CACHE_EXECUTOR);
+        long startTime = System.currentTimeMillis();
+        future.whenComplete((result, e) -> {
+            long duration = System.currentTimeMillis() - startTime;
+            if (e == null) {
+                LOG.info("async task {} finished successfully, cost: {}ms", taskName, duration);
+            } else {
+                LOG.warn("async task {} failed: {}, cost: {}ms", taskName, e.getMessage(), duration, e);
+            }
+        });
     }
 }

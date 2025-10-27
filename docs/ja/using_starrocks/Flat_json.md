@@ -47,6 +47,19 @@ Flat JSON の核心原理は、ロード中に JSON データを検出し、JSON
 
 上記の JSON データをロードする際、フィールド `a` と `b` はほとんどの JSON データに存在し、類似のデータ型（どちらも INT）を持っています。したがって、フィールド `a` と `b` のデータは JSON から抽出され、2 つの INT 列として別々に保存されます。これらの 2 つの列がクエリで使用されるとき、追加の JSON フィールドを処理することなくデータを直接読み取ることができ、JSON 構造を処理する計算オーバーヘッドを削減します。
 
+## Flat JSON 機能の有効化
+
+v3.4 以降では、Flat JSON はデフォルトでグローバルに有効化されています。v3.4 より前のバージョンでは、手動で有効にする必要があります。
+
+### v3.4 より前のバージョンで有効にする
+
+1. BE 設定を変更します：`enable_json_flat` はバージョン 3.4 以前はデフォルトで `false` です。変更方法については、[Configure BE parameters](../administration/management/BE_configuration.md#configure-be-parameters) を参照してください。
+2. FE プルーニング機能を有効化します：
+
+   ```SQL
+   SET GLOBAL cbo_prune_json_subfield = true;
+   ```
+
 ## Flat JSON が有効かどうかの確認
 
 データをロードした後、対応する列の抽出されたサブカラムをクエリできます：
@@ -148,6 +161,28 @@ FROM <table_name>[_META_];
       - JsonFlattern: 0ns
    ```
 
+## 関連するセッション変数と設定
+
+### セッション変数
+
+- `cbo_json_v2_rewrite`（デフォルト: true）: JSON v2 のパス書き換えを有効化し、`get_json_*` などの関数を Flat JSON のサブカラムへの直接アクセスに書き換えて、述語プッシュダウンやカラムプルーニングを有効にします。
+- `cbo_json_v2_dict_opt`（デフォルト: true）: パス書き換えで生成された Flat JSON の文字列サブカラムに対して、低カーディナリティ辞書最適化を有効にし、文字列式、GROUP BY、JOIN の高速化に寄与します。
+
+例：
+
+```SQL
+SET cbo_json_v2_rewrite = true;
+SET cbo_json_v2_dict_opt = true;
+```
+
+### BE 設定
+
+- [json_flat_null_factor](../administration/management/BE_configuration.md#json_flat_null_factor)
+- [json_flat_column_max](../administration/management/BE_configuration.md#json_flat_column_max)
+- [json_flat_sparsity_factor](../administration/management/BE_configuration.md#json_flat_sparsity_factor)
+- [enable_compaction_flat_json](../administration/management/BE_configuration.md#enable_compaction_flat_json)
+- [enable_lazy_dynamic_flat_json](../administration/management/BE_configuration.md#enable_lazy_dynamic_flat_json)
+
 ## 機能の制限
 
 - StarRocks のすべてのテーブルタイプは Flat JSON をサポートします。
@@ -169,31 +204,3 @@ StarRocks 共有なしクラスタは v3.3.0 から Flat JSON をサポートし
 - Flat JSON によって抽出された結果は、共通カラムと予約フィールドカラムに分けられます。すべての JSON スキーマが一致する場合、予約フィールドカラムは生成されません。
 - Flat JSON は共通フィールドカラムと予約フィールドカラムのみを保存し、元の JSON データを追加で保存しません。
 - データをロードする際、共通フィールドは自動的に BIGINT/LARGEINT/DOUBLE/STRING として型推論されます。認識されない型は JSON 型として推論され、予約フィールドカラムは JSON 型として保存されます。
-
-## Flat JSON 機能の有効化（共有なしクラスタのみサポート）
-
-1. テーブル作成時に、`flat_json.enable` プロパティをテーブルパラメータに設定できます。詳細は [Table Creation](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) を参照してください。
-   Flat JSON 機能は、テーブルプロパティを直接変更することで有効化または再設定することもできます。例：
-   ```SQL
-   alter table t1 set ("flat_json.enable" = "true")
-   
-   alter table t1 set ("flat_json.null.factor" = "0.1")
-   
-   alter table t1 set ("flat_json.sparsity.factor" = "0.8")
-   
-   alter table t1 set ("flat_json.column.max" = "90")
-   ```
-2. FE プルーニング機能を有効化します：`SET GLOBAL cbo_prune_json_subfield = true;`
-
-## Flat JSON 機能の有効化（バージョン 3.4 以前）
-
-1. BE 設定を変更します：`enable_json_flat` はバージョン 3.4 以前はデフォルトで `false` です。変更方法については、[Configure BE parameters](../administration/management/BE_configuration.md#configure-be-parameters) を参照してください。
-2. FE プルーニング機能を有効化します：`SET GLOBAL cbo_prune_json_subfield = true;`
-
-## その他のオプションの BE 設定
-
-- [json_flat_null_factor](../administration/management/BE_configuration.md#json_flat_null_factor)
-- [json_flat_column_max](../administration/management/BE_configuration.md#json_flat_column_max)
-- [json_flat_sparsity_factor](../administration/management/BE_configuration.md#json_flat_sparsity_factor)
-- [enable_compaction_flat_json](../administration/management/BE_configuration.md#enable_compaction_flat_json)
-- [enable_lazy_dynamic_flat_json](../administration/management/BE_configuration.md#enable_lazy_dynamic_flat_json)

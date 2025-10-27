@@ -393,7 +393,9 @@ public class VectorIndexTest extends PlanTestBase {
                 "  |  5 <-> [11: cast, DOUBLE, true] + 1.0\n" +
                 "  |  6 <-> [11: cast, DOUBLE, true] + 2.0\n" +
                 "  |  7 <-> cast([10: __vector_approx_cosine_similarity, FLOAT, false] as VARCHAR(65533))\n" +
-                "  |  8 <-> cast(approx_cosine_similarity[(cast([1.1,2.2,3.3,4.4,5.5] as ARRAY<FLOAT>), [3: c2, ARRAY<FLOAT>, true]); args: INVALID_TYPE,INVALID_TYPE; result: FLOAT; args nullable: true; result nullable: true] as DOUBLE) + 2.0\n" +
+                "  |  8 <-> cast(approx_cosine_similarity[([1.1,2.2,3.3,4.4,5.5], [3: c2, ARRAY<FLOAT>, true]);" +
+                " args: INVALID_TYPE,INVALID_TYPE; result: FLOAT; args nullable: true; result nullable: true] " +
+                "as DOUBLE) + 2.0\n" +
                 "  |  9 <-> [10: __vector_approx_cosine_similarity, FLOAT, false]\n" +
                 "  |  common expressions:\n" +
                 "  |  11 <-> cast([10: __vector_approx_cosine_similarity, FLOAT, false] as DOUBLE)\n" +
@@ -402,7 +404,8 @@ public class VectorIndexTest extends PlanTestBase {
                 "  0:OlapScanNode\n" +
                 "     table: test_cosine, rollup: test_cosine\n" +
                 "     VECTORINDEX: ON\n" +
-                "          IVFPQ: OFF, Distance Column: <10:__vector_approx_cosine_similarity>, LimitK: 10, Order: DESC, Query Vector: [1.1, 2.2, 3.3, 4.4, 5.5], Predicate Range: -1.0\n" +
+                "          IVFPQ: OFF, Distance Column: <10:__vector_approx_cosine_similarity>, " +
+                "LimitK: 10, Order: DESC, Query Vector: [1.1, 2.2, 3.3, 4.4, 5.5], Predicate Range: -1.0\n" +
                 "     preAggregation: on\n" +
                 "     partitionsRatio=0/1, tabletsRatio=0/0\n" +
                 "     tabletList=\n" +
@@ -411,7 +414,7 @@ public class VectorIndexTest extends PlanTestBase {
                 "     Pruned type: 3 <-> [ARRAY<FLOAT>]\n" +
                 "     cardinality: 1\n" +
                 "     probe runtime filters:\n" +
-                "     - filter_id = 0, probe_expr = (10: __vector_approx_cosine_similarity)");
+                "     - filter_id = 0, probe_expr = (10: __vector_approx_cosine_similarity)\n");
     }
 
     @Test
@@ -520,7 +523,8 @@ public class VectorIndexTest extends PlanTestBase {
                 "  1:Project\n" +
                 "  |  output columns:\n" +
                 "  |  2 <-> [2: c1, ARRAY<FLOAT>, false]\n" +
-                "  |  4 <-> approx_l2_distance[(cast([1.1,2.2,3.3,4.4] as ARRAY<FLOAT>), [2: c1, ARRAY<FLOAT>, false]); args: INVALID_TYPE,INVALID_TYPE; result: FLOAT; args nullable: true; result nullable: true]\n" +
+                "  |  4 <-> approx_l2_distance[([1.1,2.2,3.3,4.4], [2: c1, ARRAY<FLOAT>, false]); " +
+                "args: INVALID_TYPE,INVALID_TYPE; result: FLOAT; args nullable: true; result nullable: true]\n" +
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  0:OlapScanNode\n" +

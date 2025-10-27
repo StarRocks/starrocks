@@ -80,7 +80,7 @@ public class TaskRun implements Comparable<TaskRun> {
     // to another and must be only set specifically for each run but cannot be extended from the last task run.
     // eg: `FORCE` is only allowed to set in the first task run and cannot be copied into the following task run.
     public static final Set<String> MV_UNCOPYABLE_PROPERTIES = ImmutableSet.of(
-            PARTITION_START, PARTITION_END, PARTITION_VALUES, FORCE);
+            PARTITION_START, PARTITION_END, PARTITION_VALUES);
     // If there are many pending mv task runs, we can merge some of them by comparing the properties, those properties that are
     // used to check equality of task runs and we can ignore the other properties.
     // eg:
@@ -343,6 +343,8 @@ public class TaskRun implements Comparable<TaskRun> {
             } catch (DdlException e) {
                 // not session variable
                 taskRunContextProperties.put(key, properties.get(key));
+                // FIXME: it's too hack, don't pollute the session when setting variables
+                runCtx.getState().resetError();
             }
         }
         // set warehouse

@@ -36,8 +36,13 @@ import java.util.Set;
 public abstract class StarRocksTestBase {
     protected static final Logger LOG = LogManager.getLogger(StarRocksTestBase.class);
 
+    // Whether print log to system out
+    protected static boolean isOutputSystemOut = false;
+    // Whether output trace log by default
+    protected static boolean isOutputTraceLog = false;
+
     // StarRocksAssert is a class that provides methods to interact with StarRocks.
-    protected static StarRocksAssert starRocksAssert;
+    public static StarRocksAssert starRocksAssert;
     // existedTables is a set that contains all tables that have been created.
     protected static Set<Table> existedTables = Sets.newHashSet();
 
@@ -64,7 +69,9 @@ public abstract class StarRocksTestBase {
         String currentDb = starRocksAssert.getCtx().getDatabase();
         if (StringUtils.isNotEmpty(currentDb)) {
             Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(currentDb);
-            tables.addAll(ListUtils.emptyIfNull(testDb.getTables()));
+            if (testDb != null) {
+                tables.addAll(ListUtils.emptyIfNull(testDb.getTables()));
+            }
         }
     }
 

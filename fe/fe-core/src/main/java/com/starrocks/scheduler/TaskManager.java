@@ -58,6 +58,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.IOException;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -150,25 +151,6 @@ public class TaskManager implements MemoryTrackable {
         }
     }
 
-    @VisibleForTesting
-    static long getInitialDelayTime(long periodSeconds, LocalDateTime startTime, LocalDateTime scheduleTime) {
-        Duration duration = Duration.between(scheduleTime, startTime);
-        long initialDelay = duration.getSeconds();
-        // if startTime < now, start scheduling from the next period
-        if (initialDelay < 0) {
-            // if schedule time is not a complete second, add extra 1 second to avoid less than expect scheduler time.
-            // eg:
-            //  Register scheduler, task:mv-271809, initialDay:22, periodSeconds:60, startTime:2023-12-29T17:50,
-            //  scheduleTime:2024-01-30T15:27:37.342356010
-            // Before:schedule at : Hour:MINUTE:59
-            // After: schedule at : HOUR:MINUTE:00
-            int extra = scheduleTime.getNano() > 0 ? 1 : 0;
-            return ((initialDelay % periodSeconds) + periodSeconds + extra) % periodSeconds;
-        } else {
-            return initialDelay;
-        }
-    }
-
     private void clearUnfinishedTaskRun() {
         if (!taskRunManager.tryTaskRunLock()) {
             return;
@@ -244,6 +226,7 @@ public class TaskManager implements MemoryTrackable {
     }
 
     private boolean stopScheduler(String taskName) {
+        LOG.info("stop scheduler for task [{}]", taskName);
         Task task = nameToTaskMap.get(taskName);
         if (task.getType() != Constants.TaskType.PERIODICAL) {
             return false;
@@ -303,6 +286,8 @@ public class TaskManager implements MemoryTrackable {
         if (task == null) {
             return new SubmitResult(null, SubmitResult.SubmitStatus.FAILED);
         }
+        // set the last schedule time
+        task.setLastScheduleTime(TimeUtils.getEpochSeconds());
         if (option.getIsSync()) {
             return executeTaskSync(task, option);
         } else {
@@ -458,17 +443,85 @@ public class TaskManager implements MemoryTrackable {
         }
     }
 
-    private void registerScheduler(Task task) {
-        LocalDateTime scheduleTime = LocalDateTime.now();
+    @VisibleForTesting
+    static long getInitialDelayTime(long periodSeconds,
+                                    LocalDateTime taskStartTime,
+                                    LocalDateTime currentDateTime) {
+        if  (currentDateTime == null || taskStartTime == null) {
+            return 0;
+        }
+        Duration duration = Duration.between(currentDateTime, taskStartTime);
+        long initialDelay = duration.getSeconds();
+        // if startTime < now, start scheduling from the next period
+        if (initialDelay < 0) {
+            // if schedule time is not a complete second, add extra 1 second to avoid less than expect scheduler time.
+            // eg:
+            //  Register scheduler, task:mv-271809, initialDay:22, periodSeconds:60, startTime:2023-12-29T17:50,
+            //  scheduleTime:2024-01-30T15:27:37.342356010
+            // Before:schedule at : Hour:MINUTE:59
+            // After: schedule at : HOUR:MINUTE:00
+            int extra = currentDateTime.getNano() > 0 ? 1 : 0;
+            return ((initialDelay % periodSeconds) + periodSeconds + extra) % periodSeconds;
+        } else {
+            return initialDelay;
+        }
+    }
+
+    @VisibleForTesting
+    void registerScheduler(Task task) {
+        if (task.getType() != Constants.TaskType.PERIODICAL) {
+            return;
+        }
+
         TaskSchedule schedule = task.getSchedule();
-        LocalDateTime startTime = Utils.getDatetimeFromLong(schedule.getStartTime());
+        LocalDateTime taskStartTime = Utils.getDatetimeFromLong(schedule.getStartTime());
+        LocalDateTime currentDateTime = LocalDateTime.now();
+
+        LocalDateTime lastScheduleTime = null;
+        if (task.getLastScheduleTime() > 0) {
+            try {
+                lastScheduleTime = Utils.getDatetimeFromLong(task.getLastScheduleTime());
+            } catch (Exception e) {
+                LOG.warn("failed to parse last schedule time: {}", task.getLastScheduleTime(), e);
+            }
+        }
         long periodSeconds = TimeUtils.convertTimeUnitValueToSecond(schedule.getPeriod(), schedule.getTimeUnit());
-        long initialDelay = getInitialDelayTime(periodSeconds, startTime, scheduleTime);
+        // if fe restarts frequently, use currentDateTime and taskStartTime can always generate a time of the future
+        // which can cause the task never to be scheduled.
+        // so use lastScheduleTime to check if the last schedule + period is before current time to avoid this.
+        if (lastScheduleTime != null
+                && Constants.TaskSource.MV.equals(task.getSource())
+                && lastScheduleTime.isAfter(taskStartTime)
+                && lastScheduleTime.plusSeconds(periodSeconds).isBefore(currentDateTime)) {
+            // if the last schedule time + period is before current time, trigger immediately
+            LOG.info("After FE restarts, trigger periodical task immediately, task:{}, lastScheduleTime:{}, " +
+                            "periodSeconds:{}, taskStartTime:{}, currentTime:{}", task.getName(),
+                    lastScheduleTime, periodSeconds, taskStartTime, currentDateTime);
+            try {
+                task.setLastScheduleTime(TimeUtils.getEpochSeconds());
+                SubmitResult submitResult = executeTask(task.getName());
+                LOG.info("trigger periodical task immediately result: {}, task: {}", submitResult, task);
+            } catch (Exception e) {
+                LOG.warn("failed to execute periodical task immediately: {}", task, e);
+            }
+        }
+
+        long initialDelay = getInitialDelayTime(periodSeconds, taskStartTime, currentDateTime);
         LOG.info("Register scheduler, task:{}, initialDelay:{}, periodSeconds:{}, startTime:{}, scheduleTime:{}",
-                task.getName(), initialDelay, periodSeconds, startTime, scheduleTime);
+                task.getName(), initialDelay, periodSeconds, taskStartTime, currentDateTime);
+        // set task's next schedule time
+        task.setNextScheduleTime(currentDateTime.plusSeconds(initialDelay).toEpochSecond(ZoneOffset.UTC));
         ExecuteOption option = new ExecuteOption(Constants.TaskRunPriority.LOWEST.value(), true, task.getProperties());
-        ScheduledFuture<?> future = periodScheduler.scheduleAtFixedRate(() ->
-                executeTask(task.getName(), option), initialDelay, periodSeconds, TimeUnit.SECONDS);
+        ScheduledFuture<?> future = periodScheduler.scheduleAtFixedRate(() -> {
+            // ensure an execute task will not throw exception
+            try {
+                task.setLastScheduleTime(TimeUtils.getEpochSeconds());
+                task.setNextScheduleTime(TimeUtils.getEpochSeconds() + periodSeconds);
+                executeTask(task.getName(), option);
+            } catch (Throwable e) {
+                LOG.warn("failed to execute periodical task: {}", task, e);
+            }
+        }, initialDelay, periodSeconds, TimeUnit.SECONDS);
         periodFutureMap.put(task.getId(), future);
     }
 
@@ -886,6 +939,11 @@ public class TaskManager implements MemoryTrackable {
         // remove expired task run records
         taskRunManager.getTaskRunHistory().vacuum(archiveHistory);
 
+        // remove timeout task runs
+        removeTimeoutTaskRuns();
+    }
+
+    private void removeTimeoutTaskRuns() {
         // cancel long-running task runs to avoid resource waste
         long currentTimeMs = System.currentTimeMillis();
         Set<TaskRun> runningTaskRuns = taskRunManager.getTaskRunScheduler().getCopiedRunningTaskRuns();
@@ -905,7 +963,17 @@ public class TaskManager implements MemoryTrackable {
             // if the task run has been running for a long time, cancel it directly
             LOG.warn("task run [{}] has been running for a long time, cancel it," +
                     " created(ms):{}, timeout(s):{}", taskRun, taskRunCreatedTime, taskRunTimeout);
-            taskRunManager.killRunningTaskRun(taskRun, true);
+
+            if (!tryTaskLock()) {
+                continue;
+            }
+            try {
+                taskRunManager.killRunningTaskRun(taskRun, true);
+            } catch (Exception e) {
+                LOG.warn("failed to cancel long-running task run: {}", taskRun, e);
+            } finally {
+                taskUnlock();
+            }
         }
     }
 
@@ -945,4 +1013,8 @@ public class TaskManager implements MemoryTrackable {
         return nameToTaskMap.get(taskName);
     }
 
+    @VisibleForTesting
+    public Map<Long, ScheduledFuture<?>> getPeriodFutureMap() {
+        return periodFutureMap;
+    }
 }

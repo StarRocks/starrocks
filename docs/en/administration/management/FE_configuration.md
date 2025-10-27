@@ -2,13 +2,13 @@
 displayed_sidebar: docs
 ---
 
-import FEConfigMethod from '../../_assets/commonMarkdown/FE_config_method.md'
+import FEConfigMethod from '../../_assets/commonMarkdown/FE_config_method.mdx'
 
-import AdminSetFrontendNote from '../../_assets/commonMarkdown/FE_config_note.md'
+import AdminSetFrontendNote from '../../_assets/commonMarkdown/FE_config_note.mdx'
 
-import StaticFEConfigNote from '../../_assets/commonMarkdown/StaticFE_config_note.md'
+import StaticFEConfigNote from '../../_assets/commonMarkdown/StaticFE_config_note.mdx'
 
-import EditionSpecificFEItem from '../../_assets/commonMarkdown/Edition_Specific_FE_Item.md'
+import EditionSpecificFEItem from '../../_assets/commonMarkdown/Edition_Specific_FE_Item.mdx'
 
 # FE Configuration
 
@@ -2076,6 +2076,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The default timeout duration for a prepared transaction.
 - Introduced in: -
 
+##### finish_transaction_default_lock_timeout_ms
+
+- Default: 1000
+- Type: Int
+- Unit: MilliSeconds
+- Is mutable: Yes
+- Description: The default timeout for acquiring the db and table lock during finishing transaction.
+- Introduced in: v4.0.0, v3.5.8
+
 ##### spark_dpp_version
 
 - Default: 1.0.0
@@ -3768,6 +3777,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Is mutable: Yes
 - Description: The maximum number of jobs that can wait in a report queue. The report is about disk, task, and tablet information of BEs. If too many report jobs are piling up in a queue, OOM will occur.
 - Introduced in: -
+
+##### enable_collect_tablet_num_in_show_proc_backend_disk_path
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable the collection of tablet numbers for each disk in the `SHOW PROC /BACKENDS/{id}` command
+- Introduced in: v4.0.1, v3.5.8
 
 ##### enable_metric_calculator
 

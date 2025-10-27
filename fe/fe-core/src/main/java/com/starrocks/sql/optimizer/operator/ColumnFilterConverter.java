@@ -55,6 +55,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LargeInPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorEvaluator;
@@ -484,6 +485,12 @@ public class ColumnFilterConverter {
                 LOG.warn("build column filter failed.", e);
             }
             return predicate;
+        }
+
+        @Override
+        public ScalarOperator visitLargeInPredicate(LargeInPredicateOperator predicate,
+                                                    Map<String, PartitionColumnFilter> context) {
+            throw new UnsupportedOperationException("not support large in predicate in the ColumnFilterConverter");
         }
 
         @Override

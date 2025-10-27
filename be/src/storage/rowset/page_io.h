@@ -120,4 +120,8 @@ public:
                                            PageFooterPB* footer);
 };
 
+#if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
+Status drop_local_cache_data(const std::string& fname);
+#endif
+
 } // namespace starrocks
