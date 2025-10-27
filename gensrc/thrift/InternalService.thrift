@@ -352,8 +352,6 @@ struct TQueryOptions {
   200: optional bool enable_full_sort_use_german_string;
   // whether enable predicate column late materialization
   201: optional bool enable_predicate_col_late_materialize;
-  // whether enable predicate order sorting based on column type complexity
-  202: optional bool enable_predicate_order_sorting = false;
 }
 
 // A scan range plus the parameters needed to execute that scan.
