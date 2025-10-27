@@ -40,6 +40,8 @@ import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalExceptOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIntersectOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
@@ -214,6 +216,44 @@ public class CostModel {
                     inputStatistics.getComputeSize());
         }
 
+        /**
+         * For single-node execution, if the aggregation ratio is not high enough,
+         * we prefer a one-phase aggregation (with a local shuffle) rather than a two-phase aggregation.
+         */
+        private boolean preferLocalShuffleOnePhaseAgg(PhysicalHashAggregateOperator node, ExpressionContext context) {
+            ConnectContext ctx = ConnectContext.get();
+            SessionVariable sv = ctx.getSessionVariable();
+            if (!sv.isEnableLocalShuffleAgg()) {
+                return false;
+            }
+
+            if (!GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().isSingleBackendAndComputeNode()) {
+                return false;
+            }
+
+            if (node.getGroupBys().isEmpty()) {
+                return false;
+            }
+
+            // Only consider `OlapScan->[Project->]->Streaming Agg->Global Agg` is worse than OlapScan->[Project->]->Global Agg`.
+            Operator child = context.getChildOperator(0);
+            if (child instanceof LogicalProjectOperator || child instanceof PhysicalProjectOperator) {
+                if (context.getGroupExpression() == null) {
+                    return false;
+                }
+                GroupExpression childGroup = context.getGroupExpression().getInputs().get(0).getFirstLogicalExpression();
+                child = childGroup.getInputs().get(0).getFirstLogicalExpression().getOp();
+            }
+            if (!(child instanceof LogicalOlapScanOperator || child instanceof PhysicalOlapScanOperator)) {
+                return false;
+            }
+
+            // Prefer one-phase agg, if the aggregation ratio is not high enough.
+            Statistics statistics = context.getStatistics();
+            Statistics inputStatistics = context.getChildStatistics(0);
+            return statistics.getOutputRowCount() * 4 >= inputStatistics.getOutputRowCount();
+        }
+
         @Override
         public CostEstimate visitPhysicalHashAggregate(PhysicalHashAggregateOperator node, ExpressionContext context) {
             Optional<CostEstimate> cost;
@@ -233,7 +273,7 @@ public class CostModel {
 
             if (node.getDistinctColumnDataSkew() != null) {
                 factor = computeDataSkewPenaltyOfGroupByCountDistinct(node, inputStatistics);
-            } else if (node.isSplit() && node.getType().isLocal()) {
+            } else if (node.isSplit() && node.getType().isLocal() && !preferLocalShuffleOnePhaseAgg(node, context)) {
                 factor = 0.1;
             }
 
@@ -408,7 +448,6 @@ public class CostModel {
             double cpuCost = StatisticUtils.multiplyOutputSize(StatisticUtils.multiplyOutputSize(leftSize, rightSize),
                     EXECUTE_COST_PENALTY);
             double memCost = StatisticUtils.multiplyOutputSize(rightSize, EXECUTE_COST_PENALTY * 100D);
-
 
             if (join.getJoinType().isCrossJoin()) {
                 cpuCost = StatisticUtils.multiplyOutputSize(cpuCost, crossJoinCostPenalty);
