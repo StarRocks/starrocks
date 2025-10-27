@@ -119,7 +119,7 @@ Take the calculation of page UVs as an example.
 
 ## Global Dictionary
 
-Currently, Bitmap-based Count Distinct mechanism requires the input to be integer. If the user needs to use other data types as input to the Bitmap, then the user needs to build their own global dictionary to map other types of data (such as string types) to integer types. There are several ideas for building a global dictionary:
+Currently, the Bitmap-based Count Distinct mechanism requires the input to be an integer. If the user needs to use other data types as input to the Bitmap, then the user needs to build their own global dictionary to map other types of data (such as string types) to integer types. There are several ideas for building a global dictionary:
 
 ### Hive table-based Global Dictionary
 
