@@ -1,8 +1,4 @@
-<<<<<<< HEAD
--- name: test_transparent_mv_iceberg_part1
-=======
 -- name: test_transparent_mv_iceberg_part1 @slow
->>>>>>> d6a9f8d508 ([UT] [BugFix] Fix mv transparent mv related bugs (#63962))
 create external catalog mv_iceberg_${uuid0}
 properties
 (

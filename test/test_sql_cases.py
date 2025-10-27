@@ -106,8 +106,6 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
         for config in default_configs:
             sql = "ADMIN SET FRONTEND CONFIG (%s)" % config
             self.execute_sql(sql)
-<<<<<<< HEAD
-=======
 
     def _init_global_session_variables(self):
         """
@@ -120,7 +118,6 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
             sql = "SET %s;" % session_variable
             self.execute_sql(sql)
 
->>>>>>> 1785077e7b ([UT] Fix print_hit_materialized_views to ensure the result deterministic (#63862))
 
     @sql_annotation.ignore_timeout()
     def tearDown(self):
