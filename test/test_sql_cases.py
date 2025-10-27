@@ -118,6 +118,7 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
             sql = "SET %s;" % session_variable
             self.execute_sql(sql)
 
+
     @sql_annotation.ignore_timeout()
     def tearDown(self):
         """tear down"""

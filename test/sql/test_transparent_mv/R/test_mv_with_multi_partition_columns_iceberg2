@@ -526,6 +526,84 @@ SELECT * FROM mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_years order by l
 DROP MATERIALIZED VIEW test_years;
 -- result:
 -- !result
+CREATE MATERIALIZED VIEW test_years
+PARTITION BY (l_returnflag, l_linestatus, date_trunc('year', l_shipdate))
+REFRESH DEFERRED MANUAL
+PROPERTIES (
+	"replication_num" = "1",
+	"transparent_mv_rewrite_mode" = "transparent_or_error"
+)
+AS
+  SELECT * FROM mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_years;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW test_years PARTITION (('R', 'F', '2024-11-12 08:00:00')) WITH SYNC MODE;
+select sleep(3);
+-- result:
+1
+-- !result
+function: print_hit_materialized_views("SELECT * FROM test_years order by l_orderkey;")
+-- result:
+
+-- !result
+function: print_hit_materialized_views("SELECT * FROM test_years where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;")
+-- result:
+
+-- !result
+function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_years where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;")
+-- result:
+
+-- !result
+function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_years where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;")
+-- result:
+
+-- !result
+function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_years order by l_orderkey;")
+-- result:
+
+-- !result
+SELECT count(*) FROM test_years;
+-- result:
+3
+-- !result
+SELECT * FROM test_years order by l_orderkey;
+-- result:
+1	1001	5001	1	10.00	1000.00	0.05	0.08	2024-11-15 00:00:00	2024-11-20 00:00:00	DELIVER IN PERSON	AIR	Quick delivery required	2024-11-12 00:00:00	N	O
+2	1002	5002	2	20.00	2000.00	0.10	0.15	2024-11-16 00:00:00	2024-11-21 00:00:00	TAKE BACK RETURN	RAIL	Handle with care	2024-11-13 00:00:00	R	F
+3	1003	5003	3	30.00	3000.00	0.15	0.20	2024-11-17 00:00:00	2024-11-22 00:00:00	NONE	SHIP	Fragile item	2024-11-14 00:00:00	A	P
+-- !result
+SELECT * FROM test_years where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;
+-- result:
+2	1002	5002	2	20.00	2000.00	0.10	0.15	2024-11-16 00:00:00	2024-11-21 00:00:00	TAKE BACK RETURN	RAIL	Handle with care	2024-11-13 00:00:00	R	F
+-- !result
+SELECT * FROM test_years where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;
+-- result:
+2	1002	5002	2	20.00	2000.00	0.10	0.15	2024-11-16 00:00:00	2024-11-21 00:00:00	TAKE BACK RETURN	RAIL	Handle with care	2024-11-13 00:00:00	R	F
+3	1003	5003	3	30.00	3000.00	0.15	0.20	2024-11-17 00:00:00	2024-11-22 00:00:00	NONE	SHIP	Fragile item	2024-11-14 00:00:00	A	P
+-- !result
+REFRESH MATERIALIZED VIEW test_years WITH SYNC MODE;
+SELECT count(*) FROM test_years;
+-- result:
+3
+-- !result
+SELECT * FROM test_years order by l_orderkey;
+-- result:
+1	1001	5001	1	10.00	1000.00	0.05	0.08	2024-11-15 00:00:00	2024-11-20 00:00:00	DELIVER IN PERSON	AIR	Quick delivery required	2024-11-12 00:00:00	N	O
+2	1002	5002	2	20.00	2000.00	0.10	0.15	2024-11-16 00:00:00	2024-11-21 00:00:00	TAKE BACK RETURN	RAIL	Handle with care	2024-11-13 00:00:00	R	F
+3	1003	5003	3	30.00	3000.00	0.15	0.20	2024-11-17 00:00:00	2024-11-22 00:00:00	NONE	SHIP	Fragile item	2024-11-14 00:00:00	A	P
+-- !result
+SELECT * FROM test_years where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;
+-- result:
+2	1002	5002	2	20.00	2000.00	0.10	0.15	2024-11-16 00:00:00	2024-11-21 00:00:00	TAKE BACK RETURN	RAIL	Handle with care	2024-11-13 00:00:00	R	F
+-- !result
+SELECT * FROM test_years where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;
+-- result:
+2	1002	5002	2	20.00	2000.00	0.10	0.15	2024-11-16 00:00:00	2024-11-21 00:00:00	TAKE BACK RETURN	RAIL	Handle with care	2024-11-13 00:00:00	R	F
+3	1003	5003	3	30.00	3000.00	0.15	0.20	2024-11-17 00:00:00	2024-11-22 00:00:00	NONE	SHIP	Fragile item	2024-11-14 00:00:00	A	P
+-- !result
+DROP MATERIALIZED VIEW test_years;
+-- result:
+-- !result
 drop table mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_days;
 -- result:
 -- !result
