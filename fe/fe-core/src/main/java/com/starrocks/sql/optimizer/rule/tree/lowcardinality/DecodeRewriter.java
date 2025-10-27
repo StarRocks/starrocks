@@ -25,11 +25,7 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
-<<<<<<< HEAD
-=======
 import com.starrocks.qe.SessionVariable;
-import com.starrocks.sql.ast.expression.Expr;
->>>>>>> 7749457c70 ([Enhancement] Add limited support for global low-cardinality optimization in join (#63919))
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
