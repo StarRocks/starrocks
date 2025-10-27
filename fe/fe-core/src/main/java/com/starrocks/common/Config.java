@@ -2198,6 +2198,15 @@ public class Config extends ConfigBase {
     public static int dict_collect_thread_pool_size = 16;
 
     @ConfField
+    public static int dict_collect_queue_size = 4096;
+
+    // Dictionary Collection Rejection Policy
+    // ignore: ignore the task and print the log.
+    // queue: Queue until the task is consumed. The maximum length is dict_collect_queue_size.
+    @ConfField
+    public static String dict_collect_reject_policy = "ignore";
+
+    @ConfField
     public static int dict_collect_thread_pool_for_lake_size = 4;
 
     @ConfField
