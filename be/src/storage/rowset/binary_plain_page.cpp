@@ -380,22 +380,6 @@ Status BinaryPlainPageDecoder<Type>::read_by_rowids(const ordinal_t first_ordina
         size_t _size;
     };
 
-    Column* data_col;
-    if (column->is_nullable()) {
-        // This is NullableColumn, get its data_column
-        auto* nullable_col = down_cast<NullableColumn*>(column);
-        data_col = nullable_col->data_column().get();
-    } else {
-        data_col = column;
-    }
-
-    if (data_col->is_binary()) {
-        BinaryColumn* binary_col = down_cast<BinaryColumn*>(data_col);
-        binary_col->reserve(config::vector_chunk_size, _estimated_column_size);
-    } else {
-        LOG(INFO) << "BinaryPlainPageDecoder<>::data_col is not binary";
-    }
-
     SliceContainerAdaptor adaptor(slices, total);
     if (column->append_strings(adaptor)) {
         *count = total;

@@ -123,6 +123,7 @@ public:
     virtual Status read_with_filter(Column* column, const SparseRange<>& range,
                                     const std::vector<const ColumnPredicate*>& compound_and_predicates,
                                     uint8_t* selection, uint16_t* selected_idx, bool* data_filtered) = 0;
+    void reserve_col(size_t n, Column* column) { _data_decoder->reserve_col(n, column); }
 
 protected:
     uint32_t _page_index{0};
