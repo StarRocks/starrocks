@@ -1539,11 +1539,9 @@ build_simdutf() {
 build_tenann() {
     check_if_source_exist $TENANN_SOURCE
     rm -rf $TP_INSTALL_DIR/include/tenann
-    rm -rf $TP_INSTALL_DIR/lib/libtenann-bundle.a
-    rm -rf $TP_INSTALL_DIR/lib/libtenann-bundle-avx2.a
-    cp -r $TP_SOURCE_DIR/$TENANN_SOURCE/include/tenann $TP_INSTALL_DIR/include/tenann
-    cp -r $TP_SOURCE_DIR/$TENANN_SOURCE/lib/libtenann-bundle.a $TP_INSTALL_DIR/lib/
-    cp -r $TP_SOURCE_DIR/$TENANN_SOURCE/lib/libtenann-bundle-avx2.a $TP_INSTALL_DIR/lib/
+    rm -rf $TP_INSTALL_DIR/lib/libtenann-bundl*.a
+    cp -r $TP_SOURCE_DIR/$TENANN_SOURCE/include/tenann $TP_INSTALL_DIR/include/
+    cp -r $TP_SOURCE_DIR/$TENANN_SOURCE/lib/libtenann-bundl*.a $TP_INSTALL_DIR/lib/
 }
 
 build_icu() {
@@ -1750,11 +1748,12 @@ declare -a all_packages=(
     azure
     libdivide
     flamegraph
+    tenann
 )
 
 # Machine specific packages
 if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
-    all_packages+=(breakpad libdeflate tenann pprof)
+    all_packages+=(breakpad libdeflate pprof)
 fi
 
 # Initialize packages array - if none specified, build all
