@@ -65,17 +65,29 @@ public:
     }
 
     explicit BinaryColumnBase(const void* data, size_t length, Offsets offsets)
-            : _bytes(), _offsets(std::move(offsets)), _data(data), _length(length), _is_view(true), _immuable_container(*this) {}
+            : _bytes(),
+              _offsets(std::move(offsets)),
+              _data(data),
+              _length(length),
+              _is_view(true),
+              _immuable_container(*this) {}
 
     // NOTE: do *NOT* copy |_slices|
-    BinaryColumnBase(const BinaryColumnBase<T>& rhs) 
-            : _bytes(rhs._bytes), _offsets(rhs._offsets), _data(rhs._data), _length(rhs._length), _is_view(rhs._is_view),
+    BinaryColumnBase(const BinaryColumnBase<T>& rhs)
+            : _bytes(rhs._bytes),
+              _offsets(rhs._offsets),
+              _data(rhs._data),
+              _length(rhs._length),
+              _is_view(rhs._is_view),
               _immuable_container(*this) {}
 
     // NOTE: do *NOT* copy |_slices|
     BinaryColumnBase(BinaryColumnBase<T>&& rhs) noexcept
-            : _bytes(std::move(rhs._bytes)), _offsets(std::move(rhs._offsets)), 
-              _data(rhs._data), _length(rhs._length), _is_view(rhs._is_view),
+            : _bytes(std::move(rhs._bytes)),
+              _offsets(std::move(rhs._offsets)),
+              _data(rhs._data),
+              _length(rhs._length),
+              _is_view(rhs._is_view),
               _immuable_container(*this) {}
 
     BinaryColumnBase<T>& operator=(const BinaryColumnBase<T>& rhs) {
@@ -139,9 +151,9 @@ public:
 
     size_t type_size() const override { return sizeof(Slice); }
 
-    size_t byte_size() const override { 
+    size_t byte_size() const override {
         size_t data_size = _is_view ? _length : _bytes.size();
-        return data_size * sizeof(uint8_t) + _offsets.size() * sizeof(Offset); 
+        return data_size * sizeof(uint8_t) + _offsets.size() * sizeof(Offset);
     }
 
     size_t byte_size(size_t from, size_t size) const override {
@@ -367,11 +379,11 @@ public:
 
     const Bytes& get_bytes() const { return _bytes; }
 
-    const uint8_t* continuous_data() const override { 
+    const uint8_t* continuous_data() const override {
         if (_is_view) {
             return reinterpret_cast<const uint8_t*>(_data);
         } else {
-            return reinterpret_cast<const uint8_t*>(_bytes.data()); 
+            return reinterpret_cast<const uint8_t*>(_bytes.data());
         }
     }
 
