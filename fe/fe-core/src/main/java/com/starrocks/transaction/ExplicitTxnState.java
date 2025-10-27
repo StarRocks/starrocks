@@ -14,6 +14,7 @@
 
 package com.starrocks.transaction;
 
+import com.google.common.collect.Maps;
 import com.starrocks.sql.ast.DmlStmt;
 
 import java.util.ArrayList;
