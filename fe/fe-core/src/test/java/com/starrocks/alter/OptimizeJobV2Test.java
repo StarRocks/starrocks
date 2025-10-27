@@ -24,6 +24,7 @@ import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.ThreadUtil;
 import com.starrocks.scheduler.Constants;
@@ -37,6 +38,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
@@ -56,12 +58,25 @@ public class OptimizeJobV2Test extends DDLTestBase {
 
     private static final Logger LOG = LogManager.getLogger(OptimizeJobV2Test.class);
 
+    @BeforeAll
+    public static void beforeAll() {
+        // do nothing
+    }
+
     @BeforeEach
     public void setUp() throws Exception {
+        FeConstants.runningUnitTest = true;
+        Config.enable_new_publish_mechanism = false;
+        Config.tablet_sched_checker_interval_seconds = 100;
+        Config.tablet_sched_repair_delay_factor_second = 100;
+        Config.alter_scheduler_interval_millisecond = 10000;
+
+        super.beforeAll();
         super.setUp();
         String stmt = "alter table testTable7 distributed by hash(v1)";
         alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
         Config.enable_online_optimize_table = false;
+
     }
 
     @AfterEach
