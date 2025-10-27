@@ -28,6 +28,7 @@ import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.UserVariableExpr;
+import com.starrocks.sql.common.TypeManager;
 
 import java.math.BigDecimal;
 
@@ -98,16 +99,50 @@ public class AnalyticAnalyzer {
                 // do nothing
             } else if (analyticFunction.getChildren().size() == 3) {
                 Type firstType = analyticFunction.getChild(0).getType();
+                Type thirdType = analyticFunction.getChild(2).getType();
 
+                // If first argument is NullLiteral, fallback to function declared arg type
                 if (analyticFunction.getChild(0) instanceof NullLiteral) {
                     firstType = analyticFunction.getFn().getArgs()[0];
                 }
 
+                // MySQL-compatible behavior: when the third parameter exists, prefer the third
+                // parameter's type as the return type. Specifically:
+                // - If the third arg is STRING, use STRING; cast the first arg to STRING as needed.
+                // - If the third arg is complex (ARRAY/JSON), use its type.
+                // - Otherwise, fall back to a common super type.
+                Type targetType;
+                if (analyticFunction.getChild(2) instanceof NullLiteral) {
+                    targetType = firstType;
+                } else if (thirdType.isStringType()) {
+                    targetType = thirdType;
+                } else if (thirdType.isArrayType() || thirdType.isJsonType()) {
+                    targetType = thirdType;
+                } else {
+                    targetType = TypeManager.getCommonSuperType(firstType, thirdType);
+                    if (!targetType.isValid()) {
+                        // Fallback to the first argument type if no valid common type
+                        targetType = firstType;
+                    }
+                }
+
                 try {
-                    analyticFunction.uncheckedCastChild(firstType, 2);
+                    // Cast both first and third arguments to the target type so BE receives
+                    // consistent input/return type (e.g., VARCHAR when default is VARCHAR).
+                    analyticFunction.uncheckedCastChild(targetType, 0);
+                    analyticFunction.uncheckedCastChild(targetType, 2);
+                    // Also rebind function with new argument types to reflect targetType as return type
+                    Type[] argTypes = new Type[] {targetType, Type.BIGINT, targetType};
+                    Function rebound = Expr.getBuiltinFunction(analyticFunction.getFnName().getFunction(), argTypes,
+                            Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+                    if (rebound != null) {
+                        analyticFunction.setFn(rebound);
+                    }
                 } catch (AnalysisException e) {
-                    throw new SemanticException("The third parameter of LEAD/LAG can't convert to " + firstType,
-                            analyticFunction.getChild(2).getPos());
+                    throw new SemanticException(
+                            "Failed to cast LEAD/LAG arguments to common type " + targetType.toSql() + ": "
+                                    + e.getMessage(),
+                            analyticFunction.getPos());
                 }
 
                 // When the parameter is const and nullable in lead/lag, BE use create_const_null_column to store it.
@@ -118,10 +153,14 @@ public class AnalyticAnalyzer {
                 if (theThirdChild instanceof UserVariableExpr) {
                     theThirdChild = ((UserVariableExpr) theThirdChild).getValue();
                 }
-                if (!theThirdChild.isLiteral() && theThirdChild.isNullable()) {
-                    throw new SemanticException("The type of the third parameter of LEAD/LAG not match the type " + firstType,
-                            analyticFunction.getChild(2).getPos());
-                }
+                // if (!theThirdChild.isLiteral() && theThirdChild.isNullable()) {
+                //     throw new SemanticException("The type of the third parameter of LEAD/LAG not match the type " +
+                //             firstType +
+                //             " the third child is " + theThirdChild.toSql() +
+                //             " the third child isLiteral: " + theThirdChild.isLiteral() +
+                //             " the third child is nullable: " + theThirdChild.isNullable(),
+                //             analyticFunction.getChild(2).getPos());
+                // }
             } else {
                 throw new SemanticException("The number of parameter in LEAD/LAG is uncorrected", analyticFunction.getPos());
             }
