@@ -299,11 +299,7 @@ Status JsonFlatColumnIterator::get_row_ranges_by_zone_map(const std::vector<cons
                                                           const ColumnPredicate* del_predicate,
                                                           SparseRange<>* row_ranges, CompoundNodeType pred_relation,
                                                           const Range<>* src_range) {
-    if (src_range == nullptr) {
-        row_ranges->add({0, static_cast<rowid_t>(_reader->num_rows())});
-    } else {
-        row_ranges->add(*src_range);
-    }
+    row_ranges->add({0, static_cast<rowid_t>(_reader->num_rows())});
     return Status::OK();
 }
 
@@ -646,11 +642,7 @@ Status JsonMergeIterator::seek_to_ordinal(ordinal_t ord) {
 Status JsonMergeIterator::get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
                                                      const ColumnPredicate* del_predicate, SparseRange<>* row_ranges,
                                                      CompoundNodeType pred_relation, const Range<>* src_range) {
-    if (src_range == nullptr) {
-        row_ranges->add({0, static_cast<rowid_t>(_reader->num_rows())});
-    } else {
-        row_ranges->add(*src_range);
-    }
+    row_ranges->add({0, static_cast<rowid_t>(_reader->num_rows())});
     return Status::OK();
 }
 
