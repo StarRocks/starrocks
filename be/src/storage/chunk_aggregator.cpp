@@ -47,18 +47,6 @@ ChunkAggregator::ChunkAggregator(const starrocks::Schema* schema, uint32_t reser
     _is_eq.reserve(_reserve_rows);
     _selective_index.reserve(_reserve_rows);
     _aggregate_loops.reserve(_reserve_rows);
-
-    _column_aggregator.reserve(_num_fields);
-
-    // column aggregator
-    for (int i = 0; i < _key_fields; ++i) {
-        _column_aggregator.emplace_back(ColumnAggregatorFactory::create_key_column_aggregator(_schema->field(i)));
-    }
-    for (int i = _key_fields; i < _num_fields; ++i) {
-        _column_aggregator.emplace_back(ColumnAggregatorFactory::create_value_column_aggregator(_schema->field(i)));
-    }
-
-    aggregate_reset();
 }
 
 ChunkAggregator::ChunkAggregator(const Schema* schema, uint32_t max_aggregate_rows, double factor)
@@ -71,6 +59,40 @@ ChunkAggregator::ChunkAggregator(const Schema* schema, uint32_t reserve_rows, ui
 ChunkAggregator::ChunkAggregator(const Schema* schema, uint32_t max_aggregate_rows, double factor,
                                  bool is_vertical_merge, bool is_key)
         : ChunkAggregator(schema, max_aggregate_rows, max_aggregate_rows, factor, is_vertical_merge, is_key) {}
+
+Status ChunkAggregator::prepare() {
+    _column_aggregator.reserve(_num_fields);
+    // column aggregator
+    for (int i = 0; i < _key_fields; ++i) {
+        _column_aggregator.emplace_back(ColumnAggregatorFactory::create_key_column_aggregator(_schema->field(i)));
+    }
+    for (int i = _key_fields; i < _num_fields; ++i) {
+        ASSIGN_OR_RETURN(auto aggregator, ColumnAggregatorFactory::create_value_column_aggregator(_schema->field(i)));
+        _column_aggregator.emplace_back(std::move(aggregator));
+    }
+    return Status::OK();
+}
+
+StatusOr<std::unique_ptr<ChunkAggregator>> ChunkAggregator::create(const Schema* schema, uint32_t reserve_rows,
+                                                                   uint32_t max_aggregate_rows, double factor) {
+    auto aggregator = std::make_unique<ChunkAggregator>(schema, reserve_rows, max_aggregate_rows, factor);
+    RETURN_IF_ERROR(aggregator->prepare());
+    return std::move(aggregator);
+}
+
+StatusOr<std::unique_ptr<ChunkAggregator>> ChunkAggregator::create(const Schema* schema, uint32_t max_aggregate_rows,
+                                                                   double factor) {
+    auto aggregator = std::make_unique<ChunkAggregator>(schema, max_aggregate_rows, factor);
+    RETURN_IF_ERROR(aggregator->prepare());
+    return std::move(aggregator);
+}
+
+StatusOr<std::unique_ptr<ChunkAggregator>> ChunkAggregator::create(const Schema* schema, uint32_t max_aggregate_rows,
+                                                                   double factor, bool is_vertical_merge, bool is_key) {
+    auto aggregator = std::make_unique<ChunkAggregator>(schema, max_aggregate_rows, factor, is_vertical_merge, is_key);
+    RETURN_IF_ERROR(aggregator->prepare());
+    return std::move(aggregator);
+}
 
 bool ChunkAggregator::_row_equal(const Chunk* lhs, size_t m, const Chunk* rhs, size_t n) const {
     for (uint16_t i = 0; i < _key_fields; i++) {
