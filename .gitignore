@@ -29,8 +29,10 @@ custom_env.sh
 ut_dir
 log/
 fe_plugins/*/target
+fe/fe-core/pseudo_cluster_*
 fe_plugins/output
 fe/mocked
+fe/fe-core/pseudo_cluster_*
 fe/ut_ports
 fe/*/target
 fe/fe-core/gen
@@ -90,3 +92,4 @@ be/tags
 build/
 cmake-build-debug/
 CMakeLists.txt
+fe/fe-core/pseudo_cluster_*

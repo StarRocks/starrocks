@@ -105,7 +105,7 @@ public class IcebergCatalogProperties {
         this.icebergDeleteFileCacheMemoryUsageRatio = PropertyUtil.propertyAsDouble(
                     properties, ICEBERG_DELETE_FILE_CACHE_MEMORY_SIZE_RATIO, 0.1);
         this.icebergManifestCacheWithColumnStatistics = PropertyUtil.propertyAsBoolean(
-                properties, ICEBERG_MANIFEST_CACHE_WITH_COLUMN_STATISTICS, false);
+                properties, ICEBERG_MANIFEST_CACHE_WITH_COLUMN_STATISTICS, true);
         this.refreshIcebergManifestMinLength = PropertyUtil.propertyAsLong(properties, REFRESH_ICEBERG_MANIFEST_MIN_LENGTH,
                 2 * 1024 * 1024);
         this.enableCacheDataFileIdentifierColumnStatistics = PropertyUtil.propertyAsBoolean(properties,

@@ -192,6 +192,7 @@ public class AlterMaterializedViewTest extends MVTestBase  {
         starRocksAssert.withView("CREATE VIEW view1 as select v1, sum(v2) as k2 from t0 group by v1");
         starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW " + mvName +
                 "                DISTRIBUTED BY HASH(v1) BUCKETS 10\n" +
+                "                REFRESH DEFERRED ASYNC\n" +
                 "                PROPERTIES(\n" +
                 "                    \"replication_num\" = \"1\"\n" +
                 "                )\n" +

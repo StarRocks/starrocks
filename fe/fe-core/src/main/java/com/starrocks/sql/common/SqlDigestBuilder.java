@@ -18,6 +18,7 @@ import com.google.common.base.Joiner;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.InPredicate;
+import com.starrocks.analysis.LargeInPredicate;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.SlotRef;
@@ -54,6 +55,15 @@ public class SqlDigestBuilder {
                 strBuilder.append("(?)");
                 return strBuilder.toString();
             }
+        }
+
+        @Override
+        public String visitLargeInPredicate(LargeInPredicate node, Void context) {
+            StringBuilder strBuilder = new StringBuilder();
+            String notStr = (node.isNotIn()) ? "NOT " : "";
+            strBuilder.append(printWithParentheses(node.getCompareExpr())).append(" ").append(notStr).append("IN ");
+            strBuilder.append("(?)");
+            return strBuilder.toString();
         }
 
         @Override

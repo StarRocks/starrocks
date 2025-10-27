@@ -387,4 +387,107 @@ public class SetStmtTest {
             Assertions.assertEquals("Getting analyzing error. Detail message: Unknown catalog non_existent_catalog.", e.getMessage());;
         }
     }
+
+    @Test
+    public void testCboDisabledRules() {
+        {
+            SystemVariable setVar = new SystemVariable(SetType.SESSION, SessionVariable.CBO_DISABLED_RULES,
+                    new StringLiteral("TF_JOIN_COMMUTATIVITY"));
+            SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), ctx);
+            Assertions.assertEquals("TF_JOIN_COMMUTATIVITY", setVar.getResolvedExpression().getStringValue());
+        }
+
+        {
+            SystemVariable setVar = new SystemVariable(SetType.SESSION, SessionVariable.CBO_DISABLED_RULES,
+                    new StringLiteral("GP_PRUNE_COLUMNS"));
+            SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), ctx);
+            Assertions.assertEquals("GP_PRUNE_COLUMNS", setVar.getResolvedExpression().getStringValue());
+        }
+
+        {
+            SystemVariable setVar = new SystemVariable(SetType.SESSION, SessionVariable.CBO_DISABLED_RULES,
+                    new StringLiteral("TF_JOIN_COMMUTATIVITY,GP_PRUNE_COLUMNS,TF_PARTITION_PRUNE"));
+            SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), ctx);
+            Assertions.assertEquals("TF_JOIN_COMMUTATIVITY,GP_PRUNE_COLUMNS,TF_PARTITION_PRUNE",
+                    setVar.getResolvedExpression().getStringValue());
+        }
+
+        {
+            SystemVariable setVar = new SystemVariable(SetType.SESSION, SessionVariable.CBO_DISABLED_RULES,
+                    new StringLiteral(""));
+            SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), ctx);
+            Assertions.assertEquals("", setVar.getResolvedExpression().getStringValue());
+        }
+
+        {
+            SystemVariable setVar = new SystemVariable(SetType.SESSION, SessionVariable.CBO_DISABLED_RULES,
+                    new StringLiteral(" TF_JOIN_COMMUTATIVITY , GP_PRUNE_COLUMNS "));
+            SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), ctx);
+            Assertions.assertEquals(" TF_JOIN_COMMUTATIVITY , GP_PRUNE_COLUMNS ",
+                    setVar.getResolvedExpression().getStringValue());
+        }
+
+        {
+            SystemVariable setVar = new SystemVariable(SetType.SESSION, SessionVariable.CBO_DISABLED_RULES,
+                    new StringLiteral("INVALID_RULE_NAME"));
+            try {
+                SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), ctx);
+                Assertions.fail("should fail for unknown rule name");
+            } catch (SemanticException e) {
+                assertThat(e.getMessage(), containsString("Unknown rule name(s): INVALID_RULE_NAME"));
+            }
+        }
+
+        {
+            SystemVariable setVar = new SystemVariable(SetType.SESSION, SessionVariable.CBO_DISABLED_RULES,
+                    new StringLiteral("IMP_OLAP_LSCAN_TO_PSCAN"));
+            try {
+                SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), ctx);
+                Assertions.fail("should fail for non-TF/GP rule");
+            } catch (SemanticException e) {
+                assertThat(e.getMessage(), containsString("Only TF_ (Transformation) and GP_ (Group combination)" +
+                        " rules can be disabled"));
+                assertThat(e.getMessage(), containsString("IMP_OLAP_LSCAN_TO_PSCAN"));
+            }
+        }
+
+        {
+            SystemVariable setVar = new SystemVariable(SetType.SESSION, SessionVariable.CBO_DISABLED_RULES,
+                    new StringLiteral("TRANSFORMATION_RULES"));
+            try {
+                SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), ctx);
+                Assertions.fail("should fail for category marker");
+            } catch (SemanticException e) {
+                assertThat(e.getMessage(), containsString("Only TF_ (Transformation) and GP_ (Group combination)" +
+                        " rules can be disabled"));
+            }
+        }
+
+        {
+            SystemVariable setVar = new SystemVariable(SetType.SESSION, SessionVariable.CBO_DISABLED_RULES,
+                    new StringLiteral("TF_JOIN_COMMUTATIVITY,INVALID_RULE,GP_PRUNE_COLUMNS"));
+            try {
+                SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), ctx);
+                Assertions.fail("should fail when any rule is invalid");
+            } catch (SemanticException e) {
+                assertThat(e.getMessage(), containsString("Unknown rule name(s): INVALID_RULE"));
+            }
+        }
+
+        {
+            SystemVariable setVar = new SystemVariable(SetType.SESSION, SessionVariable.CBO_DISABLED_RULES,
+                    new StringLiteral("INVALID1,INVALID2,INVALID3"));
+            try {
+                SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), ctx);
+                Assertions.fail("should fail for multiple invalid rules");
+            } catch (SemanticException e) {
+                assertThat(e.getMessage(), containsString("Unknown rule name(s)"));
+                assertThat(e.getMessage(), containsString("INVALID1"));
+                assertThat(e.getMessage(), containsString("INVALID2"));
+                assertThat(e.getMessage(), containsString("INVALID3"));
+            }
+        }
+    }
+
+    
 }

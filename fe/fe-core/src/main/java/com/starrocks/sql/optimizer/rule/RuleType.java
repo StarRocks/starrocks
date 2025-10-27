@@ -214,6 +214,7 @@ public enum RuleType {
     TF_VECTOR_REWRITE_RULE,
     TF_HOIST_HEAVY_COST_UPON_TOPN,
     TF_OR_TO_UNION_ALL_JOIN,
+    TF_LARGE_IN_PREDICATE_TO_JOIN,
 
     // The following are implementation rules:
     IMPLEMENTATION_RULES,
@@ -246,6 +247,7 @@ public enum RuleType {
     IMP_ASSERT_ONE_ROW,
     IMP_ANALYTIC,
     IMP_VALUES,
+    IMP_RAW_VALUES,
     IMP_REPEAT,
     IMP_FILTER,
     IMP_TABLE_FUNCTION,

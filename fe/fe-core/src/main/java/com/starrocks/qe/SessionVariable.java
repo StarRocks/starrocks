@@ -46,6 +46,7 @@ import com.google.gson.ToNumberPolicy;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.CompressionUtils;
@@ -245,6 +246,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String MAX_PUSHDOWN_CONDITIONS_PER_COLUMN = "max_pushdown_conditions_per_column";
 
     public static final String ENABLE_LAMBDA_PUSHDOWN = "enable_lambda_pushdown";
+    
+    // Large IN predicate optimization: special fast path for queries with large IN constant lists.
+    // When enabled, IN predicates with many constants will be converted to a special streamlined format
+    // to avoid high overhead in FE parse/Analyzer/Planner/Deploy phases.
+    // LargeInPredicate will be transformed to Left semi/anti join for execution.
+    public static final String ENABLE_LARGE_IN_PREDICATE = "enable_large_in_predicate";
+    // Threshold for converting regular IN predicate to LargeInPredicate.
+    // When the number of constant elements in an IN predicate exceeds this threshold,
+    // it will be converted to LargeInPredicate for optimized processing.
+    public static final String LARGE_IN_PREDICATE_THRESHOLD = "large_in_predicate_threshold";
+
     // use new execution engine instead of the old one if enable_pipeline_engine is true,
     // the new execution engine split a fragment into pipelines, then create several drivers
     // from the pipeline for parallel executing, threads from global pool pick out the
@@ -389,6 +401,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_ENABLE_SINGLE_NODE_PREFER_TWO_STAGE_AGGREGATE =
             "cbo_enable_single_node_prefer_two_stage_aggregate";
 
+    public static final String CBO_DISABLED_RULES = "cbo_disabled_rules";
     public static final String CBO_PUSH_DOWN_DISTINCT_BELOW_WINDOW = "cbo_push_down_distinct_below_window";
     public static final String CBO_PUSH_DOWN_AGGREGATE = "cbo_push_down_aggregate";
     public static final String CBO_PUSH_DOWN_GROUPINGSET = "cbo_push_down_groupingset";
@@ -502,6 +515,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     // command, file
     public static final String TRACE_LOG_MODE = "trace_log_mode";
+    public static final String TRACE_LOG_LEVEL = "trace_log_level";
     public static final String JOIN_IMPLEMENTATION_MODE = "join_implementation_mode";
     public static final String JOIN_IMPLEMENTATION_MODE_V2 = "join_implementation_mode_v2";
 
@@ -754,6 +768,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_PLAN_VALIDATION = "enable_plan_validation";
 
+    public static final String ENABLE_OPTIMIZER_RULE_DEBUG = "enable_optimizer_rule_debug";
+
     public static final String ENABLE_STRICT_TYPE = "enable_strict_type";
 
     public static final String PARTIAL_UPDATE_MODE = "partial_update_mode";
@@ -976,6 +992,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_LOCAL_SHUFFLE_AGG)
     private boolean enableLocalShuffleAgg = true;
 
+    @VariableMgr.VarAttr(name = ENABLE_LARGE_IN_PREDICATE)
+    private boolean enableLargeInPredicate = true;
+
+    @VariableMgr.VarAttr(name = LARGE_IN_PREDICATE_THRESHOLD)
+    private int largeInPredicateThreshold = 100000;
+
     @VariableMgr.VarAttr(name = USE_COMPUTE_NODES)
     private int useComputeNodes = -1;
 
@@ -1075,6 +1097,20 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // Default sqlMode is ONLY_FULL_GROUP_BY
     @VariableMgr.VarAttr(name = SQL_MODE_STORAGE_NAME, alias = SQL_MODE, show = SQL_MODE)
     private long sqlMode = 32L;
+    
+    /**
+     * Comma-separated list of optimizer rule types to disable
+     * 
+     * This is used to temporarily disable specific optimizer rules when they cause query errors,
+     * allowing queries to complete successfully while the rule bug is being fixed.
+     * 
+     * Supports TF_ (Transformation rules) and GP_ (Group combination rules) rule types.
+     * 
+     * Example:
+     *   SET cbo_disabled_rules = 'TF_JOIN_COMMUTATIVITY,GP_PRUNE_COLUMNS';
+     */
+    @VariableMgr.VarAttr(name = CBO_DISABLED_RULES)
+    private String cboDisabledRules = "";
 
     // The specified resource group of this session
     @VariableMgr.VarAttr(name = RESOURCE_GROUP, flag = VariableMgr.SESSION_ONLY)
@@ -1642,6 +1678,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = TRACE_LOG_MODE, flag = VariableMgr.INVISIBLE)
     private String traceLogMode = "command";
 
+    // 0, 1, 2... : more detail logs will be printed with higher level
+    @VarAttr(name = TRACE_LOG_LEVEL, flag = VariableMgr.INVISIBLE)
+    private int traceLogLevel = 0;
+
     @VariableMgr.VarAttr(name = INTERPOLATE_PASSTHROUGH, flag = VariableMgr.INVISIBLE)
     private boolean interpolatePassthrough = true;
 
@@ -1940,6 +1980,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public String getTraceLogMode() {
         return traceLogMode;
+    }
+
+    public void setTraceLogLevel(int traceLogLevel) {
+        this.traceLogLevel = traceLogLevel;
+    }
+
+    public int getTraceLogLevel() {
+        return traceLogLevel;
     }
 
     public void setPartialUpdateMode(String mode) {
@@ -2330,6 +2378,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_PLAN_VALIDATION, flag = VariableMgr.INVISIBLE)
     private boolean enablePlanValidation = true;
+
+    @VarAttr(name = ENABLE_OPTIMIZER_RULE_DEBUG)
+    private boolean enableOptimizerRuleDebug = false;
 
     @VarAttr(name = SCAN_OR_TO_UNION_LIMIT, flag = VariableMgr.INVISIBLE)
     private int scanOrToUnionLimit = 4;
@@ -2782,6 +2833,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         distinctColumnBuckets = buckets;
     }
 
+    public boolean enableLargeInPredicate() {
+        return enableLargeInPredicate;
+    }
+
+    public void setEnableLargeInPredicate(boolean enableLargeInPredicate) {
+        this.enableLargeInPredicate = enableLargeInPredicate;
+    }
+
+    public int getLargeInPredicateThreshold() {
+        return largeInPredicateThreshold;
+    }
+
+    public void setLargeInPredicateThreshold(int largeInPredicateThreshold) {
+        this.largeInPredicateThreshold = largeInPredicateThreshold;
+    }
+
     public int getDistinctColumnBuckets() {
         return distinctColumnBuckets;
     }
@@ -3073,6 +3140,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setSqlMode(long sqlMode) {
         this.sqlMode = sqlMode;
+    }
+    
+    public String getCboDisabledRules() {
+        return cboDisabledRules;
+    }
+    
+    public void setCboDisabledRules(String rulesStr) {
+        this.cboDisabledRules = rulesStr;
     }
 
     public long getSqlSelectLimit() {
@@ -3552,6 +3627,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     public long getOptimizerExecuteTimeout() {
+        if (FeConstants.runningUnitTest) {
+            return 30_000;
+        }
         return optimizerExecuteTimeout;
     }
 
@@ -4564,6 +4642,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnablePlanValidation(boolean val) {
         this.enablePlanValidation = val;
+    }
+
+    public boolean enableOptimizerRuleDebug() {
+        return this.enableOptimizerRuleDebug;
+    }
+
+    public void setEnableOptimizerRuleDebug(boolean enableOptimizerRuleDebug) {
+        this.enableOptimizerRuleDebug = enableOptimizerRuleDebug;
     }
 
     public boolean isCboPruneSubfield() {

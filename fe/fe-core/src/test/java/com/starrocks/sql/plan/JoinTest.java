@@ -3333,5 +3333,29 @@ public class JoinTest extends PlanTestBase {
                 "  |    <slot 30> : if(29: expr, 'a', 'b')\n" +
                 "  |    <slot 31> : 30: if = 'b'");
     }
-
+    
+    @Test
+    public void testJoinWithMultiAnalytic() throws Exception {
+        FeConstants.runningUnitTest = true;
+        String query = "with cte0 as (\n" +
+                "    select max(v1) over (partition by v1 order by v2) mx, v1, v2, v3 from t0\n" +
+                "),\n" +
+                "cte1 as (\n" +
+                "    select l.mx g1, l.v1 g2, l.v2 g3, l.v3 g4, max(v5) over (partition by l.v1 order by l.v2) g5 from \n" +
+                "    cte0 l join [broadcast] t1 r on v1 = v4\n" +
+                ")\n" +
+                "select sum(g1),sum(g2), sum(g3), sum(g4), sum(g5) from cte1;";
+        String plan = getFragmentPlan(query);
+        assertContains(plan, "  8:ANALYTIC\n" +
+                "  |  functions: [, max(6: v5), ]\n" +
+                "  |  partition by: 1: v1\n" +
+                "  |  order by: 2: v2 ASC\n" +
+                "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
+                "  |  \n" +
+                "  7:SORT\n" +
+                "  |  order by: <slot 1> 1: v1 ASC, <slot 2> 2: v2 ASC\n" +
+                "  |  analytic partition by: 1: v1\n" +
+                "  |  offset: 0");
+        FeConstants.runningUnitTest = false;
+    }
 }
