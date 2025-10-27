@@ -1774,6 +1774,7 @@ public class MaterializedViewAnalyzer {
                                                     Map<TableName, Table> refTableNameTableMap,
                                                     Map<Integer, Expr> changedPartitionByExprs,
                                                     Map<Expr, Expr> partitionByExprToAdjustExprMap) {
+        // what if partitionByExpr is not slot ref, eg: date_trunc('day', dt)
         List<SlotRef> slotRefs = partitionByExpr.collectAllSlotRefs();
         if (slotRefs.size() != 1) {
             throw new SemanticException("Partition expr only can ref one slot refs:",
@@ -1844,7 +1845,7 @@ public class MaterializedViewAnalyzer {
                     originalPartitionByExpr.toSql());
         }
         SlotRef slotRef = slotRefs.get(0);
-        resolveRefToMVColumns(mvColumns, slotRef, mvTableName);
+        tryToResolveRefToMVColumns(mvColumns, slotRef, mvTableName);
         partitionByExprToAdjustExprMap.put(originalPartitionByExpr, adjustedPartitionByExpr);
     }
 
@@ -1852,7 +1853,7 @@ public class MaterializedViewAnalyzer {
      * For generated column, change its referred slot ref from original ref-base-table's output columns to
      * MV's output columns.
      */
-    public static void resolveRefToMVColumns(List<Column> columns, SlotRef slotRef, TableName mvTableName) {
+    public static void tryToResolveRefToMVColumns(List<Column> columns, SlotRef slotRef, TableName mvTableName) {
         Column mvPartitionColumn = null;
         int columnId = 0;
         for (Column column : columns) {
@@ -1863,8 +1864,8 @@ public class MaterializedViewAnalyzer {
             columnId++;
         }
         if (mvPartitionColumn == null) {
-            throw new SemanticException("Materialized view partition exp column:"
-                    + slotRef.getColumnName() + " is not found in query statement");
+            LOG.warn("Materialized view partition exp column:" + slotRef.getColumnName() + " is not found in query statement");
+            return;
         }
         SlotDescriptor slotDescriptor = new SlotDescriptor(new SlotId(columnId), slotRef.getColumnName(),
                 mvPartitionColumn.getType(), mvPartitionColumn.isAllowNull());
@@ -2012,10 +2013,12 @@ public class MaterializedViewAnalyzer {
         if (!MvUtils.isFuncCallExpr(partitionByExpr, FunctionSet.DATE_TRUNC)) {
             return null;
         }
+
         // why resolve slot ref to mv columns?
         // generated column should refer mv's defined column, but partitionByExpr is ref to base table's column,
         // so resolve slot ref to mv columns.
-        resolveRefToMVColumns(mvColumns, slotRef, mvTableName);
+        tryToResolveRefToMVColumns(mvColumns, slotRef, mvTableName);
+
         int zoneHourOffset = getIcebergPartitionColumnTimeZoneOffset(icebergTable, slotRef);
         return getIcebergAdjustPartitionExpr(partitionByExpr, slotRef, zoneHourOffset);
     }
@@ -2033,7 +2036,7 @@ public class MaterializedViewAnalyzer {
             // why resolve slot ref to mv columns?
             // generated column should refer mv's defined column, but partitionByExpr is ref to base table's column,
             // so resolve slot ref to mv columns.
-            resolveRefToMVColumns(mvColumns, slotRef, mvTableName);
+            tryToResolveRefToMVColumns(mvColumns, slotRef, mvTableName);
             return partitionByExpr;
         }
         return null;
