@@ -22,6 +22,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
+import com.starrocks.common.FeConstants;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
@@ -77,6 +78,7 @@ public class MaterializedViewTestBase extends PlanTestBase {
 
     @BeforeAll
     public static void beforeClass() throws Exception {
+        FeConstants.runningUnitTest = true;
         PlanTestBase.beforeClass();
 
         // set default config for async mvs

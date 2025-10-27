@@ -306,6 +306,14 @@ public class UtFrameUtils {
         if (CREATED_MIN_CLUSTER.get()) {
             return;
         }
+
+        // set some parameters to speedup test
+        FeConstants.runningUnitTest = true;
+        Config.tablet_sched_checker_interval_seconds = 1;
+        Config.tablet_sched_repair_delay_factor_second = 1;
+        Config.enable_new_publish_mechanism = true;
+        Config.alter_scheduler_interval_millisecond = 100;
+
         try {
             ThriftConnectionPool.beHeartbeatPool = new MockGenericPool.HeatBeatPool("heartbeat");
             ThriftConnectionPool.backendPool = new MockGenericPool.BackendThriftPool("backend");
