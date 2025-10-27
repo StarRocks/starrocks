@@ -260,6 +260,8 @@ public:
         return next_batch(range, dst);
     }
 
+    virtual void reserve_col(size_t n, Column* column) { column->reserve(n); }
+
 protected:
     ColumnIteratorOptions _opts;
 };

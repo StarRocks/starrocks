@@ -217,7 +217,7 @@ public:
         _parsed = true;
 
         uint32_t total_bytes = _offsets_pos;
-        _estimated_column_size = total_bytes / _num_elems * config::vector_chunk_size;
+        _estimated_row_size = _num_elems == 0 ? 0 : total_bytes / _num_elems;
 
         return Status::OK();
     }
@@ -253,7 +253,7 @@ public:
 
     EncodingTypePB encoding_type() const override { return PLAIN_ENCODING; }
 
-    size_t estimate_columns_size() const { return _estimated_column_size; }
+    size_t estimate_row_size() const { return _estimated_row_size; }
 
     Slice string_at_index(uint32_t idx) const {
         const uint32_t start_offset = offset(idx);
@@ -341,6 +341,22 @@ private:
                                 const std::vector<const ColumnPredicate*>& compound_and_predicates, uint8_t* null,
                                 uint8_t* selection, uint16_t* selected_idx);
 
+    void reserve_col(size_t n, Column* column) override {
+        Column* data_col;
+        if (column->is_nullable()) {
+            // This is NullableColumn, get its data_column
+            auto* nullable_col = down_cast<NullableColumn*>(column);
+            data_col = nullable_col->data_column().get();
+        } else {
+            data_col = column;
+        }
+
+        if (data_col->is_binary() && data_col->capacity() == 0) {
+            BinaryColumn* binary_col = down_cast<BinaryColumn*>(data_col);
+            binary_col->reserve(n, n * _estimated_row_size);
+        }
+    }
+
     Slice _data;
     bool _parsed;
 
@@ -351,7 +367,7 @@ private:
     // Index of the currently seeked element in the page.
     uint32_t _cur_idx;
 
-    size_t _estimated_column_size;
+    size_t _estimated_row_size;
 
     std::optional<std::vector<Slice>> _parsed_datas;
 };

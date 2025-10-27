@@ -2075,7 +2075,7 @@ StatusOr<size_t> SegmentIterator::_predicate_evaluate_late_materialize(vector<ro
         const auto* ordinals = down_cast<FixedLengthColumn<rowid_t>*>(rowid_column.get());
         ColumnPtr& col = chunk->get_column_by_id(current_column_id);
         current_columns.emplace_back(col);
-        col->reserve(ordinals->size());
+
         col->resize(0);
         {
             SCOPED_RAW_TIMER(&_opts.stats->late_materialize_ns);
@@ -2085,9 +2085,11 @@ StatusOr<size_t> SegmentIterator::_predicate_evaluate_late_materialize(vector<ro
             // otherwise will translate local dict value into global dict value
             DCHECK(_context->_column_ids_to_index[current_column_id] < _context->_is_dict_column.size());
             if (_context->_is_dict_column[_context->_column_ids_to_index[current_column_id]]) {
-                RETURN_IF_ERROR(_context->_column_ids_to_column_iterators[current_column_id]->fetch_dict_codes_by_rowid(
-                        *ordinals, col.get()));
+                ColumnIterator* cur_iter = _context->_column_ids_to_column_iterators[current_column_id];
+                cur_iter->reserve_col(chunk_size, col.get());
+                RETURN_IF_ERROR(cur_iter->fetch_dict_codes_by_rowid(*ordinals, col.get()));
             } else {
+                _column_decoders[current_column_id].reserve_col(chunk_size, col.get());
                 RETURN_IF_ERROR(_column_decoders[current_column_id].decode_values_by_rowid(*ordinals, col.get()));
             }
         }
