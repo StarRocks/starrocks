@@ -141,7 +141,15 @@ public class TransactionStmtExecutor {
                 }
             }
 
-            transactionState.addTableIdList(targetTable.getId());
+            if (!transactionState.getTableIdList().contains(targetTable.getId())) {
+                transactionState.addTableIdList(targetTable.getId());
+            }
+            // record modified table id in explicit txn state for later SELECT validation
+            explicitTxnState.addModifiedTableId(targetTable.getId());
+
+            for (TableName tableName : m.keySet()) {
+                explicitTxnState.setTableHasExplicitStmt(tableName.getTbl(), true);
+            }
 
             ExplicitTxnState.ExplicitTxnStateItem item =
                     load(database, targetTable, execPlan, dmlStmt, originStmt, context, coordinator);

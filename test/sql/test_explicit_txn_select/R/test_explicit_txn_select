@@ -1,0 +1,77 @@
+-- name: test_select_after_insert_same_table_should_fail
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t1(id int) primary key(id);
+-- result:
+-- !result
+create table t2(id int) primary key(id);
+-- result:
+-- !result
+begin;
+-- result:
+-- !result
+insert into t1 values(1);
+-- result:
+-- !result
+select * from t1;
+-- result:
+E: (5307, "Getting analyzing error. Detail message: SELECT cannot read table 't1' modified earlier in the same transaction.")
+-- !result
+commit;
+-- result:
+-- !result
+-- name: test_select_any_table_should_fail
+create database db_${uuid1};
+-- result:
+-- !result
+use db_${uuid1};
+-- result:
+-- !result
+create table t1(id int) primary key(id);
+-- result:
+-- !result
+create table t2(id int) primary key(id);
+-- result:
+-- !result
+begin;
+-- result:
+-- !result
+insert into t1 values(1);
+-- result:
+-- !result
+select * from t2;
+-- result:
+-- !result
+commit;
+-- result:
+-- !result
+-- name: test_set_then_dml_then_commit
+create database db_${uuid2};
+-- result:
+-- !result
+use db_${uuid2};
+-- result:
+-- !result
+create table t1(id int) primary key(id);
+-- result:
+-- !result
+begin;
+-- result:
+-- !result
+set query_timeout = 300;
+-- result:
+-- !result
+insert into t1 values(10);
+-- result:
+-- !result
+commit;
+-- result:
+-- !result
+select * from t1 order by id;
+-- result:
+10
+-- !result

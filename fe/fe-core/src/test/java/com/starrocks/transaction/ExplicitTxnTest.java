@@ -111,7 +111,7 @@ public class ExplicitTxnTest {
         MetricRepo.init();
         MysqlSerializer serializer = MysqlSerializer.newInstance();
         serializer.writeInt1(3);
-        serializer.writeEofString("select * from a");
+        serializer.writeEofString("select 1");
         ByteBuffer queryPacket = serializer.toByteBuffer();
         ByteBuffer finalQueryPacket1 = queryPacket;
         new MockUp<MysqlChannel>() {
@@ -128,8 +128,7 @@ public class ExplicitTxnTest {
         ConnectProcessor processor = new ConnectProcessor(context);
         processor.processOnce();
 
-        Assertions.assertTrue(context.getState().isError());
-        Assertions.assertEquals(ErrorCode.ERR_EXPLICIT_TXN_NOT_SUPPORT_STMT, context.getState().getErrorCode());
+        Assertions.assertNotEquals(ErrorCode.ERR_EXPLICIT_TXN_NOT_SUPPORT_STMT, context.getState().getErrorCode());
 
         serializer.reset();
         serializer.writeInt1(3);
