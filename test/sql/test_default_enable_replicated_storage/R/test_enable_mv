@@ -1,4 +1,4 @@
--- name: test_default_enable_mv @sequential
+-- name: test_default_enable_mv
 create database test_default_enable_mv;
 -- result:
 -- !result
@@ -11,7 +11,11 @@ admin set frontend config('enable_replicated_storage_as_default_engine'='true');
 create table t1(k int, v int not null) distributed by hash(k);
 -- result:
 -- !result
-create materialized view tvd distributed by hash(k) buckets 10 REFRESH ASYNC as select k, sum(v) from t1 group by k;
+create materialized view tvd distributed by hash(k) buckets 10 
+PROPERTIES (
+    "replication_num" = "1"
+)
+REFRESH ASYNC as select k, sum(v) from t1 group by k;
 -- result:
 -- !result
 show create materialized view tvd;
@@ -29,7 +33,11 @@ AS select k, sum(v) from t1 group by k;
 admin set frontend config('enable_replicated_storage_as_default_engine'='false');
 -- result:
 -- !result
-create materialized view tvb distributed by hash(k) buckets 10 REFRESH ASYNC as select k, sum(v) from t1 group by k;
+create materialized view tvb distributed by hash(k) buckets 10 
+PROPERTIES (
+    "replication_num" = "1"
+)
+REFRESH ASYNC as select k, sum(v) from t1 group by k;
 -- result:
 -- !result
 show create materialized view tvb;
@@ -39,7 +47,7 @@ DISTRIBUTED BY HASH(`k`) BUCKETS 10
 REFRESH ASYNC
 PROPERTIES (
 "replicated_storage" = "false",
-"replication_num" = "3",
+"replication_num" = "1",
 "storage_medium" = "HDD"
 )
 AS select k, sum(v) from t1 group by k;
