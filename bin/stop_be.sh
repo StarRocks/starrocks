@@ -86,6 +86,26 @@ find "${UDF_RUNTIME_DIR}" -maxdepth 1 -name 'pyworker*' -print0 | while IFS= rea
 done
 
 
+# Stop profile collection daemon first
+profile_pidfile=$STARROCKS_HOME/bin/collect_be_profile.pid
+if [ -f $profile_pidfile ]; then
+    profile_pid=`cat $profile_pidfile`
+    if kill -0 $profile_pid > /dev/null 2>&1; then
+        # Check if the process is actually a profile collection daemon
+        profile_comm=`ps -p $profile_pid -o comm= 2>/dev/null`
+        if [[ "$profile_comm" == *"collect_be_profile"* ]]; then
+            kill -9 $profile_pid > /dev/null 2>&1
+            rm -f $profile_pidfile
+            echo "Profile collection daemon stopped"
+        else
+            echo "WARNING: Process with PID $profile_pid is not a profile collection daemon (command: $profile_comm), skipping..."
+            rm -f $profile_pidfile
+        fi
+    else
+        rm -f $profile_pidfile
+    fi
+fi
+
 if [ -f $pidfile ]; then
     pid=`cat $pidfile`
     pidcomm=`ps -p $pid -o comm=`

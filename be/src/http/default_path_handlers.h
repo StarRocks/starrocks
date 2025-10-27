@@ -29,6 +29,8 @@ class MemTracker;
 // logs and configuration flags
 void add_default_path_handlers(WebPageHandler* web_page_handler, MemTracker* process_mem_tracker);
 
+void proc_profile_handler(const WebPageHandler::ArgumentMap& args, std::stringstream* output);
+
 class MemTrackerWebPageHandler {
 public:
     static void handle(MemTracker* mem_tracker, const WebPageHandler::ArgumentMap& args, std::stringstream* output);
