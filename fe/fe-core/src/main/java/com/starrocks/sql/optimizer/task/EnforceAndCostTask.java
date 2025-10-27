@@ -19,11 +19,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.HintNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
-<<<<<<< HEAD
-=======
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.HintNode;
->>>>>>> 9d2f47087a ([Enhancement] Relax rule for using local shuffle one-phase agg (#64450))
 import com.starrocks.sql.optimizer.ChildOutputPropertyGuarantor;
 import com.starrocks.sql.optimizer.Group;
 import com.starrocks.sql.optimizer.GroupExpression;
