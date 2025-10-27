@@ -917,7 +917,21 @@ under the License.
                             <goal>prepare-agent</goal>
                         </goals>
                         <configuration>
+<<<<<<< HEAD
                             <propertyName>jacocoArgLine</propertyName>
+=======
+                            <includes>
+                                <include>com/starrocks/**</include>
+                            </includes>
+                            <excludes>
+                                <exclude>com/starrocks/proto/**</exclude>
+                                <exclude>com/starrocks/rpc/**</exclude>
+                                <exclude>com/starrocks/server/**</exclude>
+                                <exclude>**/*$$JProtoBufClass</exclude>
+                                <exclude>**/*$$JProtoBuf*</exclude>
+                            </excludes>
+                            <append>true</append>
+>>>>>>> 0014637fe0 ([UT] Add FE UT timeout to avoid dead loop (#63631))
                         </configuration>
                     </execution>
                     <execution>
@@ -1008,6 +1022,7 @@ under the License.
                     <forkCount>${fe_ut_parallel}</forkCount>
                     <!-->not reuse forked jvm, so that each unit test will run in separate jvm. to avoid singleton confict<-->
                     <reuseForks>false</reuseForks>
+
                     <argLine>
                         -javaagent:${settings.localRepository}/com/github/hazendaz/jmockit/jmockit/1.49.4/jmockit-1.49.4.jar
                         -Xmx4096m
