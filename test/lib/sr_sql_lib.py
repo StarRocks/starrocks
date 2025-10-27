@@ -644,15 +644,21 @@ class StarrocksSQLApiLib(object):
     def use_database(self, db_name):
         return self.execute_sql("use %s" % db_name)
 
-    def create_database_and_table(self, database_name, table_name, table_sql_path=None, tolerate_exist=False):
+    def create_database_and_table(self, catalog_name, database_name, table_name, table_sql_path=None,
+                                  tolerate_exist=False):
         """
         create database, use database and create table
         Args:
+            catalog_name:     catalog
             database_name:    db
             table_name:       table
             table_sql_path:   sql dir
             tolerate_exist:   tolerate if not exists
         """
+        if catalog_name is not None:
+            set_catalog_res = self.execute_sql("set catalog %s" % catalog_name)
+            tools.assert_true(set_catalog_res["status"], "set catalog failed")
+
         # create database
         create_db_res = self.create_database(database_name, tolerate_exist=tolerate_exist)
         tools.assert_true(create_db_res["status"], "create database failed")
@@ -1564,7 +1570,7 @@ class StarrocksSQLApiLib(object):
 
         # create record table
         try:
-            self.create_database_and_table(T_R_DB, T_R_TABLE, "sql_framework", True)
+            self.create_database_and_table("default_catalog", T_R_DB, T_R_TABLE, "sql_framework", True)
         except AssertionError:
             self_print(f"Failed to create DB/Table to save the results, please check the env!", ColorEnum.RED)
             sys.exit(1)
