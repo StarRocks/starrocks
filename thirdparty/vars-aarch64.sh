@@ -39,12 +39,6 @@ HYPERSCAN_NAME="hyperscan-5.3.0.aarch64.tar.gz"
 HYPERSCAN_SOURCE="hyperscan-5.3.0.aarch64"
 HYPERSCAN_MD5SUM="ef337257bde6583242a739fab6fb161f"
 
-# async-profiler
-ASYNC_PROFILER_DOWNLOAD="https://github.com/async-profiler/async-profiler/releases/download/v4.0/async-profiler-4.0-linux-arm64.tar.gz"
-ASYNC_PROFILER_NAME="async-profiler-4.0-linux-arm64.tar.gz"
-ASYNC_PROFILER_SOURCE="async-profiler-4.0-linux-arm64"
-ASYNC_PROFILER_MD5SUM="588a42962cf925932615e4ce5a9daf9e"
-
 # jindosdk for Aliyun OSS
 JINDOSDK_DOWNLOAD="https://cdn-thirdparty.starrocks.com/jindosdk-4.6.8-linux-el7-aarch64.tar.gz"
 JINDOSDK_NAME="jindosdk-4.6.8-linux-el7-aarch64.tar.gz"
