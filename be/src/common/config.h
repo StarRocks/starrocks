@@ -1767,6 +1767,10 @@ CONF_mInt64(rf_branchless_ratio, "8");
 
 CONF_mInt32(big_query_sec, "1");
 
+// modules that code segments need to be mlocked, separated by commas
+// locked pages will not be swapped out
+CONF_Strings(sys_mlock_modules, "main,linux-vdso.so.1,libjemalloc.so.2,libc.so.6,libm.so.6,ld-linux-x86-64.so.2");
+
 CONF_mInt64(split_exchanger_buffer_chunk_num, "1000");
 
 // when to split hashmap/hashset into two level hashmap/hashset, negative number means use default value
