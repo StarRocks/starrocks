@@ -40,7 +40,7 @@ RUN apt-get update -y && \
 
 COPY --from=build-gcc $GCC_INSTALL_HOME $GCC_INSTALL_HOME
 
-RUN for bin in cpp gcc g++ gcc-ar gcc-nm gcov gcov-dump gcov-tool lto-dump; do \
+RUN for bin in cpp gcc g++ gcc-ar gcc-nm gcc-ranlib gcov gcov-dump gcov-tool lto-dump; do \
         update-alternatives --install /usr/bin/$bin $bin ${GCC_INSTALL_HOME}/bin/$bin 200; \
     done && \
     update-alternatives --set gcc ${GCC_INSTALL_HOME}/bin/gcc && \
