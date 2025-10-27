@@ -676,7 +676,7 @@ Status ColumnReader::_zone_map_filter(const std::vector<const ColumnPredicate*>&
 
     int32_t i = 0;
     int32_t end_page = num_pages;
-    if (src_range != nullptr) {
+    if (src_range != nullptr && src_range->end() != 0) {
         i = _ordinal_index->seek_at_or_before(src_range->begin()).page_index();
         end_page = _ordinal_index->seek_at_or_before(src_range->end() - 1).page_index();
         if (end_page + 1 <= num_pages) {
@@ -684,7 +684,7 @@ Status ColumnReader::_zone_map_filter(const std::vector<const ColumnPredicate*>&
         }
     }
 
-    for (i = 0; i < end_page; ++i) {
+    for (; i < end_page; ++i) {
         const ZoneMapPB& zm = zone_maps[i];
         ZoneMapDetail detail;
         RETURN_IF_ERROR(_parse_zone_map(type_info, zm, &detail));
