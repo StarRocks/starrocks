@@ -2218,6 +2218,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 引入版本：-
 -->
 
+##### flamegraph_tool_dir
+
+- 默认值：`${STARROCKS_HOME}/bin/flamegraph`
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：火焰图工具的目录，该目录应包含 pprof、stackcollapse-go.pl 和 flamegraph.pl 脚本，用于从性能分析数据生成火焰图。
+- 引入版本：-
+
 ##### enable_prefetch
 
 - 默认值：true

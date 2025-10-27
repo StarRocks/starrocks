@@ -1795,6 +1795,16 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: JIT コンパイルのための LRU キャッシュサイズ。0 より大きい場合、キャッシュの実際のサイズを表します。0 以下に設定されている場合、システムは `jit_lru_cache_size = min(mem_limit*0.01, 1GB)` の式を使用してキャッシュを適応的に設定します (ノードの `mem_limit` は 16 GB 以上でなければなりません)。
 - 導入バージョン: -
 
+##### flamegraph_tool_dir
+
+- デフォルト: `${STARROCKS_HOME}/bin/flamegraph`
+- タイプ: String
+- 単位: -
+- 可変: いいえ
+- 説明: フレームグラフツールのディレクトリ。このディレクトリには、プロファイルデータからフレームグラフを生成するための pprof、stackcollapse-go.pl、flamegraph.pl スクリプトが含まれている必要があります。
+- 導入バージョン: -
+
+
 ### 共有データ
 
 ##### starlet_port

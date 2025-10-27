@@ -2262,6 +2262,15 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Introduced in: -
 -->
 
+##### flamegraph_tool_dir
+
+- Default: `${STARROCKS_HOME}/bin/flamegraph`
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: Directory of the flamegraph tool, which should contain pprof, stackcollapse-go.pl, and flamegraph.pl scripts for generating flame graphs from profile data.
+- Introduced in: -
+
 ##### enable_prefetch
 
 - Default: true

@@ -1207,6 +1207,7 @@ install(FILES
     ${BASE_DIR}/../bin/stop_cn.sh
     ${BASE_DIR}/../bin/show_be_version.sh
     ${BASE_DIR}/../bin/meta_tool.sh
+    ${BASE_DIR}/../bin/collect_be_profile.sh
     PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE
     GROUP_READ GROUP_WRITE GROUP_EXECUTE
     WORLD_READ WORLD_EXECUTE
