@@ -21,10 +21,7 @@ import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.PartitionInfo;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
@@ -39,8 +36,6 @@ import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import mockit.Expectations;
-import mockit.Mocked;
 import org.apache.hadoop.util.Lists;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
@@ -98,6 +93,7 @@ public class MaterializedViewAnalyzerTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testMaterializedAnalyPaimonTable(@Mocked SlotRef slotRef, @Mocked PaimonTable table) {
         MaterializedViewAnalyzer.MaterializedViewAnalyzerVisitor materializedViewAnalyzerVisitor =
                 new MaterializedViewAnalyzer.MaterializedViewAnalyzerVisitor();
@@ -203,6 +199,8 @@ public class MaterializedViewAnalyzerTest {
     }
 
     @Test
+=======
+>>>>>>> 0014637fe0 ([UT] Add FE UT timeout to avoid dead loop (#63631))
     public void testCreateIcebergTable1() throws Exception {
         {
             String mvName = "iceberg_parttbl_mv1";

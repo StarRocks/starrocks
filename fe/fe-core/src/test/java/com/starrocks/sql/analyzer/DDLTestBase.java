@@ -17,11 +17,13 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.catalog.GlobalStateMgrTestUtil;
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 
 public class DDLTestBase {
@@ -30,17 +32,27 @@ public class DDLTestBase {
     protected static ConnectContext ctx;
     protected static StarRocksAssert starRocksAssert;
 
-    @BeforeEach
-    public void setUp() throws Exception {
+    @BeforeAll
+    public static void beforeAll() {
         UtFrameUtils.createMinStarRocksCluster();
         ctx = UtFrameUtils.createDefaultCtx();
+<<<<<<< HEAD
         analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), ctx);
+=======
+        starRocksAssert = new StarRocksAssert(ctx);
+>>>>>>> 0014637fe0 ([UT] Add FE UT timeout to avoid dead loop (#63631))
 
         FeConstants.runningUnitTest = true;
-        starRocksAssert = new StarRocksAssert(ctx);
+        Config.enable_new_publish_mechanism = false;
+        Config.tablet_sched_checker_interval_seconds = 10;
+        Config.tablet_sched_repair_delay_factor_second = 10;
+        Config.alter_scheduler_interval_millisecond = 1000;
+    }
+
+    @BeforeEach
+    public void setUp() throws Exception {
         starRocksAssert.withDatabase(GlobalStateMgrTestUtil.testDb1)
                 .useDatabase(GlobalStateMgrTestUtil.testDb1);
-
         starRocksAssert.withTable("CREATE TABLE `testTable1` (\n" +
                 "  `v1` bigint NULL COMMENT \"\",\n" +
                 "  `v2` bigint NULL COMMENT \"\",\n" +

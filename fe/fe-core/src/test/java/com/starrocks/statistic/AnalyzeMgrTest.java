@@ -21,6 +21,11 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.information.AnalyzeStatusSystemTable;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.FeConstants;
+import com.starrocks.common.util.UUIDUtil;
+>>>>>>> 0014637fe0 ([UT] Add FE UT timeout to avoid dead loop (#63631))
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.persist.OperationType;
 import com.starrocks.qe.ConnectContext;
@@ -58,6 +63,7 @@ public class AnalyzeMgrTest {
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
         ConnectorPlanTestBase.mockHiveCatalog(connectContext);
+        FeConstants.runningUnitTest = false;
     }
 
     @AfterAll

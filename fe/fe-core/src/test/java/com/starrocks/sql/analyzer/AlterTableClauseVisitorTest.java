@@ -19,19 +19,12 @@ import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.OptimizeClause;
 import com.starrocks.sql.parser.NodePosition;
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
 
 public class AlterTableClauseVisitorTest extends DDLTestBase {
-
-    @BeforeEach
-    public void beforeClass() throws Exception {
-        super.setUp();
-    }
-
     @Test
     public void testVisitOptimizeClause() {
 

@@ -32,6 +32,7 @@ import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.View;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.UUIDUtil;
@@ -128,6 +129,8 @@ public abstract class MVTestBase extends StarRocksTestBase {
 
     @BeforeAll
     public static void beforeClass() throws Exception {
+        FeConstants.runningUnitTest = true;
+
         CachingMvPlanContextBuilder.getInstance().rebuildCache();
         PseudoCluster.getOrCreateWithRandomPort(true, 1);
         GlobalStateMgr.getCurrentState().getTabletChecker().setInterval(100);
