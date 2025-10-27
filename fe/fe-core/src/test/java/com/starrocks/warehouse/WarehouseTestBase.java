@@ -20,20 +20,18 @@ import com.starrocks.utframe.StarRocksTestBase;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.BeforeAll;
 
 public abstract class WarehouseTestBase extends StarRocksTestBase {
-    @BeforeEach
-    public void before() throws Exception {
+    @BeforeAll
+    public static void beforeAll() throws Exception {
         new MockUp<RunMode>() {
             @Mock
             public RunMode getCurrentRunMode() {
                 return RunMode.SHARED_DATA;
             }
         };
-
         UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
         GlobalStateMgr.getCurrentState().getWarehouseMgr().initDefaultWarehouse();
-        super.before();
     }
 }
