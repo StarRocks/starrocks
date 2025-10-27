@@ -140,6 +140,8 @@ public:
 
     void set_page_handle(const std::shared_ptr<PageHandle>& page_handle) { _page_handle = page_handle; }
 
+    virtual void reserve_col(size_t n, Column* column) { column->reserve(n); }
+
 protected:
     std::shared_ptr<PageHandle> _page_handle;
 };
