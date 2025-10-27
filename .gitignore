@@ -40,6 +40,7 @@ fe/fe-common/.classpath
 fe/fe-core/src/main/java/com/starrocks/sql/parser/gen
 fe/fe-core/src/main/java/com/starrocks/builtins
 fe/fe-core/src/main/java/com/starrocks/common/Version.java
+fe/fe-core/*.log
 fe/fe-core/src/main/java/com/starrocks/proto
 fe/fe-core/src/main/java/com/starrocks/thrift
 fs_brokers/apache_hdfs_broker/src/main/resources/

@@ -73,6 +73,7 @@ class SelectStmtWithCaseWhenTest {
         starRocksAssert.withTable(createTbl2StmtStr);
         FeConstants.enablePruneEmptyOutputScan = false;
         FeConstants.setLengthForVarchar = false;
+        FeConstants.runningUnitTest = false;
     }
 
     @ParameterizedTest(name = "sql_{index}: {0}.")

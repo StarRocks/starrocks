@@ -226,10 +226,10 @@ public class RollupJobV2Test extends DDLTestBase {
         int maxRetry = 5;
         while (retryCount < maxRetry) {
             ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);
-            rollupJob.runRunningJob();
             if (rollupJob.getJobState() == AlterJobV2.JobState.FINISHED) {
                 break;
             }
+            rollupJob.runRunningJob();
             retryCount++;
             LOG.info("rollupJob is waiting for JobState retryCount:" + retryCount);
         }
