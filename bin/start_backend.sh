@@ -165,7 +165,7 @@ if [[ -d ${STARROCKS_HOME}/lib/paimon ]]; then
   export LD_LIBRARY_PATH="${STARROCKS_HOME}/lib/paimon:${LD_LIBRARY_PATH}"
 fi
 
-export LD_LIBRARY_PATH=$STARROCKS_HOME/lib:$STARROCKS_HOME/lib/jindosdk:$STARROCKS_HOME/lib/hadoop/native:$LD_LIBRARY_PATH
+export LD_LIBRARY_PATH=$STARROCKS_HOME/lib/jindosdk:$STARROCKS_HOME/lib/hadoop/native:$LD_LIBRARY_PATH
 export_cachelib_lib_path
 
 
