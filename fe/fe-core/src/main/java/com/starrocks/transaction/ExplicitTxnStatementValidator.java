@@ -20,7 +20,6 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
-import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SetStmt;
@@ -46,11 +45,11 @@ public final class ExplicitTxnStatementValidator {
         }
 
         boolean isSet = statement instanceof SetStmt;
-        boolean isDml = statement instanceof DmlStmt; // insert/update/delete
+        boolean isInsert = statement instanceof InsertStmt; // insert
         boolean isSelect = statement instanceof QueryStatement;
         boolean isTransactionStmt = statement instanceof BeginStmt
                 || statement instanceof CommitStmt || statement instanceof RollbackStmt;
-        if (!(isSet || isDml || isSelect || isTransactionStmt)) {
+        if (!(isSet || isInsert || isSelect || isTransactionStmt)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_EXPLICIT_TXN_NOT_SUPPORT_STMT);
         }
 
