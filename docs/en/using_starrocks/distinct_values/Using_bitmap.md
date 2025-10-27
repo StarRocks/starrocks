@@ -47,7 +47,7 @@ select page, count(distinct user_id) as uv from table group by page;
 
 ## Benefits of Count Distinct with Bitmap
 
-You can benefit from bitmaps in the following aspects compared with `COUNT(DISTINCT expr):`
+You can benefit from bitmaps in the following aspects compared with `COUNT(DISTINCT expr)`:
 
 - Less storage space: If you use bitmap to compute the number of distinct values for `INT32` data, the required storage space is only 1/32 of `COUNT(DISTINCT expr)`. Compressed roaring bitmaps are used to execute computations, further reducing storage space usage compared to traditional bitmaps.
 - Faster computation: Bitmaps use bitwise operations, resulting in faster computation compared to `COUNT(DISTINCT expr)`. Computation of the number of distinct values can be processed in parallel, leading to further improvements in query performance.
