@@ -257,7 +257,7 @@ public class AlterTest {
     @AfterAll
     public static void tearDown() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
-        String dropSQL = "drop table test_partition_exception";
+        String dropSQL = "drop table if exists test_partition_exception";
         try {
             DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
             GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
@@ -2899,5 +2899,17 @@ public class AlterTest {
                 }
             }
         }
+    }
+
+    @Test
+    public void testCatalogAddComplexColumns() throws Exception {
+        String stmt = "alter table test.tbl1 add column ("
+                + "`col1` array<string> not null,"
+                + "`col2` json not null" +
+                ");";
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt,
+                starRocksAssert.getCtx());
+        AddColumnsClause clause = (AddColumnsClause) alterTableStmt.getOps().get(0);
+        Assert.assertEquals(null, clause.getRollupName());
     }
 }

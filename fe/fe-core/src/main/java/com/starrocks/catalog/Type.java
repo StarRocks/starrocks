@@ -1029,7 +1029,7 @@ public abstract class Type implements Cloneable {
     }
 
     public boolean isComplexType() {
-        return isStructType() || isCollectionType();
+        return isStructType() || isCollectionType() || isJsonType();
     }
 
     public boolean isCollectionType() {
