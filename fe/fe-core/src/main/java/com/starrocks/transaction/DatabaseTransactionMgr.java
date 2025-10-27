@@ -994,7 +994,7 @@ public class DatabaseTransactionMgr {
                             // quorum publish will make table unstable
                             // so that we wait quorum_publish_wait_time_ms util all backend publish finish
                             // before quorum publish
-                            if (successHealthyReplicaNum != replicaNum
+                            if (successHealthyReplicaNum < replicaNum
                                     && CollectionUtils.isNotEmpty(unfinishedBackends)
                                     && currentTs
                                     - txn.getCommitTime() < Config.quorum_publish_wait_time_ms) {
