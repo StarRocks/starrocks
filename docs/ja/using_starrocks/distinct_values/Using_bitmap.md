@@ -98,6 +98,7 @@ Roaring Bitmap の実装については、[specific paper and implementation](ht
     * 行 `page_id = 1, visit_date = '2020-06-23 02:30:30'` では、`visit_users` フィールドに 1 つのビットマップ要素 (13) が含まれています。
     * 行 `page_id = 2, visit_date = '2020-06-23 01:30:30'` では、`visit_users` フィールドに 1 つのビットマップ要素 (23) が含まれています。
 
+<<<<<<< HEAD
    ローカルファイルからデータをロードします:
 
     ```shell
@@ -109,6 +110,9 @@ Roaring Bitmap の実装については、[specific paper and implementation](ht
     ```
 
 3. ページの UV を計算します。
+=======
+3. ページ UV を計算します。
+>>>>>>> b550859cba (remove excess)
 
     ```sql
     SELECT page_id, count(distinct visit_users) FROM page_uv GROUP BY page_id;
