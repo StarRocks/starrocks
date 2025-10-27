@@ -1,0 +1,25 @@
+-- name: test_be_proc_profile_simple
+-- Test BE /proc_profile and /proc_profile/file HTTP endpoints
+
+-- Get BE IP and HTTP port from show backends command
+shell: ${mysql_cmd} -e "show backends\G" | grep "IP" | head -1 | awk -F':' '{print $2}' | xargs > be_ip.txt
+shell: ${mysql_cmd} -e "show backends\G" | grep "HttpPort" | head -1 | awk -F':' '{print $2}' | xargs > be_http_port.txt
+[UC]shell: echo "BE_IP=$(cat be_ip.txt), BE_HTTP_PORT=$(cat be_http_port.txt)"
+
+-- Test 2: Check that BE /proc_profile page is accessible and contains profile information
+shell: curl -s -u root: "http://$(cat be_ip.txt):$(cat be_http_port.txt)/proc_profile" | grep -c "Process Profiles"
+
+-- Test BE /proc_profile/file endpoint with a valid filename (if profiles exist)
+-- Get a profile filename from the main page and test accessing it
+shell: curl -s -u root: "http://$(cat be_ip.txt):$(cat be_http_port.txt)/proc_profile" | grep -o 'filename=[^"]*\.gz' | head -1 | cut -d'=' -f2 > be_profile_file.txt
+[UC]shell: cat be_profile_file.txt
+shell: if [ $(curl -s -u root: "http://$(cat be_ip.txt):$(cat be_http_port.txt)/proc_profile/file?filename=$(cat be_profile_file.txt)" | wc -l) -gt 0 ]; then echo "exist"; else echo "empty"; fi
+shell: if [ $(curl -s -u root: "http://$(cat be_ip.txt):$(cat be_http_port.txt)/proc_profile/file?filename=$(cat be_profile_file.txt)" | wc -l) -gt 0 ]; then echo "exist"; else echo "empty"; fi
+
+-- Test BE /proc_profile/file endpoint with invalid filename (should return error)
+shell: curl -s -u root: "http://$(cat be_ip.txt):$(cat be_http_port.txt)/proc_profile/file?filename=invalid_file.tar.gz"
+shell: curl -s -u root: "http://$(cat be_ip.txt):$(cat be_http_port.txt)/proc_profile/file?filename=invalid_file"
+
+
+shell: rm -f be_profile_file.txt
+shell: rm -f be_ip.txt be_http_port.txt
