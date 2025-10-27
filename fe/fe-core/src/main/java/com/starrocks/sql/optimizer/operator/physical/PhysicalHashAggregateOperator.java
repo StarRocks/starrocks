@@ -73,6 +73,8 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
 
     private boolean forcePreAggregation = false;
 
+    private boolean withLocalShuffle = false;
+
     private List<Pair<ConstantOperator, ConstantOperator>> groupByMinMaxStatistic = Lists.newArrayList();
 
     public PhysicalHashAggregateOperator(AggType type,
@@ -109,6 +111,7 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
         this.withoutColocateRequirement = aggregateOperator.withoutColocateRequirement;
         this.distinctColumnDataSkew = aggregateOperator.distinctColumnDataSkew;
         this.groupByMinMaxStatistic = aggregateOperator.groupByMinMaxStatistic;
+        this.withLocalShuffle = aggregateOperator.withLocalShuffle;
     }
 
     public List<ColumnRefOperator> getGroupBys() {
@@ -213,6 +216,14 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
 
     public void setForcePreAggregation(boolean forcePreAggregation) {
         this.forcePreAggregation = forcePreAggregation;
+    }
+
+    public boolean isWithLocalShuffle() {
+        return withLocalShuffle;
+    }
+
+    public void setWithLocalShuffle(boolean withLocalShuffle) {
+        this.withLocalShuffle = withLocalShuffle;
     }
 
     @Override
