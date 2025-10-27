@@ -4,7 +4,7 @@
 
 ARG GCC_INSTALL_HOME=/opt/rh/gcc-toolset-10/root/usr
 ARG GCC_10_DOWNLOAD_URL=https://ftp.gnu.org/gnu/gcc/gcc-10.3.0/gcc-10.3.0.tar.gz
-ARG GCC_DOWNLOAD_URL=https://ftp.gnu.org/gnu/gcc/gcc-14.2.0/gcc-14.2.0.tar.gz
+ARG GCC_DOWNLOAD_URL=https://ftp.gnu.org/gnu/gcc/gcc-14.3.0/gcc-14.3.0.tar.gz
 ARG CMAKE_INSTALL_HOME=/opt/cmake
 ARG MAVEN_VERSION=3.6.3
 ARG JDK_INSTALL_HOME=/opt/jdk17
