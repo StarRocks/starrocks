@@ -40,9 +40,9 @@ public final class ExplicitTxnStatementValidator {
     private ExplicitTxnStatementValidator() {
     }
 
-    public static void validate(StatementBase statement, ConnectContext context) {
+    public static boolean validate(StatementBase statement, ConnectContext context) {
         if (context == null || context.getTxnId() == 0) {
-            return;
+            return false;
         }
 
         boolean isSet = statement instanceof SetStmt;
@@ -52,10 +52,12 @@ public final class ExplicitTxnStatementValidator {
                 || statement instanceof CommitStmt || statement instanceof RollbackStmt;
         if (!(isSet || isDml || isSelect || isTransactionStmt)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_EXPLICIT_TXN_NOT_SUPPORT_STMT);
+            return true;
         }
 
         if (statement instanceof InsertStmt insertStmt && insertStmt.isOverwrite()) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_EXPLICIT_TXN_NOT_SUPPORT_STMT);
+            return true;
         }
 
         // We validate two categories:
@@ -68,19 +70,19 @@ public final class ExplicitTxnStatementValidator {
             // Normal INSERT (non-overwrite already checked) that has a source query.
             queryForValidation = insertStmt.getQueryStatement();
         } else {
-            return; // Other statements are not validated here.
+            return false; // Other statements are not validated here.
         }
 
         ExplicitTxnState explicitTxnState = GlobalStateMgr.getCurrentState()
                 .getGlobalTransactionMgr()
                 .getExplicitTxnState(context.getTxnId());
         if (explicitTxnState == null) {
-            return;
+            return false;
         }
 
         Set<Long> modifiedTableIds = explicitTxnState.getModifiedTableIds();
         if (modifiedTableIds.isEmpty()) {
-            return;
+            return false;
         }
 
         Map<TableName, Table> referencedTables = AnalyzerUtils.collectAllTable(queryForValidation);
@@ -91,7 +93,9 @@ public final class ExplicitTxnStatementValidator {
             if (modifiedTableIds.contains(table.getId())) {
                 ErrorReport.reportSemanticException(
                         ErrorCode.ERR_EXPLICIT_TXN_SELECT_ON_MODIFIED_TABLE, table.getName());
+                return true;
             }
         }
+        return false;
     }
 }
