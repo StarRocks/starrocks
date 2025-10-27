@@ -1,0 +1,251 @@
+-- name: test_low_cardinality_join
+
+CREATE TABLE __row_util_base (
+  k1 bigint NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 32
+PROPERTIES (
+    "replication_num" = "1"
+);
+insert into __row_util_base select generate_series from TABLE(generate_series(0, 10000 - 1));
+insert into __row_util_base select * from __row_util_base;-- 20000
+insert into __row_util_base select * from __row_util_base;-- 40000
+insert into __row_util_base select * from __row_util_base;-- 80000
+
+CREATE TABLE __row_util (
+  idx bigint NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`idx`)
+DISTRIBUTED BY HASH(`idx`) BUCKETS 640
+PROPERTIES (
+    "replication_num" = "1"
+);
+insert into __row_util select row_number() over() as idx from __row_util_base;
+
+CREATE TABLE t1 (
+    k1 bigint NULL,
+    low1 string NULL,
+    low2 string NULL,
+    low3 string NULL,
+    str1 string NULL,
+    low_char1 CHAR(40) NULL,
+    str_char1 CHAR(40) NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 64
+PROPERTIES (
+    "replication_num" = "1"
+);
+
+insert into t1 select 
+    idx, 
+    concat('common-low1-', idx % 100), concat('common-low2-', idx % 200), concat('common-low3-', idx % 200), 
+    concat('common-str1-', idx),
+    concat('common-low_char1-', idx % 100), concat('common-str_char1-', idx)
+from __row_util;
+insert into t1 select 
+    idx, 
+    concat('t1-low1-', idx % 50), concat('t1-low2-', idx % 20), concat('t1-low3-', idx % 50), 
+    concat('t1-str1-', idx),
+    concat('t1-low_char1-', idx % 50), concat('t1-str_char1-', idx)
+from __row_util;
+insert into t1(k1) select 10000000;
+
+CREATE TABLE t2 (
+    k1 bigint NULL,
+    low1 string NULL,
+    low2 string NULL,
+    low3 string NULL,
+    str1 string NULL,
+    low_char1 CHAR(40) NULL,
+    str_char1 CHAR(40) NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 64
+PROPERTIES (
+    "replication_num" = "1"
+);
+insert into t2 select 
+    idx, 
+    concat('common-low1-', idx % 100), concat('common-low2-', idx % 200), concat('common-low3-', idx % 200), 
+    concat('common-str1-', idx),
+    concat('common-low_char1-', idx % 100), concat('common-str_char1-', idx)
+from __row_util where idx <= 1000;
+insert into t2 select 
+    idx + 1000, 
+    concat('t2-low1-', idx % 50), concat('t2-low2-', idx % 20), concat('t2-low3-', idx % 50), 
+    concat('t2-str1-', idx), 
+    concat('t2-low_char1-', idx % 50), concat('t2-str_char1-', idx) 
+from __row_util where idx <= 1000;
+insert into t2(k1) select 10000000;
+
+
+SELECT COUNT(DISTINCT t1.low1), SUM(murmur_hash3_32(t1.low1)), SUM(murmur_hash3_32(t2.low1)), SUM(murmur_hash3_32(t1.low2)), SUM(murmur_hash3_32(t2.low2)), SUM(murmur_hash3_32(t1.low3)), SUM(murmur_hash3_32(t2.low3)), SUM(murmur_hash3_32(t1.str1)), SUM(murmur_hash3_32(t2.str1))
+FROM t1 JOIN t2 on t1.low1 = t2.low1;
+SELECT COUNT(1) FROM t1 JOIN t2 on t1.low1 = t2.low1 where t2.k1 % 4 = 0;
+
+SELECT COUNT(1) FROM t1 JOIN t2 on t1.low1 <=> t2.low1;
+SELECT COUNT(1) FROM t1 JOIN t2 on t1.low1 <=> t2.low1 where t2.k1 % 4 = 0;
+
+SELECT COUNT(1)
+FROM t1 JOIN t2 on t1.low1 <=> t2.low1 and t1.low2 <=> t2.low2 and t1.low3 <=> t2.low3;
+SELECT COUNT(1)
+FROM t1 JOIN t2 on t1.low1 <=> t2.low1 and t1.low2 <=> t2.low2 and t1.low3 <=> t2.low3 where t2.k1 % 4 = 0;
+
+SELECT COUNT(1)
+FROM t1 
+    JOIN t2 on t1.low1 = t2.low1 and t2.k1 % 2 = 0
+    JOIN t2 t3 on t1.low2 = t3.low2;
+
+SELECT COUNT(1)
+FROM t1 
+    JOIN t2 on t1.low1 = t2.low1 and t2.k1 % 7 = 0
+    JOIN t2 t3 on t1.low2 = t3.low2;
+
+-- The number of words for low3 after merging exceeds 256.
+SELECT SUM(murmur_hash3_32(t1.low1)), SUM(murmur_hash3_32(t2.low1))
+FROM t1 
+    JOIN t2 on t1.low1 <=> t2.low1
+    JOIN t2 t3 on t1.low2 <=> t3.low2
+    JOIN t2 t4 on t1.low3 <=> t4.low3;
+
+-- DefineExpr cannot use low-cardinality optimization for join.
+SELECT SUM(murmur_hash3_32(t1.low1)), SUM(murmur_hash3_32(t2.low1))
+FROM t1 
+    JOIN t2 on t1.low1 = lower(t2.low1) 
+    JOIN t2 t3 on t1.low2 = t3.low2;
+
+SELECT SUM(murmur_hash3_32(t1.low1)), SUM(murmur_hash3_32(t2.low1))
+FROM t1 
+    JOIN t2 on t1.low1 = t2.low1
+    JOIN t2 t3 on t1.low1 = lower(t3.low2);
+
+-- Shuffle join cannot use low-cardinality optimization for join.
+SELECT SUM(murmur_hash3_32(t1.low1)), SUM(murmur_hash3_32(t2.low1))
+FROM t1 
+    JOIN t2 on t1.low1 = t2.low1
+    JOIN [shuffle] t2 t3 on t1.low1 = t3.low2;
+
+
+SELECT SUM(murmur_hash3_32(t1.low1)), SUM(murmur_hash3_32(t2.low1))
+FROM t1 
+    JOIN t2 on t1.low1 = t2.low1
+    JOIN [shuffle] t2 t3 on t1.low2 = t3.low2;
+
+-- Colocate join cannot use low-cardinality optimization for join.
+SELECT SUM(murmur_hash3_32(t1.low1)), SUM(murmur_hash3_32(t2.low1))
+FROM t1 JOIN [colocate] t1 t2 on t1.k1 = t2.k1 and t1.low1 = t2.low1 and t2.k1 < 1000;
+
+-- Local Bucket shuffle join cannot use low-cardinality optimization for join.
+SELECT SUM(murmur_hash3_32(t1.low1)), SUM(murmur_hash3_32(t2.low1))
+FROM t1 JOIN [bucket] t1 t2 on t1.k1 = t2.k1 and t1.low1 = t2.low1 and t2.k1 < 1000;
+
+-- Bucket shuffle join cannot use low-cardinality optimization for join.
+with w1 as (select distinct low1, k1 from t1)
+SELECT SUM(murmur_hash3_32(t1.low1)), SUM(murmur_hash3_32(t2.low1))
+FROM w1 t1 JOIN [bucket] w1 t2 on t1.low1 = t2.low1 and t2.k1 < 1000;
+
+
+set cbo_enable_low_cardinality_optimize_for_join = false;
+
+
+SELECT COUNT(DISTINCT t1.low1)
+FROM t1 JOIN t2 on t1.low1 = t2.low1;
+
+SELECT SUM(murmur_hash3_32(t1.low1)), SUM(murmur_hash3_32(t2.low1)), SUM(murmur_hash3_32(t1.low2)), SUM(murmur_hash3_32(t2.low2)), SUM(murmur_hash3_32(t1.low3)), SUM(murmur_hash3_32(t2.low3)), SUM(murmur_hash3_32(t1.str1)), SUM(murmur_hash3_32(t2.str1))
+FROM t1 JOIN t2 on t1.low1 <=> t2.low1;
+
+SELECT SUM(murmur_hash3_32(t1.low1)), SUM(murmur_hash3_32(t2.low1)), SUM(murmur_hash3_32(t1.low2)), SUM(murmur_hash3_32(t2.low2)), SUM(murmur_hash3_32(t1.low3)), SUM(murmur_hash3_32(t2.low3)), SUM(murmur_hash3_32(t1.str1)), SUM(murmur_hash3_32(t2.str1))
+FROM t1 JOIN t2 on t1.low1 <=> t2.low1 and t1.low2 <=> t2.low2 and t1.low3 <=> t2.low3;
+
+-- The number of words for low3 after merging exceeds 256.
+SELECT SUM(murmur_hash3_32(t1.low1)), SUM(murmur_hash3_32(t2.low1))
+FROM t1 
+    JOIN t2 on t1.low1 <=> t2.low1
+    JOIN t2 t3 on t1.low2 <=> t3.low2
+    JOIN t2 t4 on t1.low3 <=> t4.low3;
+
+-- DefineExpr cannot use low-cardinality optimization for join.
+SELECT SUM(murmur_hash3_32(t1.low1)), SUM(murmur_hash3_32(t2.low1))
+FROM t1 
+    JOIN t2 on t1.low1 = lower(t2.low1) 
+    JOIN t2 t3 on t1.low2 = t3.low2;
+
+SELECT SUM(murmur_hash3_32(t1.low1)), SUM(murmur_hash3_32(t2.low1))
+FROM t1 
+    JOIN t2 on t1.low1 = t2.low1
+    JOIN t2 t3 on t1.low1 = lower(t3.low2);
+
+-- Shuffle join cannot use low-cardinality optimization for join.
+SELECT SUM(murmur_hash3_32(t1.low1)), SUM(murmur_hash3_32(t2.low1))
+FROM t1 
+    JOIN t2 on t1.low1 = t2.low1
+    JOIN [shuffle] t2 t3 on t1.low1 = t3.low2;
+
+
+SELECT SUM(murmur_hash3_32(t1.low1)), SUM(murmur_hash3_32(t2.low1))
+FROM t1 
+    JOIN t2 on t1.low1 = t2.low1
+    JOIN [shuffle] t2 t3 on t1.low2 = t3.low2;
+
+-- Colocate join cannot use low-cardinality optimization for join.
+SELECT SUM(murmur_hash3_32(t1.low1)), SUM(murmur_hash3_32(t2.low1))
+FROM t1 JOIN [colocate] t1 t2 on t1.k1 = t2.k1 and t1.low1 = t2.low1 and t2.k1 < 1000;
+
+-- Local Bucket shuffle join cannot use low-cardinality optimization for join.
+SELECT SUM(murmur_hash3_32(t1.low1)), SUM(murmur_hash3_32(t2.low1))
+FROM t1 JOIN [bucket] t1 t2 on t1.k1 = t2.k1 and t1.low1 = t2.low1 and t2.k1 < 1000;
+
+-- Bucket shuffle join cannot use low-cardinality optimization for join.
+with w1 as (select distinct low1, k1 from t1)
+SELECT SUM(murmur_hash3_32(t1.low1)), SUM(murmur_hash3_32(t2.low1))
+FROM w1 t1 JOIN [bucket] w1 t2 on t1.low1 = t2.low1 and t2.k1 < 1000;
+
+-- non-low-cardinality VARCHAR join key
+SELECT COUNT(1) FROM t1 JOIN t2 on t1.str1 = t2.str1;
+SELECT COUNT(1) FROM t1 JOIN t2 on t1.str1 = t2.str1 where t2.k1 % 4 = 0;
+
+SELECT COUNT(1) FROM t1 JOIN t2 on t1.str1 <=> t2.str1;
+SELECT COUNT(1) FROM t1 JOIN t2 on t1.str1 <=> t2.str1 where t2.k1 % 4 = 0;
+
+-- CHAR join key
+SELECT COUNT(1) FROM t1 JOIN t2 on t1.low_char1 = t2.low_char1;
+SELECT COUNT(1) FROM t1 JOIN t2 on t1.low_char1 = t2.low_char1 where t2.k1 % 4 = 0;
+
+SELECT COUNT(1) FROM t1 JOIN t2 on t1.low_char1 <=> t2.low_char1;
+SELECT COUNT(1) FROM t1 JOIN t2 on t1.low_char1 <=> t2.low_char1 where t2.k1 % 4 = 0;
+
+SELECT COUNT(1) FROM t1 JOIN t2 on t1.str_char1 = t2.str_char1;
+SELECT COUNT(1) FROM t1 JOIN t2 on t1.str_char1 = t2.str_char1 where t2.k1 % 4 = 0;
+
+SELECT COUNT(1) FROM t1 JOIN t2 on t1.str_char1 <=> t2.str_char1;
+SELECT COUNT(1) FROM t1 JOIN t2 on t1.str_char1 <=> t2.str_char1 where t2.k1 % 4 = 0;
+
+-- low-cardinality predicates
+SELECT COUNT(1) FROM t1 WHERE low1 = 'common-low1-10';
+SELECT COUNT(1) FROM t1 WHERE low1 = 'non-exist-low1';
+SELECT COUNT(1) FROM t1 WHERE low1 IS NULL;
+SELECT COUNT(1) FROM t1 WHERE low1 IS NOT NULL;
+SELECT COUNT(1) FROM t1 WHERE low1 IN ('common-low1-10', 'common-low1-20', 'non-exist-low1') OR low1 is NULL;
+SELECT COUNT(1) FROM t1 WHERE low1 IN ('common-low1-10', 'common-low1-20', NULL);
+SELECT COUNT(1) FROM t1 WHERE low1 NOT IN ('common-low1-10', 'common-low1-20');
+
+-- non-low-cardinality predicates
+SELECT COUNT(1) FROM t1 WHERE str1 = 'common-str1-10';
+SELECT COUNT(1) FROM t1 WHERE str1 = 'non-exist-str1';
+SELECT COUNT(1) FROM t1 WHERE str1 IS NULL;
+SELECT COUNT(1) FROM t1 WHERE str1 IS NOT NULL;
+SELECT COUNT(1) FROM t1 WHERE str1 IN ('common-str1-10', 'common-str1-20', 'non-exist-str1');
+SELECT COUNT(1) FROM t1 WHERE str1 IN ('common-str1-10', 'common-str1-20', NULL);
+SELECT COUNT(1) FROM t1 WHERE str1 NOT IN ('common-str1-10', 'common-str1-20');
+
+-- CHAR predicates
+SELECT COUNT(1) FROM t1 WHERE str_char1 = 'common-str_char1-10';
+SELECT COUNT(1) FROM t1 WHERE str_char1 = 'non-exist-str_char1';
+SELECT COUNT(1) FROM t1 WHERE str_char1 IS NULL;
+SELECT COUNT(1) FROM t1 WHERE str_char1 IS NOT NULL;
+SELECT COUNT(1) FROM t1 WHERE str_char1 IN ('common-str_char1-10', 'common-str_char1-20', 'non-exist-str_char1');
+SELECT COUNT(1) FROM t1 WHERE str_char1 IN ('common-str_char1-10', 'common-str_char1-20', NULL);
+SELECT COUNT(1) FROM t1 WHERE str_char1 NOT IN ('common-str_char1-10', 'common-str_char1-20');
+
