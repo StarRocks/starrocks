@@ -124,7 +124,7 @@ public class AnalyzeStatusSystemTable extends SystemTable {
             } catch (Throwable e) {
                 // TODO: change the exception into an checked exception in MetadataMgr.getTable
                 // The underlying SDK might throw an deep exception with this message
-                if (!e.getMessage().contains("table not found")) {
+                if (!(e.getMessage() != null && e.getMessage().contains("table not found"))) {
                     LOG.warn("failed to get table meta", e);
                 }
                 continue;
