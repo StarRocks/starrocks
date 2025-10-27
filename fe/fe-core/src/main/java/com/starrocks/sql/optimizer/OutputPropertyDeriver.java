@@ -21,6 +21,8 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.system.SystemTable;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.base.CTEProperty;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -309,6 +311,19 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
         return mergeCTEProperty(childrenOutputProperties.get(0));
     }
 
+    private PhysicalPropertySet resetSortProperty(PhysicalPropertySet propertySet) {
+        final SessionVariable sv = ConnectContext.get().getSessionVariable();
+        // Spill partition join and partition join operations break ordering.
+        // When these optimizations are enabled, we need to clear the property.
+        boolean needResetSortProperty = sv.isEnableSpill() || sv.enablePartitionHashJoin();
+        if (needResetSortProperty) {
+            propertySet =
+                    new PhysicalPropertySet(propertySet.getDistributionProperty(), EmptySortProperty.INSTANCE,
+                            propertySet.getCteProperty());
+        }
+        return propertySet;
+    }
+
     private PhysicalPropertySet visitPhysicalJoin(PhysicalJoinOperator node, ExpressionContext context) {
         checkState(childrenOutputProperties.size() == 2);
         PhysicalPropertySet leftChildOutputProperty = childrenOutputProperties.get(0);
@@ -316,7 +331,7 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
 
         // 1. Distribution is broadcast
         if (rightChildOutputProperty.getDistributionProperty().isBroadcast()) {
-            return leftChildOutputProperty;
+            return resetSortProperty(leftChildOutputProperty);
         }
         // 2. Distribution is shuffle
         ColumnRefSet leftChildColumns = context.getChildOutputColumns(0);
@@ -348,6 +363,7 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
                 // bucket join
                 PhysicalPropertySet outputProperty = computeBucketJoinDistributionProperty(node.getJoinType(),
                         leftDistributionSpec, leftChildOutputProperty);
+                outputProperty = resetSortProperty(outputProperty);
                 return updateEquivalentDescriptor(node, outputProperty,
                         leftOnPredicateColumns, rightOnPredicateColumns);
 
