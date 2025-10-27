@@ -448,7 +448,7 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
     public BiMap<Integer, PartitionField> getIdentityPartitions(PartitionSpec partitionSpec) {
         // TODO: expose transform information in Iceberg library
         BiMap<Integer, PartitionField> columns = HashBiMap.create();
-        if (!ConnectContext.get().getSessionVariable().getEnableIcebergIdentityColumnOptimize()) {
+        if (ConnectContext.get() != null && !ConnectContext.get().getSessionVariable().getEnableIcebergIdentityColumnOptimize()) {
             return columns;
         }
         for (int i = 0; i < partitionSpec.fields().size(); i++) {
