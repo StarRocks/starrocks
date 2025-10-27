@@ -34,21 +34,18 @@
 
 package com.starrocks.qe;
 
-import com.starrocks.authentication.AccessControlContext;
-import com.starrocks.authentication.PlainPasswordAuthenticationProvider;
-import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.mysql.MysqlCapability;
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.mysql.MysqlCommand;
-import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.plugin.AuditEvent.AuditEventBuilder;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.DDLTestBase;
 import com.starrocks.sql.ast.PrepareStmt;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -308,14 +305,6 @@ public class ConnectProcessorExecuteTest extends DDLTestBase {
                 context.getCapability();
                 minTimes = 0;
                 result = MysqlCapability.DEFAULT_CAPABILITY;
-
-                context.getAccessControlContext();
-                minTimes = 0;
-                result = new AccessControlContext();
-
-                context.getAuthenticationProvider();
-                minTimes = 0;
-                result = new PlainPasswordAuthenticationProvider(MysqlPassword.EMPTY_PASSWORD);
             }
         };
 

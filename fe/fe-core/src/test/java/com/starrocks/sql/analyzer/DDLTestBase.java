@@ -20,7 +20,6 @@ import com.starrocks.catalog.GlobalStateMgrTestUtil;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.BeforeAll;
@@ -36,11 +35,7 @@ public class DDLTestBase {
     public static void beforeAll() {
         UtFrameUtils.createMinStarRocksCluster();
         ctx = UtFrameUtils.createDefaultCtx();
-<<<<<<< HEAD
-        analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), ctx);
-=======
         starRocksAssert = new StarRocksAssert(ctx);
->>>>>>> 0014637fe0 ([UT] Add FE UT timeout to avoid dead loop (#63631))
 
         FeConstants.runningUnitTest = true;
         Config.enable_new_publish_mechanism = false;

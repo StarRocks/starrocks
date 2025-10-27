@@ -16,8 +16,6 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Joiner;
 import com.starrocks.alter.AlterJobMgr;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
@@ -40,7 +38,6 @@ import org.apache.hadoop.util.Lists;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -93,114 +90,6 @@ public class MaterializedViewAnalyzerTest {
     }
 
     @Test
-<<<<<<< HEAD
-    public void testMaterializedAnalyPaimonTable(@Mocked SlotRef slotRef, @Mocked PaimonTable table) {
-        MaterializedViewAnalyzer.MaterializedViewAnalyzerVisitor materializedViewAnalyzerVisitor =
-                new MaterializedViewAnalyzer.MaterializedViewAnalyzerVisitor();
-
-        {
-            // test check partition column can not be found
-            boolean checkSuccess = false;
-            new Expectations() {
-                {
-                    table.isUnPartitioned();
-                    result = false;
-                }
-            };
-            try {
-                materializedViewAnalyzerVisitor.checkPartitionColumnWithBasePaimonTable(slotRef, table);
-                checkSuccess = true;
-            } catch (Exception e) {
-                Assertions.assertTrue(e.getMessage().contains("Materialized view partition column in partition exp " +
-                                "must be base table partition column"),
-                        e.getMessage());
-            }
-            Assertions.assertFalse(checkSuccess);
-        }
-
-        {
-            // test check successfully
-            boolean checkSuccess = false;
-            new Expectations() {
-                {
-                    table.isUnPartitioned();
-                    result = false;
-
-                    table.getPartitionColumnNames();
-                    result = Lists.newArrayList("dt");
-
-                    slotRef.getColumnName();
-                    result = "dt";
-
-                    table.getColumn("dt");
-                    result = new Column("dt", ScalarType.createType(PrimitiveType.DATE));
-                }
-            };
-            try {
-                materializedViewAnalyzerVisitor.checkPartitionColumnWithBasePaimonTable(slotRef, table);
-                checkSuccess = true;
-            } catch (Exception e) {
-            }
-            Assertions.assertTrue(checkSuccess);
-        }
-
-        {
-            //test paimon table is unparitioned
-            new Expectations() {
-                {
-                    table.isUnPartitioned();
-                    result = true;
-                }
-            };
-
-            boolean checkSuccess = false;
-            try {
-                materializedViewAnalyzerVisitor.checkPartitionColumnWithBasePaimonTable(slotRef, table);
-            } catch (Exception e) {
-                Assertions.assertTrue(e.getMessage().contains("Materialized view partition column in partition exp " +
-                                "must be base table partition column"),
-                        e.getMessage());
-            }
-            Assertions.assertFalse(checkSuccess);
-        }
-    }
-
-    @RepeatedTest(value = 1)
-    public void testReplacePaimonTableAlias(@Mocked SlotRef slotRef, @Mocked PaimonTable table) {
-        MaterializedViewAnalyzer.MaterializedViewAnalyzerVisitor materializedViewAnalyzerVisitor =
-                new MaterializedViewAnalyzer.MaterializedViewAnalyzerVisitor();
-        BaseTableInfo baseTableInfo = new BaseTableInfo("test_catalog", "test_db", "test_tbl",
-                "test_tbl:7920f06f-df49-472f-9662-97ac5c32da96(test_tbl) REFERENCES");
-        {
-            new Expectations() {
-                {
-                    table.getCatalogName();
-                    result = "test_catalog";
-                    table.getCatalogDBName();
-                    result = "test_db";
-                    table.getTableIdentifier();
-                    result = "test_tbl:7920f06f-df49-472f-9662-97ac5c32da96(test_tbl) REFERENCES";
-                }
-            };
-
-            Assertions.assertTrue(materializedViewAnalyzerVisitor.replacePaimonTableAlias(slotRef, table, baseTableInfo));
-        }
-
-        {
-            new Expectations() {
-                {
-                    table.getCatalogName();
-                    result = "test_catalog2";
-
-                }
-            };
-            Assertions.assertFalse(materializedViewAnalyzerVisitor.replacePaimonTableAlias(slotRef, table, baseTableInfo));
-        }
-    }
-
-    @Test
-=======
->>>>>>> 0014637fe0 ([UT] Add FE UT timeout to avoid dead loop (#63631))
     public void testCreateIcebergTable1() throws Exception {
         {
             String mvName = "iceberg_parttbl_mv1";

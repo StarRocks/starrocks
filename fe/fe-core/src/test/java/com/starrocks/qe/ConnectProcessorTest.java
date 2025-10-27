@@ -39,11 +39,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.AccessTestUtil;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
-<<<<<<< HEAD
-=======
-import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.FeConstants;
->>>>>>> 0014637fe0 ([UT] Add FE UT timeout to avoid dead loop (#63631))
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.UUIDUtil;

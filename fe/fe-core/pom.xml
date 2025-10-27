@@ -927,21 +927,7 @@ under the License.
                             <goal>prepare-agent</goal>
                         </goals>
                         <configuration>
-<<<<<<< HEAD
                             <propertyName>jacocoArgLine</propertyName>
-=======
-                            <includes>
-                                <include>com/starrocks/**</include>
-                            </includes>
-                            <excludes>
-                                <exclude>com/starrocks/proto/**</exclude>
-                                <exclude>com/starrocks/rpc/**</exclude>
-                                <exclude>com/starrocks/server/**</exclude>
-                                <exclude>**/*$$JProtoBufClass</exclude>
-                                <exclude>**/*$$JProtoBuf*</exclude>
-                            </excludes>
-                            <append>true</append>
->>>>>>> 0014637fe0 ([UT] Add FE UT timeout to avoid dead loop (#63631))
                         </configuration>
                     </execution>
                     <execution>
