@@ -1,0 +1,78 @@
+-- name: test_push_down_heavy_exprs
+create table t0 (
+c0 string
+) properties("replication_num"="1");
+-- result:
+-- !result
+insert into t0 with cte as (
+select i from table(generate_series(1,10000)) t(i)
+)
+select concat(i, ".", "foo", case i%3 when 0 then ".bar" when 1 then ".buzz" else "" end, ".xxxx") c0 
+from cte;
+-- result:
+-- !result
+create table result (
+fp bigint 
+) properties("replication_num"="1");
+-- result:
+-- !result
+insert into result 
+with cte as (
+select distinct regexp_replace(c0, "^\\d+(\\.foo\.b\\w+).*$", "\\1") as c0 from t0 
+)
+select /*+SET_VAR(push_down_heavy_exprs=true)*/sum(murmur_hash3_32(cte.c0)) fp from cte;
+-- result:
+-- !result
+insert into result 
+with cte as (
+select distinct regexp_replace(c0, "^\\d+(\\.foo\.b\\w+).*$", "\\1") as c0 from t0 
+)
+select /*+SET_VAR(push_down_heavy_exprs=false)*/sum(murmur_hash3_32(cte.c0)) fp from cte;
+-- result:
+-- !result
+select assert_true(count(fp)=2 and count(distinct fp)=1) from result;
+-- result:
+1
+-- !result
+truncate table result;
+-- result:
+-- !result
+insert into result 
+with cte as (
+select distinct regexp_replace(c0, "\\d+(\\.foo\.b\\w+).*", "\\1") as c0 from t0 
+)
+select /*+SET_VAR(push_down_heavy_exprs=true)*/sum(murmur_hash3_32(cte.c0)) fp from cte;
+-- result:
+-- !result
+insert into result 
+with cte as (
+select distinct regexp_replace(c0, "\\d+(\\.foo\.b\\w+).*", "\\1") as c0 from t0 
+)
+select /*+SET_VAR(push_down_heavy_exprs=false)*/sum(murmur_hash3_32(cte.c0)) fp from cte;
+-- result:
+-- !result
+select assert_true(count(fp)=2 and count(distinct fp)=1) from result;
+-- result:
+1
+-- !result
+truncate table result;
+-- result:
+-- !result
+insert into result 
+with cte as (
+select distinct regexp_replace(c0, ".*foo.bar*", "deadbeef") as c0 from t0 
+)
+select /*+SET_VAR(push_down_heavy_exprs=true)*/sum(murmur_hash3_32(cte.c0)) fp from cte;
+-- result:
+-- !result
+insert into result 
+with cte as (
+select distinct regexp_replace(c0, ".*foo.bar*", "deadbeef") as c0 from t0 
+)
+select /*+SET_VAR(push_down_heavy_exprs=false)*/sum(murmur_hash3_32(cte.c0)) fp from cte;
+-- result:
+-- !result
+select assert_true(count(fp)=2 and count(distinct fp)=1) from result;
+-- result:
+1
+-- !result

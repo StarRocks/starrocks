@@ -3354,6 +3354,12 @@ Status StringFunctions::regexp_replace_prepare(FunctionContext* context, Functio
         }
     }
 
+    state->global_mode = pattern_str.empty() || (!pattern_str.starts_with("^") && !pattern_str.ends_with("$"));
+    if (context->is_notnull_constant_column(2)) {
+        const auto rpl_column = context->get_constant_column(2);
+        const auto rpl_slice = ColumnHelper::get_const_value<TYPE_VARCHAR>(rpl_column);
+        state->opt_const_rpl = rpl_slice.to_string();
+    }
     return Status::OK();
 }
 
@@ -3748,6 +3754,47 @@ static ColumnPtr regexp_replace_general(FunctionContext* context, re2::RE2::Opti
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
+template <bool global_mode>
+static ColumnPtr regexp_replace_const_pattern_and_rpl(re2::RE2* const_re, const Columns& columns,
+                                                      const std::string& rpl) {
+    auto str_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
+    re2::StringPiece rpl_str = re2::StringPiece(rpl);
+    auto size = columns[0]->size();
+    ColumnBuilder<TYPE_VARCHAR> result(size);
+    std::string result_str;
+    for (int row = 0; row < size; ++row) {
+        if (str_viewer.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+
+        auto str_value = str_viewer.value(row);
+        re2::StringPiece str_str = re2::StringPiece(str_value.get_data(), str_value.get_size());
+        result_str.clear();
+#ifdef __APPLE__
+        // macOS RE2 API only supports 3-parameter GlobalReplace
+        result_str = std::string(str_str.data(), str_str.size());
+        if constexpr (global_mode) {
+            re2::RE2::GlobalReplace(&result_str, *const_re, rpl_str);
+        } else {
+            re2::RE2::Replace(&result_str, *const_re, rpl_str);
+        }
+#else
+        // Linux RE2 API supports 4-parameter GlobalReplace
+        if constexpr (global_mode) {
+            re2::RE2::GlobalReplace(str_str, *const_re, rpl_str, result_str);
+        } else {
+            result_str = std::string(str_str.data(), str_str.size());
+            re2::RE2::Replace(&result_str, *const_re, rpl_str);
+        }
+#endif
+        result.append(Slice(result_str.data(), result_str.size()));
+    }
+
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+template <bool global_mode>
 static ColumnPtr regexp_replace_const(re2::RE2* const_re, const Columns& columns) {
     auto str_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
     auto rpl_viewer = ColumnViewer<TYPE_VARCHAR>(columns[2]);
@@ -3769,10 +3816,19 @@ static ColumnPtr regexp_replace_const(re2::RE2* const_re, const Columns& columns
 #ifdef __APPLE__
         // macOS RE2 API only supports 3-parameter GlobalReplace
         result_str = std::string(str_str.data(), str_str.size());
-        re2::RE2::GlobalReplace(&result_str, *const_re, rpl_str);
+        if constexpr (global_mode) {
+            re2::RE2::GlobalReplace(&result_str, *const_re, rpl_str);
+        } else {
+            re2::RE2::Replace(&result_str, *const_re, rpl_str);
+        }
 #else
         // Linux RE2 API supports 4-parameter GlobalReplace
-        re2::RE2::GlobalReplace(str_str, *const_re, rpl_str, result_str);
+        if constexpr (global_mode) {
+            re2::RE2::GlobalReplace(str_str, *const_re, rpl_str, result_str);
+        } else {
+            result_str = std::string(str_str.data(), str_str.size());
+            re2::RE2::Replace(&result_str, *const_re, rpl_str);
+        }
 #endif
         result.append(Slice(result_str.data(), result_str.size()));
     }
@@ -4005,7 +4061,19 @@ StatusOr<ColumnPtr> StringFunctions::regexp_replace(FunctionContext* context, co
             }
         } else {
             re2::RE2* const_re = state->get_or_prepare_regex();
-            return regexp_replace_const(const_re, columns);
+            if (state->opt_const_rpl.has_value()) {
+                if (state->global_mode) {
+                    return regexp_replace_const_pattern_and_rpl<true>(const_re, columns, state->opt_const_rpl.value());
+                } else {
+                    return regexp_replace_const_pattern_and_rpl<false>(const_re, columns, state->opt_const_rpl.value());
+                }
+            } else {
+                if (state->global_mode) {
+                    return regexp_replace_const<true>(const_re, columns);
+                } else {
+                    return regexp_replace_const<false>(const_re, columns);
+                }
+            }
         }
     }
 

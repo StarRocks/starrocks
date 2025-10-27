@@ -146,6 +146,14 @@ public:
         this->_back_pressure_throttle_time_upper_bound = value;
     }
 
+    void set_heavy_expr_slot_ids(std::vector<SlotId>&& slot_ids) { _heavy_expr_slot_ids = std::move(slot_ids); }
+
+    void set_heavy_expr_ctxs(std::vector<ExprContext*>& ctxs) { _heavy_expr_ctxs = std::move(ctxs); }
+
+    std::vector<SlotId>& get_heavy_expr_slot_ids() { return _heavy_expr_slot_ids; }
+
+    std::vector<ExprContext*>& get_heavy_expr_ctxs() { return _heavy_expr_ctxs; }
+
 protected:
     RuntimeProfile::Counter* _bytes_read_counter = nullptr; // # bytes read from the scanner
     // # rows/tuples read from the scanner (including those discarded by eval_conjucts())
@@ -171,6 +179,9 @@ protected:
     size_t _back_pressure_num_rows = 10240;
     int64_t _back_pressure_throttle_time = 500;
     int64_t _back_pressure_throttle_time_upper_bound = 5000;
+
+    std::vector<SlotId> _heavy_expr_slot_ids;
+    std::vector<ExprContext*> _heavy_expr_ctxs;
 };
 
 } // namespace starrocks

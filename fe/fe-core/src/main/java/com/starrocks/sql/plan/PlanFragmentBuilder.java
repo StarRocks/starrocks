@@ -204,9 +204,11 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorUtil;
 import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamAggOperator;
 import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamJoinOperator;
 import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamScanOperator;
+import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.tree.prunesubfield.SubfieldAccessPathNormalizer;
 import com.starrocks.sql.optimizer.rule.tree.prunesubfield.SubfieldExpressionCollector;
 import com.starrocks.sql.optimizer.statistics.Statistics;
@@ -235,6 +237,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -515,6 +518,46 @@ public class PlanFragmentBuilder {
             return context.getOptExpression(node.getId().asInt());
         }
 
+        private boolean containsHeavyExpr(ScalarOperator expr) {
+            Predicate<ScalarOperator> isHeavyExpr = e -> {
+                if (e.getChildren().isEmpty() || !(e instanceof CallOperator)) {
+                    return false;
+                }
+                CallOperator call = (CallOperator) e;
+                return call.getFnName().toLowerCase().contains("regexp");
+            };
+            return ScalarOperatorUtil.getStream(expr).anyMatch(isHeavyExpr);
+        }
+
+        public Map<ColumnRefOperator, ScalarOperator> extractHeavyExprs(Projection projection) {
+            Map<ColumnRefOperator, ScalarOperator> commonSubExprs =
+                    Optional.ofNullable(projection.getCommonSubOperatorMap())
+                            .orElse(Collections.emptyMap());
+
+            Map<ColumnRefOperator, ScalarOperator> heavyCommonSubExprs =
+                    commonSubExprs.entrySet().stream().filter(e -> containsHeavyExpr(e.getValue()))
+                            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+
+            Map<ColumnRefOperator, ScalarOperator> exprs =
+                    Optional.ofNullable(projection.getColumnRefMap()).orElse(Collections.emptyMap());
+
+            Map<ColumnRefOperator, ScalarOperator> heavyExprs =
+                    exprs.entrySet().stream().filter(e -> containsHeavyExpr(e.getValue()))
+                            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+
+            if (heavyCommonSubExprs.isEmpty() && heavyExprs.isEmpty()) {
+                return Collections.emptyMap();
+            }
+
+            commonSubExprs.replaceAll((k, v) -> heavyCommonSubExprs.containsKey(k) ? k : v);
+
+            ReplaceColumnRefRewriter columnRefReplacer = new ReplaceColumnRefRewriter(commonSubExprs);
+            heavyExprs.replaceAll((k, v) -> columnRefReplacer.rewrite(v));
+            exprs.replaceAll((k, v) -> heavyExprs.containsKey(k) ? k : v);
+            heavyExprs.putAll(heavyCommonSubExprs);
+            return heavyExprs;
+        }
+
         @Override
         public PlanFragment visit(OptExpression optExpression, ExecPlan context) {
             PlanFragment fragment = optExpression.getOp().accept(this, optExpression, context);
@@ -687,6 +730,33 @@ public class PlanFragmentBuilder {
             }
 
             Preconditions.checkState(!node.getColumnRefMap().isEmpty());
+
+            // TODO(by satanson): At present we only support OlapTable
+            if (context.getConnectContext().getSessionVariable().isPushDownHeavyExprs() &&
+                    (inputFragment.getPlanRoot() instanceof OlapScanNode)) {
+                Map<ColumnRefOperator, ScalarOperator> heavyExprs = extractHeavyExprs(node);
+                Map<SlotId, Expr> heavyExprMap = Maps.newHashMap();
+                Preconditions.checkArgument(inputFragment.getPlanRoot().getTupleIds().size() == 1);
+                TupleDescriptor tupleDescriptor =
+                        context.getDescTbl().getTupleDesc(inputFragment.getPlanRoot().getTupleIds().get(0));
+                for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : heavyExprs.entrySet()) {
+                    Expr expr = ScalarOperatorToExpr.buildExecExpression(entry.getValue(),
+                            new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr(),
+                                    node.getCommonSubOperatorMap()));
+
+                    heavyExprMap.put(new SlotId(entry.getKey().getId()), expr);
+
+                    SlotDescriptor slotDescriptor =
+                            context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(entry.getKey().getId()));
+                    slotDescriptor.setIsNullable(expr.isNullable());
+                    slotDescriptor.setIsMaterialized(false);
+                    slotDescriptor.setType(expr.getType());
+                    slotDescriptor.setOriginType(expr.getType());
+                    context.getColRefToExpr()
+                            .put(entry.getKey(), new SlotRef(entry.getKey().toString(), slotDescriptor));
+                }
+                ((OlapScanNode) inputFragment.getPlanRoot()).setHeavyExprs(heavyExprMap);
+            }
 
             TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
 

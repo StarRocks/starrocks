@@ -101,6 +101,7 @@ import com.starrocks.thrift.TNormalOlapScanNode;
 import com.starrocks.thrift.TNormalPlanNode;
 import com.starrocks.thrift.TOlapScanNode;
 import com.starrocks.thrift.TPlanNode;
+import com.starrocks.thrift.TPlanNodeCommon;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TPrimitiveType;
 import com.starrocks.thrift.TScanRange;
@@ -117,6 +118,7 @@ import org.apache.spark.util.SizeEstimator;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -847,6 +849,29 @@ public class OlapScanNode extends ScanNode {
             }
         }
 
+        if (!getHeavyExprs().isEmpty()) {
+            output.append(prefix).append("heavy exprs: ").append("\n");
+            List<Pair<SlotId, Expr>> outputColumns = new ArrayList<>();
+            for (Map.Entry<SlotId, Expr> kv : getHeavyExprs().entrySet()) {
+                outputColumns.add(new Pair<>(kv.getKey(), kv.getValue()));
+            }
+            outputColumns.sort(Comparator.comparingInt(o -> o.first.asInt()));
+
+            for (Pair<SlotId, Expr> kv : outputColumns) {
+                output.append(prefix).append(prefix);
+                if (detailLevel == TExplainLevel.VERBOSE) {
+                    output.append(kv.first).append(" <-> ")
+                            .append(kv.second.explain()).append("\n");
+                } else {
+                    output.append("<slot ").
+                            append(kv.first).
+                            append("> : ").
+                            append(explainExpr(kv.second)).
+                            append("\n");
+                }
+            }
+        }
+
         if (detailLevel != TExplainLevel.VERBOSE) {
             if (isPreAggregation) {
                 output.append(prefix).append("PREAGGREGATION: ON").append("\n");
@@ -1001,6 +1026,13 @@ public class OlapScanNode extends ScanNode {
         List<TColumn> columnsDesc = new ArrayList<TColumn>();
         Set<ColumnId> bfColumns = olapTable.getBfColumnIds();
         long schemaId = 0;
+
+        if (!getHeavyExprs().isEmpty()) {
+            TPlanNodeCommon common = new TPlanNodeCommon();
+            getHeavyExprs().forEach(
+                    (key, value) -> common.putToHeavy_exprs(key.asInt(), ExprToThriftVisitor.treeToThrift(value)));
+            msg.setCommon(common);
+        }
 
         if (selectedIndexId != -1) {
             MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(selectedIndexId);

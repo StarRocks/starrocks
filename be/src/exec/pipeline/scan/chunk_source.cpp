@@ -16,6 +16,7 @@
 
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
 #include "exec/pipeline/scan/scan_operator.h"
+#include "exec/scan_node.h"
 #include "exec/workgroup/scan_task_queue.h"
 #include "exec/workgroup/work_group.h"
 #include "runtime/runtime_state.h"
@@ -73,6 +74,15 @@ Status ChunkSource::buffer_next_batch_chunks_blocking(RuntimeState* state, size_
             // in the chunk.
             if (chunk == nullptr) {
                 chunk = std::make_shared<Chunk>();
+            }
+            if (chunk != nullptr && !chunk->is_empty()) {
+                auto* scan_op_factory = down_cast<ScanOperatorFactory*>(_scan_op->get_factory());
+                auto& slot_ids = scan_op_factory->scan_node()->get_heavy_expr_slot_ids();
+                auto& expr_ctxs = scan_op_factory->scan_node()->get_heavy_expr_ctxs();
+                for (auto k = 0; k < slot_ids.size(); ++k) {
+                    ASSIGN_OR_RETURN(auto col, expr_ctxs[k]->evaluate(chunk.get()));
+                    chunk->append_column(std::move(col), slot_ids[k]);
+                }
             }
             if (!_status.ok()) {
                 // end of file is normal case, need process chunk
