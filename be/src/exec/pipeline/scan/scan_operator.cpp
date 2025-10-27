@@ -70,6 +70,8 @@ Status ScanOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(SourceOperator::prepare(state));
 
     _unique_metrics->add_info_string("MorselQueueType", _morsel_queue->name());
+    auto num_heavy_exprs = down_cast<ScanOperatorFactory*>(_factory)->scan_node()->get_heavy_expr_ctxs().size();
+    _unique_metrics->add_info_string("NumHeavyExprs", std::to_string(num_heavy_exprs));
     _peak_buffer_size_counter = _unique_metrics->AddHighWaterMarkCounter(
             "PeakChunkBufferSize", TUnit::UNIT,
             RuntimeProfile::Counter::create_strategy(TUnit::UNIT, TCounterMergeType::SKIP_ALL),
@@ -660,6 +662,8 @@ Status ScanOperatorFactory::prepare(RuntimeState* state) {
     TEST_SUCC_POINT("ScanOperatorFactory::prepare");
 
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
+    RETURN_IF_ERROR(Expr::prepare(_scan_node->get_heavy_expr_ctxs(), state));
+    RETURN_IF_ERROR(Expr::open(_scan_node->get_heavy_expr_ctxs(), state));
     RETURN_IF_ERROR(do_prepare(state));
 
     return Status::OK();
@@ -671,7 +675,9 @@ OperatorPtr ScanOperatorFactory::create(int32_t degree_of_parallelism, int32_t d
 
 void ScanOperatorFactory::close(RuntimeState* state) {
     do_close(state);
-
+    // Do not call Expr::close, since async io task would access heavy exprs after
+    // they are closed; exprs in scan operators are auto-closed by ExprContext.
+    // Expr::close(_scan_node->get_heavy_expr_ctxs(), state);
     OperatorFactory::close(state);
 }
 
