@@ -2748,12 +2748,17 @@ public class StmtExecutor {
                         commitInfo.setIs_overwrite(true);
                     }
                 }
+
                 IcebergTableSink sink = (IcebergTableSink) execPlan.getFragments().get(0).getSink();
                 IcebergMetadata.IcebergSinkExtra extra = null;
                 extra = fillRewriteFiles(stmt, execPlan, commitInfos, extra);
-
-                context.getGlobalStateMgr().getMetadataMgr().finishSink(
-                        catalogName, dbName, tableName, commitInfos, sink.getTargetBranch(), (Object) extra);
+                if (context.getSkipFinishSink()) {
+                    context.getFinishSinkHandler()
+                            .finish(catalogName, dbName, tableName, commitInfos, sink.getTargetBranch(), (Object) extra);
+                } else {
+                    context.getGlobalStateMgr().getMetadataMgr().finishSink(
+                            catalogName, dbName, tableName, commitInfos, sink.getTargetBranch(), (Object) extra);
+                }
                 txnStatus = TransactionStatus.VISIBLE;
                 label = "FAKE_ICEBERG_SINK_LABEL";
             } else if (targetTable.isHiveTable()) {

@@ -54,6 +54,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.SqlUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.connector.iceberg.IcebergRewriteDataJob.FinishSinkHandler;
 import com.starrocks.http.HttpConnectContext;
 import com.starrocks.mysql.MysqlCapability;
 import com.starrocks.mysql.MysqlChannel;
@@ -314,6 +315,9 @@ public class ConnectContext {
 
     // listeners for this connection
     private List<Listener> listeners = Lists.newArrayList();
+
+    private boolean skipFinishSink = false;
+    private FinishSinkHandler handler = null;
 
     public void setTxnId(long txnId) {
         this.txnId = txnId;
@@ -1712,6 +1716,19 @@ public class ConnectContext {
 
     public void setCurrentThreadId(long currentThreadId) {
         this.currentThreadId = new AtomicLong(currentThreadId);
+    }
+
+    public void setFinishSinkHandler(FinishSinkHandler handler) {
+        this.skipFinishSink = true;
+        this.handler = handler;
+    }
+
+    public boolean getSkipFinishSink() {
+        return skipFinishSink;
+    }
+
+    public FinishSinkHandler getFinishSinkHandler() {
+        return handler;
     }
 
     public interface Listener {
