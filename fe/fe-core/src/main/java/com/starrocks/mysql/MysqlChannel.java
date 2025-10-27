@@ -35,7 +35,7 @@
 package com.starrocks.mysql;
 
 import com.starrocks.common.util.NetUtils;
-import com.starrocks.mysql.nio.ReadListener;
+import com.starrocks.mysql.nio.MySQLReadListener;
 import com.starrocks.mysql.ssl.SSLChannel;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
@@ -118,7 +118,7 @@ public class MysqlChannel {
         return (header[0] & 0xFF) | ((header[1] & 0XFF) << 8) | ((header[2] & 0XFF) << 16);
     }
 
-    private void accSequenceId() {
+    public void accSequenceId() {
         sequenceId++;
         if (sequenceId > 255) {
             sequenceId = 0;
@@ -338,7 +338,7 @@ public class MysqlChannel {
     }
 
     public void startAcceptQuery(ConnectContext connectContext, ConnectProcessor connectProcessor) {
-        conn.getSourceChannel().setReadListener(new ReadListener(connectContext, connectProcessor));
+        conn.getSourceChannel().setReadListener(new MySQLReadListener(connectContext, connectProcessor));
         conn.getSourceChannel().resumeReads();
     }
 
