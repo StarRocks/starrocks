@@ -664,6 +664,7 @@ public class ExpressionStatisticCalculator {
                             callOperator.getType().getTypeSize(), distinctValues);
                 // use child column statistics for now
                 case FunctionSet.SUBSTRING:
+                case FunctionSet.REGEXP_REPLACE:
                     return childColumnStatisticList.get(0);
                 case FunctionSet.CONCAT:
                     distinctValues = Math.min(rowCount,
