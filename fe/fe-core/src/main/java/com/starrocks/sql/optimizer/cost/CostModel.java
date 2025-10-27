@@ -395,13 +395,8 @@ public class CostModel {
             Statistics statistics = context.getStatistics();
             Preconditions.checkNotNull(statistics);
 
-            Statistics leftStatistics = context.getChildStatistics(0);
-            Statistics rightStatistics = context.getChildStatistics(1);
-
-            List<BinaryPredicateOperator> eqOnPredicates =
-                    JoinHelper.getEqualsPredicate(leftStatistics.getUsedColumns(),
-                            rightStatistics.getUsedColumns(),
-                            Utils.extractConjuncts(join.getOnPredicate()));
+            List<BinaryPredicateOperator> eqOnPredicates = JoinHelper.getEqualsPredicate(context.getChildOutputColumns(0),
+                    context.getChildOutputColumns(1), Utils.extractConjuncts(join.getOnPredicate()));
 
             Preconditions.checkState(!(join.getJoinType().isCrossJoin() || eqOnPredicates.isEmpty()),
                     "should be handled by nestloopjoin");
