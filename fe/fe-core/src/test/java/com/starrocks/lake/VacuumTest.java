@@ -399,6 +399,132 @@ public class VacuumTest {
     }
 
     @Test
+    public void testFullVacuumMaxCheckVersionRespectsMinRetainVersion() {
+        GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
+        FullVacuumDaemon fullVacuumDaemon = new FullVacuumDaemon();
+
+        long expectedVisibleVersion = 10L;
+        long expectedMinRetainVersion = 6L;
+
+        long testDbId = 0;
+        List<Long> dbIds = currentState.getLocalMetastore().getDbIds();
+        for (Long dbId : dbIds) {
+            Database currDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+            if (currDb != null && !currDb.isSystemDatabase()) {
+                testDbId = dbId;
+                break;
+            }
+        }
+        final Database sourceDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(testDbId);
+        for (Table tbl : sourceDb.getTables()) {
+            if (tbl.isOlapTable()) {
+                OlapTable olapTbl = (OlapTable) tbl;
+                for (PhysicalPartition part : olapTbl.getPhysicalPartitions()) {
+                    part.setLastFullVacuumTime(1L);
+                    part.setMinRetainVersion(expectedMinRetainVersion);
+                }
+            }
+        }
+
+        new MockUp<PhysicalPartition>() {
+            @Mock
+            public long getVisibleVersion() {
+                return expectedVisibleVersion;
+            }
+        };
+
+        new MockUp<Table>() {
+            @Mock
+            public boolean isCloudNativeTableOrMaterializedView() {
+                return true;
+            }
+        };
+
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Database getDb(long dbId) {
+                return sourceDb;
+            }
+
+            @Mock
+            public List<Table> getTables(Long dbId) {
+                return sourceDb.getTables();
+            }
+        };
+
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public ComputeNode getComputeNodeAssignedToTablet(ComputeResource computeResource, long tabletId) {
+                return new ComputeNode();
+            }
+        };
+
+        new MockUp<BrpcProxy>() {
+            @Mock
+            public LakeService getLakeService(String host, int port) {
+                return new LakeServiceWithMetrics(null);
+            }
+        };
+
+        new MockUp<LakeServiceWithMetrics>() {
+            @Mock
+            public Future<VacuumFullResponse> vacuumFull(VacuumFullRequest request) {
+                VacuumFullResponse resp = new VacuumFullResponse();
+                resp.status = new StatusPB();
+                resp.status.statusCode = 0;
+                resp.vacuumedFiles = 1L;
+                resp.vacuumedFileSize = 1L;
+                return CompletableFuture.completedFuture(resp);
+            }
+        };
+
+        final StarOSAgent starOSAgent = new StarOSAgent();
+        final ClusterSnapshotMgr clusterSnapshotMgr = new ClusterSnapshotMgr();
+        final WarehouseManager curWarehouseManager = new WarehouseManager();
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public ClusterSnapshotMgr getClusterSnapshotMgr() {
+                return clusterSnapshotMgr;
+            }
+
+            @Mock
+            public WarehouseManager getWarehouseMgr() {
+                return curWarehouseManager;
+            }
+
+            @Mock
+            public StarOSAgent getStarOSAgent() {
+                return starOSAgent;
+            }
+        };
+
+        new MockUp<ClusterSnapshotMgr>() {
+            @Mock
+            public long getSafeDeletionTimeMs() {
+                return 454545L;
+            }
+        };
+
+        new MockUp<VacuumFullRequest>() {
+            @Mock
+            public void setMaxCheckVersion(long v) {
+                // Expect min(visibleVersion, minRetainVersion)
+                Assertions.assertEquals(Math.min(expectedVisibleVersion, expectedMinRetainVersion), v);
+            }
+        };
+
+        FeConstants.runningUnitTest = false;
+        int oldValue1 = Config.lake_fullvacuum_parallel_partitions;
+        long oldValue2 = Config.lake_fullvacuum_partition_naptime_seconds;
+        Config.lake_fullvacuum_parallel_partitions = 1;
+        Config.lake_fullvacuum_partition_naptime_seconds = 0;
+        Deencapsulation.invoke(fullVacuumDaemon, "runAfterCatalogReady");
+        Config.lake_fullvacuum_partition_naptime_seconds = oldValue2;
+        Config.lake_fullvacuum_parallel_partitions = oldValue1;
+        FeConstants.runningUnitTest = true;
+    }
+
+    @Test
     public void testLastSuccVacuumVersionUpdateFailed() throws Exception {
         GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
         partition = olapTable.getPhysicalPartitions().stream().findFirst().orElse(null);
