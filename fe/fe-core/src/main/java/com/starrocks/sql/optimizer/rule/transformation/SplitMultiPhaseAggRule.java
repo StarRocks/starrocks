@@ -22,12 +22,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
-<<<<<<< HEAD
-import com.starrocks.qe.ConnectContext;
-=======
 import com.starrocks.qe.SessionVariable;
-import com.starrocks.sql.ast.expression.Expr;
->>>>>>> 2fc8c3a270 ([Enhancement] Generate 3-stage aggregation by child distribution (#63660))
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.OptExpression;
