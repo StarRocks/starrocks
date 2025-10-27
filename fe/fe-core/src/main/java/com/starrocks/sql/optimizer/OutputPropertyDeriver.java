@@ -21,12 +21,9 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.system.SystemTable;
-<<<<<<< HEAD
-=======
 import com.starrocks.connector.BucketProperty;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
->>>>>>> d54980e64b ([BugFix] Reset Sort Property in Join's Output Property (#64086))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.base.CTEProperty;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
