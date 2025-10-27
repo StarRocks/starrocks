@@ -101,11 +101,8 @@ option(WITH_TENANN "Build with TENANN" OFF)
 
 option(WITH_RELATIVE_SRC_PATH "Build source file with relative path" ON)
 
-# Only support tenann on x86
-if (${WITH_TENANN} STREQUAL "ON" AND NOT "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "aarch64")
+if (${WITH_TENANN} STREQUAL "ON")
     add_definitions(-DWITH_TENANN)
-else()
-    set(WITH_TENANN "OFF")
 endif()
 
 message(STATUS "WITH TENANN is: ${WITH_TENANN}")
