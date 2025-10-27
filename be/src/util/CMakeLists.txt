@@ -111,6 +111,7 @@ set(UTIL_FILES
   bthreads/future_impl.cpp
   hash_util.cpp
   debug_action.cpp
+  memory_lock.cpp
   internal_service_recoverable_stub.cpp
   lake_service_recoverable_stub.cpp
   byte_buffer.cpp

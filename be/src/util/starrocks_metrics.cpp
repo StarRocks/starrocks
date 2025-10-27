@@ -254,6 +254,8 @@ StarRocksMetrics::StarRocksMetrics() : _metrics(_s_registry_name) {
     REGISTER_STARROCKS_METRIC(blocks_open_reading);
     REGISTER_STARROCKS_METRIC(blocks_open_writing);
 
+    REGISTER_STARROCKS_METRIC(exec_runtime_memory_size);
+
     REGISTER_STARROCKS_METRIC(short_circuit_request_total);
     REGISTER_STARROCKS_METRIC(short_circuit_request_duration_us);
 }
