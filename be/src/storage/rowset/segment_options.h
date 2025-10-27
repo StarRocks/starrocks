@@ -124,7 +124,6 @@ public:
 
     bool enable_join_runtime_filter_pushdown = false;
     bool enable_predicate_col_late_materialize = false;
-    bool enable_predicate_order_sorting = false;
 
     bool read_by_generated_column_adding = false;
 

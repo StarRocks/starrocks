@@ -1188,7 +1188,7 @@ void SegmentIterator::_init_compound_and_predicates_for_predicate_col_late_mater
     const ColumnPredicateMap& column_predicate_map = _opts.pred_tree.get_immediate_column_predicate_map();
     _context->_column_predicate_map.reserve(column_predicate_map.size());
     _context->_predicate_order.reserve(column_predicate_map.size());
-    
+
     for (const auto& pair : column_predicate_map) {
         _context->_predicate_order.emplace_back(pair.first);
         _context->_column_predicate_map.emplace(pair.first, pair.second);
@@ -1210,36 +1210,6 @@ void SegmentIterator::_init_compound_and_predicates_for_predicate_col_late_mater
 
     // all predicate columns + rowId column == _column_iterators size
     DCHECK(_context->_predicate_order.size() + 1 == _context->_column_iterators.size());
-
-    auto is_complex_type = [this](ColumnId column_id) -> bool {
-        auto it = _context->_column_ids_to_index.find(column_id);
-        if (it == _context->_column_ids_to_index.end()) {
-            return false;
-        }
-
-        const FieldPtr& field = _schema.field(it->second);
-        LogicalType type = field->type()->type();
-
-        return is_string_type(type) ||    // CHAR, VARCHAR
-               type == TYPE_JSON ||       // JSON
-               type == TYPE_ARRAY ||      // ARRAY
-               type == TYPE_MAP ||        // MAP
-               type == TYPE_STRUCT ||     // STRUCT
-               type == TYPE_HLL ||        // HLL
-               type == TYPE_OBJECT ||     // OBJECT
-               type == TYPE_PERCENTILE || // PERCENTILE
-               type == TYPE_VARBINARY;    // VARBINARY
-    };
-
-    // Only sort predicates if the session variable is enabled
-    if (_opts.enable_predicate_order_sorting) {
-        std::stable_sort(_context->_predicate_order.begin(), _context->_predicate_order.end(),
-                         [&is_complex_type](ColumnId a, ColumnId b) -> bool {
-                             bool a_is_complex = is_complex_type(a);
-                             bool b_is_complex = is_complex_type(b);
-                             return !a_is_complex && b_is_complex;
-                         });
-    }
 
     const ColumnId first_column_id = _context->_predicate_order.front();
     _context->_column_iterators_for_predicate_late_materialize.clear();
@@ -1278,6 +1248,7 @@ Status SegmentIterator::trigger_sample_if_necessary(vector<rowid_t>* rowid) {
             }
         }
     }
+    return Status::OK();
 }
 
 Status SegmentIterator::_sample_predicate_columns(vector<rowid_t>* rowid) {
