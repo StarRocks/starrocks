@@ -279,22 +279,6 @@ Status BinaryDictPageDecoder<Type>::next_batch(const SparseRange<>& range, Colum
         size_t _size;
     };
 
-    size_t estimated_column_size = _dict_decoder->estimate_columns_size();
-    Column* data_col;
-    if (dst->is_nullable()) {
-        // This is NullableColumn, get its data_column
-        auto* nullable_col = down_cast<NullableColumn*>(dst);
-        data_col = nullable_col->data_column().get();
-
-    } else {
-        data_col = dst;
-    }
-
-    if (data_col->is_binary()) {
-        BinaryColumn* binary_col = down_cast<BinaryColumn*>(data_col);
-        binary_col->reserve(config::vector_chunk_size, estimated_column_size);
-    }
-
     SliceContainerAdaptor adaptor(slices, nread);
     bool ok = dst->append_strings_overflow(adaptor, _max_value_length);
     DCHECK(ok) << "append_strings_overflow failed";
@@ -394,21 +378,6 @@ Status BinaryDictPageDecoder<Type>::next_batch_with_filter(
 
     // Step 4: Append selected strings to column using append_strings_overflow
     if (!selected_slices.empty()) {
-        size_t estimated_column_size = _dict_decoder->estimate_columns_size();
-        Column* data_col;
-        if (column->is_nullable()) {
-            // This is NullableColumn, get its data_column
-            auto* nullable_col = down_cast<NullableColumn*>(column);
-            data_col = nullable_col->data_column().get();
-        } else {
-            data_col = column;
-        }
-
-        if (data_col->is_binary()) {
-            BinaryColumn* binary_col = down_cast<BinaryColumn*>(data_col);
-            binary_col->reserve(config::vector_chunk_size, estimated_column_size);
-        }
-
         class SliceContainerAdaptor {
         public:
             using value_type = Slice;
@@ -481,22 +450,6 @@ Status BinaryDictPageDecoder<Type>::read_by_rowids(const ordinal_t first_ordinal
         size_t _size;
     };
 
-    size_t estimated_column_size = _dict_decoder->estimate_columns_size();
-    Column* data_col;
-    if (column->is_nullable()) {
-        // This is NullableColumn, get its data_column
-        auto* nullable_col = down_cast<NullableColumn*>(column);
-        data_col = nullable_col->data_column().get();
-
-    } else {
-        data_col = column;
-    }
-
-    if (data_col->is_binary()) {
-        BinaryColumn* binary_col = down_cast<BinaryColumn*>(data_col);
-        binary_col->reserve(config::vector_chunk_size, estimated_column_size);
-    }
-
     SliceContainerAdaptor adaptor(slices, read_count);
     bool ok = column->append_strings_overflow(adaptor, _max_value_length);
     RETURN_IF(!ok, Status::InternalError("BinaryDictPageDecoder::read_by_rowids failed"));
@@ -524,6 +477,27 @@ Status BinaryDictPageDecoder<Type>::next_dict_codes(const SparseRange<>& range, 
     DCHECK(_encoding_type == DICT_ENCODING);
     DCHECK(_parsed);
     return _data_page_decoder->next_batch(range, dst);
+}
+
+template <LogicalType Type>
+void BinaryDictPageDecoder<Type>::reserve_col(size_t n, Column* column) {
+    DCHECK(_encoding_type == DICT_ENCODING);
+    DCHECK(_parsed);
+    size_t estimated_row_size = _dict_decoder->estimate_row_size();
+    Column* data_col;
+    if (column->is_nullable()) {
+        // This is NullableColumn, get its data_column
+        auto* nullable_col = down_cast<NullableColumn*>(column);
+        data_col = nullable_col->data_column().get();
+
+    } else {
+        data_col = column;
+    }
+
+    if (data_col->is_binary()) {
+        BinaryColumn* binary_col = down_cast<BinaryColumn*>(data_col);
+        binary_col->reserve(n, estimated_row_size * n);
+    }
 }
 
 template class BinaryDictPageDecoder<TYPE_CHAR>;
