@@ -200,6 +200,7 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
         return "LogicalAggregation" + " {type=" + node.getType() +
                 " ,aggregations=" + node.getAggregations() +
                 " ,groupKeys=" + node.getGroupingKeys() +
+                ", partitionBys=" + node.getPartitionByColumns() +
                 " ,projection=" + node.getProjection() +
                 " ,predicate=" + node.getPredicate() +
                 "}";

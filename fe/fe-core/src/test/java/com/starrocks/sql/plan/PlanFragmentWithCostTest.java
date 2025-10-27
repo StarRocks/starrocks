@@ -55,6 +55,14 @@ public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
     @BeforeEach
     public void before() {
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
+
+        GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+        OlapTable t0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0");
+        setTableStatistics(t0, NUM_TABLE0_ROWS);
+        OlapTable t1 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t1");
+        setTableStatistics(t1, 10000);
+        OlapTable t2 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t1");
+        setTableStatistics(t2, NUM_TABLE2_ROWS);
     }
 
     private static final String V1 = "v1";
@@ -1049,7 +1057,10 @@ public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
     public void testLocalGroupingSet1() throws Exception {
         String sql = "select v1, v2, v3 from t0 group by grouping sets((v1, v2), (v1, v3), (v1))";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "  2:AGGREGATE (update serialize)\n" +
+        assertContains(plan, "  3:AGGREGATE (merge finalize)\n" +
+                "  |  group by: 1: v1, 2: v2, 3: v3, 4: GROUPING_ID\n" +
+                "  |  \n" +
+                "  2:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
                 "  |  group by: 1: v1, 2: v2, 3: v3, 4: GROUPING_ID\n" +
                 "  |  \n" +
@@ -2432,5 +2443,10 @@ public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
                     "  3:EXCHANGE");
             connectContext.getSessionVariable().setBroadcastRowCountLimit(originLimit);
         }
+    }
+
+    @Test
+    public void testCostBasedMultiStageAgg() {
+        runFileUnitTest("optimized-plan/cost_based_multi_stage_agg");
     }
 }
