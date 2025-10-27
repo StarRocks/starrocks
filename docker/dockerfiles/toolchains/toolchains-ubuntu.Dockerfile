@@ -8,9 +8,8 @@ ARG GCC_DOWNLOAD_URL=https://ftp.gnu.org/gnu/gcc/gcc-14.3.0/gcc-14.3.0.tar.gz
 FROM ubuntu:22.04 AS build-gcc
 
 RUN apt-get update -y && apt-get install -y --no-install-recommends \
-    build-essential wget curl git bison flex texinfo gawk libgmp-dev libmpfr-dev libmpc-dev zlib1g-dev 
-
-RUN apt-get install -y ca-certificates && update-ca-certificates
+    build-essential wget curl git bison flex texinfo gawk libgmp-dev libmpfr-dev libmpc-dev zlib1g-dev && \
+    apt-get install -y ca-certificates && update-ca-certificates
 
 RUN mkdir -p $GCC_WORK_DIR && \
     cd $GCC_WORK_DIR && \
@@ -23,6 +22,7 @@ RUN mkdir -p $GCC_WORK_DIR && \
 
 FROM ubuntu:22.04
 
+ARG GCC_INSTALL_HOME
 ARG CMAKE_INSTALL_HOME=/opt/cmake
 ARG COMMIT_ID=unset
 
@@ -32,7 +32,7 @@ LABEL com.starrocks.commit=${COMMIT_ID}
 # Install common libraries and tools that are needed for dev environment
 RUN apt-get update -y && \
     apt-get install --no-install-recommends -y \
-    automake binutils-dev bison byacc ccache flex libiberty-dev libtool maven zip python3 python-is-python3 make gcc g++ openjdk-17-jdk git patch lld bzip2 \
+    automake binutils-dev bison byacc ccache flex libiberty-dev libtool maven zip python3 python-is-python3 make openjdk-17-jdk git patch lld bzip2 \
     wget unzip curl vim tree net-tools openssh-client xz-utils gh locales && \
     DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt-get -y install tzdata && \
     locale-gen en_US.UTF-8 && \
