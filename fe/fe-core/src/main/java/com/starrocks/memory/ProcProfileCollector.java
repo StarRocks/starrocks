@@ -79,6 +79,7 @@ public class ProcProfileCollector extends FrontendDaemon {
         if (StringUtils.isEmpty(value)) {
             String path = Config.STARROCKS_HOME_DIR + "/bin/";
             System.setProperty(libPathProperty, path);
+            LOG.info("change the system property {} to {}", libPathProperty, path);
         }
     }
 
