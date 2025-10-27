@@ -282,8 +282,8 @@ bool BinaryPlainPageDecoder<Type>::next_range_with_filter(
         // Create a heap-allocated BinaryColumn to avoid stack object lifetime issues
         auto temp_column = BinaryColumn::create(data_ptr, data_length, std::move(temp_offsets));
 
-        Status predicate_result = compound_and_predicates_evaluate(compound_and_predicates, temp_column.get(), selection,
-                                                                   selected_idx, 0, num_rows);
+        Status predicate_result = compound_and_predicates_evaluate(compound_and_predicates, temp_column.get(),
+                                                                   selection, selected_idx, 0, num_rows);
         auto data_column = ColumnHelper::get_data_column(dst);
         auto& bytes = down_cast<BinaryColumn*>(data_column)->get_bytes();
         auto& offsets = down_cast<BinaryColumn*>(data_column)->get_offset();
