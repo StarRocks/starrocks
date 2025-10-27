@@ -980,26 +980,4 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         return this.aggStateDesc;
     }
 
-    public static Column fromColumnDef(Table table, ColumnDef columnDef) {
-        Column col = new Column(columnDef.getName(),
-                columnDef.getTypeDef().getType(),
-                columnDef.isKey(),
-                columnDef.getAggregateType(),
-                columnDef.getAggStateDesc(),
-                columnDef.isAllowNull(),
-                columnDef.getDefaultValueDef(),
-                columnDef.getComment(),
-                Column.COLUMN_UNIQUE_ID_INIT_VALUE);
-        col.setIsAutoIncrement(columnDef.isAutoIncrement());
-
-        Expr generatedColumnExpr = columnDef.getGeneratedColumnExpr();
-        if (generatedColumnExpr != null) {
-            if (table != null) {
-                col.setGeneratedColumnExpr(ColumnIdExpr.create(table.getNameToColumn(), generatedColumnExpr));
-            } else {
-                col.setGeneratedColumnExpr(ColumnIdExpr.create(generatedColumnExpr));
-            }
-        }
-        return col;
-    }
 }
