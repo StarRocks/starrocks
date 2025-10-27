@@ -70,6 +70,7 @@ Status ChunkAggregator::prepare() {
         ASSIGN_OR_RETURN(auto aggregator, ColumnAggregatorFactory::create_value_column_aggregator(_schema->field(i)));
         _column_aggregator.emplace_back(std::move(aggregator));
     }
+    aggregate_reset();
     return Status::OK();
 }
 
