@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.common.FeConstants;
 import com.starrocks.server.GlobalStateMgr;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -113,6 +114,7 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\"\n" +
                 ");");
+        FeConstants.runningUnitTest = false;
     }
 
     @BeforeEach
