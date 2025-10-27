@@ -39,7 +39,7 @@ public class LowCardinalityRewriteRule implements TreeRewriteRule {
                 return root;
             }
         }
-        DecodeRewriter rewriter = new DecodeRewriter(factory, context);
+        DecodeRewriter rewriter = new DecodeRewriter(factory, context, session);
         return rewriter.rewrite(root);
     }
 }
