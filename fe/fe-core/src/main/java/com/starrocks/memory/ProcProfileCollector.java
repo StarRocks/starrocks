@@ -67,6 +67,10 @@ public class ProcProfileCollector extends FrontendDaemon {
         deleteExpiredFiles();
     }
 
+    public String getProfileLogDir() {
+        return profileLogDir;
+    }
+
     // AsyncProfiler depends on the native library libasyncProfiler.so, which is bundled inside the JAR.
     // By default, it extracts this library to the /tmp directory in order to load it.
     // However, if /tmp is mounted with the "noexec" option, loading the library will fail.
@@ -77,9 +81,11 @@ public class ProcProfileCollector extends FrontendDaemon {
         final String libPathProperty = "one.profiler.extractPath";
         String value = System.getProperty(libPathProperty);
         if (StringUtils.isEmpty(value)) {
-            String path = Config.STARROCKS_HOME_DIR + "/bin/";
-            System.setProperty(libPathProperty, path);
-            LOG.info("change the system property {} to {}", libPathProperty, path);
+            String dir = Config.STARROCKS_HOME_DIR + "/bin/";
+            if (StringUtils.isNotEmpty(Config.STARROCKS_HOME_DIR) && new File(dir).exists()) {
+                System.setProperty(libPathProperty, dir);
+                LOG.info("change the system property {} to {}", libPathProperty, dir);
+            }
         }
     }
 
