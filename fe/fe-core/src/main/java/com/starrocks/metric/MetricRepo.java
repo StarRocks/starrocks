@@ -490,6 +490,16 @@ public final class MetricRepo {
         };
         STARROCKS_METRIC_REGISTER.addMetric(totalTabletCount);
 
+        // connections
+        GaugeMetric<Integer> connections = new GaugeMetric<Integer>(
+                "connection_total", MetricUnit.CONNECTIONS, "total connections") {
+            @Override
+            public Integer getValue() {
+                return ExecuteEnv.getInstance().getScheduler().getConnectionNum();
+            }
+        };
+        STARROCKS_METRIC_REGISTER.addMetric(connections);
+
         // 2. counter
         COUNTER_REQUEST_ALL = new LongCounterMetric("request_total", MetricUnit.REQUESTS, "total request");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_REQUEST_ALL);
@@ -1039,7 +1049,9 @@ public final class MetricRepo {
 
 
         //collect connections for per user
-        collectUserConnMetrics(visitor);
+        if (requestParams.isCollectUserConnMetrics()) {
+            collectUserConnMetrics(visitor);
+        }
 
         // collect runnning txns of per db
         collectDbRunningTxnMetrics(visitor);

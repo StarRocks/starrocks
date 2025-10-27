@@ -65,6 +65,7 @@ public class MetricsAction extends RestBaseAction {
     // `with_table_metrics=all` : with all table metrics
     protected static final String WITH_TABLE_METRICS_PARAM = "with_table_metrics";
     protected static final String WITH_MATERIALIZED_VIEW_METRICS_PARAM = "with_materialized_view_metrics";
+    protected static final String WITH_USER_CONNECTIONS_PARAM = "with_user_connections";
     protected static final String COLLECT_MODE_METRICS_MINIFIED = "minified";
     protected static final String COLLECT_MODE_METRICS_ALL = "all";
     protected static final Set<String> SUPPORTED_COLLECT_METRIC_MODES =
@@ -84,13 +85,17 @@ public class MetricsAction extends RestBaseAction {
         private final boolean collectMVMetrics;
         // Whether to collect per materialized view metrics in minified mode, Ignore some heavy metrics if true
         private final boolean minifyMVMetrics;
+        // Whether to collect user connection metrics
+        private final boolean collectUserConnMetrics;
 
         public RequestParams(boolean collectTableMetrics, boolean minifyTableMetrics,
-                      boolean collectMVMetrics, boolean minifyMVMetrics) {
+                      boolean collectMVMetrics, boolean minifyMVMetrics,
+                      boolean collectUserConnMetrics) {
             this.collectTableMetrics = collectTableMetrics;
             this.minifyTableMetrics = minifyTableMetrics;
             this.collectMVMetrics = collectMVMetrics;
             this.minifyMVMetrics = minifyMVMetrics;
+            this.collectUserConnMetrics = collectUserConnMetrics;
         }
 
         public boolean isCollectTableMetrics() {
@@ -107,6 +112,10 @@ public class MetricsAction extends RestBaseAction {
 
         public boolean isMinifyMVMetrics() {
             return minifyMVMetrics;
+        }
+
+        public boolean isCollectUserConnMetrics() {
+            return collectUserConnMetrics;
         }
     }
 
@@ -149,11 +158,13 @@ public class MetricsAction extends RestBaseAction {
     protected RequestParams parseRequestParams(BaseRequest request) {
         String withTableMetrics = request.getSingleParameter(WITH_TABLE_METRICS_PARAM);
         String withMaterializedViewsMetrics = request.getSingleParameter(WITH_MATERIALIZED_VIEW_METRICS_PARAM);
+        String withUserConnections = request.getSingleParameter(WITH_USER_CONNECTIONS_PARAM);
         boolean isCollectTableMetrics = isCollectTableOrMVMetrics(withTableMetrics);
         boolean isCollectMVMetrics = isCollectTableOrMVMetrics(withMaterializedViewsMetrics);
+        boolean isCollectUserConnMetrics = isCollectTableOrMVMetrics(withUserConnections);
 
         // check request authorization
-        if (isCollectTableMetrics || isCollectMVMetrics) {
+        if (isCollectTableMetrics || isCollectMVMetrics || isCollectUserConnMetrics) {
             UserIdentity currentUser = null;
             try {
                 ActionAuthorizationInfo authInfo = getAuthorizationInfo(request);
@@ -163,7 +174,8 @@ public class MetricsAction extends RestBaseAction {
                 // disable Table related metrics collection due to AccessDenied
                 isCollectTableMetrics = false;
                 isCollectMVMetrics = false;
-                LOG.warn("Auth failure when getting table level metrics, current user: {}, error msg: {}",
+                isCollectUserConnMetrics = false;
+                LOG.warn("Auth failure when getting metrics, current user: {}, error msg: {}",
                         currentUser, e.getMessage());
             }
         }
@@ -177,6 +189,7 @@ public class MetricsAction extends RestBaseAction {
         boolean isCollectTableMetricsMinifiedMode = isCollectTableOrMVMetricsMinifiedMode(withTableMetrics);
         boolean isCollectMVMetricsMinifiedMode = isCollectTableOrMVMetricsMinifiedMode(withMaterializedViewsMetrics);
         return new RequestParams(isCollectTableMetrics, isCollectTableMetricsMinifiedMode,
-                isCollectMVMetrics, isCollectMVMetricsMinifiedMode);
+                isCollectMVMetrics, isCollectMVMetricsMinifiedMode,
+                isCollectUserConnMetrics);
     }
 }
