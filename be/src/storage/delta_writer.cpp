@@ -467,17 +467,18 @@ Status DeltaWriter::write(const Chunk& chunk, const uint32_t* indexes, uint32_t 
     if (_mem_tracker->limit_exceeded()) {
         VLOG(2) << "Flushing memory table due to memory limit exceeded";
         st = _flush_memtable();
+        RETURN_IF_ERROR(_reset_mem_table());
     } else if (_mem_tracker->parent() && _mem_tracker->parent()->limit_exceeded()) {
         VLOG(2) << "Flushing memory table due to parent memory limit exceeded";
         st = _flush_memtable();
+        RETURN_IF_ERROR(_reset_mem_table());
     } else if (full) {
         st = flush_memtable_async();
         ADD_COUNTER_RELAXED(_stats.memtable_full_count, 1);
+        RETURN_IF_ERROR(_reset_mem_table());
     }
     if (!st.ok()) {
         _set_state(kAborted, st);
-    } else {
-        st = _reset_mem_table();
     }
     return st;
 }
