@@ -65,7 +65,7 @@ public class OptimizeJobV2Test extends DDLTestBase {
 
     @BeforeEach
     public void setUp() throws Exception {
-        FeConstants.runningUnitTest = true;
+        FeConstants.runningUnitTest = false;
         Config.enable_new_publish_mechanism = false;
         Config.tablet_sched_checker_interval_seconds = 100;
         Config.tablet_sched_repair_delay_factor_second = 100;
@@ -76,7 +76,6 @@ public class OptimizeJobV2Test extends DDLTestBase {
         String stmt = "alter table testTable7 distributed by hash(v1)";
         alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
         Config.enable_online_optimize_table = false;
-
     }
 
     @AfterEach
