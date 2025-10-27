@@ -84,6 +84,7 @@ public class ThreadPoolManager {
 
     private static final long KEEP_ALIVE_TIME = 60L;
 
+<<<<<<< HEAD
     private static final ThreadPoolExecutor DICT_CACHE_THREAD_POOL =
             ThreadPoolManager.newDaemonCacheThreadPool(Config.dict_collect_thread_pool_size, "cache-dict",
             false);
@@ -91,6 +92,25 @@ public class ThreadPoolManager {
     private static final ThreadPoolExecutor DICT_CACHE_THREAD_POOL_FOR_LAKE =
             ThreadPoolManager.newDaemonCacheThreadPool(Config.dict_collect_thread_pool_for_lake_size,
                     "cache-dict-lake", false);
+=======
+    private static final ThreadPoolExecutor STATS_CACHE_THREAD_POOL =
+            ThreadPoolManager.newCollectThreadPool(Config.dict_collect_thread_pool_size, "cache-stats"
+            );
+
+    private static final ThreadPoolExecutor STATS_CACHE_THREAD_POOL_FOR_LAKE =
+            ThreadPoolManager.newCollectThreadPool(Config.dict_collect_thread_pool_for_lake_size,
+                    "cache-stats-lake");
+
+    private static ThreadPoolExecutor newCollectThreadPool(int maxNumThread, String poolName) {
+        if (Config.dict_collect_reject_policy.equals("ignore")) {
+            return newDaemonCacheThreadPool(maxNumThread, poolName, false);
+        } else if (Config.dict_collect_reject_policy.equals("queue")) {
+            return newDaemonCacheThreadPool(maxNumThread, Config.dict_collect_queue_size, poolName, false);
+        } else {
+            throw new RuntimeException("unknown config" + Config.dict_collect_reject_policy);
+        }
+    }
+>>>>>>> 3f4805737e ([UT] Introducing low-cardinality collection queue parameters to enhance UT stability (#64589))
 
     public static ThreadPoolExecutor getDictCacheThread() {
         return DICT_CACHE_THREAD_POOL;
@@ -141,7 +161,7 @@ public class ThreadPoolManager {
     }
 
     public static ThreadPoolExecutor newDaemonCacheThreadPool(int maxNumThread, int queueSize, String poolName,
-            boolean needRegisterMetric) {
+                                                              boolean needRegisterMetric) {
         return newDaemonThreadPool(0, maxNumThread, KEEP_ALIVE_TIME, TimeUnit.SECONDS,
                 new LinkedBlockingQueue<>(queueSize),
                 new BlockedPolicy(poolName, 5), poolName, needRegisterMetric);
@@ -155,7 +175,8 @@ public class ThreadPoolManager {
     }
 
     public static PriorityThreadPoolExecutor newDaemonFixedPriorityThreadPool(int numThread, int queueSize,
-            String poolName, boolean needRegisterMetric) {
+                                                                              String poolName,
+                                                                              boolean needRegisterMetric) {
         ThreadFactory threadFactory = namedThreadFactory(poolName);
         PriorityThreadPoolExecutor threadPool = new PriorityThreadPoolExecutor(numThread, numThread, 0,
                 TimeUnit.SECONDS, new PriorityBlockingQueue<>(queueSize), threadFactory,
