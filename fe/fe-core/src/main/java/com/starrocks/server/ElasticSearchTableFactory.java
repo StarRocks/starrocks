@@ -16,6 +16,7 @@ package com.starrocks.server;
 
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnBuilder;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.PartitionInfo;
@@ -46,13 +47,16 @@ public class ElasticSearchTableFactory implements AbstractTableFactory {
 
         // create columns
         List<Column> baseSchema = stmt.getColumnDefs().stream()
-                .map(ref -> new Column(ref.getName(),
-                        ref.getType(),
-                        ref.isKey(),
-                        ref.getAggregateType(),
-                        ref.isAllowNull(),
-                        ref.getDefaultValueDef(),
-                        "by es comment"))
+                .map(ref -> {
+                    Column column;
+                    if (ref.getGeneratedColumnExpr() != null) {
+                        column = ColumnBuilder.buildGeneratedColumn(null, ref);
+                    } else {
+                        column = ColumnBuilder.buildColumn(ref);
+                    }
+                    column.setComment("by es comment");
+                    return column;
+                })
                 .collect(Collectors.toList());
         // metastore is null when external table
         if (null != metastore) {

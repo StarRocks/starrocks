@@ -29,6 +29,7 @@ import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnBuilder;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExpressionRangePartitionInfoV2;
@@ -1841,7 +1842,7 @@ public class MaterializedViewAnalyzer {
         ColumnDef generatedPartitionColumn = new ColumnDef(
                 columnName, typeDef, null, false, aggregateType, null, true,
                 ColumnDef.DefaultValueDef.NOT_SET, null, adjustedPartitionByExpr, "");
-        return Column.fromColumnDef(null, generatedPartitionColumn);
+        return ColumnBuilder.buildGeneratedColumn(null, generatedPartitionColumn);
     }
 
     /**
