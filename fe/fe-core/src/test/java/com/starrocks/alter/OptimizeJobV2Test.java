@@ -70,7 +70,6 @@ public class OptimizeJobV2Test extends DDLTestBase {
         String stmt = "alter table testTable7 distributed by hash(v1)";
         alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
         Config.enable_online_optimize_table = false;
-
     }
 
     @AfterEach
