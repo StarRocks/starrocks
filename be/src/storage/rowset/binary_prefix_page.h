@@ -130,10 +130,6 @@ public:
     Status next_batch(size_t* n, Column* dst) override;
 
     Status next_batch(const SparseRange<>& range, Column* dst) override;
-
-    Status read_by_rowids(const ordinal_t first_ordinal_in_page, const rowid_t* rowids, size_t* count,
-                          Column* column) override;
-
     uint32_t count() const override {
         DCHECK(_parsed);
         return _num_values;
