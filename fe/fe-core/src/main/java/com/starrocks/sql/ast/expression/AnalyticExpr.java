@@ -46,7 +46,6 @@ import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.HintNode;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.thrift.TExprNode;
 import org.apache.commons.collections.CollectionUtils;
 
 import java.util.ArrayList;
@@ -248,9 +247,6 @@ public class AnalyticExpr extends Expr {
                 .toString();
     }
 
-    @Override
-    protected void toThrift(TExprNode msg) {
-    }
 
     public static boolean isAnalyticFn(Function fn) {
         return fn instanceof AggregateFunction

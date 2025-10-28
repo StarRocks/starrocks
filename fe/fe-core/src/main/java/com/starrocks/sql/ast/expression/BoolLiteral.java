@@ -40,9 +40,6 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.thrift.TBoolLiteral;
-import com.starrocks.thrift.TExprNode;
-import com.starrocks.thrift.TExprNodeType;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -144,11 +141,6 @@ public class BoolLiteral extends LiteralExpr {
         return value ? 1.0 : 0.0;
     }
 
-    @Override
-    protected void toThrift(TExprNode msg) {
-        msg.node_type = TExprNodeType.BOOL_LITERAL;
-        msg.bool_literal = new TBoolLiteral(value);
-    }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {

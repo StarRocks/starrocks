@@ -21,8 +21,6 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.thrift.TDictQueryExpr;
-import com.starrocks.thrift.TExprNode;
-import com.starrocks.thrift.TExprNodeType;
 
 import java.util.List;
 
@@ -48,11 +46,6 @@ public class DictQueryExpr extends FunctionCallExpr {
     }
 
 
-    @Override
-    protected void toThrift(TExprNode msg) {
-        msg.setNode_type(TExprNodeType.DICT_QUERY_EXPR);
-        msg.setDict_query_expr(dictQueryExpr);
-    }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {

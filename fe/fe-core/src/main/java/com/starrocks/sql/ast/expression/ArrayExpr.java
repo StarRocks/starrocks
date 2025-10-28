@@ -20,8 +20,6 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.thrift.TExprNode;
-import com.starrocks.thrift.TExprNodeType;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -42,10 +40,6 @@ public class ArrayExpr extends Expr {
         super(other);
     }
 
-    @Override
-    protected void toThrift(TExprNode msg) {
-        msg.setNode_type(TExprNodeType.ARRAY_EXPR);
-    }
 
     @Override
     public Expr clone() {

@@ -43,8 +43,6 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.thrift.TExprNode;
-import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.thrift.TExprOpcode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -126,17 +124,6 @@ public class CastExpr extends Expr {
         return new CastExpr(this);
     }
 
-    @Override
-    protected void toThrift(TExprNode msg) {
-        msg.node_type = TExprNodeType.CAST_EXPR;
-        msg.setOpcode(opcode);
-        msg.setOutput_column(outputColumn);
-        if (getChild(0).getType().isComplexType()) {
-            msg.setChild_type_desc(getChild(0).getType().toThrift());
-        } else {
-            msg.setChild_type(getChild(0).getType().getPrimitiveType().toThrift());
-        }
-    }
 
     public boolean isImplicit() {
         return isImplicit;

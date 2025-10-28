@@ -40,8 +40,6 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.thrift.TExprNode;
-import com.starrocks.thrift.TExprNodeType;
 
 import java.util.Objects;
 
@@ -140,17 +138,6 @@ public class BinaryPredicate extends Predicate implements Writable {
         return ((BinaryPredicate) obj).opcode == this.opcode;
     }
 
-    @Override
-    protected void toThrift(TExprNode msg) {
-        msg.node_type = TExprNodeType.BINARY_PRED;
-        msg.setOpcode(opcode);
-        msg.setVector_opcode(vectorOpcode);
-        if (getChild(0).getType().isComplexType()) {
-            msg.setChild_type_desc(getChild(0).getType().toThrift());
-        } else {
-            msg.setChild_type(getChild(0).getType().getPrimitiveType().toThrift());
-        }
-    }
 
     /*
      * the follow persistence code is only for TableFamilyDeleteInfo.

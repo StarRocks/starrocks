@@ -19,7 +19,6 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.thrift.TExprNode;
 
 import java.util.List;
 import java.util.Objects;
@@ -172,14 +171,6 @@ public class LargeInPredicate extends InPredicate {
         }
     }
 
-    @Override
-    protected void toThrift(TExprNode msg) {
-        // LargeInPredicate should never be serialized to Thrift.
-        // It must be transformed to Left semi/anti join before execution.
-        throw new UnsupportedOperationException(
-                "LargeInPredicate cannot be serialized to Thrift. " +
-                "It should be transformed to Left semi/anti join via LargeInPredicateToJoinRule.");
-    }
 
     @Override
     public String toString() {

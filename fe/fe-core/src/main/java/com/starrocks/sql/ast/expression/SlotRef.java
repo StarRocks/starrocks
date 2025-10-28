@@ -225,8 +225,6 @@ public class SlotRef extends Expr {
     }
 
     public SlotDescriptor getDesc() {
-        Preconditions.checkState(isAnalyzed);
-        Preconditions.checkNotNull(desc);
         return desc;
     }
 
@@ -314,23 +312,6 @@ public class SlotRef extends Expr {
         return tblName;
     }
 
-    @Override
-    protected void toThrift(TExprNode msg) {
-        msg.node_type = TExprNodeType.SLOT_REF;
-        if (desc != null) {
-            if (desc.getParent() != null) {
-                msg.slot_ref = new TSlotRef(desc.getId().asInt(), desc.getParent().getId().asInt());
-            } else {
-                // tuple id is meaningless here
-                msg.slot_ref = new TSlotRef(desc.getId().asInt(), 0);
-            }
-        } else {
-            // slot id and tuple id are meaningless here
-            msg.slot_ref = new TSlotRef(0, 0);
-        }
-
-        msg.setOutput_column(outputColumn);
-    }
 
     @Override
     public void toNormalForm(TExprNode msg, FragmentNormalizer normalizer) {

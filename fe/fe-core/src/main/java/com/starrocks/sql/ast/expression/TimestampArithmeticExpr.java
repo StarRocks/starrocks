@@ -39,8 +39,6 @@ import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.expression.ArithmeticExpr.Operator;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.thrift.TExprNode;
-import com.starrocks.thrift.TExprNodeType;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -117,11 +115,6 @@ public class TimestampArithmeticExpr extends Expr {
         return new TimestampArithmeticExpr(this);
     }
 
-    @Override
-    protected void toThrift(TExprNode msg) {
-        msg.node_type = TExprNodeType.COMPUTE_FUNCTION_CALL;
-        msg.setOpcode(opcode);
-    }
 
     public ArithmeticExpr.Operator getOp() {
         return op;
