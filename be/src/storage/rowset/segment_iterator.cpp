@@ -2036,7 +2036,8 @@ StatusOr<size_t> SegmentIterator::_predicate_evaluate_late_materialize(vector<ro
             _context->_first_column_total_rows_read += rows_read_this_iter;
         }
 
-        if (has_non_expr_predicate && !_context->_is_filtered) {
+        if (has_non_expr_predicate && !_context->_is_filtered &&
+            non_expr_column_predicate_map.contains(first_column_id)) {
             // use first column's non-expr predicate to filter data
             // This will filter rowid_column, removing rows that don't match the predicate
             // column-expr-predicate doesn't support [begin, end] interface
