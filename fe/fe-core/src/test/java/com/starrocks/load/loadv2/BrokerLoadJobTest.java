@@ -141,7 +141,7 @@ public class BrokerLoadJobTest {
                                   @Mocked GlobalStateMgr globalStateMgr) {
 
         String label = "label";
-        long dbId = 1;
+        long dbId = System.currentTimeMillis();
         String tableName = "table";
         String databaseName = "database";
         List<DataDescription> dataDescriptionList = Lists.newArrayList();
@@ -208,7 +208,7 @@ public class BrokerLoadJobTest {
                               @Mocked GlobalStateMgr globalStateMgr) {
 
         String label = "label";
-        long dbId = 1;
+        long dbId = System.currentTimeMillis();
         String tableName = "table";
         String databaseName = "database";
         List<DataDescription> dataDescriptionList = Lists.newArrayList();
