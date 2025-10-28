@@ -78,6 +78,7 @@ import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
+import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
@@ -95,6 +96,7 @@ import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.DataOperations;
 import org.apache.iceberg.DeleteFile;
+import org.apache.iceberg.DeleteFiles;
 import org.apache.iceberg.FileContent;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.HistoryEntry;
@@ -118,9 +120,11 @@ import org.apache.iceberg.StarRocksIcebergTableScan;
 import org.apache.iceberg.TableScan;
 import org.apache.iceberg.Transaction;
 import org.apache.iceberg.catalog.TableIdentifier;
+import org.apache.iceberg.exceptions.CommitFailedException;
 import org.apache.iceberg.exceptions.CommitStateUnknownException;
 import org.apache.iceberg.exceptions.NoSuchNamespaceException;
 import org.apache.iceberg.exceptions.NoSuchTableException;
+import org.apache.iceberg.exceptions.ValidationException;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.expressions.Expressions;
 import org.apache.iceberg.expressions.ResidualEvaluator;
@@ -137,6 +141,7 @@ import org.apache.iceberg.view.View;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.UncheckedIOException;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -179,6 +184,7 @@ public class IcebergMetadata implements ConnectorMetadata {
     public static final String FILE_FORMAT = "file_format";
     public static final String COMPRESSION_CODEC = "compression_codec";
     public static final String COMMENT = "comment";
+    public static final String STARROCKS_USER = "starrocks_user";
 
     private final String catalogName;
     private final HdfsEnvironment hdfsEnvironment;
@@ -371,6 +377,28 @@ public class IcebergMetadata implements ConnectorMetadata {
                 icebergCatalog.invalidateCache(dbName, tableName);
             }
             asyncRefreshOthersFeMetadataCache(dbName, tableName);
+        }
+    }
+
+    @Override
+    public void truncateTable(TruncateTableStmt truncateTableStmt, ConnectContext context) {
+        String dbName = truncateTableStmt.getDbName();
+        String tableName = truncateTableStmt.getTblName();
+        org.apache.iceberg.Table table = icebergCatalog.getTable(context, dbName, tableName);
+
+        if (table == null) {
+            throw new StarRocksConnectorException(
+                    "Failed to load iceberg table: " + truncateTableStmt.getTblRef().toString());
+        }
+
+        DeleteFiles deleteFiles = table.newDelete().deleteFromRowFilter(Expressions.alwaysTrue());
+        deleteFiles.set(STARROCKS_USER, context.getCurrentUserIdentity() != null ?
+                context.getCurrentUserIdentity().getUser() : "None");
+        try {
+            deleteFiles.commit();
+        } catch (UncheckedIOException | ValidationException | CommitFailedException | CommitStateUnknownException e) {
+            LOG.error("Failed to truncate iceberg table: {}.{}", dbName, tableName, e);
+            throw new StarRocksConnectorException("Failed to truncate iceberg table: %s.%s", dbName, tableName, e);
         }
     }
 

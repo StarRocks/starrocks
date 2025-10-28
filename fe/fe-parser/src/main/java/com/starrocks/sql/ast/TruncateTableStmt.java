@@ -20,7 +20,7 @@ import com.starrocks.sql.parser.NodePosition;
 // TRUNCATE TABLE tbl [PARTITION(p1, p2, ...)]
 public class TruncateTableStmt extends DdlStmt {
 
-    private final TableRef tblRef;
+    private TableRef tblRef;
 
     public TruncateTableStmt(TableRef tblRef) {
         this(tblRef, NodePosition.ZERO);
@@ -33,6 +33,14 @@ public class TruncateTableStmt extends DdlStmt {
 
     public TableRef getTblRef() {
         return tblRef;
+    }
+
+    public void setTblRef(TableRef tblRef) {
+        this.tblRef = tblRef;
+    }
+
+    public String getCatalogName() {
+        return tblRef.getCatalogName();
     }
 
     public String getDbName() {

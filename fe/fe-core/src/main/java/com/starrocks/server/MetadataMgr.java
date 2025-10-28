@@ -77,6 +77,7 @@ import com.starrocks.sql.ast.CreateTemporaryTableStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.DropTemporaryTableStmt;
+import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -400,6 +401,15 @@ public class MetadataMgr {
 
         if (connectorMetadata.isPresent()) {
             connectorMetadata.get().alterView(context, stmt);
+        }
+    }
+
+    public void truncateTable(ConnectContext context, TruncateTableStmt stmt) throws StarRocksException {
+        String catalogName = stmt.getCatalogName();
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+
+        if (connectorMetadata.isPresent()) {
+            connectorMetadata.get().truncateTable(stmt, context);
         }
     }
 
