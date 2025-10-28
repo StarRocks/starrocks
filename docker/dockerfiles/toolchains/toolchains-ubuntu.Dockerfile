@@ -7,6 +7,10 @@ ARG GCC_DOWNLOAD_URL=https://ftp.gnu.org/gnu/gcc/gcc-14.3.0/gcc-14.3.0.tar.gz
 
 FROM ubuntu:22.04 AS build-gcc
 
+ARG GCC_INSTALL_HOME
+ARG GCC_DOWNLOAD_URL
+ARG GCC_WORK_DIR
+
 RUN apt-get update -y && apt-get install -y --no-install-recommends \
     build-essential wget curl git bison flex texinfo gawk libgmp-dev libmpfr-dev libmpc-dev zlib1g-dev && \
     apt-get install -y ca-certificates && update-ca-certificates
