@@ -616,7 +616,6 @@ Status UpdateManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_writ
             // Handle index conflicts for newly written segments
             uint32_t seg_idx_after = new_rows_op.rowset().segments_size();
             if (seg_idx_after > seg_idx_before) {
-                // Upsert primary keys for all new segments
                 for (uint32_t seg_idx = seg_idx_before; seg_idx < seg_idx_after; ++seg_idx) {
                     size_t rows_per_segment = batch_size;
                     if (seg_idx == seg_idx_after - 1) {
