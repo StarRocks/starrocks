@@ -102,7 +102,7 @@ insert into test4 values(1, 'v0', 1), (2, 'v2', 2);
 -- !result
 insert into test4 (pk, v0) values(1, 'v0_1'), (3, 'v3_1');
 -- result:
-E: (5609, '172.26.95.128: partial update on table with sort key must provide all sort key columns')
+[REGEX].*partial update on table with sort key must provide all sort key columns.*
 -- !result
 -- name: test_non_replicated_storage_multi_replica_pk
 CREATE TABLE `t_non_replicated_storage_multi_replica_pk` (
