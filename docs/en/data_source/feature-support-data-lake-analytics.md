@@ -189,6 +189,10 @@ INTERVAL, BINARY, and UNION types are not supported.
 
 TEXT-formatted Hive table does not support MAP and STRUCT types.
 
+#### Table types
+
+Reading Hive transactional tables is not supported.
+
 ### Hive views
 
 StarRocks supports querying Hive views from v3.1.0 onwards.
