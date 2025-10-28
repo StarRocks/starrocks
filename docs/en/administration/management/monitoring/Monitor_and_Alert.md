@@ -140,7 +140,7 @@ After the download is complete, upload or copy the installation package to the d
    ```
 
    :::note
-   Please note that Prometheus is unable to detect the service changes (`targets`) after the cluster has been scaled in or out. For clusters deployed on AWS, you can grant the EC2 instance that hosts the Prometheus service the `ec2:DescribeInstances` and `ec2:DescribeTags` permissions, and add the `ec2_sd_configs` and `relabel_configs` properties to **prometheus/prometheus.yml**. For detailed instructions, see [Appendix - Enable Service Detection for Prometheus](#enable-service-detection-for-prometheus).
+   Please note that Prometheus is unable to detect the service changes (`targets`) after the cluster has been scaled in or out. For example, for clusters deployed on AWS, you can grant the EC2 instance that hosts the Prometheus service the `ec2:DescribeInstances` and `ec2:DescribeTags` permissions, and add the `ec2_sd_configs` and `relabel_configs` properties to **prometheus/prometheus.yml**. For detailed instructions, see [Appendix - Enable Service Detection for Prometheus](#enable-service-detection-for-prometheus).
    :::
 
    After you have modified the configuration file, you can use `promtool` to verify whether the modification is valid.
@@ -785,7 +785,7 @@ This item corresponds to **Cluster FE JVM Heap Stat** under **Overview**, monito
 You can enable Service Detection for Prometheus so that it can automatically detect the services (nodes) after the cluster is scaled in or out.
 
 :::note
-Currently, this feature is available only to clusters deployed on AWS.
+The following section uses AWS as an example.
 :::
 
 1. Grant the EC2 instance that hosts your Prometheus service the following permissions using IAM Policy:

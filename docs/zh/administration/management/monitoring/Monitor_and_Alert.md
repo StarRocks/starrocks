@@ -141,7 +141,7 @@ wget https://github.com/prometheus/prometheus/releases/download/v2.45.0/promethe
    ```
 
    :::note
-   请注意，在集群进行扩缩容后，Prometheus 将无法检测到服务（`targets`）变更。对于部署在 AWS 上的集群，可为托管 Prometheus 服务的 EC2 实例授予 `ec2:DescribeInstances` 和 `ec2:DescribeTags` 权限，并在 **prometheus/prometheus.yml** 中添加 `ec2_sd_configs` 和 `relabel_configs` 属性。详细操作指南请参阅 [附录 - 为 Prometheus 启用服务检测](#为-prometheus-启用服务检测)。
+   请注意，在集群进行扩缩容后，Prometheus 将无法检测到服务（`targets`）变更。例如，对于部署在 AWS 上的集群，可为托管 Prometheus 服务的 EC2 实例授予 `ec2:DescribeInstances` 和 `ec2:DescribeTags` 权限，并在 **prometheus/prometheus.yml** 中添加 `ec2_sd_configs` 和 `relabel_configs` 属性。详细操作指南请参阅 [附录 - 为 Prometheus 启用服务检测](#为-prometheus-启用服务检测)。
    :::
 
    配置文件修改完成后，您可以使用 `promtool` 检查配置文件语法是否合规。
@@ -785,7 +785,7 @@ BE 节点的 CPU Idle，即 CPU 空闲率。
 您可以为 Prometheus 启用服务检测功能，使其能够在集群进行扩缩容后自动检测服务（节点）。
 
 :::note
-目前，此功能仅适用于部署在AWS上的集群。
+以下部分以 AWS 为例进行说明。
 :::
 
 1. 使用 IAM Policy 为托管 Prometheus 服务的 EC2 实例授予以下权限：

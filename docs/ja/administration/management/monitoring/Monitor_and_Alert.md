@@ -140,7 +140,7 @@ wget https://github.com/prometheus/prometheus/releases/download/v2.45.0/promethe
    ```
 
    :::note
-   クラスタのスケーリング（スケールイン/スケールアウト）後、Prometheus はサービス（`targets`）変更を検出できないことにご注意ください。AWS 上にデプロイされたクラスターの場合、Prometheus サービスをホストする EC2 インスタンスに `ec2:DescribeInstances` および `ec2:DescribeTags` 権限を付与し、**prometheus/prometheus.yml** に `ec2_sd_configs` および `relabel_configs` プロパティを追加できます。詳細な手順については、[付録 - Prometheus のサービス検出を有効にする](#prometheus-のサービス検出を有効にする)を参照してください。
+   クラスタのスケーリング（スケールイン/スケールアウト）後、Prometheus はサービス（`targets`）変更を検出できないことにご注意ください。例えば、AWS 上にデプロイされたクラスターの場合、Prometheus サービスをホストする EC2 インスタンスに `ec2:DescribeInstances` および `ec2:DescribeTags` 権限を付与し、**prometheus/prometheus.yml** に `ec2_sd_configs` および `relabel_configs` プロパティを追加できます。詳細な手順については、[付録 - Prometheus のサービス検出を有効にする](#prometheus-のサービス検出を有効にする)を参照してください。
    :::
 
    設定ファイルを変更した後、`promtool` を使用して変更が有効かどうかを確認できます。
@@ -785,7 +785,7 @@ Backends Status メトリック項目の設定を編集します。
 Prometheus のサービス検出を有効にすると、クラスタのスケーリング（スケールイン/スケールアウト）後にサービス（ノード）を自動的に検出できるようになります。
 
 :::note
-現在、この機能は AWS 上にデプロイされたクラスターでのみ利用可能です。
+以下の部分では、AWSを例として使用します。
 :::
 
 1. IAM Policy を使用して、Prometheus サービスをホストする EC2 インスタンスに以下の権限を付与してください：
