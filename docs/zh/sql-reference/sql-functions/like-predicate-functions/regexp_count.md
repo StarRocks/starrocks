@@ -106,4 +106,4 @@ MySQL > SELECT str, regex, regexp_count(str, regex) AS count
 
 ## 关键字
 
-REGEXP_COUNT,REGEXP,COUNT 
+REGEXP_COUNT,REGEXP,COUNT
