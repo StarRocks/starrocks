@@ -65,11 +65,7 @@ public class TestLockInterface {
         Database database = new Database(rid, "db");
         database.setExist(false);
         Locker locker = new Locker();
-<<<<<<< HEAD
-        Assert.assertFalse(locker.lockDatabaseAndCheckExist(database, rid2, LockType.READ));
-=======
-        Assertions.assertFalse(locker.lockTableAndCheckDbExist(database, rid2, LockType.READ));
->>>>>>> 0b7231250d ([Enhancement] Optimize mv relatd locks (backport #63481) (#63546))
+        Assert.assertFalse(locker.lockTableAndCheckDbExist(database, rid2, LockType.READ));
     }
 
     @Test
@@ -207,49 +203,6 @@ public class TestLockInterface {
     }
 
     @Test
-<<<<<<< HEAD
-    public void testReentrantReadWriteTryLock() {
-        List<Database> dbs = Lists.newArrayList();
-        for (int i = 0; i < 10; i++) {
-            dbs.add(new Database(i, "db" + i));
-        }
-        Locker locker = new Locker();
-        Config.lock_manager_enabled = false;
-
-        {
-            Assert.assertTrue(locker.tryLockDatabases(dbs, LockType.WRITE, 10, TimeUnit.MILLISECONDS));
-            Assert.assertTrue(locker.tryLockDatabases(dbs, LockType.WRITE, 10, TimeUnit.MILLISECONDS));
-            locker.unlockDatabases(dbs, LockType.WRITE);
-            locker.unlockDatabases(dbs, LockType.WRITE);
-        }
-
-        {
-            new MockUp<Locker>() {
-                @Mock
-                public boolean tryLockDatabase(Long dbId, LockType lockType, long timeout, TimeUnit unit) {
-                    if (dbId == 5) {
-                        return false;
-                    }
-
-                    QueryableReentrantReadWriteLock rwLock = dbs.get(dbId.intValue()).getRwLock();
-                    rwLock.exclusiveLock();
-                    return true;
-                }
-
-                @Mock
-                public void unLockDatabase(Long dbId, LockType lockType) {
-
-                }
-            };
-            Assert.assertFalse(locker.tryLockDatabases(dbs, LockType.WRITE, 10, TimeUnit.MILLISECONDS));
-        }
-
-        Config.lock_manager_enabled = true;
-    }
-
-    @Test
-=======
->>>>>>> 0b7231250d ([Enhancement] Optimize mv relatd locks (backport #63481) (#63546))
     public void testTryLockTablesWithIntensiveDbLock2() throws LockException {
         long rid = 1L;
         Database database = new Database(rid, "db");
