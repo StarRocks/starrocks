@@ -41,9 +41,6 @@ import com.starrocks.common.NotImplementedException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.thrift.TExprNode;
-import com.starrocks.thrift.TExprNodeType;
-import com.starrocks.thrift.TFloatLiteral;
 
 import java.math.BigDecimal;
 import java.nio.ByteBuffer;
@@ -173,11 +170,6 @@ public class FloatLiteral extends LiteralExpr {
         return value;
     }
 
-    @Override
-    protected void toThrift(TExprNode msg) {
-        msg.node_type = TExprNodeType.FLOAT_LITERAL;
-        msg.float_literal = new TFloatLiteral(value);
-    }
 
     public double getValue() {
         return value;

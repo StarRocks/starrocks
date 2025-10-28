@@ -18,7 +18,6 @@ package com.starrocks.sql.ast.expression;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.thrift.TExprNode;
 
 public class DefaultValueExpr extends Expr {
 
@@ -26,10 +25,6 @@ public class DefaultValueExpr extends Expr {
         super(pos);
     }
 
-    @Override
-    protected void toThrift(TExprNode msg) {
-
-    }
 
     @Override
     public Expr clone() {

@@ -22,11 +22,7 @@ import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.ParsingException;
-import com.starrocks.thrift.TBinaryLiteral;
-import com.starrocks.thrift.TExprNode;
-import com.starrocks.thrift.TExprNodeType;
 
-import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Objects;
@@ -125,16 +121,15 @@ public class VarBinaryLiteral extends LiteralExpr {
         return value;
     }
 
+    public byte[] getValue() {
+        return value;
+    }
+
     @Override
     public boolean isMinValue() {
         return false;
     }
 
-    @Override
-    protected void toThrift(TExprNode msg) {
-        msg.node_type = TExprNodeType.BINARY_LITERAL;
-        msg.binary_literal = new TBinaryLiteral(ByteBuffer.wrap(value));
-    }
 
     @Override
     public String getStringValue() {
