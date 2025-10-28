@@ -1203,7 +1203,8 @@ public final class MetricRepo {
             ExecuteEnv.getInstance().getScheduler().getUserConnectionMap().forEach((user, count) -> {
                 GaugeMetricImpl<Integer> metric = new GaugeMetricImpl<>("connection_total",
                         MetricUnit.CONNECTIONS, "total connection");
-                metric.addLabel(new MetricLabel("user", user)).setValue(count.get());
+                metric.addLabel(new MetricLabel("user", user));
+                metric.setValue(count.get());
                 visitor.visit(metric);
             });
         } else {
