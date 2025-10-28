@@ -14,6 +14,7 @@
 
 package com.starrocks.memory;
 
+import com.starrocks.StarRocksFE;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.FrontendDaemon;
 import one.profiler.AsyncProfiler;
@@ -81,8 +82,8 @@ public class ProcProfileCollector extends FrontendDaemon {
         final String libPathProperty = "one.profiler.extractPath";
         String value = System.getProperty(libPathProperty);
         if (StringUtils.isEmpty(value)) {
-            String dir = Config.STARROCKS_HOME_DIR + "/bin/";
-            if (StringUtils.isNotEmpty(Config.STARROCKS_HOME_DIR) && new File(dir).exists()) {
+            String dir = StarRocksFE.STARROCKS_HOME_DIR + "/bin/";
+            if (StringUtils.isNotEmpty(StarRocksFE.STARROCKS_HOME_DIR) && new File(dir).exists()) {
                 System.setProperty(libPathProperty, dir);
                 LOG.info("change the system property {} to {}", libPathProperty, dir);
             }
