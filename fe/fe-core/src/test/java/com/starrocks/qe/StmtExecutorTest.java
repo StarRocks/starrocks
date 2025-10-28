@@ -14,13 +14,7 @@
 
 package com.starrocks.qe;
 
-<<<<<<< HEAD
-=======
-import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.common.util.ProfileManager;
-import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.mysql.MysqlSerializer;
->>>>>>> 59f4feaf1c ([BugFix] Fix fe follower run select statements within transaction without validation (#64616))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.AstBuilder;
