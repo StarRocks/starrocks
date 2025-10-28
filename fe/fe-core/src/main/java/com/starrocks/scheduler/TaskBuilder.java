@@ -18,7 +18,9 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.starrocks.alter.OptimizeTask;
 import com.starrocks.analysis.IntLiteral;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
@@ -37,6 +39,8 @@ import com.starrocks.sql.ast.RefreshSchemeClause;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.warehouse.Warehouse;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -46,6 +50,7 @@ import static com.starrocks.scheduler.TaskRun.MV_ID;
 // TaskBuilder is responsible for converting Stmt to Task Class
 // and also responsible for generating taskId and taskName
 public class TaskBuilder {
+    private static final Logger LOG = LogManager.getLogger(TaskBuilder.class);
 
     public static Task buildPipeTask(PipeTaskDesc desc) {
         Task task = new Task(desc.getUniqueTaskName());
@@ -283,5 +288,37 @@ public class TaskBuilder {
 
     public static String getMvTaskName(long mvId) {
         return "mv-" + mvId;
+    }
+
+    /**
+     * Get MaterializedView object from task if the task is mv task, otherwise return null.
+     */
+    public static MaterializedView getMvFromTask(Task task) {
+        if (task == null || task.getSource() != Constants.TaskSource.MV) {
+            return null;
+        }
+
+        Map<String, String> properties = task.getProperties();
+        if (properties == null || !properties.containsKey(MV_ID)) {
+            LOG.warn("mv id is missing in task properties, task: {}", task.getName());
+            return null;
+        }
+        String dbName = task.getDbName();
+        if (dbName == null) {
+            LOG.warn("db name is missing in task, task: {}", task.getName());
+            return null;
+        }
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        if (db == null) {
+            LOG.warn("db not found: {}, task: {}", dbName, task.getName());
+            return null;
+        }
+        long mvId = Long.parseLong(properties.get(MV_ID));
+        Table table = db.getTable(mvId);
+        if (table == null || !(table instanceof MaterializedView)) {
+            LOG.warn("mv not found: {}, task: {}", mvId, task.getName());
+            return null;
+        }
+        return (MaterializedView) table;
     }
 }

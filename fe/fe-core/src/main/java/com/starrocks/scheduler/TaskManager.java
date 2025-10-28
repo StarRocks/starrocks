@@ -23,6 +23,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -343,6 +344,64 @@ public class TaskManager implements MemoryTrackable {
                 .setExecuteOption(option)
                 .build();
         return taskRunManager.submitTaskRun(taskRun, option);
+    }
+
+    /**
+     * Suspend a task, which will stop the task scheduler and kill the running task run.
+     * NOTE: this method is thread safe, no need to task lock again.
+     */
+    public void suspendTask(Task task) {
+        if (task == null) {
+            return;
+        }
+        if (!tryTaskLock()) {
+            throw new RuntimeException("Failed to get task lock when suspend Task sync[" + task.getName() + "]");
+        }
+        try {
+            task.setState(Constants.TaskState.PAUSE);
+            // stop task scheduler
+            if (task.getType() == Constants.TaskType.PERIODICAL) {
+                boolean isCancel = stopScheduler(task.getName());
+                if (!isCancel) {
+                    LOG.warn("stop scheduler failed for task [{}]", task.getName());
+                }
+            }
+
+            // kill running task run
+            if (!killTask(task.getName(), true)) {
+                LOG.warn("kill task failed: {}", task.getName());
+            }
+            // remove task from scheduler
+            periodFutureMap.remove(task.getId());
+        } finally {
+            taskUnlock();
+        }
+    }
+
+    /**
+     * Resume a task, which will restart the task scheduler if the task is periodical.
+     * NOTE: This method is thread safe, no need to task lock again.
+     */
+    public void resumeTask(Task task) {
+        if (task == null) {
+            return;
+        }
+        if (!tryTaskLock()) {
+            throw new RuntimeException("Failed to get task lock when resume Task sync[" + task.getName() + "]");
+        }
+        try {
+            task.setState(Constants.TaskState.ACTIVE);
+            if (task.getType() == Constants.TaskType.PERIODICAL) {
+                TaskSchedule schedule = task.getSchedule();
+                if (schedule != null) {
+                    registerScheduler(task);
+                }
+            }
+            // reset consecutive failure number
+            task.resetConsecutiveFailCount();
+        } finally {
+            taskUnlock();
+        }
     }
 
     public void dropTasks(List<Long> taskIdList, boolean isReplay) {
@@ -1016,5 +1075,13 @@ public class TaskManager implements MemoryTrackable {
     @VisibleForTesting
     public Map<Long, ScheduledFuture<?>> getPeriodFutureMap() {
         return periodFutureMap;
+    }
+
+    public Task getTask(MaterializedView mv) {
+        if (mv == null) {
+            return null;
+        }
+        String taskName = TaskBuilder.getMvTaskName(mv.getId());
+        return getTask(taskName);
     }
 }

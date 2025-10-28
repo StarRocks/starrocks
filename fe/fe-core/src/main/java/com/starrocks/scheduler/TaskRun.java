@@ -21,6 +21,7 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.alter.AlterMVJobExecutor;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
@@ -31,6 +32,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.LogUtil;
@@ -316,7 +318,7 @@ public class TaskRun implements Comparable<TaskRun> {
         }
     }
 
-    public Constants.TaskRunState executeTaskRun() throws Exception {
+    public TaskRunContext buildTaskRunContext() throws Exception {
         TaskRunContext taskRunContext = new TaskRunContext();
 
         // Definition will cause a lot of repeats and cost a lot of metadata memory resources, so
@@ -372,6 +374,44 @@ public class TaskRun implements Comparable<TaskRun> {
         taskRunContext.setStatus(status);
         taskRunContext.setExecuteOption(executeOption);
         taskRunContext.setTaskRun(this);
+        return taskRunContext;
+    }
+
+    public Constants.TaskRunState executeTaskRun() throws Exception {
+        try {
+            Constants.TaskRunState result = doExecuteTaskRun();
+            // clear the fail count
+            if (result != null && result.isSuccessState()) {
+                task.resetConsecutiveFailCount();
+            }
+            return result;
+        } catch (Exception e) {
+            task.incConsecutiveFailCount();
+            LOG.warn("Failed to execute task run, task_id: {}, task_run_id: {}, failCount:{}",
+                    taskId, taskRunId, task.getConsecutiveFailCount(), e);
+            if (Constants.TaskSource.MV.equals(task.getSource()) && Config.max_task_consecutive_fail_count > 0 &&
+                    task.getConsecutiveFailCount() >= Config.max_task_consecutive_fail_count) {
+                LOG.warn("Task {} has failed {} times continuously, so we disable it",
+                        task.getName(), task.getConsecutiveFailCount());
+                TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+                taskManager.suspendTask(task);
+                String mvName = "";
+                MaterializedView mv = TaskBuilder.getMvFromTask(task);
+                if (mv != null) {
+                    // If the task is an mv task, inactive the mv
+                    AlterMVJobExecutor.inactiveForConsecutiveFailures(mv);
+                    mvName = mv.getName();
+                }
+                throw new StarRocksException(String.format("Task %s has continuously failed %d times " +
+                                "and has been suspended. If you want active it again, try `ALTER MATERIALIZED VIEW %s ACTIVE`.",
+                        task.getName(), task.getConsecutiveFailCount(), mvName), e);
+            }
+            throw e;
+        }
+    }
+
+    private Constants.TaskRunState doExecuteTaskRun() throws Exception {
+        TaskRunContext taskRunContext = buildTaskRunContext();
 
         // prepare to execute task run, move it here so that we can catch the exception and set the status
         taskRunContext = processor.prepare(taskRunContext);
