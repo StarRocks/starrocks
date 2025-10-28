@@ -116,7 +116,13 @@ public:
 
     std::string name() const override { return "ScalarColumnIterator"; }
 
-    void reserve_col(size_t n, Column* column) override { _page->reserve_col(n, column); }
+    void reserve_col(size_t n, Column* column) override {
+        if (_page != nullptr) {
+            _page->reserve_col(n, column);
+        } else {
+            column->reserve(n);
+        }
+    }
 
 private:
     static Status _seek_to_pos_in_page(ParsedPage* page, ordinal_t offset_in_page);
