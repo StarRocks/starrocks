@@ -187,7 +187,8 @@ public class SimplifiedDateColumnPredicateRule extends BottomUpScalarOperatorRew
         @Override
         public boolean check() {
             if (!(call.getChild(1).isConstantRef() && ((ConstantOperator) call.getChild(1)).getInt() == 1)
-                    || !(call.getChild(2).isConstantRef() && ((ConstantOperator) call.getChild(2)).getInt() == 10)) {
+                    || !(call.getChildren().size() == 3 && call.getChild(2).isConstantRef() 
+                         && ((ConstantOperator) call.getChild(2)).getInt() == 10)) {
                 return false;
             }
             if (!(call.getChild(0) instanceof CastOperator)) {
