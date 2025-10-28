@@ -182,7 +182,7 @@ public:
 
     const char* get_string_end() const {
         if (_is_view) {
-            return reinterpret_cast<const char*>(_data + _length);
+            return reinterpret_cast<const char*>(reinterpret_cast<const uint8_t*>(_data) + _length);
         } else {
             return reinterpret_cast<const char*>(_bytes.data() + _bytes.size());
         }
