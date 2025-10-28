@@ -26,6 +26,7 @@
 #include "exprs/function_context.h"
 #include "runtime/agg_state_desc.h"
 #include "runtime/mem_pool.h"
+#include "util/bit_util.h"
 
 namespace starrocks {
 
@@ -72,7 +73,7 @@ public:
 
         auto chunk_size = columns[0]->size();
         auto align_size = _function->alignof_size();
-        auto state_size = align_to(_function->size(), align_size);
+        auto state_size = BitUtil::round_up(_function->size(), align_size);
         auto result = ColumnHelper::create_column(_intermediate_type, _agg_state_desc.is_result_nullable());
         // allocate the agg_state
         AlignedMemoryGuard guard(align_size, state_size);
