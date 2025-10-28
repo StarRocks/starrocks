@@ -82,13 +82,8 @@ RuntimeFilter* RuntimeFilterHelper::create_runtime_bloom_filter(ObjectPool* pool
 }
 
 RuntimeFilter* RuntimeFilterHelper::create_agg_runtime_in_filter(ObjectPool* pool, LogicalType type, int8_t join_mode) {
-    return scalar_type_dispatch(type, [pool]<LogicalType ltype>() -> RuntimeFilter* {
-        auto rf = new InRuntimeFilter<ltype>();
-        if (pool != nullptr) {
-            return pool->add(rf);
-        }
-        return rf;
-    });
+    return scalar_type_dispatch(
+            type, [pool]<LogicalType ltype>() -> RuntimeFilter* { return InRuntimeFilter<ltype>::create(pool); });
 }
 
 RuntimeFilter* RuntimeFilterHelper::create_runtime_bitset_filter(ObjectPool* pool, LogicalType type, int8_t join_mode) {
