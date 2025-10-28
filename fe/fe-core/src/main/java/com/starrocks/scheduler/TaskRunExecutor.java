@@ -51,10 +51,6 @@ public class TaskRunExecutor {
             return false;
         }
 
-        // Synchronously update the status, to make sure they can be persisted
-        status.setState(Constants.TaskRunState.RUNNING);
-        status.setProcessStartTime(System.currentTimeMillis());
-
         CompletableFuture<Constants.TaskRunState> future = CompletableFuture.supplyAsync(() -> {
             try {
                 Constants.TaskRunState runState = taskRun.executeTaskRun();
