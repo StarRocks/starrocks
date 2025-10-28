@@ -71,7 +71,7 @@ REFRESH DEFERRED MANUAL
 distributed by hash(dt, province) buckets 10 
 PROPERTIES (
       'partition_refresh_number' = '-1',
-      "partition_retention_condition" = "dt > '2024-01-01'",
+      "partition_retention_condition" = "dt > '2024-01-01' or dt is null",
       'session.enable_insert_strict' = 'true',
       "replication_num" = "1"
 ) 
