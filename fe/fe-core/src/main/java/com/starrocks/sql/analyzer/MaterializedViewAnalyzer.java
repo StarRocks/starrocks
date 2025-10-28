@@ -15,6 +15,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.ArrayListMultimap;
@@ -28,6 +29,7 @@ import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnBuilder;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExpressionRangePartitionInfoV2;
@@ -350,19 +352,28 @@ public class MaterializedViewAnalyzer {
             statement.setOriginalViewDefineSql(originalViewDef.substring(statement.getQueryStartIndex(),
                     statement.getQueryStopIndex()));
 
-            IVMAnalyzer ivmAnalyzer = new IVMAnalyzer(context, statement);
-            Optional<IVMAnalyzer.IVMAnalyzeResult> ivmAnalyzeResult = ivmAnalyzer.rewrite();
-            if (ivmAnalyzeResult.isPresent()) {
-                IVMAnalyzer.IVMAnalyzeResult result = ivmAnalyzeResult.get();
-                queryStatement = result.queryStatement();
-                // re-analyze again
-                Analyzer.analyze(queryStatement, context);
-                statement.setIvmViewDef(AstToSQLBuilder.buildSimple(queryStatement));
-                statement.setQueryStatement(queryStatement);
-                // use primary key as default keys type for ivm
-                if (result.needRetractableSink()) {
-                    statement.setKeysType(KeysType.PRIMARY_KEYS);
+            MaterializedView.RefreshMode refreshMode = IVMAnalyzer.getRefreshMode(statement);
+            if (refreshMode.isIncrementalOrAuto()) {
+                IVMAnalyzer ivmAnalyzer = new IVMAnalyzer(context, statement.getQueryStatement());
+                Optional<IVMAnalyzer.IVMAnalyzeResult> ivmAnalyzeResult = ivmAnalyzer.rewrite(refreshMode);
+                if (ivmAnalyzeResult.isPresent()) {
+                    IVMAnalyzer.IVMAnalyzeResult result = ivmAnalyzeResult.get();
+                    queryStatement = result.queryStatement();
+                    // re-analyze again
+                    Analyzer.analyze(queryStatement, context);
+                    statement.setIvmViewDef(AstToSQLBuilder.buildSimple(queryStatement));
+                    statement.setQueryStatement(queryStatement);
+                    // use primary key as default keys type for ivm
+                    if (result.needRetractableSink()) {
+                        statement.setKeysType(KeysType.PRIMARY_KEYS);
+                    }
+                    statement.setCurrentRefreshMode(result.currentRefreshMode());
+                } else {
+                    // if not ivm, set query statement directly
+                    statement.setCurrentRefreshMode(MaterializedView.RefreshMode.PCT);
                 }
+            } else {
+                statement.setCurrentRefreshMode(refreshMode);
             }
 
             // collect table from query statement
@@ -1242,7 +1253,7 @@ public class MaterializedViewAnalyzer {
                 if (adjustedPartitionByExpr == null || adjustedPartitionByExpr.equals(expr)) {
                     continue;
                 }
-                Column generatedCol = getGeneratedPartitionColumn(adjustedPartitionByExpr, placeholder);
+                Column generatedCol = getGeneratedPartitionColumn(statement, adjustedPartitionByExpr, placeholder);
                 if (generatedCol == null) {
                     throw new SemanticException("Create generated partition expression column failed:",
                             partitionByExpr.toSql());
@@ -1551,7 +1562,16 @@ public class MaterializedViewAnalyzer {
             // If the key type is primary key, the distribution must be hash distribution.
             if (distributionDesc != null && KeysType.PRIMARY_KEYS.equals(statement.getKeysType()) &&
                     distributionDesc instanceof RandomDistributionDesc) {
-                throw new SemanticException("PRIMARY KEY must use hash distribution");
+                // if the mv is primary key, we use hash distribution with all key columns.
+                List<String> keyColNames = statement.getMvColumnItems()
+                        .stream()
+                        .filter(col -> col.isKey())
+                        .map(Column::getName)
+                        .collect(Collectors.toList());
+                throw new SemanticException(String.format("Please use `DISTRIBUTED BY HASH(%s)` instead of `DISTRIBUTED BY " +
+                        "RANDOM` for incremental materialized view, or remove `DISTRIBUTED BY RANDOM` instead.",
+                        Joiner.on(",").join(keyColNames)),
+                        statement.getPartitionByExprs().get(0).getPos());
             }
 
             if (distributionDesc == null) {
@@ -1796,7 +1816,8 @@ public class MaterializedViewAnalyzer {
      * - Iceberg table's timestamp-with-zone's default timezone is UTC
      * - Starrocks table's timestamp type is no timezone and its time is converted to local timezone.
      */
-    private static Column getGeneratedPartitionColumn(Expr adjustedPartitionByExpr,
+    private static Column getGeneratedPartitionColumn(CreateMaterializedViewStatement statement,
+                                                      Expr adjustedPartitionByExpr,
                                                       int placeHolderSlotId) {
 
         Type type = adjustedPartitionByExpr.getType();
@@ -1816,10 +1837,12 @@ public class MaterializedViewAnalyzer {
             throw new ParsingException("Generate partition column " + columnName
                     + " for multi expression partition error: " + e.getMessage());
         }
+        AggregateType aggregateType = statement.getKeysType() == KeysType.DUP_KEYS ?
+                AggregateType.NONE : AggregateType.REPLACE;
         ColumnDef generatedPartitionColumn = new ColumnDef(
-                columnName, typeDef, null, false, null, null, true,
+                columnName, typeDef, null, false, aggregateType, null, true,
                 ColumnDef.DefaultValueDef.NOT_SET, null, adjustedPartitionByExpr, "");
-        return Column.fromColumnDef(null, generatedPartitionColumn);
+        return ColumnBuilder.buildGeneratedColumn(null, generatedPartitionColumn);
     }
 
     /**
@@ -1834,6 +1857,7 @@ public class MaterializedViewAnalyzer {
                                                     Map<TableName, Table> refTableNameTableMap,
                                                     Map<Integer, Expr> changedPartitionByExprs,
                                                     Map<Expr, Expr> partitionByExprToAdjustExprMap) {
+        // what if partitionByExpr is not slot ref, eg: date_trunc('day', dt)
         List<SlotRef> slotRefs = partitionByExpr.collectAllSlotRefs();
         if (slotRefs.size() != 1) {
             throw new SemanticException("Partition expr only can ref one slot refs:",
@@ -1904,7 +1928,7 @@ public class MaterializedViewAnalyzer {
                     originalPartitionByExpr.toSql());
         }
         SlotRef slotRef = slotRefs.get(0);
-        resolveRefToMVColumns(mvColumns, slotRef, mvTableName);
+        tryToResolveRefToMVColumns(mvColumns, slotRef, mvTableName);
         partitionByExprToAdjustExprMap.put(originalPartitionByExpr, adjustedPartitionByExpr);
     }
 
@@ -1912,7 +1936,7 @@ public class MaterializedViewAnalyzer {
      * For generated column, change its referred slot ref from original ref-base-table's output columns to
      * MV's output columns.
      */
-    public static void resolveRefToMVColumns(List<Column> columns, SlotRef slotRef, TableName mvTableName) {
+    public static void tryToResolveRefToMVColumns(List<Column> columns, SlotRef slotRef, TableName mvTableName) {
         Column mvPartitionColumn = null;
         int columnId = 0;
         for (Column column : columns) {
@@ -1923,8 +1947,8 @@ public class MaterializedViewAnalyzer {
             columnId++;
         }
         if (mvPartitionColumn == null) {
-            throw new SemanticException("Materialized view partition exp column:"
-                    + slotRef.getColumnName() + " is not found in query statement");
+            LOG.warn("Materialized view partition exp column:" + slotRef.getColumnName() + " is not found in query statement");
+            return;
         }
         SlotDescriptor slotDescriptor = new SlotDescriptor(new SlotId(columnId), slotRef.getColumnName(),
                 mvPartitionColumn.getType(), mvPartitionColumn.isAllowNull());
@@ -2072,10 +2096,12 @@ public class MaterializedViewAnalyzer {
         if (!MvUtils.isFuncCallExpr(partitionByExpr, FunctionSet.DATE_TRUNC)) {
             return null;
         }
+
         // why resolve slot ref to mv columns?
         // generated column should refer mv's defined column, but partitionByExpr is ref to base table's column,
         // so resolve slot ref to mv columns.
-        resolveRefToMVColumns(mvColumns, slotRef, mvTableName);
+        tryToResolveRefToMVColumns(mvColumns, slotRef, mvTableName);
+
         int zoneHourOffset = getIcebergPartitionColumnTimeZoneOffset(icebergTable, slotRef);
         return getIcebergAdjustPartitionExpr(partitionByExpr, slotRef, zoneHourOffset);
     }
@@ -2093,7 +2119,7 @@ public class MaterializedViewAnalyzer {
             // why resolve slot ref to mv columns?
             // generated column should refer mv's defined column, but partitionByExpr is ref to base table's column,
             // so resolve slot ref to mv columns.
-            resolveRefToMVColumns(mvColumns, slotRef, mvTableName);
+            tryToResolveRefToMVColumns(mvColumns, slotRef, mvTableName);
             return partitionByExpr;
         }
         return null;

@@ -103,3 +103,4 @@ displayed_sidebar: docs
   - `TABLET_STATUS` 列を `SCHEDULE_REASON` に、`CLONE_SRC` 列を `SRC_BE_ID` に、`CLONE_DEST` 列を `DEST_BE_ID` に名称変更しました。
   - `CREATE_TIME`、`SCHEDULE_TIME` および `FINISH_TIME` 列のデータ型を `DOUBLE` から `DATETIME` に変更しました。
 - 一部の FE メトリクスに `is_leader` ラベルを追加しました。[#63004](https://github.com/StarRocks/starrocks/pull/63004)
+- Microsoft Azure Blob Storage および Data Lake Storage Gen 2 をオブジェクト ストレージとして使用する共有データクラスターは、v4.0 へのアップグレード後にデータキャッシュの障害が発生します。システムは自動的にキャッシュを再読み込みします。

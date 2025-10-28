@@ -174,7 +174,11 @@ Status read_and_decompress_page_internal(const PageReadOptions& opts, PageHandle
     opts.stats->total_pages_num++;
 
     auto cache = StoragePageCache::instance();
+#ifdef __APPLE__
+    bool page_cache_available = false;
+#else
     bool page_cache_available = (cache != nullptr) && cache->available();
+#endif
     PageCacheHandle cache_handle;
     std::string cache_key = encode_cache_key(opts.read_file->filename(), opts.page_pointer.offset);
     if (opts.use_page_cache && page_cache_available && cache->lookup(cache_key, &cache_handle)) {

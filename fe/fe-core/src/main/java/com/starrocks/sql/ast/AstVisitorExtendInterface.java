@@ -47,6 +47,7 @@ import com.starrocks.sql.ast.expression.IntervalLiteral;
 import com.starrocks.sql.ast.expression.IsNullPredicate;
 import com.starrocks.sql.ast.expression.LambdaArgument;
 import com.starrocks.sql.ast.expression.LambdaFunctionExpr;
+import com.starrocks.sql.ast.expression.LargeInPredicate;
 import com.starrocks.sql.ast.expression.LargeIntLiteral;
 import com.starrocks.sql.ast.expression.LargeStringLiteral;
 import com.starrocks.sql.ast.expression.LikePredicate;
@@ -152,9 +153,6 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
-    default R visitTruncateTableStatement(TruncateTableStmt statement, C context) {
-        return visitDDLStatement(statement, context);
-    }
 
     default R visitRefreshTableStatement(RefreshTableStmt statement, C context) {
         return visitDDLStatement(statement, context);
@@ -306,21 +304,11 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
-    default R visitAdminShowReplicaDistributionStatement(AdminShowReplicaDistributionStmt statement, C context) {
-        return visitShowStatement(statement, context);
-    }
 
     default R visitAdminShowReplicaStatusStatement(AdminShowReplicaStatusStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
 
-    default R visitAdminRepairTableStatement(AdminRepairTableStmt statement, C context) {
-        return visitDDLStatement(statement, context);
-    }
-
-    default R visitAdminCancelRepairTableStatement(AdminCancelRepairTableStmt statement, C context) {
-        return visitDDLStatement(statement, context);
-    }
 
     default R visitAdminSetPartitionVersionStmt(AdminSetPartitionVersionStmt statement, C context) {
         return visitDDLStatement(statement, context);
@@ -501,14 +489,6 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
     }
 
     // ---------------------------------------- Backup Restore Statement -----------------------------------------------
-
-    default R visitBackupStatement(BackupStmt statement, C context) {
-        return visitDDLStatement(statement, context);
-    }
-
-    default R visitRestoreStatement(RestoreStmt statement, C context) {
-        return visitDDLStatement(statement, context);
-    }
 
     default R visitShowBackupStatement(ShowBackupStmt statement, C context) {
         return visitShowStatement(statement, context);
@@ -699,6 +679,10 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
     }
 
     default R visitCompactionClause(CompactionClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    default R visitAlterTableModifyDefaultBucketsClause(AlterTableModifyDefaultBucketsClause clause, C context) {
         return visitNode(clause, context);
     }
 
@@ -929,6 +913,10 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
 
     default R visitInPredicate(InPredicate node, C context) {
         return visitPredicate(node, context);
+    }
+
+    default R visitLargeInPredicate(LargeInPredicate node, C context) {
+        return visitInPredicate(node, context);
     }
 
     default R visitMultiInPredicate(MultiInPredicate node, C context) {

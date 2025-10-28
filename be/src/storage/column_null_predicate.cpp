@@ -80,10 +80,14 @@ public:
 
     Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
                                roaring::Roaring* row_bitmap) const override {
+#ifndef __APPLE__
         roaring::Roaring null_roaring;
         RETURN_IF_ERROR(iterator->read_null(column_name, &null_roaring));
         *row_bitmap &= null_roaring;
         return Status::OK();
+#else
+        return Status::OK();
+#endif
     }
 
     bool support_original_bloom_filter() const override { return true; }
@@ -159,10 +163,14 @@ public:
 
     Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
                                roaring::Roaring* row_bitmap) const override {
+#ifndef __APPLE__
         roaring::Roaring null_roaring;
         RETURN_IF_ERROR(iterator->read_null(column_name, &null_roaring));
         *row_bitmap -= null_roaring;
         return Status::OK();
+#else
+        return Status::OK();
+#endif
     }
 
     PredicateType type() const override { return PredicateType::kNotNull; }

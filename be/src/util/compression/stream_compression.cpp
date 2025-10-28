@@ -35,15 +35,8 @@
 #include "util/compression/stream_compression.h"
 
 #include <bzlib.h>
-#include <lz4/lz4frame.h>
 #include <snappy/snappy.h>
 #include <zlib.h>
-#include <zstd/zstd.h>
-#ifdef __APPLE__
-#include <zstd_errors.h>
-#else
-#include <zstd/zstd_errors.h>
-#endif
 
 #include <memory>
 
@@ -51,6 +44,7 @@
 #include "gutil/strings/substitute.h"
 #include "util/coding.h"
 #include "util/compression/compression_context_pool_singletons.h"
+#include "util/compression/compression_headers.h"
 
 namespace orc {
 uint64_t lzoDecompress(const char* inputAddress, const char* inputLimit, char* outputAddress, char* outputLimit);

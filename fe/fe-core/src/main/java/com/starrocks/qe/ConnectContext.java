@@ -55,6 +55,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.SqlUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.connector.iceberg.IcebergRewriteDataJob.FinishSinkHandler;
 import com.starrocks.http.HttpConnectContext;
 import com.starrocks.mysql.MysqlCapability;
 import com.starrocks.mysql.MysqlChannel;
@@ -93,6 +94,7 @@ import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWorkGroup;
 import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.cngroup.ComputeResource;
+import com.starrocks.warehouse.cngroup.LazyComputeResource;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -271,6 +273,9 @@ public class ConnectContext {
 
     // listeners for this connection
     private List<Listener> listeners = Lists.newArrayList();
+
+    private boolean skipFinishSink = false;
+    private FinishSinkHandler handler = null;
 
     public void setTxnId(long txnId) {
         this.txnId = txnId;
@@ -821,7 +826,11 @@ public class ConnectContext {
     }
 
     public String getDatabase() {
-        return currentDb;
+        if (GlobalVariable.enableTableNameCaseInsensitive && currentDb != null) {
+            return currentDb.toLowerCase();
+        } else {
+            return currentDb;
+        }
     }
 
     public void setDatabase(String db) {
@@ -1004,7 +1013,8 @@ public class ConnectContext {
         // try to acquire cn group id once the warehouse is set
         final long warehouseId = this.getCurrentWarehouseId();
         final WarehouseManager warehouseManager = globalStateMgr.getWarehouseMgr();
-        this.computeResource = warehouseManager.acquireComputeResource(warehouseId, this.computeResource);
+        this.computeResource = LazyComputeResource.of(warehouseId, () ->
+                warehouseManager.acquireComputeResource(warehouseId, this.computeResource));
     }
 
     /**
@@ -1024,7 +1034,7 @@ public class ConnectContext {
             // throw exception if the current warehouse is not exist.
             if (!warehouseManager.warehouseExists(this.getCurrentWarehouseName())) {
                 String errMsg = String.format("Current connection's warehouse(%s) does not exist, please " +
-                                "set to another warehouse.", this.getCurrentWarehouseName());
+                        "set to another warehouse.", this.getCurrentWarehouseName());
                 this.resetComputeResource();
                 throw new RuntimeException(errMsg);
             }
@@ -1049,6 +1059,7 @@ public class ConnectContext {
      * Get the name of the current compute resource.
      * During the execution of a statement, the compute resource should be fixed.
      * NOTE: this method will not acquire compute resource if it is not set.
+     *
      * @return: the name of the current compute resource, or empty string if not set.
      */
     public String getCurrentComputeResourceName() {
@@ -1085,13 +1096,8 @@ public class ConnectContext {
         if (!RunMode.isSharedDataMode() || this.computeResource == null) {
             return;
         }
-        final WarehouseManager warehouseManager = globalStateMgr.getWarehouseMgr();
-        if (!warehouseManager.isResourceAvailable(computeResource)) {
-            this.computeResource = warehouseManager.acquireComputeResource(this.getCurrentWarehouseId());
-        } else {
-            // acquire compute resource again to for better-schedule balance
-            acquireComputeResource();
-        }
+        // acquire compute resource again for better schedule balance
+        acquireComputeResource();
     }
 
     public void setParentConnectContext(ConnectContext parent) {
@@ -1658,6 +1664,19 @@ public class ConnectContext {
 
     public void setCurrentThreadId(long currentThreadId) {
         this.currentThreadId = new AtomicLong(currentThreadId);
+    }
+
+    public void setFinishSinkHandler(FinishSinkHandler handler) {
+        this.skipFinishSink = true;
+        this.handler = handler;
+    }
+
+    public boolean getSkipFinishSink() {
+        return skipFinishSink;
+    }
+
+    public FinishSinkHandler getFinishSinkHandler() {
+        return handler;
     }
 
     public interface Listener {

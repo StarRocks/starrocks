@@ -1761,7 +1761,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### json_flat_sparsity_factor
 
-- デフォルト: 0.9
+- デフォルト: 0.3
 - タイプ: Double
 - 単位: 
 - 可変: はい
@@ -1812,6 +1812,16 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 可変: はい
 - 説明: JIT コンパイルのための LRU キャッシュサイズ。0 より大きい場合、キャッシュの実際のサイズを表します。0 以下に設定されている場合、システムは `jit_lru_cache_size = min(mem_limit*0.01, 1GB)` の式を使用してキャッシュを適応的に設定します (ノードの `mem_limit` は 16 GB 以上でなければなりません)。
 - 導入バージョン: -
+
+##### flamegraph_tool_dir
+
+- デフォルト: `${STARROCKS_HOME}/bin/flamegraph`
+- タイプ: String
+- 単位: -
+- 可変: いいえ
+- 説明: フレームグラフツールのディレクトリ。このディレクトリには、プロファイルデータからフレームグラフを生成するための pprof、stackcollapse-go.pl、flamegraph.pl スクリプトが含まれている必要があります。
+- 導入バージョン: -
+
 
 ### 共有データ
 
@@ -2178,3 +2188,14 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 可変: いいえ
 - 説明: ビットマップ関数の入力値の最大長。
 - 導入バージョン: -
+
+##### enable_resolve_hostname_to_ip_in_load_error_url
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 可変: はい
+- 説明: `error_urls` デバッグのために、オペレーターがFEハートビートからの元のホスト名を使用するか、環境要件に基づいてIPアドレスへの解決を強制するかを選択できるようにするかどうか。
+  - `true`: ホスト名をIPアドレスに変換します。
+  - `false` (デフォルト): エラーURLに元のホスト名を保持します。
+- 導入バージョン: v4.0.1

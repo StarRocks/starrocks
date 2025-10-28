@@ -22,6 +22,7 @@ import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DynamicPartitionProperty;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
+import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -51,6 +52,7 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.AlterViewInfo;
 import com.starrocks.persist.BatchModifyPartitionsInfo;
 import com.starrocks.persist.ModifyPartitionInfo;
+import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.persist.SwapTableOperationLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -64,6 +66,7 @@ import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterTableAutoIncrementClause;
 import com.starrocks.sql.ast.AlterTableCommentClause;
+import com.starrocks.sql.ast.AlterTableModifyDefaultBucketsClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterViewClause;
 import com.starrocks.sql.ast.AlterViewStmt;
@@ -82,19 +85,21 @@ import com.starrocks.sql.ast.ModifyPartitionClause;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.sql.ast.OptimizeClause;
 import com.starrocks.sql.ast.ParseNode;
+import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.PartitionRenameClause;
+import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.ReorderColumnsClause;
 import com.starrocks.sql.ast.ReplacePartitionClause;
 import com.starrocks.sql.ast.RollupRenameClause;
 import com.starrocks.sql.ast.SplitTabletClause;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SwapTableClause;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TruncatePartitionClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.sql.ast.expression.TableName;
-import com.starrocks.sql.ast.expression.TableRefPersist;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.thrift.TTabletType;
@@ -195,6 +200,32 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
         } else {
             for (AlterClause alterClause : statement.getAlterClauseList()) {
                 visit(alterClause, context);
+            }
+        }
+        return null;
+    }
+
+    @Override
+    public Void visitAlterTableModifyDefaultBucketsClause(AlterTableModifyDefaultBucketsClause clause,
+                                                         ConnectContext context) {
+        if (clause instanceof AlterTableModifyDefaultBucketsClause) {
+            // apply synchronously: update default distribution bucket num
+            AlterTableModifyDefaultBucketsClause c = (AlterTableModifyDefaultBucketsClause) clause;
+            if (table instanceof OlapTable) {
+                OlapTable olap = (OlapTable) table;
+                if (olap.getDefaultDistributionInfo() instanceof HashDistributionInfo) {
+                    try (AutoCloseableLock ignore =
+                                    new AutoCloseableLock(new Locker(), db.getId(),
+                                            Lists.newArrayList(table.getId()), LockType.WRITE)) {
+                        ((HashDistributionInfo) olap.getDefaultDistributionInfo())
+                                .setBucketNum(c.getBucketNum());
+                        // persist change
+                        ModifyTablePropertyOperationLog log =
+                                new ModifyTablePropertyOperationLog(db.getId(), table.getId());
+                        log.getProperties().put("default_bucket_num", String.valueOf(c.getBucketNum()));
+                        GlobalStateMgr.getCurrentState().getEditLog().logModifyDefaultBucketNum(log);
+                    }
+                }
             }
         }
         return null;
@@ -721,7 +752,26 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
     public Void visitTruncatePartitionClause(TruncatePartitionClause clause, ConnectContext context) {
         // This logic is used to adapt mysql syntax.
         // ALTER TABLE test TRUNCATE PARTITION p1;
-        TableRefPersist tableRef = new TableRefPersist(tableName, null, clause.getPartitionNames());
+        
+        // Convert TableName to QualifiedName for TableRef
+        List<String> parts = Lists.newArrayList();
+        if (tableName.getCatalog() != null) {
+            parts.add(tableName.getCatalog());
+        }
+        if (tableName.getDb() != null) {
+            parts.add(tableName.getDb());
+        }
+        parts.add(tableName.getTbl());
+        QualifiedName qualifiedName = QualifiedName.of(parts, tableName.getPos());
+        
+        // Convert PartitionNames to PartitionRef
+        PartitionRef partitionRef = null;
+        if (clause.getPartitionNames() != null) {
+            partitionRef = new PartitionRef(clause.getPartitionNames().getPartitionNames(), 
+                    clause.getPartitionNames().isTemp(), clause.getPartitionNames().getPos());
+        }
+        
+        TableRef tableRef = new TableRef(qualifiedName, partitionRef, tableName.getPos());
         TruncateTableStmt tStmt = new TruncateTableStmt(tableRef);
         ConnectContext ctx = ConnectContext.buildInner();
         ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());

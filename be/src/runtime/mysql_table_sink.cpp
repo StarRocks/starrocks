@@ -40,10 +40,15 @@
 #include "exprs/expr.h"
 #include "runtime/runtime_state.h"
 #include "util/runtime_profile.h"
+#ifndef __APPLE__
+#include "runtime/mysql_table_writer.h"
+#endif
 
 namespace starrocks {
 
+#ifndef __APPLE__
 const int MYSQL_SINK_BATCH_SIZE = 1024;
+#endif
 
 MysqlTableSink::MysqlTableSink(ObjectPool* pool, const RowDescriptor& row_desc, const std::vector<TExpr>& t_exprs)
         : _pool(pool), _t_output_expr(t_exprs) {}
@@ -52,6 +57,7 @@ MysqlTableSink::~MysqlTableSink() = default;
 
 Status MysqlTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
     RETURN_IF_ERROR(DataSink::init(t_sink, state));
+#ifndef __APPLE__
     const TMysqlTableSink& t_mysql_sink = t_sink.mysql_table_sink;
 
     _conn_info.host = t_mysql_sink.host;
@@ -65,6 +71,9 @@ Status MysqlTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
     // From the thrift expressions create the real exprs.
     RETURN_IF_ERROR(Expr::create_expr_trees(_pool, _t_output_expr, &_output_expr_ctxs, state));
     return Status::OK();
+#else
+    return Status::NotSupported("MySQL table sink is not supported in this build.");
+#endif
 }
 
 Status MysqlTableSink::prepare(RuntimeState* state) {
@@ -79,16 +88,24 @@ Status MysqlTableSink::prepare(RuntimeState* state) {
 }
 
 Status MysqlTableSink::open(RuntimeState* state) {
+#ifndef __APPLE__
     // Prepare the exprs to run.
     RETURN_IF_ERROR(Expr::open(_output_expr_ctxs, state));
     // create writer
     _writer = std::make_unique<MysqlTableWriter>(_output_expr_ctxs, _chunk_size);
     RETURN_IF_ERROR(_writer->open(_conn_info, _mysql_tbl));
     return Status::OK();
+#else
+    return Status::NotSupported("MySQL table sink is not supported in this build.");
+#endif
 }
 
 Status MysqlTableSink::send_chunk(RuntimeState* state, Chunk* chunk) {
+#ifndef __APPLE__
     return _writer->append(chunk);
+#else
+    return Status::NotSupported("MySQL table sink is not supported in this build.");
+#endif
 }
 
 Status MysqlTableSink::close(RuntimeState* state, Status exec_status) {

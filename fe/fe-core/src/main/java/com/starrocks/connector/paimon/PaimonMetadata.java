@@ -423,11 +423,13 @@ public class PaimonMetadata implements ConnectorMetadata {
         }
         TvrVersionRange version = params.getTableVersionRange();
         snapshotId = version.end().isPresent() ? version.end().get() : -1L;
+        GetRemoteFilesParams copyParams = params.copy();
+        copyParams.setTableVersionRange(TvrTableSnapshot.of(snapshotId));
         Map<String, String> options = new HashMap<>();
         options.put(CoreOptions.SCAN_SNAPSHOT_ID.key(), String.valueOf(snapshotId));
         org.apache.paimon.table.Table paimonNativeTable = paimonTable.getNativeTable().copy(options);
         PredicateSearchKey filter = PredicateSearchKey.of(paimonTable.getCatalogDBName(),
-                paimonTable.getCatalogTableName(), snapshotId, params.getPredicate());
+                paimonTable.getCatalogTableName(), copyParams);
         if (!paimonSplits.containsKey(filter)) {
             ReadBuilder readBuilder = paimonNativeTable.newReadBuilder();
             int[] projected =

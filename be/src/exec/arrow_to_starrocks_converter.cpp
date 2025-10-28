@@ -29,7 +29,9 @@
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "exec/arrow_type_traits.h"
+#ifndef __APPLE__
 #include "exec/file_scanner/parquet_scanner.h"
+#endif
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/datetime_value.h"
@@ -840,9 +842,13 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, ArrayGuard<LT>> {
 
         Filter child_chunk_filter;
         child_chunk_filter.resize(col_array->elements_column()->size() + child_array_num_elements, 1);
+#ifndef __APPLE__
         return ParquetScanner::convert_array_to_column(conv_func->children[0].get(), child_array_num_elements,
                                                        child_array, col_array->elements_column(), child_array_start_idx,
                                                        col_array->elements_column()->size(), &child_chunk_filter, ctx);
+#else
+        return Status::NotSupported("Parquet nested type conversion is not supported on this build");
+#endif
     }
 };
 
@@ -867,11 +873,15 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, MapGuard<LT>> {
                 return Status::InternalError(fmt::format("Unnest arrow array type({}) fail", array->type()->name()));
             }
 
+#ifndef __APPLE__
             Filter child_chunk_filter;
             child_chunk_filter.resize(kv_size[i] + child_array_num_elements, 1);
             RETURN_IF_ERROR(ParquetScanner::convert_array_to_column(
                     conv_func->children[i].get(), child_array_num_elements, child_array, kv_columns[i],
                     child_array_start_idx, kv_size[i], &child_chunk_filter, ctx));
+#else
+            return Status::NotSupported("Parquet nested type conversion is not supported on this build");
+#endif
         }
         return Status::OK();
     }
@@ -899,9 +909,13 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, StructGurad<LT>> {
                 continue;
             }
 
+#ifndef __APPLE__
             RETURN_IF_ERROR(ParquetScanner::convert_array_to_column(conv_func->children[i].get(), num_elements,
                                                                     child_array.get(), child_col, array_start_idx,
                                                                     chunk_start_idx, chunk_filter, ctx));
+#else
+            return Status::NotSupported("Parquet nested type conversion is not supported on this build");
+#endif
         }
 
         return Status::OK();

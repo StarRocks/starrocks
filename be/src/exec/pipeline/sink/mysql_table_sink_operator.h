@@ -79,10 +79,14 @@ private:
     std::vector<TExpr> _t_output_expr;
     std::vector<ExprContext*> _output_expr_ctxs;
     TMysqlTableSink _t_mysql_table_sink;
+#ifndef __APPLE__
     int32_t _num_sinkers;
+#endif
 
     std::shared_ptr<MysqlTableSinkIOBuffer> _mysql_table_sink_buffer;
+#ifndef __APPLE__
     FragmentContext* _fragment_ctx = nullptr;
+#endif
 };
 } // namespace pipeline
 } // namespace starrocks

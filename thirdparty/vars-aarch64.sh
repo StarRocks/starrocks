@@ -39,17 +39,17 @@ HYPERSCAN_NAME="hyperscan-5.3.0.aarch64.tar.gz"
 HYPERSCAN_SOURCE="hyperscan-5.3.0.aarch64"
 HYPERSCAN_MD5SUM="ef337257bde6583242a739fab6fb161f"
 
-# async-profiler
-ASYNC_PROFILER_DOWNLOAD="https://github.com/async-profiler/async-profiler/releases/download/v4.0/async-profiler-4.0-linux-arm64.tar.gz"
-ASYNC_PROFILER_NAME="async-profiler-4.0-linux-arm64.tar.gz"
-ASYNC_PROFILER_SOURCE="async-profiler-4.0-linux-arm64"
-ASYNC_PROFILER_MD5SUM="588a42962cf925932615e4ce5a9daf9e"
-
 # jindosdk for Aliyun OSS
 JINDOSDK_DOWNLOAD="https://cdn-thirdparty.starrocks.com/jindosdk-4.6.8-linux-el7-aarch64.tar.gz"
 JINDOSDK_NAME="jindosdk-4.6.8-linux-el7-aarch64.tar.gz"
 JINDOSDK_SOURCE="jindosdk-4.6.8-linux-el7-aarch64"
 JINDOSDK_MD5SUM="27a4e2cd9a403c6e21079a866287d88b"
+
+# tenann
+TENANN_DOWNLOAD="https://github.com/StarRocks/tenann/releases/download/v0.5.0-RELEASE/tenann-v0.5.0-RELEASE-arm64.tar.gz"
+TENANN_NAME="tenann-v0.5.0-RELEASE-arm64.tar.gz"
+TENANN_SOURCE="tenann-v0.5.0-RELEASE"
+TENANN_MD5SUM="397632c3b81a25e636177c8f80291cc3"
 
 # starcache
 STARCACHE_DOWNLOAD="https://cdn-thirdparty.starrocks.com/starcache/v3.5-rc4/starcache-centos7_arm64.tar.gz"

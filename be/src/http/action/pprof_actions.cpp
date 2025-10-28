@@ -195,12 +195,14 @@ void SymbolAction::handle(HttpRequest* req) {
             std::string func_name;
             unsigned int lineno = 0;
             const char* old_ptr = ptr;
+#ifndef __APPLE__
             if (!_parser->decode_address(ptr, &ptr, &file_name, &func_name, &lineno)) {
                 result.append(old_ptr, ptr - old_ptr);
                 result.push_back('\t');
                 result.append(func_name);
                 result.push_back('\n');
             }
+#endif
             if (ptr < end && *ptr == '+') {
                 ptr++;
             }

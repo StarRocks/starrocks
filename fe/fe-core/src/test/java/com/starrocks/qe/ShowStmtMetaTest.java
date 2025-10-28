@@ -14,6 +14,7 @@
 
 package com.starrocks.qe;
 
+import com.google.common.collect.Lists;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcResult;
@@ -100,7 +101,6 @@ import com.starrocks.sql.ast.ShowWhiteListStmt;
 import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.TableName;
-import com.starrocks.sql.ast.expression.TableRefPersist;
 import com.starrocks.sql.ast.group.ShowCreateGroupProviderStmt;
 import com.starrocks.sql.ast.group.ShowGroupProvidersStmt;
 import com.starrocks.sql.ast.integration.ShowCreateSecurityIntegrationStatement;
@@ -956,7 +956,8 @@ public class ShowStmtMetaTest {
     @Test
     public void testAdminShowReplicaStatusStmt() {
         TableName tableName = new TableName("test_db", "test_table");
-        TableRefPersist tableRef = new TableRefPersist(tableName, null, null, NodePosition.ZERO);
+        QualifiedName qualifiedName = QualifiedName.of(List.of(tableName.getDb(), tableName.getTbl()));
+        TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
         AdminShowReplicaStatusStmt stmt = new AdminShowReplicaStatusStmt(tableRef, null);
         ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(13, metaData.getColumnCount());
@@ -1119,8 +1120,8 @@ public class ShowStmtMetaTest {
 
     @Test
     public void testAdminShowReplicaDistributionStmt() {
-        TableName tableName = new TableName("test_db", "test_table");
-        TableRefPersist tableRef = new TableRefPersist(tableName, null, null, NodePosition.ZERO);
+        QualifiedName qualifiedName = QualifiedName.of(Lists.newArrayList("test_db", "test_table"));
+        TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
         AdminShowReplicaDistributionStmt stmt = new AdminShowReplicaDistributionStmt(tableRef);
         ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(4, metaData.getColumnCount());

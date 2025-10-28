@@ -52,6 +52,7 @@
 #include "http/action/metrics_action.h"
 #include "http/action/pipeline_blocking_drivers_action.h"
 #include "http/action/pprof_actions.h"
+#include "http/action/proc_profile_file_action.h"
 #include "http/action/query_cache_action.h"
 #include "http/action/reload_tablet_action.h"
 #include "http/action/restore_tablet_action.h"
@@ -273,9 +274,11 @@ Status HttpServiceBE::start() {
     _http_handlers.emplace_back(jit_cache_action);
 #endif
 
+#ifndef __APPLE__
     auto* datacache_action = new DataCacheAction(_cache_env->local_disk_cache(), _cache_env->local_mem_cache());
     _ev_http_server->register_handler(HttpMethod::GET, "/api/datacache/{action}", datacache_action);
     _http_handlers.emplace_back(datacache_action);
+#endif
 
     auto* pipeline_driver_poller_action = new PipelineBlockingDriversAction(_env);
     _ev_http_server->register_handler(HttpMethod::GET, "/api/pipeline_blocking_drivers/{action}",
@@ -285,6 +288,11 @@ Status HttpServiceBE::start() {
     auto* greplog_action = new GrepLogAction();
     _ev_http_server->register_handler(HttpMethod::GET, "/greplog", greplog_action);
     _http_handlers.emplace_back(greplog_action);
+
+    // Register proc profile file action (for serving individual files)
+    auto* proc_profile_file_action = new ProcProfileFileAction(_env);
+    _ev_http_server->register_handler(HttpMethod::GET, "/proc_profile/file", proc_profile_file_action);
+    _http_handlers.emplace_back(proc_profile_file_action);
 
 #ifdef USE_STAROS
     auto* lake_dump_metadata_action = new lake::DumpTabletMetadataAction(_env);

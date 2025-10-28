@@ -103,4 +103,5 @@ displayed_sidebar: docs
 - 优化 Information Schema 中的 `fe_tablet_schedules` 视图。[#62073](https://github.com/StarRocks/starrocks/pull/62073) [#59813](https://github.com/StarRocks/starrocks/pull/59813)
   - `TABLET_STATUS` 列更名为 `SCHEDULE_REASON`，`CLONE_SRC` 列更名为 `SRC_BE_ID`，`CLONE_DEST` 列更名为 `DEST_BE_ID`。
   - `CREATE_TIME`、`SCHEDULE_TIME` 和 `FINISH_TIME` 列类型从 `DOUBLE` 改为 `DATETIME`。
-- 一些 FE 指标增加了 `is_leader` 标签。[#63004](https://github.com/StarRocks/starrocks/pull/63004)
+- 部分 FE 指标增加了 `is_leader` 标签。[#63004](https://github.com/StarRocks/starrocks/pull/63004)
+- 使用 Microsoft Azure Blob Storage 以及 Data Lake Storage Gen 2 作为对象存储的存算分离集群，升级到 v4.0 后 Data Cache 失效，系统将自动重新加载。

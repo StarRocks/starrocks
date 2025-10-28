@@ -15,7 +15,6 @@
 package com.starrocks.sql.plan;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.AggregateFunction;
@@ -95,6 +94,7 @@ import com.starrocks.planner.PartitionIdGenerator;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanNode;
 import com.starrocks.planner.ProjectNode;
+import com.starrocks.planner.RawValuesNode;
 import com.starrocks.planner.RepeatNode;
 import com.starrocks.planner.RuntimeFilterId;
 import com.starrocks.planner.ScanNode;
@@ -185,6 +185,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalOdpsScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalPaimonScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalRawValuesOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalRepeatOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalSchemaScanOperator;
@@ -459,8 +460,6 @@ public class PlanFragmentBuilder {
         private final List<Integer> collectExecStatsIds = Lists.newArrayList();
         private ExecGroup currentExecGroup = execGroups.newExecGroup();
 
-        private boolean canUseLocalShuffleAgg = true;
-
         public PhysicalPlanTranslator(ColumnRefFactory columnRefFactory) {
             this.columnRefFactory = columnRefFactory;
         }
@@ -518,7 +517,6 @@ public class PlanFragmentBuilder {
 
         @Override
         public PlanFragment visit(OptExpression optExpression, ExecPlan context) {
-            canUseLocalShuffleAgg &= optExpression.arity() <= 1;
             PlanFragment fragment = optExpression.getOp().accept(this, optExpression, context);
             Projection projection = (optExpression.getOp()).getProjection();
 
@@ -607,7 +605,6 @@ public class PlanFragmentBuilder {
             for (ScalarOperator predicate : predicates) {
                 predicateColumns.union(predicate.getUsedColumns());
             }
-
 
             // ------------------------------------------------------------------------------------
             // unused Columns = required columns - predicate columns.
@@ -1471,7 +1468,6 @@ public class PlanFragmentBuilder {
             return buildIcebergScanNode(optExpression, context);
         }
 
-
         public PlanFragment buildIcebergScanNode(OptExpression expression, ExecPlan context) {
             PhysicalScanOperator node = expression.getOp().cast();
             Table referenceTable = node.getTable();
@@ -2021,6 +2017,40 @@ public class PlanFragmentBuilder {
             }
         }
 
+        @Override
+        public PlanFragment visitPhysicalRawValues(OptExpression optExpr, ExecPlan context) {
+            PhysicalRawValuesOperator rawValuesOperator = optExpr.getOp().cast();
+
+            TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
+            for (ColumnRefOperator columnRefOperator : rawValuesOperator.getColumnRefSet()) {
+                SlotDescriptor slotDescriptor =
+                        context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(columnRefOperator.getId()));
+                slotDescriptor.setIsNullable(columnRefOperator.isNullable());
+                slotDescriptor.setIsMaterialized(true);
+                slotDescriptor.setType(columnRefOperator.getType());
+                context.getColRefToExpr()
+                        .put(columnRefOperator, new SlotRef(columnRefOperator.toString(), slotDescriptor));
+            }
+            tupleDescriptor.computeMemLayout();
+
+            RawValuesNode rawValuesNode = new RawValuesNode(
+                    context.getNextNodeId(),
+                    tupleDescriptor.getId(),
+                    rawValuesOperator.getConstantType(),
+                    rawValuesOperator.getRawText(),
+                    rawValuesOperator.getRawConstantList(),
+                    rawValuesOperator.getConstantCount());
+
+            rawValuesNode.setLimit(rawValuesOperator.getLimit());
+            rawValuesNode.computeStatistics(optExpr.getStatistics());
+            currentExecGroup.add(rawValuesNode, true);
+
+            PlanFragment fragment = new PlanFragment(context.getNextFragmentId(), rawValuesNode,
+                    DataPartition.UNPARTITIONED);
+            context.getFragments().add(fragment);
+            return fragment;
+        }
+
         // return true if all leaf offspring are not ExchangeNode
         public static boolean hasNoExchangeNodes(PlanNode root) {
             if (root instanceof ExchangeNode) {
@@ -2054,78 +2084,6 @@ public class PlanFragmentBuilder {
             }
 
             return true;
-        }
-
-        /**
-         * Remove ExchangeNode between AggNode and ScanNode for the single backend.
-         * <p>
-         * This is used to generate "ScanNode->LocalShuffle->OnePhaseLocalAgg" for the single backend,
-         * which contains two steps:
-         * 1. Ignore the network cost for ExchangeNode when estimating cost model.
-         * 2. Remove ExchangeNode between AggNode and ScanNode when building fragments.
-         * <p>
-         * Specifically, transfer
-         * (AggNode->ExchangeNode)->([ProjectNode->]ScanNode)
-         * -      *inputFragment         sourceFragment
-         * to
-         * (AggNode->[ProjectNode->]ScanNode)
-         * -      *sourceFragment
-         * That is, when matching this fragment pattern, remove inputFragment and return sourceFragment.
-         *
-         * @param inputFragment The input fragment to match the above pattern.
-         * @param context       The context of building fragment, which contains all the fragments.
-         * @return SourceFragment if it matches th pattern, otherwise the original inputFragment.
-         */
-        private PlanFragment removeExchangeNodeForLocalShuffleAgg(PlanFragment inputFragment, ExecPlan context) {
-            if (ConnectContext.get() == null) {
-                return inputFragment;
-            }
-            if (!canUseLocalShuffleAgg) {
-                return inputFragment;
-            }
-            SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
-            boolean enableLocalShuffleAgg = sessionVariable.isEnableLocalShuffleAgg()
-                    && sessionVariable.isEnablePipelineEngine()
-                    && GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().isSingleBackendAndComputeNode();
-            if (!enableLocalShuffleAgg) {
-                return inputFragment;
-            }
-
-            // InputFragment should match "AggNode->ExchangeNode" pattern, where AggNode is the caller of this method.
-            if (!(inputFragment.getPlanRoot() instanceof ExchangeNode)) {
-                return inputFragment;
-            }
-
-            ExchangeNode node = (ExchangeNode) inputFragment.getPlanRoot();
-            if (node.isMerge()) {
-                return inputFragment;
-            }
-
-            // SourceFragment should match "[ProjectNode->]ScanNode" pattern.
-            PlanNode sourceFragmentRoot = inputFragment.getPlanRoot().getChild(0);
-            if (!onlyContainNodeTypes(sourceFragmentRoot, ImmutableList.of(ScanNode.class, ProjectNode.class))) {
-                return inputFragment;
-            }
-
-            // If ExchangeSink is CTE MultiCastPlanFragment, we cannot remove this ExchangeNode.
-            PlanFragment sourceFragment = sourceFragmentRoot.getFragment();
-            if (sourceFragment instanceof MultiCastPlanFragment) {
-                return inputFragment;
-            }
-
-            // Traverse fragment in reverse to delete inputFragment,
-            // because the last fragment is inputFragment for the most cases.
-            ArrayList<PlanFragment> fragments = context.getFragments();
-            for (int i = fragments.size() - 1; i >= 0; --i) {
-                if (fragments.get(i).equals(inputFragment)) {
-                    fragments.remove(i);
-                    break;
-                }
-            }
-
-            sourceFragment.clearDestination();
-            sourceFragment.clearOutputPartition();
-            return sourceFragment;
         }
 
         private static class AggregateExprInfo {
@@ -2229,10 +2187,12 @@ public class PlanFragmentBuilder {
         @Override
         public PlanFragment visitPhysicalHashAggregate(OptExpression optExpr, ExecPlan context) {
             PhysicalHashAggregateOperator node = (PhysicalHashAggregateOperator) optExpr.getOp();
-            PlanFragment originalInputFragment = visit(optExpr.inputAt(0), context);
+            PlanFragment inputFragment = visit(optExpr.inputAt(0), context);
 
-            PlanFragment inputFragment = removeExchangeNodeForLocalShuffleAgg(originalInputFragment, context);
-            boolean withLocalShuffle = inputFragment != originalInputFragment || inputFragment.isWithLocalShuffle();
+            final boolean withLocalShuffle = node.isWithLocalShuffle() || inputFragment.isWithLocalShuffle();
+            if (node.isWithLocalShuffle()) {
+                inputFragment.setWithLocalShuffleIfTrue(true);
+            }
 
             Map<ColumnRefOperator, CallOperator> aggregations = node.getAggregations();
             List<ColumnRefOperator> groupBys = node.getGroupBys();
@@ -2368,7 +2328,8 @@ public class PlanFragmentBuilder {
             aggregationNode.computeStatistics(optExpr.getStatistics());
             aggregationNode.setGroupByMinMaxStats(node.getGroupByMinMaxStatistic());
 
-            if (node.isOnePhaseAgg() || node.isMergedLocalAgg() || node.getType().isDistinctGlobal()) {
+            if (node.isOnePhaseAgg() || node.isMergedLocalAgg() || node.getType().isDistinctGlobal() ||
+                    node.getType().isGlobal()) {
                 // For ScanNode->LocalShuffle->AggNode, we needn't assign scan ranges per driver sequence.
                 inputFragment.setAssignScanRangesPerDriverSeq(!withLocalShuffle);
                 inputFragment.setWithLocalShuffleIfTrue(withLocalShuffle);
@@ -2392,8 +2353,8 @@ public class PlanFragmentBuilder {
             }
             inputFragment.setPlanRoot(aggregationNode);
             inputFragment.getPlanRoot().forceCollectExecStats();
-            inputFragment.mergeQueryDictExprs(originalInputFragment.getQueryGlobalDictExprs());
-            inputFragment.mergeQueryGlobalDicts(originalInputFragment.getQueryGlobalDicts());
+            inputFragment.mergeQueryDictExprs(inputFragment.getQueryGlobalDictExprs());
+            inputFragment.mergeQueryGlobalDicts(inputFragment.getQueryGlobalDicts());
             return inputFragment;
         }
 
@@ -2499,6 +2460,29 @@ public class PlanFragmentBuilder {
             return fragment;
         }
 
+        private boolean isUseParallelMerge(OptExpression optExpr, long limit, long offset) {
+            long inputRowCount = Optional.ofNullable(optExpr.inputAt(0).getStatistics())
+                    .map(stat -> (long) stat.getOutputRowCount()).orElse(-1L);
+
+            long topN = limit == Operator.DEFAULT_LIMIT ? Operator.DEFAULT_LIMIT : limit + offset;
+            int parallelMergeInputRowsThreshold = Optional.ofNullable(ConnectContext.get())
+                    .map(ConnectContext::getSessionVariable)
+                    .map(sv ->
+                            sv.isEnableParallelMerge() ? sv.getDegreeOfParallelism() * sv.getChunkSize() : -1
+                    ).orElse(-1);
+            // this threshold == -1 indidcates that enable_parallel_merge is off
+            if (parallelMergeInputRowsThreshold == -1) {
+                return false;
+            } else if (topN == Operator.DEFAULT_LIMIT) {
+                // for full-sort (topN == Operator.DEFAULT_LIMIT indicates full-sort), if inputRowCount
+                // is unknown from statisitics or it is greater than threshold, then use parallel_merge.
+                return inputRowCount == -1 || inputRowCount > parallelMergeInputRowsThreshold;
+            } else {
+                // for topN-sort, if n > threshold, then use parallel_merge, otherwise do not use.
+                return topN > parallelMergeInputRowsThreshold;
+            }
+        }
+
         @Override
         public PlanFragment visitPhysicalTopN(OptExpression optExpr, ExecPlan context) {
             ExecGroup lastExecGroup = currentExecGroup;
@@ -2533,6 +2517,7 @@ public class PlanFragmentBuilder {
             sortNode.setTopNType(topNType);
             exchangeNode.setMergeInfo(sortNode.getSortInfo(), offset);
             exchangeNode.computeStatistics(optExpr.getStatistics());
+            exchangeNode.setUseParallelMerge(isUseParallelMerge(optExpr, limit, offset));
             currentExecGroup.add(exchangeNode, true);
 
             if (TopNType.ROW_NUMBER.equals(topNType)) {
@@ -2596,6 +2581,7 @@ public class PlanFragmentBuilder {
             List<Expr> preAggFnCallExprs = new ArrayList<>();
             List<SlotId> preAggOutputColumnIds = new ArrayList<>();
             TupleDescriptor preAggTuple = context.getDescTbl().createTupleDescriptor();
+
             if (preAggFnCalls != null) {
                 for (Map.Entry<ColumnRefOperator, CallOperator> entry : preAggFnCalls.entrySet()) {
                     Expr preAggFunction = ScalarOperatorToExpr.buildExecExpression(entry.getValue(),
@@ -2662,6 +2648,9 @@ public class PlanFragmentBuilder {
             sortNode.resolvedTupleExprs = resolvedTupleExprs;
             sortNode.setHasNullableGenerateChild();
             sortNode.computeStatistics(optExpr.getStatistics());
+
+            sortNode.setUseParallelMerge(isUseParallelMerge(optExpr, limit, offset));
+
             currentExecGroup.add(sortNode, true);
             if (shouldBuildGlobalRuntimeFilter()) {
                 sortNode.buildRuntimeFilters(runtimeFilterIdIdGenerator, context.getDescTbl(), execGroups);
@@ -2757,7 +2746,7 @@ public class PlanFragmentBuilder {
 
             NestLoopJoinNode joinNode = new NestLoopJoinNode(context.getNextNodeId(),
                     leftFragment.getPlanRoot(), rightFragment.getPlanRoot(),
-                    null, node.getJoinType(), Lists.newArrayList(), joinOnConjuncts);
+                    node.getJoinType(), Lists.newArrayList(), joinOnConjuncts);
             joinNode.setCommonSlotMap(commonSubExprMap);
 
             joinNode.setLimit(node.getLimit());
@@ -3434,7 +3423,6 @@ public class PlanFragmentBuilder {
 
             Map<SlotId, Expr> commonSubOperatorMap = buildCommonSubExprMap(filter.getPredicateCommonOperators(), context);
 
-
             List<Expr> predicates = Utils.extractConjuncts(filter.getPredicate()).stream()
                     .map(d -> ScalarOperatorToExpr.buildExecExpression(d,
                             new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
@@ -3573,8 +3561,6 @@ public class PlanFragmentBuilder {
                     .map(ColumnRefOperator::getId).distinct().collect(Collectors.toList()));
             exchangeNode.setDataPartition(cteFragment.getDataPartition());
             exchangeNode.forceCollectExecStats();
-
-
 
             PlanFragment consumeFragment = new PlanFragment(context.getNextFragmentId(), exchangeNode,
                     cteFragment.getDataPartition());
