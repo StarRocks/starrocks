@@ -304,12 +304,13 @@ private:
 
     void _init_compound_and_predicates_for_predicate_col_late_material();
 
-    Status trigger_sample_if_necessary(vector<rowid_t>* rowid);
+    StatusOr<size_t> trigger_sample_if_necessary(vector<rowid_t>* rowid);
 
     // Sample and measure all predicate columns to update selectivity and read time
     // Reads all predicate columns (like _predicate_evaluate_without_late_materialize)
     // and measures actual read time and filtering effectiveness for each column
-    Status _sample_predicate_columns(vector<rowid_t>* rowid);
+    // Returns the sampled chunk size if successful
+    StatusOr<size_t> _sample_predicate_columns(vector<rowid_t>* rowid);
 
     Status _init_context();
 
@@ -1222,7 +1223,7 @@ void SegmentIterator::_init_compound_and_predicates_for_predicate_col_late_mater
     _context->_column_id_for_predicate_late_materialize.emplace_back(_context->_row_id_column_id);
 }
 
-Status SegmentIterator::trigger_sample_if_necessary(vector<rowid_t>* rowid) {
+StatusOr<size_t> SegmentIterator::trigger_sample_if_necessary(vector<rowid_t>* rowid) {
     // Check every 32 chunks if we should trigger sampling based on selectivity
     const bool should_check_selectivity = (_context->_evaluated_chunk_nums++ & 31) == 0;
     if (should_check_selectivity && _context->_enable_predicate_col_late_materialize &&
@@ -1237,7 +1238,7 @@ Status SegmentIterator::trigger_sample_if_necessary(vector<rowid_t>* rowid) {
             ColumnId old_first_column_id = _context->_predicate_order[0];
 
             // Sample and update predicate selectivity
-            RETURN_IF_ERROR(_sample_predicate_columns(rowid));
+            ASSIGN_OR_RETURN(size_t sampled_chunk_size, _sample_predicate_columns(rowid));
 
             // Check if first column changed after sampling
             ColumnId new_first_column_id = _context->_predicate_order.front();
@@ -1246,12 +1247,13 @@ Status SegmentIterator::trigger_sample_if_necessary(vector<rowid_t>* rowid) {
                 _context->_first_column_total_rows_read = 0;
                 _context->_first_column_total_rows_passed = 0;
             }
+            return sampled_chunk_size;
         }
     }
-    return Status::OK();
+    return 0;
 }
 
-Status SegmentIterator::_sample_predicate_columns(vector<rowid_t>* rowid) {
+StatusOr<size_t> SegmentIterator::_sample_predicate_columns(vector<rowid_t>* rowid) {
     // Clear previous measurements
     _context->_predicate_selectivity_map.clear();
 
@@ -1262,7 +1264,7 @@ Status SegmentIterator::_sample_predicate_columns(vector<rowid_t>* rowid) {
     Chunk* chunk = _context->_read_chunk.get();
 
     if (!_range_iter.has_more()) {
-        return Status::OK();
+        return 0;
     }
 
     // Call _read with predicate_col_late_materialize_read = false to read all columns
@@ -1270,7 +1272,7 @@ Status SegmentIterator::_sample_predicate_columns(vector<rowid_t>* rowid) {
 
     const size_t chunk_size = chunk->num_rows();
     if (chunk_size == 0) {
-        return Status::OK();
+        return 0;
     }
 
     // Similar to RuntimeFilterProbeCollector::update_selectivity
@@ -1281,13 +1283,6 @@ Status SegmentIterator::_sample_predicate_columns(vector<rowid_t>* rowid) {
     current_selection.resize(chunk_size);
 
     bool use_merged_selection = true; // Similar to RuntimeFilter's use_merged_selection flag
-
-    // Collect all columns for filtering later
-    Columns sample_columns;
-    sample_columns.reserve(_context->_predicate_order.size());
-    for (const auto& column_id : _context->_predicate_order) {
-        sample_columns.emplace_back(chunk->get_column_by_id(column_id));
-    }
 
     // Evaluate each predicate column and measure its selectivity
     for (const auto& column_id : _context->_predicate_order) {
@@ -1325,11 +1320,10 @@ Status SegmentIterator::_sample_predicate_columns(vector<rowid_t>* rowid) {
         }
     }
 
-    // Filter columns based on merged selection
+    // Filter the entire chunk (including all columns and rowid) based on merged selection
     // _selection already contains the merged result, use it directly
-
     // This removes rows that don't pass all predicates
-    _filter_columns_by_selection(sample_columns, rowid, 0, chunk_size);
+    size_t filtered_chunk_size = _filter_chunk_by_selection(chunk, rowid, 0, chunk_size);
 
     // Update predicate order based on selectivity (lower selectivity = higher filtering = better)
     std::vector<ColumnId> new_order;
@@ -1357,7 +1351,8 @@ Status SegmentIterator::_sample_predicate_columns(vector<rowid_t>* rowid) {
         _context->_column_id_for_predicate_late_materialize[0] = new_first_column_id;
     }
 
-    return Status::OK();
+    // Return the filtered chunk size (after applying all predicates)
+    return filtered_chunk_size;
 }
 
 Status SegmentIterator::_get_row_ranges_by_keys() {
@@ -1741,7 +1736,11 @@ inline Status SegmentIterator::_read(Chunk* chunk, vector<rowid_t>* rowids, size
     size_t read_num = 0;
     SparseRange<> range;
 
-    if (_cur_rowid != _range_iter.begin() || _cur_rowid == 0) {
+    // Always seek columns if switching between late materialization modes or position changed
+    // This ensures all column iterators (_column_iterators vs _column_iterators_for_predicate_late_materialize)
+    // are synchronized at the same position
+    if (_cur_rowid != _range_iter.begin() || _cur_rowid == 0 ||
+        (_context->_enable_predicate_col_late_materialize && !predicate_col_late_materialize_read)) {
         _cur_rowid = _range_iter.begin();
         _opts.stats->block_seek_num += 1;
         SCOPED_RAW_TIMER(&_opts.stats->block_seek_ns);
@@ -2000,7 +1999,11 @@ StatusOr<size_t> SegmentIterator::_predicate_evaluate(vector<rowid_t>* rowid) {
 }
 
 StatusOr<size_t> SegmentIterator::_predicate_evaluate_late_materialize(vector<rowid_t>* rowid) {
-    RETURN_IF_ERROR(trigger_sample_if_necessary(rowid));
+    ASSIGN_OR_RETURN(size_t sampled_chunk_size, trigger_sample_if_necessary(rowid));
+    if (sampled_chunk_size > 0) {
+        // Sampling was triggered, return the sampled chunk size without further processing
+        return sampled_chunk_size;
+    }
 
     const uint32_t chunk_capacity = _reserve_chunk_size;
     const uint32_t return_chunk_threshold = std::max<uint32_t>(chunk_capacity - chunk_capacity / 4, 1);
@@ -2022,7 +2025,7 @@ StatusOr<size_t> SegmentIterator::_predicate_evaluate_late_materialize(vector<ro
     uint16_t chunk_start = first_col->size();
 
     size_t original_chunk_size = chunk_start;
-    while ((chunk_start < return_chunk_threshold) & _range_iter.has_more()) {
+    while ((chunk_start < return_chunk_threshold) && _range_iter.has_more()) {
         RETURN_IF_ERROR(_read(chunk, rowid, chunk_capacity - chunk_start, true));
         // chunk->check_or_die();
         size_t next_start = first_col->size();
