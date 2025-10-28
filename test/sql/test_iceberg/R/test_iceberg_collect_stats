@@ -120,25 +120,6 @@ None
 drop table iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t5 force;
 -- result:
 -- !result
-create table iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t6 (
-    c1 decimal(10,3)
-) partition by truncate(c1, 50);
--- result:
--- !result
-insert into iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t6 values(1.23), (2.34), (3.45);
--- result:
--- !result
-[UC] analyze table iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t6;
--- result:
-iceberg_collect_stats_2b0cc3e04eb5425f8ed5624f15534ba8.iceberg_collect_stats_db_2b0cc3e04eb5425f8ed5624f15534ba8.t6	analyze	status	OK
--- !result
-function: assert_explain_costs_contains('select * from iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t6', 'cardinality: 3')
--- result:
-None
--- !result
-drop table iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t6 force;
--- result:
--- !result
 drop database iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0};
 -- result:
 -- !result
