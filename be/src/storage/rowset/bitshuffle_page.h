@@ -435,7 +435,11 @@ inline Status BitShufflePageDecoder<Type>::read_by_rowids(const ordinal_t first_
     }
 
     if (read_count > 0) {
-        RETURN_IF_ERROR(column->append_numbers(data, SIZE_OF_TYPE * read_count));
+        size_t nappend = column->append_numbers(data, SIZE_OF_TYPE * read_count);
+        if (UNLIKELY(nappend != read_count)) {
+            return Status::InternalError(
+                    fmt::format("append_numbers failed, expected rows[{}], actual rows[{}]", read_count, nappend));
+        }
     }
     *count = read_count;
     return Status::OK();
