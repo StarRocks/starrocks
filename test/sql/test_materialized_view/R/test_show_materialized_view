@@ -90,15 +90,19 @@ select
     LAST_REFRESH_ERROR_CODE,
     IS_ACTIVE,
     INACTIVE_REASON
-from information_schema.materialized_views where table_name = 'user_tags_mv1';
+from information_schema.materialized_views where table_name = 'user_tags_mv1' and TABLE_SCHEMA = 'test_show_materialized_view';
 -- result:
 user_tags_mv1	SKIPPED	0	true	
 -- !result
 set @last_refresh_time = (
     select max(last_refresh_start_time)
-    from information_schema.materialized_views where table_name = 'user_tags_mv1'
+    from information_schema.materialized_views where table_name = 'user_tags_mv1' and TABLE_SCHEMA = 'test_show_materialized_view';
+-- result:
+E: (1064, "Getting syntax error at line 3, column 130. Detail message: Unexpected input ';', the most similar input is {')'}.")
+-- !result
 );
 -- result:
+E: (1064, "Getting syntax error at line 1, column 0. Detail message: Unexpected input ')', the most similar input is {'ADD', 'ADMIN', 'ALTER', 'ANALYZE', 'BACKUP', '(', ';'}.")
 -- !result
 select sleep(3);
 -- result:
@@ -111,43 +115,47 @@ select
     LAST_REFRESH_ERROR_CODE,
     IS_ACTIVE,
     INACTIVE_REASON
-from information_schema.materialized_views where table_name = 'user_tags_mv1';
+from information_schema.materialized_views where table_name = 'user_tags_mv1' and TABLE_SCHEMA = 'test_show_materialized_view';
 -- result:
 user_tags_mv1	SUCCESS	0	true	
 -- !result
 set @this_refresh_time = (
     select max(last_refresh_start_time)
-    from information_schema.materialized_views where table_name = 'user_tags_mv1'
+    from information_schema.materialized_views where table_name = 'user_tags_mv1' and TABLE_SCHEMA = 'test_show_materialized_view'
 );
 -- result:
 -- !result
 select if(@last_refresh_time != @this_refresh_time, 
     'refreshed', concat('no refresh after ', @last_refresh_time));
 -- result:
-refreshed
+None
 -- !result
-select TABLE_NAME, LAST_REFRESH_ERROR_CODE, IS_ACTIVE, INACTIVE_REASON from information_schema.materialized_views where TABLE_SCHEMA = 'test_show_materialized_view' and table_name = 'user_tags_mv1';
+select TABLE_NAME, LAST_REFRESH_ERROR_CODE, IS_ACTIVE, INACTIVE_REASON from information_schema.materialized_views where TABLE_SCHEMA = 'test_show_materialized_view' and table_name = 'user_tags_mv1' ORDER BY LAST_REFRESH_START_TIME DESC;
 -- result:
 user_tags_mv1	0	true	
 -- !result
-select TABLE_NAME, LAST_REFRESH_ERROR_CODE, IS_ACTIVE, INACTIVE_REASON from information_schema.materialized_views where TABLE_SCHEMA = 'test_show_materialized_view' and table_name like 'user_tags_mv1';
+select TABLE_NAME, LAST_REFRESH_ERROR_CODE, IS_ACTIVE, INACTIVE_REASON from information_schema.materialized_views where TABLE_SCHEMA = 'test_show_materialized_view' and table_name like 'user_tags_mv1' ORDER BY LAST_REFRESH_START_TIME DESC;
 -- result:
 user_tags_mv1	0	true	None
 -- !result
-select TABLE_NAME, LAST_REFRESH_ERROR_CODE, IS_ACTIVE, INACTIVE_REASON from information_schema.materialized_views where TABLE_SCHEMA = 'test_show_materialized_view' and table_name like '%user_tags_mv1%';
+select TABLE_NAME, LAST_REFRESH_ERROR_CODE, IS_ACTIVE, INACTIVE_REASON from information_schema.materialized_views where TABLE_SCHEMA = 'test_show_materialized_view' and table_name like '%user_tags_mv1%' ORDER BY LAST_REFRESH_START_TIME DESC;
 -- result:
 user_tags_mv1	0	true	None
 -- !result
-select TABLE_NAME, LAST_REFRESH_ERROR_CODE, IS_ACTIVE, INACTIVE_REASON from information_schema.materialized_views where TABLE_SCHEMA = 'test_show_materialized_view' and table_name like '%%';
+select TABLE_NAME, LAST_REFRESH_ERROR_CODE, IS_ACTIVE, INACTIVE_REASON from information_schema.materialized_views where TABLE_SCHEMA = 'test_show_materialized_view' and table_name like '%%' ORDER BY LAST_REFRESH_START_TIME DESC;
 -- result:
 user_tags_mv1	0	true	None
 -- !result
-select TABLE_NAME, LAST_REFRESH_ERROR_CODE, IS_ACTIVE, INACTIVE_REASON from information_schema.materialized_views where TABLE_SCHEMA = 'test_show_materialized_view' and table_name like '%bad_name%';
+select TABLE_NAME, LAST_REFRESH_ERROR_CODE, IS_ACTIVE, INACTIVE_REASON from information_schema.materialized_views where TABLE_SCHEMA = 'test_show_materialized_view' and table_name like '%bad_name%' ORDER BY LAST_REFRESH_START_TIME DESC;
 -- result:
 -- !result
 [UC] SELECT * FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'test_show_materialized_view' and table_name = 'user_tags_mv1';
 -- result:
+<<<<<<< HEAD
 22021	test_show_materialized_view	user_tags_mv1	MANUAL	true		UNPARTITIONED	22031	mv-22021	2025-06-27 11:15:04	2025-06-27 11:15:05	0.434	SUCCESS	true	NULL	NULL	{}	[user_tags_mv1]	0		0	CREATE MATERIALIZED VIEW `user_tags_mv1` (`user_id`, `bitmap_union(to_bitmap(tag_id))`)
+=======
+10376	test_show_materialized_view	user_tags_mv1	MANUAL	true		UNPARTITIONED	10384	mv-10376	2025-10-28 15:25:56	2025-10-28 15:25:57	0.197	SUCCESS	true	NULL	NULL	{}	[user_tags_mv1]	0		0	CREATE MATERIALIZED VIEW `user_tags_mv1` (`user_id`, `bitmap_union(to_bitmap(tag_id))`)
+>>>>>>> b0122d2db4 ([UT] [BugFix] Fix show materialized view bugs (#64646))
 DISTRIBUTED BY HASH(`user_id`)
 REFRESH DEFERRED MANUAL
 PROPERTIES (
@@ -159,11 +167,19 @@ PROPERTIES (
 )
 AS SELECT `user_tags`.`user_id`, bitmap_union(to_bitmap(`user_tags`.`tag_id`)) AS `bitmap_union(to_bitmap(tag_id))`
 FROM `test_show_materialized_view`.`user_tags`
+<<<<<<< HEAD
 GROUP BY `user_tags`.`user_id`;	{"queryIds":["0197af61-b047-7082-924b-aee3fd7a4ce1"],"isManual":true,"isSync":true,"isReplay":false,"priority":80,"lastTaskRunState":"SUCCESS"}	VALID	'root'@'%'	2025-06-27 11:15:05	0197af61-b047-77bb-ad89-c04b4ded602e
 -- !result
 [UC] SELECT * FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'test_show_materialized_view' and table_name like 'user_tags_mv1';
 -- result:
 22021	test_show_materialized_view	user_tags_mv1	MANUAL	true	None	UNPARTITIONED	22031	mv-22021	2025-06-27 11:15:04	2025-06-27 11:15:05	0.434	SUCCESS	true	NULL	NULL	{}	[user_tags_mv1]	0		0	CREATE MATERIALIZED VIEW `user_tags_mv1` (`user_id`, `bitmap_union(to_bitmap(tag_id))`)
+=======
+GROUP BY `user_tags`.`user_id`;	{"queryIds":["019a29b5-9196-73ae-b18f-e8c41bad5d07"],"isManual":true,"isSync":true,"isReplay":false,"priority":80,"lastTaskRunState":"SUCCESS"}	VALID	'root'@'%'	2025-10-28 15:25:57	019a29b5-9196-7c93-87e9-38f42cf5fc58
+-- !result
+[UC] SELECT * FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'test_show_materialized_view' and table_name like 'user_tags_mv1';
+-- result:
+10376	test_show_materialized_view	user_tags_mv1	MANUAL	true	None	UNPARTITIONED	10384	mv-10376	2025-10-28 15:25:56	2025-10-28 15:25:57	0.197	SUCCESS	true	NULL	NULL	{}	[user_tags_mv1]	0		0	CREATE MATERIALIZED VIEW `user_tags_mv1` (`user_id`, `bitmap_union(to_bitmap(tag_id))`)
+>>>>>>> b0122d2db4 ([UT] [BugFix] Fix show materialized view bugs (#64646))
 DISTRIBUTED BY HASH(`user_id`)
 REFRESH DEFERRED MANUAL
 PROPERTIES (
@@ -175,11 +191,19 @@ PROPERTIES (
 )
 AS SELECT `user_tags`.`user_id`, bitmap_union(to_bitmap(`user_tags`.`tag_id`)) AS `bitmap_union(to_bitmap(tag_id))`
 FROM `test_show_materialized_view`.`user_tags`
+<<<<<<< HEAD
 GROUP BY `user_tags`.`user_id`;	{"queryIds":["0197af61-b047-7082-924b-aee3fd7a4ce1"],"isManual":true,"isSync":true,"isReplay":false,"priority":80,"lastTaskRunState":"SUCCESS"}	VALID	'root'@'%'	2025-06-27 11:15:05	0197af61-b047-77bb-ad89-c04b4ded602e
 -- !result
 [UC] SELECT * FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'test_show_materialized_view' and table_name like '%user_tags_mv1%';
 -- result:
 22021	test_show_materialized_view	user_tags_mv1	MANUAL	true	None	UNPARTITIONED	22031	mv-22021	2025-06-27 11:15:04	2025-06-27 11:15:05	0.434	SUCCESS	true	NULL	NULL	{}	[user_tags_mv1]	0		0	CREATE MATERIALIZED VIEW `user_tags_mv1` (`user_id`, `bitmap_union(to_bitmap(tag_id))`)
+=======
+GROUP BY `user_tags`.`user_id`;	{"queryIds":["019a29b5-9196-73ae-b18f-e8c41bad5d07"],"isManual":true,"isSync":true,"isReplay":false,"priority":80,"lastTaskRunState":"SUCCESS"}	VALID	'root'@'%'	2025-10-28 15:25:57	019a29b5-9196-7c93-87e9-38f42cf5fc58
+-- !result
+[UC] SELECT * FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'test_show_materialized_view' and table_name like '%user_tags_mv1%';
+-- result:
+10376	test_show_materialized_view	user_tags_mv1	MANUAL	true	None	UNPARTITIONED	10384	mv-10376	2025-10-28 15:25:56	2025-10-28 15:25:57	0.197	SUCCESS	true	NULL	NULL	{}	[user_tags_mv1]	0		0	CREATE MATERIALIZED VIEW `user_tags_mv1` (`user_id`, `bitmap_union(to_bitmap(tag_id))`)
+>>>>>>> b0122d2db4 ([UT] [BugFix] Fix show materialized view bugs (#64646))
 DISTRIBUTED BY HASH(`user_id`)
 REFRESH DEFERRED MANUAL
 PROPERTIES (
@@ -191,11 +215,19 @@ PROPERTIES (
 )
 AS SELECT `user_tags`.`user_id`, bitmap_union(to_bitmap(`user_tags`.`tag_id`)) AS `bitmap_union(to_bitmap(tag_id))`
 FROM `test_show_materialized_view`.`user_tags`
+<<<<<<< HEAD
 GROUP BY `user_tags`.`user_id`;	{"queryIds":["0197af61-b047-7082-924b-aee3fd7a4ce1"],"isManual":true,"isSync":true,"isReplay":false,"priority":80,"lastTaskRunState":"SUCCESS"}	VALID	'root'@'%'	2025-06-27 11:15:05	0197af61-b047-77bb-ad89-c04b4ded602e
 -- !result
 [UC] SELECT * FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'test_show_materialized_view' and table_name like '%%';
 -- result:
 22021	test_show_materialized_view	user_tags_mv1	MANUAL	true	None	UNPARTITIONED	22031	mv-22021	2025-06-27 11:15:04	2025-06-27 11:15:05	0.434	SUCCESS	true	NULL	NULL	{}	[user_tags_mv1]	0		0	CREATE MATERIALIZED VIEW `user_tags_mv1` (`user_id`, `bitmap_union(to_bitmap(tag_id))`)
+=======
+GROUP BY `user_tags`.`user_id`;	{"queryIds":["019a29b5-9196-73ae-b18f-e8c41bad5d07"],"isManual":true,"isSync":true,"isReplay":false,"priority":80,"lastTaskRunState":"SUCCESS"}	VALID	'root'@'%'	2025-10-28 15:25:57	019a29b5-9196-7c93-87e9-38f42cf5fc58
+-- !result
+[UC] SELECT * FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'test_show_materialized_view' and table_name like '%%';
+-- result:
+10376	test_show_materialized_view	user_tags_mv1	MANUAL	true	None	UNPARTITIONED	10384	mv-10376	2025-10-28 15:25:56	2025-10-28 15:25:57	0.197	SUCCESS	true	NULL	NULL	{}	[user_tags_mv1]	0		0	CREATE MATERIALIZED VIEW `user_tags_mv1` (`user_id`, `bitmap_union(to_bitmap(tag_id))`)
+>>>>>>> b0122d2db4 ([UT] [BugFix] Fix show materialized view bugs (#64646))
 DISTRIBUTED BY HASH(`user_id`)
 REFRESH DEFERRED MANUAL
 PROPERTIES (
@@ -207,14 +239,22 @@ PROPERTIES (
 )
 AS SELECT `user_tags`.`user_id`, bitmap_union(to_bitmap(`user_tags`.`tag_id`)) AS `bitmap_union(to_bitmap(tag_id))`
 FROM `test_show_materialized_view`.`user_tags`
+<<<<<<< HEAD
 GROUP BY `user_tags`.`user_id`;	{"queryIds":["0197af61-b047-7082-924b-aee3fd7a4ce1"],"isManual":true,"isSync":true,"isReplay":false,"priority":80,"lastTaskRunState":"SUCCESS"}	VALID	'root'@'%'	2025-06-27 11:15:05	0197af61-b047-77bb-ad89-c04b4ded602e
+=======
+GROUP BY `user_tags`.`user_id`;	{"queryIds":["019a29b5-9196-73ae-b18f-e8c41bad5d07"],"isManual":true,"isSync":true,"isReplay":false,"priority":80,"lastTaskRunState":"SUCCESS"}	VALID	'root'@'%'	2025-10-28 15:25:57	019a29b5-9196-7c93-87e9-38f42cf5fc58
+>>>>>>> b0122d2db4 ([UT] [BugFix] Fix show materialized view bugs (#64646))
 -- !result
 [UC] SELECT * FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'test_show_materialized_view' and table_name like '%bad_name%';
 -- result:
 -- !result
 [UC] show materialized views from test_show_materialized_view where name like 'user_tags_mv1';
 -- result:
+<<<<<<< HEAD
 22021	test_show_materialized_view	user_tags_mv1	MANUAL	true	None	UNPARTITIONED	22031	mv-22021	2025-06-27 11:15:04	2025-06-27 11:15:05	0.434	SUCCESS	true	NULL	NULL	{}	[user_tags_mv1]	0		0	CREATE MATERIALIZED VIEW `user_tags_mv1` (`user_id`, `bitmap_union(to_bitmap(tag_id))`)
+=======
+10376	test_show_materialized_view	user_tags_mv1	MANUAL	true	None	UNPARTITIONED	10384	mv-10376	2025-10-28 15:25:56	2025-10-28 15:25:57	0.197	SUCCESS	true	NULL	NULL	{}	[user_tags_mv1]	0		0	CREATE MATERIALIZED VIEW `user_tags_mv1` (`user_id`, `bitmap_union(to_bitmap(tag_id))`)
+>>>>>>> b0122d2db4 ([UT] [BugFix] Fix show materialized view bugs (#64646))
 DISTRIBUTED BY HASH(`user_id`)
 REFRESH DEFERRED MANUAL
 PROPERTIES (
@@ -226,11 +266,19 @@ PROPERTIES (
 )
 AS SELECT `user_tags`.`user_id`, bitmap_union(to_bitmap(`user_tags`.`tag_id`)) AS `bitmap_union(to_bitmap(tag_id))`
 FROM `test_show_materialized_view`.`user_tags`
+<<<<<<< HEAD
 GROUP BY `user_tags`.`user_id`;	{"queryIds":["0197af61-b047-7082-924b-aee3fd7a4ce1"],"isManual":true,"isSync":true,"isReplay":false,"priority":80,"lastTaskRunState":"SUCCESS"}	VALID	'root'@'%'	2025-06-27 11:15:05	0197af61-b047-77bb-ad89-c04b4ded602e
 -- !result
 [UC] show materialized views from test_show_materialized_view where name like '%user_tags_mv1%';
 -- result:
 22021	test_show_materialized_view	user_tags_mv1	MANUAL	true	None	UNPARTITIONED	22031	mv-22021	2025-06-27 11:15:04	2025-06-27 11:15:05	0.434	SUCCESS	true	NULL	NULL	{}	[user_tags_mv1]	0		0	CREATE MATERIALIZED VIEW `user_tags_mv1` (`user_id`, `bitmap_union(to_bitmap(tag_id))`)
+=======
+GROUP BY `user_tags`.`user_id`;	{"queryIds":["019a29b5-9196-73ae-b18f-e8c41bad5d07"],"isManual":true,"isSync":true,"isReplay":false,"priority":80,"lastTaskRunState":"SUCCESS"}	VALID	'root'@'%'	2025-10-28 15:25:57	019a29b5-9196-7c93-87e9-38f42cf5fc58
+-- !result
+[UC] show materialized views from test_show_materialized_view where name like '%user_tags_mv1%';
+-- result:
+10376	test_show_materialized_view	user_tags_mv1	MANUAL	true	None	UNPARTITIONED	10384	mv-10376	2025-10-28 15:25:56	2025-10-28 15:25:57	0.197	SUCCESS	true	NULL	NULL	{}	[user_tags_mv1]	0		0	CREATE MATERIALIZED VIEW `user_tags_mv1` (`user_id`, `bitmap_union(to_bitmap(tag_id))`)
+>>>>>>> b0122d2db4 ([UT] [BugFix] Fix show materialized view bugs (#64646))
 DISTRIBUTED BY HASH(`user_id`)
 REFRESH DEFERRED MANUAL
 PROPERTIES (
@@ -242,11 +290,19 @@ PROPERTIES (
 )
 AS SELECT `user_tags`.`user_id`, bitmap_union(to_bitmap(`user_tags`.`tag_id`)) AS `bitmap_union(to_bitmap(tag_id))`
 FROM `test_show_materialized_view`.`user_tags`
+<<<<<<< HEAD
 GROUP BY `user_tags`.`user_id`;	{"queryIds":["0197af61-b047-7082-924b-aee3fd7a4ce1"],"isManual":true,"isSync":true,"isReplay":false,"priority":80,"lastTaskRunState":"SUCCESS"}	VALID	'root'@'%'	2025-06-27 11:15:05	0197af61-b047-77bb-ad89-c04b4ded602e
 -- !result
 [UC] show materialized views from test_show_materialized_view where name = 'user_tags_mv1';
 -- result:
 22021	test_show_materialized_view	user_tags_mv1	MANUAL	true		UNPARTITIONED	22031	mv-22021	2025-06-27 11:15:04	2025-06-27 11:15:05	0.434	SUCCESS	true	NULL	NULL	{}	[user_tags_mv1]	0		0	CREATE MATERIALIZED VIEW `user_tags_mv1` (`user_id`, `bitmap_union(to_bitmap(tag_id))`)
+=======
+GROUP BY `user_tags`.`user_id`;	{"queryIds":["019a29b5-9196-73ae-b18f-e8c41bad5d07"],"isManual":true,"isSync":true,"isReplay":false,"priority":80,"lastTaskRunState":"SUCCESS"}	VALID	'root'@'%'	2025-10-28 15:25:57	019a29b5-9196-7c93-87e9-38f42cf5fc58
+-- !result
+[UC] show materialized views from test_show_materialized_view where name = 'user_tags_mv1';
+-- result:
+10376	test_show_materialized_view	user_tags_mv1	MANUAL	true		UNPARTITIONED	10384	mv-10376	2025-10-28 15:25:56	2025-10-28 15:25:57	0.197	SUCCESS	true	NULL	NULL	{}	[user_tags_mv1]	0		0	CREATE MATERIALIZED VIEW `user_tags_mv1` (`user_id`, `bitmap_union(to_bitmap(tag_id))`)
+>>>>>>> b0122d2db4 ([UT] [BugFix] Fix show materialized view bugs (#64646))
 DISTRIBUTED BY HASH(`user_id`)
 REFRESH DEFERRED MANUAL
 PROPERTIES (
@@ -258,11 +314,19 @@ PROPERTIES (
 )
 AS SELECT `user_tags`.`user_id`, bitmap_union(to_bitmap(`user_tags`.`tag_id`)) AS `bitmap_union(to_bitmap(tag_id))`
 FROM `test_show_materialized_view`.`user_tags`
+<<<<<<< HEAD
 GROUP BY `user_tags`.`user_id`;	{"queryIds":["0197af61-b047-7082-924b-aee3fd7a4ce1"],"isManual":true,"isSync":true,"isReplay":false,"priority":80,"lastTaskRunState":"SUCCESS"}	VALID	'root'@'%'	2025-06-27 11:15:05	0197af61-b047-77bb-ad89-c04b4ded602e
 -- !result
 [UC] show materialized views where name like 'user_tags_mv1';
 -- result:
 22021	test_show_materialized_view	user_tags_mv1	MANUAL	true	None	UNPARTITIONED	22031	mv-22021	2025-06-27 11:15:04	2025-06-27 11:15:05	0.434	SUCCESS	true	NULL	NULL	{}	[user_tags_mv1]	0		0	CREATE MATERIALIZED VIEW `user_tags_mv1` (`user_id`, `bitmap_union(to_bitmap(tag_id))`)
+=======
+GROUP BY `user_tags`.`user_id`;	{"queryIds":["019a29b5-9196-73ae-b18f-e8c41bad5d07"],"isManual":true,"isSync":true,"isReplay":false,"priority":80,"lastTaskRunState":"SUCCESS"}	VALID	'root'@'%'	2025-10-28 15:25:57	019a29b5-9196-7c93-87e9-38f42cf5fc58
+-- !result
+[UC] show materialized views where name like 'user_tags_mv1';
+-- result:
+10376	test_show_materialized_view	user_tags_mv1	MANUAL	true	None	UNPARTITIONED	10384	mv-10376	2025-10-28 15:25:56	2025-10-28 15:25:57	0.197	SUCCESS	true	NULL	NULL	{}	[user_tags_mv1]	0		0	CREATE MATERIALIZED VIEW `user_tags_mv1` (`user_id`, `bitmap_union(to_bitmap(tag_id))`)
+>>>>>>> b0122d2db4 ([UT] [BugFix] Fix show materialized view bugs (#64646))
 DISTRIBUTED BY HASH(`user_id`)
 REFRESH DEFERRED MANUAL
 PROPERTIES (
@@ -274,11 +338,19 @@ PROPERTIES (
 )
 AS SELECT `user_tags`.`user_id`, bitmap_union(to_bitmap(`user_tags`.`tag_id`)) AS `bitmap_union(to_bitmap(tag_id))`
 FROM `test_show_materialized_view`.`user_tags`
+<<<<<<< HEAD
 GROUP BY `user_tags`.`user_id`;	{"queryIds":["0197af61-b047-7082-924b-aee3fd7a4ce1"],"isManual":true,"isSync":true,"isReplay":false,"priority":80,"lastTaskRunState":"SUCCESS"}	VALID	'root'@'%'	2025-06-27 11:15:05	0197af61-b047-77bb-ad89-c04b4ded602e
 -- !result
 [UC] show materialized views where name like '%user_tags_mv1%';
 -- result:
 22021	test_show_materialized_view	user_tags_mv1	MANUAL	true	None	UNPARTITIONED	22031	mv-22021	2025-06-27 11:15:04	2025-06-27 11:15:05	0.434	SUCCESS	true	NULL	NULL	{}	[user_tags_mv1]	0		0	CREATE MATERIALIZED VIEW `user_tags_mv1` (`user_id`, `bitmap_union(to_bitmap(tag_id))`)
+=======
+GROUP BY `user_tags`.`user_id`;	{"queryIds":["019a29b5-9196-73ae-b18f-e8c41bad5d07"],"isManual":true,"isSync":true,"isReplay":false,"priority":80,"lastTaskRunState":"SUCCESS"}	VALID	'root'@'%'	2025-10-28 15:25:57	019a29b5-9196-7c93-87e9-38f42cf5fc58
+-- !result
+[UC] show materialized views where name like '%user_tags_mv1%';
+-- result:
+10376	test_show_materialized_view	user_tags_mv1	MANUAL	true	None	UNPARTITIONED	10384	mv-10376	2025-10-28 15:25:56	2025-10-28 15:25:57	0.197	SUCCESS	true	NULL	NULL	{}	[user_tags_mv1]	0		0	CREATE MATERIALIZED VIEW `user_tags_mv1` (`user_id`, `bitmap_union(to_bitmap(tag_id))`)
+>>>>>>> b0122d2db4 ([UT] [BugFix] Fix show materialized view bugs (#64646))
 DISTRIBUTED BY HASH(`user_id`)
 REFRESH DEFERRED MANUAL
 PROPERTIES (
@@ -290,11 +362,19 @@ PROPERTIES (
 )
 AS SELECT `user_tags`.`user_id`, bitmap_union(to_bitmap(`user_tags`.`tag_id`)) AS `bitmap_union(to_bitmap(tag_id))`
 FROM `test_show_materialized_view`.`user_tags`
+<<<<<<< HEAD
 GROUP BY `user_tags`.`user_id`;	{"queryIds":["0197af61-b047-7082-924b-aee3fd7a4ce1"],"isManual":true,"isSync":true,"isReplay":false,"priority":80,"lastTaskRunState":"SUCCESS"}	VALID	'root'@'%'	2025-06-27 11:15:05	0197af61-b047-77bb-ad89-c04b4ded602e
 -- !result
 [UC] show materialized views where name = 'user_tags_mv1';
 -- result:
 22021	test_show_materialized_view	user_tags_mv1	MANUAL	true		UNPARTITIONED	22031	mv-22021	2025-06-27 11:15:04	2025-06-27 11:15:05	0.434	SUCCESS	true	NULL	NULL	{}	[user_tags_mv1]	0		0	CREATE MATERIALIZED VIEW `user_tags_mv1` (`user_id`, `bitmap_union(to_bitmap(tag_id))`)
+=======
+GROUP BY `user_tags`.`user_id`;	{"queryIds":["019a29b5-9196-73ae-b18f-e8c41bad5d07"],"isManual":true,"isSync":true,"isReplay":false,"priority":80,"lastTaskRunState":"SUCCESS"}	VALID	'root'@'%'	2025-10-28 15:25:57	019a29b5-9196-7c93-87e9-38f42cf5fc58
+-- !result
+[UC] show materialized views where name = 'user_tags_mv1';
+-- result:
+10376	test_show_materialized_view	user_tags_mv1	MANUAL	true		UNPARTITIONED	10384	mv-10376	2025-10-28 15:25:56	2025-10-28 15:25:57	0.197	SUCCESS	true	NULL	NULL	{}	[user_tags_mv1]	0		0	CREATE MATERIALIZED VIEW `user_tags_mv1` (`user_id`, `bitmap_union(to_bitmap(tag_id))`)
+>>>>>>> b0122d2db4 ([UT] [BugFix] Fix show materialized view bugs (#64646))
 DISTRIBUTED BY HASH(`user_id`)
 REFRESH DEFERRED MANUAL
 PROPERTIES (
@@ -306,7 +386,11 @@ PROPERTIES (
 )
 AS SELECT `user_tags`.`user_id`, bitmap_union(to_bitmap(`user_tags`.`tag_id`)) AS `bitmap_union(to_bitmap(tag_id))`
 FROM `test_show_materialized_view`.`user_tags`
+<<<<<<< HEAD
 GROUP BY `user_tags`.`user_id`;	{"queryIds":["0197af61-b047-7082-924b-aee3fd7a4ce1"],"isManual":true,"isSync":true,"isReplay":false,"priority":80,"lastTaskRunState":"SUCCESS"}	VALID	'root'@'%'	2025-06-27 11:15:05	0197af61-b047-77bb-ad89-c04b4ded602e
+=======
+GROUP BY `user_tags`.`user_id`;	{"queryIds":["019a29b5-9196-73ae-b18f-e8c41bad5d07"],"isManual":true,"isSync":true,"isReplay":false,"priority":80,"lastTaskRunState":"SUCCESS"}	VALID	'root'@'%'	2025-10-28 15:25:57	019a29b5-9196-7c93-87e9-38f42cf5fc58
+>>>>>>> b0122d2db4 ([UT] [BugFix] Fix show materialized view bugs (#64646))
 -- !result
 drop database test_show_materialized_view;
 -- result:
