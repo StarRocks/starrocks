@@ -231,7 +231,7 @@ PARTITION BY (l_returnflag, l_linestatus, date_trunc('day', l_shipdate))
 REFRESH DEFERRED MANUAL
 PROPERTIES (
   "replication_num" = "1",
-  "partition_retention_condition" = "date_trunc('day', l_shipdate) >= '2024-11-13'"
+  "partition_retention_condition" = "date_trunc('day', l_shipdate) >= '2024-11-13' or date_trunc('day', l_shipdate) is null"
 )
 AS
   SELECT * FROM mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_days;
