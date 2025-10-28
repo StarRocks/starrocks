@@ -20,8 +20,6 @@ import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TDictionaryGetExpr;
-import com.starrocks.thrift.TExprNode;
-import com.starrocks.thrift.TExprNodeType;
 
 import java.util.List;
 
@@ -60,18 +58,6 @@ public class DictionaryGetExpr extends Expr {
         this.type = other.getType();
     }
 
-    @Override
-    protected void toThrift(TExprNode msg) {
-        TDictionaryGetExpr dictionaryGetExpr = new TDictionaryGetExpr();
-        dictionaryGetExpr.setDict_id(dictionaryId);
-        dictionaryGetExpr.setTxn_id(dictionaryTxnId);
-        dictionaryGetExpr.setKey_size(keySize);
-        dictionaryGetExpr.setNull_if_not_exist(nullIfNotExist);
-        setDictionaryGetExpr(dictionaryGetExpr);
-
-        msg.setNode_type(TExprNodeType.DICTIONARY_GET_EXPR);
-        msg.setDictionary_get_expr(dictionaryGetExpr);
-    }
 
     @Override
     public Expr clone() {

@@ -42,13 +42,10 @@ public class PlaceHolderExpr extends Expr {
         this.type = type;
     }
 
-    @Override
-    protected void toThrift(TExprNode msg) {
-        msg.setNode_type(TExprNodeType.PLACEHOLDER_EXPR);
-        msg.setVslot_ref(new TPlaceHolder());
-        msg.vslot_ref.setNullable(nullable);
-        msg.vslot_ref.setSlot_id(slotId);
+    public int getSlotId() {
+        return slotId;
     }
+
 
     @Override
     public void toNormalForm(TExprNode msg, FragmentNormalizer normalizer) {

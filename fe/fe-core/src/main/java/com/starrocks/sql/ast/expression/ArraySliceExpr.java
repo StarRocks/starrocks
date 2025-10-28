@@ -36,8 +36,6 @@ package com.starrocks.sql.ast.expression;
 
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
-import com.starrocks.thrift.TExprNode;
-import com.starrocks.thrift.TExprNodeType;
 
 public class ArraySliceExpr extends Expr {
     public ArraySliceExpr(Expr expr, Expr lowerBound, Expr upperBound) {
@@ -50,10 +48,6 @@ public class ArraySliceExpr extends Expr {
         super(other);
     }
 
-    @Override
-    protected void toThrift(TExprNode msg) {
-        msg.setNode_type(TExprNodeType.ARRAY_SLICE_EXPR);
-    }
 
     @Override
     public Expr clone() {
