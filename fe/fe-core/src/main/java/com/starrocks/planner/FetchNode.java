@@ -32,6 +32,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+// Used in global late materialization,
+// the FetchNode is responsible for initiating a lazy read request to a LookUpNode,
+// reading certain columns of some specific rows based on the row position
 public class FetchNode extends PlanNode {
     PlanNodeId targetNodeId;
     List<TupleDescriptor> descs;

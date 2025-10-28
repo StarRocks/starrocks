@@ -26,6 +26,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+// Used in global late materialization,
+// LookUpNode is responsible for handling lazy read requests from a FetchNode
+// and reading specific data from the data sources based on the row position,
+// and returning it to the FetchNode.
 public class LookUpNode extends PlanNode {
     private List<TupleDescriptor> descs;
     // row position desc for each table

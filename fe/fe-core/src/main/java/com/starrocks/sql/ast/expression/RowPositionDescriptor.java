@@ -24,14 +24,33 @@ import com.starrocks.thrift.TRowPositionType;
 
 import java.util.List;
 
-// describe how to find a row in specific table, only used by global late materialization
+/**
+ * Describes how to locate a specific row in a table for global late materialization.
+ *
+ * In global late materialization, scan operators initially output only computation-related columns
+ * (e.g., predicate columns) and row position columns (instead of all columns) to minimize data movement.
+ * Later, when additional columns are needed, FetchNode uses this descriptor to request LookUpNode
+ * to materialize the specific rows.
+ */
 public class RowPositionDescriptor {
     public enum Type {
         ICEBERG_V3
     }
+
+    // Type of row position format, determines how row positions are encoded and interpreted.
     private Type type;
+
+    // slot id that identifies the BE/CN where the row originated.
+    // it will determine which compute node FetchNode sends the request to
     private SlotId rowSourceSlot;
+
+    // slot ids that contain row position information in FetchNode.
+    // for Iceberg V3: [scan_range_id, row_id]
     private List<SlotId> fetchRefSlots;
+
+    // slot ids in LookUpNode that correspond to fetchRefSlots.
+    // used by LookUpNode to receive position info and materialize rows.
+    // must have the same size as fetchRefSlots.
     private List<SlotId> lookupRefSlots;
 
     public RowPositionDescriptor(Type type, SlotId rowSourceSlot, List<SlotId> fetchRefSlots, List<SlotId> lookupRefSlots) {
