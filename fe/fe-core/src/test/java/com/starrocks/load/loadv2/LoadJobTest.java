@@ -95,11 +95,15 @@ public class LoadJobTest {
     }
 
     @Test
-    public void testGetDbNotExists(@Mocked GlobalStateMgr globalStateMgr) {
+    public void testGetDbNotExists() {
         LoadJob loadJob = new BrokerLoadJob();
         Deencapsulation.setField(loadJob, "dbId", 1L);
         new Expectations() {
             {
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+
                 globalStateMgr.getLocalMetastore().getDb(1L);
                 minTimes = 0;
                 result = null;
@@ -294,11 +298,15 @@ public class LoadJobTest {
     }
 
     @Test
-    public void testProcessTimeout(@Mocked GlobalStateMgr globalStateMgr, @Mocked EditLog editLog) {
+    public void testProcessTimeout(@Mocked EditLog editLog) {
         LoadJob loadJob = new BrokerLoadJob();
         Deencapsulation.setField(loadJob, "timeoutSecond", 0);
         new Expectations() {
             {
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+
                 globalStateMgr.getEditLog();
                 minTimes = 0;
                 result = editLog;
