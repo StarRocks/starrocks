@@ -23,6 +23,7 @@ import com.starrocks.planner.PlanFragment;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.PlannerMetaLocker;
 import com.starrocks.sql.analyzer.QueryAnalyzer;
+import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.JoinRelation;
@@ -49,6 +50,7 @@ import java.util.stream.Collectors;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class StatementPlannerTest extends PlanTestBase {
@@ -284,6 +286,46 @@ class StatementPlannerTest extends PlanTestBase {
                 assertTrue(child instanceof FileTableFunctionRelation);
                 assertNotNull(((FileTableFunctionRelation) child).getTable());
             }
+        } finally {
+            FeConstants.runningUnitTest = originalRunningUnitTest;
+        }
+    }
+
+    @Test
+    public void testFilesOnlyVisitorProcessesCteQueries() throws Exception {
+        boolean originalRunningUnitTest = FeConstants.runningUnitTest;
+        try {
+            FeConstants.runningUnitTest = false;
+            String sql = "with source as (select * from files(\"path\"=\"fake://cte\", \"format\"=\"csv\") as f) "
+                    + "select * from source";
+            StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            QueryStatement queryStatement = (QueryStatement) stmt;
+
+            QueryRelation queryRelation = queryStatement.getQueryRelation();
+            assertEquals(1, queryRelation.getCteRelations().size());
+            CTERelation cteRelation = queryRelation.getCteRelations().get(0);
+
+            List<FileTableFunctionRelation> cteRelations =
+                    AnalyzerUtils.collectFileTableFunctionRelation(cteRelation.getCteQueryStatement());
+            assertEquals(1, cteRelations.size());
+            FileTableFunctionRelation fileRelation = cteRelations.get(0);
+
+            TableFunctionTable originalTable = (TableFunctionTable) fileRelation.getTable();
+            if (originalTable != null) {
+                fileRelation.setTable(null);
+            }
+
+            new QueryAnalyzer(connectContext).analyzeFilesOnly(queryStatement);
+
+            assertNotNull(fileRelation.getTable());
+            assertTrue(fileRelation.getTable() instanceof TableFunctionTable);
+            if (originalTable != null) {
+                assertNotSame(originalTable, fileRelation.getTable());
+            }
+
+            List<FileTableFunctionRelation> allRelations =
+                    AnalyzerUtils.collectFileTableFunctionRelation(queryStatement);
+            assertTrue(allRelations.contains(fileRelation));
         } finally {
             FeConstants.runningUnitTest = originalRunningUnitTest;
         }
