@@ -46,3 +46,21 @@ shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/strea
 sync;
 select * from tab1;
 
+
+CREATE table expr_partition_tbl (
+      org_id INT,
+      id INT,
+      v1 INT,
+      modified_at INT
+)
+ENGINE=OLAP
+PRIMARY KEY(`org_id`,`id`)
+PARTITION BY (`org_id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1"
+);
+
+shell: curl --location-trusted -u root: -H "Expect:100-continue" -H "label:conditional_update_expr_partition_tbl" -H "column_separator:," -H "row_delimiter:|" -H "merge_condition:modified_at" -d "1,2,1,1|1,2,0,0"  -XPUT ${url}/api/test_condition_update_2fdsiou12s/expr_partition_tbl/_stream_load
+sync;
+select * from expr_partition_tbl;
