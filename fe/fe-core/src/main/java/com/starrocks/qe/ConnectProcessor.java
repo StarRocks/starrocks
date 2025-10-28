@@ -76,27 +76,13 @@ import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.ExecuteStmt;
-<<<<<<< HEAD
-import com.starrocks.sql.ast.InsertStmt;
-=======
 import com.starrocks.sql.ast.OriginStatement;
->>>>>>> 06d18890aa ([Enhancement] Allow SELECT/SET in explicit transactions and add error 5307 for SELECT on previously modified tables (#63722))
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.StatementBase;
-<<<<<<< HEAD
-import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.UserIdentity;
-import com.starrocks.sql.ast.txn.BeginStmt;
-import com.starrocks.sql.ast.txn.CommitStmt;
-import com.starrocks.sql.ast.txn.RollbackStmt;
-=======
-import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.LiteralExpr;
-import com.starrocks.sql.ast.expression.NullLiteral;
->>>>>>> 06d18890aa ([Enhancement] Allow SELECT/SET in explicit transactions and add error 5307 for SELECT on previously modified tables (#63722))
 import com.starrocks.sql.common.AuditEncryptionChecker;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.SqlDigestBuilder;
