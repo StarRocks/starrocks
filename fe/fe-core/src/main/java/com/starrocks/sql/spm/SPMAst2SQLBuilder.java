@@ -20,6 +20,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.InPredicate;
+import com.starrocks.analysis.LargeInPredicate;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
@@ -180,6 +181,11 @@ public class SPMAst2SQLBuilder {
                 return strBuilder.toString();
             }
             return super.visitInPredicate(node, context);
+        }
+
+        @Override
+        public String visitLargeInPredicate(LargeInPredicate node, Void context) {
+            return super.visitLargeInPredicate(node, context);
         }
 
         @Override

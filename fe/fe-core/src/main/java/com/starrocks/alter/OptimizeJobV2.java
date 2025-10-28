@@ -385,6 +385,29 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
             if (status.getState() == Constants.TaskRunState.FAILED) {
                 LOG.warn("optimize task {} failed", rewriteTask.getName());
                 rewriteTask.setOptimizeTaskState(Constants.TaskRunState.FAILED);
+            } else if (status.getState() == Constants.TaskRunState.SUCCESS) {
+                // Task finished successfully at SQL level. Now gate on visibility for its temp partition.
+                try {
+                    Partition tmpPartition = tbl.getPartition(rewriteTask.getTempPartitionName(), true);
+                    if (tmpPartition == null) {
+                        LOG.warn("temp partition {} not found for task {}", rewriteTask.getTempPartitionName(),
+                                rewriteTask.getName());
+                        rewriteTask.setOptimizeTaskState(Constants.TaskRunState.FAILED);
+                    } else {
+                        boolean hasCommitted = hasCommittedNotVisible(tmpPartition.getId());
+                        if (hasCommitted) {
+                            // Not visible yet, mark this task as FAILED to avoid replacing this partition.
+                            LOG.warn("optimize task {} not visible yet, mark as FAILED (temp partition: {}, pid: {})",
+                                    rewriteTask.getName(), rewriteTask.getTempPartitionName(), tmpPartition.getId());
+                            rewriteTask.setOptimizeTaskState(Constants.TaskRunState.FAILED);
+                        } else {
+                            rewriteTask.setOptimizeTaskState(Constants.TaskRunState.SUCCESS);
+                        }
+                    }
+                } catch (Exception ex) {
+                    LOG.warn("check visibility for task {} failed", rewriteTask.getName(), ex);
+                    rewriteTask.setOptimizeTaskState(Constants.TaskRunState.FAILED);
+                }
             }
             progress += 100 / rewriteTasks.size();
         }
@@ -417,6 +440,13 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
     @Override
     protected void runFinishedRewritingJob() {
         // nothing to do
+    }
+
+    // Visible check wrapper for testability.
+    // Returns true if there exists committed-but-not-visible txn for the given partition.
+    protected boolean hasCommittedNotVisible(long partitionId) {
+        return GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                .existCommittedTxns(dbId, tableId, partitionId);
     }
 
     private void onFinished(Database db, OlapTable targetTable) throws AlterCancelException {

@@ -35,6 +35,7 @@ import com.starrocks.analysis.HintNode;
 import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.InformationFunction;
 import com.starrocks.analysis.IsNullPredicate;
+import com.starrocks.analysis.LargeInPredicate;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.LiteralExpr;
@@ -1520,6 +1521,10 @@ public interface AstVisitor<R, C> {
 
     default R visitInPredicate(InPredicate node, C context) {
         return visitExpression(node, context);
+    }
+
+    default R visitLargeInPredicate(LargeInPredicate node, C context) {
+        return visitInPredicate(node, context);
     }
 
     default R visitMultiInPredicate(MultiInPredicate node, C context) {

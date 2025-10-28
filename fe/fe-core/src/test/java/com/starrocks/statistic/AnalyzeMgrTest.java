@@ -21,6 +21,7 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.information.AnalyzeStatusSystemTable;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.persist.OperationType;
@@ -58,6 +59,7 @@ public class AnalyzeMgrTest {
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
         ConnectorPlanTestBase.mockHiveCatalog(connectContext);
+        FeConstants.runningUnitTest = false;
     }
 
     @AfterAll

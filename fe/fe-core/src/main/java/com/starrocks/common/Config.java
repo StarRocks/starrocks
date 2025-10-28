@@ -400,6 +400,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "task ttl")
     public static int task_ttl_second = 24 * 3600;         // 1 day
 
+    @ConfField(mutable = true, comment = "Max consecutive fail count of a task after which the task will be paused")
+    public static int max_task_consecutive_fail_count = 10;
+
     @ConfField(mutable = true, comment = "task run ttl")
     public static int task_runs_ttl_second = 7 * 24 * 3600;     // 7 day
 
@@ -934,6 +937,9 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static boolean mysql_service_nio_enable_keep_alive = true;
+
+    @ConfField
+    public static boolean mysql_service_kill_after_disconnect = true;
 
     /**
      * max num of thread to handle task in mysql.
@@ -1477,6 +1483,12 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true, comment = "The number of bytes to retain profile files")
     public static long proc_profile_file_retained_size_bytes = 2L * 1024 * 1024 * 1024;
+
+    /**
+     * Maximum Java stack depth for proc profile collection
+     */
+    @ConfField(mutable = true, comment = "Maximum Java stack depth for proc profile collection, default is 128")
+    public static int proc_profile_jstack_depth = 128;
 
     /**
      * If batch creation of partitions is allowed to create half of the partitions, it is easy to generate holes.
@@ -3239,8 +3251,7 @@ public class Config extends ConfigBase {
     @ConfField
     public static double flat_json_null_factor = 0.3;
 
-    @ConfField
-    public static double flat_json_sparsity_factory = 0.9;
+    @ConfField public static double flat_json_sparsity_factory = 0.3;
 
     @ConfField
     public static int flat_json_column_max = 100;
@@ -3447,6 +3458,9 @@ public class Config extends ConfigBase {
             " If one base mv has done reload, no need to do it again while other mv that related to it is reloading ")
     public static boolean enable_mv_post_image_reload_cache = true;
 
+    @ConfField(mutable = true, comment = "The timeout for waiting async mv reload done, 3 min by default")
+    public static int mv_async_reload_wait_timeout_second = 3 * 60; // 3 min
+
     /**
      * Whether analyze the mv after refresh in async mode.
      */
@@ -3494,7 +3508,7 @@ public class Config extends ConfigBase {
     public static long mv_plan_cache_expire_interval_sec = 24L * 60L * 60L;
 
     @ConfField(mutable = true, comment = "The default thread pool size of mv plan cache")
-    public static int mv_plan_cache_thread_pool_size = 3;
+    public static int mv_plan_cache_thread_pool_size = 8;
 
     /**
      * mv plan cache expire interval in seconds
@@ -3844,7 +3858,7 @@ public class Config extends ConfigBase {
     public static long max_graceful_exit_time_second = 60;
 
     @ConfField(mutable = true)
-    public static long default_statistics_output_row_count = 1L * 1000 * 1000 * 1000;
+    public static long default_statistics_output_row_count = 1L;
 
     /**
      * Whether enable dynamic tablet.

@@ -23,6 +23,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.IntLiteral;
+import com.starrocks.analysis.LargeInPredicate;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.Subquery;
@@ -146,6 +147,11 @@ public class SPMPlaceholderBuilder {
         }
 
         @Override
+        public ParseNode visitLargeInPredicate(LargeInPredicate node, Expr root) {
+            return node;
+        }
+
+        @Override
         public ParseNode visitLiteral(LiteralExpr node, Expr root) {
             Optional<Expr> placeholder = findPlaceholderExpr(node, root);
             if (placeholder.isPresent()) {
@@ -258,6 +264,11 @@ public class SPMPlaceholderBuilder {
             }
             usePlaceholders.add(spm.get());
             return spm.get();
+        }
+
+        @Override
+        public ParseNode visitLargeInPredicate(LargeInPredicate node, Expr root) {
+            return node;
         }
 
         @Override

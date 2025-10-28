@@ -35,6 +35,7 @@ import com.starrocks.analysis.GroupingFunctionCallExpr;
 import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.InformationFunction;
 import com.starrocks.analysis.IsNullPredicate;
+import com.starrocks.analysis.LargeInPredicate;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.MatchExpr;
@@ -95,6 +96,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ExistsPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LargeInPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.MapOperator;
 import com.starrocks.sql.optimizer.operator.scalar.MatchExprOperator;
@@ -608,6 +610,20 @@ public final class SqlToScalarOperatorTranslator {
             return outputPredicateRef;
         }
 
+        public ScalarOperator visitLargeInPredicate(LargeInPredicate node, Context context) {
+            List<ScalarOperator> children = node.getChildren().stream()
+                    .map(child -> visit(child, context))
+                    .collect(Collectors.toList());
+            
+            return new LargeInPredicateOperator(
+                    node.getRawText(),
+                    node.getRawConstantList(), 
+                    node.getConstantCount(),
+                    node.isNotIn(), 
+                    node.getConstantType(),
+                    children);
+        }
+
         @Override
         public ScalarOperator visitInPredicate(InPredicate node, Context context)
                 throws SemanticException {
@@ -616,6 +632,7 @@ public final class SqlToScalarOperatorTranslator {
             if (!lhsSubQueries.isEmpty()) {
                 throw new SemanticException("Subquery in left-side child of in-predicate is not supported");
             }
+
             if (!(node.getChild(1) instanceof Subquery)) {
                 return new InPredicateOperator(node.isNotIn(),
                         node.getChildren().stream()
@@ -960,4 +977,5 @@ public final class SqlToScalarOperatorTranslator {
             return node.getTransformed();
         }
     }
+
 }

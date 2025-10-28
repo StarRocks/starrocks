@@ -1603,9 +1603,19 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
                                 }
                                 clause.setBatchSize(((IntLiteral) valExpr).getValue());
                             } else {
-                                throw new SemanticException("min file size arg should be integer value");
+                                throw new SemanticException("batch size arg should be integer value");
                             }
                             break;
+                        case BATCH_PARALLELISM:
+                            if (valExpr instanceof IntLiteral) {
+                                long size = ((IntLiteral) valExpr).getValue();
+                                if (size < 0) {
+                                    throw new SemanticException("batch parallelism arg should be non-negative integer");
+                                }
+                                clause.setBatchSize(((IntLiteral) valExpr).getValue());
+                            } else {
+                                throw new SemanticException("batch parallelism arg should be integer value");
+                            }
                         default:
                             throw new SemanticException("Unknown key:" + expr);
                     }

@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.HintNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.ChildOutputPropertyGuarantor;
 import com.starrocks.sql.optimizer.Group;
 import com.starrocks.sql.optimizer.GroupExpression;
@@ -408,8 +409,10 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         if (!OperatorType.PHYSICAL_HASH_AGG.equals(groupExpression.getOp().getOpType())) {
             return true;
         }
+
+        SessionVariable sv = ConnectContext.get().getSessionVariable();
         // respect session variable new_planner_agg_stage
-        int aggStage = ConnectContext.get().getSessionVariable().getNewPlannerAggStage();
+        int aggStage = sv.getNewPlannerAggStage();
         if (aggStage == 1) {
             return true;
         }
@@ -433,16 +436,24 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
             if (aggregate.getDistinctColumnDataSkew() != null) {
                 return true;
             }
+
             // 1.1 check default column statistics or child output row may not be accurate
             if (groupExpression.getGroup().getStatistics().getColumnStatistics().values().stream()
                     .anyMatch(ColumnStatistic::isUnknown) ||
                     childBestExpr.getGroup().getStatistics().isTableRowCountMayInaccurate()) {
                 return false;
             }
+
             // 1.2 disable one stage agg with distinct aggregate
             if (!distinctAggCallOperator.isEmpty()) {
                 return false;
             }
+
+            if (sv.isEnableLocalShuffleAgg() &&
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().isSingleBackendAndComputeNode()) {
+                return true;
+            }
+
             // 1.3 disable one stage agg with multi group by columns
             return aggregate.getGroupBys().size() <= 1;
         }

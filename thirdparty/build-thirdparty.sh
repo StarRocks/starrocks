@@ -1405,14 +1405,6 @@ build_datasketches() {
     cp -r $TP_SOURCE_DIR/$DATASKETCHES_SOURCE/tuple/include/* $TP_INSTALL_DIR/include/datasketches/
 }
 
-# async-profiler
-build_async_profiler() {
-    check_if_source_exist $ASYNC_PROFILER_SOURCE
-    mkdir -p $TP_INSTALL_DIR/async-profiler
-    cp -r $TP_SOURCE_DIR/$ASYNC_PROFILER_SOURCE/bin $TP_INSTALL_DIR/async-profiler
-    cp -r $TP_SOURCE_DIR/$ASYNC_PROFILER_SOURCE/lib $TP_INSTALL_DIR/async-profiler
-}
-
 # fiu
 build_fiu() {
     check_if_source_exist $FIU_SOURCE
@@ -1539,11 +1531,9 @@ build_simdutf() {
 build_tenann() {
     check_if_source_exist $TENANN_SOURCE
     rm -rf $TP_INSTALL_DIR/include/tenann
-    rm -rf $TP_INSTALL_DIR/lib/libtenann-bundle.a
-    rm -rf $TP_INSTALL_DIR/lib/libtenann-bundle-avx2.a
-    cp -r $TP_SOURCE_DIR/$TENANN_SOURCE/include/tenann $TP_INSTALL_DIR/include/tenann
-    cp -r $TP_SOURCE_DIR/$TENANN_SOURCE/lib/libtenann-bundle.a $TP_INSTALL_DIR/lib/
-    cp -r $TP_SOURCE_DIR/$TENANN_SOURCE/lib/libtenann-bundle-avx2.a $TP_INSTALL_DIR/lib/
+    rm -rf $TP_INSTALL_DIR/lib/libtenann-bundl*.a
+    cp -r $TP_SOURCE_DIR/$TENANN_SOURCE/include/tenann $TP_INSTALL_DIR/include/
+    cp -r $TP_SOURCE_DIR/$TENANN_SOURCE/lib/libtenann-bundl*.a $TP_INSTALL_DIR/lib/
 }
 
 build_icu() {
@@ -1720,7 +1710,6 @@ declare -a all_packages=(
     avro_cpp
     serdes
     datasketches
-    async_profiler
     fiu
     llvm
     clucene
@@ -1731,11 +1720,12 @@ declare -a all_packages=(
     libxml2
     azure
     libdivide
+    tenann
 )
 
 # Machine specific packages
 if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
-    all_packages+=(breakpad libdeflate tenann)
+    all_packages+=(breakpad libdeflate)
 fi
 
 # Initialize packages array - if none specified, build all

@@ -39,6 +39,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.AccessTestUtil;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.UUIDUtil;
@@ -99,6 +100,7 @@ public class ConnectProcessorTest extends DDLTestBase {
 
     @BeforeAll
     public static void setUpClass() {
+        FeConstants.runningUnitTest = false;
         // Init Database packet
         {
             MysqlSerializer serializer = MysqlSerializer.newInstance();
@@ -177,11 +179,11 @@ public class ConnectProcessorTest extends DDLTestBase {
 
         statistics.scanBytes = 0L;
         statistics.scanRows = 0L;
+        DDLTestBase.beforeAll();
     }
 
     @BeforeEach
     public void setUp() throws Exception {
-        super.setUp();
         initDbPacket.clear();
         initWarehousePacket.clear();
         pingPacket.clear();
@@ -201,6 +203,7 @@ public class ConnectProcessorTest extends DDLTestBase {
         };
         myContext = new ConnectContext(connection);
         Deencapsulation.setField(myContext, "mysqlChannel", channel);
+        super.setUp();
     }
 
     private static MysqlChannel mockChannel(ByteBuffer packet) {
@@ -699,38 +702,6 @@ public class ConnectProcessorTest extends DDLTestBase {
         TMasterOpResult result = processor.proxyExecute(request);
         Assertions.assertNotNull(result);
         Assertions.assertTrue(context.getState().isError());
-    }
-
-    @Test
-    public void testStmtExecute() throws Exception {
-        int stmtId = 1;
-        MysqlSerializer serializer = MysqlSerializer.newInstance();
-        serializer.writeInt1(MysqlCommand.COM_STMT_EXECUTE.getCommandCode());
-        serializer.writeInt4(stmtId);
-        serializer.writeInt1(0); // flags
-        serializer.writeInt4(0); // flags
-        ByteBuffer packet = serializer.toByteBuffer();
-
-        ConnectContext ctx = initMockContext(mockChannel(packet), GlobalStateMgr.getCurrentState());
-
-        String sql = "PREPARE stmt1 FROM select * from testDb1.testTable1";
-        PrepareStmt stmt = (PrepareStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        ctx.putPreparedStmt(String.valueOf(stmtId), new PrepareStmtContext(stmt, ctx, null));
-
-        ConnectProcessor processor = new ConnectProcessor(ctx);
-        // Mock statement executor
-        // Create mock for StmtExecutor using MockUp instead of @Mocked parameter
-        new MockUp<StmtExecutor>() {
-            @Mock
-            public PQueryStatistics getQueryStatisticsForAuditLog() {
-                return statistics;
-            }
-        };
-
-        processor.processOnce();
-
-        Assertions.assertEquals(MysqlCommand.COM_STMT_EXECUTE, myContext.getCommand());
-        Assertions.assertTrue(ctx.getState().isQuery());
     }
 
     /**

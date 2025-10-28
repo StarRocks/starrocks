@@ -17,6 +17,7 @@ package com.starrocks.load.batchwrite;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.Status;
 import com.starrocks.common.util.DebugUtil;
@@ -89,6 +90,8 @@ public class MergeCommitTaskTest extends BatchWriteTestBase {
                 .withTable(new MTable(TABLE_NAME_1_1, Arrays.asList("c0 INT", "c1 STRING")));
         DATABASE_1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME_1);
         TABLE_1_1 = (OlapTable) DATABASE_1.getTable(TABLE_NAME_1_1);
+        FeConstants.runningUnitTest = false;
+        Config.enable_new_publish_mechanism = false;
     }
 
     @BeforeEach

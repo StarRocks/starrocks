@@ -401,10 +401,10 @@ void GroupReader::_process_columns_and_conjunct_ctxs() {
         } else {
             if (config::parquet_late_materialization_enable) {
                 _lazy_column_indices.emplace_back(read_col_idx);
+                _column_readers[slot_id]->set_can_lazy_decode(true);
             } else {
                 _active_column_indices.emplace_back(read_col_idx);
             }
-            _column_readers[slot_id]->set_can_lazy_decode(true);
         }
         ++read_col_idx;
     }

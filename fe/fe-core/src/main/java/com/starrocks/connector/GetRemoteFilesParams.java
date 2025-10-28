@@ -106,6 +106,10 @@ public class GetRemoteFilesParams {
         return tableVersionRange;
     }
 
+    public long getSnapshotId() {
+        return tableVersionRange.end().orElse(-1L);
+    }
+
     public ScalarOperator getPredicate() {
         return predicate;
     }
@@ -138,7 +142,7 @@ public class GetRemoteFilesParams {
         private List<PartitionKey> partitionKeys;
         private List<String> partitionNames;
         private List<Object> partitionAttachments;
-        private TableVersionRange tableVersionRange;
+        private TableVersionRange tableVersionRange = TableVersionRange.empty();
         private ScalarOperator predicate;
         private List<String> fieldNames;
         private long limit = -1;
@@ -163,6 +167,11 @@ public class GetRemoteFilesParams {
 
         public Builder setTableVersionRange(TableVersionRange tableVersionRange) {
             this.tableVersionRange = tableVersionRange;
+            return this;
+        }
+
+        public Builder setSnapshotId(long snapshotId) {
+            this.tableVersionRange = TableVersionRange.withEnd(java.util.Optional.of(snapshotId));
             return this;
         }
 

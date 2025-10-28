@@ -291,7 +291,7 @@ public class PaimonMetadata implements ConnectorMetadata {
             LOG.warn("Cannot get snapshot because {}", e.getMessage());
         }
         PredicateSearchKey filter = PredicateSearchKey.of(paimonTable.getCatalogDBName(),
-                paimonTable.getCatalogTableName(), latestSnapshotId, params.getPredicate());
+                paimonTable.getCatalogTableName(), params);
         if (!paimonSplits.containsKey(filter)) {
             ReadBuilder readBuilder = paimonTable.getNativeTable().newReadBuilder();
             int[] projected =
@@ -391,13 +391,13 @@ public class PaimonMetadata implements ConnectorMetadata {
 
             Statistics.Builder builder = Statistics.builder();
             if (!session.getSessionVariable().enablePaimonColumnStatistics()) {
-                return defaultStatistics(columns, table, predicate, limit);
+                return defaultStatistics(columns, table, predicate, versionRange, limit);
             }
             org.apache.paimon.table.Table nativeTable = ((PaimonTable) table).getNativeTable();
             Optional<org.apache.paimon.stats.Statistics> statistics = nativeTable.statistics();
             if (!statistics.isPresent() || statistics.get().colStats() == null
                     || !statistics.get().mergedRecordCount().isPresent()) {
-                return defaultStatistics(columns, table, predicate, limit);
+                return defaultStatistics(columns, table, predicate, versionRange, limit);
             }
             long rowCount = statistics.get().mergedRecordCount().getAsLong();
             builder.setOutputRowCount(rowCount);
@@ -410,6 +410,7 @@ public class PaimonMetadata implements ConnectorMetadata {
     }
 
     private Statistics defaultStatistics(Map<ColumnRefOperator, Column> columns, Table table, ScalarOperator predicate,
+                                         TableVersionRange versionRange,
                                          long limit) {
         Statistics.Builder builder = Statistics.builder();
         for (ColumnRefOperator columnRefOperator : columns.keySet()) {
@@ -417,7 +418,8 @@ public class PaimonMetadata implements ConnectorMetadata {
         }
         List<String> fieldNames = columns.keySet().stream().map(ColumnRefOperator::getName).collect(Collectors.toList());
         GetRemoteFilesParams params =
-                GetRemoteFilesParams.newBuilder().setPredicate(predicate).setFieldNames(fieldNames).setLimit(limit).build();
+                GetRemoteFilesParams.newBuilder().setPredicate(predicate).setTableVersionRange(versionRange)
+                        .setFieldNames(fieldNames).setLimit(limit).build();
         List<RemoteFileInfo> fileInfos = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFiles(table, params);
         PaimonRemoteFileDesc remoteFileDesc = (PaimonRemoteFileDesc) fileInfos.get(0).getFiles().get(0);
         List<Split> splits = remoteFileDesc.getPaimonSplitsInfo().getPaimonSplits();

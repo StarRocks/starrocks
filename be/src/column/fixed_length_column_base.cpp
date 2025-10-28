@@ -199,8 +199,9 @@ void FixedLengthColumnBase<T>::serialize_batch_with_null_masks(uint8_t* __restri
 
 template <typename T>
 size_t FixedLengthColumnBase<T>::serialize_batch_at_interval(uint8_t* dst, size_t byte_offset, size_t byte_interval,
-                                                             size_t start, size_t count) const {
+                                                             uint32_t max_row_size, size_t start, size_t count) const {
     const size_t value_size = sizeof(T);
+    DCHECK_EQ(max_row_size, value_size);
     const auto& key_data = get_data();
     uint8_t* buf = dst + byte_offset;
     for (size_t i = start; i < start + count; ++i) {

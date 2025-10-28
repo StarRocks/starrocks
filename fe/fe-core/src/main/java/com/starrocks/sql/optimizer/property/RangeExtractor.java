@@ -21,10 +21,12 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.BinaryType;
+import com.starrocks.sql.common.LargeInPredicateException;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LargeInPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 
@@ -71,6 +73,11 @@ public class RangeExtractor {
             }
 
             return visit(predicate, context);
+        }
+
+        @Override
+        public Void visitLargeInPredicate(LargeInPredicateOperator predicate, Void context) {
+            throw new LargeInPredicateException("not support large in predicate in the RangeValueExtractor");
         }
 
         @Override

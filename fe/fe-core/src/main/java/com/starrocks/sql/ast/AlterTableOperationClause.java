@@ -28,16 +28,19 @@ public class AlterTableOperationClause extends AlterTableClause {
         private boolean rewriteAll;
         private long minFileSizeBytes;
         private long batchSize;
+        private long batchParallelism;
         private ScalarOperator partitionFilter;
     
         public RewriteDataOptions(Expr where,
                                 boolean rewriteAll,
                                 long minFileSizeBytes,
-                                long batchSize) {
+                                long batchSize,
+                                long batchParallelism) {
             this.where           = where;
             this.rewriteAll      = rewriteAll;
             this.minFileSizeBytes = minFileSizeBytes;
             this.batchSize       = batchSize;
+            this.batchParallelism = batchParallelism;
             this.partitionFilter   = null;
         }
     }
@@ -50,7 +53,7 @@ public class AlterTableOperationClause extends AlterTableClause {
         super(AlterOpType.ALTER_TABLE_OPERATION, pos);
         this.tableOperationName = tableOperationName;
         this.exprs = exprs;
-        rewriteDataOptions = new RewriteDataOptions(where, false, 256L * 1024 * 1024, 10L * 1024 * 1024 * 1024);
+        rewriteDataOptions = new RewriteDataOptions(where, false, 256L * 1024 * 1024, 10L * 1024 * 1024 * 1024, 1);
     }
 
 
@@ -100,6 +103,14 @@ public class AlterTableOperationClause extends AlterTableClause {
 
     public long getBatchSize() {
         return this.rewriteDataOptions.batchSize;
+    }
+
+    public void setBatchParallelism(long batchParallelism) {
+        this.rewriteDataOptions.batchParallelism = batchParallelism;
+    }
+
+    public long getBatchParallelism() {
+        return this.rewriteDataOptions.batchParallelism;
     }
 
     public void setPartitionFilter(ScalarOperator partitionFilter) {

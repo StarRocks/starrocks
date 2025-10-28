@@ -24,15 +24,27 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.qe.ShowMaterializedViewStatus;
+import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.MVActiveChecker;
+import com.starrocks.scheduler.PartitionBasedMvRefreshProcessor;
+import com.starrocks.scheduler.Task;
+import com.starrocks.scheduler.TaskManager;
+import com.starrocks.scheduler.TaskRunContext;
+import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
+import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.RefreshSchemeClause;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
+import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -194,7 +206,6 @@ public class AlterMaterializedViewTest extends MVTestBase  {
 
     @Test
     public void testInactiveMV() throws Exception {
-
         starRocksAssert
                 .withTable("CREATE TABLE IF NOT EXISTS par_tbl1\n" +
                         "(\n" +
@@ -254,6 +265,11 @@ public class AlterMaterializedViewTest extends MVTestBase  {
         MaterializedView mv = (MaterializedView) starRocksAssert.getTable(connectContext.getDatabase(), "mv_test1");
         Assertions.assertTrue(starRocksAssert.waitRefreshFinished(mv.getId()));
 
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        Task task = taskManager.getTask(mv);
+        Assertions.assertNotNull(task);
+        Assertions.assertEquals(0, task.getConsecutiveFailCount());
+
         Map<Long, Map<String, MaterializedView.BasePartitionInfo>> baseTableVisibleVersionMap =
                 mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap();
         Assertions.assertTrue(!baseTableVisibleVersionMap.isEmpty());
@@ -263,6 +279,8 @@ public class AlterMaterializedViewTest extends MVTestBase  {
                 (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
         currentState.getLocalMetastore().alterMaterializedView(stmt);
         Assertions.assertFalse(mv.isActive());
+        Assertions.assertEquals(Constants.TaskState.PAUSE, task.getState());
+        Assertions.assertEquals(0, task.getConsecutiveFailCount());
 
         alterMvSql = "alter materialized view mv_test1 ACTIVE";
         stmt = (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
@@ -272,6 +290,7 @@ public class AlterMaterializedViewTest extends MVTestBase  {
         baseTableVisibleVersionMap =
                 mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap();
         Assertions.assertTrue(!baseTableVisibleVersionMap.isEmpty());
+        Assertions.assertNotEquals(Constants.TaskState.PAUSE, task.getState());
 
         alterMvSql = "alter materialized view mv_test1 INACTIVE";
         stmt = (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
@@ -301,6 +320,7 @@ public class AlterMaterializedViewTest extends MVTestBase  {
         starRocksAssert.withView("CREATE VIEW view1 as select v1, sum(v2) as k2 from t0 group by v1");
         starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW " + mvName +
                 "                DISTRIBUTED BY HASH(v1) BUCKETS 10\n" +
+                "                REFRESH DEFERRED ASYNC\n" +
                 "                PROPERTIES(\n" +
                 "                    \"replication_num\" = \"1\"\n" +
                 "                )\n" +
@@ -663,5 +683,87 @@ public class AlterMaterializedViewTest extends MVTestBase  {
             currentState.getLocalMetastore().alterMaterializedView(stmt);
             starRocksAssert.query(query).explainContains("test_mv1");
         }
+    }
+
+    @Test
+    public void testMVPausedWithConsecutiveFailCount1() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE base_t1 (\n" +
+                "   k1 int,\n" +
+                "   k2 date,\n" +
+                "   k3 string\n" +
+                ")\n" +
+                "DUPLICATE KEY(k1);");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test_refresh_fail_mv1\n" +
+                "REFRESH MANUAL\n" +
+                "AS select sum(k1), k2, k3 from base_t1 group by k2, k3;");
+        executeInsertSql("insert into base_t1 values(1, '2020-06-02','BJ'),(3,'2020-06-02','SZ'),(2,'2020-07-02','SH');");
+        MaterializedView mv = getMv("test_refresh_fail_mv1");
+        Config.max_task_consecutive_fail_count = 3;
+        for (int i = 0; i < Config.max_task_consecutive_fail_count; i++) {
+            new MockUp<PartitionBasedMvRefreshProcessor>() {
+                @Mock
+                public Constants.TaskRunState processTaskRun(TaskRunContext context) throws Exception {
+                    throw new RuntimeException("Mocked exception");
+                }
+            };
+            try {
+                refreshMV("test", mv);
+            } catch (Exception e) {
+                // do nothing
+            }
+        }
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        Task task = taskManager.getTask(mv);
+        Assertions.assertEquals(Config.max_task_consecutive_fail_count, task.getConsecutiveFailCount());
+        Assertions.assertEquals(Constants.TaskState.PAUSE, task.getState());
+
+        Map<String, List<TaskRunStatus>> taskNameJobStatusMap =
+                taskManager.listMVRefreshedTaskRunStatus(DB_NAME, Set.of("test_refresh_fail_mv1"));
+        List<TaskRunStatus> taskRunStatuses = taskNameJobStatusMap.getOrDefault(mv.getName(), Lists.newArrayList());
+        ShowMaterializedViewStatus mvStatus = ShowMaterializedViewStatus.of("test", mv, taskRunStatuses);
+        Assertions.assertFalse(mv.isActive());
+        Config.max_task_consecutive_fail_count = 10;
+    }
+
+    @Test
+    public void testMVPausedWithConsecutiveFailCount2() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE base_t1 (\n" +
+                "   k1 int,\n" +
+                "   k2 date,\n" +
+                "   k3 string\n" +
+                ")\n" +
+                "DUPLICATE KEY(k1);");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test_refresh_fail_mv2\n" +
+                "REFRESH MANUAL\n" +
+                "AS select sum(k1), k2, k3 from base_t1 group by k2, k3;");
+        executeInsertSql("insert into base_t1 values(1, '2020-06-02','BJ'),(3,'2020-06-02','SZ'),(2,'2020-07-02','SH');");
+        MaterializedView mv = getMv("test_refresh_fail_mv2");
+        Config.max_task_consecutive_fail_count = 3;
+        for (int i = 0; i < Config.max_task_consecutive_fail_count - 1; i++) {
+            new MockUp<PartitionBasedMvRefreshProcessor>() {
+                @Mock
+                public Constants.TaskRunState processTaskRun(TaskRunContext context) throws Exception {
+                    throw new RuntimeException("Mocked exception");
+                }
+            };
+            try {
+                refreshMV("test", mv);
+            } catch (Exception e) {
+                // do nothing
+            }
+        }
+        // refresh success
+        new MockUp<PartitionBasedMvRefreshProcessor>() {
+            @Mock
+            public Constants.TaskRunState processTaskRun(TaskRunContext context) throws Exception {
+                return Constants.TaskRunState.SUCCESS;
+            }
+        };
+        refreshMV("test", mv);
+        Task task = GlobalStateMgr.getCurrentState().getTaskManager().getTask(mv);
+        Assertions.assertEquals(0, task.getConsecutiveFailCount());
+        Assertions.assertNotEquals(Constants.TaskState.PAUSE, task.getState());
+        Assertions.assertTrue(mv.isActive());
+        Config.max_task_consecutive_fail_count = 10;
     }
 }
