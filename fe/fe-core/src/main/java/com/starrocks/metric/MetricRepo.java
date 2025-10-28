@@ -97,7 +97,6 @@ import java.util.Set;
 import java.util.SortedMap;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import javax.management.Attribute;
 import javax.management.AttributeList;
@@ -1210,7 +1209,7 @@ public final class MetricRepo {
         } else {
             GaugeMetricImpl<Integer> metric = new GaugeMetricImpl<>("connection_total",
                     MetricUnit.CONNECTIONS, "total connections");
-            metric.setValue(ExecuteEnv.getInstance().getScheduler().getTotalConnCount());
+            metric.setValue(ExecuteEnv.getInstance().getScheduler().getConnectionNum());
             visitor.visit(metric);
         }
     }
