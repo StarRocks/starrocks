@@ -257,8 +257,8 @@ ORDER BY CREATE_TIME DESC;
 
 ## 另请参阅
 
-- [CREATE MATERIALIZED VIEW](../sql-statements/materialized_view/CREATE_MATERIALIZED_VIEW.md)
-- [REFRESH MATERIALIZED VIEW](../sql-statements/materialized_view/REFRESH_MATERIALIZED_VIEW.md)
+- [`CREATE MATERIALIZED VIEW`](../sql-statements/materialized_view/CREATE_MATERIALIZED_VIEW.md)
+- [`REFRESH MATERIALIZED VIEW`](../sql-statements/materialized_view/REFRESH_MATERIALIZED_VIEW.md)
 - [Information Schema: task_runs](task_runs.md)
-- [物化视图管理](../../using_starrocks/Materialized_view.md)
+- [物化视图管理](../../using_starrocks/async_mv/Materialized_view.md)
 
