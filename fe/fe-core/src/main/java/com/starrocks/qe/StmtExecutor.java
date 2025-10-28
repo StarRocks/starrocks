@@ -465,6 +465,12 @@ public class StmtExecutor {
             }
         }
 
+        // keep explicit transaction semantics consistent: let the leader run any read statements so it can enforce
+        // validation (for example, checking tables already modified in the same transaction)
+        if (context != null && context.getTxnId() != 0 && context.isQueryStmt(parsedStmt)) {
+            return true;
+        }
+
         // this is a query stmt, but this non-master FE can not read, forward it to master
         if (parsedStmt instanceof QueryStatement) {
             // When FollowerQueryForwardMode is not default, forward it to leader or follower by default.
