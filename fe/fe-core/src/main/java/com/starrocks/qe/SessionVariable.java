@@ -2028,7 +2028,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enableInsertSelectExternalAutoRefresh = true;
     
     @VarAttr(name = ENABLE_PREDICATE_COL_LATE_MATERIALIZE)
-    private boolean enablePredicateColLateMaterialize = false;
+    private boolean enablePredicateColLateMaterialize = true;
 
     public int getCboPruneJsonSubfieldDepth() {
         return cboPruneJsonSubfieldDepth;
