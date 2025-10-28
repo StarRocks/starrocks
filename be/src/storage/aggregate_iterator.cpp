@@ -62,8 +62,9 @@ public:
         RETURN_IF_ERROR(ChunkIterator::init_encoded_schema(dict_maps));
         RETURN_IF_ERROR(_child->init_encoded_schema(dict_maps));
         _curr_chunk = ChunkHelper::new_chunk(encoded_schema(), _chunk_size);
-        _aggregator = std::make_unique<ChunkAggregator>(&encoded_schema(), _chunk_size, _pre_aggregate_factor / 100,
-                                                        _is_vertical_merge, _is_key);
+        ASSIGN_OR_RETURN(_aggregator,
+                         ChunkAggregator::create(&encoded_schema(), _chunk_size, _pre_aggregate_factor / 100,
+                                                 _is_vertical_merge, _is_key));
         return Status::OK();
     }
 
@@ -71,8 +72,9 @@ public:
         RETURN_IF_ERROR(ChunkIterator::init_output_schema(unused_output_column_ids));
         RETURN_IF_ERROR(_child->init_output_schema(unused_output_column_ids));
         _curr_chunk = ChunkHelper::new_chunk(output_schema(), _chunk_size);
-        _aggregator = std::make_unique<ChunkAggregator>(&output_schema(), _chunk_size, _pre_aggregate_factor / 100,
-                                                        _is_vertical_merge, _is_key);
+        ASSIGN_OR_RETURN(_aggregator,
+                         ChunkAggregator::create(&output_schema(), _chunk_size, _pre_aggregate_factor / 100,
+                                                 _is_vertical_merge, _is_key));
         return Status::OK();
     }
 

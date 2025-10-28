@@ -14,10 +14,14 @@
 
 #include "storage/column_aggregate_func.h"
 
+#include <fmt/format.h>
+
 #include "column/array_column.h"
 #include "column/map_column.h"
 #include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
+#include "common/status.h"
+#include "common/statusor.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/aggregate_state_allocator.h"
 #include "exprs/agg/combinator/agg_state_union.h"
@@ -425,12 +429,12 @@ ColumnAggregatorPtr ColumnAggregatorFactory::create_key_column_aggregator(const 
     }
 }
 
-ColumnAggregatorPtr ColumnAggregatorFactory::create_value_column_aggregator(const starrocks::FieldPtr& field) {
+StatusOr<ColumnAggregatorPtr> ColumnAggregatorFactory::create_value_column_aggregator(
+        const starrocks::FieldPtr& field) {
     LogicalType type = field->type()->type();
     starrocks::StorageAggregateType method = field->aggregate_method();
     if (method == STORAGE_AGGREGATE_NONE) {
-        CHECK(false) << "bad agg method NONE for column: " << field->name();
-        return nullptr;
+        return Status::InternalError(fmt::format("Bad agg method NONE for column: {}", field->name()));
     } else if (method == STORAGE_AGGREGATE_REPLACE) {
         auto p = create_value_aggregator(type, method);
         if (field->is_nullable()) {
@@ -447,17 +451,21 @@ ColumnAggregatorPtr ColumnAggregatorFactory::create_value_column_aggregator(cons
         }
     } else if (method == STORAGE_AGGREGATE_AGG_STATE_UNION) {
         if (field->get_agg_state_desc() == nullptr) {
-            CHECK(false) << "Bad agg state union method for column: " << field->name()
-                         << " for its agg state type is null";
-            return nullptr;
+            return Status::InternalError(
+                    fmt::format("Bad agg state union method for column: {} "
+                                "for its agg state type is null",
+                                field->name()));
         }
         auto* agg_state_desc = field->get_agg_state_desc();
         auto func_name = agg_state_desc->get_func_name();
         DCHECK_EQ(field->is_nullable(), agg_state_desc->is_result_nullable());
         auto* agg_func = AggStateDesc::get_agg_state_func(agg_state_desc);
-        CHECK(agg_func != nullptr) << "Unknown aggregate function, name=" << func_name << ", type=" << type
-                                   << ", is_nullable=" << field->is_nullable()
-                                   << ", agg_state_desc=" << agg_state_desc->debug_string();
+        if (agg_func == nullptr) {
+            return Status::InternalError(
+                    fmt::format("Unknown aggregate function, name={}, type={}, "
+                                "is_nullable={}, agg_state_desc={}",
+                                func_name, type, field->is_nullable(), agg_state_desc->debug_string()));
+        }
         auto agg_state_union = std::make_unique<AggStateUnion>(*agg_state_desc, agg_func);
         return std::make_unique<AggFuncBasedValueAggregator>(agg_state_desc, std::move(agg_state_union));
     } else {
@@ -481,8 +489,10 @@ ColumnAggregatorPtr ColumnAggregatorFactory::create_value_column_aggregator(cons
 
         auto agg_func = AggregateFuncResolver::instance()->get_aggregate_info(func_name, normalized_tpe, normalized_tpe,
                                                                               false, field->is_nullable());
-        CHECK(agg_func != nullptr) << "Unknown aggregate function, name=" << func_name << ", type=" << type
-                                   << ", is_nullable=" << field->is_nullable();
+        if (agg_func == nullptr) {
+            return Status::InternalError(fmt::format("Unknown aggregate function, name={}, type={}, is_nullable={}",
+                                                     func_name, type, field->is_nullable()));
+        }
         return std::make_unique<AggFuncBasedValueAggregator>(agg_func);
     }
 }

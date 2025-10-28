@@ -21,6 +21,7 @@
 
 #include "column/column_helper.h"
 #include "storage/column_aggregate_func.h"
+#include "testutil/assert.h"
 
 namespace starrocks {
 
@@ -40,6 +41,7 @@ TEST(ChunkAggregatorTest, testNoneAggregator) {
     SchemaPtr schema = std::make_shared<Schema>(fields);
 
     ChunkAggregator aggregator(schema.get(), 1024, 0.9);
+    ASSERT_OK(aggregator.prepare());
 
     ASSERT_EQ(true, aggregator.source_exhausted());
 
@@ -89,7 +91,7 @@ TEST(ChunkAggregatorTest, testNonKeyColumnsByMask) {
     SchemaPtr schema = std::make_shared<Schema>(fields);
 
     ChunkAggregator aggregator(schema.get(), 1024, 0, true, false);
-
+    ASSERT_OK(aggregator.prepare());
     ASSERT_EQ(true, aggregator.source_exhausted());
 
     auto v_col = Int32Column::create();

@@ -227,6 +227,7 @@ public:
         _vectorized_schema = MemTable::convert_schema(_schema, _slots);
         _mem_table =
                 std::make_unique<MemTable>(1, &_vectorized_schema, _slots, _mem_table_sink.get(), _mem_tracker.get());
+        ASSERT_TRUE(_mem_table->prepare().ok());
     }
 
     void TearDown() override {
