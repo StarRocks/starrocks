@@ -160,7 +160,7 @@ public final class MVTimelinessRangePartitionArbiter extends MVTimelinessArbiter
                 // because the relation of partitions between materialized view and base partition table is n: m,
                 // should calculate the candidate partitions recursively.
                 SyncPartitionUtils.calcPotentialRefreshPartition(mvToRefreshPartitionNames, baseChangedPartitionNames,
-                        baseToMvNameRef, mvToBaseNameRef, Sets.newHashSet());
+                        baseToMvNameRef, mvToBaseNameRef);
             }
         }
         // update mv's to refresh partitions
