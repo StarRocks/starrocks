@@ -14,6 +14,13 @@
 
 package com.starrocks.qe;
 
+<<<<<<< HEAD
+=======
+import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.util.ProfileManager;
+import com.starrocks.common.util.RuntimeProfile;
+import com.starrocks.mysql.MysqlSerializer;
+>>>>>>> 59f4feaf1c ([BugFix] Fix fe follower run select statements within transaction without validation (#64616))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.AstBuilder;
@@ -50,6 +57,50 @@ public class StmtExecutorTest {
 
         Assertions.assertFalse(new StmtExecutor(new ConnectContext(),
                 SqlParser.parseSingleStatement("show frontends", SqlModeHelper.MODE_DEFAULT)).isForwardToLeader());
+    }
+
+    @Test
+    public void testForwardExplicitTxnSelectOnFollower(@Mocked GlobalStateMgr state,
+                                                       @Mocked ConnectContext ctx) {
+        StatementBase stmt;
+        MysqlSerializer serializer = MysqlSerializer.newInstance();
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = state;
+
+                state.getSqlParser();
+                minTimes = 0;
+                result = new SqlParser(AstBuilder.getInstance());
+
+                state.isLeader();
+                minTimes = 0;
+                result = false;
+
+                state.isInTransferringToLeader();
+                minTimes = 0;
+                result = false;
+
+                ctx.getSerializer();
+                minTimes = 0;
+                result = serializer;
+
+                ctx.getTxnId();
+                minTimes = 0;
+                result = 1L;
+
+                ctx.isQueryStmt((StatementBase) any);
+                minTimes = 0;
+                result = true;
+            }
+        };
+
+        // Parse after expectations to ensure GlobalStateMgr.getSqlParser() is properly mocked
+        stmt = SqlParser.parseSingleStatement("select 1", SqlModeHelper.MODE_DEFAULT);
+        StmtExecutor executor = new StmtExecutor(ctx, stmt);
+        Assertions.assertTrue(executor.isForwardToLeader());
     }
 
     @Test
