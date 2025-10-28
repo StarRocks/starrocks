@@ -26,6 +26,7 @@
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
 #include "storage/column_aggregator.h"
+#include "util/bit_util.h"
 #include "util/percentile_value.h"
 
 namespace starrocks {
@@ -247,7 +248,7 @@ private:
 class AggFuncBasedValueAggregator : public ValueColumnAggregatorBase {
 public:
     AggFuncBasedValueAggregator(const AggregateFunction* agg_func) : _agg_func(agg_func) {
-        _state = static_cast<AggDataPtr>(std::aligned_alloc(_agg_func->alignof_size(), _agg_func->size()));
+        _state = static_cast<AggDataPtr>(BitUtil::safe_aligned_alloc(_agg_func->alignof_size(), _agg_func->size()));
         // TODO: create a new FunctionContext by using specific FunctionContext::create_context
         _func_ctx = new FunctionContext();
         _agg_func->create(_func_ctx, _state);
@@ -260,7 +261,7 @@ public:
         _mem_pool = std::make_unique<MemPool>();
         _func_ctx = FunctionContext::create_context(_runtime_state.get(), _mem_pool.get(),
                                                     agg_state_desc->get_return_type(), agg_state_desc->get_arg_types());
-        _state = static_cast<AggDataPtr>(std::aligned_alloc(_agg_func->alignof_size(), _agg_func->size()));
+        _state = static_cast<AggDataPtr>(BitUtil::safe_aligned_alloc(_agg_func->alignof_size(), _agg_func->size()));
         _agg_func->create(_func_ctx, _state);
     }
 
