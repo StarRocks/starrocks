@@ -23,6 +23,7 @@ import com.starrocks.epack.authentication.AuthenticationMgrEPack;
 import com.starrocks.epack.authentication.PasswordExpiredChecker;
 import com.starrocks.epack.authorization.SecurityPolicyMgr;
 import com.starrocks.epack.persist.EditLogEPack;
+import com.starrocks.epack.qe.DDLStmtExecutorVisitorEPack;
 import com.starrocks.epack.sql.ast.CreatePasswordPolicyStmt;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.MysqlChannel;
@@ -49,8 +50,8 @@ import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.SqlParser;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -83,7 +84,7 @@ public class PasswordPolicyTest {
 
         try {
             AuthenticationHandler.authenticate(context, "u1", "%", scramble);
-            Assert.fail();
+            Assertions.fail();
         } catch (AuthenticationException e) {
 
         }
@@ -94,13 +95,13 @@ public class PasswordPolicyTest {
                 "alter user u1 unlock", context.getSessionVariable().getSqlMode());
         Analyzer.analyze(alterUserStmt, context);
         DDLStmtExecutor.execute(alterUserStmt, context);
-        Assert.assertFalse(authenticationMgr.checkUserLocked(new UserIdentity("u1", "%")));
+        Assertions.assertFalse(authenticationMgr.checkUserLocked(new UserIdentity("u1", "%")));
 
         try {
             byte[] password = MysqlPassword.scramble(seed, "123456abcD!");
             AuthenticationHandler.authenticate(context, "u1", "%", password);
         } catch (AuthenticationException e) {
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
@@ -155,13 +156,13 @@ public class PasswordPolicyTest {
         for (int i = 0; i < 3; ++i) {
             try {
                 AuthenticationHandler.authenticate(context, "u1", "%", scramble);
-                Assert.fail();
+                Assertions.fail();
             } catch (AuthenticationException e) {
 
             }
         }
         // Check user has locked after login with error password three times
-        Assert.assertTrue(authenticationMgr.checkUserLocked(new UserIdentity("u1", "%")));
+        Assertions.assertTrue(authenticationMgr.checkUserLocked(new UserIdentity("u1", "%")));
 
         // Can login after alter user unlock
         context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
@@ -169,13 +170,13 @@ public class PasswordPolicyTest {
                 "alter user u1 unlock", context.getSessionVariable().getSqlMode());
         Analyzer.analyze(alterUserStmt, context);
         DDLStmtExecutor.execute(alterUserStmt, context);
-        Assert.assertFalse(authenticationMgr.checkUserLocked(new UserIdentity("u1", "%")));
+        Assertions.assertFalse(authenticationMgr.checkUserLocked(new UserIdentity("u1", "%")));
 
         try {
             byte[] password = MysqlPassword.scramble(seed, "123456abcD!");
             AuthenticationHandler.authenticate(context, "u1", "%", password);
         } catch (AuthenticationException e) {
-            Assert.fail();
+            Assertions.fail();
         }
 
         //Can not login after alter user lock
@@ -183,11 +184,11 @@ public class PasswordPolicyTest {
                 "alter user u1 lock", context.getSessionVariable().getSqlMode());
         Analyzer.analyze(alterUserStmt, context);
         DDLStmtExecutor.execute(alterUserStmt, context);
-        Assert.assertTrue(authenticationMgr.checkUserLocked(new UserIdentity("u1", "%")));
+        Assertions.assertTrue(authenticationMgr.checkUserLocked(new UserIdentity("u1", "%")));
         try {
             byte[] password = MysqlPassword.scramble(seed, "123456abcD!");
             AuthenticationHandler.authenticate(context, "u1", "%", password);
-            Assert.fail();
+            Assertions.fail();
         } catch (AuthenticationException e) {
 
         }
@@ -215,12 +216,12 @@ public class PasswordPolicyTest {
         byte[] seed = "data_salt".getBytes(StandardCharsets.UTF_8);
         byte[] scramble = MysqlPassword.scramble(seed, "123456abcD!");
         context.setAuthDataSalt(seed);
-        Assert.assertTrue(authenticationMgr.checkUserPasswordExpired(new UserIdentity("u1", "%")));
+        Assertions.assertTrue(authenticationMgr.checkUserPasswordExpired(new UserIdentity("u1", "%")));
         try {
             AuthenticationHandler.authenticate(context, "u1", "%", scramble);
-            Assert.assertTrue(context.isPasswordExpired());
+            Assertions.assertTrue(context.isPasswordExpired());
         } catch (AuthenticationException e) {
-            Assert.fail();
+            Assertions.fail();
         }
 
         // Can login after alter user expired = false
@@ -229,12 +230,12 @@ public class PasswordPolicyTest {
                 "alter user u1 expire_password = false", context.getSessionVariable().getSqlMode());
         Analyzer.analyze(alterUserStmt, context);
         DDLStmtExecutor.execute(alterUserStmt, context);
-        Assert.assertFalse(authenticationMgr.checkUserPasswordExpired(new UserIdentity("u1", "%")));
+        Assertions.assertFalse(authenticationMgr.checkUserPasswordExpired(new UserIdentity("u1", "%")));
         try {
             byte[] password = MysqlPassword.scramble(seed, "123456abcD!");
             AuthenticationHandler.authenticate(context, "u1", "%", password);
         } catch (AuthenticationException e) {
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
@@ -279,12 +280,12 @@ public class PasswordPolicyTest {
         byte[] seed = "data_salt".getBytes(StandardCharsets.UTF_8);
         byte[] scramble = MysqlPassword.scramble(seed, "123456abcD!");
         context.setAuthDataSalt(seed);
-        Assert.assertFalse(authenticationMgr.checkUserPasswordExpired(new UserIdentity("u1", "%")));
+        Assertions.assertFalse(authenticationMgr.checkUserPasswordExpired(new UserIdentity("u1", "%")));
         try {
             AuthenticationHandler.authenticate(context, "u1", "%", scramble);
-            Assert.assertFalse(context.isPasswordExpired());
+            Assertions.assertFalse(context.isPasswordExpired());
         } catch (AuthenticationException e) {
-            Assert.fail();
+            Assertions.fail();
         }
 
         // Can login after alter user expired = false
@@ -293,20 +294,20 @@ public class PasswordPolicyTest {
                 "alter user u1 expire_password = true", context.getSessionVariable().getSqlMode());
         Analyzer.analyze(alterUserStmt, context);
         DDLStmtExecutor.execute(alterUserStmt, context);
-        Assert.assertTrue(authenticationMgr.checkUserPasswordExpired(new UserIdentity("u1", "%")));
+        Assertions.assertTrue(authenticationMgr.checkUserPasswordExpired(new UserIdentity("u1", "%")));
         try {
             byte[] password = MysqlPassword.scramble(seed, "123456abcD!");
             AuthenticationHandler.authenticate(context, "u1", "%", password);
-            Assert.assertTrue(context.isPasswordExpired());
+            Assertions.assertTrue(context.isPasswordExpired());
         } catch (AuthenticationException e) {
-            Assert.fail();
+            Assertions.fail();
         }
 
         //password is too simple
         alterUserStmt = (AlterUserStmt) SqlParser.parseSingleStatement(
                 "alter user u1 identified by '123';", context.getSessionVariable().getSqlMode());
         AlterUserStmt finalAlterUserStmt = alterUserStmt;
-        Assert.assertThrows(SemanticException.class, () -> Analyzer.analyze(finalAlterUserStmt, context));
+        Assertions.assertThrows(SemanticException.class, () -> Analyzer.analyze(finalAlterUserStmt, context));
 
         // Modify Password
         UserAuthenticationInfo userAuthenticationInfo =
@@ -319,16 +320,16 @@ public class PasswordPolicyTest {
                 "alter user u1 identified by '!Ab345678';", context.getSessionVariable().getSqlMode());
         Analyzer.analyze(alterUserStmt, context);
         DDLStmtExecutor.execute(alterUserStmt, context);
-        Assert.assertFalse(authenticationMgr.checkUserPasswordExpired(new UserIdentity("u1", "%")));
-        Assert.assertNotEquals(authenticationMgr.getUserAuthenticationInfoByUserIdentity(new UserIdentity("u1", "%"))
+        Assertions.assertFalse(authenticationMgr.checkUserPasswordExpired(new UserIdentity("u1", "%")));
+        Assertions.assertNotEquals(authenticationMgr.getUserAuthenticationInfoByUserIdentity(new UserIdentity("u1", "%"))
                 .getPasswordLastModifiedTimestamp(), lastModifiedTime);
 
         try {
             byte[] password = MysqlPassword.scramble(seed, "!Ab345678");
             AuthenticationHandler.authenticate(context, "u1", "%", password);
-            Assert.assertFalse(context.isPasswordExpired());
+            Assertions.assertFalse(context.isPasswordExpired());
         } catch (AuthenticationException e) {
-            Assert.fail();
+            Assertions.fail();
         }
 
         //Test set password
@@ -336,14 +337,14 @@ public class PasswordPolicyTest {
                 "alter user u1 expire_password = true", context.getSessionVariable().getSqlMode());
         Analyzer.analyze(alterUserStmt, context);
         DDLStmtExecutor.execute(alterUserStmt, context);
-        Assert.assertTrue(authenticationMgr.checkUserPasswordExpired(new UserIdentity("u1", "%")));
+        Assertions.assertTrue(authenticationMgr.checkUserPasswordExpired(new UserIdentity("u1", "%")));
 
         try {
             byte[] password = MysqlPassword.scramble(seed, "!Ab345678");
             AuthenticationHandler.authenticate(context, "u1", "%", password);
-            Assert.assertTrue(context.isPasswordExpired());
+            Assertions.assertTrue(context.isPasswordExpired());
         } catch (AuthenticationException e) {
-            Assert.fail();
+            Assertions.fail();
         }
 
         lastModifiedTime = userAuthenticationInfo.getPasswordLastModifiedTimestamp();
@@ -358,15 +359,15 @@ public class PasswordPolicyTest {
         com.starrocks.sql.analyzer.Analyzer.analyze(setStmt, context);
         SetExecutor executor = new SetExecutor(context, setStmt);
         executor.execute();
-        Assert.assertNotEquals(authenticationMgr.getUserAuthenticationInfoByUserIdentity(new UserIdentity("u1", "%"))
+        Assertions.assertNotEquals(authenticationMgr.getUserAuthenticationInfoByUserIdentity(new UserIdentity("u1", "%"))
                 .getPasswordLastModifiedTimestamp(), lastModifiedTime);
 
         try {
             byte[] password = MysqlPassword.scramble(seed, "!Ab345678");
             AuthenticationHandler.authenticate(context, "u1", "%", password);
-            Assert.assertFalse(context.isPasswordExpired());
+            Assertions.assertFalse(context.isPasswordExpired());
         } catch (AuthenticationException e) {
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
@@ -412,12 +413,12 @@ public class PasswordPolicyTest {
         byte[] seed = "data_salt".getBytes(StandardCharsets.UTF_8);
         byte[] scramble = MysqlPassword.scramble(seed, "123456abcD!");
         context.setAuthDataSalt(seed);
-        Assert.assertFalse(authenticationMgr.checkUserPasswordExpired(new UserIdentity("u1", "%")));
+        Assertions.assertFalse(authenticationMgr.checkUserPasswordExpired(new UserIdentity("u1", "%")));
         try {
             AuthenticationHandler.authenticate(context, "u1", "%", scramble);
-            Assert.assertFalse(context.isPasswordExpired());
+            Assertions.assertFalse(context.isPasswordExpired());
         } catch (AuthenticationException e) {
-            Assert.fail();
+            Assertions.fail();
         }
 
         long lastModifiedTimestamp = authenticationMgr.getUserAuthenticationInfoByUserIdentity(new UserIdentity("u1", "%"))
@@ -427,7 +428,7 @@ public class PasswordPolicyTest {
         //Mock timestamp to 7 days ago
         passwordExpiredChecker.checkPasswordExpiredAndLock(lastModifiedTimestamp + 7 * 24 * 60 * 60 * 1000);
 
-        Assert.assertTrue(authenticationMgr.checkUserPasswordExpired(new UserIdentity("u1", "%")));
+        Assertions.assertTrue(authenticationMgr.checkUserPasswordExpired(new UserIdentity("u1", "%")));
     }
 
     @Test
@@ -482,13 +483,13 @@ public class PasswordPolicyTest {
         for (int i = 0; i < 3; ++i) {
             try {
                 AuthenticationHandler.authenticate(context, "u1", "%", scramble);
-                Assert.fail();
+                Assertions.fail();
             } catch (AuthenticationException e) {
 
             }
         }
         // Check user has locked after login with error password three times
-        Assert.assertTrue(authenticationMgr.checkUserLocked(new UserIdentity("u1", "%")));
+        Assertions.assertTrue(authenticationMgr.checkUserLocked(new UserIdentity("u1", "%")));
 
         long lockTimestamp =
                 authenticationMgr.getUserAuthenticationInfoByUserIdentity(new UserIdentity("u1", "%")).getLockTimestamp();
@@ -498,13 +499,13 @@ public class PasswordPolicyTest {
         passwordExpiredChecker.checkPasswordExpiredAndLock(lockTimestamp + 10 * 60 * 1000);
 
         // Can login after alter user unlock
-        Assert.assertFalse(authenticationMgr.checkUserLocked(new UserIdentity("u1", "%")));
+        Assertions.assertFalse(authenticationMgr.checkUserLocked(new UserIdentity("u1", "%")));
 
         try {
             byte[] password = MysqlPassword.scramble(seed, "123456abcD!");
             AuthenticationHandler.authenticate(context, "u1", "%", password);
         } catch (AuthenticationException e) {
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
@@ -564,12 +565,12 @@ public class PasswordPolicyTest {
         try {
             AuthenticationHandler.authenticate(context, "u1", "%", scramble);
         } catch (AuthenticationException e) {
-            Assert.fail();
+            Assertions.fail();
         }
 
         // Check user has locked after login with error password three times
-        Assert.assertTrue(authenticationMgr.checkUserPasswordExpired(new UserIdentity("u1", "%")));
-        Assert.assertTrue(context.isPasswordExpired());
+        Assertions.assertTrue(authenticationMgr.checkUserPasswordExpired(new UserIdentity("u1", "%")));
+        Assertions.assertTrue(context.isPasswordExpired());
 
         //Init ConnectProcessor
         MetricRepo.init();
@@ -591,8 +592,8 @@ public class PasswordPolicyTest {
 
         ConnectProcessor processor = new ConnectProcessor(context);
         processor.processOnce();
-        Assert.assertEquals(ErrorCode.ERR_AUTHENTICATION_PASSWORD_EXPIRED, context.getState().getErrorCode());
-        Assert.assertEquals(QueryState.ErrType.ANALYSIS_ERR, context.getState().getErrType());
+        Assertions.assertEquals(ErrorCode.ERR_AUTHENTICATION_PASSWORD_EXPIRED, context.getState().getErrorCode());
+        Assertions.assertEquals(QueryState.ErrType.ANALYSIS_ERR, context.getState().getErrType());
 
         serializer.reset();
         serializer.writeInt1(3);
@@ -609,7 +610,7 @@ public class PasswordPolicyTest {
             }
         };
         processor.processOnce();
-        Assert.assertEquals(QueryState.ErrType.ANALYSIS_ERR, context.getState().getErrType());
+        Assertions.assertEquals(QueryState.ErrType.ANALYSIS_ERR, context.getState().getErrType());
 
         serializer.reset();
         serializer.writeInt1(3);
@@ -626,7 +627,561 @@ public class PasswordPolicyTest {
             }
         };
         processor.processOnce();
-        Assert.assertFalse(context.getState().isError());
-        Assert.assertFalse(context.isPasswordExpired());
+        Assertions.assertFalse(context.getState().isError());
+        Assertions.assertFalse(context.isPasswordExpired());
+    }
+
+    @Test
+    public void testDuplicatePasswordPolicyCreation() throws Exception {
+        new MockUp<EditLog>() {
+            @Mock
+            public void logEdit(short op, Writable writable) {
+                return;
+            }
+        };
+        GlobalStateMgr.getCurrentState().setEditLog(new EditLogEPack(null));
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            boolean isLeader() {
+                return true;
+            }
+        };
+
+        SecurityPolicyMgr securityPolicyMgr = new SecurityPolicyMgr();
+        GlobalStateMgr.getCurrentState().setSecurityPolicyManager(securityPolicyMgr);
+
+        ConnectContext context = new ConnectContext();
+
+        // Create first password policy
+        CreatePasswordPolicyStmt createPolicyStmt1 = (CreatePasswordPolicyStmt) SqlParser.parseSingleStatement(
+                "CREATE PASSWORD POLICY pp1 comment \"pp1 comment\"\n" +
+                        "properties (\n" +
+                        "    \"PASSWORD_MIN_LENGTH\" = \"8\",\n" +
+                        "    \"PASSWORD_MIN_UPPER_CASE_CHARS\" = \"1\",\n" +
+                        "    \"PASSWORD_MIN_LOWER_CASE_CHARS\" = \"1\",\n" +
+                        "    \"PASSWORD_MIN_NUMERIC_CHARS\" = \"1\",\n" +
+                        "    \"PASSWORD_MIN_SPECIAL_CHARS\" = \"1\",\n" +
+                        "    \"PASSWORD_MAX_AGE_DAYS\" = \"7\"\n" +
+                        ")", context.getSessionVariable().getSqlMode());
+        com.starrocks.sql.analyzer.Analyzer.analyze(createPolicyStmt1, context);
+        securityPolicyMgr.createPasswordPolicy(createPolicyStmt1);
+
+        // Verify policy exists
+        Assertions.assertNotNull(securityPolicyMgr.getPasswordPolicy("pp1"));
+
+        // Try to create duplicate password policy - should throw exception
+        CreatePasswordPolicyStmt createPolicyStmt2 = (CreatePasswordPolicyStmt) SqlParser.parseSingleStatement(
+                "CREATE PASSWORD POLICY pp1 comment \"pp1 comment updated\"\n" +
+                        "properties (\n" +
+                        "    \"PASSWORD_MIN_LENGTH\" = \"8\",\n" +
+                        "    \"PASSWORD_MIN_UPPER_CASE_CHARS\" = \"1\",\n" +
+                        "    \"PASSWORD_MIN_LOWER_CASE_CHARS\" = \"1\",\n" +
+                        "    \"PASSWORD_MIN_NUMERIC_CHARS\" = \"1\",\n" +
+                        "    \"PASSWORD_MIN_SPECIAL_CHARS\" = \"1\",\n" +
+                        "    \"PASSWORD_MAX_AGE_DAYS\" = \"7\"\n" +
+                        ")", context.getSessionVariable().getSqlMode());
+        CreatePasswordPolicyStmt finalCreatePolicyStmt2 = createPolicyStmt2;
+        Assertions.assertThrows(SemanticException.class, () -> 
+                com.starrocks.sql.analyzer.Analyzer.analyze(finalCreatePolicyStmt2, context));
+    }
+
+    @Test
+    public void testSystemPasswordPolicySetAndUnset() throws Exception {
+        new MockUp<EditLog>() {
+            @Mock
+            public void logEdit(short op, Writable writable) {
+                return;
+            }
+        };
+        GlobalStateMgr.getCurrentState().setEditLog(new EditLogEPack(null));
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            boolean isLeader() {
+                return true;
+            }
+        };
+
+        SecurityPolicyMgr securityPolicyMgr = new SecurityPolicyMgr();
+        GlobalStateMgr.getCurrentState().setSecurityPolicyManager(securityPolicyMgr);
+
+        AuthenticationMgrEPack authenticationMgr = new AuthenticationMgrEPack();
+        GlobalStateMgr.getCurrentState().setAuthenticationMgr(authenticationMgr);
+
+        ConnectContext context = new ConnectContext();
+
+        // Create password policy
+        CreatePasswordPolicyStmt createPolicyStmt = (CreatePasswordPolicyStmt) SqlParser.parseSingleStatement(
+                "CREATE PASSWORD POLICY pp1 comment \"pp1 comment\"\n" +
+                        "properties (\n" +
+                        "    \"PASSWORD_MIN_LENGTH\" = \"8\",\n" +
+                        "    \"PASSWORD_MIN_UPPER_CASE_CHARS\" = \"1\",\n" +
+                        "    \"PASSWORD_MIN_LOWER_CASE_CHARS\" = \"1\",\n" +
+                        "    \"PASSWORD_MIN_NUMERIC_CHARS\" = \"1\",\n" +
+                        "    \"PASSWORD_MIN_SPECIAL_CHARS\" = \"1\",\n" +
+                        "    \"PASSWORD_MAX_AGE_DAYS\" = \"7\"\n" +
+                        ")", context.getSessionVariable().getSqlMode());
+        com.starrocks.sql.analyzer.Analyzer.analyze(createPolicyStmt, context);
+        securityPolicyMgr.createPasswordPolicy(createPolicyStmt);
+
+        // Set global password policy
+        securityPolicyMgr.setGlobalPasswordPolicy("pp1");
+        Assertions.assertEquals("pp1", securityPolicyMgr.getGlobalPasswordPolicy().getPolicyName());
+
+        // Test creating user with password policy enforced
+        CreateUserStmt stmt = (CreateUserStmt) SqlParser.parseSingleStatement(
+                "create user u1 identified by '123'",
+                context.getSessionVariable().getSqlMode());
+        
+        // Should fail due to password policy during analysis
+        Assertions.assertThrows(SemanticException.class, () -> Analyzer.analyze(stmt, context));
+
+        // Unset global password policy
+        securityPolicyMgr.unsetGlobalPasswordPolicy();
+        Assertions.assertNull(securityPolicyMgr.getGlobalPasswordPolicy());
+
+        // Now creating user with simple password should succeed
+        CreateUserStmt stmt2 = (CreateUserStmt) SqlParser.parseSingleStatement(
+                "create user u1 identified by '123'",
+                context.getSessionVariable().getSqlMode());
+        Analyzer.analyze(stmt2, context);
+        authenticationMgr.createUser(stmt2);
+
+        // Verify user was created successfully
+        Assertions.assertNotNull(authenticationMgr.getUserAuthenticationInfoByUserIdentity(new UserIdentity("u1", "%")));
+    }
+
+    @Test
+    public void testPasswordPolicyValidationLevels() throws Exception {
+        new MockUp<EditLog>() {
+            @Mock
+            public void logEdit(short op, Writable writable) {
+                return;
+            }
+        };
+        GlobalStateMgr.getCurrentState().setEditLog(new EditLogEPack(null));
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            boolean isLeader() {
+                return true;
+            }
+        };
+
+        SecurityPolicyMgr securityPolicyMgr = new SecurityPolicyMgr();
+        GlobalStateMgr.getCurrentState().setSecurityPolicyManager(securityPolicyMgr);
+
+        AuthenticationMgrEPack authenticationMgr = new AuthenticationMgrEPack();
+        GlobalStateMgr.getCurrentState().setAuthenticationMgr(authenticationMgr);
+
+        ConnectContext context = new ConnectContext();
+
+        // Create password policy
+        CreatePasswordPolicyStmt createPolicyStmt = (CreatePasswordPolicyStmt) SqlParser.parseSingleStatement(
+                "CREATE PASSWORD POLICY pp1 comment \"pp1 comment\"\n" +
+                        "properties (\n" +
+                        "    \"PASSWORD_MIN_LENGTH\" = \"8\",\n" +
+                        "    \"PASSWORD_MIN_UPPER_CASE_CHARS\" = \"1\",\n" +
+                        "    \"PASSWORD_MIN_LOWER_CASE_CHARS\" = \"1\",\n" +
+                        "    \"PASSWORD_MIN_NUMERIC_CHARS\" = \"1\",\n" +
+                        "    \"PASSWORD_MIN_SPECIAL_CHARS\" = \"1\",\n" +
+                        "    \"PASSWORD_MAX_AGE_DAYS\" = \"7\"\n" +
+                        ")", context.getSessionVariable().getSqlMode());
+        com.starrocks.sql.analyzer.Analyzer.analyze(createPolicyStmt, context);
+        securityPolicyMgr.createPasswordPolicy(createPolicyStmt);
+        securityPolicyMgr.setGlobalPasswordPolicy("pp1");
+
+        // Test different password complexity levels that should fail
+        String[] weakPasswords = {
+                "123",           // Too short
+                "12345678",      // Missing uppercase, lowercase, special chars
+                "A2345678",      // Missing lowercase, special chars
+                "Ab345678"       // Missing special chars
+        };
+
+        for (String password : weakPasswords) {
+            CreateUserStmt stmt = (CreateUserStmt) SqlParser.parseSingleStatement(
+                    "create user u1 identified by '" + password + "'",
+                    context.getSessionVariable().getSqlMode());
+            
+            // Should fail due to password policy during analysis
+            Assertions.assertThrows(SemanticException.class, () -> Analyzer.analyze(stmt, context));
+        }
+
+        // Test password that should succeed
+        CreateUserStmt validStmt = (CreateUserStmt) SqlParser.parseSingleStatement(
+                "create user u1 identified by '!Ab345678'",
+                context.getSessionVariable().getSqlMode());
+        Analyzer.analyze(validStmt, context);
+        authenticationMgr.createUser(validStmt);
+
+        // Verify user was created successfully
+        Assertions.assertNotNull(authenticationMgr.getUserAuthenticationInfoByUserIdentity(new UserIdentity("u1", "%")));
+    }
+
+    @Test
+    public void testShowPasswordPolicies() throws Exception {
+        new MockUp<EditLog>() {
+            @Mock
+            public void logEdit(short op, Writable writable) {
+                return;
+            }
+        };
+        GlobalStateMgr.getCurrentState().setEditLog(new EditLogEPack(null));
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            boolean isLeader() {
+                return true;
+            }
+        };
+
+        SecurityPolicyMgr securityPolicyMgr = new SecurityPolicyMgr();
+        GlobalStateMgr.getCurrentState().setSecurityPolicyManager(securityPolicyMgr);
+
+        ConnectContext context = new ConnectContext();
+
+        // Create password policy
+        CreatePasswordPolicyStmt createPolicyStmt = (CreatePasswordPolicyStmt) SqlParser.parseSingleStatement(
+                "CREATE PASSWORD POLICY pp1 comment \"pp1 comment\"\n" +
+                        "properties (\n" +
+                        "    \"PASSWORD_MIN_LENGTH\" = \"8\",\n" +
+                        "    \"PASSWORD_MIN_UPPER_CASE_CHARS\" = \"1\",\n" +
+                        "    \"PASSWORD_MIN_LOWER_CASE_CHARS\" = \"1\",\n" +
+                        "    \"PASSWORD_MIN_NUMERIC_CHARS\" = \"1\",\n" +
+                        "    \"PASSWORD_MIN_SPECIAL_CHARS\" = \"1\",\n" +
+                        "    \"PASSWORD_MAX_AGE_DAYS\" = \"7\"\n" +
+                        ")", context.getSessionVariable().getSqlMode());
+        com.starrocks.sql.analyzer.Analyzer.analyze(createPolicyStmt, context);
+        securityPolicyMgr.createPasswordPolicy(createPolicyStmt);
+
+        // Set as global policy
+        securityPolicyMgr.setGlobalPasswordPolicy("pp1");
+
+        // Test show password policies
+        com.starrocks.epack.sql.ast.ShowPasswordPolicyStmt showStmt = 
+                (com.starrocks.epack.sql.ast.ShowPasswordPolicyStmt) SqlParser.parseSingleStatement(
+                        "show password policies", context.getSessionVariable().getSqlMode());
+        com.starrocks.sql.analyzer.Analyzer.analyze(showStmt, context);
+
+        // Execute show statement
+        com.starrocks.epack.qe.ShowExecutorVisitorEPack showExecutor = new com.starrocks.epack.qe.ShowExecutorVisitorEPack();
+        com.starrocks.qe.ShowResultSet resultSet = showExecutor.visitShowPasswordPolicyStatement(showStmt, context);
+
+        // Verify result contains the policy
+        Assertions.assertNotNull(resultSet);
+        Assertions.assertFalse(resultSet.getResultRows().isEmpty());
+        
+        // Check that the policy appears in the results
+        boolean foundPolicy = false;
+        for (List<String> row : resultSet.getResultRows()) {
+            if (row.contains("pp1")) {
+                foundPolicy = true;
+                break;
+            }
+        }
+        Assertions.assertTrue(foundPolicy, "Password policy pp1 should be found in show results");
+    }
+
+    @Test
+    public void testShowCreatePasswordPolicy() throws Exception {
+        new MockUp<EditLog>() {
+            @Mock
+            public void logEdit(short op, Writable writable) {
+                return;
+            }
+        };
+        GlobalStateMgr.getCurrentState().setEditLog(new EditLogEPack(null));
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            boolean isLeader() {
+                return true;
+            }
+        };
+
+        SecurityPolicyMgr securityPolicyMgr = new SecurityPolicyMgr();
+        GlobalStateMgr.getCurrentState().setSecurityPolicyManager(securityPolicyMgr);
+
+        ConnectContext context = new ConnectContext();
+
+        // Create password policy
+        CreatePasswordPolicyStmt createPolicyStmt = (CreatePasswordPolicyStmt) SqlParser.parseSingleStatement(
+                "CREATE PASSWORD POLICY pp1 comment \"pp1 comment\"\n" +
+                        "properties (\n" +
+                        "    \"PASSWORD_MIN_LENGTH\" = \"8\",\n" +
+                        "    \"PASSWORD_MIN_UPPER_CASE_CHARS\" = \"1\",\n" +
+                        "    \"PASSWORD_MIN_LOWER_CASE_CHARS\" = \"1\",\n" +
+                        "    \"PASSWORD_MIN_NUMERIC_CHARS\" = \"1\",\n" +
+                        "    \"PASSWORD_MIN_SPECIAL_CHARS\" = \"1\",\n" +
+                        "    \"PASSWORD_MAX_AGE_DAYS\" = \"7\"\n" +
+                        ")", context.getSessionVariable().getSqlMode());
+        com.starrocks.sql.analyzer.Analyzer.analyze(createPolicyStmt, context);
+        securityPolicyMgr.createPasswordPolicy(createPolicyStmt);
+
+        // Test show create password policy
+        com.starrocks.epack.sql.ast.ShowCreatePasswordPolicyStmt showStmt = 
+                (com.starrocks.epack.sql.ast.ShowCreatePasswordPolicyStmt) SqlParser.parseSingleStatement(
+                        "show create password policy pp1", context.getSessionVariable().getSqlMode());
+        com.starrocks.sql.analyzer.Analyzer.analyze(showStmt, context);
+
+        // Execute show statement
+        com.starrocks.epack.qe.ShowExecutorVisitorEPack showExecutor = new com.starrocks.epack.qe.ShowExecutorVisitorEPack();
+        com.starrocks.qe.ShowResultSet resultSet = showExecutor.visitShowCreatePasswordPolicyStatement(showStmt, context);
+
+        // Verify result contains the policy creation statement
+        Assertions.assertNotNull(resultSet);
+        Assertions.assertFalse(resultSet.getResultRows().isEmpty());
+        
+        // Check that the create statement appears in the results
+        List<String> resultRow = resultSet.getResultRows().get(0);
+        Assertions.assertTrue(resultRow.contains("pp1"), "Result should contain policy name");
+        Assertions.assertTrue(resultRow.stream().anyMatch(s -> s.contains("CREATE PASSWORD POLICY")), 
+                "Result should contain CREATE statement");
+    }
+
+    @Test
+    public void testShowCreatePasswordPolicyNotFound() throws Exception {
+        new MockUp<EditLog>() {
+            @Mock
+            public void logEdit(short op, Writable writable) {
+                return;
+            }
+        };
+        GlobalStateMgr.getCurrentState().setEditLog(new EditLogEPack(null));
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            boolean isLeader() {
+                return true;
+            }
+        };
+
+        SecurityPolicyMgr securityPolicyMgr = new SecurityPolicyMgr();
+        GlobalStateMgr.getCurrentState().setSecurityPolicyManager(securityPolicyMgr);
+
+        ConnectContext context = new ConnectContext();
+
+        // Test show create password policy for non-existent policy
+        com.starrocks.epack.sql.ast.ShowCreatePasswordPolicyStmt showStmt = 
+                (com.starrocks.epack.sql.ast.ShowCreatePasswordPolicyStmt) SqlParser.parseSingleStatement(
+                        "show create password policy nonexistent", context.getSessionVariable().getSqlMode());
+        com.starrocks.sql.analyzer.Analyzer.analyze(showStmt, context);
+
+        // Execute show statement - should throw exception
+        com.starrocks.epack.qe.ShowExecutorVisitorEPack showExecutor = new com.starrocks.epack.qe.ShowExecutorVisitorEPack();
+        Assertions.assertThrows(SemanticException.class, () -> 
+                showExecutor.visitShowCreatePasswordPolicyStatement(showStmt, context));
+    }
+
+    @Test
+    public void testDropPasswordPolicy() throws Exception {
+        new MockUp<EditLog>() {
+            @Mock
+            public void logEdit(short op, Writable writable) {
+                return;
+            }
+        };
+        GlobalStateMgr.getCurrentState().setEditLog(new EditLogEPack(null));
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            boolean isLeader() {
+                return true;
+            }
+        };
+
+        SecurityPolicyMgr securityPolicyMgr = new SecurityPolicyMgr();
+        GlobalStateMgr.getCurrentState().setSecurityPolicyManager(securityPolicyMgr);
+
+        ConnectContext context = new ConnectContext();
+
+        // Create password policy
+        CreatePasswordPolicyStmt createPolicyStmt = (CreatePasswordPolicyStmt) SqlParser.parseSingleStatement(
+                "CREATE PASSWORD POLICY pp1 comment \"pp1 comment\"\n" +
+                        "properties (\n" +
+                        "    \"PASSWORD_MIN_LENGTH\" = \"8\",\n" +
+                        "    \"PASSWORD_MIN_UPPER_CASE_CHARS\" = \"1\",\n" +
+                        "    \"PASSWORD_MIN_LOWER_CASE_CHARS\" = \"1\",\n" +
+                        "    \"PASSWORD_MIN_NUMERIC_CHARS\" = \"1\",\n" +
+                        "    \"PASSWORD_MIN_SPECIAL_CHARS\" = \"1\",\n" +
+                        "    \"PASSWORD_MAX_AGE_DAYS\" = \"7\"\n" +
+                        ")", context.getSessionVariable().getSqlMode());
+        com.starrocks.sql.analyzer.Analyzer.analyze(createPolicyStmt, context);
+        securityPolicyMgr.createPasswordPolicy(createPolicyStmt);
+
+        // Verify policy exists
+        Assertions.assertNotNull(securityPolicyMgr.getPasswordPolicy("pp1"));
+
+        // Drop password policy
+        com.starrocks.epack.sql.ast.DropPasswordPolicyStmt dropStmt = 
+                (com.starrocks.epack.sql.ast.DropPasswordPolicyStmt) SqlParser.parseSingleStatement(
+                        "drop password policy pp1", context.getSessionVariable().getSqlMode());
+        com.starrocks.sql.analyzer.Analyzer.analyze(dropStmt, context);
+        
+        // Execute drop statement
+        DDLStmtExecutor ddlStmtExecutor = new DDLStmtExecutor(DDLStmtExecutorVisitorEPack.getInstance());
+        ddlStmtExecutor.execute(dropStmt, context);
+
+        // Verify policy no longer exists
+        Assertions.assertNull(securityPolicyMgr.getPasswordPolicy("pp1"));
+    }
+
+    @Test
+    public void testDropNonExistentPasswordPolicy() throws Exception {
+        new MockUp<EditLog>() {
+            @Mock
+            public void logEdit(short op, Writable writable) {
+                return;
+            }
+        };
+        GlobalStateMgr.getCurrentState().setEditLog(new EditLogEPack(null));
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            boolean isLeader() {
+                return true;
+            }
+        };
+
+        SecurityPolicyMgr securityPolicyMgr = new SecurityPolicyMgr();
+        GlobalStateMgr.getCurrentState().setSecurityPolicyManager(securityPolicyMgr);
+
+        ConnectContext context = new ConnectContext();
+
+        // Try to drop non-existent password policy
+        com.starrocks.epack.sql.ast.DropPasswordPolicyStmt dropStmt = 
+                (com.starrocks.epack.sql.ast.DropPasswordPolicyStmt) SqlParser.parseSingleStatement(
+                        "drop password policy nonexistent", context.getSessionVariable().getSqlMode());
+        
+        // Should throw exception during analysis
+        Assertions.assertThrows(SemanticException.class, () -> 
+                com.starrocks.sql.analyzer.Analyzer.analyze(dropStmt, context));
+    }
+
+    @Test
+    public void testSystemSetPasswordPolicy() throws Exception {
+        new MockUp<EditLog>() {
+            @Mock
+            public void logEdit(short op, Writable writable) {
+                return;
+            }
+        };
+        GlobalStateMgr.getCurrentState().setEditLog(new EditLogEPack(null));
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            boolean isLeader() {
+                return true;
+            }
+        };
+
+        SecurityPolicyMgr securityPolicyMgr = new SecurityPolicyMgr();
+        GlobalStateMgr.getCurrentState().setSecurityPolicyManager(securityPolicyMgr);
+
+        ConnectContext context = new ConnectContext();
+
+        // Create password policy
+        CreatePasswordPolicyStmt createPolicyStmt = (CreatePasswordPolicyStmt) SqlParser.parseSingleStatement(
+                "CREATE PASSWORD POLICY pp1 comment \"pp1 comment\"\n" +
+                        "properties (\n" +
+                        "    \"PASSWORD_MIN_LENGTH\" = \"8\",\n" +
+                        "    \"PASSWORD_MIN_UPPER_CASE_CHARS\" = \"1\",\n" +
+                        "    \"PASSWORD_MIN_LOWER_CASE_CHARS\" = \"1\",\n" +
+                        "    \"PASSWORD_MIN_NUMERIC_CHARS\" = \"1\",\n" +
+                        "    \"PASSWORD_MIN_SPECIAL_CHARS\" = \"1\",\n" +
+                        "    \"PASSWORD_MAX_AGE_DAYS\" = \"7\"\n" +
+                        ")", context.getSessionVariable().getSqlMode());
+        com.starrocks.sql.analyzer.Analyzer.analyze(createPolicyStmt, context);
+        securityPolicyMgr.createPasswordPolicy(createPolicyStmt);
+
+        // Set system password policy
+        com.starrocks.epack.sql.ast.SetPasswordPolicyStmt setStmt = 
+                (com.starrocks.epack.sql.ast.SetPasswordPolicyStmt) SqlParser.parseSingleStatement(
+                        "alter system set password policy pp1", context.getSessionVariable().getSqlMode());
+        com.starrocks.sql.analyzer.Analyzer.analyze(setStmt, context);
+        
+        // Execute set statement
+        DDLStmtExecutor ddlStmtExecutor = new DDLStmtExecutor(DDLStmtExecutorVisitorEPack.getInstance());
+        ddlStmtExecutor.execute(setStmt, context);
+
+        // Verify global password policy is set
+        Assertions.assertEquals("pp1", securityPolicyMgr.getGlobalPasswordPolicy().getPolicyName());
+    }
+
+    @Test
+    public void testSystemUnsetPasswordPolicy() throws Exception {
+        new MockUp<EditLog>() {
+            @Mock
+            public void logEdit(short op, Writable writable) {
+                return;
+            }
+        };
+        GlobalStateMgr.getCurrentState().setEditLog(new EditLogEPack(null));
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            boolean isLeader() {
+                return true;
+            }
+        };
+
+        SecurityPolicyMgr securityPolicyMgr = new SecurityPolicyMgr();
+        GlobalStateMgr.getCurrentState().setSecurityPolicyManager(securityPolicyMgr);
+
+        ConnectContext context = new ConnectContext();
+
+        // Create password policy and set it as global
+        CreatePasswordPolicyStmt createPolicyStmt = (CreatePasswordPolicyStmt) SqlParser.parseSingleStatement(
+                "CREATE PASSWORD POLICY pp1 comment \"pp1 comment\"\n" +
+                        "properties (\n" +
+                        "    \"PASSWORD_MIN_LENGTH\" = \"8\",\n" +
+                        "    \"PASSWORD_MIN_UPPER_CASE_CHARS\" = \"1\",\n" +
+                        "    \"PASSWORD_MIN_LOWER_CASE_CHARS\" = \"1\",\n" +
+                        "    \"PASSWORD_MIN_NUMERIC_CHARS\" = \"1\",\n" +
+                        "    \"PASSWORD_MIN_SPECIAL_CHARS\" = \"1\",\n" +
+                        "    \"PASSWORD_MAX_AGE_DAYS\" = \"7\"\n" +
+                        ")", context.getSessionVariable().getSqlMode());
+        com.starrocks.sql.analyzer.Analyzer.analyze(createPolicyStmt, context);
+        securityPolicyMgr.createPasswordPolicy(createPolicyStmt);
+        securityPolicyMgr.setGlobalPasswordPolicy("pp1");
+
+        // Verify global password policy is set
+        Assertions.assertEquals("pp1", securityPolicyMgr.getGlobalPasswordPolicy().getPolicyName());
+
+        // Unset system password policy
+        com.starrocks.epack.sql.ast.UnsetPasswordPolicyStmt unsetStmt = 
+                (com.starrocks.epack.sql.ast.UnsetPasswordPolicyStmt) SqlParser.parseSingleStatement(
+                        "alter system unset password policy", context.getSessionVariable().getSqlMode());
+        com.starrocks.sql.analyzer.Analyzer.analyze(unsetStmt, context);
+        
+        // Execute unset statement
+        DDLStmtExecutor ddlStmtExecutor = new DDLStmtExecutor(DDLStmtExecutorVisitorEPack.getInstance());
+        ddlStmtExecutor.execute(unsetStmt, context);
+
+        // Verify global password policy is unset
+        Assertions.assertNull(securityPolicyMgr.getGlobalPasswordPolicy());
+    }
+
+    @Test
+    public void testSystemSetNonExistentPasswordPolicy() throws Exception {
+        new MockUp<EditLog>() {
+            @Mock
+            public void logEdit(short op, Writable writable) {
+                return;
+            }
+        };
+        GlobalStateMgr.getCurrentState().setEditLog(new EditLogEPack(null));
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            boolean isLeader() {
+                return true;
+            }
+        };
+
+        SecurityPolicyMgr securityPolicyMgr = new SecurityPolicyMgr();
+        GlobalStateMgr.getCurrentState().setSecurityPolicyManager(securityPolicyMgr);
+
+        ConnectContext context = new ConnectContext();
+
+        // Try to set non-existent password policy
+        com.starrocks.epack.sql.ast.SetPasswordPolicyStmt setStmt = 
+                (com.starrocks.epack.sql.ast.SetPasswordPolicyStmt) SqlParser.parseSingleStatement(
+                        "alter system set password policy nonexistent", context.getSessionVariable().getSqlMode());
+        
+        // Should throw exception during analysis
+        Assertions.assertThrows(SemanticException.class, () -> 
+                com.starrocks.sql.analyzer.Analyzer.analyze(setStmt, context));
     }
 }
