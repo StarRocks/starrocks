@@ -1,4 +1,4 @@
--- name: test_serialize_key_agg
+-- name: test_serialize_key_agg @mac
 create table t0 (
     c0 STRING,
     c1 STRING,
