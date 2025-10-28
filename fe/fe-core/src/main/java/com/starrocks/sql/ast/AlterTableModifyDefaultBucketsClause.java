@@ -14,7 +14,8 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.sql.ast.expression.TableName;
+import com.starrocks.alter.AlterOpType;
+import com.starrocks.analysis.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -30,7 +31,7 @@ public class AlterTableModifyDefaultBucketsClause extends AlterTableClause {
     protected TableName tableName;
 
     public AlterTableModifyDefaultBucketsClause(List<String> distributionColumns, int bucketNum, NodePosition pos) {
-        super(pos);
+        super(AlterOpType.MODIFY_TABLE_PROPERTY, pos);
         Preconditions.checkArgument(bucketNum > 0, "bucket num must > 0");
         this.distributionColumns = distributionColumns;
         this.bucketNum = bucketNum;
@@ -54,6 +55,6 @@ public class AlterTableModifyDefaultBucketsClause extends AlterTableClause {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitAlterTableModifyDefaultBucketsClause(this, context);
+        return visitor.visitAlterTableModifyDefaultBucketsClause(this, context);
     }
 }
