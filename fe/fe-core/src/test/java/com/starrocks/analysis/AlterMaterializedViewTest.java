@@ -746,7 +746,7 @@ public class AlterMaterializedViewTest extends MVTestBase  {
                 }
             };
             try {
-                refresh("test", mv);
+                refreshMV("test", mv);
             } catch (Exception e) {
                 // do nothing
             }

@@ -46,6 +46,7 @@ import com.starrocks.scheduler.PartitionBasedMvRefreshProcessor;
 import com.starrocks.scheduler.TableSnapshotInfo;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
+import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.TaskRun;
 import com.starrocks.scheduler.TaskRunBuilder;
 import com.starrocks.server.GlobalStateMgr;
@@ -364,6 +365,7 @@ public class MVTestBase extends StarRocksTestBase {
 
     protected PartitionBasedMvRefreshProcessor refreshMV(String dbName, MaterializedView mv) throws Exception {
         // create a task if not exist
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
         Task task = taskManager.getTask(mv);
         if (task == null) {
             task = TaskBuilder.buildMvTask(mv, dbName);
