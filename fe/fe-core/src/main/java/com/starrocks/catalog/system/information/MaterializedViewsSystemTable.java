@@ -30,8 +30,6 @@ import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.Pair;
 import com.starrocks.common.PatternMatcher;
-import com.starrocks.common.util.concurrent.lock.LockType;
-import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowMaterializedViewStatus;
@@ -53,6 +51,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 import org.apache.thrift.meta_data.FieldValueMetaData;
+import org.sparkproject.guava.base.Strings;
 
 import java.util.Collections;
 import java.util.List;
@@ -135,7 +134,6 @@ public class MaterializedViewsSystemTable extends SystemTable {
         TUserIdentity userIdentity = context.getCurrentUserIdentity().toThrift();
         TGetTablesParams params = new TGetTablesParams();
         params.setCurrent_user_ident(userIdentity);
-        params.setDb(context.getDatabase());
         params.setType(MATERIALIZED_VIEW);
         for (ScalarOperator conjunct : conjuncts) {
             BinaryPredicateOperator binary = (BinaryPredicateOperator) conjunct;
@@ -226,15 +224,30 @@ public class MaterializedViewsSystemTable extends SystemTable {
         List<TMaterializedViewStatus> tablesResult = Lists.newArrayList();
         result.setMaterialized_views(tablesResult);
         String dbName = params.getDb();
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
-        if (db == null) {
-            LOG.warn("database not exists: {}", dbName);
-            return result;
+        if (Strings.isNullOrEmpty(dbName)) {
+            for (Long dbId : GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds()) {
+                Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+                if (db == null) {
+                    continue;
+                }
+                listMaterializedViews(db, limit, matcher, context, params).stream()
+                        .map(s -> s.toThrift())
+                        .forEach(t -> tablesResult.add(t));
+                // check limit
+                if (limit > 0 && tablesResult.size() >= limit) {
+                    break;
+                }
+            }
+        } else {
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+            if (db == null) {
+                LOG.warn("database not exists: {}", dbName);
+                return result;
+            }
+            listMaterializedViews(db, limit, matcher, context, params).stream()
+                    .map(s -> s.toThrift())
+                    .forEach(t -> tablesResult.add(t));
         }
-
-        listMaterializedViews(limit, matcher, context, params).stream()
-                .map(s -> s.toThrift())
-                .forEach(t -> tablesResult.add(t));
         return result;
     }
 
@@ -297,35 +310,29 @@ public class MaterializedViewsSystemTable extends SystemTable {
     }
 
     private static List<ShowMaterializedViewStatus> listMaterializedViews(
+            Database db,
             long limit,
             PatternMatcher matcher,
             ConnectContext context,
             TGetTablesParams params) {
-        String dbName = params.getDb();
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
-        List<MaterializedView> materializedViews = com.google.common.collect.Lists.newArrayList();
-        List<Pair<OlapTable, MaterializedIndexMeta>> singleTableMVs = com.google.common.collect.Lists.newArrayList();
-        Locker locker = new Locker();
-        locker.lockDatabase(db.getId(), LockType.READ);
-        try {
-            for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
-                if (table.isMaterializedView()) {
-                    filterAsynchronousMaterializedView(matcher, context, dbName,
-                            (MaterializedView) table, params, materializedViews);
-                } else if (table.getType() == Table.TableType.OLAP) {
-                    filterSynchronousMaterializedView((OlapTable) table, matcher, params, singleTableMVs);
-                } else {
-                    // continue
-                }
-
-                // check limit
-                int mvSize = materializedViews.size() + singleTableMVs.size();
-                if (limit > 0 && mvSize >= limit) {
-                    break;
-                }
+        String dbName = db.getFullName();
+        List<MaterializedView> materializedViews = Lists.newArrayList();
+        List<Pair<OlapTable, MaterializedIndexMeta>> singleTableMVs = Lists.newArrayList();
+        for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
+            if (table.isMaterializedView()) {
+                filterAsynchronousMaterializedView(matcher, context, dbName,
+                        (MaterializedView) table, params, materializedViews);
+            } else if (table.getType() == Table.TableType.OLAP) {
+                filterSynchronousMaterializedView((OlapTable) table, matcher, params, singleTableMVs);
+            } else {
+                // continue
             }
-        } finally {
-            locker.unLockDatabase(db.getId(), LockType.READ);
+
+            // check limit
+            int mvSize = materializedViews.size() + singleTableMVs.size();
+            if (limit > 0 && mvSize >= limit) {
+                break;
+            }
         }
         return ShowExecutor.listMaterializedViewStatus(dbName, materializedViews, singleTableMVs);
     }
