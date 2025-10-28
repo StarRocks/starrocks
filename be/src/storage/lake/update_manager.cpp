@@ -595,10 +595,10 @@ Status UpdateManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_writ
             // Process insert rowids in batches to avoid memory overflow
             const size_t batch_size = std::max<size_t>(1, config::column_mode_partial_update_batch_size);
             uint32_t seg_idx_before = new_rows_op.rowset().segments_size();
-            
+
             MutableColumnPtr pk_column;
             RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
-            
+
             for (size_t batch_start = 0; batch_start < insert_rowids.size(); batch_start += batch_size) {
                 size_t batch_end = std::min(batch_start + batch_size, insert_rowids.size());
                 std::vector<uint32_t> batch_insert_rowids(insert_rowids.begin() + batch_start,
@@ -608,11 +608,11 @@ Status UpdateManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_writ
                 RETURN_IF_ERROR(_write_segment_for_upsert(op_write, tschema, tablet, fs, txn_id, seg,
                                                           batch_insert_rowids, update_cids, &new_rows_op, &total_rows,
                                                           &full_chunk));
-                
+
                 // Extract primary keys from the chunk
                 PrimaryKeyEncoder::encode(pkey_schema, *full_chunk, 0, full_chunk->num_rows(), pk_column.get());
             }
-            
+
             // Handle index conflicts for newly written segments
             uint32_t seg_idx_after = new_rows_op.rowset().segments_size();
             if (seg_idx_after > seg_idx_before) {
@@ -622,13 +622,13 @@ Status UpdateManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_writ
                     if (seg_idx == seg_idx_after - 1) {
                         rows_per_segment = insert_rowids.size() - (seg_idx - seg_idx_before) * batch_size;
                     }
-                    
+
                     size_t pk_offset = (seg_idx - seg_idx_before) * batch_size;
-                    
+
                     PrimaryIndex::DeletesMap segment_deletes;
-                    RETURN_IF_ERROR(index.upsert(rowset_id + seg_idx, 0, *pk_column,
-                                                 pk_offset, pk_offset + rows_per_segment, &segment_deletes));
-                    
+                    RETURN_IF_ERROR(index.upsert(rowset_id + seg_idx, 0, *pk_column, pk_offset,
+                                                 pk_offset + rows_per_segment, &segment_deletes));
+
                     for (auto& [rssid, del_ids] : segment_deletes) {
                         if (del_ids.empty()) continue;
                         DelVectorPtr dv = std::make_shared<DelVector>();
