@@ -24,10 +24,10 @@ select
     LAST_REFRESH_ERROR_CODE,
     IS_ACTIVE,
     INACTIVE_REASON
-from information_schema.materialized_views where table_name = 'user_tags_mv1';
+from information_schema.materialized_views where table_name = 'user_tags_mv1' and TABLE_SCHEMA = 'test_show_materialized_view';
 set @last_refresh_time = (
     select max(last_refresh_start_time)
-    from information_schema.materialized_views where table_name = 'user_tags_mv1'
+    from information_schema.materialized_views where table_name = 'user_tags_mv1' and TABLE_SCHEMA = 'test_show_materialized_view';
 );
 
 select sleep(3);
@@ -40,19 +40,19 @@ select
     LAST_REFRESH_ERROR_CODE,
     IS_ACTIVE,
     INACTIVE_REASON
-from information_schema.materialized_views where table_name = 'user_tags_mv1';
+from information_schema.materialized_views where table_name = 'user_tags_mv1' and TABLE_SCHEMA = 'test_show_materialized_view';
 set @this_refresh_time = (
     select max(last_refresh_start_time)
-    from information_schema.materialized_views where table_name = 'user_tags_mv1'
+    from information_schema.materialized_views where table_name = 'user_tags_mv1' and TABLE_SCHEMA = 'test_show_materialized_view'
 );
 select if(@last_refresh_time != @this_refresh_time, 
     'refreshed', concat('no refresh after ', @last_refresh_time));
 
-select TABLE_NAME, LAST_REFRESH_ERROR_CODE, IS_ACTIVE, INACTIVE_REASON from information_schema.materialized_views where TABLE_SCHEMA = 'test_show_materialized_view' and table_name = 'user_tags_mv1';
-select TABLE_NAME, LAST_REFRESH_ERROR_CODE, IS_ACTIVE, INACTIVE_REASON from information_schema.materialized_views where TABLE_SCHEMA = 'test_show_materialized_view' and table_name like 'user_tags_mv1';
-select TABLE_NAME, LAST_REFRESH_ERROR_CODE, IS_ACTIVE, INACTIVE_REASON from information_schema.materialized_views where TABLE_SCHEMA = 'test_show_materialized_view' and table_name like '%user_tags_mv1%';
-select TABLE_NAME, LAST_REFRESH_ERROR_CODE, IS_ACTIVE, INACTIVE_REASON from information_schema.materialized_views where TABLE_SCHEMA = 'test_show_materialized_view' and table_name like '%%';
-select TABLE_NAME, LAST_REFRESH_ERROR_CODE, IS_ACTIVE, INACTIVE_REASON from information_schema.materialized_views where TABLE_SCHEMA = 'test_show_materialized_view' and table_name like '%bad_name%';
+select TABLE_NAME, LAST_REFRESH_ERROR_CODE, IS_ACTIVE, INACTIVE_REASON from information_schema.materialized_views where TABLE_SCHEMA = 'test_show_materialized_view' and table_name = 'user_tags_mv1' ORDER BY LAST_REFRESH_START_TIME DESC;
+select TABLE_NAME, LAST_REFRESH_ERROR_CODE, IS_ACTIVE, INACTIVE_REASON from information_schema.materialized_views where TABLE_SCHEMA = 'test_show_materialized_view' and table_name like 'user_tags_mv1' ORDER BY LAST_REFRESH_START_TIME DESC;
+select TABLE_NAME, LAST_REFRESH_ERROR_CODE, IS_ACTIVE, INACTIVE_REASON from information_schema.materialized_views where TABLE_SCHEMA = 'test_show_materialized_view' and table_name like '%user_tags_mv1%' ORDER BY LAST_REFRESH_START_TIME DESC;
+select TABLE_NAME, LAST_REFRESH_ERROR_CODE, IS_ACTIVE, INACTIVE_REASON from information_schema.materialized_views where TABLE_SCHEMA = 'test_show_materialized_view' and table_name like '%%' ORDER BY LAST_REFRESH_START_TIME DESC;
+select TABLE_NAME, LAST_REFRESH_ERROR_CODE, IS_ACTIVE, INACTIVE_REASON from information_schema.materialized_views where TABLE_SCHEMA = 'test_show_materialized_view' and table_name like '%bad_name%' ORDER BY LAST_REFRESH_START_TIME DESC;
 [UC] SELECT * FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'test_show_materialized_view' and table_name = 'user_tags_mv1';
 [UC] SELECT * FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'test_show_materialized_view' and table_name like 'user_tags_mv1';
 [UC] SELECT * FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'test_show_materialized_view' and table_name like '%user_tags_mv1%';
