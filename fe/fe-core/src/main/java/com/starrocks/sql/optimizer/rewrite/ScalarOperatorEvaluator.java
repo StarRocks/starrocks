@@ -199,6 +199,12 @@ public enum ScalarOperatorEvaluator {
                     operator.getType().getPrimitiveType() != fn.getReturnType().getPrimitiveType()) {
                 Preconditions.checkState(operator.getType().isDecimalOfAnyVersion());
                 Preconditions.checkState(fn.getReturnType().isDecimalOfAnyVersion());
+                if (operator.getType().isDecimal256()) {
+                    Optional<ConstantOperator> res = operator.castTo(fn.getReturnType());
+                    if (res.isPresent() && res.get().isConstantNull()) {
+                        return root;
+                    }
+                }
                 operator.setType(fn.getReturnType());
             }
             return operator;
