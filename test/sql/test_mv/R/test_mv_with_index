@@ -55,8 +55,7 @@ PROPERTIES (
 "storage_medium" = "HDD",
 "bloom_filter_columns" = "c1, c2"
 )
-AS SELECT `t1`.`c0`, `t1`.`c1`, `t1`.`c2`, `t1`.`c3`
-FROM `test_mv_with_index`.`t1`;
+AS SELECT * from t1;
 -- !result
 CREATE INDEX idx1 ON test_mv1(c0) USING BITMAP COMMENT 'bitmap index on c0';
 -- result:
@@ -131,8 +130,7 @@ PROPERTIES (
 "replication_num" = "1",
 "storage_medium" = "HDD"
 )
-AS SELECT `t1`.`c0`, `t1`.`c1`, `t1`.`c2`, `t1`.`c3`
-FROM `test_mv_with_index`.`t1`;
+AS SELECT * from t1;
 -- !result
 DROP INDEX idx2 ON test_mv1;
 -- result:

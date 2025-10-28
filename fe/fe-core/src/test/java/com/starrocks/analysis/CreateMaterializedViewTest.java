@@ -96,9 +96,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInfo;
-import org.junit.jupiter.api.io.TempDir;
 
-import java.io.File;
 import java.lang.reflect.Method;
 import java.time.LocalDateTime;
 import java.util.Arrays;
@@ -4544,10 +4542,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                         "\"replication_num\" = \"1\",\n" +
                         "\"storage_medium\" = \"HDD\"\n" +
                         ")\n" +
-                        "AS SELECT `t1`.`c_1_0`, `t1`.`c_1_1`, `t1`.`c_1_2`, `t1`.`c_1_3`, `t1`.`c_1_4`, `t1`.`c_1_5`, " +
-                        "`t1`.`c_1_6`, `t1`.`c_1_7`, `t1`.`c_1_8`, `t1`.`c_1_9`, `t1`.`c_1_10`, `t1`.`c_1_11`, " +
-                        "`t1`.`c_1_12`\n" +
-                        "FROM `test`.`t1` LIMIT 10;"
+                        "AS select * from t1 limit 10;"
                 ,
                 starRocksAssert.showCreateTable("show create table mv_invalid"));
         starRocksAssert.dropMaterializedView("mv_invalid");
@@ -4568,10 +4563,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                         "\"enable_query_rewrite\" = \"false\",\n" +
                         "\"storage_medium\" = \"HDD\"\n" +
                         ")\n" +
-                        "AS SELECT `t1`.`c_1_0`, `t1`.`c_1_1`, `t1`.`c_1_2`, `t1`.`c_1_3`, `t1`.`c_1_4`, `t1`.`c_1_5`, " +
-                        "`t1`.`c_1_6`, `t1`.`c_1_7`, `t1`.`c_1_8`, `t1`.`c_1_9`, `t1`.`c_1_10`, `t1`.`c_1_11`, " +
-                        "`t1`.`c_1_12`\n" +
-                        "FROM `test`.`t1` LIMIT 10;",
+                        "AS select * from t1 limit 10;",
                 starRocksAssert.showCreateTable("show create table mv_invalid"));
         starRocksAssert.dropMaterializedView("mv_invalid");
 
@@ -4590,10 +4582,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                         "\"enable_query_rewrite\" = \"true\",\n" +
                         "\"storage_medium\" = \"HDD\"\n" +
                         ")\n" +
-                        "AS SELECT `t1`.`c_1_0`, `t1`.`c_1_1`, `t1`.`c_1_2`, `t1`.`c_1_3`, `t1`.`c_1_4`, `t1`.`c_1_5`, " +
-                        "`t1`.`c_1_6`, `t1`.`c_1_7`, `t1`.`c_1_8`, `t1`.`c_1_9`, `t1`.`c_1_10`, `t1`.`c_1_11`, " +
-                        "`t1`.`c_1_12`\n" +
-                        "FROM `test`.`t1`;",
+                        "AS select * from t1;",
                 starRocksAssert.showCreateTable("show create table mv_enable"));
         starRocksAssert.refreshMV("refresh materialized view mv_enable with sync mode");
         MaterializedView mv = starRocksAssert.getMv("test", "mv_enable");
@@ -4612,10 +4601,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                         "\"enable_query_rewrite\" = \"FALSE\",\n" +
                         "\"storage_medium\" = \"HDD\"\n" +
                         ")\n" +
-                        "AS SELECT `t1`.`c_1_0`, `t1`.`c_1_1`, `t1`.`c_1_2`, `t1`.`c_1_3`, `t1`.`c_1_4`, `t1`.`c_1_5`, " +
-                        "`t1`.`c_1_6`, `t1`.`c_1_7`, `t1`.`c_1_8`, `t1`.`c_1_9`, `t1`.`c_1_10`, `t1`.`c_1_11`, " +
-                        "`t1`.`c_1_12`\n" +
-                        "FROM `test`.`t1`;",
+                        "AS select * from t1;",
                 starRocksAssert.showCreateTable("show create table mv_enable"));
         valid = MvRewritePreprocessor.isMVValidToRewriteQuery(connectContext, mv, null,
                 true, false, connectContext.getSessionVariable().getOptimizerExecuteTimeout());
@@ -4643,10 +4629,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 "\"replication_num\" = \"1\",\n" +
                 "\"storage_medium\" = \"HDD\"\n" +
                 ")\n" +
-                "AS SELECT `t1`.`c_1_0`, `t1`.`c_1_1`, `t1`.`c_1_2`, `t1`.`c_1_3`, `t1`.`c_1_4`, `t1`.`c_1_5`, " +
-                "`t1`.`c_1_6`, `t1`.`c_1_7`, `t1`.`c_1_8`, `t1`.`c_1_9`, `t1`.`c_1_10`, `t1`.`c_1_11`, " +
-                "`t1`.`c_1_12`\n" +
-                "FROM `test`.`t1` LIMIT 10;", sql);
+                "AS select * from t1 limit 10;", sql);
         starRocksAssert.dropMaterializedView("mv_invalid");
 
         // enable
@@ -4664,10 +4647,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                         "\"replication_num\" = \"1\",\n" +
                         "\"storage_medium\" = \"HDD\"\n" +
                         ")\n" +
-                        "AS SELECT `t1`.`c_1_0`, `t1`.`c_1_1`, `t1`.`c_1_2`, `t1`.`c_1_3`, `t1`.`c_1_4`, `t1`.`c_1_5`, " +
-                        "`t1`.`c_1_6`, `t1`.`c_1_7`, `t1`.`c_1_8`, `t1`.`c_1_9`, `t1`.`c_1_10`, `t1`.`c_1_11`, " +
-                        "`t1`.`c_1_12`\n" +
-                        "FROM `test`.`t1`;",
+                        "AS select * from t1;",
                 starRocksAssert.showCreateTable("show create table mv_enable"));
         starRocksAssert.refreshMV("refresh materialized view mv_enable with sync mode");
         MaterializedView mv = starRocksAssert.getMv("test", "mv_enable");
@@ -4686,10 +4666,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 "\"replication_num\" = \"1\",\n" +
                 "\"storage_medium\" = \"HDD\"\n" +
                 ")\n" +
-                "AS SELECT `t1`.`c_1_0`, `t1`.`c_1_1`, `t1`.`c_1_2`, `t1`.`c_1_3`, `t1`.`c_1_4`, `t1`.`c_1_5`, " +
-                "`t1`.`c_1_6`, `t1`.`c_1_7`, `t1`.`c_1_8`, `t1`.`c_1_9`, `t1`.`c_1_10`, `t1`.`c_1_11`, " +
-                "`t1`.`c_1_12`\n" +
-                "FROM `test`.`t1`;", sql);
+                "AS select * from t1;", sql);
         Assertions.assertTrue(!mv.isEnableTransparentRewrite());
         Assertions.assertTrue(mv.getTransparentRewriteMode().equals(TableProperty.MVTransparentRewriteMode.FALSE));
 
@@ -4704,10 +4681,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                         "\"replication_num\" = \"1\",\n" +
                         "\"storage_medium\" = \"HDD\"\n" +
                         ")\n" +
-                        "AS SELECT `t1`.`c_1_0`, `t1`.`c_1_1`, `t1`.`c_1_2`, `t1`.`c_1_3`, `t1`.`c_1_4`, `t1`.`c_1_5`, " +
-                        "`t1`.`c_1_6`, `t1`.`c_1_7`, `t1`.`c_1_8`, `t1`.`c_1_9`, `t1`.`c_1_10`, `t1`.`c_1_11`, " +
-                        "`t1`.`c_1_12`\n" +
-                        "FROM `test`.`t1`;",
+                        "AS select * from t1;",
                 starRocksAssert.showCreateTable("show create table mv_enable"));
         Assertions.assertTrue(mv.isEnableTransparentRewrite());
         Assertions.assertTrue(mv.getTransparentRewriteMode().equals(TableProperty.MVTransparentRewriteMode.TRANSPARENT_OR_ERROR));
@@ -4722,10 +4696,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                         "\"replication_num\" = \"1\",\n" +
                         "\"storage_medium\" = \"HDD\"\n" +
                         ")\n" +
-                        "AS SELECT `t1`.`c_1_0`, `t1`.`c_1_1`, `t1`.`c_1_2`, `t1`.`c_1_3`, `t1`.`c_1_4`, `t1`.`c_1_5`, " +
-                        "`t1`.`c_1_6`, `t1`.`c_1_7`, `t1`.`c_1_8`, `t1`.`c_1_9`, `t1`.`c_1_10`, `t1`.`c_1_11`, " +
-                        "`t1`.`c_1_12`\n" +
-                        "FROM `test`.`t1`;",
+                        "AS select * from t1;",
                 starRocksAssert.showCreateTable("show create table mv_enable"));
         Assertions.assertTrue(mv.isEnableTransparentRewrite());
         Assertions.assertTrue(mv.getTransparentRewriteMode().equals(TableProperty.MVTransparentRewriteMode.TRANSPARENT_OR_DEFAULT));
@@ -5897,6 +5868,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
             starRocksAssert.withMaterializedView(sql);
         }
     }
+
     @Test
     public void testPartitionByDateTruncWithNestedMV3() throws Exception {
         String sql = "create materialized view mv1 " +
@@ -5908,5 +5880,51 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 ") \n" +
                 "as select 'This is a test',123,v1.date, v1.id from iceberg0.partitioned_db.t2 as v1; ";
         starRocksAssert.withMaterializedView(sql);
+    }
+
+    @Test
+    public void testCreateMVWithComment() throws Exception {
+        String sql = "create materialized view mv1 " +
+                "comment \"this is a comment2\" " +
+                "partition by date_trunc('month', date) " +
+                "distributed by random " +
+                "REFRESH DEFERRED MANUAL " +
+                "PROPERTIES (\n" +
+                "'replication_num' = '1'\n" +
+                ") \n" +
+                "as select 'This is a test', --mocked \n" +
+                "123,v1.date, v1.id from iceberg0.partitioned_db.t2 as v1; ";
+        starRocksAssert.withMaterializedView(sql);
+        MaterializedView mv = getMv("mv1");
+        {
+            String ddl = mv.getMaterializedViewDdlStmt(true, false);
+            Assertions.assertEquals("CREATE MATERIALIZED VIEW `mv1` (`'This is a test'`, `123`, `date`, `id`)\n" +
+                    "COMMENT \"this is a comment2\"\n" +
+                    "PARTITION BY (date_trunc('month', `date`))\n" +
+                    "DISTRIBUTED BY RANDOM\n" +
+                    "REFRESH DEFERRED MANUAL\n" +
+                    "PROPERTIES (\n" +
+                    "\"replicated_storage\" = \"true\",\n" +
+                    "\"replication_num\" = \"1\",\n" +
+                    "\"storage_medium\" = \"HDD\"\n" +
+                    ")\n" +
+                    "AS select 'This is a test', --mocked \n" +
+                    "123,v1.date, v1.id from iceberg0.partitioned_db.t2 as v1;", ddl);
+        }
+        {
+            String ddl = mv.getMaterializedViewDdlStmt(false, false);
+            Assertions.assertEquals("CREATE MATERIALIZED VIEW `mv1` (`'This is a test'`, `123`, `date`, `id`)\n" +
+                    "COMMENT \"this is a comment2\"\n" +
+                    "PARTITION BY (date_trunc('month', `date`))\n" +
+                    "DISTRIBUTED BY RANDOM\n" +
+                    "REFRESH DEFERRED MANUAL\n" +
+                    "PROPERTIES (\n" +
+                    "\"replicated_storage\" = \"true\",\n" +
+                    "\"replication_num\" = \"1\",\n" +
+                    "\"storage_medium\" = \"HDD\"\n" +
+                    ")\n" +
+                    "AS SELECT 'This is a test' AS `'This is a test'`, 123 AS `123`, `iceberg0`.`partitioned_db`.`v1`.`date`, `iceberg0`.`partitioned_db`.`v1`.`id`\n" +
+                    "FROM `iceberg0`.`partitioned_db`.`t2` AS `v1`;", ddl);
+        }
     }
 }
