@@ -57,11 +57,11 @@ import com.starrocks.thrift.TScanRangeLocations;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.paimon.data.BinaryRow;
-import org.apache.paimon.format.aliorc.AliOrcFileFormatFactory;
 import org.apache.paimon.io.DataFileMeta;
 import org.apache.paimon.io.DataOutputViewStreamWrapper;
 import org.apache.paimon.rest.RESTToken;
 import org.apache.paimon.rest.RESTTokenFileIO;
+import org.apache.paimon.table.Table;
 import org.apache.paimon.table.source.DataSplit;
 import org.apache.paimon.table.FileStoreTable;
 import org.apache.paimon.table.source.DeletionFile;
@@ -189,7 +189,7 @@ public class PaimonScanNode extends ScanNode {
                 if (optionalRawFiles.isEmpty()) {
                     if (forceJNIReader) {
                         readerType = PaimonReaderType.JNI;
-                    } else if (forcePaimonNativeReader || AliOrcFileFormatFactory.IDENTIFIER.equals(tableFileFormat)) {
+                    } else if (forcePaimonNativeReader || "aliorc".equals(tableFileFormat)) {
                         readerType = PaimonReaderType.PAIMON_NATIVE;
                     } else {
                         readerType = PaimonReaderType.JNI;
@@ -197,7 +197,7 @@ public class PaimonScanNode extends ScanNode {
                 } else {
                     if (forceJNIReader) {
                         readerType = PaimonReaderType.JNI;
-                    } else if (forcePaimonNativeReader) {
+                    } else if (forcePaimonNativeReader || "aliorc".equals(tableFileFormat)) {
                         readerType = PaimonReaderType.PAIMON_NATIVE;
                     } else if (nativeSupportedFormat) {
                         readerType = PaimonReaderType.STARROCKS_NATIVE;

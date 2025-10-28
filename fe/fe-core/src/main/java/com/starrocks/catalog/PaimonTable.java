@@ -282,7 +282,7 @@ public class PaimonTable extends Table {
         }
         String encodedTable = PaimonScanNode.encodeObjectToString(paimonNativeTable);
 
-        Map<String, String> originalOptions = paimonNativeTable.options();
+        Map<String, String> originalOptions = new HashMap<>(paimonNativeTable.options());
         originalOptions.putIfAbsent(CoreOptions.FILE_FORMAT.key(), CoreOptions.FILE_FORMAT.defaultValue());
         originalOptions.putIfAbsent(CoreOptions.MANIFEST_FORMAT.key(), CoreOptions.MANIFEST_FORMAT.defaultValue());
 
