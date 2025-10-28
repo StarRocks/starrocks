@@ -139,6 +139,10 @@ After the download is complete, upload or copy the installation package to the d
              group: be
    ```
 
+   :::note
+   Please note that Prometheus is unable to detect the service changes (`targets`) after the cluster has been scaled in or out. For clusters deployed on AWS, you can grant the EC2 instance that hosts the Prometheus service the `ec2:DescribeInstances` and `ec2:DescribeTags` permissions, and add the `ec2_sd_configs` and `relabel_configs` properties to **prometheus/prometheus.yml**. For detailed instructions, see [Appendix - Enable Service Detection for Prometheus](#enable-service-detection-for-prometheus).
+   :::
+
    After you have modified the configuration file, you can use `promtool` to verify whether the modification is valid.
 
    ```Bash
@@ -773,6 +777,81 @@ This item corresponds to **Cluster FE JVM Heap Stat** under **Overview**, monito
 3. In the **Alert evaluation behavior** section, choose the **PROD** directory and Evaluation group **01** created earlier, and set the duration to 30 seconds.
 4. In the **Add details for your alert rule** section, click **Add annotation**, select **Description**, and input the alert content, for example, "Detected that FE heap memory usage is high, please adjust the heap memory limit in the FE configuration file **fe.conf**".
 5. In the **Notifications** section, configure **Labels** the same as the FE alert rule. If Labels are not configured, Grafana will use the Default policy and send alert emails to the "StarRocksOp" alert channel.
+
+## Appendix
+
+### Enable Service Detection for Prometheus
+
+You can enable Service Detection for Prometheus so that it can automatically detect the services (nodes) after the cluster is scaled in or out.
+
+:::note
+Currently, this feature is available only to clusters deployed on AWS.
+:::
+
+1. Grant the EC2 instance that hosts your Prometheus service the following permissions using IAM Policy:
+
+   ```JSON
+   {
+         "Version": "2012-10-17",
+         "Statement": [
+                  {
+                           "Effect": "Allow",
+                           "Action": [
+                                 "ec2:DescribeInstances",
+                                 "ec2:DescribeTags"
+                           ],
+                           "Resource": "*"
+                  }
+         ]
+   }
+   ```
+
+   For detailed instructions of authentication to AWS resources, see [Authenticate to AWS resources](../../../integrations/authenticate_to_aws_resources.md).
+
+   With these permissions, Prometheus is able to list the instances and their tags in the region.
+
+2. Add the `ec2_sd_configs` and `relabel_configs` sections to **prometheus/prometheus.yml**.
+
+   Example:
+
+   ```Yaml
+   global:
+   scrape_interval: 15s # Set the global scrape interval to 15s. The default is 1 min.
+   evaluation_interval: 15s # Set the global rule evaluation interval to 15s. The default is 1 min.
+   scrape_configs:
+   - job_name: 'StarRocks_Cluster01'
+      metrics_path: '/metrics'
+      # highlight-start
+      ec2_sd_configs:
+         - region: us-west-2
+         port: 8030
+         filters:
+            - name: tag:ClusterName
+               values: ['test-stage-20251021']
+            - name: tag:ProcessType
+               values: ['FE']
+         - region: us-west-2
+         port: 8040
+         filters:
+            - name: tag:ClusterName
+               values: ['test-stage-20251021']
+            - name: tag:ProcessType
+               values: ['BE']
+      relabel_configs:
+         - source_labels: [__meta_ec2_tag_ClusterName]
+         regex: test-stage-20251021
+         target_label: cluster
+         replacement: test-stage-20251021
+         - source_labels: [__meta_ec2_tag_ProcessType]
+         regex: FE
+         target_label: group
+         replacement: fe
+         - source_labels: [__meta_ec2_tag_ProcessType]
+         regex: BE
+         target_label: group
+         replacement: be
+      # highlight-end
+   ```
 
 ## Q&A
 
