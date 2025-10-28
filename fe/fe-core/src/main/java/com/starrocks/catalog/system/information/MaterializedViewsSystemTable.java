@@ -225,7 +225,11 @@ public class MaterializedViewsSystemTable extends SystemTable {
         result.setMaterialized_views(tablesResult);
         String dbName = params.getDb();
         if (Strings.isNullOrEmpty(dbName)) {
-            for (Database db : GlobalStateMgr.getCurrentState().getLocalMetastore().getAllDbs()) {
+            for (Long dbId : GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds()) {
+                Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+                if (db == null) {
+                    continue;
+                }
                 listMaterializedViews(db, limit, matcher, context, params).stream()
                         .map(s -> s.toThrift())
                         .forEach(t -> tablesResult.add(t));
