@@ -73,9 +73,16 @@ Ranger クラスターを操作する権限がない場合や、この機能が�
 
 3. Ranger Admin を再起動します。
 
-   ```SQL
-   ranger-admin restart
-   ```
+   -  Ranger 0.5.x:
+
+      ```SQL
+      ranger-admin restart
+      ```
+   - Ranger 2.x and above:
+   
+      ```SQL
+      ./ews/ranger-admin-services.sh restart
+      ```
 
 ### Ranger Admin で StarRocks Service を設定する
 

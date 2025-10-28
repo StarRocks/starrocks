@@ -69,9 +69,16 @@ StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
 
 3. 重启 Ranger Admin。
 
-   ```SQL
-   ranger-admin restart
-   ```
+   -  Ranger 0.5.x:
+
+      ```SQL
+      ranger-admin restart
+      ```
+   - Ranger 2.x and above:
+   
+      ```SQL
+      ./ews/ranger-admin-services.sh restart
+      ```
 
 ### 在 Ranger Admin 上配置 StarRocks Service
 
