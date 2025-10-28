@@ -1,4 +1,4 @@
--- name: test_distinct_agg
+-- name: test_distinct_agg @mac
 CREATE TABLE `skew_agg` (
   `c0` int DEFAULT NULL,
   `c1` bigint DEFAULT NULL,

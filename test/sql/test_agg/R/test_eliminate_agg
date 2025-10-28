@@ -1,4 +1,4 @@
--- name: test_eliminate_agg
+-- name: test_eliminate_agg @mac
 CREATE TABLE `test_agg_group_single_unique_key` (
   id INT NOT NULL,
   big_value BIGINT,

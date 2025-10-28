@@ -1,4 +1,4 @@
--- name: test_agg_compressed_key2
+-- name: test_agg_compressed_key2 @mac
 CREATE TABLE t3 (
     c_2_0 LARGEINT NOT NULL,
     c_2_1 LARGEINT NOT NULL,

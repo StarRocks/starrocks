@@ -1,4 +1,4 @@
--- name: test_tinyint_agg
+-- name: test_tinyint_agg @mac
 CREATE TABLE `t1` (
   `tinyint_col_1` tinyint NOT NULL,
   `tinyint_col_2` tinyint
