@@ -73,9 +73,16 @@ Also, please notice that if you didn't install the ranger-starrocks-plugin, then
 
 3. Restart Ranger Admin.
 
-   ```SQL
-   ranger-admin restart
-   ```
+   -  Ranger 0.5.x:
+
+      ```SQL
+      ranger-admin restart
+      ```
+   - Ranger 2.x and above:
+   
+      ```SQL
+      ./ews/ranger-admin-services.sh restart
+      ```
 
 ### Configure StarRocks Service on Ranger Admin
 
