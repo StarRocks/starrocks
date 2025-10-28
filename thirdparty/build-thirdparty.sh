@@ -1225,14 +1225,6 @@ build_datasketches() {
     cp -r $TP_SOURCE_DIR/$DATASKETCHES_SOURCE/tuple/include/* $TP_INSTALL_DIR/include/datasketches/
 }
 
-# async-profiler
-build_async_profiler() {
-    check_if_source_exist $ASYNC_PROFILER_SOURCE
-    mkdir -p $TP_INSTALL_DIR/async-profiler
-    cp -r $TP_SOURCE_DIR/$ASYNC_PROFILER_SOURCE/bin $TP_INSTALL_DIR/async-profiler
-    cp -r $TP_SOURCE_DIR/$ASYNC_PROFILER_SOURCE/lib $TP_INSTALL_DIR/async-profiler
-}
-
 # fiu
 build_fiu() {
     check_if_source_exist $FIU_SOURCE
@@ -1526,7 +1518,6 @@ build_avro_c
 build_avro_cpp
 build_serdes
 build_datasketches
-build_async_profiler
 build_fiu
 build_llvm
 build_clucene
