@@ -21,6 +21,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.PlannerMetaLocker;
 import com.starrocks.sql.analyzer.QueryAnalyzer;
+import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.JoinRelation;
@@ -45,6 +46,7 @@ import java.util.stream.Collectors;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class StatementPlannerTest extends PlanTestBase {
@@ -284,4 +286,86 @@ public class StatementPlannerTest extends PlanTestBase {
             FeConstants.runningUnitTest = originalRunningUnitTest;
         }
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testFilesOnlyVisitorProcessesCteQueries() throws Exception {
+        boolean originalRunningUnitTest = FeConstants.runningUnitTest;
+        try {
+            FeConstants.runningUnitTest = false;
+            String sql = "with source as (select * from files(\"path\"=\"fake://cte\", \"format\"=\"csv\") as f) "
+                    + "select * from source";
+            StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            QueryStatement queryStatement = (QueryStatement) stmt;
+
+            QueryRelation queryRelation = queryStatement.getQueryRelation();
+            assertEquals(1, queryRelation.getCteRelations().size());
+            CTERelation cteRelation = queryRelation.getCteRelations().get(0);
+
+            List<FileTableFunctionRelation> cteRelations =
+                    AnalyzerUtils.collectFileTableFunctionRelation(cteRelation.getCteQueryStatement());
+            assertEquals(1, cteRelations.size());
+            FileTableFunctionRelation fileRelation = cteRelations.get(0);
+
+            TableFunctionTable originalTable = (TableFunctionTable) fileRelation.getTable();
+            if (originalTable != null) {
+                fileRelation.setTable(null);
+            }
+
+            new QueryAnalyzer(connectContext).analyzeFilesOnly(queryStatement);
+
+            assertNotNull(fileRelation.getTable());
+            assertTrue(fileRelation.getTable() instanceof TableFunctionTable);
+            if (originalTable != null) {
+                assertNotSame(originalTable, fileRelation.getTable());
+            }
+
+            List<FileTableFunctionRelation> allRelations =
+                    AnalyzerUtils.collectFileTableFunctionRelation(queryStatement);
+            assertTrue(allRelations.contains(fileRelation));
+        } finally {
+            FeConstants.runningUnitTest = originalRunningUnitTest;
+        }
+    }
+
+    @Test
+    public void testInsertPartialUpdateMode() throws Exception {
+        {
+            FeConstants.runningUnitTest = true;
+            connectContext.getSessionVariable().setPartialUpdateMode("column");
+            String sql = "insert into tprimary_multi_cols (pk, v1) values (1, '1')";
+            StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            InsertPlanner planner = new InsertPlanner();
+            ExecPlan plan = planner.plan((InsertStmt) stmt, connectContext);
+            assertEquals(TPartialUpdateMode.COLUMN_UPSERT_MODE, getPartialUpdateMode(plan));
+        }
+
+        {
+            FeConstants.runningUnitTest = true;
+            connectContext.getSessionVariable().setPartialUpdateMode("auto");
+            String sql = "insert into tprimary_multi_cols (pk, v1) values (1, '1')";
+            StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            InsertPlanner planner = new InsertPlanner();
+            ExecPlan plan = planner.plan((InsertStmt) stmt, connectContext);
+            assertEquals(TPartialUpdateMode.COLUMN_UPSERT_MODE, getPartialUpdateMode(plan));
+        }
+
+        {
+            FeConstants.runningUnitTest = true;
+            connectContext.getSessionVariable().setPartialUpdateMode("auto");
+            String sql = "insert into tprimary_multi_cols (pk, v1, v2) values (1, '1', 1)";
+            StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            InsertPlanner planner = new InsertPlanner();
+            ExecPlan plan = planner.plan((InsertStmt) stmt, connectContext);
+            assertEquals(TPartialUpdateMode.AUTO_MODE, getPartialUpdateMode(plan));
+        }
+    }
+
+    private TPartialUpdateMode getPartialUpdateMode(ExecPlan plan) {
+        PlanFragment fragment = plan.getFragments().get(0);
+        OlapTableSink sink = (OlapTableSink) fragment.getSink();
+        return sink.getPartialUpdateMode();
+    }
+>>>>>>> 8e443efbd6 ([BugFix] Support preanalyze file function in CTE (#64609))
 }
