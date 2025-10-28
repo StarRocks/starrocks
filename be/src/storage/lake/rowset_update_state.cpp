@@ -431,11 +431,6 @@ Status RowsetUpdateState::_prepare_partial_update_states(uint32_t segment_id, co
     const auto& txn_meta = params.op_write.txn_meta();
     bool is_column_upsert_mode = (txn_meta.partial_update_mode() == PartialUpdateMode::COLUMN_UPSERT_MODE);
 
-    std::vector<ColumnId> read_column_ids;
-    if (!is_column_upsert_mode) {
-        read_column_ids = get_read_columns_ids(params.op_write, params.tablet_schema);
-    }
-
     for (auto& entry : txn_meta.column_to_expr_value()) {
         _column_to_expr_value.insert({entry.first, entry.second});
     }
@@ -453,6 +448,7 @@ Status RowsetUpdateState::_prepare_partial_update_states(uint32_t segment_id, co
     }
 
     // For COLUMN_UPDATE_MODE, read column values as before
+    std::vector<ColumnId> read_column_ids = get_read_columns_ids(params.op_write, params.tablet_schema);
     auto read_column_schema = ChunkHelper::convert_schema(params.tablet_schema, read_column_ids);
     // column list that need to read from source segment
     MutableColumns read_columns;
