@@ -25,6 +25,23 @@ select * from test order by pk;
 1	v0	11
 2	v2	2
 -- !result
+insert into test values(1, 'v0', 1), (2, 'v2', 2);
+-- result:
+-- !result
+set enable_insert_partial_update = false;
+-- result:
+-- !result
+insert into test (pk, v1) values(1, 111);
+-- result:
+-- !result
+select * from test order by pk;
+-- result:
+1	defaultv0	111
+2	v2	2
+-- !result
+set enable_insert_partial_update = true;
+-- result:
+-- !result
 create table test2 (pk bigint NOT NULL, v0 string not null, v1 int not null default '100001')
 primary KEY (pk) DISTRIBUTED BY HASH(pk) BUCKETS 1 PROPERTIES("replication_num" = "1");
 -- result:
@@ -38,6 +55,25 @@ insert into test2 (pk, v1) values(1, 11), (3, 3);
 select * from test2 order by pk;
 -- result:
 1	v0	11
+2	v2	2
+3		3
+-- !result
+insert into test2 values(1, 'v0', 1), (2, 'v2', 2);
+-- result:
+-- !result
+set enable_insert_partial_update = false;
+-- result:
+-- !result
+insert into test2 (pk, v1) values(1, 11), (3, 3);
+-- result:
+E: (1064, "Getting analyzing error. Detail message: 'v0' must be explicitly mentioned in column permutation:  pk  v1 .")
+-- !result
+set enable_insert_partial_update = true;
+-- result:
+-- !result
+select * from test2 order by pk;
+-- result:
+1	v0	1
 2	v2	2
 3		3
 -- !result
@@ -66,26 +102,5 @@ insert into test4 values(1, 'v0', 1), (2, 'v2', 2);
 -- !result
 insert into test4 (pk, v0) values(1, 'v0_1'), (3, 'v3_1');
 -- result:
-[REGEX].*partial update on table with sort key must provide all sort key columns.*
--- !result
--- name: test_non_replicated_storage_multi_replica_pk
-CREATE TABLE `t_non_replicated_storage_multi_replica_pk` (
-  `k` STRING NOT NULL COMMENT "",
-  `v1` int DEFAULT "10",
-  `v2` int
-) ENGINE=OLAP 
-PRIMARY KEY(`k`)
-DISTRIBUTED BY HASH(`k`) BUCKETS 1
-PROPERTIES (
-"replication_num" = "2",
-"replicated_storage" = "false"
-);
--- result:
--- !result
-insert into t_non_replicated_storage_multi_replica_pk (k,v2) select "abc", 10;
--- result:
--- !result
-select * from t_non_replicated_storage_multi_replica_pk;
--- result:
-abc	10	10
+E: (5609, '172.26.95.127: partial update on table with sort key must provide all sort key columns')
 -- !result
