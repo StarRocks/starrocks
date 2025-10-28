@@ -433,8 +433,9 @@ inline Status BitShufflePageDecoder<Type>::read_by_rowids(const ordinal_t first_
         }
         data[read_count++] = *reinterpret_cast<const CppType*>(get_data(ord * SIZE_OF_TYPE));
     }
+
     if (read_count > 0) {
-        column->append_numbers(data, SIZE_OF_TYPE * read_count);
+        RETURN_IF_ERROR(column->append_numbers(data, SIZE_OF_TYPE * read_count));
     }
     *count = read_count;
     return Status::OK();
