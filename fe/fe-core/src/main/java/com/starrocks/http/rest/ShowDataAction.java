@@ -49,6 +49,7 @@ import io.netty.handler.codec.http.HttpResponseStatus;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -64,21 +65,36 @@ public class ShowDataAction extends RestBaseAction {
     }
 
     public long getDataSizeOfDatabase(Database db) {
+        // The result of the total size is not necessary to be absolutely accurate.
+        // So we can avoid holding the database lock for a long time.
         long totalSize = 0;
+        List<Long> tableIds = new ArrayList<>();
         Locker locker = new Locker();
         locker.lockDatabase(db.getId(), LockType.READ);
         try {
-            // sort by table name
-            List<Table> tables = GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId());
-            for (Table table : tables) {
+            // get the table id list under the READ lock
+            db.getTables().forEach(x -> tableIds.add(x.getId()));
+        } finally {
+            locker.unLockDatabase(db.getId(), LockType.READ);
+        }
+        for (long tableId : tableIds) {
+            if (!locker.lockTableAndCheckDbExist(db, tableId, LockType.READ)) {
+                // db is dropped
+                return 0;
+            }
+            try {
+                Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+                if (table == null) {
+                    // table is dropped after we get the table id list.
+                    continue;
+                }
                 if (!table.isNativeTableOrMaterializedView()) {
                     continue;
                 }
-                long tableSize = ((OlapTable) table).getDataSize();
-                totalSize += tableSize;
-            } // end for tables
-        } finally {
-            locker.unLockDatabase(db.getId(), LockType.READ);
+                totalSize += ((OlapTable) table).getDataSize();
+            } finally {
+                locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
+            }
         }
         return totalSize;
     }
