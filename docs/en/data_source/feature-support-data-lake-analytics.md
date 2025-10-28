@@ -191,7 +191,7 @@ TEXT-formatted Hive table does not support MAP and STRUCT types.
 
 #### Table types
 
-Does not support reading Hive transactional tables.
+Reading Hive transactional tables is not supported.
 
 ### Hive views
 
