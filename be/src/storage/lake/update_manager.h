@@ -97,11 +97,6 @@ public:
                                      const std::vector<uint32_t>& update_cids, TxnLogPB_OpWrite* new_rows_op,
                                      uint64_t* total_rows, ChunkPtr* out_chunk);
 
-    Status _handle_upsert_index_conflicts(const TabletMetadataPtr& metadata, LakePrimaryIndex& index,
-                                          MetaFileBuilder* builder, const Schema& pkey_schema, uint32_t rowset_id,
-                                          const TxnLogPB_OpWrite& new_rows_op, const ChunkPtr& full_chunk,
-                                          std::map<uint32_t, size_t>* segment_id_to_add_dels_new_acc);
-
     Status _handle_column_upsert_mode(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
                                       const TabletMetadataPtr& metadata, Tablet* tablet, LakePrimaryIndex& index,
                                       MetaFileBuilder* builder, int64_t base_version, uint32_t rowset_id);
