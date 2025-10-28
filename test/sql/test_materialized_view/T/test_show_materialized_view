@@ -1,6 +1,7 @@
 -- name: test_show_materialized_view
 
 set enable_rewrite_bitmap_union_to_bitamp_agg = false;
+set new_planner_optimize_timeout=10000;
 create database test_show_materialized_view;
 use test_show_materialized_view;
 create table user_tags (time date, user_id int, user_name varchar(20), tag_id int) partition by range (time)  (partition p1 values less than MAXVALUE) distributed by hash(time) buckets 3 properties('replication_num' = '1');
@@ -18,56 +19,36 @@ show create table user_tags_mv1;
 
 -- information_schema.materialized_views
 refresh materialized view user_tags_mv1 with sync mode;
-select sleep(2);
-
 select 
     TABLE_NAME,
     LAST_REFRESH_STATE,
     LAST_REFRESH_ERROR_CODE,
     IS_ACTIVE,
     INACTIVE_REASON
-<<<<<<< HEAD
-from information_schema.materialized_views where TABLE_SCHEMA = 'test_show_materialized_view' and table_name = 'user_tags_mv1';
-
-set @last_refresh_time = (
-    select max(last_refresh_start_time)
-    from information_schema.materialized_views where TABLE_SCHEMA = 'test_show_materialized_view' and table_name = 'user_tags_mv1'
-=======
 from information_schema.materialized_views where table_name = 'user_tags_mv1' and TABLE_SCHEMA = 'test_show_materialized_view';
 set @last_refresh_time = (
     select max(last_refresh_start_time)
     from information_schema.materialized_views where table_name = 'user_tags_mv1' and TABLE_SCHEMA = 'test_show_materialized_view';
->>>>>>> b0122d2db4 ([UT] [BugFix] Fix show materialized view bugs (#64646))
 );
 
+select sleep(3);
 
 -- multiple refresh tasks
 refresh materialized view user_tags_mv1 force with sync mode;
-select sleep(2);
-
 select 
     TABLE_NAME,
     LAST_REFRESH_STATE,
     LAST_REFRESH_ERROR_CODE,
     IS_ACTIVE,
     INACTIVE_REASON
-<<<<<<< HEAD
-from information_schema.materialized_views where TABLE_SCHEMA = 'test_show_materialized_view' and table_name = 'user_tags_mv1';
-set @this_refresh_time = (
-    select max(last_refresh_start_time)
-    from information_schema.materialized_views where TABLE_SCHEMA = 'test_show_materialized_view' and table_name = 'user_tags_mv1'
-=======
 from information_schema.materialized_views where table_name = 'user_tags_mv1' and TABLE_SCHEMA = 'test_show_materialized_view';
 set @this_refresh_time = (
     select max(last_refresh_start_time)
     from information_schema.materialized_views where table_name = 'user_tags_mv1' and TABLE_SCHEMA = 'test_show_materialized_view'
->>>>>>> b0122d2db4 ([UT] [BugFix] Fix show materialized view bugs (#64646))
 );
 select if(@last_refresh_time != @this_refresh_time, 
     'refreshed', concat('no refresh after ', @last_refresh_time));
 
-<<<<<<< HEAD
-=======
 select TABLE_NAME, LAST_REFRESH_ERROR_CODE, IS_ACTIVE, INACTIVE_REASON from information_schema.materialized_views where TABLE_SCHEMA = 'test_show_materialized_view' and table_name = 'user_tags_mv1' ORDER BY LAST_REFRESH_START_TIME DESC;
 select TABLE_NAME, LAST_REFRESH_ERROR_CODE, IS_ACTIVE, INACTIVE_REASON from information_schema.materialized_views where TABLE_SCHEMA = 'test_show_materialized_view' and table_name like 'user_tags_mv1' ORDER BY LAST_REFRESH_START_TIME DESC;
 select TABLE_NAME, LAST_REFRESH_ERROR_CODE, IS_ACTIVE, INACTIVE_REASON from information_schema.materialized_views where TABLE_SCHEMA = 'test_show_materialized_view' and table_name like '%user_tags_mv1%' ORDER BY LAST_REFRESH_START_TIME DESC;
@@ -85,5 +66,4 @@ select TABLE_NAME, LAST_REFRESH_ERROR_CODE, IS_ACTIVE, INACTIVE_REASON from info
 [UC] show materialized views where name like '%user_tags_mv1%';
 [UC] show materialized views where name = 'user_tags_mv1';
 
->>>>>>> b0122d2db4 ([UT] [BugFix] Fix show materialized view bugs (#64646))
 drop database test_show_materialized_view;
