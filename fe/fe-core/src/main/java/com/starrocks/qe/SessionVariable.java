@@ -2085,7 +2085,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enableInsertSelectExternalAutoRefresh = true;
     
     @VarAttr(name = ENABLE_PREDICATE_COL_LATE_MATERIALIZE)
-    private boolean enablePredicateColLateMaterialize = false;
+    private boolean enablePredicateColLateMaterialize = true;
 
     @VarAttr(name = PUSH_DOWN_HEAVY_EXPRS)
     private boolean pushDownHeavyExprs = true;
