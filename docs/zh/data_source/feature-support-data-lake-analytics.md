@@ -128,6 +128,10 @@ Hive Catalog 对 Hive Metastore（HMS）和 AWS Glue 的支持基本重合，仅
 
 TEXT 格式的 Hive 表不支持 MAP 和 STRUCT 类型。
 
+#### 表类型
+
+不支持读取 Hive 事务表。
+
 ### Hive 视图
 
 StarRocks 从 v3.1.0 版本开始支持查询 Hive 视图。
