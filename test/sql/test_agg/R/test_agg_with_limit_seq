@@ -1,0 +1,51 @@
+-- name: test_agg_with_limit_seq @sequential
+create table base_table (
+    c0 int,
+    c1 int,
+    c2 string,
+    c3 int
+) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 3 PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+insert into base_table SELECT generate_series % 4, generate_series % 9, generate_series % 9, generate_series %9 FROM TABLE(generate_series(1,  10000));
+-- result:
+-- !result
+create table agg_with_limit_seq (
+    c0 int,
+    c1 int,
+    c2 string,
+    c3 int
+) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+insert into agg_with_limit_seq SELECT * FROM base_table;
+-- result:
+-- !result
+admin enable failpoint 'scan_chunk_sleep_after_read';
+-- result:
+-- !result
+set streaming_preaggregation_mode="force_streaming";
+-- result:
+-- !result
+select * from (select max(c3), sum(c3) sc3, c0 from agg_with_limit_seq group by c0 limit 10) t order by 3;
+-- result:
+8	10003	0
+8	10000	1
+8	9998	2
+8	9996	3
+-- !result
+select * from (select max(c3), sum(c3) sc3, c1 from agg_with_limit_seq group by c1 limit 10) t order by 3;
+-- result:
+0	0	0
+1	1112	1
+2	2222	2
+3	3333	3
+4	4444	4
+5	5555	5
+6	6666	6
+7	7777	7
+8	8888	8
+-- !result
+admin disable failpoint 'scan_chunk_sleep_after_read';
+-- result:
+-- !result
