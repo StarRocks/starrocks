@@ -23,11 +23,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
-<<<<<<< HEAD
-=======
 import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.ResourceGroupClassifier;
->>>>>>> 9d4a716230 ([Enhancement] Suspend the task after consecutive failures (#62579))
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;

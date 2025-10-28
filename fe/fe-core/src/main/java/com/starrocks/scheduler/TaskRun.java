@@ -21,11 +21,8 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
-<<<<<<< HEAD
-import com.starrocks.analysis.StringLiteral;
-=======
 import com.starrocks.alter.AlterMVJobExecutor;
->>>>>>> 9d4a716230 ([Enhancement] Suspend the task after consecutive failures (#62579))
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.authorization.PrivilegeException;
@@ -321,7 +318,7 @@ public class TaskRun implements Comparable<TaskRun> {
         }
     }
 
-    public Constants.TaskRunState executeTaskRun() throws Exception {
+    public TaskRunContext buildTaskRunContext() throws Exception {
         TaskRunContext taskRunContext = new TaskRunContext();
 
         // Definition will cause a lot of repeats and cost a lot of metadata memory resources, so
@@ -373,8 +370,6 @@ public class TaskRun implements Comparable<TaskRun> {
         taskRunContext.setStatus(status);
         taskRunContext.setExecuteOption(executeOption);
         taskRunContext.setTaskRun(this);
-<<<<<<< HEAD
-=======
         return taskRunContext;
     }
 
@@ -413,7 +408,6 @@ public class TaskRun implements Comparable<TaskRun> {
 
     private Constants.TaskRunState doExecuteTaskRun() throws Exception {
         TaskRunContext taskRunContext = buildTaskRunContext();
->>>>>>> 9d4a716230 ([Enhancement] Suspend the task after consecutive failures (#62579))
 
         // prepare to execute task run, move it here so that we can catch the exception and set the status
         taskRunContext = processor.prepare(taskRunContext);

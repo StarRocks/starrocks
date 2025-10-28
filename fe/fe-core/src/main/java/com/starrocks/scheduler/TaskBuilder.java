@@ -17,15 +17,10 @@ package com.starrocks.scheduler;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.starrocks.alter.OptimizeTask;
-<<<<<<< HEAD
 import com.starrocks.analysis.IntLiteral;
-import com.starrocks.catalog.MaterializedView;
-=======
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.MaterializedViewRefreshType;
 import com.starrocks.catalog.Table;
->>>>>>> 9d4a716230 ([Enhancement] Suspend the task after consecutive failures (#62579))
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;

@@ -362,13 +362,7 @@ public class MVTestBase extends StarRocksTestBase {
         refreshMVRange(mvName, null, null, force);
     }
 
-<<<<<<< HEAD
     protected PartitionBasedMvRefreshProcessor refreshMV(String dbName, MaterializedView mv) throws Exception {
-        Task task = TaskBuilder.buildMvTask(mv, dbName);
-=======
-    protected TaskRun withMVRefreshTaskRun(String dbName, MaterializedView mv) throws Exception {
-        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-
         // create a task if not exist
         Task task = taskManager.getTask(mv);
         if (task == null) {
@@ -376,7 +370,6 @@ public class MVTestBase extends StarRocksTestBase {
             taskManager.createTask(task, false);
         }
 
->>>>>>> 9d4a716230 ([Enhancement] Suspend the task after consecutive failures (#62579))
         Map<String, String> testProperties = task.getProperties();
         testProperties.put(TaskRun.IS_TEST, "true");
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();

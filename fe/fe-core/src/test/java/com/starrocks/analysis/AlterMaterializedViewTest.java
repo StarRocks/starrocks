@@ -29,9 +29,10 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ShowMaterializedViewStatus;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.MVActiveChecker;
-import com.starrocks.scheduler.MVTaskRunProcessor;
+import com.starrocks.scheduler.PartitionBasedMvRefreshProcessor;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskManager;
+import com.starrocks.scheduler.TaskRunContext;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
@@ -698,9 +699,9 @@ public class AlterMaterializedViewTest extends MVTestBase  {
         MaterializedView mv = getMv("test_refresh_fail_mv1");
         Config.max_task_consecutive_fail_count = 3;
         for (int i = 0; i < Config.max_task_consecutive_fail_count; i++) {
-            new MockUp<MVTaskRunProcessor>() {
+            new MockUp<PartitionBasedMvRefreshProcessor>() {
                 @Mock
-                public void executePlan(ExecPlan execPlan, InsertStmt insertStmt) throws Exception {
+                public Constants.TaskRunState processTaskRun(TaskRunContext context) throws Exception {
                     throw new RuntimeException("Mocked exception");
                 }
             };
@@ -738,23 +739,23 @@ public class AlterMaterializedViewTest extends MVTestBase  {
         MaterializedView mv = getMv("test_refresh_fail_mv2");
         Config.max_task_consecutive_fail_count = 3;
         for (int i = 0; i < Config.max_task_consecutive_fail_count - 1; i++) {
-            new MockUp<MVTaskRunProcessor>() {
+            new MockUp<PartitionBasedMvRefreshProcessor>() {
                 @Mock
-                public void executePlan(ExecPlan execPlan, InsertStmt insertStmt) throws Exception {
+                public Constants.TaskRunState processTaskRun(TaskRunContext context) throws Exception {
                     throw new RuntimeException("Mocked exception");
                 }
             };
             try {
-                refreshMV("test", mv);
+                refresh("test", mv);
             } catch (Exception e) {
                 // do nothing
             }
         }
         // refresh success
-        new MockUp<MVTaskRunProcessor>() {
+        new MockUp<PartitionBasedMvRefreshProcessor>() {
             @Mock
-            public void executePlan(ExecPlan execPlan, InsertStmt insertStmt) throws Exception {
-                // do nothing
+            public Constants.TaskRunState processTaskRun(TaskRunContext context) throws Exception {
+                return Constants.TaskRunState.SUCCESS;
             }
         };
         refreshMV("test", mv);
