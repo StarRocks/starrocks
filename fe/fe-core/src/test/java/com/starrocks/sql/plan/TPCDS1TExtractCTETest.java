@@ -334,7 +334,7 @@ public class TPCDS1TExtractCTETest extends TPCDS1TTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan, "  2:AGGREGATE (update serialize)\n"
                 + "  |  STREAMING\n"
-                + "  |  output: sum(42: c_birth_day), sum_if(61: c_birth_day, 60: expr)\n"
+                + "  |  output: sum(42: c_birth_day), sum_if(61: c_birth_day, 60: expr), any_value_if(TRUE, 60: expr)\n"
                 + "  |  group by: 45: c_current_addr_sk\n"
                 + "  |  \n"
                 + "  1:Project\n"
@@ -342,6 +342,18 @@ public class TPCDS1TExtractCTETest extends TPCDS1TTestBase {
                 + "  |  <slot 45> : 45: c_current_addr_sk\n"
                 + "  |  <slot 60> : 45: c_current_addr_sk > 100\n"
                 + "  |  <slot 61> : clone(42: c_birth_day)");
+
+        assertContains(plan, "4:AGGREGATE (merge finalize)\n" +
+                "  |  output: sum(59: sum), sum_if(62: sum), any_value_if(63: row_hit, TRUE)\n" +
+                "  |  group by: 45: c_current_addr_sk");
+
+        assertContains(plan, "11:SELECT\n" +
+                "  |  predicates: 64: row_hit IS NOT NULL\n" +
+                "  |  \n" +
+                "  10:Project\n" +
+                "  |  <slot 24> : 45: c_current_addr_sk\n" +
+                "  |  <slot 38> : 62: sum\n" +
+                "  |  <slot 64> : 63: row_hit");
     }
 
     @Test
@@ -376,5 +388,76 @@ public class TPCDS1TExtractCTETest extends TPCDS1TTestBase {
                 + "     partitions=1/1\n"
                 + "     rollup: customer\n"
                 + "     tabletRatio=5/5\n");
+    }
+
+    @Test
+    public void testUnionCount() throws Exception {
+        String sql = "select count(*) from store_sales where ss_item_sk = 2 group by ss_sold_date_sk union" +
+                " select count(*) from store_sales where ss_item_sk = 3 group by ss_sold_date_sk";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "MultiCastDataSinks\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 07\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 11\n" +
+                "    RANDOM\n" +
+                "\n" +
+                "  5:Project\n" +
+                "  |  <slot 74> : 74: count\n" +
+                "  |  <slot 76> : 76: count\n" +
+                "  |  \n" +
+                "  4:AGGREGATE (merge finalize)\n" +
+                "  |  output: count_if(74: count, 1), count_if(76: count, 1)\n" +
+                "  |  group by: 68: ss_sold_date_sk\n" +
+                "  |  having: (76: count > 0) OR (74: count > 0)");
+        assertContains(plan, "13:SELECT\n" +
+                "  |  predicates: 48: count > 0\n" +
+                "  |  \n" +
+                "  12:Project\n" +
+                "  |  <slot 48> : 76: count\n" +
+                "  |  \n" +
+                "  11:EXCHANGE");
+
+        sql = "select count(1) from store_sales where ss_item_sk = 2 group by ss_sold_date_sk union" +
+                " select count(1) from store_sales where ss_item_sk = 3 group by ss_sold_date_sk";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "MultiCastDataSinks\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 07\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 12\n" +
+                "    RANDOM\n" +
+                "\n" +
+                "  5:Project\n" +
+                "  |  <slot 74> : 74: count\n" +
+                "  |  <slot 75> : 75: row_hit\n" +
+                "  |  <slot 77> : 77: count\n" +
+                "  |  <slot 78> : 78: row_hit\n" +
+                "  |  \n" +
+                "  4:AGGREGATE (merge finalize)\n" +
+                "  |  output: count_if(74: count, 1), any_value_if(75: row_hit, TRUE), count_if(77: count, 1)," +
+                " any_value_if(78: row_hit, TRUE)\n" +
+                "  |  group by: 68: ss_sold_date_sk\n" +
+                "  |  having: (78: row_hit IS NOT NULL) OR (75: row_hit IS NOT NULL)");
+        assertContains(plan, "2:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  output: count_if(1, 73: expr), any_value_if(TRUE, 73: expr), count_if(1, 76: expr), " +
+                "any_value_if(TRUE, 76: expr)\n" +
+                "  |  group by: 68: ss_sold_date_sk");
+        assertContains(plan, "9:SELECT\n" +
+                "  |  predicates: 79: row_hit IS NOT NULL");
+    }
+
+    @Test
+    public void testSumAvg() throws Exception {
+        String sql = "select sum(ss_store_sk), avg(ss_promo_sk) from store_sales where ss_item_sk =2 group by ss_sold_date_sk " +
+                "except select sum(ss_store_sk), avg(ss_promo_sk) from store_sales where ss_item_sk = 3 group by ss_sold_date_sk";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "output: any_value_if(TRUE, 76: expr), sum_if(77: ss_store_sk, 82: expr), avg_if(79: ss_promo_sk," +
+                " 82: expr), any_value_if(TRUE, 82: expr), sum_if(77: ss_store_sk, 76: expr), avg_if(79: ss_promo_sk, 76: " +
+                "expr)\n" +
+                "  |  group by: 71: ss_sold_date_sk");
     }
 }

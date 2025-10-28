@@ -34,6 +34,7 @@ import com.starrocks.sql.ast.expression.FunctionParams;
 import com.starrocks.sql.ast.expression.JoinOperator;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.CTEContext;
+import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -52,9 +53,11 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
+import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarRangePredicateExtractor;
 import com.starrocks.sql.optimizer.rule.tree.TreeRewriteRule;
@@ -107,12 +110,49 @@ public class ReuseFusionPlanRule implements TreeRewriteRule {
         for (QueryPiecesPlan plan : fusionPieces) {
             int cteId = cteContext.getNextCteId();
             plan.planId = cteId;
-            OptExpression produce = OptExpression.create(new LogicalCTEProduceOperator(cteId), plan.toOptExpression());
+            OptExpression producerChild = ensureProducerOutputsForCTE(plan.toOptExpression(), plan);
+            OptExpression produce = OptExpression.create(new LogicalCTEProduceOperator(cteId), producerChild);
             root = OptExpression.create(new LogicalCTEAnchorOperator(cteId), produce, root);
             cteContext.addForceCTE(cteId);
         }
         rewritePlan(start);
         return root;
+    }
+
+    private void deriveLogicalProperty(OptExpression root) {
+        for (OptExpression child : root.getInputs()) {
+            deriveLogicalProperty(child);
+        }
+
+        if (root.getLogicalProperty() == null) {
+            ExpressionContext context = new ExpressionContext(root);
+            context.deriveLogicalProperty();
+            root.setLogicalProperty(context.getRootProperty());
+        }
+    }
+
+    private OptExpression ensureProducerOutputsForCTE(OptExpression producerChild, QueryPiecesPlan plan) {
+        if (plan.pieceIdToRowCountRef == null || plan.pieceIdToRowCountRef.isEmpty()) {
+            return producerChild;
+        }
+
+        deriveLogicalProperty(producerChild);
+        ColumnRefSet childOutputs = producerChild.getOutputColumns();
+        boolean needProject = false;
+        Map<ColumnRefOperator, ScalarOperator> projectMap = Maps.newHashMap();
+        for (ColumnRefOperator ref : childOutputs.getColumnRefOperators(factory)) {
+            projectMap.put(ref, ref);
+        }
+        for (ColumnRefOperator hitRef : plan.pieceIdToRowCountRef.values()) {
+            if (!childOutputs.contains(hitRef)) {
+                projectMap.put(hitRef, hitRef);
+                needProject = true;
+            }
+        }
+        if (needProject) {
+            return OptExpression.create(new LogicalProjectOperator(projectMap), producerChild);
+        }
+        return producerChild;
     }
 
     private OptExpression rewritePlan(OptExpression root) {
@@ -136,11 +176,47 @@ public class ReuseFusionPlanRule implements TreeRewriteRule {
             cteRefsMapping.put(originRef, fusionPlan.columnRefConverter.convertRef(originRef));
         }
 
+        ScalarOperator consumerPredicate = buildPerPieceGatingPredicate(pieces, fusionPlan, cteRefsMapping);
+
         LogicalCTEConsumeOperator consumer = LogicalCTEConsumeOperator.builder().setCteId(fusionPlan.planId)
                 .setCteOutputColumnRefMap(cteRefsMapping)
-                .setPredicate(pieces.getPredicate())
+                .setPredicate(consumerPredicate)
                 .build();
         return OptExpression.create(consumer);
+    }
+
+    private ScalarOperator buildPerPieceGatingPredicate(LogicalPiecesOperator pieces,
+                                                        QueryPiecesPlan fusionPlan,
+                                                        Map<ColumnRefOperator, ColumnRefOperator> cteRefsMapping) {
+        ScalarOperator basePredicate = pieces.getPredicate();
+        if (fusionPlan.pieceIdToRowCountRef == null ||
+                !fusionPlan.pieceIdToRowCountRef.containsKey(pieces.getPiece().planId)) {
+            return basePredicate;
+        }
+
+        ColumnRefOperator fusedHitRef = fusionPlan.pieceIdToRowCountRef.get(pieces.getPiece().planId);
+        Boolean hasGroupBy = fusionPlan.pieceIdToHasGroupBy.getOrDefault(pieces.getPiece().planId, Boolean.TRUE);
+        if (!hasGroupBy) {
+            return basePredicate;
+        }
+
+        ColumnRefOperator originHitRef = null;
+        for (Map.Entry<ColumnRefOperator, ColumnRefOperator> e : cteRefsMapping.entrySet()) {
+            if (e.getValue().equals(fusedHitRef)) {
+                originHitRef = e.getKey();
+                break;
+            }
+        }
+        if (originHitRef == null) {
+            originHitRef = factory.create(fusedHitRef.getName(), fusedHitRef.getType(), false);
+            cteRefsMapping.put(originHitRef, fusedHitRef);
+        }
+
+        ScalarOperator gate = (fusedHitRef.getType() == Type.BOOLEAN)
+                ? new IsNullPredicateOperator(true, originHitRef)
+                : BinaryPredicateOperator.gt(originHitRef, ConstantOperator.createBigint(0));
+
+        return basePredicate == null ? gate : Utils.compoundAnd(basePredicate, gate);
     }
 
     private void recommendFusionCTE(List<QueryPiecesPlan> piecesPlans) {
@@ -202,6 +278,11 @@ public class ReuseFusionPlanRule implements TreeRewriteRule {
             return plan.map(p -> {
                 QueryPiecesPlan newPlan = new QueryPiecesPlan(-1, converter);
                 newPlan.root = p;
+                for (QueryPiecesPlan pp : piecePlans) {
+                    if (pp.pieceIdToRowCountRef != null) {
+                        newPlan.pieceIdToRowCountRef.putAll(pp.pieceIdToRowCountRef);
+                    }
+                }
                 return newPlan;
             });
         }
@@ -273,6 +354,8 @@ public class ReuseFusionPlanRule implements TreeRewriteRule {
             Map<CallOperator, ColumnRefOperator> aggToRefs = Maps.newHashMap();
             Map<ScalarOperator, ColumnRefOperator> aggFilterProject = Maps.newHashMap();
             List<ScalarOperator> havingPredicates = Lists.newArrayList();
+            // extra aggregation outputs that must be preserved by upper projects (e.g., row_hit/row_count_if)
+            List<ColumnRefOperator> extraOutputRefs = Lists.newArrayList();
 
             Preconditions.checkState(context.size() == pieceFilters.size());
             for (int i = 0; i < context.size(); i++) {
@@ -296,6 +379,11 @@ public class ReuseFusionPlanRule implements TreeRewriteRule {
 
 
                 ScalarOperator filter = filterDistinct > 1 ? pieceFilters.get(i) : null;
+                QueryPiecesPlan originalPiece = piecePlans.get(i);
+                originalPiece.pieceIdToHasGroupBy.put(originalPiece.planId, !aggregate.getGroupingKeys().isEmpty());
+
+                // track if this piece already has a safe row-count aggregation (COUNT(*)) after rewrite
+                final ColumnRefOperator[] pieceRowCountRef = {null};
                 aggregate.getAggregations().forEach((ref, call) -> {
                     CallOperator newCall = addFilterAggCall((CallOperator) converter.convert(call), filter,
                             aggFilterProject, hasDistinctAgg);
@@ -307,9 +395,35 @@ public class ReuseFusionPlanRule implements TreeRewriteRule {
                         aggToRefs.put(newCall, newRef);
                         converter.add(ref, newRef);
                     }
+
+                    // if original is COUNT(*) (non-distinct), reuse its filtered form as row_count_if
+                    if (pieceRowCountRef[0] == null && filter != null) {
+                        if (FunctionSet.COUNT.equalsIgnoreCase(call.getFnName())
+                                && call.getChildren().isEmpty()
+                                && !call.isDistinct()) {
+                            pieceRowCountRef[0] = aggToRefs.get(newCall);
+                        }
+                    }
                 });
 
                 havingPredicates.add(converter.convert(aggregate.getPredicate()));
+
+                if (filter != null && !aggregate.getGroupingKeys().isEmpty()) {
+                    if (pieceRowCountRef[0] != null) {
+                        originalPiece.pieceIdToRowCountRef.put(originalPiece.planId, pieceRowCountRef[0]);
+                        extraOutputRefs.add(pieceRowCountRef[0]);
+                    } else {
+                        Function anyFn = Expr.getBuiltinFunction(FunctionSet.ANY_VALUE,
+                                new Type[] {Type.BOOLEAN}, Function.CompareMode.IS_IDENTICAL);
+                        CallOperator anyTrue = new CallOperator(FunctionSet.ANY_VALUE, Type.BOOLEAN,
+                                List.of(ConstantOperator.createBoolean(true)), anyFn);
+                        CallOperator anyIfCall = addFilterAggCall(anyTrue, filter, aggFilterProject, false);
+                        ColumnRefOperator hitRef = factory.create("row_hit", Type.BOOLEAN, true);
+                        aggToRefs.put(anyIfCall, hitRef);
+                        originalPiece.pieceIdToRowCountRef.put(originalPiece.planId, hitRef);
+                        extraOutputRefs.add(hitRef);
+                    }
+                }
             }
 
             Optional<QueryPieces> childPieces = child;
@@ -325,7 +439,6 @@ public class ReuseFusionPlanRule implements TreeRewriteRule {
                         Collections.emptyList(), childPieces.get());
             }
 
-            // different having predicate
             ScalarOperator havingPredicate =
                     havingPredicates.stream().distinct().count() == 1 ? havingPredicates.get(0) : null;
 
@@ -338,7 +451,7 @@ public class ReuseFusionPlanRule implements TreeRewriteRule {
                     .setPredicate(havingPredicate)
                     .build();
             Preconditions.checkState(childPieces.isPresent());
-            return QueryPieces.of(op, Collections.emptyList(), childPieces.get());
+            return QueryPieces.of(op, extraOutputRefs, childPieces.get());
         }
 
         private CallOperator addFilterAggCall(CallOperator call, ScalarOperator filter,

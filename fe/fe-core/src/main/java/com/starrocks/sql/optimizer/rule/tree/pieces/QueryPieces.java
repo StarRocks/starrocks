@@ -15,12 +15,14 @@
 package com.starrocks.sql.optimizer.rule.tree.pieces;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 public class QueryPieces {
@@ -55,6 +57,10 @@ class QueryPiecesPlan {
     ScalarOperatorConverter columnRefConverter;
     int planId;
     QueryPieces root;
+    // original piece planId -> fused plan's row_count_if ColumnRef
+    Map<Integer, ColumnRefOperator> pieceIdToRowCountRef = Maps.newHashMap();
+    // original piece planId -> whether original aggregate has non-empty group by
+    Map<Integer, Boolean> pieceIdToHasGroupBy = Maps.newHashMap();
 
     public QueryPiecesPlan(int planId, ScalarOperatorConverter converter) {
         this.planId = planId;
