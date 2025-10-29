@@ -306,7 +306,7 @@ bool BinaryPlainPageDecoder<Type>::next_range_with_filter(
         size_t total_bytes_to_append = 0;
         for (uint32_t i = 0; i < num_rows; i++) {
             if (selection[i]) {
-                total_bytes_to_append += temp_offset_in_column[i + 1];
+                total_bytes_to_append += temp_offset_in_column[i + 1] - temp_offset_in_column[i];
             }
         }
 
