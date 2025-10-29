@@ -8,23 +8,45 @@ CREATE TABLE `test_json_cast_map` (
   `c2` json NULL COMMENT ""
 );
 
--- Insert test data with different JSON structures
--- Row 1: Only has level1.level2.level3.level4.5 path
--- Row 9: Only has 100.200.300 path
+-- Test 1: Inconsistent nested structure - should be rejected
+-- Some rows have level1.level2.level3.level4.5, others have level1.level2.level3.level4 but no 5
+insert into test_json_cast_map values
+(1, '{"level1": {"level2": {"level3": {"level4": {"5":"abc"}}}}}'),
+(2, '{"level1": {"level2": {"level3": {"level4": {}}}}}'),
+(9, '{"100": {"200": {"300": "abc"}}}');
+
+select * from test_json_cast_map order by c1;
+select flat_json_meta(c2) from test_json_cast_map [_META_];
+
+-- Test 2: Same inconsistent nested structure - should be rejected
+truncate table test_json_cast_map;
+
+insert into test_json_cast_map values
+(1, '{"level1": {"level2": {"level3": {"level4": {"5":"abc"}}}}}'),
+(2, '{"level1": {"level2": {"level3": {"level4": {}}}}}');
+
+select * from test_json_cast_map order by c1;
+select flat_json_meta(c2) from test_json_cast_map [_META_];
+
+-- Test 3: Different paths but consistent structure - should be flattenable
+truncate table test_json_cast_map;
+
 insert into test_json_cast_map values
 (1, '{"level1": {"level2": {"level3": {"level4": {"5":"abc"}}}}}'),
 (9, '{"100": {"200": {"300": "abc"}}}');
 
--- Verify the original data is stored correctly
 select * from test_json_cast_map order by c1;
-
--- Test FlatJSON meta to see what paths are extracted
 select flat_json_meta(c2) from test_json_cast_map [_META_];
 
--- Test JSON path extraction to verify consistency
--- These should return NULL for non-existent paths, not empty objects
-select get_json_string(c2, '$.100.200.300') from test_json_cast_map where c1 = 1;
-select get_json_string(c2, '$.level1.level2.level3.level4.5') from test_json_cast_map where c1 = 9;
+-- Test 4: Same path with different values - should be flattenable
+truncate table test_json_cast_map;
 
--- Clean up
-DROP TABLE test_json_cast_map;
+insert into test_json_cast_map values
+(1, '{"level1": {"level2": {"level3": {"level4": {"5":"abc"}}}}}'),
+(2, '{"level1": {"level2": {"level3": {"level4": {"5":"def"}}}}}'),
+(3, '{"level1": {"level2": {"level3": {"level4": {"6":"ghi"}}}}}');
+
+select * from test_json_cast_map order by c1;
+select flat_json_meta(c2) from test_json_cast_map [_META_];
+
+drop table test_json_cast_map;
