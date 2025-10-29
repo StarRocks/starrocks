@@ -123,3 +123,33 @@ select * from tab1;
 300	k3_300	300	300	300	v4_300	v5_300
 200	k2_200	222	200	200	v4_200	v5_200
 -- !result
+CREATE table expr_partition_tbl (
+      org_id INT,
+      id INT,
+      v1 INT,
+      modified_at INT
+)
+ENGINE=OLAP
+PRIMARY KEY(`org_id`,`id`)
+PARTITION BY (`org_id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result
+-- !result
+shell: curl --location-trusted -u root: -H "Expect:100-continue" -H "label:conditional_update_expr_partition_tbl" -H "column_separator:," -H "row_delimiter:|" -H "merge_condition:modified_at" -d "1,2,1,1|1,2,0,0"  -XPUT ${url}/api/test_condition_update_2fdsiou12s/expr_partition_tbl/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+sync;
+-- result:
+-- !result
+select * from expr_partition_tbl;
+-- result:
+1	2	1	1
+-- !result
