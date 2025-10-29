@@ -256,7 +256,7 @@ public:
         if (it != _mem_index.end()) {
             it->second.add(_rid);
             if (it->second.update_estimate_size(&_reverted_index_size)) {
-                _late_update_context_vector.push_back(&(it->second));
+                _late_update_context_vector.push_back(it->second.context());
             }
         } else {
             // new value, copy value and insert new key->bitmap pair
@@ -365,7 +365,7 @@ public:
     uint64_t size() const override {
         uint64_t size = 0;
         size += _null_bitmap.getSizeInBytes(false);
-        for (BitmapUpdateContextRefOrSingleValue* update_context : _late_update_context_vector) {
+        for (BitmapUpdateContext* update_context : _late_update_context_vector) {
             update_context->flush_pending_adds();
             update_context->late_update_size(&_reverted_index_size);
         }
@@ -392,7 +392,7 @@ private:
 
     // roaring bitmap size
     mutable uint64_t _reverted_index_size = 0;
-    mutable std::vector<BitmapUpdateContextRefOrSingleValue*> _late_update_context_vector;
+    mutable std::vector<BitmapUpdateContext*> _late_update_context_vector;
 };
 
 struct BitmapIndexWriterBuilder {
