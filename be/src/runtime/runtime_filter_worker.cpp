@@ -626,7 +626,7 @@ void RuntimeFilterMerger::_send_total_runtime_filter(int rf_version, int32_t fil
     int64_t now = UnixMillis();
     status->broadcast_filter_ts = now;
 
-    VLOG_FILE << "RuntimeFilterMerger::merge_runtime_filter. target_nodes[0] = " << target_nodes->at(0)
+    VLOG_FILE << "RuntimeFilterMerger::_send_total_runtime_filter. target_nodes[0] = " << target_nodes->at(0)
               << ", target_nodes_size = " << target_nodes->size() << ", filter_id = " << request.filter_id()
               << ", latency(last-first = " << status->recv_last_filter_ts - status->recv_first_filter_ts
               << ", send-first = " << status->broadcast_filter_ts - status->recv_first_filter_ts << ")"
@@ -704,8 +704,8 @@ void RuntimeFilterMerger::_send_total_runtime_filter(int rf_version, int32_t fil
         }
 
         if (half != 0) {
-            VLOG_FILE << "RuntimeFilterMerger::merge_runtime_filter. target " << t.first << " will forward to " << half
-                      << " nodes. nodes[0] = " << request.forward_targets(0).DebugString();
+            VLOG_FILE << "RuntimeFilterMerger::_send_total_runtime_filter. target " << t.first << " will forward to "
+                      << half << " nodes. nodes[0] = " << request.forward_targets(0).DebugString();
         }
 
         index += (1 + half);
