@@ -191,9 +191,6 @@ private:
         std::unordered_set<size_t> _prune_cols;
         bool _prune_column_after_index_filter = false;
 
-        // when enable predicate column late materialize, use this set to remember which predicate column already be read
-        std::unordered_set<size_t> _already_read_predicate_col;
-
         bool _enable_predicate_col_late_materialize = false;
         std::vector<ColumnId> _predicate_order;
         ColumnPredicateMap _column_predicate_map;
