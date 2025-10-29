@@ -240,6 +240,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String EVENT_SCHEDULER = "event_scheduler";
     public static final String STORAGE_ENGINE = "storage_engine";
     public static final String DIV_PRECISION_INCREMENT = "div_precision_increment";
+    public static final String DECIMAL_OVERFLOW_TO_DOUBLE = "decimal_overflow_to_double";
 
     // see comment of `starrocks_max_scan_key_num` and `max_pushdown_conditions_per_column` in BE config
     public static final String MAX_SCAN_KEY_NUM = "max_scan_key_num";
@@ -1446,6 +1447,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = DIV_PRECISION_INCREMENT)
     private int divPrecisionIncrement = 4;
 
+    @VariableMgr.VarAttr(name = DECIMAL_OVERFLOW_TO_DOUBLE)
+    private boolean decimalOverflowToDouble = false;
+
     // -1 means unset, BE will use its config value
     @VariableMgr.VarAttr(name = MAX_SCAN_KEY_NUM)
     private int maxScanKeyNum = -1;
@@ -2635,6 +2639,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isCboDecimalCastStringStrict() {
         return cboDecimalCastStringStrict;
+    }
+
+    public boolean isDecimalOverflowToDouble() {
+        return decimalOverflowToDouble;
+    }
+
+    public void setDecimalOverflowToDouble(boolean decimalOverflowToDouble) {
+        this.decimalOverflowToDouble = decimalOverflowToDouble;
     }
 
     @VarAttr(name = ENABLE_ARRAY_DISTINCT_AFTER_AGG_OPT)

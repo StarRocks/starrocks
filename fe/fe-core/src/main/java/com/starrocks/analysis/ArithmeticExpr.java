@@ -44,6 +44,7 @@ import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.parser.NodePosition;
@@ -273,6 +274,15 @@ public class ArithmeticExpr extends Expr {
                     result.rhsTargetType = ScalarType.createDecimalV3Type(commonPtype, rhsPrecision, rhsScale);
                     return result;
                 } else if (returnScale <= maxDecimalPrecision) {
+                    ConnectContext connectContext = ConnectContext.get();
+                    if (connectContext != null && connectContext.getSessionVariable().isDecimalOverflowToDouble()) {
+                        // Convert to double when precision overflow and session variable is enabled
+                        result.returnType = Type.DOUBLE;
+                        result.lhsTargetType = Type.DOUBLE;
+                        result.rhsTargetType = Type.DOUBLE;
+                        return result;
+                    }
+
                     // returnPrecision > 38 and returnScale <= 38, the multiplication is computable but the result maybe
                     // overflow, so use decimal128 arithmetic and adopt maximum decimal precision(38) as precision of
                     // the result.
