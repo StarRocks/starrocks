@@ -167,6 +167,7 @@ public class LowCardinalityTest extends PlanTestBase {
         connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
         connectContext.getSessionVariable().setCboCteReuse(false);
         connectContext.getSessionVariable().setEnableEliminateAgg(false);
+        connectContext.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(false);
         FeConstants.runningUnitTest = true;
     }
 
