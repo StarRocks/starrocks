@@ -89,6 +89,7 @@ import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.warehouse.cngroup.ComputeResource;
+import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -441,7 +442,7 @@ public class FileScanNode extends LoadScanNode {
                 expr = Expr.analyzeAndCastFold(expr);
             }
             expr = castToSlot(destSlotDesc, expr);
-            context.params.putToExpr_of_dest_slot(destSlotDesc.getId().asInt(), expr.treeToThrift());
+            context.params.putToExpr_of_dest_slot(destSlotDesc.getId().asInt(), ExprToThriftVisitor.treeToThrift(expr));
         }
         context.params.setDest_sid_to_src_sid_without_trans(destSidToSrcSidWithoutTrans);
         context.params.setSrc_tuple_id(context.tupleDescriptor.getId().asInt());

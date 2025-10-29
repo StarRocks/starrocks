@@ -64,7 +64,9 @@ public class SplitCastDataSink extends DataSink {
     protected TDataSink toThrift() {
         List<TDataStreamSink> streamSinkList = dataStreamSinks.stream().map(d -> d.toThrift().getStream_sink())
                 .collect(Collectors.toList());
-        List<TExpr> tSplitExprs = this.splitExprs.stream().map(Expr::treeToThrift).collect(Collectors.toList());
+        List<TExpr> tSplitExprs = this.splitExprs.stream()
+                .map(com.starrocks.sql.ast.expression.ExprToThriftVisitor::treeToThrift)
+                .collect(Collectors.toList());
         TSplitDataStreamSink sink = new TSplitDataStreamSink();
         sink.setSinks(streamSinkList);
         sink.setDestinations(destinations);
