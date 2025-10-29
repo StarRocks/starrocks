@@ -66,6 +66,8 @@ import java.io.IOException;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -195,61 +197,53 @@ public class VariableMgr {
     private boolean setValue(Object obj, Field field, String value) throws DdlException {
         VarAttr attr = field.getAnnotation(VarAttr.class);
 
-        String variableName;
-        if (attr.show().isEmpty()) {
-            variableName = attr.name();
-        } else {
-            variableName = attr.show();
-        }
+        String varName = attr.show().isEmpty() ? attr.name() : attr.show();
+        Method setter = SessionVariable.SETTER_MAP.get(field.getName());
+        Object parsed = parseValue(field.getType(), varName, value);
 
-        String convertedVal = VariableVarConverters.convert(variableName, value);
         try {
-            switch (field.getType().getSimpleName()) {
-                case "boolean":
-                    if (convertedVal.equalsIgnoreCase("ON")
-                            || convertedVal.equalsIgnoreCase("TRUE")
-                            || convertedVal.equalsIgnoreCase("1")) {
-                        field.setBoolean(obj, true);
-                    } else if (convertedVal.equalsIgnoreCase("OFF")
-                            || convertedVal.equalsIgnoreCase("FALSE")
-                            || convertedVal.equalsIgnoreCase("0")) {
-                        field.setBoolean(obj, false);
-                    } else {
-                        throw new IllegalAccessException();
-                    }
-                    break;
-                case "byte":
-                    field.setByte(obj, Byte.parseByte(convertedVal));
-                    break;
-                case "short":
-                    field.setShort(obj, Short.parseShort(convertedVal));
-                    break;
-                case "int":
-                    field.setInt(obj, Integer.parseInt(convertedVal));
-                    break;
-                case "long":
-                    field.setLong(obj, Long.parseLong(convertedVal));
-                    break;
-                case "float":
-                    field.setFloat(obj, Float.parseFloat(convertedVal));
-                    break;
-                case "double":
-                    field.setDouble(obj, Double.parseDouble(convertedVal));
-                    break;
-                case "String":
-                    field.set(obj, convertedVal);
-                    break;
-                default:
-                    // Unsupported type variable.
-                    ErrorReport.reportDdlException(ErrorCode.ERR_WRONG_TYPE_FOR_VAR, variableName);
+            if (setter != null) {
+                setter.invoke(obj, parsed);
+            } else {
+                field.set(obj, parsed);
             }
         } catch (NumberFormatException e) {
-            ErrorReport.reportDdlException(ErrorCode.ERR_WRONG_TYPE_FOR_VAR, variableName);
-        } catch (IllegalAccessException e) {
-            ErrorReport.reportDdlException(ErrorCode.ERR_WRONG_VALUE_FOR_VAR, variableName, value);
+            ErrorReport.reportDdlException(ErrorCode.ERR_WRONG_TYPE_FOR_VAR, varName);
+        } catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_WRONG_VALUE_FOR_VAR, varName, value);
         }
 
         return true;
+    }
+
+    private Object parseValue(Class<?> type, String varName, String raw) throws DdlException {
+        String v = VariableVarConverters.convert(varName, raw);
+        try {
+            if (type == boolean.class || type == Boolean.class) {
+                return v.equalsIgnoreCase("ON")
+                        || v.equalsIgnoreCase("TRUE")
+                        || v.equals("1");
+            }
+            if (type == byte.class || type == Byte.class) {
+                return Byte.parseByte(v);
+            } else if (type == short.class || type == Short.class) {
+                return Short.parseShort(v);
+            } else if (type == int.class || type == Integer.class) {
+                return Integer.parseInt(v);
+            } else if (type == long.class || type == Long.class) {
+                return Long.parseLong(v);
+            } else if (type == float.class || type == Float.class) {
+                return Float.parseFloat(v);
+            } else if (type == double.class || type == Double.class) {
+                return Double.parseDouble(v);
+            } else if (type == String.class) {
+                return v;
+            }
+        } catch (NumberFormatException e) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_WRONG_TYPE_FOR_VAR, varName);
+        }
+        ErrorReport.reportDdlException(ErrorCode.ERR_WRONG_TYPE_FOR_VAR, varName);
+        return null;
     }
 
     public SessionVariable newSessionVariable() {
@@ -344,7 +338,8 @@ public class VariableMgr {
 
     public void setCaseInsensitive(boolean caseInsensitive) throws DdlException {
         VarContext ctx = getVarContext(GlobalVariable.ENABLE_TABLE_NAME_CASE_INSENSITIVE);
-        setGlobalVariableAndWriteEditLog(ctx, GlobalVariable.ENABLE_TABLE_NAME_CASE_INSENSITIVE, String.valueOf(caseInsensitive));
+        setGlobalVariableAndWriteEditLog(ctx, GlobalVariable.ENABLE_TABLE_NAME_CASE_INSENSITIVE,
+                String.valueOf(caseInsensitive));
     }
 
     public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {

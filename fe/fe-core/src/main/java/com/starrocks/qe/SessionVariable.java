@@ -38,6 +38,7 @@ import com.google.common.base.Enums;
 import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.google.common.reflect.TypeToken;
 import com.google.gson.Gson;
@@ -85,6 +86,7 @@ import java.io.DataInput;
 import java.io.IOException;
 import java.io.Serializable;
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.lang.reflect.Type;
 import java.util.List;
 import java.util.Map;
@@ -97,6 +99,24 @@ import static com.starrocks.qe.SessionVariableConstants.ComputationFragmentSched
 // System variable
 @SuppressWarnings("FieldMayBeFinal")
 public class SessionVariable implements Serializable, Writable, Cloneable {
+    public static final ImmutableMap<String, Method> SETTER_MAP;
+    static {
+        ImmutableMap.Builder<String, Method> builder = ImmutableMap.builder();
+        for (Field field : SessionVariable.class.getDeclaredFields()) {
+            if (!field.isAnnotationPresent(VarAttr.class)) {
+                continue;
+            }
+            String fieldName = field.getName();
+            String setterName = "set" + Character.toUpperCase(fieldName.charAt(0)) + fieldName.substring(1);
+            try {
+                Method setter = SessionVariable.class.getMethod(setterName, field.getType());
+                builder.put(fieldName, setter);
+            } catch (NoSuchMethodException ignored) {
+            }
+        }
+        SETTER_MAP = builder.build();
+    }
+
     private static final Logger LOG = LogManager.getLogger(SessionVariable.class);
 
     public static final SessionVariable DEFAULT_SESSION_VARIABLE = new SessionVariable();
@@ -570,6 +590,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_PARALLEL_MERGE = "enable_parallel_merge";
     public static final String PARALLEL_MERGE_LATE_MATERIALIZATION_MODE = "parallel_merge_late_materialization_mode";
     public static final String ENABLE_QUERY_QUEUE = "enable_query_queue";
+    public static final String EXEC_MODE = "exec_mode";
 
     public static final String WINDOW_PARTITION_MODE = "window_partition_mode";
 
@@ -1850,6 +1871,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_QUERY_QUEUE, flag = VariableMgr.INVISIBLE)
     private boolean enableQueryQueue = true;
 
+    // DEFAULT/ETL
+    @VarAttr(name = EXEC_MODE)
+    private String execMode = SessionVariableConstants.DEFAULT;
+
     // 1: sort based, 2: hash based
     @VarAttr(name = WINDOW_PARTITION_MODE, flag = VariableMgr.INVISIBLE)
     private int windowPartitionMode = 1;
@@ -2183,6 +2208,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public int getWindowPartitionMode() {
         return windowPartitionMode;
+    }
+
+    public void setExecMode(String execMode) {
+        if (execMode.equalsIgnoreCase(SessionVariableConstants.ETL)) {
+            setEnablePhasedScheduler(true);
+            setEnableSpill(true);
+        } else {
+            setEnablePhasedScheduler(false);
+            setEnableSpill(false);
+        }
+        this.execMode = execMode;
     }
 
     public void setEnableSortAggregate(boolean enableSortAggregate) {
