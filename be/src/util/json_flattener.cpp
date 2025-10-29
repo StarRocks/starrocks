@@ -19,6 +19,7 @@
 
 #include <storage/flat_json_config.h>
 #include <sys/types.h>
+#include <velocypack/StringRef.h>
 
 #include <algorithm>
 #include <cstddef>
@@ -661,7 +662,13 @@ uint32_t JsonPathDeriver::_dfs_finalize(JsonFlatPath* node, const std::string& a
             return 0;
         }
     } else {
-        node->remain |= (flat_count != node->children.size());
+        // For intermediate nodes: mark as remain if not all children are flattened,
+        // or if the node itself was visited (to preserve structures like {"100": {}})
+        if (flat_count != node->children.size()) {
+            node->remain = true;
+        } else if (!absolute_path.empty() && _derived_maps.find(node) != _derived_maps.end()) {
+            node->remain = true;
+        }
         return 1;
     }
 }
@@ -1085,9 +1092,6 @@ void JsonMerger::_merge_impl(size_t rows) {
 template <bool IN_TREE>
 void JsonMerger::_merge_json_with_remain(const JsonFlatPath* root, const vpack::Slice* remain, vpack::Builder* builder,
                                          size_t index) {
-    // #ifndef NDEBUG
-    //     std::string json = remain->toJson();
-    // #endif
     vpack::ObjectIterator it(*remain, false);
     for (; it.valid(); it.next()) {
         auto k = it.key().stringView();
@@ -1112,9 +1116,31 @@ void JsonMerger::_merge_json_with_remain(const JsonFlatPath* root, const vpack::
                 _merge_json_with_remain<true>(child, &v, builder, index);
             } else {
                 DCHECK(child->op == JsonFlatPath::OP_INCLUDE || child->op == JsonFlatPath::OP_NEW_LEVEL);
-                builder->addUnchecked(k.data(), k.size(), vpack::Value(vpack::ValueType::Object));
-                _merge_json_with_remain<true>(child, &v, builder, index);
-                builder->close();
+                bool has_value = false;
+                _check_has_non_null_values(child, index, &has_value);
+                // When IN_TREE=false, skip empty remain objects that have no flat column values
+                if constexpr (!IN_TREE) {
+                    if (v.isEmptyObject() && !has_value) {
+                        continue;
+                    }
+                }
+                vpack::Builder temp_builder;
+                temp_builder.add(vpack::Value(vpack::ValueType::Object));
+                // Use IN_TREE=false for empty remain to build from flat columns only,
+                // IN_TREE=true otherwise to merge remain and flat columns
+                if (v.isEmptyObject()) {
+                    _merge_json_with_remain<false>(child, &v, &temp_builder, index);
+                } else {
+                    _merge_json_with_remain<true>(child, &v, &temp_builder, index);
+                }
+                temp_builder.close();
+                auto temp_slice = temp_builder.slice();
+                // When IN_TREE=true, preserve remain keys even if empty to maintain original structure
+                if constexpr (IN_TREE) {
+                    builder->addUnchecked(k.data(), k.size(), temp_slice);
+                } else if (!temp_slice.isEmptyObject()) {
+                    builder->addUnchecked(k.data(), k.size(), temp_slice);
+                }
             }
             continue;
         }
@@ -1127,6 +1153,27 @@ void JsonMerger::_merge_json_with_remain(const JsonFlatPath* root, const vpack::
         if (child->op == JsonFlatPath::OP_EXCLUDE) {
             continue;
         }
+        
+        // Skip keys already processed from remain in the first loop when IN_TREE=true
+        bool key_processed_from_remain = remain->hasKey(vpack::StringRef(child_name.data(), child_name.size()));
+        if (key_processed_from_remain) {
+            if constexpr (IN_TREE) {
+                continue;
+            } else {
+                // For IN_TREE=false, only process if remain is empty but flat columns have values
+                auto remain_value = remain->get(vpack::StringRef(child_name.data(), child_name.size()));
+                bool has_value = false;
+                if (!child->children.empty()) {
+                    _check_has_non_null_values(child.get(), index, &has_value);
+                } else {
+                    has_value = !_src_columns[child->index]->is_null(index);
+                }
+                if (!(remain_value.isObject() && remain_value.isEmptyObject() && has_value)) {
+                    continue;
+                }
+            }
+        }
+        
         // e.g. flat path: b.b2.b3}
         // json: {"b": {}}
         // we can't output: {"b": {}} to {"b": {"b2": {}}}
@@ -1140,6 +1187,15 @@ void JsonMerger::_merge_json_with_remain(const JsonFlatPath* root, const vpack::
                 func(builder, child_name, col, index);
             }
             continue;
+        }
+        
+        // For intermediate nodes not in remain, only create if we have flat values for descendants
+        bool has_value = false;
+        _check_has_non_null_values(child.get(), index, &has_value);
+        if (has_value) {
+            builder->addUnchecked(child_name.data(), child_name.size(), vpack::Value(vpack::ValueType::Object));
+            _merge_json(child.get(), builder, index);
+            builder->close();
         }
     }
 }
@@ -1167,12 +1223,12 @@ void JsonMerger::_merge_json(const JsonFlatPath* root, vpack::Builder* builder, 
         } else if (child->op == JsonFlatPath::OP_ROOT) {
             _merge_json(child.get(), builder, index);
         } else {
-            // Only create object structure if there are non-null values in the subtree
-            // Otherwise it will create a JSON like {"a": {"b": {}}} but it's not expected
-            bool has_non_null_values = false;
-            _check_has_non_null_values(child.get(), index, &has_non_null_values);
-
-            if (has_non_null_values) {
+            // Check if any leaf descendant has value in this row
+            // If yes, create the object structure; if no, skip to avoid creating empty objects
+            bool has_value = false;
+            _check_has_non_null_values(child.get(), index, &has_value);
+            
+            if (has_value) {
                 builder->addUnchecked(child_name.data(), child_name.size(), vpack::Value(vpack::ValueType::Object));
                 _merge_json(child.get(), builder, index);
                 builder->close();
