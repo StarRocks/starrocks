@@ -76,7 +76,7 @@ under the License.
         <paimon.version>1.2.0</paimon.version>
         <delta-kernel.version>4.0.0rc1</delta-kernel.version>
         <iceberg.version>1.10.0</iceberg.version>
-        <staros.version>3.5-rc4</staros.version>
+        <staros.version>4.0.0</staros.version>
         <!-- hadoop-azure requires no more than jetty10+ -->
         <!-- https://stackoverflow.com/questions/66713254/spark-wasb-and-jetty-11 -->
         <jetty.version>9.4.57.v20241219</jetty.version>
