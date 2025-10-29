@@ -285,71 +285,6 @@ public class TabletSchedCtxTest {
 
     }
 
-<<<<<<< HEAD
-=======
-    @Test
-    public void testGetBrief() {
-        TabletSchedCtx ctx = new TabletSchedCtx(Type.REPAIR, 1, 2, 3, 4, 1000, System.currentTimeMillis());
-        ctx.setOrigPriority(Priority.NORMAL);
-        ctx.setTabletStatus(LocalTablet.TabletHealthStatus.VERSION_INCOMPLETE);
-        Deencapsulation.setField(ctx, "copySize", 1048576L);
-        Deencapsulation.setField(ctx, "copyTimeMs", 1000L);
-        List<String> results = ctx.getBrief();
-        Assertions.assertEquals(25, results.size());
-        Assertions.assertEquals("1000", results.get(0));
-        Assertions.assertEquals("REPAIR", results.get(1));
-        Assertions.assertEquals("VERSION_INCOMPLETE", results.get(3));
-        Assertions.assertEquals("1.0", results.get(16));
-
-        ctx = new TabletSchedCtx(Type.BALANCE, 1, 2, 3, 4, 1001, System.currentTimeMillis());
-        ctx.setOrigPriority(Priority.NORMAL);
-        ctx.setBalanceType(BalanceStat.BalanceType.INTER_NODE_TABLET_DISTRIBUTION);
-        results = ctx.getBrief();
-        Assertions.assertEquals("1001", results.get(0));
-        Assertions.assertEquals("BALANCE", results.get(1));
-        Assertions.assertEquals("INTER_NODE_TABLET_DISTRIBUTION", results.get(3));
-        Assertions.assertFalse(ctx.isIntraNodeBalance());
-    }
-
-    @Test
-    public void testToTabletScheduleThrift() {
-        TabletSchedCtx ctx = new TabletSchedCtx(Type.REPAIR, 1L, 2L, 3L, 4L, 1000L, System.currentTimeMillis());
-        ctx.setOrigPriority(Priority.NORMAL);
-        ctx.setTabletStatus(LocalTablet.TabletHealthStatus.VERSION_INCOMPLETE);
-        ctx.setStorageMedium(TStorageMedium.HDD);
-
-        Replica replica = new Replica(1001L, be1.getId(), 0, Replica.ReplicaState.NORMAL);
-        replica.setPathHash(123456789L);
-        ctx.setSrc(replica);
-        ctx.setDest(be2.getId(), 123456780L);
-
-        Deencapsulation.setField(ctx, "copySize", 1048576L);
-        Deencapsulation.setField(ctx, "copyTimeMs", 1000L);
-
-        ctx.setVersionInfo(1L, 2L, 3L, 0L);
-
-        TTabletSchedule res = ctx.toTabletScheduleThrift();
-
-        Assertions.assertNotNull(res);
-        Assertions.assertEquals(1000L, res.getTablet_id());
-        Assertions.assertEquals("REPAIR", res.getType());
-        Assertions.assertEquals("VERSION_INCOMPLETE", res.getSchedule_reason());
-        Assertions.assertEquals(be1.getId(), res.getSrc_be_id());
-        Assertions.assertEquals("123456789", res.getSrc_path());
-        Assertions.assertEquals(be2.getId(), res.getDest_be_id());
-        Assertions.assertEquals("123456780", res.getDest_path());
-        Assertions.assertEquals(1048576, res.getClone_bytes());
-        Assertions.assertEquals(1, res.getClone_duration(), 0.01);
-        Assertions.assertEquals(1, res.getClone_rate(), 0.01);
-        Assertions.assertEquals("HDD", res.getMedium());
-        Assertions.assertEquals("NORMAL", res.getOrig_priority());
-        Assertions.assertEquals(0L, res.getLast_priority_adjust_time());
-        Assertions.assertEquals(1L, res.getVisible_version());
-        Assertions.assertEquals(2L, res.getCommitted_version());
-        Assertions.assertEquals(0L, res.getFailed_schedule_count());
-        Assertions.assertEquals(0L, res.getFailed_running_count());
-    }
-
     @Test
     public void testChooseSrcReplica() {
         Replica replicaNormalIncomplete = new Replica(70001L, be1.getId(), 0, Replica.ReplicaState.NORMAL);
@@ -376,11 +311,10 @@ public class TabletSchedCtxTest {
         try {
             ctx.chooseSrcReplica(backendsWorkingSlots);
         } catch (Exception e) {
-            Assertions.fail(e);
+            Assert.fail(e);
         }
 
-        Assertions.assertEquals(be2.getId(), ctx.getSrcBackendId());
-        Assertions.assertEquals(2002L, ctx.getSrcPathHash());
+        Assert.assertEquals(be2.getId(), ctx.getSrcBackendId());
+        Assert.assertEquals(2002L, ctx.getSrcPathHash());
     }
->>>>>>> dc5d828118 ([BugFix] Unblock repair when source replica is marked DECOMMISSION during migration (#62942))
 }

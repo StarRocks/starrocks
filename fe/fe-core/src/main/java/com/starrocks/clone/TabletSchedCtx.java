@@ -600,15 +600,11 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
          */
         List<Replica> candidates = getHealthyReplicas(false);
         if (candidates.isEmpty()) {
-<<<<<<< HEAD
-            throw new SchedException(Status.UNRECOVERABLE, "unable to find source replica");
-=======
             candidates = getHealthyReplicas(true);
             if (candidates.isEmpty()) {
                 throw new SchedException(Status.UNRECOVERABLE,
                         "unable to find source replica. replicas: " + tablet.getReplicaInfos());
-            }    
->>>>>>> dc5d828118 ([BugFix] Unblock repair when source replica is marked DECOMMISSION during migration (#62942))
+            }
         }
 
         // Shuffle the candidate list first so that we won't always choose the same replica with
