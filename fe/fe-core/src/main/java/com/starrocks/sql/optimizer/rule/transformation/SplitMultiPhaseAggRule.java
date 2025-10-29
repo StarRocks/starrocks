@@ -21,6 +21,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.common.ErrorType;
@@ -98,7 +99,7 @@ public class SplitMultiPhaseAggRule extends SplitAggregateRule {
                     "each can't have multi columns.", ErrorType.USER_ERROR);
         }
 
-        if (isSuitableForTwoStageDistinct(input, aggOp, distinctCols.get())) {
+        if (isSuitableForTwoStageDistinct(context.getConnectContext(), input, aggOp, distinctCols.get())) {
             return List.of();
         }
 
@@ -106,7 +107,7 @@ public class SplitMultiPhaseAggRule extends SplitAggregateRule {
             return implementDistinctWithoutGroupByAgg(context.getColumnRefFactory(),
                     input, aggOp, distinctCols.get());
         } else {
-            return implementDistinctWithGroupByAgg(context.getSessionVariable(), context.getColumnRefFactory(), input, aggOp);
+            return implementDistinctWithGroupByAgg(context.getConnectContext(), context.getColumnRefFactory(), input, aggOp);
         }
 
     }
@@ -178,7 +179,7 @@ public class SplitMultiPhaseAggRule extends SplitAggregateRule {
     // For SQL: select count(distinct k1) from test_basic group by v1;
     // Local Agg -> Distinct global Agg -> Global Agg
     private List<OptExpression> implementDistinctWithGroupByAgg(
-            SessionVariable sv,
+            ConnectContext connectContext,
             ColumnRefFactory columnRefFactory,
             OptExpression input,
             LogicalAggregationOperator oldAgg) {
@@ -206,13 +207,14 @@ public class SplitMultiPhaseAggRule extends SplitAggregateRule {
                     connectThreeStageAgg(localExpr, distinctGlobal, global, oldAgg.getGroupingKeys(), true));
         }
 
-        if (!isThreeStageMoreEfficient(sv, input, distinctGlobal.getGroupingKeys(), local.getPartitionByColumns())) {
+        if (!isThreeStageMoreEfficient(connectContext, input, distinctGlobal.getGroupingKeys(), local.getPartitionByColumns())) {
             // 4-stage: Local(GB k1,v1) -> Distinct Global(GB k1,v1; PB k1,v1) -> Local(GB v1) -> Global(GB v1; PB v1)
             // Use grouping keys and distinct cols to distribute data, we need to continue split the global agg.
             return Lists.newArrayList(
                     connectThreeStageAgg(localExpr, distinctGlobal, global, distinctGlobal.getGroupingKeys(), false));
         }
 
+        final SessionVariable sv = connectContext.getSessionVariable();
         if (!sv.isEnableCostBasedMultiStageAgg()) {
             // 3-stage: Local(GB k1,v1) -> Distinct Global(GB k1,v1; PB v1) -> Global(GB v1; PB v1)
             return Lists.newArrayList(
@@ -390,13 +392,23 @@ public class SplitMultiPhaseAggRule extends SplitAggregateRule {
         return elseOperator;
     }
 
-    private boolean isThreeStageMoreEfficient(SessionVariable sv, OptExpression input, List<ColumnRefOperator> groupKeys,
+    private boolean isThreeStageMoreEfficient(ConnectContext connectContext, OptExpression input,
+                                              List<ColumnRefOperator> groupKeys,
                                               List<ColumnRefOperator> partitionByColumns) {
+        final SessionVariable sv = connectContext.getSessionVariable();
         if (sv.getNewPlannerAggStage() == FOUR_STAGE.ordinal()) {
             return false;
         }
         if (sv.getNewPlannerAggStage() == THREE_STAGE.ordinal()) {
             return true;
+        }
+
+        // for a single node, we prefer multi-phases agg when partitionByColumns between 1/2 agg is not skew.
+        // and prefer four phase agg when partitionByColumns is skew
+        if (!Utils.isRunningInUnitTest()
+                && sv.isCboEnableSingleNodePreferTwoStageAggregate()
+                && Utils.isSingleNodeExecution(connectContext)) {
+            return false;
         }
 
         Statistics inputStatistics = input.getGroupExpression().inputAt(0).getStatistics();
