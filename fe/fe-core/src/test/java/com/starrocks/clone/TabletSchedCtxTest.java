@@ -311,7 +311,7 @@ public class TabletSchedCtxTest {
         try {
             ctx.chooseSrcReplica(backendsWorkingSlots);
         } catch (Exception e) {
-            Assert.fail(e);
+            Assert.fail();
         }
 
         Assert.assertEquals(be2.getId(), ctx.getSrcBackendId());
