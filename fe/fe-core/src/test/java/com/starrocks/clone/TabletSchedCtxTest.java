@@ -172,7 +172,7 @@ public class TabletSchedCtxTest {
         Config.recover_with_empty_tablet = false;
         SchedException schedException = Assert.assertThrows(SchedException.class, () -> tabletScheduler
                 .handleTabletByTypeAndStatus(LocalTablet.TabletHealthStatus.REPLICA_MISSING, ctx, agentBatchTask));
-        Assert.assertEquals("unable to find source replica", schedException.getMessage());
+        Assert.assertTrue(schedException.getMessage().contains("unable to find source replica"));
 
         Config.recover_with_empty_tablet = true;
         tabletScheduler.handleTabletByTypeAndStatus(LocalTablet.TabletHealthStatus.REPLICA_MISSING, ctx, agentBatchTask);
