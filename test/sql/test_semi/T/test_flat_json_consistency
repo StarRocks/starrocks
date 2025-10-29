@@ -49,4 +49,15 @@ insert into test_json_cast_map values
 select * from test_json_cast_map order by c1;
 select flat_json_meta(c2) from test_json_cast_map [_META_];
 
+-- Test 5: Same path with different values - should be flattenable
+truncate table test_json_cast_map;
+
+insert into test_json_cast_map values
+(2, '{"level1": {"level2": {"level3": {"level4": {}}}}}'),
+(9, '{"100": {"200": {"300": "abc"}}}');
+
+select * from test_json_cast_map order by c1;
+select flat_json_meta(c2) from test_json_cast_map [_META_];
+
+
 drop table test_json_cast_map;

@@ -74,6 +74,23 @@ select flat_json_meta(c2) from test_json_cast_map [_META_];
 -- result:
 ["nulls(TINYINT), level1.level2.level3.level4.5(VARCHAR), level1.level2.level3.level4.6(VARCHAR)"]
 -- !result
+truncate table test_json_cast_map;
+-- result:
+-- !result
+insert into test_json_cast_map values
+(2, '{"level1": {"level2": {"level3": {"level4": {}}}}}'),
+(9, '{"100": {"200": {"300": "abc"}}}');
+-- result:
+-- !result
+select * from test_json_cast_map order by c1;
+-- result:
+2	{"level1": {"level2": {"level3": {"level4": {}}}}}
+9	{"100": {"200": {"300": "abc"}}}
+-- !result
+select flat_json_meta(c2) from test_json_cast_map [_META_];
+-- result:
+["nulls(TINYINT), 100.200.300(VARCHAR), remain(JSON)"]
+-- !result
 drop table test_json_cast_map;
 -- result:
 -- !result
