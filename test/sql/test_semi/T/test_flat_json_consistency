@@ -1,0 +1,30 @@
+-- name: test_flat_json_consistency
+
+-- Test case for FlatJSON consistency issue where non-existent fields
+-- were being created as empty objects during reconstruction
+
+CREATE TABLE `test_json_cast_map` (
+  `c1` bigint(20) NULL COMMENT "",
+  `c2` json NULL COMMENT ""
+);
+
+-- Insert test data with different JSON structures
+-- Row 1: Only has level1.level2.level3.level4.5 path
+-- Row 9: Only has 100.200.300 path
+insert into test_json_cast_map values
+(1, '{"level1": {"level2": {"level3": {"level4": {"5":"abc"}}}}}'),
+(9, '{"100": {"200": {"300": "abc"}}}');
+
+-- Verify the original data is stored correctly
+select * from test_json_cast_map order by c1;
+
+-- Test FlatJSON meta to see what paths are extracted
+select flat_json_meta(c2) from test_json_cast_map [_META_];
+
+-- Test JSON path extraction to verify consistency
+-- These should return NULL for non-existent paths, not empty objects
+select get_json_string(c2, '$.100.200.300') from test_json_cast_map where c1 = 1;
+select get_json_string(c2, '$.level1.level2.level3.level4.5') from test_json_cast_map where c1 = 9;
+
+-- Clean up
+DROP TABLE test_json_cast_map;

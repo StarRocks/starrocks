@@ -1,0 +1,32 @@
+-- name: test_flat_json_consistency
+CREATE TABLE `test_json_cast_map` (
+  `c1` bigint(20) NULL COMMENT "",
+  `c2` json NULL COMMENT ""
+);
+-- result:
+-- !result
+insert into test_json_cast_map values
+(1, '{"level1": {"level2": {"level3": {"level4": {"5":"abc"}}}}}'),
+(9, '{"100": {"200": {"300": "abc"}}}');
+-- result:
+-- !result
+select * from test_json_cast_map order by c1;
+-- result:
+1	{"level1": {"level2": {"level3": {"level4": {"5": "abc"}}}}}
+9	{"100": {"200": {"300": "abc"}}}
+-- !result
+select flat_json_meta(c2) from test_json_cast_map [_META_];
+-- result:
+["nulls(TINYINT), 100.200.300(VARCHAR), level1.level2.level3.level4.5(VARCHAR)"]
+-- !result
+select get_json_string(c2, '$.100.200.300') from test_json_cast_map where c1 = 1;
+-- result:
+None
+-- !result
+select get_json_string(c2, '$.level1.level2.level3.level4.5') from test_json_cast_map where c1 = 9;
+-- result:
+None
+-- !result
+DROP TABLE test_json_cast_map;
+-- result:
+-- !result
