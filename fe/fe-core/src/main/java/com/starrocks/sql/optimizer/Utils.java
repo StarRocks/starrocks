@@ -27,6 +27,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.qe.ConnectContext;
@@ -1080,5 +1081,19 @@ public class Utils {
         }
 
         return new Pair<>(columnConstMap, otherPredicates);
+    }
+
+    /**
+     * If there's only one BE node, splitting into multi-phase has no benefit but only overhead
+     */
+    public static boolean isSingleNodeExecution(ConnectContext context) {
+        return context.getAliveExecutionNodesNumber() == 1;
+    }
+
+    /**
+     * Check whether the FE is running in unit test mode
+     */
+    public static boolean isRunningInUnitTest() {
+        return FeConstants.runningUnitTest;
     }
 }
