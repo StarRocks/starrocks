@@ -253,7 +253,7 @@ public class TabletChecker extends FrontendDaemon {
                 // in this case, we need to forcefully create an empty replica to recover
                 return true;
             } else {
-                return !tabletCtx.getHealthyReplicas().isEmpty();
+                return !tabletCtx.getHealthyReplicas(false).isEmpty();
             }
         } else {
             return true;

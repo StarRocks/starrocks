@@ -172,7 +172,7 @@ public class TabletSchedCtxTest {
         Config.recover_with_empty_tablet = false;
         SchedException schedException = Assert.assertThrows(SchedException.class, () -> tabletScheduler
                 .handleTabletByTypeAndStatus(LocalTablet.TabletHealthStatus.REPLICA_MISSING, ctx, agentBatchTask));
-        Assert.assertEquals("unable to find source replica", schedException.getMessage());
+        Assert.assertTrue(schedException.getMessage().contains("unable to find source replica"));
 
         Config.recover_with_empty_tablet = true;
         tabletScheduler.handleTabletByTypeAndStatus(LocalTablet.TabletHealthStatus.REPLICA_MISSING, ctx, agentBatchTask);
@@ -285,4 +285,36 @@ public class TabletSchedCtxTest {
 
     }
 
+    @Test
+    public void testChooseSrcReplica() {
+        Replica replicaNormalIncomplete = new Replica(70001L, be1.getId(), 0, Replica.ReplicaState.NORMAL);
+        replicaNormalIncomplete.setPathHash(2001L);
+        replicaNormalIncomplete.updateVersionInfo(90L, 90L, 0L);
+
+        Replica replicaDecommissionHealthy = new Replica(70002L, be2.getId(), 0, Replica.ReplicaState.DECOMMISSION);
+        replicaDecommissionHealthy.setPathHash(2002L);
+        replicaDecommissionHealthy.updateVersionInfo(100L, 100L, 0L);
+
+        LocalTablet tablet = new LocalTablet(30001L, Lists.newArrayList(replicaNormalIncomplete, replicaDecommissionHealthy));
+
+        TabletSchedCtx ctx = new TabletSchedCtx(Type.REPAIR, DB_ID, TB_ID, PART_ID, INDEX_ID,
+                30001L, System.currentTimeMillis(),
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
+        ctx.setTablet(tablet);
+        ctx.setStorageMedium(TStorageMedium.HDD);
+        ctx.setVersionInfo(100L, 100L, 0L, 0L);
+
+        Map<Long, PathSlot> backendsWorkingSlots = Maps.newConcurrentMap();
+        backendsWorkingSlots.put(be1.getId(), new PathSlot(Lists.newArrayList(2001L), 1));
+        backendsWorkingSlots.put(be2.getId(), new PathSlot(Lists.newArrayList(2002L), 1));
+
+        try {
+            ctx.chooseSrcReplica(backendsWorkingSlots);
+        } catch (Exception e) {
+            Assert.fail();
+        }
+
+        Assert.assertEquals(be2.getId(), ctx.getSrcBackendId());
+        Assert.assertEquals(2002L, ctx.getSrcPathHash());
+    }
 }
