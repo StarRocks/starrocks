@@ -82,6 +82,50 @@ LocalTabletsChannel::LocalTabletsChannel(LoadChannel* load_channel, const Tablet
     _wait_txn_persist_timer = ADD_CHILD_TIMER(_profile, "WaitTxnPersistTime", "AddChunkTime");
 }
 
+DeltaWriterOptions LocalTabletsChannel::_build_delta_writer_options(const PTabletWriterOpenRequest& params,
+                                                                    const PTabletWithPartition& tablet,
+                                                                    int32_t schema_hash,
+                                                                    const std::vector<SlotDescriptor*>* index_slots) {
+    DeltaWriterOptions options;
+    options.tablet_id = tablet.tablet_id();
+    options.schema_hash = schema_hash;
+    options.txn_id = _txn_id;
+    options.partition_id = tablet.partition_id();
+    options.load_id = params.id();
+    options.slots = index_slots;
+    options.global_dicts = &_global_dicts;
+    options.parent_span = _load_channel->get_span();
+    options.index_id = _index_id;
+    options.node_id = _node_id;
+    options.sink_id = params.sink_id();
+    options.timeout_ms = params.timeout_ms();
+    options.write_quorum = params.write_quorum();
+    options.miss_auto_increment_column = params.miss_auto_increment_column();
+    options.ptable_schema_param = &(params.schema());
+    options.column_to_expr_value = &(_column_to_expr_value);
+    options.merge_condition = params.merge_condition();
+    options.partial_update_mode = params.partial_update_mode();
+    options.immutable_tablet_size = params.immutable_tablet_size();
+
+    if (params.is_replicated_storage()) {
+        for (auto& replica : tablet.replicas()) {
+            options.replicas.emplace_back(replica);
+            if (_node_id_to_endpoint.count(replica.node_id()) == 0) {
+                _node_id_to_endpoint[replica.node_id()] = replica;
+            }
+        }
+        if (!options.replicas.empty() && options.replicas[0].node_id() == options.node_id) {
+            options.replica_state = Primary;
+        } else {
+            options.replica_state = Secondary;
+        }
+    } else {
+        options.replica_state = Peer;
+    }
+
+    return options;
+}
+
 LocalTabletsChannel::~LocalTabletsChannel() {
     _s_tablet_writer_count -= _delta_writers.size();
     _mem_pool.reset();
@@ -691,45 +735,12 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
     int32_t primary_num = 0;
     int32_t secondary_num = 0;
     for (const PTabletWithPartition& tablet : params.tablets()) {
-        DeltaWriterOptions options;
-        options.tablet_id = tablet.tablet_id();
-        options.schema_hash = schema_hash;
-        options.txn_id = _txn_id;
-        options.partition_id = tablet.partition_id();
-        options.load_id = params.id();
-        options.slots = index_slots;
-        options.global_dicts = &_global_dicts;
-        options.parent_span = _load_channel->get_span();
-        options.index_id = _index_id;
-        options.node_id = _node_id;
-        options.sink_id = params.sink_id();
-        options.timeout_ms = params.timeout_ms();
-        options.write_quorum = params.write_quorum();
-        options.miss_auto_increment_column = params.miss_auto_increment_column();
-        options.ptable_schema_param = &(params.schema());
-        options.column_to_expr_value = &(_column_to_expr_value);
-        if (params.is_replicated_storage()) {
-            for (auto& replica : tablet.replicas()) {
-                options.replicas.emplace_back(replica);
-                if (_node_id_to_endpoint.count(replica.node_id()) == 0) {
-                    _node_id_to_endpoint[replica.node_id()] = replica;
-                }
-            }
-            if (options.replicas.size() > 0 && options.replicas[0].node_id() == options.node_id) {
-                options.replica_state = Primary;
-                primary_num += 1;
-            } else {
-                options.replica_state = Secondary;
-                secondary_num += 1;
-            }
+        DeltaWriterOptions options = _build_delta_writer_options(params, tablet, schema_hash, index_slots);
+        if (options.replica_state == Secondary) {
+            secondary_num += 1;
         } else {
-            options.replica_state = Peer;
             primary_num += 1;
         }
-        options.merge_condition = params.merge_condition();
-        options.partial_update_mode = params.partial_update_mode();
-        options.immutable_tablet_size = params.immutable_tablet_size();
-
         auto res = AsyncDeltaWriter::open(options, _mem_tracker);
         if (res.status().ok()) {
             auto writer = std::move(res).value();
@@ -902,39 +913,7 @@ Status LocalTabletsChannel::incremental_open(const PTabletWriterOpenRequest& par
         }
         incremental_tablet_num++;
 
-        DeltaWriterOptions options;
-        options.tablet_id = tablet.tablet_id();
-        options.schema_hash = schema_hash;
-        options.txn_id = _txn_id;
-        options.partition_id = tablet.partition_id();
-        options.load_id = params.id();
-        options.slots = index_slots;
-        options.global_dicts = &_global_dicts;
-        options.parent_span = _load_channel->get_span();
-        options.index_id = _index_id;
-        options.node_id = _node_id;
-        options.sink_id = params.sink_id();
-        options.timeout_ms = params.timeout_ms();
-        options.write_quorum = params.write_quorum();
-        options.miss_auto_increment_column = params.miss_auto_increment_column();
-        options.ptable_schema_param = &(params.schema());
-        options.immutable_tablet_size = params.immutable_tablet_size();
-        options.column_to_expr_value = &(_column_to_expr_value);
-        if (params.is_replicated_storage()) {
-            for (auto& replica : tablet.replicas()) {
-                options.replicas.emplace_back(replica);
-                if (_node_id_to_endpoint.count(replica.node_id()) == 0) {
-                    _node_id_to_endpoint[replica.node_id()] = replica;
-                }
-            }
-            if (options.replicas.size() > 0 && options.replicas[0].node_id() == options.node_id) {
-                options.replica_state = Primary;
-            } else {
-                options.replica_state = Secondary;
-            }
-        } else {
-            options.replica_state = Peer;
-        }
+        DeltaWriterOptions options = _build_delta_writer_options(params, tablet, schema_hash, index_slots);
 
         auto res = AsyncDeltaWriter::open(options, _mem_tracker);
         RETURN_IF_ERROR(res.status());
