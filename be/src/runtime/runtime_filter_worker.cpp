@@ -511,13 +511,20 @@ void RuntimeFilterMerger::store_skew_broadcast_join_runtime_filter(PTransmitRunt
     _send_total_runtime_filter(rf_version, filter_id);
 }
 
+#define WARN_IF_RF_RPC_ERROR(closure)                                                                                 \
+    if (closure->cntl.Failed()) {                                                                                     \
+        LOG(WARNING) << "runtime filter brpc failed, error_code=" << berror(closure->cntl.ErrorCode())                \
+                     << ", error_text=" << closure->cntl.ErrorText() << ", filter_id=" << closure->result.filter_id() \
+                     << ", debug_info=" << closure->debug_info;                                                       \
+    }
+
 struct BatchClosuresJoinAndClean {
 public:
     BatchClosuresJoinAndClean(RuntimeFilterRpcClosures& closures) : _closures(closures) {}
     ~BatchClosuresJoinAndClean() {
         for (auto& closure : _closures) {
             closure->join();
-            WARN_IF_RPC_ERROR(closure->cntl);
+            WARN_IF_RF_RPC_ERROR(closure);
             if (closure->unref()) {
                 delete closure;
             }
@@ -534,7 +541,7 @@ public:
     SingleClosureJoinAndClean(RuntimeFilterRpcClosure* closure) : _closure(closure) {}
     ~SingleClosureJoinAndClean() {
         _closure->join();
-        WARN_IF_RPC_ERROR(_closure->cntl);
+        WARN_IF_RF_RPC_ERROR(_closure);
         if (_closure->unref()) {
             delete _closure;
         }
@@ -705,6 +712,8 @@ void RuntimeFilterMerger::_send_total_runtime_filter(int rf_version, int32_t fil
         _exec_env->add_rf_event({request.query_id(), request.filter_id(), t.first.hostname, "SEND_TOTAL_RF_RPC"});
         rpc_closures.push_back(new RuntimeFilterRpcClosure);
         auto* closure = rpc_closures.back();
+        closure->result.set_filter_id(request.filter_id());
+        closure->debug_info = "send total runtime filter";
         closure->ref();
         send_rpc_runtime_filter(t.first, closure, timeout_ms, rpc_http_min_size, request);
     }
@@ -973,6 +982,8 @@ void RuntimeFilterWorker::_receive_total_runtime_filter(PTransmitRuntimeFilterPa
         _exec_env->add_rf_event({request.query_id(), request.filter_id(), addr.hostname, "FORWARD"});
         rpc_closures.push_back(new RuntimeFilterRpcClosure());
         auto* closure = rpc_closures.back();
+        closure->debug_info = "forward total runtime filter";
+        closure->result.set_filter_id(request.filter_id());
         closure->ref();
         send_rpc_runtime_filter(addr, closure, config::send_rpc_runtime_filter_timeout_ms,
                                 config::send_runtime_filter_via_http_rpc_min_size, request);
@@ -1050,6 +1061,8 @@ void RuntimeFilterWorker::_deliver_broadcast_runtime_filter_relay(PTransmitRunti
     SingleClosureJoinAndClean join_and_join(rpc_closure);
     _exec_env->add_rf_event(
             {request.query_id(), request.filter_id(), first_dest.address.hostname, "DELIVER_BROADCAST_RF_RELAY"});
+    rpc_closure->result.set_filter_id(request.filter_id());
+    rpc_closure->debug_info = "deliver broadcast runtime filter relay";
     rpc_closure->ref();
     send_rpc_runtime_filter(first_dest.address, rpc_closure, timeout_ms, rpc_http_min_size, request);
 }
@@ -1083,6 +1096,8 @@ void RuntimeFilterWorker::_deliver_broadcast_runtime_filter_passthrough(
 
             rpc_closures.push_back(new RuntimeFilterRpcClosure());
             auto* closure = rpc_closures.back();
+            closure->result.set_filter_id(request.filter_id());
+            closure->debug_info = "deliver broadcast runtime filter passthrough";
             closure->ref();
             send_rpc_runtime_filter(dest.address, closure, timeout_ms, rpc_http_min_size, request);
         }
@@ -1112,6 +1127,8 @@ void RuntimeFilterWorker::_deliver_part_runtime_filter(std::vector<TNetworkAddre
         _exec_env->add_rf_event({params.query_id(), params.filter_id(), addr.hostname, msg});
         rpc_closures.push_back(new RuntimeFilterRpcClosure());
         auto* closure = rpc_closures.back();
+        closure->result.set_filter_id(params.filter_id());
+        closure->debug_info = "deliver part runtime filter. " + msg;
         closure->ref();
         send_rpc_runtime_filter(addr, closure, transmit_timeout_ms, rpc_http_min_size, params);
     }

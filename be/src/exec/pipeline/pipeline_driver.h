@@ -361,16 +361,26 @@ public:
         return !_all_local_rf_ready;
     }
 
-    bool global_rf_block() {
+    bool global_rf_block(std::string* rf_waiting_set = nullptr) {
         if (_all_global_rf_ready_or_timeout) {
             return false;
         }
-        _all_global_rf_ready_or_timeout =
-                _precondition_block_timer_sw->elapsed_time() >= _global_rf_wait_timeout_ns || // Timeout,
-                std::all_of(_global_rf_descriptors.begin(), _global_rf_descriptors.end(), [](auto* rf_desc) {
-                    return rf_desc->is_local() || rf_desc->runtime_filter(-1) != nullptr;
-                }); // or all the remote RFs are ready.
+        _all_global_rf_ready_or_timeout = true;
 
+        // timeout check
+        if (_precondition_block_timer_sw->elapsed_time() >= _global_rf_wait_timeout_ns) {
+            return false;
+        }
+        // check if all the remote RFs are ready.
+        for (auto* rf_desc : _global_rf_descriptors) {
+            if (rf_desc->is_local() || rf_desc->runtime_filter(-1) != nullptr) {
+                continue;
+            }
+            if (rf_waiting_set != nullptr) {
+                rf_waiting_set->append(std::to_string(rf_desc->filter_id()) + ",");
+            }
+            _all_global_rf_ready_or_timeout = false;
+        }
         return !_all_global_rf_ready_or_timeout;
     }
 
@@ -403,8 +413,9 @@ public:
 
     std::string get_preconditions_block_reasons() {
         if (_state == DriverState::PRECONDITION_BLOCK) {
+            std::string rf_waiting_set;
             return std::string(dependencies_block() ? "(dependencies," : "(") +
-                   std::string(global_rf_block() ? "global runtime filter," : "") +
+                   std::string(global_rf_block(&rf_waiting_set) ? "global runtime filter:" + rf_waiting_set : "") +
                    std::string(local_rf_block() ? "local runtime filter)" : ")");
         } else {
             return "";

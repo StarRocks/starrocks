@@ -48,14 +48,10 @@ public:
 
     brpc::Controller cntl;
     T result;
+    std::string debug_info;
 
 private:
     std::atomic<int> _refs;
 };
-
-#define WARN_IF_RPC_ERROR(cntl)                                                                                   \
-    if (cntl.Failed()) {                                                                                          \
-        LOG(WARNING) << "brpc failed, error=" << berror(cntl.ErrorCode()) << ", error_text=" << cntl.ErrorText(); \
-    }
 
 } // namespace starrocks
