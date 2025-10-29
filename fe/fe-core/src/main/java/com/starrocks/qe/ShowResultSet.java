@@ -38,7 +38,9 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.Type;
 import com.starrocks.thrift.TColumnDefinition;
+import com.starrocks.thrift.TColumnType;
 import com.starrocks.thrift.TShowResultSet;
 import com.starrocks.thrift.TShowResultSetMetaData;
 import org.apache.logging.log4j.LogManager;
@@ -124,8 +126,9 @@ public class ShowResultSet {
         set.metaData = new TShowResultSetMetaData();
         for (int i = 0; i < metaData.getColumnCount(); i++) {
             Column definition = metaData.getColumn(i);
+            TColumnType columnType = convertTypeToColumnType(definition.getType());
             set.metaData.addToColumns(new TColumnDefinition(
-                    definition.getName(), definition.getType().toColumnTypeThrift())
+                    definition.getName(), columnType)
             );
         }
 
@@ -135,5 +138,22 @@ public class ShowResultSet {
             set.resultRows.add(list);
         }
         return set;
+    }
+
+    private TColumnType convertTypeToColumnType(Type type) {
+        if (type instanceof ScalarType) {
+            ScalarType scalarType = (ScalarType) type;
+            TColumnType thrift = new TColumnType();
+            thrift.type = scalarType.getPrimitiveType().toThrift();
+            if (scalarType.getPrimitiveType().isVariableLengthType()) {
+                thrift.setLen(scalarType.getLength());
+            }
+            if (scalarType.isDecimalV2() || scalarType.isDecimalV3()) {
+                thrift.setPrecision(scalarType.getScalarPrecision());
+                thrift.setScale(scalarType.getScalarScale());
+            }
+            return thrift;
+        }
+        return null;
     }
 }

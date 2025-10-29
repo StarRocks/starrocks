@@ -29,9 +29,6 @@ import com.google.gson.JsonParseException;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.thrift.TTypeDesc;
-import com.starrocks.thrift.TTypeNode;
-import com.starrocks.thrift.TTypeNodeType;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -265,20 +262,6 @@ public class StructType extends Type {
         }
         StructType otherStructType = (StructType) other;
         return otherStructType.getFields().equals(fields);
-    }
-
-    @Override
-    public void toThrift(TTypeDesc container) {
-        TTypeNode node = new TTypeNode();
-        container.types.add(node);
-        Preconditions.checkNotNull(fields);
-        Preconditions.checkState(!fields.isEmpty(), "StructType must contains at least one StructField.");
-        node.setType(TTypeNodeType.STRUCT);
-        node.setStruct_fields(Lists.newArrayList());
-        node.setIs_named(isNamed);
-        for (StructField field : fields) {
-            field.toThrift(container, node);
-        }
     }
 
     @Override

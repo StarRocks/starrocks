@@ -690,7 +690,7 @@ public class TableFunctionTable extends Table {
 
         List<Column> columns = new ArrayList<>();
         for (PSlotDescriptor slot : result.schema) {
-            columns.add(new Column(slot.colName, Type.fromProtobuf(slot.slotType), true));
+            columns.add(new Column(slot.colName, TypeDeserializer.fromProtobuf(slot.slotType), true));
         }
         return columns;
     }

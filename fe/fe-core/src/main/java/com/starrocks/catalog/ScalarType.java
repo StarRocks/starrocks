@@ -42,12 +42,7 @@ import com.starrocks.common.Config;
 import com.starrocks.proto.PScalarType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariableConstants;
-import com.starrocks.thrift.TColumnType;
 import com.starrocks.thrift.TPrimitiveType;
-import com.starrocks.thrift.TScalarType;
-import com.starrocks.thrift.TTypeDesc;
-import com.starrocks.thrift.TTypeNode;
-import com.starrocks.thrift.TTypeNodeType;
 
 import java.util.Objects;
 
@@ -638,45 +633,6 @@ public class ScalarType extends Type implements Cloneable {
     }
 
     @Override
-    public void toThrift(TTypeDesc container) {
-        TTypeNode node = new TTypeNode();
-        container.types.add(node);
-        switch (type) {
-            case CHAR:
-            case VARCHAR:
-            case VARBINARY:
-            case HLL: {
-                node.setType(TTypeNodeType.SCALAR);
-                TScalarType scalarType = new TScalarType();
-                scalarType.setType(type.toThrift());
-                scalarType.setLen(len);
-                node.setScalar_type(scalarType);
-                break;
-            }
-            case DECIMALV2:
-            case DECIMAL32:
-            case DECIMAL64:
-            case DECIMAL128:
-            case DECIMAL256: {
-                node.setType(TTypeNodeType.SCALAR);
-                TScalarType scalarType = new TScalarType();
-                scalarType.setType(type.toThrift());
-                scalarType.setScale(scale);
-                scalarType.setPrecision(precision);
-                node.setScalar_type(scalarType);
-                break;
-            }
-            default: {
-                node.setType(TTypeNodeType.SCALAR);
-                TScalarType scalarType = new TScalarType();
-                scalarType.setType(type.toThrift());
-                node.setScalar_type(scalarType);
-                break;
-            }
-        }
-    }
-
-    @Override
     public boolean isFullyCompatible(Type other) {
         if (!other.isScalarType()) {
             return false;
@@ -820,20 +776,6 @@ public class ScalarType extends Type implements Cloneable {
             return precision == other.precision && scale == other.scale;
         }
         return true;
-    }
-
-    @Override
-    public TColumnType toColumnTypeThrift() {
-        TColumnType thrift = new TColumnType();
-        thrift.type = type.toThrift();
-        if (type.isVariableLengthType()) {
-            thrift.setLen(len);
-        }
-        if (type.isDecimalV2Type() || type.isDecimalV3Type()) {
-            thrift.setPrecision(precision);
-            thrift.setScale(scale);
-        }
-        return thrift;
     }
 
     @Override
