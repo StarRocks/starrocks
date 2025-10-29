@@ -69,6 +69,7 @@ public class FilterUnusedColumnTest extends PlanTestBase {
         FeConstants.USE_MOCK_DICT_MANAGER = true;
         connectContext.getSessionVariable().setSqlMode(2);
         connectContext.getSessionVariable().enableTrimOnlyFilteredColumnsInScanStage();
+        connectContext.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(false);
     }
 
     @Test
