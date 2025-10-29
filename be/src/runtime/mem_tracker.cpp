@@ -122,6 +122,9 @@ MemTracker::~MemTracker() {
     if (parent()) {
         unregister_from_parent();
     }
+    // When the mem_tracker is destroyed, manually setting _consumption to null can easily
+    // trigger a use-after-free bug in MemTracker.
+    _consumption = nullptr;
 }
 
 Status MemTracker::check_mem_limit(const std::string& msg) const {
