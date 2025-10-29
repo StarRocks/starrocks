@@ -17,7 +17,6 @@ insert into test_array_ndv values
 (null, null, null, null),
 (4, [], [], []);
 
-select column_name, hll_cardinality(ndv) from _statistics_.column_statistics where table_name = 'test_array_stats.test_array_ndv' order by column_name;
 admin set frontend config ("enable_manual_collect_array_ndv"="true");
 analyze table test_array_ndv;
 select column_name, hll_cardinality(ndv) from _statistics_.column_statistics where table_name = 'test_array_stats.test_array_ndv' order by column_name;
