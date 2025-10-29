@@ -1,0 +1,76 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package staros;
+option java_package = "com.staros.proto";
+option java_multiple_files = true;
+
+enum OperationType {
+    OP_INVALID = 0;
+    // service operation starts from 1
+    OP_REGISTER_SERVICE = 1;
+    OP_DEREGISTER_SERVICE = 2;
+    OP_BOOTSTRAP_SERVICE = 3;
+    OP_SHUTDOWN_SERVICE = 4;
+
+    // worker operation starts from 50
+    OP_ADD_WORKER = 50;
+    OP_REMOVE_WORKER = 51;
+    OP_UPDATE_WORKER = 52;
+
+    // shard operation starts from 100
+    OP_CREATE_SHARD = 100;
+    OP_DELETE_SHARD = 101;
+    OP_UPDATE_SHARD = 102;
+
+    OP_CREATE_SHARD_GROUP = 110;
+    OP_DELETE_SHARD_GROUP = 111;
+    OP_UPDATE_SHARD_GROUP = 112;
+
+    OP_CREATE_META_GROUP = 120;
+    OP_DELETE_META_GROUP = 121;
+    OP_UPDATE_META_GROUP = 122;
+
+    OP_CREATE_WORKER_GROUP = 130;
+    OP_UPDATE_WORKER_GROUP = 131;
+    OP_DELETE_WORKER_GROUP = 132;
+
+    // filestore operation starts from 150
+    OP_ADD_FILESTORE = 150;
+    OP_REMOVE_FILESTORE = 151;
+    OP_UPDATE_FILESTORE = 152;
+    OP_REPLACE_FILESTORE = 153;
+
+    OP_SET_ID = 200;
+    OP_LEADER_CHANGE = 201; // cluster leader changed
+
+    // stream mgr op
+    OP_STREAM_MGR_INVALID = 1000;
+    OP_STREAM = 1001;
+    OP_LEASE = 1002;
+    OP_EXTENT_SERVER = 1003;
+    OP_INLIE_FILE = 1004;
+}
+
+message JournalHeader {
+    string service_id = 1;
+    OperationType operation_type = 2;
+}
+
+message JournalEntry {
+    JournalHeader header = 1;
+    bytes body = 2;
+}

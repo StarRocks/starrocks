@@ -1,0 +1,217 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+import "star_status.proto";
+
+package staros;
+option java_package = "com.staros.proto";
+option java_multiple_files = true;
+
+enum WorkerState {
+    OFF = 0; // worker shutdown
+    ON = 1;  // worker running
+    DOWN = 2; // worker running but heartbeat does not work
+    SHUTTING_DOWN = 3; // worker is in shutting down
+}
+
+enum WorkerGroupState {
+    // pending or in the progress of provisioning
+    PENDING = 0;
+    READY = 1;
+    // pending delete or in the progress of de-provisioning
+    DELETING = 2;
+}
+
+message AddWorkerRequest {
+    string service_id = 1;
+    uint64 group_id = 2;
+    string ip_port = 3; // port is used to communicate with star manager
+}
+
+message AddWorkerResponse {
+    StarStatus status = 1;
+    uint64 worker_id = 2;
+}
+
+message RemoveWorkerRequest {
+    string service_id = 1;
+    uint64 group_id = 2;
+    uint64 worker_id = 3;
+}
+
+message RemoveWorkerResponse {
+    StarStatus status = 1;
+}
+
+message GetWorkerRequest {
+    string service_id = 1;
+    oneof identifier {
+        uint64 worker_id = 2;
+        string ip_port = 3;
+    }
+}
+
+message WorkerInfo {
+    string service_id = 1;
+    uint64 group_id = 2;
+    uint64 worker_id = 3;
+    string ip_port = 4;
+    WorkerState worker_state = 5;
+    map<string, string> worker_properties = 6;
+    uint64 start_time = 7;
+    uint64 tablet_num = 8;
+    uint64 last_down_time = 9;
+}
+
+message GetWorkerResponse {
+    StarStatus status = 1;
+    WorkerInfo worker_info = 2;
+}
+
+message ShardReportInfo {
+    uint64 shard_id = 1;
+    int64 file_store_version = 2;
+    int32 hash_code = 3;
+}
+
+message WorkerHeartbeatRequest {
+    string service_id = 1;
+    uint64 worker_id = 2;
+    uint64 start_time = 3;
+    map<string, string> worker_properties = 4;
+    repeated uint64 shard_ids = 5;
+    repeated ShardReportInfo shard_report_infos = 6;
+}
+
+message WorkerHeartbeatResponse {
+    StarStatus status = 1;
+}
+
+message WorkerGroupSpec {
+    // WorkerGroup Size: XS/S/M/L/XL/...
+    string size = 1;
+}
+
+enum ReplicationType {
+    NO_SET = 0;
+    NO_REPLICATION = 1;
+    SYNC = 2;
+    ASYNC = 3;
+}
+
+enum WarmupLevel {
+    WARMUP_NOT_SET = 0;
+    WARMUP_NOTHING = 1;
+    WARMUP_META = 2;
+    WARMUP_INDEX = 3;
+    WARMUP_ALL = 4;
+}
+
+message CreateWorkerGroupRequest {
+    // required
+    string service_id = 1;
+    // required
+    string owner = 2;
+    // required
+    WorkerGroupSpec spec = 3;
+    // optional
+    map<string, string> labels = 4;
+    // optional
+    map<string, string> properties = 5;
+    // replica number of each shard that should be scheduled to this group
+    int32 replica_number = 6;
+    ReplicationType replication_type = 7;
+    WarmupLevel warmup_level = 8;
+}
+
+message WorkerGroupDetailInfo {
+    string service_id = 1;
+    uint64 group_id = 2;
+    WorkerGroupSpec spec = 3;
+    string owner = 4;
+    WorkerGroupState state = 5;
+    map<string, string> labels = 6;
+    map<string, string> properties = 7;
+    repeated WorkerInfo workers_info = 8;
+    int32 replica_number = 9;
+    ReplicationType replication_type = 10;
+    WarmupLevel warmup_level = 11;
+}
+
+message CreateWorkerGroupResponse {
+    StarStatus status = 1;
+    WorkerGroupDetailInfo group_info = 2;
+}
+
+message ListWorkerGroupRequest {
+    string service_id = 1;
+    // group ids to be listed, leave empty if want to list all/list by labels
+    repeated uint64 group_ids = 2;
+    // filter by those labels, only all k-v matched group will be listed.
+    map<string, string> filter_labels = 3;
+    // optional, include all workers info in the result
+    bool include_workers_info = 4;
+}
+
+message ListWorkerGroupResponse {
+    StarStatus status = 1;
+    repeated WorkerGroupDetailInfo groups_info = 2;
+}
+
+message UpdateWorkerGroupRequest {
+    string service_id = 1;
+    uint64 group_id = 2;
+    // optional, alter worker group size
+    WorkerGroupSpec spec = 3;
+    // optional, replace worker group labels
+    map<string, string> labels = 5;
+    // optional, replace worker group properties
+    map<string, string> properties = 6;
+    // optional
+    int32 replica_number = 7;
+    // optional
+    ReplicationType replication_type = 8;
+    WarmupLevel warmup_level = 9;
+}
+
+message UpdateWorkerGroupResponse {
+    StarStatus status = 1;
+    WorkerGroupDetailInfo group_info = 2;
+}
+
+message DeleteWorkerGroupRequest {
+    string service_id = 1;
+    uint64 group_id = 2;
+}
+
+message DeleteWorkerGroupResponse {
+    StarStatus status = 1;
+}
+
+message UpdateWorkerGroupInfo {
+    uint64 group_id = 1;
+    WorkerGroupSpec spec = 2;
+    map<string, string> labels = 3;
+    map<string, string> properties = 4;
+    int32 replica_number = 5;
+    ReplicationType replication_type = 6;
+    WarmupLevel warmup_level = 7;
+}
+
+// TODO: move persistent related protobuf to separate file
+message DeleteWorkerGroupInfo {
+    uint64 group_id = 1;
+}
