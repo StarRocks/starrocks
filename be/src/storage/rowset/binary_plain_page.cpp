@@ -350,6 +350,7 @@ Status BinaryPlainPageDecoder<Type>::read_by_rowids(const ordinal_t first_ordina
         for (size_t i = 0; i < total; i++) {
             ordinal_t ord = rowids[i] - first_ordinal_in_page;
             if (UNLIKELY(ord >= _num_elems)) {
+                total = i;
                 break;
             }
             Slice element = string_at_index(ord);
