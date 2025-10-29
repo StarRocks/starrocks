@@ -1511,7 +1511,7 @@ public class StmtExecutor {
         }
 
         if (context instanceof ArrowFlightSqlConnectContext) {
-            coord.join(0);
+            coord.join(context.getSessionVariable().getQueryTimeoutS());
         }
 
         processQueryStatisticsFromResult(batch, execPlan, isOutfileQuery);

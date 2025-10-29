@@ -462,18 +462,16 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
 
                     ctx.setDeploymentFinished(null);
                     processorFinished.complete(null);
-                } catch (Exception e) {
-                    processorFinished.completeExceptionally(e);
                 } catch (Throwable t) {
                     processorFinished.completeExceptionally(t);
                 }
             });
 
-            processorFinished.get();
             // ------------------------------------------------------------------------------------
             // FE task will return FE as endpoint.
             // ------------------------------------------------------------------------------------
             if (ctx.returnFromFE() || ctx.isFromFECoordinator()) {
+                processorFinished.get();
                 if (ctx.getState().isError()) {
                     throw new RuntimeException(String.format("failed to process query [queryID=%s] [error=%s]",
                             DebugUtil.printId(ctx.getExecutionId()),
