@@ -221,6 +221,12 @@ public class ArrowFlightSqlServiceImplTest {
     }
     @Test
     public void testGetFlightInfoPreparedStatement() {
+        SessionVariable mockSessionVariable = mock(SessionVariable.class);
+        when(mockContext.getSessionVariable()).thenReturn(mockSessionVariable);
+        when(mockSessionVariable.getQueryTimeoutS()).thenReturn(10);
+        when(mockSessionVariable.getQueryDeliveryTimeoutS()).thenReturn(10);
+        when(mockSessionVariable.getSqlDialect()).thenReturn("mysql");
+
         FlightSql.CommandPreparedStatementQuery command = FlightSql.CommandPreparedStatementQuery.newBuilder()
                 .setPreparedStatementHandle(ByteString.copyFromUtf8("token123")).build();
         FlightInfo info = service
