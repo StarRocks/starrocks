@@ -160,6 +160,7 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
             for (const auto& [_, desc] : global_rf_collector->descriptors()) {
                 if (!desc->skip_wait()) {
                     _global_rf_descriptors.emplace_back(desc);
+                    desc->add_observer(_runtime_state, &_observer);
                 }
             }
 
