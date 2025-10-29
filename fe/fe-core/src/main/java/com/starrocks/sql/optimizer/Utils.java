@@ -1081,4 +1081,11 @@ public class Utils {
 
         return new Pair<>(columnConstMap, otherPredicates);
     }
+
+    /**
+     * If there's only one BE node, splitting into multi-phase has no benefit but only overhead
+     */
+    public static boolean isSingleNodeExecution(ConnectContext context) {
+        return context.getAliveExecutionNodesNumber() == 1;
+    }
 }
