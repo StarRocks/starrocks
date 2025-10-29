@@ -33,8 +33,8 @@ public:
     static constexpr const char* AGG_STATE_MERGE_SUFFIX = "_merge";
     static constexpr const char* AGG_STATE_COMBINE_SUFFIX = "_combine";
     static constexpr const char* AGG_STATE_IF_SUFFIX = "_if";
-    static constexpr std::string FUNCTION_COUNT = "count";
-    static constexpr std::string FUNCTION_COUNT_NULLABLE = "count_nullable";
+    static const inline std::string FUNCTION_COUNT = "count";
+    static const inline std::string FUNCTION_COUNT_NULLABLE = "count_nullable";
 
     static bool is_agg_state_function(const std::string& func_name) noexcept {
         return !func_name.empty() && func_name.ends_with(STATE_FUNCTION_SUFFIX);
