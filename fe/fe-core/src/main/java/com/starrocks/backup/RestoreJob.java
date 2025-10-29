@@ -53,6 +53,7 @@ import com.starrocks.backup.BackupJobInfo.BackupTableInfo;
 import com.starrocks.backup.BackupJobInfo.BackupTabletInfo;
 import com.starrocks.backup.RestoreFileMapping.IdChain;
 import com.starrocks.backup.Status.ErrCode;
+import com.starrocks.backup.mv.MvBackupInfo;
 import com.starrocks.backup.mv.MvRestoreContext;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.ColocateTableIndex;
@@ -67,6 +68,7 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
@@ -112,6 +114,7 @@ import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletSchema;
 import com.starrocks.thrift.TTaskType;
 import com.starrocks.warehouse.WarehouseIdleChecker;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -485,7 +488,7 @@ public class RestoreJob extends AbstractJob {
                 }
             } catch (DdlException e) {
                 status = new Status(ErrCode.COMMON_ERROR,
-                                    "Failed to restore external catalog, errmsg: " + e.getMessage());
+                        "Failed to restore external catalog, errmsg: " + e.getMessage());
                 return;
             }
             state = RestoreJobState.COMMITTING;
@@ -848,7 +851,245 @@ public class RestoreJob extends AbstractJob {
     }
 
     protected Status resetTableForRestore(OlapTable remoteOlapTbl, Database db) {
-        return remoteOlapTbl.resetIdsForRestore(globalStateMgr, db, restoreReplicationNum, mvRestoreContext);
+        if (remoteOlapTbl instanceof MaterializedView) {
+            return resetMVIdsForRestore(globalStateMgr, (MaterializedView) remoteOlapTbl, db, restoreReplicationNum,
+                    mvRestoreContext);
+        } else {
+            return resetIdsForRestore(globalStateMgr, remoteOlapTbl, db, restoreReplicationNum, mvRestoreContext);
+        }
+    }
+
+    public Status resetMVIdsForRestore(GlobalStateMgr globalStateMgr,
+                                       MaterializedView remoteOlapTbl,
+                                       Database db, int restoreReplicationNum,
+                                       MvRestoreContext mvRestoreContext) {
+        // change db_id to new restore id
+        MvId oldMvId = new MvId(dbId, remoteOlapTbl.getId());
+
+        this.dbId = db.getId();
+        Status status = resetIdsForRestore(globalStateMgr, remoteOlapTbl, db, restoreReplicationNum, mvRestoreContext);
+        if (!status.ok()) {
+            return status;
+        }
+        // store new mvId to for old mvId
+        MvId newMvId = new MvId(dbId, remoteOlapTbl.getId());
+        MvBackupInfo mvBackupInfo = mvRestoreContext.getMvIdToTableNameMap()
+                .computeIfAbsent(oldMvId, x -> new MvBackupInfo(db.getFullName(), remoteOlapTbl.getName()));
+        mvBackupInfo.setLocalMvId(newMvId);
+        return Status.OK;
+    }
+
+    public Status resetIdsForRestore(GlobalStateMgr globalStateMgr,
+                                     OlapTable remoteOlapTbl,
+                                     Database db, int restoreReplicationNum,
+                                     MvRestoreContext mvRestoreContext) {
+        Map<String, Long> indexNameToId = remoteOlapTbl.getIndexNameToId();
+
+        // copy an origin index id to name map
+        Map<Long, String> origIdxIdToName = Maps.newHashMap();
+        for (Map.Entry<String, Long> entry : indexNameToId.entrySet()) {
+            origIdxIdToName.put(entry.getValue(), entry.getKey());
+        }
+
+        // reset table id
+        remoteOlapTbl.setId(globalStateMgr.getNextId());
+
+        // reset all 'indexIdToXXX' map
+        Map<Long, MaterializedIndexMeta> indexIdToMeta = remoteOlapTbl.getIndexIdToMeta();
+        Map<Long, MaterializedIndexMeta> origIndexIdToMeta = Maps.newHashMap(indexIdToMeta);
+        indexIdToMeta.clear();
+        for (Map.Entry<Long, String> entry : origIdxIdToName.entrySet()) {
+            long newIdxId = globalStateMgr.getNextId();
+            if (entry.getValue().equals(remoteOlapTbl.getName())) {
+                // base index
+                remoteOlapTbl.setBaseIndexId(newIdxId);
+            }
+            MaterializedIndexMeta indexMeta = origIndexIdToMeta.get(entry.getKey());
+            indexMeta.setIndexIdForRestore(newIdxId);
+            indexMeta.setSchemaId(newIdxId);
+            indexIdToMeta.put(newIdxId, indexMeta);
+            indexNameToId.put(entry.getValue(), newIdxId);
+        }
+
+        // generate a partition old id to new id map
+        Map<Long, Long> partitionOldIdToNewId = Maps.newHashMap();
+        Map<Long, Partition> idToPartition = remoteOlapTbl.getIdToPartition();
+        PartitionInfo partitionInfo = remoteOlapTbl.getPartitionInfo();
+
+        for (Long id : idToPartition.keySet()) {
+            partitionOldIdToNewId.put(id, globalStateMgr.getNextId());
+            // reset replication number for partition info
+            partitionInfo.setReplicationNum(id, (short) restoreReplicationNum);
+        }
+
+        // reset partition info
+        partitionInfo.setPartitionIdsForRestore(partitionOldIdToNewId);
+
+        // reset partitions
+        List<Partition> partitions = Lists.newArrayList(idToPartition.values());
+        idToPartition.clear();
+        Map<Long, Long> physicalPartitionIdToPartitionId = remoteOlapTbl.getPhysicalPartitionIdToPartitionId();
+        physicalPartitionIdToPartitionId.clear();
+        Map<String, Long> physicalPartitionNameToPartitionId = remoteOlapTbl.getPhysicalPartitionNameToPartitionId();
+        physicalPartitionNameToPartitionId.clear();
+
+        for (Partition partition : partitions) {
+            long newPartitionId = partitionOldIdToNewId.get(partition.getId());
+            partition.setIdForRestore(newPartitionId);
+            idToPartition.put(newPartitionId, partition);
+            List<PhysicalPartition> origPhysicalPartitions = Lists.newArrayList(partition.getSubPartitions());
+            origPhysicalPartitions.forEach(physicalPartition -> {
+                // after refactor, the first physicalPartition id is different from logical partition id
+                if (physicalPartition.getParentId() != newPartitionId) {
+                    partition.removeSubPartition(physicalPartition.getId());
+                }
+            });
+            origPhysicalPartitions.forEach(physicalPartition -> {
+                // after refactor, the first physicalPartition id is different from logical partition id
+                if (physicalPartition.getParentId() != newPartitionId) {
+                    physicalPartition.setIdForRestore(GlobalStateMgr.getCurrentState().getNextId());
+                    physicalPartition.setParentId(newPartitionId);
+                    partition.addSubPartition(physicalPartition);
+                }
+                physicalPartitionIdToPartitionId.put(physicalPartition.getId(), newPartitionId);
+                physicalPartitionNameToPartitionId.put(physicalPartition.getName(), newPartitionId);
+            });
+        }
+
+        // reset replication number for olaptable
+        remoteOlapTbl.setReplicationNum((short) restoreReplicationNum);
+
+        // for each partition, reset rollup index map
+        for (Map.Entry<Long, Partition> entry : idToPartition.entrySet()) {
+            Partition partition = entry.getValue();
+            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                Map<Long, MaterializedIndex> origIdToIndex = Maps.newHashMapWithExpectedSize(origIdxIdToName.size());
+                for (Map.Entry<Long, String> entry2 : origIdxIdToName.entrySet()) {
+                    MaterializedIndex idx = physicalPartition.getIndex(entry2.getKey());
+                    origIdToIndex.put(entry2.getKey(), idx);
+                    long newIdxId = indexNameToId.get(entry2.getValue());
+                    if (newIdxId != remoteOlapTbl.getBaseIndexId()) {
+                        // not base table, delete old index
+                        physicalPartition.deleteRollupIndex(entry2.getKey());
+                    }
+                }
+                for (Map.Entry<Long, String> entry2 : origIdxIdToName.entrySet()) {
+                    MaterializedIndex idx = origIdToIndex.get(entry2.getKey());
+                    long newIdxId = indexNameToId.get(entry2.getValue());
+                    int schemaHash = indexIdToMeta.get(newIdxId).getSchemaHash();
+                    idx.setIdForRestore(newIdxId);
+                    if (newIdxId != remoteOlapTbl.getBaseIndexId()) {
+                        // not base table, reset
+                        physicalPartition.createRollupIndex(idx);
+                    }
+
+                    // generate new tablets in origin tablet order
+                    int tabletNum = idx.getTablets().size();
+                    idx.clearTabletsForRestore();
+                    Status status = createTabletsForRestore(remoteOlapTbl, tabletNum, idx, globalStateMgr,
+                            partitionInfo.getReplicationNum(entry.getKey()), physicalPartition.getVisibleVersion(),
+                            schemaHash, physicalPartition.getId(), db);
+                    if (!status.ok()) {
+                        return status;
+                    }
+                }
+            }
+        }
+
+        return Status.OK;
+    }
+
+    public Status createTabletsForRestore(OlapTable remoteOlapTbl,
+                                          int tabletNum, MaterializedIndex index, GlobalStateMgr globalStateMgr,
+                                          int replicationNum, long version, int schemaHash,
+                                          long partitionId, Database db) {
+        Preconditions.checkArgument(replicationNum > 0);
+        String colocateGroup = remoteOlapTbl.getColocateGroup();
+        boolean isColocate = (colocateGroup != null && !colocateGroup.isEmpty() && db != null);
+
+        if (isColocate) {
+            try {
+                isColocate = GlobalStateMgr.getCurrentState().getColocateTableIndex()
+                        .addTableToGroup(db, remoteOlapTbl, colocateGroup, false);
+            } catch (Exception e) {
+                return new Status(ErrCode.COMMON_ERROR,
+                        "check colocate restore failed, errmsg: " + e.getMessage() +
+                                ", you can disable colocate restore by turn off Config.enable_colocate_restore");
+            }
+        }
+
+        if (isColocate) {
+            ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+            ColocateTableIndex.GroupId groupId = colocateTableIndex.getGroup(remoteOlapTbl.getId());
+            List<List<Long>> backendsPerBucketSeq = colocateTableIndex.getBackendsPerBucketSeq(groupId);
+            boolean chooseBackendsArbitrary = backendsPerBucketSeq == null || backendsPerBucketSeq.isEmpty();
+
+            if (chooseBackendsArbitrary) {
+                backendsPerBucketSeq = Lists.newArrayList();
+            }
+
+            for (int i = 0; i < tabletNum; ++i) {
+                long newTabletId = globalStateMgr.getNextId();
+                LocalTablet newTablet = new LocalTablet(newTabletId);
+                index.addTablet(newTablet, null /* tablet meta */, false/* update inverted index */);
+
+                // replicas
+                List<Long> beIds;
+                if (chooseBackendsArbitrary) {
+                    // This is the first colocate table in the group, or just a normal table,
+                    // randomly choose backends
+                    beIds = GlobalStateMgr.getCurrentState().getNodeMgr()
+                            .getClusterInfo().getNodeSelector()
+                            .seqChooseBackendIds(replicationNum, true, true, remoteOlapTbl.getLocation());
+                    backendsPerBucketSeq.add(beIds);
+                } else {
+                    // get backends from existing backend sequence
+                    beIds = backendsPerBucketSeq.get(i);
+                }
+
+                if (CollectionUtils.isEmpty(beIds)) {
+                    return new Status(ErrCode.COMMON_ERROR, "failed to find "
+                            + replicationNum
+                            + " different hosts to create table: " + remoteOlapTbl.getName());
+                }
+                for (Long beId : beIds) {
+                    long newReplicaId = globalStateMgr.getNextId();
+                    Replica replica = new Replica(newReplicaId, beId, Replica.ReplicaState.NORMAL,
+                            version, schemaHash);
+                    newTablet.addReplica(replica, false/* update inverted index */);
+                }
+                Preconditions.checkState(beIds.size() == replicationNum,
+                        beIds.size() + " vs. " + replicationNum);
+            }
+
+            // first colocate table in CG
+            if (groupId != null && chooseBackendsArbitrary) {
+                colocateTableIndex.addBackendsPerBucketSeq(groupId, backendsPerBucketSeq);
+            }
+        } else {
+            for (int i = 0; i < tabletNum; i++) {
+                long newTabletId = globalStateMgr.getNextId();
+                LocalTablet newTablet = new LocalTablet(newTabletId);
+                index.addTablet(newTablet, null /* tablet meta */, false/* update inverted index */);
+
+                // replicas
+                List<Long> beIds = GlobalStateMgr.getCurrentState().getNodeMgr()
+                        .getClusterInfo().getNodeSelector()
+                        .seqChooseBackendIds(replicationNum, true, true, remoteOlapTbl.getLocation());
+                if (CollectionUtils.isEmpty(beIds)) {
+                    return new Status(ErrCode.COMMON_ERROR, "failed to find "
+                            + replicationNum
+                            + " different hosts to create table: " + remoteOlapTbl.getName());
+                }
+                for (Long beId : beIds) {
+                    long newReplicaId = globalStateMgr.getNextId();
+                    Replica replica = new Replica(newReplicaId, beId, Replica.ReplicaState.NORMAL,
+                            version, schemaHash);
+                    newTablet.addReplica(replica, false/* update inverted index */);
+                }
+            }
+        }
+        return Status.OK;
     }
 
     protected void sendCreateReplicaTasks() {
@@ -1123,7 +1364,7 @@ public class RestoreJob extends AbstractJob {
                 int remotetabletSize = remoteIdx.getTablets().size();
                 remoteIdx.clearTabletsForRestore();
                 // generate new table
-                status = remoteTbl.createTabletsForRestore(remotetabletSize, remoteIdx, globalStateMgr,
+                status = createTabletsForRestore(remoteTbl, remotetabletSize, remoteIdx, globalStateMgr,
                         restoreReplicationNum,
                         visibleVersion, schemaHash, physicalPartition.getId(), null);
                 if (!status.ok()) {
@@ -1569,7 +1810,7 @@ public class RestoreJob extends AbstractJob {
             if (!isReplay) {
                 finishedTime = System.currentTimeMillis();
                 state = RestoreJobState.FINISHED;
-    
+
                 globalStateMgr.getEditLog().logRestoreJob(this);
             }
             LOG.info("job is finished. is replay: {}. {}", isReplay, this);
@@ -1681,7 +1922,7 @@ public class RestoreJob extends AbstractJob {
                                 try {
                                     MaterializedView mv = (MaterializedView) olapTable;
                                     mv.setInactiveAndReason(MaterializedViewExceptions
-                                                    .inactiveReasonForMetadataTableRestoreCorrupted(mv.getName()));
+                                            .inactiveReasonForMetadataTableRestoreCorrupted(mv.getName()));
                                     // clear version map so can be refreshed later
                                     mv.getRefreshScheme().getAsyncRefreshContext().clearVisibleVersionMap();
                                     // drop all partitions
@@ -1943,9 +2184,6 @@ public class RestoreJob extends AbstractJob {
             }
         }
     }
-
-
-
 
     @Override
     public String toString() {
