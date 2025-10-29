@@ -46,6 +46,10 @@ shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/strea
 sync;
 select * from tab1;
 
+insert into tab1 properties("merge_condition" = "v1") values (300, "k3_300", 200, 400, 400, "v4_400", "v5_400");
+select * from tab1 order by k1,k2;
+insert into tab1 properties("merge_condition" = "v1") values (300, "k3_300", 400, 400, 400, "v4_400", "v5_400");
+select * from tab1 order by k1,k2;
 
 CREATE table expr_partition_tbl (
       org_id INT,
