@@ -214,6 +214,10 @@ const VariantMetadata& Variant::metadata() const {
     return _metadata;
 }
 
+std::string_view Variant::value() const {
+    return _value;
+}
+
 StatusOr<ObjectInfo> get_object_info(std::string_view value) {
     BasicType basic_type = static_cast<BasicType>(static_cast<uint8_t>(value[0]) & Variant::kBasicTypeMask);
     if (basic_type != BasicType::OBJECT) {

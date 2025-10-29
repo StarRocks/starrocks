@@ -256,6 +256,9 @@ public class FunctionSet {
     public static final String JSON_LENGTH = "json_length";
     public static final String JSON_REMOVE = "json_remove";
 
+    // Variant functions:
+    public static final String VARIANT_QUERY = "variant_query";
+
     // Matching functions:
     public static final String ILIKE = "ilike";
     public static final String LIKE = "like";
@@ -534,6 +537,10 @@ public class FunctionSet {
     // JSON functions
     public static final Function JSON_QUERY_FUNC = new Function(
             new FunctionName(JSON_QUERY), new Type[] {Type.JSON, Type.VARCHAR}, Type.JSON, false);
+
+    // VARIANT functions
+    public static final Function VARIANT_QUERY_FUNC = new Function(
+            new FunctionName(VARIANT_QUERY), new Type[] {Type.VARIANT, Type.VARCHAR}, Type.VARIANT, false);
 
     // dict query function
     public static final String DICT_MAPPING = "dict_mapping";
