@@ -1167,9 +1167,39 @@ void JsonMerger::_merge_json(const JsonFlatPath* root, vpack::Builder* builder, 
         } else if (child->op == JsonFlatPath::OP_ROOT) {
             _merge_json(child.get(), builder, index);
         } else {
-            builder->addUnchecked(child_name.data(), child_name.size(), vpack::Value(vpack::ValueType::Object));
-            _merge_json(child.get(), builder, index);
-            builder->close();
+            // Only create object structure if there are non-null values in the subtree
+            // Otherwise it will create a JSON like {"a": {"b": {}}} but it's not expected
+            bool has_non_null_values = false;
+            _check_has_non_null_values(child.get(), index, &has_non_null_values);
+
+            if (has_non_null_values) {
+                builder->addUnchecked(child_name.data(), child_name.size(), vpack::Value(vpack::ValueType::Object));
+                _merge_json(child.get(), builder, index);
+                builder->close();
+            }
+        }
+    }
+}
+
+void JsonMerger::_check_has_non_null_values(const JsonFlatPath* root, size_t index, bool* has_non_null_values) {
+    for (auto& [child_name, child] : root->children) {
+        if (child->op == JsonFlatPath::OP_EXCLUDE) {
+            continue;
+        }
+
+        if (child->children.empty() && child->op != JsonFlatPath::OP_NEW_LEVEL) {
+            // Leaf node - check if the value is not null
+            auto col = _src_columns[child->index];
+            if (!col->is_null(index)) {
+                *has_non_null_values = true;
+                return;
+            }
+        } else {
+            // Non-leaf node - recursively check children
+            _check_has_non_null_values(child.get(), index, has_non_null_values);
+            if (*has_non_null_values) {
+                return;
+            }
         }
     }
 }
