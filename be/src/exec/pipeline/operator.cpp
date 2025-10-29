@@ -405,6 +405,8 @@ void OperatorFactory::acquire_runtime_filter(RuntimeState* state) {
             continue;
         }
 
+        VLOG_FILE << "OperatorFactory::acquire_runtime_filter(shared). filter_id = " << filter_id
+                  << ", filter = " << grf->debug_string();
         desc->set_shared_runtime_filter(grf);
     }
 }
