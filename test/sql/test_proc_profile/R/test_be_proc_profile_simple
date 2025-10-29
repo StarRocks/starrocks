@@ -19,7 +19,7 @@ shell: curl -s -u root: "http://$(cat be_ip.txt):$(cat be_http_port.txt)/proc_pr
 0
 1
 -- !result
-shell: curl -s -u root: "http://$(cat be_ip.txt):$(cat be_http_port.txt)/proc_profile" | grep -o 'filename=[^"]*\.gz' | head -1 | cut -d'=' -f2 > be_profile_file.txt
+shell: curl -s -u root: "http://$(cat be_ip.txt):$(cat be_http_port.txt)/proc_profile" | grep -o 'filename=[^"]*\.gz' | tail -1 | cut -d'=' -f2 > be_profile_file.txt
 -- result:
 0
 
@@ -27,7 +27,7 @@ shell: curl -s -u root: "http://$(cat be_ip.txt):$(cat be_http_port.txt)/proc_pr
 [UC]shell: cat be_profile_file.txt
 -- result:
 0
-cpu-profile-20251022-105520-pprof.gz
+cpu-profile-20251027-140332-pprof.gz
 -- !result
 shell: if [ $(curl -s -u root: "http://$(cat be_ip.txt):$(cat be_http_port.txt)/proc_profile/file?filename=$(cat be_profile_file.txt)" | wc -l) -gt 0 ]; then echo "exist"; else echo "empty"; fi
 -- result:
