@@ -14,7 +14,12 @@
 
 #include "async_flush_output_stream.h"
 
+#include "runtime/current_thread.h"
+#include "util/failpoint/fail_point.h"
+
 namespace starrocks::io {
+
+DEFINE_FAIL_POINT(async_flush_output_stream_sleep);
 
 int64_t AsyncFlushOutputStream::SliceChunk::append(const uint8_t* data, int64_t size) {
     int64_t old_size = static_cast<int64_t>(buffer_.size());
@@ -53,15 +58,19 @@ Status AsyncFlushOutputStream::write(const uint8_t* data, int64_t size) {
             _releasable_bytes.fetch_add(chunk->get_buffer_ptr()->capacity());
 
             auto task = [this, chunk]() {
-                SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_runtime_state->instance_mem_tracker());
-                CurrentThread::current().set_query_id(_runtime_state->query_id());
-                CurrentThread::current().set_fragment_instance_id(_runtime_state->fragment_instance_id());
-                auto buffer = chunk->get_buffer_ptr();
-                DeferOp op([this, chunk, capacity = buffer->capacity()] {
-                    _releasable_bytes.fetch_sub(capacity);
-                    delete chunk;
-                });
-                auto status = _file->append(Slice(buffer->data(), buffer->size()));
+                Status status;
+                {
+                    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_runtime_state->instance_mem_tracker());
+                    CurrentThread::current().set_query_id(_runtime_state->query_id());
+                    CurrentThread::current().set_fragment_instance_id(_runtime_state->fragment_instance_id());
+                    auto buffer = chunk->get_buffer_ptr();
+                    DeferOp op([this, chunk, capacity = buffer->capacity()] {
+                        _releasable_bytes.fetch_sub(capacity);
+                        delete chunk;
+                        FAIL_POINT_TRIGGER_EXECUTE(async_flush_output_stream_sleep, { sleep(2); });
+                    });
+                    status = _file->append(Slice(buffer->data(), buffer->size()));
+                }
                 {
                     std::scoped_lock lock(_mutex);
                     _io_status.update(status);
@@ -97,15 +106,18 @@ Status AsyncFlushOutputStream::close() {
         _slice_chunk_queue.pop_front();
         _releasable_bytes.fetch_add(chunk->get_buffer_ptr()->capacity());
         auto task = [&, chunk]() {
-            SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_runtime_state->instance_mem_tracker());
-            CurrentThread::current().set_query_id(_runtime_state->query_id());
-            CurrentThread::current().set_fragment_instance_id(_runtime_state->fragment_instance_id());
-            auto buffer = chunk->get_buffer_ptr();
-            DeferOp op([this, chunk, capacity = buffer->capacity()] {
-                _releasable_bytes.fetch_sub(capacity);
-                delete chunk;
-            });
-            auto status = _file->append(Slice(buffer->data(), buffer->size()));
+            Status status;
+            {
+                SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_runtime_state->instance_mem_tracker());
+                CurrentThread::current().set_query_id(_runtime_state->query_id());
+                CurrentThread::current().set_fragment_instance_id(_runtime_state->fragment_instance_id());
+                auto buffer = chunk->get_buffer_ptr();
+                DeferOp op([this, chunk, capacity = buffer->capacity()] {
+                    _releasable_bytes.fetch_sub(capacity);
+                    delete chunk;
+                });
+                status = _file->append(Slice(buffer->data(), buffer->size()));
+            }
             {
                 std::scoped_lock lock(_mutex);
                 _io_status.update(status);
@@ -125,10 +137,13 @@ Status AsyncFlushOutputStream::close() {
     }
 
     auto close_task = [&]() {
-        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_runtime_state->instance_mem_tracker());
-        CurrentThread::current().set_query_id(_runtime_state->query_id());
-        CurrentThread::current().set_fragment_instance_id(_runtime_state->fragment_instance_id());
-        auto status = _file->close();
+        Status status;
+        {
+            SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_runtime_state->instance_mem_tracker());
+            CurrentThread::current().set_query_id(_runtime_state->query_id());
+            CurrentThread::current().set_fragment_instance_id(_runtime_state->fragment_instance_id());
+            status = _file->close();
+        }
         {
             std::scoped_lock lock(_mutex);
             _io_status.update(status);
