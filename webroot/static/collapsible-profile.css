@@ -37,3 +37,16 @@
 .profile-line.hidden {
   display: none;
 }
+
+/* Button Layout Styles */
+.button-group-left {
+  float: left;
+}
+
+.button-group-right {
+  float: right;
+}
+
+.button-group-left input, .button-group-right input {
+  margin-right: 5px;
+}
