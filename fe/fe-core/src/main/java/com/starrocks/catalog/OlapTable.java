@@ -50,7 +50,6 @@ import com.starrocks.alter.OlapTableAlterJobV2Builder;
 import com.starrocks.alter.OlapTableRollupJobBuilder;
 import com.starrocks.alter.OptimizeJobV2Builder;
 import com.starrocks.backup.Status;
-import com.starrocks.backup.Status.ErrCode;
 import com.starrocks.backup.mv.MvBackupInfo;
 import com.starrocks.backup.mv.MvRestoreContext;
 import com.starrocks.binlog.BinlogConfig;
@@ -78,7 +77,6 @@ import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.RangeUtils;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.common.util.Util;
 import com.starrocks.common.util.WriteQuorum;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.lake.DataCacheInfo;
@@ -139,7 +137,6 @@ import org.apache.logging.log4j.Logger;
 import org.threeten.extra.PeriodDuration;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -160,7 +157,6 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
-import java.util.zip.Adler32;
 import javax.annotation.Nullable;
 
 import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_STORAGE_TYPE_COLUMN;
@@ -1696,171 +1692,6 @@ public class OlapTable extends Table {
             }
         }
         return rowCount;
-    }
-
-    public int getSignature(int signatureVersion, List<String> partNames, boolean isRestore) {
-        Adler32 adler32 = new Adler32();
-        adler32.update(signatureVersion);
-
-        // table name
-        adler32.update(name.getBytes(StandardCharsets.UTF_8));
-        LOG.debug("signature. table name: {}", name);
-        // type
-        adler32.update(type.name().getBytes(StandardCharsets.UTF_8));
-        LOG.debug("signature. table type: {}", type.name());
-
-        // all indices(should be in order)
-        Set<String> indexNames = Sets.newTreeSet();
-        indexNames.addAll(indexNameToId.keySet());
-        for (String indexName : indexNames) {
-            long indexId = indexNameToId.get(indexName);
-            adler32.update(indexName.getBytes(StandardCharsets.UTF_8));
-            LOG.debug("signature. index name: {}", indexName);
-            MaterializedIndexMeta indexMeta = indexIdToMeta.get(indexId);
-            // schema hash
-            // schema hash will change after finish schema change. It is make no sense
-            // that check the schema hash here when doing restore
-            if (!isRestore) {
-                adler32.update(indexMeta.getSchemaHash());
-                LOG.debug("signature. index schema hash: {}", indexMeta.getSchemaHash());
-            }
-            // short key column count
-            adler32.update(indexMeta.getShortKeyColumnCount());
-            LOG.debug("signature. index short key: {}", indexMeta.getShortKeyColumnCount());
-            // storage type
-            adler32.update(indexMeta.getStorageType().name().getBytes(StandardCharsets.UTF_8));
-            LOG.debug("signature. index storage type: {}", indexMeta.getStorageType());
-        }
-
-        // bloom filter
-        if (bfColumns != null && !bfColumns.isEmpty()) {
-            for (ColumnId bfCol : bfColumns) {
-                adler32.update(bfCol.getId().getBytes());
-                LOG.debug("signature. bf col: {}", bfCol);
-            }
-            adler32.update(String.valueOf(bfFpp).getBytes());
-            LOG.debug("signature. bf fpp: {}", bfFpp);
-        }
-
-        // partition type
-        adler32.update(partitionInfo.getType().name().getBytes(StandardCharsets.UTF_8));
-        LOG.debug("signature. partition type: {}", partitionInfo.getType().name());
-        // partition columns
-        if (partitionInfo.isRangePartition()) {
-            List<Column> partitionColumns = partitionInfo.getPartitionColumns(this.idToColumn);
-            adler32.update(Util.schemaHash(0, partitionColumns, null, 0));
-            LOG.debug("signature. partition col hash: {}", Util.schemaHash(0, partitionColumns, null, 0));
-        }
-
-        // partition and distribution
-        Collections.sort(partNames, String.CASE_INSENSITIVE_ORDER);
-        for (String partName : partNames) {
-            Partition partition = getPartition(partName);
-            Preconditions.checkNotNull(partition, partName);
-            adler32.update(partName.getBytes(StandardCharsets.UTF_8));
-            LOG.debug("signature. partition name: {}", partName);
-            DistributionInfo distributionInfo = partition.getDistributionInfo();
-            adler32.update(distributionInfo.getType().name().getBytes(StandardCharsets.UTF_8));
-            if (distributionInfo.getType() == DistributionInfoType.HASH) {
-                HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) distributionInfo;
-                List<Column> distributionColumns = MetaUtils.getColumnsByColumnIds(
-                        this, hashDistributionInfo.getDistributionColumns());
-                adler32.update(Util.schemaHash(0, distributionColumns, null, 0));
-                LOG.debug("signature. distribution col hash: {}",
-                        Util.schemaHash(0, distributionColumns, null, 0));
-                adler32.update(hashDistributionInfo.getBucketNum());
-                LOG.debug("signature. bucket num: {}", hashDistributionInfo.getBucketNum());
-            }
-        }
-
-        LOG.debug("signature: {}", Math.abs((int) adler32.getValue()));
-        return Math.abs((int) adler32.getValue());
-    }
-
-    // This function is only used for getting the err msg for restore job
-    public List<Pair<Integer, String>> getSignatureSequence(int signatureVersion, List<String> partNames) {
-        List<Pair<Integer, String>> checkSumList = Lists.newArrayList();
-        Adler32 adler32 = new Adler32();
-        adler32.update(signatureVersion);
-
-        // table name
-        adler32.update(name.getBytes(StandardCharsets.UTF_8));
-        checkSumList.add(new Pair(Math.abs((int) adler32.getValue()), "Table name is inconsistent"));
-        // type
-        adler32.update(type.name().getBytes(StandardCharsets.UTF_8));
-        LOG.info("test getBytes", type.name().getBytes(StandardCharsets.UTF_8));
-        checkSumList.add(new Pair(Math.abs((int) adler32.getValue()), "Table type is inconsistent"));
-
-        // all indices(should be in order)
-        Set<String> indexNames = Sets.newTreeSet();
-        indexNames.addAll(indexNameToId.keySet());
-        for (String indexName : indexNames) {
-            long indexId = indexNameToId.get(indexName);
-            adler32.update(indexName.getBytes(StandardCharsets.UTF_8));
-            checkSumList.add(new Pair(Math.abs((int) adler32.getValue()), "indexName is inconsistent"));
-            MaterializedIndexMeta indexMeta = indexIdToMeta.get(indexId);
-            // short key column count
-            adler32.update(indexMeta.getShortKeyColumnCount());
-            checkSumList.add(new Pair(Math.abs((int) adler32.getValue()), "short key column count is inconsistent"));
-            // storage type
-            adler32.update(indexMeta.getStorageType().name().getBytes(StandardCharsets.UTF_8));
-            checkSumList.add(new Pair(Math.abs((int) adler32.getValue()), "storage type is inconsistent"));
-        }
-
-        // bloom filter
-        if (bfColumns != null && !bfColumns.isEmpty()) {
-            for (ColumnId bfCol : bfColumns) {
-                adler32.update(bfCol.getId().getBytes());
-                checkSumList.add(new Pair(Math.abs((int) adler32.getValue()), "bloom filter is inconsistent"));
-            }
-            adler32.update(String.valueOf(bfFpp).getBytes());
-            checkSumList.add(new Pair(Math.abs((int) adler32.getValue()), "bloom filter is inconsistent"));
-        }
-
-        // partition type
-        adler32.update(partitionInfo.getType().name().getBytes(StandardCharsets.UTF_8));
-        checkSumList.add(new Pair(Math.abs((int) adler32.getValue()), "partition type is inconsistent"));
-        // partition columns
-        if (partitionInfo.isRangePartition()) {
-            List<Column> partitionColumns = partitionInfo.getPartitionColumns(this.idToColumn);
-            adler32.update(Util.schemaHash(0, partitionColumns, null, 0));
-            checkSumList.add(new Pair(Math.abs((int) adler32.getValue()), "partition columns is inconsistent"));
-        }
-
-        // partition and distribution
-        Collections.sort(partNames, String.CASE_INSENSITIVE_ORDER);
-        for (String partName : partNames) {
-            Partition partition = getPartition(partName);
-            Preconditions.checkNotNull(partition, partName);
-            adler32.update(partName.getBytes(StandardCharsets.UTF_8));
-            checkSumList.add(new Pair(Math.abs((int) adler32.getValue()), "partition name is inconsistent"));
-            DistributionInfo distributionInfo = partition.getDistributionInfo();
-            adler32.update(distributionInfo.getType().name().getBytes(StandardCharsets.UTF_8));
-            if (distributionInfo.getType() == DistributionInfoType.HASH) {
-                HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) distributionInfo;
-                List<Column> distributionColumns = MetaUtils.getColumnsByColumnIds(
-                        this, hashDistributionInfo.getDistributionColumns());
-                adler32.update(Util.schemaHash(0, distributionColumns, null, 0));
-                checkSumList.add(new Pair(Math.abs((int) adler32.getValue()), "partition distribution col hash is inconsistent"));
-                adler32.update(hashDistributionInfo.getBucketNum());
-                checkSumList.add(new Pair(Math.abs((int) adler32.getValue()), "bucket num is inconsistent"));
-            }
-        }
-
-        return checkSumList;
-    }
-
-    // get intersect partition names with the given table "anotherTbl". not
-    // including temp partitions
-    public Status getIntersectPartNamesWith(OlapTable anotherTbl, List<String> intersectPartNames) {
-        if (this.getPartitionInfo().getType() != anotherTbl.getPartitionInfo().getType()) {
-            return new Status(ErrCode.COMMON_ERROR, "Table's partition type is different");
-        }
-
-        Set<String> intersect = this.getPartitionNames();
-        intersect.retainAll(anotherTbl.getPartitionNames());
-        intersectPartNames.addAll(intersect);
-        return Status.OK;
     }
 
     // Whether it's a partitioned table partition by columns, range or list.

@@ -246,18 +246,18 @@ public class BackupJobMaterializedViewTest {
                 OlapTable backupTbl = (OlapTable) backupMeta.getTable(UnitTestUtil.TABLE_NAME);
                 List<String> partNames = Lists.newArrayList(backupTbl.getPartitionNames());
                 Assertions.assertNotNull(backupTbl);
-                Assertions.assertEquals(backupTbl.getSignature(BackupHandler.SIGNATURE_VERSION, partNames, true),
-                            ((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                                        .getTable(db.getId(), tblId)).getSignature(BackupHandler.SIGNATURE_VERSION, partNames,
+                Assertions.assertEquals(RestoreJob.getSignature(backupTbl, BackupHandler.SIGNATURE_VERSION, partNames, true),
+                            RestoreJob.getSignature(((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                        .getTable(db.getId(), tblId)), BackupHandler.SIGNATURE_VERSION, partNames,
                                         true));
             }
             {
                 OlapTable backupTbl = (OlapTable) backupMeta.getTable(UnitTestUtil.MATERIALIZED_VIEW_NAME);
                 List<String> partNames = Lists.newArrayList(backupTbl.getPartitionNames());
                 Assertions.assertNotNull(backupTbl);
-                Assertions.assertEquals(backupTbl.getSignature(BackupHandler.SIGNATURE_VERSION, partNames, true),
-                            ((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                                        .getTable(db.getId(), tblId + 1)).getSignature(BackupHandler.SIGNATURE_VERSION, partNames,
+                Assertions.assertEquals(RestoreJob.getSignature(backupTbl, BackupHandler.SIGNATURE_VERSION, partNames, true),
+                            RestoreJob.getSignature(((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                        .getTable(db.getId(), tblId + 1)), BackupHandler.SIGNATURE_VERSION, partNames,
                                         true));
             }
         }
@@ -366,18 +366,18 @@ public class BackupJobMaterializedViewTest {
                 Assertions.assertNotNull(olapTable);
                 Assertions.assertNotNull(restoreMetaInfo.getTable(UnitTestUtil.TABLE_NAME));
                 List<String> names = Lists.newArrayList(olapTable.getPartitionNames());
-                Assertions.assertEquals(((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                                        .getTable(db.getId(), tblId)).getSignature(BackupHandler.SIGNATURE_VERSION, names, true),
-                            olapTable.getSignature(BackupHandler.SIGNATURE_VERSION, names, true));
+                Assertions.assertEquals(RestoreJob.getSignature(((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                        .getTable(db.getId(), tblId)), BackupHandler.SIGNATURE_VERSION, names, true),
+                            RestoreJob.getSignature(olapTable, BackupHandler.SIGNATURE_VERSION, names, true));
             }
             {
                 MaterializedView mv = (MaterializedView) restoreMetaInfo.getTable(tblId + 1);
                 Assertions.assertNotNull(mv);
                 Assertions.assertNotNull(restoreMetaInfo.getTable(UnitTestUtil.MATERIALIZED_VIEW_NAME));
                 List<String> names = Lists.newArrayList(mv.getPartitionNames());
-                Assertions.assertEquals(((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                            .getTable(db.getId(), tblId + 1)).getSignature(BackupHandler.SIGNATURE_VERSION, names,
-                            true), mv.getSignature(BackupHandler.SIGNATURE_VERSION, names, true));
+                Assertions.assertEquals(RestoreJob.getSignature(((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .getTable(db.getId(), tblId + 1)), BackupHandler.SIGNATURE_VERSION, names,
+                            true), RestoreJob.getSignature(mv, BackupHandler.SIGNATURE_VERSION, names, true));
             }
 
             restoreJobInfo = BackupJobInfo.fromFile(job.getLocalJobInfoFilePath());

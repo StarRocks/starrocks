@@ -27,7 +27,6 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.backup.Status;
-import com.starrocks.backup.mv.MvBackupInfo;
 import com.starrocks.backup.mv.MvBaseTableBackupInfo;
 import com.starrocks.backup.mv.MvRestoreContext;
 import com.starrocks.catalog.constraint.ForeignKeyConstraint;
