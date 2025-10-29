@@ -20,6 +20,7 @@ import one.profiler.AsyncProfiler;
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
 import org.apache.commons.compress.archivers.tar.TarArchiveOutputStream;
 import org.apache.commons.compress.compressors.gzip.GzipCompressorOutputStream;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -53,6 +54,7 @@ public class ProcProfileCollector extends FrontendDaemon {
     protected void runAfterCatalogReady() {
         File file = new File(profileLogDir);
         file.mkdirs();
+        prepareLibrary();
 
         if (Config.proc_profile_cpu_enable) {
             collectCPUProfile();
@@ -65,12 +67,34 @@ public class ProcProfileCollector extends FrontendDaemon {
         deleteExpiredFiles();
     }
 
+    public String getProfileLogDir() {
+        return profileLogDir;
+    }
+
+    // AsyncProfiler depends on the native library libasyncProfiler.so, which is bundled inside the JAR.
+    // By default, it extracts this library to the /tmp directory in order to load it.
+    // However, if /tmp is mounted with the "noexec" option, loading the library will fail.
+    // To avoid this issue, we explicitly set 'one.profiler.extractPath' to a directory with execute permissions.
+    // See prepareLibrary() for how the extraction path is set to a safer default under STARROCKS_HOME.
+    // See https://github.com/StarRocks/starrocks/issues/64502
+    private void prepareLibrary() {
+        final String libPathProperty = "one.profiler.extractPath";
+        String value = System.getProperty(libPathProperty);
+        if (StringUtils.isEmpty(value)) {
+            String dir = Config.STARROCKS_HOME_DIR + "/bin/";
+            if (StringUtils.isNotEmpty(Config.STARROCKS_HOME_DIR) && new File(dir).exists()) {
+                System.setProperty(libPathProperty, dir);
+                LOG.info("change the system property {} to {}", libPathProperty, dir);
+            }
+        }
+    }
+
     private void collectMemProfile() {
         String fileName = MEM_FILE_NAME_PREFIX + currentTimeString() + ".html";
         AsyncProfiler profiler = AsyncProfiler.getInstance();
         try {
-            profiler.execute(String.format("start,quiet,event=alloc,alloc=2m,cstack=vm,file=%s",
-                    profileLogDir + "/" + fileName));
+            profiler.execute(String.format("start,quiet,event=alloc,alloc=2m,cstack=vm,jstackdepth=%d,file=%s",
+                    Config.proc_profile_jstack_depth, profileLogDir + "/" + fileName));
             Thread.sleep(Config.proc_profile_collect_time_s * 1000L);
             profiler.execute(String.format("stop,file=%s", profileLogDir + "/" + fileName));
         } catch (Exception e) {
@@ -90,7 +114,8 @@ public class ProcProfileCollector extends FrontendDaemon {
         String fileName = CPU_FILE_NAME_PREFIX + currentTimeString() + ".html";
         AsyncProfiler profiler = AsyncProfiler.getInstance();
         try {
-            profiler.execute(String.format("start,quiet,event=cpu,cstack=vm,file=%s", profileLogDir + "/" + fileName));
+            profiler.execute(String.format("start,quiet,event=cpu,cstack=vm,jstackdepth=%d,file=%s",
+                    Config.proc_profile_jstack_depth, profileLogDir + "/" + fileName));
             Thread.sleep(Config.proc_profile_collect_time_s * 1000L);
             profiler.execute(String.format("stop,file=%s", profileLogDir + "/" + fileName));
         } catch (Exception e) {

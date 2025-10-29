@@ -55,7 +55,7 @@
 #include "runtime/types.h"
 #include "storage/column_predicate.h"
 #include "storage/index/index_descriptor.h"
-#ifndef MACOS_DISABLE_CLUCENE
+#ifndef __APPLE__
 #include "storage/index/inverted/inverted_plugin_factory.h"
 #endif
 #include "storage/rowset/array_column_iterator.h"
@@ -542,7 +542,7 @@ Status ColumnReader::_load_inverted_index(const std::shared_ptr<TabletIndex>& in
         return Status::OK();
     }
 
-#ifndef MACOS_DISABLE_CLUCENE
+#ifndef __APPLE__
     SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
     return success_once(_inverted_index_load_once,
                         [&]() {

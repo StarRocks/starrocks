@@ -38,6 +38,8 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.ArrayType;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnBuilder;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
@@ -48,6 +50,7 @@ import com.starrocks.sql.analyzer.ColumnDefAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.ColumnDef.DefaultValueDef;
+import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.TypeDef;
 import org.junit.jupiter.api.Assertions;
@@ -107,13 +110,18 @@ public class ColumnDefTest {
         {
             // not allow null
             // although here is default value is NOT_SET but after analyze it will be set to NULL and allowed NULL trick.
-            ColumnDef column =
+            ColumnDef columnDef =
                     new ColumnDef("col", intCol, false, AggregateType.REPLACE_IF_NOT_NULL, null, false,
                             DefaultValueDef.NOT_SET,
                             "");
-            ColumnDefAnalyzer.analyze(column, true);
-            Assertions.assertEquals(AggregateType.REPLACE_IF_NOT_NULL, column.getAggregateType());
-            Assertions.assertEquals("`col` int(11) REPLACE_IF_NOT_NULL NULL DEFAULT NULL COMMENT \"\"", column.toSql());
+            ColumnDefAnalyzer.analyze(columnDef, true);
+            Assertions.assertEquals(AggregateType.REPLACE_IF_NOT_NULL, columnDef.getAggregateType());
+            Assertions.assertTrue(columnDef.getDefaultValueDef().expr instanceof NullLiteral);
+
+            Column column = ColumnBuilder.buildColumn(columnDef);
+            Assertions.assertEquals(AggregateType.REPLACE_IF_NOT_NULL, column.getAggregationType());
+            Assertions.assertNull(column.getDefaultExpr());
+            Assertions.assertNull(column.getDefaultValue());
         }
         {
             // not allow null

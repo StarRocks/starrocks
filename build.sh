@@ -584,7 +584,6 @@ if [ ${BUILD_FE} -eq 1 -o ${BUILD_SPARK_DPP} -eq 1 ]; then
         cp -r -p ${STARROCKS_HOME}/webroot/* ${STARROCKS_OUTPUT}/fe/webroot/
         cp -r -p ${STARROCKS_HOME}/fe/plugin/spark-dpp/target/spark-dpp-*-jar-with-dependencies.jar ${STARROCKS_OUTPUT}/fe/spark-dpp/
         cp -r -p ${STARROCKS_HOME}/fe/plugin/hive-udf/target/hive-udf-*.jar ${STARROCKS_OUTPUT}/fe/hive-udf/
-        cp -r -p ${STARROCKS_THIRDPARTY}/installed/async-profiler ${STARROCKS_OUTPUT}/fe/bin/
         MSG="${MSG} √ ${MSG_FE}"
     elif [ ${BUILD_SPARK_DPP} -eq 1 ]; then
         install -d ${STARROCKS_OUTPUT}/fe/spark-dpp/
@@ -646,8 +645,10 @@ if [ ${BUILD_BE} -eq 1 ]; then
     ln -s ./libjemalloc.so.2 ${STARROCKS_OUTPUT}/be/lib/libjemalloc.so
 
     # Copy pprof and FlameGraph tools
-    mkdir -p ${STARROCKS_OUTPUT}/be/bin/flamegraph/
-    cp -r -p ${STARROCKS_THIRDPARTY}/installed/flamegraph/* ${STARROCKS_OUTPUT}/be/bin/flamegraph/
+    if [ -d "${STARROCKS_THIRDPARTY}/installed/flamegraph" ]; then
+        mkdir -p ${STARROCKS_OUTPUT}/be/bin/flamegraph/
+        cp -r -p ${STARROCKS_THIRDPARTY}/installed/flamegraph/* ${STARROCKS_OUTPUT}/be/bin/flamegraph/
+    fi
 
     # format $BUILD_TYPE to lower case
     ibuildtype=`echo ${BUILD_TYPE} | tr 'A-Z' 'a-z'`

@@ -22,6 +22,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnBuilder;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DynamicPartitionProperty;
@@ -63,6 +64,7 @@ import com.starrocks.sql.ast.AddRollupClause;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStatusClause;
 import com.starrocks.sql.ast.AlterTableAutoIncrementClause;
+import com.starrocks.sql.ast.AlterTableModifyDefaultBucketsClause;
 import com.starrocks.sql.ast.AlterTableOperationClause;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
@@ -150,6 +152,33 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
     @Override
     public Void visitCreateIndexClause(CreateIndexClause clause, ConnectContext context) {
         IndexAnalyzer.analyze(clause.getIndexDef());
+        return null;
+    }
+
+    @Override
+    public Void visitAlterTableModifyDefaultBucketsClause(AlterTableModifyDefaultBucketsClause clause, ConnectContext context) {
+        if (!(table instanceof OlapTable)) {
+            throw new SemanticException("Only support OLAP table");
+        }
+        OlapTable tbl = (OlapTable) table;
+        if (!(tbl.getDefaultDistributionInfo() instanceof HashDistributionInfo)) {
+            throw new SemanticException("Only support hash distribution tables");
+        }
+        HashDistributionInfo current = (HashDistributionInfo) tbl.getDefaultDistributionInfo();
+        List<Column> cols = MetaUtils.getColumnsByColumnIds(tbl, current.getDistributionColumns());
+        List<String> currentNames = cols.stream().map(c -> c.getName()).collect(Collectors.toList());
+        List<String> input = clause.getDistributionColumns();
+        if (currentNames.size() != input.size()) {
+            throw new SemanticException("Distribution columns mismatch: " + input + " vs " + currentNames);
+        }
+        for (int i = 0; i < currentNames.size(); i++) {
+            if (!currentNames.get(i).equalsIgnoreCase(input.get(i))) {
+                throw new SemanticException("Distribution columns mismatch: " + input + " vs " + currentNames);
+            }
+        }
+        if (clause.getBucketNum() <= 0) {
+            throw new SemanticException("Bucket num must > 0");
+        }
         return null;
     }
 
@@ -728,7 +757,7 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
                         "Column Type: " + columnDef.getType().toString() +
                         ", Expression Type: " + expr.getType().toString());
             }
-            clause.setColumn(Column.fromColumnDef(table, columnDef));
+            clause.setColumn(ColumnBuilder.buildGeneratedColumn(table, columnDef));
             return null;
         }
 
@@ -753,10 +782,6 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
             }
         }
 
-        if (!columnDef.isAllowNull() && columnDef.defaultValueIsNull()) {
-            throw new SemanticException(PARSER_ERROR_MSG.withOutDefaultVal(columnDef.getName()), columnDef.getPos());
-        }
-
         if (columnDef.getAggregateType() != null && colPos != null && colPos.isFirst()) {
             throw new SemanticException("Cannot add value column[" + columnDef.getName() + "] at first",
                     columnDef.getPos());
@@ -765,7 +790,12 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
         // Make sure return null if rollup name is empty.
         clause.setRollupName(Strings.emptyToNull(clause.getRollupName()));
 
-        clause.setColumn(Column.fromColumnDef(table, columnDef));
+        Column column = ColumnBuilder.buildColumn(columnDef);
+        if (!column.isAllowNull() && column.getDefaultValue() == null && column.getDefaultExpr() == null) {
+            throw new SemanticException(PARSER_ERROR_MSG.withOutDefaultVal(column.getName()), columnDef.getPos());
+        }
+
+        clause.setColumn(column);
         return null;
     }
 
@@ -786,10 +816,6 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
             } catch (AnalysisException e) {
                 throw new SemanticException(PARSER_ERROR_MSG.invalidColumnDef(e.getMessage()), colDef.getPos());
             }
-            if (!colDef.isAllowNull() && colDef.defaultValueIsNull()) {
-                throw new SemanticException(PARSER_ERROR_MSG.withOutDefaultVal(colDef.getName()), colDef.getPos());
-            }
-
             if (colDef.isGeneratedColumn()) {
                 hasGeneratedColumn = true;
 
@@ -860,7 +886,19 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
         // Make sure return null if rollup name is empty.
         clause.setRollupName(Strings.emptyToNull(clause.getRollupName()));
 
-        columnDefs.forEach(columnDef -> clause.addColumn(Column.fromColumnDef(table, columnDef)));
+        if (hasGeneratedColumn) {
+            columnDefs.forEach(columnDef -> clause.addColumn(ColumnBuilder.buildGeneratedColumn(table, columnDef)));
+        } else {
+            columnDefs.forEach(columnDef -> {
+                Column column = ColumnBuilder.buildColumn(columnDef);
+                if (!column.isAllowNull() && column.getDefaultValue() == null && column.getDefaultExpr() == null) {
+                    throw new SemanticException(PARSER_ERROR_MSG.withOutDefaultVal(column.getName()),
+                            columnDef.getPos());
+                }
+                clause.addColumn(column);
+            });
+        }
+
         return null;
     }
 
@@ -993,7 +1031,7 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
                         "Column Type: " + columnDef.getType().toString() +
                         ", Expression Type: " + expr.getType().toString());
             }
-            clause.setColumn(Column.fromColumnDef(table, columnDef));
+            clause.setColumn(ColumnBuilder.buildGeneratedColumn(table, columnDef));
             return null;
         }
 
@@ -1014,7 +1052,7 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
 
         clause.setRollupName(Strings.emptyToNull(clause.getRollupName()));
 
-        clause.setColumn(Column.fromColumnDef(table, columnDef));
+        clause.setColumn(ColumnBuilder.buildColumn(columnDef));
         return null;
     }
 
@@ -1107,7 +1145,6 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
         if (clause.getProperties() != null && !clause.getProperties().isEmpty()) {
             throw new SemanticException("Unknown properties: " + clause.getProperties());
         }
-
 
         if (table instanceof OlapTable) {
             List<String> partitionNames = clause.getPartitionNames();
@@ -1451,7 +1488,6 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
         }
         return sortKeys;
     }
-
 
     @Override
     public Void visitDropPartitionClause(DropPartitionClause clause, ConnectContext context) {

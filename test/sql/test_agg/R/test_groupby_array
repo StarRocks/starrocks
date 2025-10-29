@@ -1,4 +1,4 @@
--- name: test_groupby_array @slow
+-- name: test_groupby_array @slow @mac
 SET @var = array_map(x -> CAST(x AS STRING), array_generate(1, 2000000, 1));
 -- result:
 -- !result

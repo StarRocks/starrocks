@@ -204,7 +204,7 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
     @Test
     public void testChooseBest() throws Exception {
         String plan = getPlanFragment("query_dump/materialized-view/choose_best_mv1", TExplainLevel.NORMAL);
-        PlanTestBase.assertContains(plan, "rocketview_v4", "rocketview_v4_mv2");
+        PlanTestBase.assertContains(plan, "rocketview_v4_mv1");
     }
 
     @Test

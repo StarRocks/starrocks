@@ -284,7 +284,7 @@ public:
     uint64_t get_insert_count() const;
     uint64_t get_insert_evict_count() const;
     uint64_t get_release_evict_count() const;
-    size_t get_usage() const;
+    uint64_t get_usage() const;
     size_t get_capacity() const;
     static size_t key_handle_size(const CacheKey& key) { return sizeof(LRUHandle) - 1 + key.size(); }
 
@@ -348,7 +348,7 @@ private:
     static uint32_t _hash_slice(const CacheKey& s);
     static uint32_t _shard(uint32_t hash);
     void _set_capacity(size_t capacity);
-    size_t _get_stat(size_t (LRUCache::*mem_fun)() const) const;
+    size_t _get_stat(uint64_t (LRUCache::*mem_fun)() const) const;
 
     LRUCache _shards[kNumShards];
     mutable std::mutex _mutex;

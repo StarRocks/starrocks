@@ -31,6 +31,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.View;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.UUIDUtil;
@@ -51,10 +52,11 @@ import com.starrocks.scheduler.TaskRunBuilder;
 import com.starrocks.scheduler.TaskRunManager;
 import com.starrocks.scheduler.TaskRunProcessor;
 import com.starrocks.scheduler.mv.BaseTableSnapshotInfo;
-import com.starrocks.scheduler.mv.MVPCTBasedRefreshProcessor;
+import com.starrocks.scheduler.mv.pct.MVPCTBasedRefreshProcessor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
@@ -94,6 +96,7 @@ import org.apache.logging.log4j.Logger;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.File;
@@ -112,6 +115,7 @@ import java.util.stream.Collectors;
 /**
  * Base class for materialized view tests.
  */
+@ExtendWith(MVTraceExtension.class)
 public abstract class MVTestBase extends StarRocksTestBase {
 
     public interface ExceptionRunnable {
@@ -137,6 +141,8 @@ public abstract class MVTestBase extends StarRocksTestBase {
 
     @BeforeAll
     public static void beforeClass() throws Exception {
+        FeConstants.runningUnitTest = true;
+
         CachingMvPlanContextBuilder.getInstance().rebuildCache();
         PseudoCluster.getOrCreateWithRandomPort(true, 1);
         GlobalStateMgr.getCurrentState().getTabletChecker().setInterval(100);
@@ -161,9 +167,7 @@ public abstract class MVTestBase extends StarRocksTestBase {
     }
 
     public String getFragmentPlan(String sql) throws Exception {
-        String s = UtFrameUtils.getPlanAndFragment(connectContext, sql).second.
-                getExplainString(TExplainLevel.NORMAL);
-        return s;
+        return getFragmentPlan(sql, "MV");
     }
 
     public String getFragmentPlan(String sql, String traceModule) throws Exception {
@@ -178,10 +182,6 @@ public abstract class MVTestBase extends StarRocksTestBase {
         Pair<String, Pair<ExecPlan, String>> result =
                 UtFrameUtils.getFragmentPlanWithTrace(connectContext, sql, traceModule);
         Pair<ExecPlan, String> execPlanWithQuery = result.second;
-        String traceLog = execPlanWithQuery.second;
-        if (!Strings.isNullOrEmpty(traceLog)) {
-            logSysInfo(traceLog);
-        }
         return execPlanWithQuery.first.getExplainString(level);
     }
 
@@ -263,7 +263,7 @@ public abstract class MVTestBase extends StarRocksTestBase {
     }
 
     public static OptExpression getOptimizedPlan(String sql, ConnectContext connectContext) {
-        return getOptimizedPlan(sql, connectContext, OptimizerOptions.defaultOpt());
+        return getOptimizedPlan(sql, connectContext, new OptimizerOptions());
     }
 
     public static StatementBase getAnalyzedPlan(String sql, ConnectContext connectContext) {
@@ -404,6 +404,13 @@ public abstract class MVTestBase extends StarRocksTestBase {
 
     protected MVTaskRunProcessor getMVTaskRunProcessor(String dbName, MaterializedView mv) throws Exception {
         TaskRun taskRun = withMVRefreshTaskRun(dbName, mv);
+        return getMVTaskRunProcessor(taskRun);
+    }
+
+    protected MVTaskRunProcessor getMVTaskRunProcessor(MaterializedView mv) throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mv.getDbId());
+        Assertions.assertNotNull(db);
+        TaskRun taskRun = withMVRefreshTaskRun(db.getFullName(), mv);
         return getMVTaskRunProcessor(taskRun);
     }
 
@@ -831,5 +838,33 @@ public abstract class MVTestBase extends StarRocksTestBase {
             throw new IOException("Couldn't create folders " + root);
         }
         return result;
+    }
+
+    protected static void alterMaterializedView(String sql, boolean expectedException) throws Exception {
+        AlterMaterializedViewStmt alterMaterializedViewStmt =
+                (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        try {
+            GlobalStateMgr.getCurrentState().getLocalMetastore().alterMaterializedView(alterMaterializedViewStmt);
+            if (expectedException) {
+                Assertions.fail();
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            if (!expectedException) {
+                Assertions.fail();
+            }
+        }
+    }
+
+    protected MaterializedView createMaterializedViewWithRefreshMode(String query,
+                                                                     String refreshMode) throws Exception {
+        String ddl = String.format("CREATE MATERIALIZED VIEW `test_mv1` " +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"refresh_mode\" = \"%s\"" +
+                ")\n" +
+                "AS %s;", refreshMode, query);
+        starRocksAssert.withMaterializedView(ddl);
+        return getMv("test_mv1");
     }
 }

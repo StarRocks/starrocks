@@ -21,11 +21,13 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
+import com.starrocks.common.FeConstants;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTraceExtension;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
@@ -35,8 +37,11 @@ import com.starrocks.utframe.UtFrameUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.openjdk.jmh.annotations.Scope;
 import org.openjdk.jmh.annotations.State;
 
@@ -46,6 +51,7 @@ import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+@ExtendWith(MVTraceExtension.class)
 @State(Scope.Thread) // Add State annotation with appropriate scope
 public class MaterializedViewTestBase extends PlanTestBase {
     protected static final Logger LOG = LogManager.getLogger(MaterializedViewTestBase.class);
@@ -54,7 +60,7 @@ public class MaterializedViewTestBase extends PlanTestBase {
     protected static final String MATERIALIZED_VIEW_NAME = "mv0";
 
     // You can set it in each unit test for trace mv log: mv/all/"", default is "" which will output nothing.
-    private  String traceLogModule = "";
+    private  String traceLogModule = "MV";
 
     public void setTracLogModule(String module) {
         this.traceLogModule = module;
@@ -66,6 +72,7 @@ public class MaterializedViewTestBase extends PlanTestBase {
 
     @BeforeAll
     public static void beforeClass() throws Exception {
+        FeConstants.runningUnitTest = true;
         PlanTestBase.beforeClass();
 
         // set default config for async mvs
@@ -82,6 +89,28 @@ public class MaterializedViewTestBase extends PlanTestBase {
 
         starRocksAssert.withDatabase(MATERIALIZED_DB_NAME)
                 .useDatabase(MATERIALIZED_DB_NAME);
+
+        starRocksAssert.getCtx().getSessionVariable().setEnableLocalShuffleAgg(false);
+        connectContext.getSessionVariable().setEnableLocalShuffleAgg(false);
+    }
+
+    @BeforeEach
+    public void before() throws Exception {
+        super.setUp();
+        if (starRocksAssert != null) {
+            collectTables(starRocksAssert, existedTables);
+        }
+    }
+
+    @AfterEach
+    public void after() throws Exception {
+        if (starRocksAssert != null) {
+            try {
+                cleanup(starRocksAssert, existedTables);
+            } catch (Exception e) {
+                // ignore exception
+            }
+        }
     }
 
     @AfterAll
@@ -148,10 +177,6 @@ public class MaterializedViewTestBase extends PlanTestBase {
                 } else {
                     this.rewritePlan = planAndTrace.first.getExplainString(TExplainLevel.NORMAL);
                 }
-                if (!Strings.isNullOrEmpty(traceLogModule)) {
-                    logSysInfo(this.rewritePlan);
-                }
-                this.traceLog = planAndTrace.second;
             } catch (Exception e) {
                 LOG.warn("test rewrite failed:", e);
                 this.exception = e;

@@ -40,10 +40,10 @@ import com.starrocks.qe.ShowMaterializedViewStatus;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.mv.BaseMVRefreshProcessor;
 import com.starrocks.scheduler.mv.BaseTableSnapshotInfo;
-import com.starrocks.scheduler.mv.MVPCTBasedRefreshProcessor;
-import com.starrocks.scheduler.mv.MVPCTRefreshPartitioner;
 import com.starrocks.scheduler.mv.MVRefreshExecutor;
-import com.starrocks.scheduler.mv.PCTTableSnapshotInfo;
+import com.starrocks.scheduler.mv.pct.MVPCTBasedRefreshProcessor;
+import com.starrocks.scheduler.mv.pct.MVPCTRefreshPartitioner;
+import com.starrocks.scheduler.mv.pct.PCTTableSnapshotInfo;
 import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.schema.MTable;
@@ -585,8 +585,9 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
         new MockUp<MVPCTBasedRefreshProcessor>() {
             int runNum = 0;
             @Mock
-            public Constants.TaskRunState doProcessTaskRun(TaskRunContext taskRunContext,
-                                                           MVRefreshExecutor executor) throws Exception {
+            public Constants.TaskRunState execProcessExecPlan(TaskRunContext taskRunContext,
+                                                              BaseMVRefreshProcessor.ProcessExecPlan processExecPlan,
+                                                              MVRefreshExecutor executor) throws Exception {
                 if (runNum < 1) {
                     runNum++;
                     throw new RuntimeException("do refresh failed at first time");

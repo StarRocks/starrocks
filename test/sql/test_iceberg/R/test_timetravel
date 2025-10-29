@@ -5,8 +5,9 @@ create external catalog iceberg_sql_test_${uuid0} PROPERTIES ("type"="iceberg", 
 create database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
 -- result:
 -- !result
-create external table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} (k1 int);
+function: retry_execute_sql("create external table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} (k1 int)", False, 5, 1000)
 -- result:
+{'status': True, 'result': '', 'msg': b''}
 -- !result
 insert into iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} select 1; 
 insert into iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} select 2; 
@@ -57,8 +58,9 @@ select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} ord
 3
 4
 -- !result
-insert into iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} version as of test_branch select 55;
+function: retry_execute_sql("insert into iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} version as of test_branch select 55", False, 5, 1000)
 -- result:
+{'status': True, 'result': '', 'msg': b''}
 -- !result
 select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} order by k1;
 -- result:
@@ -73,13 +75,13 @@ select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} ver
 2
 55
 -- !result
-insert into iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} version as of not_exist_branch select 55;
+function: retry_execute_sql("insert into iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} version as of not_exist_branch select 55", False, 5, 1000)
 -- result:
-E: (1064, 'Cannot find snapshot with reference name: not_exist_branch')
+{'status': False, 'msg': (1064, 'Cannot find snapshot with reference name: not_exist_branch')}
 -- !result
-insert into iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} version as of test_tag select 55;
+function: retry_execute_sql("insert into iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} version as of test_tag select 55", False, 5, 1000)
 -- result:
-E: (1064, 'test_tag is a tag, not a branch')
+{'status': False, 'msg': (1064, 'test_tag is a tag, not a branch')}
 -- !result
 select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} order by k1;
 -- result:
@@ -88,8 +90,9 @@ select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} ord
 3
 4
 -- !result
-insert overwrite iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} version as of test_branch select 111;
+function: retry_execute_sql("insert overwrite iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} version as of test_branch select 111", False, 5, 1000)
 -- result:
+{'status': True, 'result': '', 'msg': b''}
 -- !result
 select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} order by k1;
 -- result:

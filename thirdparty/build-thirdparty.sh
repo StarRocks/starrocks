@@ -573,7 +573,7 @@ build_simdjson() {
     #ref: https://github.com/simdjson/simdjson/blob/master/HACKING.md
     mkdir -p $BUILD_DIR
     cd $BUILD_DIR
-    $CMAKE_CMD -G "${CMAKE_GENERATOR}" -DCMAKE_CXX_FLAGS="-O3 -fPIC" -DCMAKE_C_FLAGS="-O3 -fPIC" -DCMAKE_POSITION_INDEPENDENT_CODE=True -DSIMDJSON_AVX512_ALLOWED=OFF ..
+    $CMAKE_CMD -G "${CMAKE_GENERATOR}" -DCMAKE_CXX_FLAGS="-O3 -fPIC" -DCMAKE_C_FLAGS="-O3 -fPIC" -DCMAKE_POSITION_INDEPENDENT_CODE=True -DSIMDJSON_AVX512_ALLOWED=OFF -DSIMDJSON_SKIPUTF8VALIDATION=ON ..
     $CMAKE_CMD --build .
     mkdir -p $TP_INSTALL_DIR/lib
 
@@ -778,7 +778,7 @@ build_kerberos() {
 build_sasl() {
     check_if_source_exist $SASL_SOURCE
     cd $TP_SOURCE_DIR/$SASL_SOURCE
-    CFLAGS="-fPIC" LDFLAGS="-L$TP_INSTALL_DIR/lib -lresolv -pthread -ldl" ./autogen.sh --prefix=$TP_INSTALL_DIR --enable-gssapi=yes --enable-static --disable-shared --with-openssl=$TP_INSTALL_DIR --with-gss_impl=mit
+    CFLAGS="-fPIC" LDFLAGS="-L$TP_INSTALL_DIR/lib -lresolv -pthread -ldl" ./autogen.sh --prefix=$TP_INSTALL_DIR --enable-gssapi=yes --enable-static --disable-shared --with-openssl=$TP_INSTALL_DIR --with-gss_impl=mit --with-dblib=none
     make -j$PARALLEL
     make install
 }
@@ -1405,14 +1405,6 @@ build_datasketches() {
     cp -r $TP_SOURCE_DIR/$DATASKETCHES_SOURCE/tuple/include/* $TP_INSTALL_DIR/include/datasketches/
 }
 
-# async-profiler
-build_async_profiler() {
-    check_if_source_exist $ASYNC_PROFILER_SOURCE
-    mkdir -p $TP_INSTALL_DIR/async-profiler
-    cp -r $TP_SOURCE_DIR/$ASYNC_PROFILER_SOURCE/bin $TP_INSTALL_DIR/async-profiler
-    cp -r $TP_SOURCE_DIR/$ASYNC_PROFILER_SOURCE/lib $TP_INSTALL_DIR/async-profiler
-}
-
 # fiu
 build_fiu() {
     check_if_source_exist $FIU_SOURCE
@@ -1738,7 +1730,6 @@ declare -a all_packages=(
     avro_cpp
     serdes
     datasketches
-    async_profiler
     fiu
     llvm
     clucene

@@ -294,7 +294,7 @@ PARTITION BY  (date_trunc('day', dt1), date_trunc('month', dt2))
 REFRESH DEFERRED MANUAL 
 PROPERTIES (
     "replication_num" = "1",
-    "partition_retention_condition" = "date_trunc('day', dt1) >= '2024-02-01'"
+    "partition_retention_condition" = "date_trunc('day', dt1) >= '2024-02-01' or date_trunc('day', dt1) is null"
 )
 AS 
     SELECT * FROM t1;
@@ -396,7 +396,7 @@ PARTITION BY  (date_trunc('month', dt2))
 REFRESH DEFERRED MANUAL 
 PROPERTIES (
     "replication_num" = "1",
-    "partition_retention_condition" = "date_trunc('month', dt2) >= '2024-02-01'"
+    "partition_retention_condition" = "date_trunc('month', dt2) >= '2024-02-01' or date_trunc('month', dt2) is null"
 )
 AS 
     SELECT * FROM t1;

@@ -229,7 +229,9 @@ public:
 #ifdef USE_STAROS
         s_sr_posix_write_iosize.Observe(bytes_written);
 #endif
+#ifndef __APPLE__
         IOProfiler::add_write(bytes_written, watch.elapsed_time());
+#endif
         return Status::OK();
     }
 
@@ -318,7 +320,9 @@ public:
             _pending_sync = false;
             RETURN_IF_ERROR(do_sync(_fd, _filename));
         }
+#ifndef __APPLE__
         IOProfiler::add_sync(watch.elapsed_time());
+#endif
         return Status::OK();
     }
 

@@ -16,20 +16,78 @@
 // under the License.
 
 #include <cstdint>
+#include <string>
 
 namespace starrocks {
 
-enum AesMode { AES_128_ECB, AES_192_ECB, AES_256_ECB, AES_128_CBC, AES_192_CBC, AES_256_CBC };
+// Extended AES encryption modes, supporting more modes including GCM authenticated encryption
+enum AesMode {
+    // ECB mode
+    AES_128_ECB = 0,
+    AES_192_ECB = 1,
+    AES_256_ECB = 2,
+    // CBC mode
+    AES_128_CBC = 3,
+    AES_192_CBC = 4,
+    AES_256_CBC = 5,
+    // CFB mode
+    AES_128_CFB = 6,
+    AES_192_CFB = 7,
+    AES_256_CFB = 8,
+    AES_128_CFB1 = 9,
+    AES_192_CFB1 = 10,
+    AES_256_CFB1 = 11,
+    AES_128_CFB8 = 12,
+    AES_192_CFB8 = 13,
+    AES_256_CFB8 = 14,
+    AES_128_CFB128 = 15,
+    AES_192_CFB128 = 16,
+    AES_256_CFB128 = 17,
+    // OFB mode
+    AES_128_OFB = 18,
+    AES_192_OFB = 19,
+    AES_256_OFB = 20,
+    // CTR mode
+    AES_128_CTR = 21,
+    AES_192_CTR = 22,
+    AES_256_CTR = 23,
+    // GCM mode (authenticated encryption)
+    AES_128_GCM = 24,
+    AES_192_GCM = 25,
+    AES_256_GCM = 26,
+};
 
 enum AesState { AES_SUCCESS = 0, AES_BAD_DATA = -1 };
 
 class AesUtil {
 public:
-    static int encrypt(AesMode mode, const unsigned char* source, uint32_t source_length, const unsigned char* key,
-                       uint32_t key_length, const unsigned char* iv, bool padding, unsigned char* encrypt);
+    // GCM mode TAG size (16 bytes)
+    //https://tools.ietf.org/html/rfc5116#section-5.1
+    static constexpr int GCM_TAG_SIZE = 16;
+    // Default IV
+    static constexpr const char* DEFAULT_IV = "STARROCKS_16BYTE";
 
-    static int decrypt(AesMode mode, const unsigned char* encrypt, uint32_t encrypt_length, const unsigned char* key,
-                       uint32_t key_length, const unsigned char* iv, bool padding, unsigned char* decrypt_content);
+    // Extended encryption function, supports IV string and AAD (for GCM mode)
+    static int encrypt_ex(AesMode mode, const unsigned char* source, uint32_t source_length, const unsigned char* key,
+                          uint32_t key_length, const char* iv_str, uint32_t iv_input_length, bool padding,
+                          unsigned char* encrypt, const unsigned char* aad = nullptr, uint32_t aad_length = 0);
+
+    // Extended decryption function, supports IV string and AAD (for GCM mode)
+    static int decrypt_ex(AesMode mode, const unsigned char* encrypt, uint32_t encrypt_length, const unsigned char* key,
+                          uint32_t key_length, const char* iv_str, uint32_t iv_input_length, bool padding,
+                          unsigned char* decrypt_content, const unsigned char* aad = nullptr, uint32_t aad_length = 0);
+
+    // Get AES mode from string
+    static AesMode get_mode_from_string(const std::string& mode_str);
+
+    // Check if it is GCM mode
+    static bool is_gcm_mode(AesMode mode);
+
+    // Check if it is stream mode (CFB/OFB/CTR - no padding needed)
+    static bool is_stream_mode(AesMode mode);
+
+    // Check if it is ECB mode (ECB mode does not require IV)
+    static bool is_ecb_mode(AesMode mode);
 };
 
 } // namespace starrocks

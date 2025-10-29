@@ -26,6 +26,8 @@ import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -34,6 +36,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 public class MvNormalizePredicateRule extends NormalizePredicateRule {
+    private static final Logger LOG = LogManager.getLogger(MvNormalizePredicateRule.class);
 
     // Comparator to normalize predicates, only use scalar operators' string to compare.
     private static final Comparator<ScalarOperator> SCALAR_OPERATOR_COMPARATOR_IGNORE_COLUMN_ID =

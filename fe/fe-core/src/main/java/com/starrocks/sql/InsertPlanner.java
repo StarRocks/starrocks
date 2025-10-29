@@ -39,6 +39,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.load.Load;
 import com.starrocks.planner.BlackHoleTableSink;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.DescriptorTable;
@@ -80,6 +81,7 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
+import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -125,6 +127,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.DefaultExpr.isValidDefaultFunction;
+import static com.starrocks.sql.StatementPlanner.collectSourceTablesCount;
 import static com.starrocks.sql.optimizer.rule.mv.MVUtils.MATERIALIZED_VIEW_NAME_PREFIX;
 
 public class InsertPlanner {
@@ -444,8 +447,10 @@ public class InsertPlanner {
                 Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(session, catalogDbTable.getCatalog(),
                         catalogDbTable.getDb());
                 try {
+                    Load.checkMergeCondition(insertStmt.getMergingCondition(), olapTable, outputFullSchema,
+                            ((OlapTableSink) dataSink).missAutoIncrementColumn());
                     olapTableSink.init(session.getExecutionId(), insertStmt.getTxnId(), db.getId(), session.getExecTimeout());
-                    olapTableSink.complete();
+                    olapTableSink.complete(insertStmt.getMergingCondition());
                 } catch (StarRocksException e) {
                     throw new SemanticException(e.getMessage());
                 }
@@ -560,8 +565,12 @@ public class InsertPlanner {
                 session.getSessionVariable());
         OptExpression optimizedPlan;
 
+        int sourceTablesCount = collectSourceTablesCount(session, insertStmt);
+
         try (Timer ignore2 = Tracers.watchScope("Optimizer")) {
-            Optimizer optimizer = OptimizerFactory.create(OptimizerFactory.initContext(session, columnRefFactory));
+            OptimizerContext optimizerContext = OptimizerFactory.initContext(session, columnRefFactory);
+            optimizerContext.setSourceTablesCount(sourceTablesCount);
+            Optimizer optimizer = OptimizerFactory.create(optimizerContext);
             optimizedPlan = optimizer.optimize(
                     logicalPlan.getRoot(),
                     requiredPropertySet,
@@ -771,7 +780,8 @@ public class InsertPlanner {
                 continue;
             }
 
-            // Target column which starts with "mv" should not be treated as materialized view column when this column exists in base schema,
+            // Target column which starts with "mv" should not be treated as materialized view column when this column exists
+            // in base schema,
             // this could be created by user.
             if (targetColumn.isNameWithPrefix(MATERIALIZED_VIEW_NAME_PREFIX) &&
                     !baseSchema.contains(targetColumn)) {
@@ -1018,7 +1028,7 @@ public class InsertPlanner {
                 PartitionSpec partitionSpec = icebergTable.getNativeTable().spec();
                 boolean isInvalid = partitionSpec.fields().stream().anyMatch(field -> !field.transform().isIdentity());
                 if (isInvalid) {
-                    throw new SemanticException("Staitc insert into Iceberg table %s is not supported" + 
+                    throw new SemanticException("Staitc insert into Iceberg table %s is not supported" +
                             " for not partitioned by identity transform", icebergTable.getName());
                 }
             }

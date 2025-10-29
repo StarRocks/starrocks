@@ -84,6 +84,9 @@ public class OptimizerContext {
     // TvrOptContext is used to store the context for TVR optimization.
     private final TvrOptContext tvrOptContext;
 
+    // source tables count in the query
+    private int sourceTablesCount = 0;
+
     OptimizerContext(ConnectContext context) {
         this.connectContext = context;
         this.ruleSet = new RuleSet();
@@ -93,7 +96,7 @@ public class OptimizerContext {
         this.cteContext.setInlineCTERatio(getSessionVariable().getCboCTERuseRatio());
         this.cteContext.setMaxCTELimit(getSessionVariable().getCboCTEMaxLimit());
 
-        this.optimizerOptions = OptimizerOptions.defaultOpt();
+        this.optimizerOptions = new OptimizerOptions();
         this.enableJoinIsNullPredicateDerive = getSessionVariable().isCboDeriveJoinIsNullPredicate();
         this.tvrOptContext = new TvrOptContext(getSessionVariable());
     }
@@ -247,6 +250,14 @@ public class OptimizerContext {
 
     public TvrOptContext getTvrOptContext() {
         return tvrOptContext;
+    }
+
+    public int getSourceTablesCount() {
+        return this.sourceTablesCount;
+    }
+
+    public void setSourceTablesCount(int count) {
+        this.sourceTablesCount = count;
     }
 
     /**

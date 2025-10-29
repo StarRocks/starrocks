@@ -39,12 +39,6 @@ HYPERSCAN_NAME="hyperscan-5.4.0.tar.gz"
 HYPERSCAN_SOURCE="hyperscan-5.4.0"
 HYPERSCAN_MD5SUM="65e08385038c24470a248f6ff2fa379b"
 
-# async-profiler
-ASYNC_PROFILER_DOWNLOAD="https://github.com/async-profiler/async-profiler/releases/download/v4.0/async-profiler-4.0-linux-x64.tar.gz"
-ASYNC_PROFILER_NAME="async-profiler-4.0-linux-x64.tar.gz"
-ASYNC_PROFILER_SOURCE="async-profiler-4.0-linux-x64"
-ASYNC_PROFILER_MD5SUM="40257e6f4eb046427d8c59e67754fa62"
-
 # jindosdk for Aliyun OSS
 JINDOSDK_DOWNLOAD="https://cdn-thirdparty.starrocks.com/jindosdk-4.6.8-linux.tar.gz"
 JINDOSDK_NAME="jindosdk-4.6.8-linux.tar.gz"
@@ -56,9 +50,3 @@ STARCACHE_DOWNLOAD="https://cdn-thirdparty.starrocks.com/starcache/v3.5-rc4/star
 STARCACHE_NAME="starcache.tar.gz"
 STARCACHE_SOURCE="starcache"
 STARCACHE_MD5SUM="996aef75dbbf1b1f231bb95f4402fc59"
-
-# pprof
-PPROF_DOWNLOAD="https://github.com/murphyatwork/pprof/releases/download/20251014/pprof-linux-amd64.zip"
-PPROF_NAME="pprof.zip"
-PPROF_SOURCE="pprof"
-PPROF_MD5SUM="98f892dfc7925533bbd98ab927b4ca6b"

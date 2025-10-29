@@ -50,7 +50,10 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.TableRefPersist;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.NodeMgr;
 import com.starrocks.sql.ast.expression.TableName;
+import com.starrocks.system.Backend;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -69,6 +72,7 @@ import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -112,6 +116,8 @@ public class BackupJobPrimaryKeyTest {
 
     private MockRepositoryMgr repoMgr;
 
+    private static boolean origin_enable_metric_calculator_value;
+
     // Thread is not mockable in Jmockit, use subclass instead
     private final class MockBackupHandler extends BackupHandler {
         public MockBackupHandler(GlobalStateMgr globalStateMgr) {
@@ -149,8 +155,6 @@ public class BackupJobPrimaryKeyTest {
         if (!backupDir.exists()) {
             backupDir.mkdirs();
         }
-
-        MetricRepo.init();
     }
 
     @AfterAll
@@ -178,6 +182,15 @@ public class BackupJobPrimaryKeyTest {
 
         LockManager lockManager = new LockManager();
 
+        // Setup default NodeMgr with SystemInfoService
+        SystemInfoService infoService = new SystemInfoService();
+        Backend backend = new Backend(backendId, "127.0.0.1", 9050);
+        backend.setAlive(true);
+        infoService.addBackend(backend);
+        
+        NodeMgr nodeMgr = new NodeMgr();
+        Deencapsulation.setField(nodeMgr, "systemInfo", infoService);
+
         new Expectations(globalStateMgr) {
             {
                 globalStateMgr.getLocalMetastore().getDb(anyLong);
@@ -199,6 +212,10 @@ public class BackupJobPrimaryKeyTest {
                 globalStateMgr.getGtidGenerator();
                 minTimes = 0;
                 result = new GtidGenerator();
+
+                globalStateMgr.getNodeMgr();
+                minTimes = 0;
+                result = nodeMgr;
 
                 globalStateMgr.getLocalMetastore().getTable(testDbName, testTableName);
                 minTimes = 0;
@@ -246,6 +263,15 @@ public class BackupJobPrimaryKeyTest {
         tableRefs.add(new TableRefPersist(new TableName(testDbName, testTableName), null));
         job = new BackupJob("label_pk", dbId, testDbName, tableRefs, 13600 * 1000, globalStateMgr, repo.getId());
         job.setTestPrimaryKey();
+
+        origin_enable_metric_calculator_value = Config.enable_metric_calculator;
+        Config.enable_metric_calculator = false;
+        MetricRepo.init();
+    }
+
+    @AfterEach
+    public void tearDown() {
+        Config.enable_metric_calculator = origin_enable_metric_calculator_value;
     }
 
     @Test

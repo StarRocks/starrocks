@@ -24,9 +24,6 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParseException;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.thrift.TTypeDesc;
-import com.starrocks.thrift.TTypeNode;
-import com.starrocks.thrift.TTypeNodeType;
 
 import java.util.Arrays;
 
@@ -148,15 +145,6 @@ public class MapType extends Type {
         String structStr = valueType.prettyPrint(lpad);
         structStr = structStr.substring(lpad);
         return String.format("%sMAP<%s,%s>", leftPadding, keyType.toSql(), structStr);
-    }
-
-    @Override
-    public void toThrift(TTypeDesc container) {
-        TTypeNode node = new TTypeNode();
-        container.types.add(node);
-        node.setType(TTypeNodeType.MAP);
-        keyType.toThrift(container);
-        valueType.toThrift(container);
     }
 
     @Override

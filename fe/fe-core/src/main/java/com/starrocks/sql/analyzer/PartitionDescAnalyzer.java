@@ -183,7 +183,6 @@ public class PartitionDescAnalyzer {
                                                                      PartitionInfo partitionInfo,
                                                                      Map<ColumnId, Column> idToColumn) {
 
-
         List<Column> partitionColumns = partitionInfo.getPartitionColumns(idToColumn);
         if (partitionColumns.size() != 1) {
             ErrorReport.report(ErrorCode.ERR_MULTI_PARTITION_COLUMN_NOT_SUPPORT_ADD_MULTI_RANGE);
@@ -589,8 +588,9 @@ public class PartitionDescAnalyzer {
                 .flatMap(e -> e.collectAllSlotRefs().stream())
                 .map(SlotRef::getColumnName)
                 .collect(Collectors.toList());
+        
         for (ColumnDef columnDef : columnDefs) {
-            if (slotRefs.contains(columnDef.getName()) && !columnDef.isKey()
+            if ((slotRefs.isEmpty() || slotRefs.contains(columnDef.getName())) && !columnDef.isKey()
                     && columnDef.getAggregateType() != AggregateType.NONE) {
                 throw new AnalysisException("The partition expr should base on key column");
             }

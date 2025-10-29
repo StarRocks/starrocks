@@ -25,6 +25,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.ColumnTypeConverter;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
@@ -290,8 +291,13 @@ public class PaimonMetadata implements ConnectorMetadata {
             // System table does not have snapshotId, ignore it.
             LOG.warn("Cannot get snapshot because {}", e.getMessage());
         }
+
+        GetRemoteFilesParams copyParams = params.copy();
+        copyParams.setTableVersionRange(TvrTableSnapshot.of(latestSnapshotId));
+
         PredicateSearchKey filter = PredicateSearchKey.of(paimonTable.getCatalogDBName(),
-                paimonTable.getCatalogTableName(), latestSnapshotId, params.getPredicate());
+                paimonTable.getCatalogTableName(), copyParams);
+
         if (!paimonSplits.containsKey(filter)) {
             ReadBuilder readBuilder = paimonTable.getNativeTable().newReadBuilder();
             int[] projected =
