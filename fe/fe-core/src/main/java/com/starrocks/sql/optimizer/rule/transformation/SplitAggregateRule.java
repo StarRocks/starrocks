@@ -20,9 +20,9 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
@@ -39,6 +39,7 @@ import org.apache.commons.collections4.CollectionUtils;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import static com.starrocks.qe.SessionVariableConstants.AggregationStage.AUTO;
 import static com.starrocks.qe.SessionVariableConstants.AggregationStage.TWO_STAGE;
@@ -100,19 +101,14 @@ public abstract class SplitAggregateRule extends TransformationRule {
         return af.getIntermediateType() == null ? af.getReturnType() : af.getIntermediateType();
     }
 
-    /**
-     * If there's only one BE node, splitting into multi-phase has no benefit but only overhead
-     */
-    private static boolean isSingleNodeExecution(ConnectContext context) {
-        return context.getAliveExecutionNodesNumber() == 1;
-    }
-
-    protected boolean isSuitableForTwoStageDistinct(OptExpression input, LogicalAggregationOperator operator,
+    protected boolean isSuitableForTwoStageDistinct(ConnectContext connectContext,
+                                                    OptExpression input,
+                                                    LogicalAggregationOperator operator,
                                                     List<ColumnRefOperator> distinctColumns) {
         if (distinctColumns.isEmpty()) {
             return true;
         }
-        int aggMode = ConnectContext.get().getSessionVariable().getNewPlannerAggStage();
+        int aggMode = connectContext.getSessionVariable().getNewPlannerAggStage();
         for (CallOperator callOperator : operator.getAggregations().values()) {
             if (callOperator.isDistinct() && !canGenerateTwoStageAggregate(callOperator)) {
                 return false;
@@ -126,11 +122,29 @@ public abstract class SplitAggregateRule extends TransformationRule {
         // 1. Only single node in the cluster
         // 2. With GROUP-BY clause, otherwise the second-stage cannot be parallelized
         // 3. CBO_ENABLE_SINGLE_NODE_PREFER_TWO_STAGE_AGGREGATE is enabled
-        if (aggMode == AUTO.ordinal()
-                && isSingleNodeExecution(ConnectContext.get())
-                && !FeConstants.runningUnitTest
+        if (!Utils.isRunningInUnitTest()
+                && aggMode == AUTO.ordinal()
+                && Utils.isSingleNodeExecution(connectContext)
                 && CollectionUtils.isNotEmpty(operator.getGroupingKeys())
-                && ConnectContext.get().getSessionVariable().isCboEnableSingleNodePreferTwoStageAggregate()) {
+                && connectContext.getSessionVariable().isCboEnableSingleNodePreferTwoStageAggregate()) {
+            // for single node's distinct, we prefer two phase agg when partition by column in exchange is not skew.
+            // since in such case, there is no scale problem.
+            // otherwise prefer four phase agg in isThreeStageMoreEfficient() since it has the best scalability.
+            List<ColumnRefOperator> partitionByColumns = operator.getPartitionByColumns();
+            Statistics inputStatistics = input.getGroupExpression().inputAt(0).getStatistics();
+            List<ColumnStatistic> partitionByColumnStatistics = partitionByColumns
+                    .stream()
+                    .map(inputStatistics::getColumnStatistic)
+                    .collect(Collectors.toList());
+            if (partitionByColumnStatistics.stream().anyMatch(ColumnStatistic::isUnknown)) {
+                return true;
+            }
+            double aggOutputRow =
+                    StatisticsCalculator.computeGroupByStatistics(partitionByColumns, inputStatistics, Maps.newHashMap());
+            // if partition by column's ndv is too small, two phase agg may not scale
+            if (aggOutputRow <= LOW_AGGREGATE_EFFECT_COEFFICIENT * 10) {
+                return false;
+            }
             return true;
         }
 
