@@ -15,6 +15,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.common.DdlException;
+import com.starrocks.lake.snapshot.ClusterSnapshotJob;
 import com.starrocks.lake.snapshot.ClusterSnapshotMgr;
 import com.starrocks.lake.snapshot.ClusterSnapshotMgrEPack;
 import com.starrocks.qe.ConnectContext;
@@ -26,7 +27,10 @@ import com.starrocks.sql.ast.AdminSetAutomatedSnapshotOnStmt;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.CreateClusterSnapshotStmt;
 import com.starrocks.sql.ast.DropClusterSnapshotStmt;
+import com.starrocks.sql.ast.RestoreTableFromSnapshotStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.TableRef;
+import com.starrocks.sql.ast.expression.TableName;
 
 public class ClusterSnapshotAnalyzer {
     public static void analyze(StatementBase stmt, ConnectContext session) {
@@ -112,6 +116,39 @@ public class ClusterSnapshotAnalyzer {
             String snapshotName = statement.getSnapshotName();
             if (!statement.getIfExists() && clusterSnapshotMgrEPack.getClusterSnapshotJobByName(snapshotName) == null) {
                 throw new SemanticException("Manual Snapshot: %s doest not exist", snapshotName);
+            }
+
+            return null;
+        }
+
+        @Override
+        public Void visitRestoreTableFromSnapshotStatement(RestoreTableFromSnapshotStmt statement, ConnectContext context) {
+            if (!RunMode.isSharedDataMode()) {
+                throw new SemanticException("Table snapshot recovery only supports shared data mode");
+            }
+
+            String snapshotName = statement.getSnapshotName();
+            if (snapshotName.isEmpty()) {
+                throw new SemanticException("Snapshot name cannot be empty");
+            }
+
+            TableRef sourceTableRef = statement.getSourceTable();
+            TableRef targetTableRef = statement.getTargetTable();
+            TableName sourceTable = new TableName(sourceTableRef.getCatalogName(),
+                    sourceTableRef.getDbName(), sourceTableRef.getTableName());
+            sourceTable.normalization(context);
+            TableName targetTable = new TableName(targetTableRef.getCatalogName(),
+                    targetTableRef.getDbName(), targetTableRef.getTableName());
+            targetTable.normalization(context);
+
+            ClusterSnapshotMgr clusterSnapshotMgr = GlobalStateMgr.getCurrentState().getClusterSnapshotMgr();
+            if (clusterSnapshotMgr == null) {
+                throw new SemanticException("Cluster snapshot manager is not initialized");
+            }
+
+            ClusterSnapshotJob job = clusterSnapshotMgr.getClusterSnapshotJobByName(snapshotName);
+            if (job == null || !job.isFinished()) {
+                throw new SemanticException("Cluster snapshot '%s' is not available for restore", snapshotName);
             }
 
             return null;

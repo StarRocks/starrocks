@@ -56,7 +56,9 @@ import com.starrocks.sql.ast.Identifier;
 import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.Property;
 import com.starrocks.sql.ast.QualifiedName;
+import com.starrocks.sql.ast.RestoreTableFromSnapshotStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.TableName;
@@ -967,5 +969,18 @@ public class AstBuilderEPack extends AstBuilder {
                 .map(c -> ((StringLiteral) visit(c)).getStringValue())
                 .collect(toList());
         return new DisableDiskClause(strings.get(strings.size() - 1), strings.subList(0, strings.size() - 1));
+    }
+
+    @Override
+    public ParseNode visitRestoreTableFromSnapshotStatement(
+            StarRocksParser.RestoreTableFromSnapshotStatementContext context) {
+        QualifiedName sourceQualifiedName = normalizeName(getQualifiedName(context.sourceTable));
+        TableRef sourceTable = new TableRef(sourceQualifiedName, null, createPos(context.sourceTable));
+        String snapshotName = getQualifiedName(context.snapshotName).toString();
+        QualifiedName targetQualifiedName = normalizeName(getQualifiedName(context.targetTable));
+        TableRef targetTable = new TableRef(targetQualifiedName, null, createPos(context.targetTable));
+        Map<String, String> properties = context.propertyList() != null
+                ? getPropertyList(context.propertyList()) : null;
+        return new RestoreTableFromSnapshotStmt(sourceTable, snapshotName, targetTable, properties, createPos(context));
     }
 }

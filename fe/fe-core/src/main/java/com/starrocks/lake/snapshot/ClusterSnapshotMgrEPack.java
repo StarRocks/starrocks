@@ -23,10 +23,12 @@ import com.starrocks.lake.snapshot.ClusterSnapshotJob.ClusterSnapshotJobState;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateClusterSnapshotStmt;
 import com.starrocks.sql.ast.DropClusterSnapshotStmt;
+import com.starrocks.sql.ast.RestoreTableFromSnapshotStmt;
 import com.starrocks.thrift.TClusterSnapshotJobsResponse;
 import com.starrocks.thrift.TClusterSnapshotsResponse;
 
@@ -364,6 +366,11 @@ public class ClusterSnapshotMgrEPack extends ClusterSnapshotMgr {
             }
         }
         return response;
+    }
+
+    public void submitTableSnapshotRestore(RestoreTableFromSnapshotStmt stmt, ConnectContext context)
+            throws StarRocksException {
+        throw new StarRocksException("Table snapshot recovery is not supported");
     }
 
     @Override

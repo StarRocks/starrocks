@@ -37,9 +37,11 @@ import com.starrocks.epack.sql.ast.DropRoleMappingStatement;
 import com.starrocks.epack.sql.ast.RefreshRoleMappingStatement;
 import com.starrocks.epack.sql.ast.SetPasswordPolicyStmt;
 import com.starrocks.epack.sql.ast.UnsetPasswordPolicyStmt;
+import com.starrocks.lake.snapshot.ClusterSnapshotMgrEPack;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.ShowResultSet;
+import com.starrocks.sql.ast.RestoreTableFromSnapshotStmt;
 
 public class DDLStmtExecutorVisitorEPack extends DDLStmtExecutor.StmtExecutorVisitor
         implements AstVisitorEPack<ShowResultSet, ConnectContext> {
@@ -249,6 +251,17 @@ public class DDLStmtExecutorVisitorEPack extends DDLStmtExecutor.StmtExecutorVis
         ErrorReport.wrapWithRuntimeException(() ->
                 context.getGlobalStateMgr().getSecurityPolicyManager().unsetGlobalPasswordPolicy()
         );
+        return null;
+    }
+
+    @Override
+    public ShowResultSet visitRestoreTableFromSnapshotStatement(RestoreTableFromSnapshotStmt stmt,
+                                                                ConnectContext context) {
+        ErrorReport.wrapWithRuntimeException(() -> {
+            ClusterSnapshotMgrEPack clusterSnapshotMgr =
+                    (ClusterSnapshotMgrEPack) context.getGlobalStateMgr().getClusterSnapshotMgr();
+            clusterSnapshotMgr.submitTableSnapshotRestore(stmt, context);
+        });
         return null;
     }
 }

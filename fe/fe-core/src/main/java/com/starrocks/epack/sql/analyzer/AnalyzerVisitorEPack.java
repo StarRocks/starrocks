@@ -30,11 +30,13 @@ import com.starrocks.epack.sql.ast.ShowPolicyStmt;
 import com.starrocks.epack.sql.ast.UnsetPasswordPolicyStmt;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.analyzer.ClusterSnapshotAnalyzer;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
+import com.starrocks.sql.ast.RestoreTableFromSnapshotStmt;
 import com.starrocks.sql.automv.analysis.TunespaceAnalyzer;
 import com.starrocks.sql.automv.ast.AlterTunespaceStmt;
 import com.starrocks.sql.automv.ast.CreateTunespaceStmt;
@@ -260,5 +262,11 @@ public class AnalyzerVisitorEPack extends Analyzer.AnalyzerVisitor implements As
     @Override
     public Void visitSubmitRecommendationsTaskStmt(SubmitRecommendationsTaskStmt node, ConnectContext context) {
         return TunespaceAnalyzer.analyze(node, context);
+    }
+
+    @Override
+    public Void visitRestoreTableFromSnapshotStatement(RestoreTableFromSnapshotStmt statement, ConnectContext context) {
+        ClusterSnapshotAnalyzer.analyze(statement, context);
+        return null;
     }
 }

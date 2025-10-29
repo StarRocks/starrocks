@@ -9567,7 +9567,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         return properties;
     }
 
-    private Map<String, String> getPropertyList(com.starrocks.sql.parser.StarRocksParser.PropertyListContext context) {
+    protected Map<String, String> getPropertyList(com.starrocks.sql.parser.StarRocksParser.PropertyListContext context) {
         Map<String, String> properties = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
         if (context != null && context.property() != null) {
             List<Property> propertyList = visit(context.property(), Property.class);
@@ -9727,7 +9727,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         return caseInsensitive && name != null ? name.toLowerCase() : name;
     }
 
-    private QualifiedName normalizeName(QualifiedName qualifiedName) {
+    protected QualifiedName normalizeName(QualifiedName qualifiedName) {
         List<String> parts = new ArrayList<>();
         for (String part : qualifiedName.getParts()) {
             parts.add(normalizeName(part));

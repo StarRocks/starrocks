@@ -700,4 +700,8 @@ public interface AstVisitor<R, C> {
     default R visitShowDataDistributionStatement(ShowDataDistributionStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
+
+    default R visitRestoreTableFromSnapshotStatement(RestoreTableFromSnapshotStmt clause, C context) {
+        return visitDDLStatement(clause, context);
+    }
 }

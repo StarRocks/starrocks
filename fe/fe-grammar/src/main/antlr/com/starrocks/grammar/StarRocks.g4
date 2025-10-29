@@ -133,6 +133,7 @@ statement
     // Manual Snapshot Statement
     | createClusterSnapshotStatement
     | dropClusterSnapshotStatement
+    | restoreTableFromSnapshotStatement
 
     // Cluster Management Statement
     | alterSystemStatement
@@ -862,6 +863,13 @@ createClusterSnapshotStatement
 
 dropClusterSnapshotStatement
     : DROP CLUSTER SNAPSHOT snapshotName=identifier (IF EXISTS)?
+    ;
+
+restoreTableFromSnapshotStatement
+    : RESTORE TABLE sourceTable=qualifiedName
+      FROM SNAPSHOT snapshotName=qualifiedName
+      TO TABLE targetTable=qualifiedName
+      (WITH PROPERTIES propertyList)?
     ;
 
 // ------------------------------------------- Cluster Management Statement ---------------------------------------------
