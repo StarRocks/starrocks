@@ -168,6 +168,8 @@ public class TransactionStmtExecutor {
             if (!transactionState.getTableIdList().contains(targetTable.getId())) {
                 transactionState.addTableIdList(targetTable.getId());
             }
+            // record modified table id in explicit txn state for later SELECT validation
+            explicitTxnState.addModifiedTableId(targetTable.getId());
 
             for (TableName tableName : m.keySet()) {
                 if (explicitTxnState.getTableHasExplicitStmt(tableName.getTbl())) {
@@ -204,6 +206,9 @@ public class TransactionStmtExecutor {
         }
 
         transactionState.addTableIdList(tableId);
+
+        // record modified table id in explicit txn state for later SELECT validation
+        explicitTxnState.addModifiedTableId(tableId);
 
         explicitTxnState.addTransactionItem(item);
 

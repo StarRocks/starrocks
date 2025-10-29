@@ -75,10 +75,8 @@ import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.AlterUserStmt;
 import com.starrocks.sql.ast.AstTraverser;
-import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.ExecuteStmt;
-import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.QueryStatement;
@@ -86,13 +84,9 @@ import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SetPassVar;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.NullLiteral;
-import com.starrocks.sql.ast.txn.BeginStmt;
-import com.starrocks.sql.ast.txn.CommitStmt;
-import com.starrocks.sql.ast.txn.RollbackStmt;
 import com.starrocks.sql.common.AuditEncryptionChecker;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.formatter.FormatOptions;
@@ -101,6 +95,7 @@ import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TMasterOpRequest;
 import com.starrocks.thrift.TMasterOpResult;
 import com.starrocks.thrift.TQueryOptions;
+import com.starrocks.transaction.ExplicitTxnStatementValidator;
 import org.apache.commons.codec.binary.Hex;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -417,16 +412,8 @@ public class ConnectProcessor {
                     }
                 }
 
-                if (ctx.getTxnId() != 0 &&
-                        !((parsedStmt instanceof InsertStmt && !((InsertStmt) parsedStmt).isOverwrite()) ||
-                                parsedStmt instanceof BeginStmt ||
-                                parsedStmt instanceof CommitStmt ||
-                                parsedStmt instanceof UpdateStmt ||
-                                parsedStmt instanceof DeleteStmt ||
-                                parsedStmt instanceof RollbackStmt)) {
-                    ErrorReport.report(ErrorCode.ERR_EXPLICIT_TXN_NOT_SUPPORT_STMT);
-                    ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
-                    return;
+                if (ctx.getTxnId() != 0) {
+                    ExplicitTxnStatementValidator.validate(parsedStmt, ctx);
                 }
 
                 try {
