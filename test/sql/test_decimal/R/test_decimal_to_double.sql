@@ -202,12 +202,12 @@ select 12345678901234567890123456789012345678.0 * 1.1;
 set decimal_overflow_to_double = true;
 -- result:
 -- !result
-select c_id, c_d128_large * c_d64_max + 1.0 from t_decimal_precision_overflow where c_id <= 2;
+select c_id, c_d128_large * c_d64_max + 1.0 from t_decimal_precision_overflow where c_id <= 2 order by 1;
 -- result:
 1	1.5241578766956256e+27
 2	1.5241578766956256e+27
 -- !result
-select c_id, (c_d128_max * c_d128_max) / 2.0 from t_decimal_precision_overflow where c_id <= 2;
+select c_id, (c_d128_max * c_d128_max) / 2.0 from t_decimal_precision_overflow where c_id <= 2 order by 1;
 -- result:
 1	7.620789376619419e+43
 2	7.620789376619419e+43
