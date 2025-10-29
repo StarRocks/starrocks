@@ -587,7 +587,7 @@ public:
         if (!fs_st.ok()) {
             return to_status(fs_st.status());
         }
-        return to_status((*fs_st)->drop_cache(pair.first));
+        return to_status((*fs_st)->drop_cache(pair.first, 0 /* offset */, -1 /* size */));
     }
 
     Status delete_files(std::span<const std::string> paths) override {
