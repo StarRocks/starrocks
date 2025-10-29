@@ -14,9 +14,6 @@
 
 #pragma once
 
-#include <memory>
-#include <vector>
-
 #include "common/status.h"
 #include "runtime/decimalv2_value.h"
 #include "util/decimal_types.h"
@@ -98,6 +95,11 @@ public:
     // return the field name for the index
     StatusOr<std::string_view> get_key(uint32_t index) const;
 
+    // return the metadata raw string view
+    std::string_view get_raw() const {
+        return _metadata;
+    }
+
     static constexpr char kEmptyMetadataChars[] = {0x1, 0x0, 0x0};
     static constexpr std::string_view kEmptyMetadata{kEmptyMetadataChars, sizeof(kEmptyMetadataChars)};
 
@@ -128,6 +130,7 @@ public:
 
     BasicType basic_type() const;
     const VariantMetadata& metadata() const;
+    std::string_view value() const;
     VariantType type() const;
 
     // Get the primitive boolean value.
