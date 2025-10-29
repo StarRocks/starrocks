@@ -481,8 +481,15 @@ Status BinaryDictPageDecoder<Type>::next_dict_codes(const SparseRange<>& range, 
 
 template <LogicalType Type>
 void BinaryDictPageDecoder<Type>::reserve_col(size_t n, Column* column) {
-    DCHECK(_encoding_type == DICT_ENCODING);
-    DCHECK(_parsed);
+    if (_encoding_type == PLAIN_ENCODING) {
+        return _data_page_decoder->reserve_col(n, column);
+    }
+
+    if (_dict_decoder == nullptr) {
+        column->reserve(n);
+        return;
+    }
+
     size_t estimated_row_size = _dict_decoder->estimate_row_size();
     Column* data_col;
     if (column->is_nullable()) {
