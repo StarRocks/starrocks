@@ -6,7 +6,7 @@
 CREATE TABLE `test_json_cast_map` (
   `c1` bigint(20) NULL COMMENT "",
   `c2` json NULL COMMENT ""
-);
+) DISTRIBUTED BY HASH(c1) BUCKETS 1;
 
 -- Test 1: Inconsistent nested structure - should be rejected
 -- Some rows have level1.level2.level3.level4.5, others have level1.level2.level3.level4 but no 5
