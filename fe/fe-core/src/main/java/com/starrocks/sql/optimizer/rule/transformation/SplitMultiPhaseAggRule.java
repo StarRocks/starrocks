@@ -406,7 +406,7 @@ public class SplitMultiPhaseAggRule extends SplitAggregateRule {
 
         // for a single node, we prefer multi-phases agg when partitionByColumns between 1/2 agg is not skew.
         // and prefer four phase agg when partitionByColumns is skew
-        if (!FeConstants.runningUnitTest
+        if (!Utils.isRunningInUnitTest()
                 && sv.isCboEnableSingleNodePreferTwoStageAggregate()
                 && Utils.isSingleNodeExecution(connectContext)) {
             return false;
