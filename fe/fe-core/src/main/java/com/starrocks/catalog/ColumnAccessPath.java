@@ -236,7 +236,7 @@ public class ColumnAccessPath {
         tColumnAccessPath.setFrom_predicate(fromPredicate);
         tColumnAccessPath.setExtended(extended);
         if (valueType != null) {
-            tColumnAccessPath.setType_desc(valueType.toThrift());
+            tColumnAccessPath.setType_desc(TypeSerializer.toThrift(valueType));
         }
         return tColumnAccessPath;
     }

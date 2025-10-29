@@ -144,6 +144,7 @@ import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.SparkResource;
+import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Tablet;
@@ -216,6 +217,7 @@ import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
@@ -485,8 +487,8 @@ public class GsonUtils {
                 .registerTypeHierarchyAdapter(ColumnId.class, new ColumnIdAdapter())
                 .registerTypeAdapterFactory(new ProcessHookTypeAdapterFactory())
                 // For call constructor with selectedFields
-                .registerTypeAdapter(MapType.class, new MapType.MapTypeDeserializer())
-                .registerTypeAdapter(StructType.class, new StructType.StructTypeDeserializer())
+                .registerTypeAdapter(MapType.class, new MapTypeDeserializer())
+                .registerTypeAdapter(StructType.class, new StructTypeDeserializer())
                 .registerTypeAdapterFactory(COLUMN_TYPE_ADAPTER_FACTORY)
                 .registerTypeAdapterFactory(DISTRIBUTION_INFO_TYPE_ADAPTER_FACTORY)
                 .registerTypeAdapterFactory(RESOURCE_TYPE_ADAPTER_FACTORY)
@@ -788,6 +790,41 @@ public class GsonUtils {
             } catch (Throwable t) {
                 return PrimitiveType.INVALID_TYPE;
             }
+        }
+    }
+
+    // Todo: remove it after remove selectedFields
+    private static class MapTypeDeserializer implements JsonDeserializer<MapType> {
+        @Override
+        public MapType deserialize(JsonElement jsonElement, java.lang.reflect.Type type,
+                                   JsonDeserializationContext jsonDeserializationContext)
+                throws JsonParseException {
+            JsonObject dumpJsonObject = jsonElement.getAsJsonObject();
+            JsonObject key = dumpJsonObject.getAsJsonObject("keyType");
+            com.starrocks.catalog.Type keyType = GsonUtils.GSON.fromJson(key, com.starrocks.catalog.Type.class);
+            JsonObject value = dumpJsonObject.getAsJsonObject("valueType");
+            com.starrocks.catalog.Type valueType = GsonUtils.GSON.fromJson(value, com.starrocks.catalog.Type.class);
+            return new MapType(keyType, valueType);
+        }
+    }
+
+    // Todo: remove it after remove selectedFields
+    public static class StructTypeDeserializer implements JsonDeserializer<StructType> {
+        @Override
+        public StructType deserialize(JsonElement jsonElement, java.lang.reflect.Type type,
+                                      JsonDeserializationContext jsonDeserializationContext)
+                throws JsonParseException {
+            JsonObject dumpJsonObject = jsonElement.getAsJsonObject();
+            boolean isNamed = false;
+            if (dumpJsonObject.get("named") != null) {
+                isNamed = dumpJsonObject.get("named").getAsBoolean();
+            }
+            JsonArray fields = dumpJsonObject.getAsJsonArray("fields");
+            ArrayList<StructField> structFields = new ArrayList<>(fields.size());
+            for (JsonElement field : fields) {
+                structFields.add(GsonUtils.GSON.fromJson(field, StructField.class));
+            }
+            return new StructType(structFields, isNamed);
         }
     }
 }
