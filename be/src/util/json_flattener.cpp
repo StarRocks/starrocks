@@ -612,7 +612,8 @@ void JsonPathDeriver::_visit_json_paths(const vpack::Slice& value, JsonFlatPath*
         desc->last_row = mark_row;
 
         if (v.isObject()) {
-            child->remain = v.isEmptyObject();
+            // Accumulate remain status: if node is ever empty in any row, mark as remain
+            child->remain |= v.isEmptyObject();
             desc->type = flat_json::JSON_BASE_TYPE_BITS;
             _visit_json_paths(v, child, mark_row);
         } else {
@@ -663,11 +664,12 @@ uint32_t JsonPathDeriver::_dfs_finalize(JsonFlatPath* node, const std::string& a
         }
     } else {
         // For intermediate nodes: mark as remain if not all children are flattened,
-        // or if the node itself was visited (to preserve structures like {"100": {}})
+        // or if the node itself was ever empty in any row (to preserve structures like {"100": {}})
         if (flat_count != node->children.size()) {
             node->remain = true;
-        } else if (!absolute_path.empty() && _derived_maps.find(node) != _derived_maps.end()) {
-            node->remain = true;
+        } else if (!absolute_path.empty() && node->remain) {
+            // Node was marked as remain because it was empty in some row(s)
+            // Keep it as remain even if all children are flattened
         }
         return 1;
     }
@@ -1153,7 +1155,7 @@ void JsonMerger::_merge_json_with_remain(const JsonFlatPath* root, const vpack::
         if (child->op == JsonFlatPath::OP_EXCLUDE) {
             continue;
         }
-        
+
         // Skip keys already processed from remain in the first loop when IN_TREE=true
         bool key_processed_from_remain = remain->hasKey(vpack::StringRef(child_name.data(), child_name.size()));
         if (key_processed_from_remain) {
@@ -1173,7 +1175,7 @@ void JsonMerger::_merge_json_with_remain(const JsonFlatPath* root, const vpack::
                 }
             }
         }
-        
+
         // e.g. flat path: b.b2.b3}
         // json: {"b": {}}
         // we can't output: {"b": {}} to {"b": {"b2": {}}}
@@ -1188,7 +1190,7 @@ void JsonMerger::_merge_json_with_remain(const JsonFlatPath* root, const vpack::
             }
             continue;
         }
-        
+
         // For intermediate nodes not in remain, only create if we have flat values for descendants
         bool has_value = false;
         _check_has_non_null_values(child.get(), index, &has_value);
@@ -1227,7 +1229,7 @@ void JsonMerger::_merge_json(const JsonFlatPath* root, vpack::Builder* builder, 
             // If yes, create the object structure; if no, skip to avoid creating empty objects
             bool has_value = false;
             _check_has_non_null_values(child.get(), index, &has_value);
-            
+
             if (has_value) {
                 builder->addUnchecked(child_name.data(), child_name.size(), vpack::Value(vpack::ValueType::Object));
                 _merge_json(child.get(), builder, index);
