@@ -340,6 +340,14 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
     private synchronized boolean timeExpired(long id, long currentTimeMs) {
         long latencyMs = currentTimeMs - getAdjustedRecycleTimestamp(id);
         long expireMs = max(Config.catalog_trash_expire_second * 1000L, MIN_ERASE_LATENCY);
+        // customize expireMs for partition that need to be retained for a configurable period
+        if (idToPartition.containsKey(id)) {
+            RecyclePartitionInfo recyclePartitionInfo = idToPartition.get(id);
+            if (recyclePartitionInfo.isRecoverable() && recyclePartitionInfo.getRetentionPeriod() > 0) {
+                // retain the partition alive for `tabletReservePeriod` seconds
+                expireMs = recyclePartitionInfo.getRetentionPeriod() * 1000;
+            }
+        }
         if (enableEraseLater.contains(id)) {
             // if enableEraseLater is set, extend the timeout by LATE_RECYCLE_INTERVAL_SECONDS
             expireMs += LATE_RECYCLE_INTERVAL_SECONDS * 1000L;
