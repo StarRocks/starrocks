@@ -359,14 +359,12 @@ protected:
 
 template <typename F>
 concept HashValueForEachFunc = requires(F f, size_t index, uint32_t& hash_value) {
-    { f(index, hash_value) }
-    ->std::same_as<void>;
+    { f(index, hash_value) } -> std::same_as<void>;
 };
 
 template <typename F>
 concept HashValueAndBucketIdForEachFunc = requires(F f, size_t index, uint32_t& hash_value, uint32_t& bucket_id) {
-    { f(index, hash_value, bucket_id) }
-    ->std::same_as<void>;
+    { f(index, hash_value, bucket_id) } -> std::same_as<void>;
 };
 
 struct FullScanIterator {
@@ -957,22 +955,21 @@ public:
     std::string debug_string() const override {
         std::stringstream ss;
         ss << "RuntimeMinMax(";
-        ss << "type = " << Type << " ";
-        ss << "has_null = " << _has_null << " ";
+        ss << "type=" << Type << ", ";
+        ss << "has_null=" << _has_null << ", ";
         if constexpr (std::is_integral_v<CppType> || std::is_floating_point_v<CppType>) {
             if constexpr (!std::is_same_v<CppType, __int128>) {
-                ss << "_min = " << _min << ", _max = " << _max;
+                ss << "_min=" << _min << ", _max=" << _max;
             } else {
-                ss << "_min/_max = int128";
+                ss << "_min/_max=int128";
             }
         } else if constexpr (IsSlice<CppType>) {
-            ss << "_min/_max = slice";
+            ss << "_min/_max=slice";
         } else if constexpr (IsDate<CppType> || IsTimestamp<CppType> || IsDecimal<CppType>) {
-            ss << "_min = " << _min.to_string() << ", _max = " << _max.to_string();
+            ss << "_min=" << _min.to_string() << ", _max=" << _max.to_string();
         }
-        ss << " left_close_interval = " << _left_close_interval << ", right_close_interval = " << _right_close_interval
-           << " ";
-        ss << ")";
+        ss << ", left_close_interval=" << _left_close_interval << ", right_close_interval=" << _right_close_interval
+           << ")";
         return ss.str();
     }
 
@@ -1316,9 +1313,8 @@ public:
     std::string debug_string() const override {
         LogicalType ltype = Type;
         std::stringstream ss;
-        ss << "RuntimeBF(type = " << ltype << ", size = " << _size << ", has_null = " << _has_null
-           << ", can_use_bf = " << can_use_bf();
-        ss << ")";
+        ss << "RuntimeBF(type=" << ltype << ", size=" << _size << ", has_null=" << _has_null
+           << ", can_use_bf=" << can_use_bf() << ")";
         return ss.str();
     }
 

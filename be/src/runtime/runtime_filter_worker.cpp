@@ -182,8 +182,8 @@ void RuntimeFilterPort::publish_runtime_filters(const std::list<RuntimeFilterBui
                                rf_desc->sender_finst_id() == state->fragment_instance_id();
         if (!need_sender_grf) continue;
 
-        VLOG_FILE << "RuntimeFilterPort::publish_runtime_filters. join filter_id = " << rf_desc->filter_id()
-                  << ", finst_id = " << state->fragment_instance_id();
+        VLOG_FILE << "RuntimeFilterPort::publish_runtime_filters. join filter_id=" << rf_desc->filter_id()
+                  << ", finst_id=" << state->fragment_instance_id();
 
         // rf metadata
         PTransmitRuntimeFilterParams params;
@@ -233,11 +233,11 @@ void RuntimeFilterPort::publish_skew_boradcast_join_key_columns(RuntimeFilterBui
     PTransmitRuntimeFilterParams params;
     prepare_params(params, state, rf_desc);
 
-    VLOG_FILE << "RuntimeFilterPort::publish_runtime_filters for skew join's boradcast site. join filter_id = "
-              << rf_desc->filter_id() << ", finst_id = " << state->fragment_instance_id()
-              << "RuntimeFilterPort::publish_runtime_filters. merge_node[0] = " << rf_desc->merge_nodes()[0]
-              << ", query_id = " << params.query_id() << ", finst_id = " << params.finst_id()
-              << ", be_number = " << params.build_be_number() << ", is_pipeline = " << params.is_pipeline();
+    VLOG_FILE << "RuntimeFilterPort::publish_runtime_filters for skew join's boradcast site. join filter_id="
+              << rf_desc->filter_id() << ", finst_id=" << state->fragment_instance_id()
+              << "RuntimeFilterPort::publish_runtime_filters. merge_node[0]=" << rf_desc->merge_nodes()[0]
+              << ", query_id=" << params.query_id() << ", finst_id=" << params.finst_id()
+              << ", be_number=" << params.build_be_number() << ", is_pipeline=" << params.is_pipeline();
 
     std::string* rf_data = params.mutable_data();
     size_t max_size = RuntimeFilterHelper::max_runtime_filter_serialized_size_for_skew_boradcast_join(keyColumn);
@@ -297,8 +297,8 @@ void RuntimeFilterPort::receive_runtime_filter(int32_t filter_id, const RuntimeF
     auto it = _listeners.find(filter_id);
     if (it == _listeners.end()) return;
     auto& wait_list = it->second;
-    VLOG_FILE << "RuntimeFilterPort::receive_runtime_filter(local). filter_id = " << filter_id
-              << ", wait_list_size = " << wait_list.size() << ", filter = " << rf->debug_string();
+    VLOG_FILE << "RuntimeFilterPort::receive_runtime_filter(local). filter_id=" << filter_id
+              << ", wait_list_size=" << wait_list.size() << ", filter=" << rf->debug_string();
     for (auto* rf_desc : wait_list) {
         rf_desc->set_runtime_filter(rf);
     }
@@ -309,8 +309,8 @@ void RuntimeFilterPort::receive_shared_runtime_filter(int32_t filter_id,
     auto it = _listeners.find(filter_id);
     if (it == _listeners.end()) return;
     auto& wait_list = it->second;
-    VLOG_FILE << "RuntimeFilterPort::receive_runtime_filter(shared). filter_id = " << filter_id
-              << ", wait_list_size = " << wait_list.size() << ", filter = " << rf->debug_string();
+    VLOG_FILE << "RuntimeFilterPort::receive_runtime_filter(shared). filter_id=" << filter_id
+              << ", wait_list_size=" << wait_list.size() << ", filter=" << rf->debug_string();
     for (auto* rf_desc : wait_list) {
         rf_desc->set_shared_runtime_filter(rf);
     }
@@ -362,13 +362,13 @@ void merge_membership_filter(RuntimeFilterMergerStatus* rf_state, RuntimeFilter*
     if (rf_state->current_size > rf_state->max_size) {
         // alreay exceeds max size, no need to build bloom filter, but still reserve min/max filter.
         VLOG_FILE << "RuntimeFilterMerger::merge_runtime_filter. stop building bf since size too "
-                     "large. filter_id = "
-                  << filter_id << ", size = " << rf_state->current_size;
+                     "large. filter_id="
+                  << filter_id << ", rf_size=" << rf_state->current_size;
         rf_state->exceeded = false;
     }
 
-    VLOG_FILE << "RuntimeFilterMerger::merge_runtime_filter. assembled filter_id = " << filter_id
-              << ", be_number = " << be_number;
+    VLOG_FILE << "RuntimeFilterMerger::merge_runtime_filter. merged filter_id=" << filter_id
+              << ", be_number=" << be_number;
 
     if (!rf_state->exceeded) {
         VLOG_FILE << "RuntimeFilterMerger::merge_runtime_filter, clear bf in all filters";
@@ -412,8 +412,8 @@ void RuntimeFilterMerger::merge_runtime_filter(PTransmitRuntimeFilterParams& par
         status = &(it->second);
         if (status->arrives.find(be_number) != status->arrives.end()) {
             // duplicated one, just skip it.
-            VLOG_FILE << "RuntimeFilterMerger::merge_runtime_filter. duplicated filter_id = " << filter_id
-                      << ", be_number = " << be_number;
+            VLOG_FILE << "RuntimeFilterMerger::merge_runtime_filter. duplicated filter_id=" << filter_id
+                      << ", be_number=" << be_number;
             return;
         }
         if (status->stop) {
@@ -627,11 +627,11 @@ void RuntimeFilterMerger::_send_total_runtime_filter(int rf_version, int32_t fil
     status->broadcast_filter_ts = now;
 
     if (VLOG_FILE_IS_ON) {
-        VLOG_FILE << "RuntimeFilterMerger::_send_total_runtime_filter. target_nodes[0] = " << target_nodes->at(0)
-                  << ", target_nodes_size = " << target_nodes->size() << ", filter_id = " << request.filter_id()
-                  << ", latency(last-first = " << status->recv_last_filter_ts - status->recv_first_filter_ts
-                  << ", send-first = " << status->broadcast_filter_ts - status->recv_first_filter_ts << ")"
-                  << ", filter = " << out->debug_string();
+        VLOG_FILE << "RuntimeFilterMerger::_send_total_runtime_filter. target_nodes[0]=" << target_nodes->at(0)
+                  << ", target_nodes_size=" << target_nodes->size() << ", filter_id=" << request.filter_id()
+                  << ", latency(last-first=" << status->recv_last_filter_ts - status->recv_first_filter_ts
+                  << ", send-first=" << status->broadcast_filter_ts - status->recv_first_filter_ts << ")"
+                  << ", filter=" << out->debug_string();
     }
     request.set_broadcast_timestamp(now);
 
@@ -674,8 +674,8 @@ void RuntimeFilterMerger::_send_total_runtime_filter(int rf_version, int32_t fil
             targets_string += ", ";
         }
 
-        VLOG_FILE << "RuntimeFilterMerger::_send_total_runtime_filter. targets = [" << targets_string
-                  << "], filter_id = " << request.filter_id() << ", filter = " << out->debug_string();
+        VLOG_FILE << "RuntimeFilterMerger::_send_total_runtime_filter. targets=[" << targets_string
+                  << "], filter_id=" << request.filter_id() << ", filter=" << out->debug_string();
     }
 
     size_t index = 0;
@@ -717,8 +717,9 @@ void RuntimeFilterMerger::_send_total_runtime_filter(int rf_version, int32_t fil
         }
 
         if (half != 0) {
-            VLOG_FILE << "RuntimeFilterMerger::_send_total_runtime_filter. target " << t.first << " will forward to "
-                      << half << " nodes. nodes[0] = " << request.forward_targets(0).host() << ":"
+            VLOG_FILE << "RuntimeFilterMerger::_send_total_runtime_filter. filter_id=" << request.filter_id()
+                      << ". target=" << t.first << ". it will forward to " << half
+                      << " nodes. nodes[0] = " << request.forward_targets(0).host() << ":"
                       << request.forward_targets(0).port();
         }
 
@@ -804,8 +805,8 @@ void RuntimeFilterWorker::send_part_runtime_filter(PTransmitRuntimeFilterParams&
                                                    const std::vector<TNetworkAddress>& addrs, int timeout_ms,
                                                    int64_t rpc_http_min_size, EventType type) {
     if (_reach_queue_limit()) {
-        LOG(WARNING) << "runtime filter worker queue drop part runtime filter, query_id = " << params.query_id()
-                     << ", filter_id = " << params.filter_id();
+        LOG(WARNING) << "runtime filter worker queue drop part runtime filter, query_id=" << params.query_id()
+                     << ", filter_id=" << params.filter_id();
         return;
     }
     _exec_env->add_rf_event({params.query_id(), params.filter_id(), "", EventTypeToString(type)});
@@ -824,8 +825,8 @@ void RuntimeFilterWorker::send_broadcast_runtime_filter(PTransmitRuntimeFilterPa
                                                         const std::vector<TRuntimeFilterDestination>& destinations,
                                                         int timeout_ms, int64_t rpc_http_min_size) {
     if (_reach_queue_limit()) {
-        LOG(WARNING) << "runtime filter worker queue drop broadcast runtime filter, query_id = " << params.query_id()
-                     << ", filter_id = " << params.filter_id();
+        LOG(WARNING) << "runtime filter worker queue drop broadcast runtime filter, query_id=" << params.query_id()
+                     << ", filter_id=" << params.filter_id();
         return;
     }
     _exec_env->add_rf_event({params.query_id(), params.filter_id(), "", "SEND_BROADCAST_RF"});
@@ -841,14 +842,14 @@ void RuntimeFilterWorker::send_broadcast_runtime_filter(PTransmitRuntimeFilterPa
 }
 
 void RuntimeFilterWorker::receive_runtime_filter(const PTransmitRuntimeFilterParams& params) {
-    VLOG_FILE << "RuntimeFilterWorker::receive_runtime_filter: partial = " << params.is_partial()
-              << ", query_id = " << params.query_id() << ", finst_id = " << params.finst_id()
-              << ", filter_id = " << params.filter_id() << ", # probe insts = " << params.probe_finst_ids_size()
-              << ", is_pipeline = " << params.is_pipeline();
+    VLOG_FILE << "RuntimeFilterWorker::receive_runtime_filter: partial=" << params.is_partial()
+              << ", query_id=" << params.query_id() << ", finst_id=" << params.finst_id()
+              << ", filter_id=" << params.filter_id() << ", probe_size=" << params.probe_finst_ids_size()
+              << ", is_pipeline=" << params.is_pipeline();
 
     if (_reach_queue_limit()) {
-        LOG(WARNING) << "runtime filter worker queue drop receive runtime filter, query_id = " << params.query_id()
-                     << ", filter_id = " << params.filter_id();
+        LOG(WARNING) << "runtime filter worker queue drop receive runtime filter, query_id=" << params.query_id()
+                     << ", filter_id=" << params.filter_id();
         return;
     }
     RuntimeFilterWorkerEvent ev;
