@@ -827,7 +827,7 @@ void LocalTabletsChannel::abort() {
     }
     string tablet_id_list_str;
     JoinInts(tablet_ids, ",", &tablet_id_list_str);
-    LOG(INFO) << "cancel LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << _key.id
+    LOG(INFO) << "cancel LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(_key.id)
               << " index_id: " << _key.index_id << " #tablet:" << _delta_writers.size()
               << " tablet_ids:" << tablet_id_list_str;
 }
@@ -842,12 +842,12 @@ void LocalTabletsChannel::abort(const std::vector<int64_t>& tablet_ids, const st
             it->second->abort(abort_with_exception);
         } else {
             LOG(WARNING) << "tablet_id: " << tablet_id << " not found in LocalTabletsChannel txn_id: " << _txn_id
-                         << " load_id: " << _key.id << " index_id: " << _key.index_id;
+                         << " load_id: " << print_id(_key.id) << " index_id: " << _key.index_id;
         }
     }
     string tablet_id_list_str;
     JoinInts(tablet_ids, ",", &tablet_id_list_str);
-    LOG(INFO) << "cancel LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << _key.id
+    LOG(INFO) << "cancel LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(_key.id)
               << " index_id: " << _key.index_id << " tablet_ids:" << tablet_id_list_str << ", reason: " << reason;
 }
 
