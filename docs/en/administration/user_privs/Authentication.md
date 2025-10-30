@@ -73,7 +73,7 @@ LDAP authentication requires the client to pass on a clear-text password to Star
 Add `--default-auth mysql_clear_password --enable-cleartext-plugin` when executing:
 
 ```sql
-mysql -utom -P8030 -h127.0.0.1 -p --default-auth mysql_clear_password --enable-cleartext-plugin
+mysql -utom -P9030 -h127.0.0.1 -p --default-auth mysql_clear_password --enable-cleartext-plugin
 ```
 
 ### Connect from JDBC/ODBC client with LDAP
