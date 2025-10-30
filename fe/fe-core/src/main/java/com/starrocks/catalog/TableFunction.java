@@ -160,7 +160,7 @@ public class TableFunction extends Function {
         TFunction fn = super.toThrift();
         TTableFunction tableFn = new TTableFunction();
         tableFn.setSymbol(symbolName);
-        tableFn.setRet_types(tableFnReturnTypes.stream().map(Type::toThrift).collect(Collectors.toList()));
+        tableFn.setRet_types(tableFnReturnTypes.stream().map(TypeSerializer::toThrift).collect(Collectors.toList()));
         tableFn.setIs_left_join(isLeftJoin);
         fn.setTable_fn(tableFn);
         return fn;
