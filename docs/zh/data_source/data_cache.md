@@ -4,21 +4,53 @@ displayed_sidebar: docs
 
 # Data Cache
 
-本文介绍 Data Cache 的原理，以及如何开启 Data Cache 加速外部数据查询。自 v3.3.0 起，Data Cache 功能默认开启。
+本文将介绍 Data Cache 的核心原理，以及如何通过开启 Data Cache 功能加速数据查询。
 
-在数据湖分析场景中，StarRocks 作为 OLAP 查询引擎需要扫描 HDFS 或对象存储（下文简称为“外部存储系统”）上的数据文件。查询实际读取的文件数量越多，I/O 开销也就越大。此外，在即席查询 (ad-hoc) 场景中，如果频繁访问相同数据，还会带来重复的 I/O 开销。
+Data Cache 是用于缓存内表与外表数据。该功能自 v3.3.0 版本起默认开启，而从 V4.0 版本开始，内表与外表的内存缓存、磁盘缓存已统一纳入 Data Cache 体系进行管理。
 
-为了进一步提升该场景下的查询性能，StarRocks 2.5 版本开始提供 Data Cache 功能。通过将外部存储系统的原始数据按照一定策略切分成多个 block 后，缓存至 StarRocks 的本地 BE 节点，从而避免重复的远端数据拉取开销，实现热点数据查询分析性能的进一步提升。Data Cache 仅在使用外部表（不含 JDBC 外部表）和使用 External Catalog 查询外部存储系统中的数据时生效，在查询 StarRocks 原生表时不生效。
+Data Cache 包含两部分：Page Cache（内存缓存）与 Block Cache（磁盘缓存）。
 
-## 原理
+## Page Cache 原理
 
-StarRocks 将远端存储文件缓存至本地 BE 节点时，会将原始文件按照一定策略切分为相等大小的 block。block 是数据缓存的最小单元，大小可配置。当配置 block 大小为 1 MB 时，如果查询 Amazon S3 上一个 128 MB 的 Parquet 文件，StarRocks 会按照 1 MB 的步长，将该文件拆分成相等的 128 个 block，即 [0, 1 MB)、[1 MB, 2 MB)、[2 MB, 3 MB) ... [127 MB, 128 MB)，并为每个 block 分配一个全局唯一 ID，即 cache key。Cache key 由三部分组成。
+Page Cache 作为内存级缓存，负责存储内表与外表解压锁后的数据页，Page 其大小不固定。目前，Page Cache 支持缓存以下几类数据：
 
+1. 内表的数据页和索引页
+2. 外表数据文件的 Footer 信息
+3. 外表解压缩后的部分数据页
+
+Page Cache 目前采用 LRU（最近最少使用）策略进行数据淘汰。
+
+## Block Cache 原理
+
+Block Cache 则为磁盘缓存，主要作用是将外表及存算分离场景下存储在远程对象存储中的数据文件，缓存到本地磁盘，以此降低远端数据访问延迟、提升查询效率，Block 大小固定。
+
+### 功能背景与价值
+
+在数据湖分析或存算分离内表场景中，StarRocks 作为 OLAP 查询引擎需扫描 HDFS 或对象存储（下文统一简称 “外部存储系统”）中的数据文件。该过程存在两大性能瓶颈：
+
+1. 查询需读取的文件数量越多，远端 I/O 开销越大。
+2. 在即席查询（ad-hoc）场景中，频繁访问相同数据会产生重复的远端 I/O 消耗。
+
+为解决上述问题，StarRocks 从 2.5 版本起引入 Block Cache 功能：将外部存储系统的原始数据按特定策略切分为多个 block，缓存至 StarRocks 本地 BE 节点。通过避免重复拉取远端数据，显著提升热点数据的查询分析性能。
+
+### 生效场景
+
+- 使用外部表（不含 JDBC 外部表）查询外部存储系统数据时。
+- 查询存算分离模式下的 StarRocks 原生表时。
+
+### 核心工作机制
+
+**数据切分与缓存单元**
+
+StarRocks 缓存远端文件时，会将原始文件按配置策略切分为等大小的 block（block 是缓存的最小单元，大小可自定义）。
+
+- 示例：若配置 block 大小为 1 MB，查询 Amazon S3 上 128 MB 的 Parquet 文件时，文件会被拆分为 128 个连续 block（如 [0, 1 MB)、[1 MB, 2 MB) … [127 MB, 128 MB)）；
+  每个 block 会分配一个全局唯一的缓存标识（cache key），由以下三部分组成：
 ```Plain
 hash(filename) + fileModificationTime + blockId
 ```
 
-说明如下。
+说明如下：
 
 | **组成项** | **说明**                                                     |
 | ---------- | ------------------------------------------------------------ |
@@ -26,66 +58,78 @@ hash(filename) + fileModificationTime + blockId
 | fileModificationTime  | 数据文件最近一次修改时间。                                    |
 | blockId    | StarRocks 在拆分数据文件时为每个 block 分配的 ID。该 ID 在一个文件下是唯一的，非全局唯一。 |
 
-假如该查询命中了 [1 MB, 2 MB) 这个 block，那么：
+**缓存命中与读取流程**
 
-1. StarRocks 检查缓存中是否存在该 block。
-2. 如存在，则从缓存中读取该 block；如不存在，则从 Amazon S3 远端读取该 block 并将其缓存在 BE 上。
+以查询命中 [1 MB, 2 MB) 区间的 block 为例，流程如下：
 
-开启 Data Cache 后，StarRocks 会缓存从外部存储系统读取的数据文件。
+1. StarRocks 先检查本地 BE 节点的 Block Cache 中是否存在该 block（通过 cache key 匹配）。
+2. 若存在（命中缓存），直接从本地磁盘读取该 block。
+3. 若不存在（未命中），从远端存储（如 Amazon S3）拉取该 block，并同步缓存到本地 BE 节点，供后续查询复用。
 
-## 缓存介质
+### 缓存介质
 
-StarRocks 以 BE 节点的内存和磁盘作为缓存的存储介质，支持全内存缓存或者内存+磁盘的两级缓存。
-注意，当使用磁盘作为缓存介质时，缓存加速效果和磁盘本身性能直接相关，建议使用高性能本地磁盘（如本地 NVMe 盘）进行数据缓存。如果磁盘本身性能一般，也可通过增加多块盘来减少单盘 I/O 压力。
+Block Cache 以 BE 节点的本地磁盘作为存储介质，缓存加速效果与磁盘性能直接相关：
 
-## 缓存淘汰机制
+- 推荐使用高性能本地磁盘（如 NVMe 盘），最大化降低缓存读写延迟。
+- 若磁盘性能一般，可通过增加磁盘数量实现负载分担，减少单盘 I/O 压力。
 
-Data Cache 支持内存和磁盘的两级缓存。您也可以根据实际需要配置全内存或者全磁盘的一级缓存。
+### 缓存淘汰机制
 
-当使用内存+磁盘的两级缓存时：
+Block Cache 支持两种数据缓存与淘汰策略，默认使用 SLRU（Segmented LRU） 策略：
 
-- 优先从内存读取数据，如果在内存中没有找到再从磁盘上读取。从磁盘上读取的数据，会尝试加载到内存中。
-- 从内存中淘汰的数据，会尝试写入磁盘；从磁盘上淘汰的数据，会被废弃。
-
-内存和磁盘分别按照自己的淘汰策略进行数据淘汰。StarRocks Data Cache当前支持 [LRU](https://baike.baidu.com/item/LRU/1269842) (least recently used) 和 SLRU（Segmented LRU）策略来缓存和淘汰数据，默认使用 SLRU 淘汰策略。
-
-当使用 SLRU 策略时，缓存空间会被分成淘汰段和保护段，两段都均采用 LRU 策略。数据第一次被访问时，进入淘汰段。处于淘汰段的数据只有再次被访问时才会进入保护段。保护段的数据如果被淘汰将再次进入淘汰段，而淘汰段的数据被淘汰时则会被移出缓存。和 LRU 相比，SLRU 能够更好的抵御突发的稀疏流量，避免保护段的数据不会被只访问过一次的元素直接淘汰。
+|策略|核心逻辑|优势|
+|----|----|----|
+|LRU|基于 “最近最少使用” 原则，淘汰最长时间未被访问的 block。|实现简单，适用于访问模式稳定的场景。|
+|SLRU|将缓存空间划分为淘汰段和保护段，两段均遵循 LRU 规则：<br>1. 数据首次访问时进入淘汰段；<br>2. 淘汰段数据被再次访问时，升级至保护段；<br>3. 保护段数据淘汰时回退至淘汰段，淘汰段数据淘汰时直接移出缓存。| 能有效抵御突发稀疏流量，避免 “仅访问一次的临时数据” 直接淘汰保护段的热点数据，稳定性优于 LRU。|
 
 ## 开启 Data Cache
 
-Data Cache 功能默认开启。默认情况下，系统会通过以下方式缓存数据：
+Data Cache 功能默认开启，通过 BE 节点的配置参数实现，可开关和控制资源上限，具体说明如下：
 
-- 系统变量 `enable_scan_datacache` 和 BE 参数 `datacache_enable` 默认设置为 `true`。
-- 系统在 `storage_root_path` 目录下创建 **datacache** 目录作为磁盘缓存目录，从 v3.4.0 起，不再支持手动更改磁盘缓存路径。如需使用其他路径，可创建 Linux Symbolic Link。
-- 如未手动配置内存以及磁盘上限，系统会根据磁盘容量自动设置磁盘上限：
-  - 开启磁盘空间自动调整功能。根据缓存磁盘当前使用情况自动设置上限，保证当前缓存盘整体磁盘使用率在 80% 左右，并根据后续磁盘使用情况动态调整。（您可以通过 BE 参数 `datacache_disk_high_level`、`datacache_disk_safe_level` 以及 `datacache_disk_low_level` 调整该行为。）
-  - 默认配置缓存数据的内存上限为 `0`。（您可以通过 BE 参数 `datacache_mem_size` 修改。）
-- 默认使用异步缓存方式，减少缓存填充影响数据读操作。
-- 默认启用 I/O 自适应功能，当磁盘 I/O 负载比较高时，系统会自动将一部分请求路由到远端存储，减少磁盘压力。
+### 开关参数
 
-如需禁用 Data Cache，需要执行以下命令：
+1. 总开关：控制 Data Cache 整体开启/关闭
 
-```SQL
-SET GLOBAL enable_scan_datacache=false;
-```
+- 参数名：datacache_enable
+- 作用：Data Cache 功能的总开关，直接控制 Page Cache 与 Block Cache 的整体状态。
+- 取值说明：
+    - true（默认）：Data Cache 整体开启，Page Cache 和 Block Cache 可通过各自子开关独立控制；
+    - false：Data Cache 整体关闭，Page Cache 和 Block Cache 均失效。
 
-## 填充 Data Cache
+2. 子缓存开关：独立控制 Page Cache/Block Cache
+
+| 子缓存类型       | 参数名                        | 作用                | 取值说明                   |
+|-------------|----------------------------|-------------------|------------------------|
+| Page Cache  | disable_storage_page_cache | 控制 Page Cache 启停  | false（默认，开启）；true（关闭）  |
+| Block Cache | block_cache_enable         | 控制 Block Cache 启停 | true（默认，开启）；false（关闭）｜ |
+
+### 资源上限配置参数
+
+通过以下 BE 参数设置 Data Cache 的内存与磁盘使用上限，避免资源过度占用：
+
+- datacache_mem_size：设置 Data Cache 的内存使用上限（用于 Page Cache 缓存数据）
+- datacache_disk_size：设置 Data Cache 的磁盘使用上限（用于 Block Cache 缓存数据）
+
+## 填充 Block Cache
 
 ### 填充规则
 
-自 v3.3.2 起，为了提高 Data Cache 的缓存命中率，StarRocks 按照如下规则填充 Data Cache：
+自 v3.3.2 版本起，为进一步提升 Block Cache 的命中率，StarRocks 按以下规则判断是否填充缓存，未满足条件的场景将跳过填充：
 
-- 对于非 SELECT 的查询， 不进行填充，比如 `ANALYZE TABLE`，`INSERT INTO SELECT` 等。
-- 扫描一个表的所有分区时，不进行填充。但如果该表仅有一个分区，默认进行填充。
-- 扫描一个表的所有列时，不进行填充。但如果该表仅有一个列，默认进行填充。
-- 对于非 Hive、Paimon、Delta Lake、Hudi 或 Iceberg 的表，不进行填充。
+1. 仅对 SELECT 查询 进行填充，非 SELECT 操作（如 ANALYZE TABLE、INSERT INTO SELECT 等）不填充；
+2. 扫描表的所有分区时不填充，但若表仅含 1 个分区，默认填充；
+3. 扫描表的所有列时不填充，但若表仅含 1 个列，默认填充；
+4. 仅对 Hive、Paimon、Delta Lake、Hudi、Iceberg 类型的表 进行填充，其他类型表不填充。
 
-您可以通过 `EXPLAIN VERBOSE` 命令查看指定查询的具体填充行为。
+### 查看缓存填充行为
+
+可通过 `EXPLAIN VERBOSE` 命令，查看指定查询的具体缓存填充策略，关键信息通过 dataCacheOptions 字段体现：
 
 示例：
 
 ```sql
 mysql> explain verbose select col1 from hudi_table;
+....
 |   0:HudiScanNode                        |
 |      TABLE: hudi_table                  |
 |      partitions=3/3                     |
@@ -96,37 +140,34 @@ mysql> explain verbose select col1 from hudi_table;
 +-----------------------------------------+
 ```
 
-其中 `dataCacheOptions={populate: false}` 即表明不填充 Data Cache，因为该查询会扫描全部分区。
+如上示例中，因查询扫描表的全部分区，dataCacheOptions={populate: false} 表明该查询不会触发 Data Cache 填充。
 
-您还可以通过 Session Variable [populate_datacache_mode](../sql-reference/System_variable.md#populate_datacache_mode) 进一步精细化管理该行为。
+您还可以通过 Session Variable [populate_datacache_mode](../sql-reference/System_variable.md#populate_datacache_mode) 对缓存填充规则进行更灵活的自定义配置。
 
 ### 填充方式
 
-Data Cache 支持以同步或异步的方式进行缓存填充。
+Block Cache 支持 同步填充 和 异步填充 两种模式，可根据业务对 “首次查询性能” 和 “缓存效率” 的需求选择：
 
-- 同步填充
-
-  使用同步填充方式时，会将当前查询所读取的远端数据都缓存在本地。同步方式填充效率较高，但由于缓存填充操作在数据读取时执行，可能会对首次查询效率带来影响。
-
-- 异步填充
-
-  使用异步填充方式时，系统会尝试在尽可能不影响读取性能的前提下在后台对访问到的数据进行缓存。异步方式能够减少缓存填充对首次读取性能的影响，但填充效率较低。通常单次查询不能保证将访问到的所以数据都缓存到本地，往往需要多次。
+|填充方式|核心逻辑| 优缺点对比                                                                    |
+|----|----|--------------------------------------------------------------------------|
+|同步填充|首次查询读取远端数据时，立即将数据缓存到本地，后续查询可直接复用缓存。| 优点：缓存效率高，单次查询即可完成数据缓存；<br> 缺点：缓存操作与读取操作同步执行，可能增加首次查询延迟。                  |
+|异步填充|首次查询仅优先完成数据读取，后台异步执行缓存写入，不阻塞当前查询流程。| 优点：不影响首次查询性能，避免读取操作因缓存而延迟；<br> 缺点：缓存效率较低，单次查询可能无法完全缓存所有访问数据，需多次查询逐步完善缓存。 |
 
 自 v3.3.0 起，系统默认以异步方式进行缓存，您可以通过修改 Session 变量 [enable_datacache_async_populate_mode](../sql-reference/System_variable.md) 来修改填充方式。
 
 ### 持久化
 
-Data Cache 当前默认会持久化磁盘缓存数据，BE 进程重启后，可直接复用先前磁盘缓存数据。
+Block Cache 当前默认会持久化磁盘缓存数据，BE 进程重启后，可直接复用先前磁盘缓存数据。
 
-## 查看 Data Cache 命中情况
+## 查看 Block Cache 命中情况
 
-您可以在 Query Profile 里观测当前查询的 Cache 命中情况。观测下述三个指标查看 Data Cache 的命中情况：
+可通过 Query Profile（查询性能剖析）观测当前查询的 Block Cache 命中效果，核心关注以下三个关键指标，通过指标间的数值对比即可判断命中情况：
 
 - `DataCacheReadBytes`：从内存和磁盘中读取的数据量。
 - `DataCacheWriteBytes`：从外部存储系统加载到内存和磁盘的数据量。
 - `BytesRead`：总共读取的数据量，包括从内存、磁盘以及外部存储读取的数据量。
 
-示例一：StarRocks 从外部存储系统中读取了大量的数据 (7.65 GB)，从内存和磁盘中读取的数据量 (518.73 MB) 较少，即代表 Data Cache 命中较少。
+示例一：StarRocks 从外部存储系统中读取了大量的数据 (7.65 GB)，从内存和磁盘中读取的数据量 (518.73 MB) 较少，即代表 Block Cache 命中较少。
 
 ```Plain
  - Table: lineorder
@@ -154,7 +195,7 @@ Data Cache 当前默认会持久化磁盘缓存数据，BE 进程重启后，可
    - __MIN_OF_BytesRead: 0.00
 ```
 
-示例二：StarRocks 从 Data Cache 读取了 46.08 GB 数据，从外部存储系统直接读取的数据量为 0，即代表 Data Cache 完全命中。
+示例二：StarRocks 从 Block Cache 读取了 46.08 GB 数据，从外部存储系统直接读取的数据量为 0，即代表 Block Cache 完全命中。
 
 ```Plain
  Table: lineitem
@@ -178,41 +219,10 @@ Data Cache 当前默认会持久化磁盘缓存数据，BE 进程重启后，可
  - __MIN_OF_BytesRead: 81.25 MB
 ```
 
-## Footer Cache
-
-除了支持对数据湖查询中涉及到的远端文件数据进行缓存外，StarRocks 还支持对文件解析后的部分元数据（Footer）进行缓存。Footer Cache 通过将解析后生成 Footer 对象直接缓存在内存中，在后续访问相同文件 Footer 时，可以直接从缓存中获得该对象句柄进行使用，避免进行重复解析。
-
-当前 StarRocks 支持缓存 Parquet Footer 对象。
-
-您可通过设置以下系统变量启用 Footer Cache：
-
-```SQL
-SET GLOBAL enable_file_metacache=true;
-```
-
-> **注意**
->
-> Footer Cache 基于 Data Cache 的内存模块进行数据缓存，因此需要保证 BE 参数 `datacache_enable` 为 `true` 且为 `datacache_mem_size` 配置一个合理值。
-
-## Page Cache
-
-除了支持对数据湖查询中涉及到的远端文件数据进行缓存外，StarRocks 还支持对解压缩后的 Parquet 页面数据进行缓存。Page Cache 将解压缩后的 Parquet 页面数据存储在内存中。在后续查询中访问相同页面时，可以直接从缓存中获取数据，避免重复的 I/O 操作和解压缩。
-
-您可通过设置以下系统变量启用 Page Cache：
-
-```SQL
-SET GLOBAL enable_file_pagecache=true;
-```
-
-> **注意**
->
-> Page Cache 基于 Data Cache 的内存模块进行数据缓存，因此需要保证 BE 参数 `datacache_enable` 为 `true` 且为 `datacache_mem_size` 配置一个合理值。
-
 ## I/O 自适应
 
-为了避免当缓存磁盘 I/O 负载过高时，磁盘访问出现明显长尾，导致访问缓存系统出现负优化，Data Cache 提供 I/O 自适应功能，用于在磁盘负载过高时将一部分缓存请求路由到远端存储，同时利用本地缓存和远端存储来提升 I/O 吞吐。该功能默认开启。
-
-您可通过设置以下系统变量启用 I/O 自适应：
+为避免缓存磁盘 I/O 负载过高时，出现磁盘访问长尾问题（进而导致缓存系统产生负优化），Data Cache 提供 I/O 自适应功能。其核心逻辑是：当磁盘负载超出阈值时，自动将部分缓存请求路由至远端存储，通过 “本地缓存 + 远端存储” 的协同访问，平衡 I/O 压力、提升整体 I/O 吞吐。
+该功能默认处于开启状态，无需额外配置即可生效。若此前手动关闭，可通过以下系统变量重新启用：
 
 ```SQL
 SET GLOBAL enable_datacache_io_adaptor=true;
@@ -235,7 +245,7 @@ UPDATE be_configs SET VALUE="10G" WHERE NAME="datacache_mem_size" and BE_ID=1000
 -- 调整所有 BE 实例的 Data Cache 内存比例上限。
 UPDATE be_configs SET VALUE="10%" WHERE NAME="datacache_mem_size";
 
--- 调整所有 BE 实例的 Data Cache 磁盘上限。
+-- 调整所有 BE 实例的 Data Cache 单个磁盘上限。
 UPDATE be_configs SET VALUE="2T" WHERE NAME="datacache_disk_size";
 ```
 
@@ -251,18 +261,18 @@ UPDATE be_configs SET VALUE="2T" WHERE NAME="datacache_disk_size";
 您也可通过在 BE 配置文件中添加以下配置项并重启 BE 进程来打开自动扩缩容功能：
 
 ```Plain
-datacache_auto_adjust_enable=true
+enable_datacache_disk_auto_adjust=true
 ```
 
 开启自动扩缩容后：
 
-- 当磁盘占用比例高于 BE 参数 `datacache_disk_high_level` 中规定的阈值（默认值 `80`, 即磁盘空间的 80%）时，系统自动淘汰缓存数据，释放磁盘空间。
-- 当磁盘占用比例在一定时间内持续低于 BE 参数 `datacache_disk_low_level` 中规定的阈值（默认值 `60`, 即磁盘空间的 60%），且当前磁盘用于缓存数据的空间已经写满时，系统将自动进行缓存扩容，增加缓存上限。
-- 当进行缓存自动扩容或缩容时，系统将以 BE 参数 `datacache_disk_safe_level` 中规定的阈值（默认值 `70`, 即磁盘空间的 70%）为目标，尽可能得调整缓存容量。
+- 当磁盘占用比例高于 BE 参数 `disk_high_level` 中规定的阈值（默认值 `90`, 即磁盘空间的 90%）时，系统自动淘汰缓存数据，释放磁盘空间。
+- 当磁盘占用比例在一定时间内持续低于 BE 参数 `disk_low_level` 中规定的阈值（默认值 `60`, 即磁盘空间的 60%），且当前磁盘用于缓存数据的空间已经写满时，系统将自动进行缓存扩容，增加缓存上限。
+- 当进行缓存自动扩容或缩容时，系统将以 BE 参数 `disk_safe_level` 中规定的阈值（默认值 `80`, 即磁盘空间的 80%）为目标，尽可能得调整缓存容量。
 
 ## Cache Sharing
 
-由于 Data Cache 依赖于 BE 节点的本地磁盘，当集群进行扩展时，数据路由的变化可能会导致 Cache Miss，这很容易在弹性扩展过程中导致明显的性能抖动。
+由于 Block Cache 依赖于 BE 节点的本地磁盘，当集群进行扩展时，数据路由的变化可能会导致 Cache Miss，这很容易在弹性扩展过程中导致明显的性能抖动。
 
 Cache Sharing 能够通过网络来访问集群中其他节点上的缓存数据。在集群扩展过程中，如果发生本地 Cache Miss，系统会首先尝试从同一集群内的其他节点获取缓存数据。只有当所有缓存都未命中时，系统才会从远程存储中重新获取数据。这一功能可有效减少弹性扩展过程中缓存失效造成的性能抖动，并确保稳定的查询性能。
 
