@@ -17,9 +17,6 @@ package com.starrocks.catalog;
 import com.google.common.base.Objects;
 import com.google.common.base.Strings;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.thrift.TStructField;
-import com.starrocks.thrift.TTypeDesc;
-import com.starrocks.thrift.TTypeNode;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.StringJoiner;
@@ -90,6 +87,10 @@ public class StructField {
         return fieldId;
     }
 
+    String getFieldPhysicalName() {
+        return fieldPhysicalName;
+    }
+
     public void setPosition(int position) {
         this.position = position;
     }
@@ -136,16 +137,6 @@ public class StructField {
             sb.append(String.format(" COMMENT '%s'", comment));
         }
         return sb.toString();
-    }
-
-    public void toThrift(TTypeDesc container, TTypeNode node) {
-        TStructField field = new TStructField();
-        field.setName(name);
-        field.setComment(comment);
-        field.setId(fieldId);
-        field.setPhysical_name(fieldPhysicalName);
-        node.struct_fields.add(field);
-        type.toThrift(container);
     }
 
     @Override

@@ -40,17 +40,9 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.combinator.AggStateDesc;
-import com.starrocks.common.Pair;
-import com.starrocks.proto.PScalarType;
-import com.starrocks.proto.PTypeDesc;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.thrift.TColumnType;
-import com.starrocks.thrift.TPrimitiveType;
-import com.starrocks.thrift.TScalarType;
-import com.starrocks.thrift.TStructField;
 import com.starrocks.thrift.TTypeDesc;
 import com.starrocks.thrift.TTypeNode;
-import com.starrocks.thrift.TTypeNodeType;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -1117,18 +1109,9 @@ public abstract class Type implements Cloneable {
     public TTypeDesc toThrift() {
         TTypeDesc container = new TTypeDesc();
         container.setTypes(new ArrayList<TTypeNode>());
-        toThrift(container);
+        TypeSerializer.toThrift(this, container);
         return container;
     }
-
-    public TColumnType toColumnTypeThrift() {
-        return null;
-    }
-
-    /**
-     * Subclasses should override this method to add themselves to the thrift container.
-     */
-    public abstract void toThrift(TTypeDesc container);
 
     /**
      * Returns true if the other can be fully compatible with this type.
@@ -1318,155 +1301,6 @@ public abstract class Type implements Cloneable {
             result.add(t.toThrift());
         }
         return result;
-    }
-
-    public static Type fromThrift(TTypeDesc thrift) {
-        Preconditions.checkState(thrift.types.size() > 0);
-        Pair<Type, Integer> t = fromThrift(thrift, 0);
-        Preconditions.checkState(t.second.equals(thrift.getTypesSize()));
-        return t.first;
-    }
-
-    /**
-     * Constructs a ColumnType rooted at the TTypeNode at nodeIdx in TColumnType.
-     * Returned pair: The resulting ColumnType and the next nodeIdx that is not a child
-     * type of the result.
-     */
-    protected static Pair<Type, Integer> fromThrift(TTypeDesc col, int nodeIdx) {
-        TTypeNode node = col.getTypes().get(nodeIdx);
-        Type type = null;
-        int tmpNodeIdx = nodeIdx;
-        switch (node.getType()) {
-            case SCALAR: {
-                Preconditions.checkState(node.isSetScalar_type());
-                TScalarType scalarType = node.getScalar_type();
-                if (scalarType.getType() == TPrimitiveType.CHAR) {
-                    Preconditions.checkState(scalarType.isSetLen());
-                    type = ScalarType.createCharType(scalarType.getLen());
-                } else if (scalarType.getType() == TPrimitiveType.VARCHAR) {
-                    Preconditions.checkState(scalarType.isSetLen());
-                    type = ScalarType.createVarcharType(scalarType.getLen());
-                } else if (scalarType.getType() == TPrimitiveType.VARBINARY) {
-                    type = ScalarType.createVarbinary(scalarType.getLen());
-                } else if (scalarType.getType() == TPrimitiveType.HLL) {
-                    type = ScalarType.createHllType();
-                } else if (scalarType.getType() == TPrimitiveType.DECIMAL) {
-                    Preconditions.checkState(scalarType.isSetPrecision()
-                            && scalarType.isSetScale());
-                    type = ScalarType.createDecimalV2Type(scalarType.getPrecision(),
-                            scalarType.getScale());
-                } else if (scalarType.getType() == TPrimitiveType.DECIMALV2) {
-                    Preconditions.checkState(scalarType.isSetPrecision()
-                            && scalarType.isSetScale());
-                    type = ScalarType.createDecimalV2Type(scalarType.getPrecision(),
-                            scalarType.getScale());
-                } else if (scalarType.getType() == TPrimitiveType.DECIMAL32 ||
-                        scalarType.getType() == TPrimitiveType.DECIMAL64 ||
-                        scalarType.getType() == TPrimitiveType.DECIMAL128 ||
-                        scalarType.getType() == TPrimitiveType.DECIMAL256) {
-                    Preconditions.checkState(scalarType.isSetPrecision() && scalarType.isSetScale());
-                    type = ScalarType.createDecimalV3Type(
-                            PrimitiveType.fromThrift(scalarType.getType()),
-                            scalarType.getPrecision(),
-                            scalarType.getScale());
-                } else {
-                    type = ScalarType.createType(
-                            PrimitiveType.fromThrift(scalarType.getType()));
-                }
-                ++tmpNodeIdx;
-                break;
-            }
-            case ARRAY: {
-                Preconditions.checkState(tmpNodeIdx + 1 < col.getTypesSize());
-                Pair<Type, Integer> childType = fromThrift(col, tmpNodeIdx + 1);
-                type = new ArrayType(childType.first);
-                tmpNodeIdx = childType.second;
-                break;
-            }
-            case MAP: {
-                Preconditions.checkState(tmpNodeIdx + 2 < col.getTypesSize());
-                Pair<Type, Integer> keyType = fromThrift(col, tmpNodeIdx + 1);
-                Pair<Type, Integer> valueType = fromThrift(col, keyType.second);
-                type = new MapType(keyType.first, valueType.first);
-                tmpNodeIdx = valueType.second;
-                break;
-            }
-            case STRUCT: {
-                Preconditions.checkState(tmpNodeIdx + node.getStruct_fieldsSize() < col.getTypesSize());
-                ArrayList<StructField> structFields = Lists.newArrayList();
-                ++tmpNodeIdx;
-                for (int i = 0; i < node.getStruct_fieldsSize(); ++i) {
-                    TStructField thriftField = node.getStruct_fields().get(i);
-                    String name = thriftField.getName();
-                    String comment = null;
-                    if (thriftField.isSetComment()) {
-                        comment = thriftField.getComment();
-                    }
-                    Pair<Type, Integer> res = fromThrift(col, tmpNodeIdx);
-                    tmpNodeIdx = res.second;
-                    structFields.add(new StructField(name, res.first, comment));
-                }
-                type = new StructType(structFields);
-                break;
-            }
-        }
-        return new Pair<Type, Integer>(type, tmpNodeIdx);
-    }
-
-    public static Type fromProtobuf(PTypeDesc pTypeDesc) {
-        return fromProtobuf(pTypeDesc, 0).first;
-    }
-
-    private static Pair<Type, Integer> fromProtobuf(PTypeDesc pTypeDesc, int nodeIndex) {
-        Preconditions.checkState(pTypeDesc.types.size() > nodeIndex);
-        TTypeNodeType tTypeNodeType = TTypeNodeType.findByValue(pTypeDesc.types.get(nodeIndex).type);
-        switch (tTypeNodeType) {
-            case SCALAR: {
-                PScalarType scalarType = pTypeDesc.types.get(nodeIndex).scalarType;
-                return new Pair<>(ScalarType.createType(scalarType), 1);
-            }
-            case ARRAY: {
-                Preconditions.checkState(pTypeDesc.types.size() > nodeIndex + 1);
-                Pair<Type, Integer> res = fromProtobuf(pTypeDesc, nodeIndex + 1);
-                return new Pair<>(new ArrayType(res.first), 1 + res.second);
-            }
-            case MAP: {
-                Preconditions.checkState(pTypeDesc.types.size() > nodeIndex + 2);
-                Pair<Type, Integer> keyRes = fromProtobuf(pTypeDesc, nodeIndex + 1);
-                int keyStep = keyRes.second;
-
-                Pair<Type, Integer> valueRes = fromProtobuf(pTypeDesc, nodeIndex + 1 + keyStep);
-                int valueStep = valueRes.second;
-                return new Pair<>(new MapType(keyRes.first, valueRes.first), 1 + keyStep + valueStep);
-            }
-            case STRUCT: {
-                Preconditions.checkState(pTypeDesc.types.size() >=
-                        nodeIndex + 1 + pTypeDesc.types.get(nodeIndex).structFields.size());
-                ArrayList<StructField> fields = new ArrayList<>();
-
-                int totalStep = 0;
-                for (int i = 0; i < pTypeDesc.types.get(nodeIndex).structFields.size(); ++i) {
-                    String fieldName = pTypeDesc.types.get(nodeIndex).structFields.get(i).name;
-                    Pair<Type, Integer> res = fromProtobuf(pTypeDesc, nodeIndex + 1 + totalStep);
-                    fields.add(new StructField(fieldName, res.first));
-                    totalStep += res.second;
-                }
-                return new Pair<>(new StructType(fields), 1 + totalStep);
-            }
-        }
-        // NEVER REACH.
-        Preconditions.checkState(false);
-        return null;
-    }
-
-    /**
-     * Utility function to get the primitive type of a thrift type that is known
-     * to be scalar.
-     */
-    public TPrimitiveType getTPrimitiveType(TTypeDesc ttype) {
-        Preconditions.checkState(ttype.getTypesSize() == 1);
-        Preconditions.checkState(ttype.types.get(0).getType() == TTypeNodeType.SCALAR);
-        return ttype.types.get(0).scalar_type.getType();
     }
 
     /**

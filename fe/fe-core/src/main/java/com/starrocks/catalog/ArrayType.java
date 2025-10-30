@@ -16,13 +16,8 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Objects;
-import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.thrift.TColumnType;
-import com.starrocks.thrift.TTypeDesc;
-import com.starrocks.thrift.TTypeNode;
-import com.starrocks.thrift.TTypeNodeType;
 
 /**
  * Describes an ARRAY type.
@@ -37,12 +32,6 @@ public class ArrayType extends Type {
 
     public Type getItemType() {
         return itemType;
-    }
-
-    @Override
-    public TColumnType toColumnTypeThrift() {
-        Preconditions.checkArgument(false, "ArrayType.toColumnTypeThrift not implemented");
-        return null;
     }
 
     @Override
@@ -77,15 +66,6 @@ public class ArrayType extends Type {
     @Override
     public int hashCode() {
         return Objects.hashCode(itemType);
-    }
-
-    @Override
-    public void toThrift(TTypeDesc container) {
-        TTypeNode node = new TTypeNode();
-        container.types.add(node);
-        Preconditions.checkNotNull(itemType);
-        node.setType(TTypeNodeType.ARRAY);
-        itemType.toThrift(container);
     }
 
     @Override
