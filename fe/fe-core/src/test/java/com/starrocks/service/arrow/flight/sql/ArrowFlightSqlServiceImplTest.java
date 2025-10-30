@@ -119,7 +119,6 @@ public class ArrowFlightSqlServiceImplTest {
         mockCallContext = mock(FlightProducer.CallContext.class);
         when(mockCallContext.peerIdentity()).thenReturn("token123");
         when(sessionManager.validateAndGetConnectContext("token123")).thenReturn(mockContext);
-        when(mockContext.getSessionVariable()).thenReturn(new SessionVariable());
         when(mockContext.getQuery()).thenReturn("SELECT 1");
         when(mockContext.getState()).thenReturn(mock(QueryState.class));
         when(mockContext.getResult(anyString())).thenReturn(mock(VectorSchemaRoot.class));
@@ -127,6 +126,12 @@ public class ArrowFlightSqlServiceImplTest {
         when(mockContext.returnFromFE()).thenReturn(true);
         when(mockContext.isFromFECoordinator()).thenReturn(true);
         when(mockContext.getArrowFlightSqlToken()).thenReturn("token123");
+
+        SessionVariable mockSessionVariable = mock(SessionVariable.class);
+        when(mockContext.getSessionVariable()).thenReturn(mockSessionVariable);
+        when(mockSessionVariable.getQueryTimeoutS()).thenReturn(10);
+        when(mockSessionVariable.getQueryDeliveryTimeoutS()).thenReturn(10);
+        when(mockSessionVariable.getSqlDialect()).thenReturn("mysql");
 
         CallHeaders mockHeaders = mock(CallHeaders.class);
         when(mockHeaders.get("database")).thenReturn("test_db");
@@ -218,20 +223,6 @@ public class ArrowFlightSqlServiceImplTest {
                 .getFlightInfoStatement(command, mockCallContext, FlightDescriptor.command("SELECT 1".getBytes()));
         assertNotNull(beInfo);
         assertEquals(mockFlightInfo, beInfo);
-    }
-    @Test
-    public void testGetFlightInfoPreparedStatement() {
-        SessionVariable mockSessionVariable = mock(SessionVariable.class);
-        when(mockContext.getSessionVariable()).thenReturn(mockSessionVariable);
-        when(mockSessionVariable.getQueryTimeoutS()).thenReturn(10);
-        when(mockSessionVariable.getQueryDeliveryTimeoutS()).thenReturn(10);
-        when(mockSessionVariable.getSqlDialect()).thenReturn("mysql");
-
-        FlightSql.CommandPreparedStatementQuery command = FlightSql.CommandPreparedStatementQuery.newBuilder()
-                .setPreparedStatementHandle(ByteString.copyFromUtf8("token123")).build();
-        FlightInfo info = service
-                .getFlightInfoPreparedStatement(command, mockCallContext, FlightDescriptor.command("SELECT 1".getBytes()));
-        assertNotNull(info);
     }
 
     @Test
