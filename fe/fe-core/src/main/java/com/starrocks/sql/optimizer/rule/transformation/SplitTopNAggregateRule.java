@@ -26,6 +26,7 @@ import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.Ordering;
+import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
@@ -56,9 +57,13 @@ public class SplitTopNAggregateRule extends TransformationRule {
             return false;
         }
 
+        LogicalTopNOperator topN = input.getOp().cast();
         LogicalAggregationOperator agg = input.inputAt(0).getOp().cast();
         LogicalOlapScanOperator scan = input.inputAt(0).inputAt(0).getOp().cast();
 
+        if (topN.getLimit() == Operator.DEFAULT_LIMIT) {
+            return false;
+        }
         if (scan.getProjection() != null) {
             if (scan.getProjection().getColumnRefMap().entrySet()
                     .stream().anyMatch(e -> !e.getKey().equals(e.getValue()))) {
@@ -204,6 +209,7 @@ public class SplitTopNAggregateRule extends TransformationRule {
                 .setPartitionByColumns(agg.getGroupingKeys().stream().map(refMapping::get).toList())
                 .setAggregations(newAggregations)
                 .setPredicate(refRewriter.rewrite(agg.getPredicate()))
+                .setProjection(null)
                 .build();
 
         List<Ordering> newOrdering = Lists.newArrayList();
@@ -218,6 +224,7 @@ public class SplitTopNAggregateRule extends TransformationRule {
         LogicalTopNOperator newTopN = LogicalTopNOperator.builder()
                 .withOperator(topN)
                 .setOrderByElements(newOrdering)
+                .setProjection(null)
                 .build();
 
         return OptExpression.create(newTopN, OptExpression.create(newAgg, OptExpression.create(newScan)));

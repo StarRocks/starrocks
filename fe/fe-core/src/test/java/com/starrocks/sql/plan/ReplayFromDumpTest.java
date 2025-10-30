@@ -1222,13 +1222,8 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
             }
         };
         String plan = getPlanFragment("query_dump/single_node_plan1", TExplainLevel.NORMAL);
-        PlanTestBase.assertContains(plan, "  2:AGGREGATE (update serialize)\n" +
-                "  |  STREAMING\n" +
-                "  |  output: sum(106: sum), count(107: count), avg(108: avg), count(3: UserID)\n" +
-                "  |  group by: 10: RegionID\n" +
-                "  |  \n" +
-                "  1:AGGREGATE (update serialize)\n" +
-                "  |  output: sum(41: AdvEngineID), count(*), avg(21: ResolutionWidth)\n" +
-                "  |  group by: 3: UserID, 10: RegionID");
+        PlanTestBase.assertContains(plan, "AGGREGATE (merge finalize)\n"
+                + "  |  output: sum(106: sum), avg(108: avg), multi_distinct_count(109: count)\n"
+                + "  |  group by: 10: RegionID, 107: count");
     }
 }
