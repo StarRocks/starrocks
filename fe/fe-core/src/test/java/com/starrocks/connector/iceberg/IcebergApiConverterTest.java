@@ -43,11 +43,7 @@ import org.apache.iceberg.SortOrder;
 import org.apache.iceberg.StructLike;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.types.Types;
-<<<<<<< HEAD
-=======
 import org.apache.iceberg.util.StructProjection;
-import org.junit.jupiter.api.Assertions;
->>>>>>> f380750d00 ([Enhancement] Support collect statistics for iceberg table with partition evolution (#64551))
 import org.junit.jupiter.api.Test;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
