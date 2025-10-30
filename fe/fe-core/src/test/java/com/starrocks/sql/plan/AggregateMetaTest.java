@@ -46,5 +46,23 @@ public class AggregateMetaTest extends PlanTestBase {
                 + "  0:UNION\n"
                 + "     constant exprs: \n"
                 + "         NULL");
+        new MockUp<ColumnMinMaxMgr>() {
+            @Mock
+            public Optional<IMinMaxStatsMgr.ColumnMinMax> getStats(ColumnIdentifier identifier, StatsVersion version) {
+                if (identifier.getColumnName().getId().equals("v3")) {
+                    return Optional.of(new IMinMaxStatsMgr.ColumnMinMax("1", "200"));
+                } else {
+                    return Optional.empty();
+                }
+            }
+        };
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:Project\n" +
+                "  |  <slot 4> : 4: max\n" +
+                "  |  <slot 5> : 1\n" +
+                "  |  \n" +
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: max(2: v2)\n" +
+                "  |  group by:");
     }
 }
