@@ -11,6 +11,30 @@ displayed_sidebar: docs
 
 :::
 
+## 3.3.19
+
+Release Date: October 14, 2025
+
+### Bug Fixes
+
+The following issues have been fixed:
+
+- `UserProperty` had lower priority than Session Variables. [#63173](https://github.com/StarRocks/starrocks/pull/63173)
+- Materialized view refresh failures that could occur when the Hive base table was dropped and recreated. [#63072](https://github.com/StarRocks/starrocks/pull/63072)
+- Issues with the aggregation pushdown rewrite rule. [#63060](https://github.com/StarRocks/starrocks/pull/63060)
+- Inconsistencies between null columns and data columns in Boolean extraction functions for JSON. [#63054](https://github.com/StarRocks/starrocks/pull/63054)
+- Issues when getting partition columns in Delta Lake format tables. [#62953](https://github.com/StarRocks/starrocks/pull/62953)
+- Lack of colocation support for materialized views in shared-data clusters. [#62941](https://github.com/StarRocks/starrocks/pull/62941)
+- Projection mapping errors in view-based materialized view rewrite. [#62918](https://github.com/StarRocks/starrocks/pull/62918)
+- SQL syntax errors in histogram statistics when Most Common Values (MCV) contained single quotes. [#62853](https://github.com/StarRocks/starrocks/pull/62853)
+- `KILL ANALYZE` did not work. [#62842](https://github.com/StarRocks/starrocks/pull/62842)
+- CVE-2025-58056 vulnerability. [#62801](https://github.com/StarRocks/starrocks/pull/62801)
+- Executing `SHOW CREATE ROUTINE LOAD` without specifying a database causes wrong results. [#62745](https://github.com/StarRocks/starrocks/pull/62745)
+- Data loss caused by incorrectly skipping CSV headers in `files()`. [#62719](https://github.com/StarRocks/starrocks/pull/62719)
+- Version check failures when Replication and Compaction transactions were committed together. [#62663](https://github.com/StarRocks/starrocks/pull/62663)
+- Materialized view refresh is skipped because the materialized view version map is not cleared after a failed restore job. [#62634](https://github.com/StarRocks/starrocks/pull/62634)
+- Issues caused by case-sensitive partition column validation in the materialized view analyzer. [#62598](https://github.com/StarRocks/starrocks/pull/62598)
+
 ## 3.3.18
 
 Release Date: August 28, 2025

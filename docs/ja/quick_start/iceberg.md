@@ -2,7 +2,7 @@
 description: Apache Iceberg を使用したデータレイクハウス
 displayed_sidebar: docs
 ---
-import DataLakeIntro from '../_assets/commonMarkdown/datalakeIntro.md'
+import DataLakeIntro from '../_assets/commonMarkdown/datalakeIntro.mdx'
 import Clients from '../_assets/quick-start/_clientsCompose.mdx'
 
 # Apache Iceberg レイクハウス

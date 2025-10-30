@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.statistics;
 
 public class StatisticsEstimateCoefficient {
@@ -36,12 +35,6 @@ public class StatisticsEstimateCoefficient {
     public static final double OVERLAP_INFINITE_RANGE_FILTER_COEFFICIENT = 0.5;
     // used in compute extra cost for multi distinct function, estimate whether to trigger streaming
     public static final double STREAMING_EXTRA_COST_THRESHOLD_COEFFICIENT = 0.8;
-    // default mysql external table output rows
-    public static final int DEFAULT_MYSQL_OUTPUT_ROWS = 10000;
-    // default es external table output rows
-    public static final int DEFAULT_ES_OUTPUT_ROWS = 5000;
-    // default JDBC external table output rows, JDBC maybe is a distribute system
-    public static final int DEFAULT_JDBC_OUTPUT_ROWS = 20000;
     // if after aggregate row count * DEFAULT_AGGREGATE_EFFECT_COEFFICIENT < input row count,
     // the aggregate has good effect.
     public static final double LOWER_AGGREGATE_EFFECT_COEFFICIENT = 10000;
@@ -62,7 +55,6 @@ public class StatisticsEstimateCoefficient {
     public static final long SMALL_SCALE_ROWS_LIMIT = 1000000;
     // default or predicate limit
     public static final int DEFAULT_OR_OPERATOR_LIMIT = 16;
-
 
     public static final double EXECUTE_COST_PENALTY = 2;
     public static final int BROADCAST_JOIN_MEM_EXCEED_PENALTY = 1000;

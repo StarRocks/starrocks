@@ -37,6 +37,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LargeInPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorEvaluator;
@@ -163,6 +164,12 @@ public class FoldConstantsRule extends BottomUpScalarOperatorRewriteRule {
             com.starrocks.catalog.Function fn =
                     Expr.getBuiltinFunction(opName, new Type[] {lhs.getType(), rhs.getType()},
                             com.starrocks.catalog.Function.CompareMode.IS_SUPERTYPE_OF);
+            // for decimal types, add function should be rectified.
+            if (call.getType().isDecimalV3()) {
+                Type type = call.getType();
+                fn = new ScalarFunction(fn.getFunctionName(), new Type[] {type, type}, type, fn.hasVarArgs());
+            }
+
             CallOperator addition =
                     new CallOperator(ArithmeticExpr.Operator.ADD.getName(), lhs.getType(), List.of(lhs, rhs), fn);
             ScalarOperator result = addition.accept(this, new ScalarOperatorRewriteContext());
@@ -181,7 +188,7 @@ public class FoldConstantsRule extends BottomUpScalarOperatorRewriteRule {
             BinaryPredicateOperator cmp =
                     lessThan ? BinaryPredicateOperator.lt(lhs, rhs) : BinaryPredicateOperator.gt(lhs, rhs);
             ScalarOperator result = cmp.accept(this, new ScalarOperatorRewriteContext());
-            if (result.isConstant() && result.getType().isBoolean()) {
+            if (result.isConstantRef() && result.getType().isBoolean()) {
                 return ((ConstantOperator) result).getBoolean() ? -1 : 1;
             } else {
                 throw new IllegalArgumentException();
@@ -233,7 +240,7 @@ public class FoldConstantsRule extends BottomUpScalarOperatorRewriteRule {
                 new CallOperator(opName, call.getType(), List.of(sum, length), fn);
         ScalarOperatorRewriter rewriter = new ScalarOperatorRewriter();
         ScalarOperator result = rewriter.rewrite(avg, ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
-        if (result.isConstant()) {
+        if (result.isConstantRef()) {
             return Optional.of(result);
         } else {
             return Optional.empty();
@@ -304,7 +311,14 @@ public class FoldConstantsRule extends BottomUpScalarOperatorRewriteRule {
                         .put("array_position", this::constArrayPosition)
                         .build();
         if (handlers.containsKey(call.getFnName())) {
-            return handlers.get(call.getFnName()).apply(call);
+            Optional<ScalarOperator> optResult = handlers.get(call.getFnName()).apply(call);
+            if (optResult.isPresent()) {
+                CastOperator castOp = new CastOperator(call.getType(), optResult.get());
+                ScalarOperator op =
+                        new ScalarOperatorRewriter().rewrite(castOp, Lists.newArrayList(new ReduceCastRule()));
+                return Optional.of(op);
+            }
+            return optResult;
         }
         return Optional.empty();
     }
@@ -355,6 +369,11 @@ public class FoldConstantsRule extends BottomUpScalarOperatorRewriteRule {
         }
 
         return ConstantOperator.createBoolean(predicate.isNotIn());
+    }
+
+    @Override
+    public ScalarOperator visitLargeInPredicate(LargeInPredicateOperator predicate, ScalarOperatorRewriteContext context) {
+        return predicate;
     }
 
     //

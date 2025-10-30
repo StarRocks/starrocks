@@ -123,6 +123,9 @@ void BackendServiceBase::fetch_data(TFetchDataResult& return_val, const TFetchDa
 }
 
 void BackendServiceBase::submit_routine_load_task(TStatus& t_status, const std::vector<TRoutineLoadTask>& tasks) {
+#ifdef __APPLE__
+    Status::NotSupported("submit_routine_load_task is not supported on MacOS").to_thrift(&t_status);
+#else
     for (auto& task : tasks) {
         Status st = _exec_env->routine_load_task_executor()->submit_task(task);
         if (!st.ok()) {
@@ -132,6 +135,7 @@ void BackendServiceBase::submit_routine_load_task(TStatus& t_status, const std::
     }
 
     return Status::OK().to_thrift(&t_status);
+#endif
 }
 
 void BackendServiceBase::finish_stream_load_channel(TStatus& t_status, const TStreamLoadChannel& stream_load_channel) {

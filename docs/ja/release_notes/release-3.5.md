@@ -10,6 +10,41 @@ StarRocks を v3.5 にアップグレードした後、直接 v3.4.0 ~ v3.4.4 �
 
 :::
 
+## 3.5.7
+
+リリース日：2025年10月21日
+
+### 改善点
+
+- メモリ競合が激しいシナリオでリトライバックオフを導入し、スキャン演算子のメモリ統計の精度を向上させました。[#63788](https://github.com/StarRocks/starrocks/pull/63788)
+- 既存のタブレット分布を活用して、マテリアライズドビューのバケット推論を最適化し、過剰なバケット作成を防ぎました。[#63367](https://github.com/StarRocks/starrocks/pull/63367)
+- Iceberg テーブルのキャッシュメカニズムを改訂し、一貫性を向上させ、頻繁なメタデータ更新時のキャッシュ無効化リスクを減少させました。[#63388](https://github.com/StarRocks/starrocks/pull/63388)
+- `QueryDetail` と `AuditEvent` に `querySource` フィールドを追加し、API およびスケジューラー間でクエリの起源をよりよく追跡できるようにしました。[#63480](https://github.com/StarRocks/starrocks/pull/63480)
+- MemTable 書き込み時に重複キーが検出された場合に、詳細なコンテキストを表示することで、永続的インデックスの診断機能を強化しました。[#63560](https://github.com/StarRocks/starrocks/pull/63560)
+- ロック粒度を洗練し、並行シナリオでのシーケンシングを改善することで、マテリアライズドビュー操作におけるロック競合を減少させました。[#63481](https://github.com/StarRocks/starrocks/pull/63481)
+
+### バグ修正
+
+以下の問題を修正しました：
+
+- 型の不一致により、マテリアライズドビューの再書き込みに失敗する問題。[#63659](https://github.com/StarRocks/starrocks/pull/63659)
+- `regexp_extract_all` が誤った動作をし、`pos=0` をサポートしていない問題。[#63626](https://github.com/StarRocks/starrocks/pull/63626)
+- 複雑な関数を含む CASE WHEN の無駄な簡略化により、スキャンパフォーマンスが低下する問題。[#63732](https://github.com/StarRocks/starrocks/pull/63732)
+- 列モードから行モードへの部分更新切替時に、DCG データの読み取りが不正になる問題。[#61529](https://github.com/StarRocks/starrocks/pull/61529)
+- `ExceptionStackContext` の初期化時にデッドロックが発生する可能性のある問題。[#63776](https://github.com/StarRocks/starrocks/pull/63776)
+- ARMアーキテクチャのマシンで、Parquet の数値変換がクラッシュする問題。[#63294](https://github.com/StarRocks/starrocks/pull/63294)
+- 集約中間型が `ARRAY<NULL_TYPE>` を使用している問題。[#63371](https://github.com/StarRocks/starrocks/pull/63371)
+- LARGEINT を DECIMAL128 にキャストする際、符号の端点でのオーバーフロー検出が誤って行われることによる安定性の問題。[#63559](https://github.com/StarRocks/starrocks/pull/63559)
+- LZ4 の圧縮および解凍エラーが認識できない問題。[#63629](https://github.com/StarRocks/starrocks/pull/63629)
+- `FROM_UNIXTIME` でパーティションされたテーブルのクエリ実行時に `ClassCastException` が発生する問題。[#63684](https://github.com/StarRocks/starrocks/pull/63684)
+- `DECOMMISSION` としてマークされた唯一の有効なソースレプリカで、バランス駆動の移行後にタブレットが修復できない問題。[#62942](https://github.com/StarRocks/starrocks/pull/62942)
+- `PREPARE` ステートメントを使用した場合、SQL ステートメントとプランナートレースが失われる問題。[#63519](https://github.com/StarRocks/starrocks/pull/63519)
+- `extract_number`、`extract_bool`、`extract_string` 関数が例外に安全でない問題。[#63575](https://github.com/StarRocks/starrocks/pull/63575)
+- シャットダウンされたタブレットが適切にガーベジコレクトされない問題。[#63595](https://github.com/StarRocks/starrocks/pull/63595)
+- `PREPARE`/`EXECUTE` ステートメントの返却結果がプロファイルで`omit`として表示される問題。[#62988](https://github.com/StarRocks/starrocks/pull/62988)
+- 組み合わせた述語による `date_trunc` パーティションプルーニングが誤って EMPTYSET を生成する問題。[#63464](https://github.com/StarRocks/starrocks/pull/63464)
+- `NullableColumn` での CHECK によりリリースビルドでクラッシュが発生する問題。[#63553](https://github.com/StarRocks/starrocks/pull/63553)
+
 ## 3.5.6
 
 リリース日: 2025年9月22日

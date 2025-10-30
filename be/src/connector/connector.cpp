@@ -18,7 +18,9 @@
 #include "connector/es_connector.h"
 #include "connector/file_connector.h"
 #include "connector/hive_connector.h"
+#ifndef __APPLE__
 #include "connector/iceberg_connector.h"
+#endif
 #include "connector/jdbc_connector.h"
 #include "connector/lake_connector.h"
 #include "connector/mysql_connector.h"
@@ -61,7 +63,9 @@ public:
         cm->put(Connector::FILE, std::make_unique<FileConnector>());
         cm->put(Connector::LAKE, std::make_unique<LakeConnector>());
         cm->put(Connector::BINLOG, std::make_unique<BinlogConnector>());
+#ifndef __APPLE__
         cm->put(Connector::ICEBERG, std::make_unique<IcebergConnector>());
+#endif
     }
 };
 

@@ -42,9 +42,11 @@ public class RewriteDataFilesProcedure extends IcebergTableProcedure {
     private static final String REWRITE_ALL = "rewrite_all";
     private static final String MIN_FILE_SIZE_BYTES = "min_file_size_bytes";
     private static final String BATCH_SIZE = "batch_size";
+    private static final String BATCH_PARALLELISM = "batch_parallelism";
 
     private static final long DEFAULT_MIN_FILE_SIZE_BYTES = 256L * 1024 * 1024;
     private static final long DEFAULT_BATCH_SIZE = 10L * 1024 * 1024 * 1024;
+    private static final long DEFAULT_BATCH_PARALLELISM = 1L;
 
     private static final RewriteDataFilesProcedure INSTANCE = new RewriteDataFilesProcedure();
 
@@ -58,7 +60,8 @@ public class RewriteDataFilesProcedure extends IcebergTableProcedure {
                 Arrays.asList(
                         new NamedArgument(REWRITE_ALL, Type.BOOLEAN, false),
                         new NamedArgument(MIN_FILE_SIZE_BYTES, Type.BIGINT, false),
-                        new NamedArgument(BATCH_SIZE, Type.BIGINT, false)
+                        new NamedArgument(BATCH_SIZE, Type.BIGINT, false),
+                        new NamedArgument(BATCH_PARALLELISM, Type.BIGINT, false)
                 ),
                 IcebergTableOperation.REWRITE_DATA_FILES
         );
@@ -66,9 +69,9 @@ public class RewriteDataFilesProcedure extends IcebergTableProcedure {
 
     @Override
     public void execute(IcebergTableProcedureContext context, Map<String, ConstantOperator> args) {
-        if (args.size() > 3) {
+        if (args.size() > 4) {
             throw new StarRocksConnectorException("invalid args. only support `rewrite_all`, " +
-                    "`min_file_size_bytes` and `batch_size` in the rewrite data files operation");
+                    "`min_file_size_bytes`, `batch_size` and `batch_parallelism` in the rewrite data files operation");
         }
 
         boolean rewriteAll = args.get(REWRITE_ALL) != null && args.get(REWRITE_ALL)
@@ -90,6 +93,13 @@ public class RewriteDataFilesProcedure extends IcebergTableProcedure {
                 .orElseThrow(() -> new StarRocksConnectorException("invalid argument type for %s, expected positive BIGINT",
                         BATCH_SIZE))
                 : DEFAULT_BATCH_SIZE;
+        long batchParallelism = args.get(BATCH_PARALLELISM) != null ? args.get(BATCH_PARALLELISM)
+                .castTo(Type.BIGINT)
+                .map(ConstantOperator::getBigint)
+                .filter(v -> v > 0)
+                .orElseThrow(() -> new StarRocksConnectorException("invalid argument type for %s, expected positive BIGINT",
+                        BATCH_PARALLELISM))
+                : DEFAULT_BATCH_PARALLELISM;
 
         AlterTableStmt stmt = context.stmt();
         Expr partitionFilter = context.clause().getWhere();
@@ -124,7 +134,7 @@ public class RewriteDataFilesProcedure extends IcebergTableProcedure {
         );
         String executeStmt = writer.toString();
         IcebergRewriteDataJob job = new IcebergRewriteDataJob(executeStmt, rewriteAll,
-                minFileSizeBytes, batchSize, context.context(), stmt);
+                minFileSizeBytes, batchSize, batchParallelism, context.context(), stmt);
         try {
             job.prepare();
             job.execute();

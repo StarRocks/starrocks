@@ -17,7 +17,6 @@ package com.starrocks.lake.snapshot;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.storagevolume.StorageVolume;
 
 public class ClusterSnapshotUtils {
@@ -46,9 +45,7 @@ public class ClusterSnapshotUtils {
         }
 
         StorageVolume sv = GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getStorageVolumeBySnapshotJob(job);
-        BrokerDesc brokerDesc = new BrokerDesc(sv.getProperties());
         String snapshotImagePath = getSnapshotImagePath(sv, snapshotName);
-
-        HdfsUtil.deletePath(snapshotImagePath, brokerDesc);
+        HdfsUtil.deletePath(snapshotImagePath, sv.getProperties());
     }
 }

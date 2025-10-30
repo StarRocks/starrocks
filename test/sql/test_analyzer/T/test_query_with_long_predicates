@@ -1,4 +1,4 @@
--- name: test_query_with_long_predicates
+-- name: test_query_with_long_predicates @slow
 CREATE TABLE `test_table` (
   `id` bigint(20) NOT NULL,
   `cargo_code` bigint(20) NOT NULL,

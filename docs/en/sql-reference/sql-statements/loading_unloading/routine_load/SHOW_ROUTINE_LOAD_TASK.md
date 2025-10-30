@@ -4,7 +4,7 @@ displayed_sidebar: docs
 
 # SHOW ROUTINE LOAD TASK
 
-import RoutineLoadPrivNote from '../../../../_assets/commonMarkdown/RoutineLoadPrivNote.md'
+import RoutineLoadPrivNote from '../../../../_assets/commonMarkdown/RoutineLoadPrivNote.mdx'
 
 SHOW ROUTINE LOAD TASK shows the execution information of load tasks within a Routine Load job.
 

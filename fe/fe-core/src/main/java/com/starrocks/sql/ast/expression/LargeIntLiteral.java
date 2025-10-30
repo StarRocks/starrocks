@@ -41,9 +41,6 @@ import com.starrocks.common.io.Text;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.thrift.TExprNode;
-import com.starrocks.thrift.TExprNodeType;
-import com.starrocks.thrift.TLargeIntLiteral;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -202,11 +199,6 @@ public class LargeIntLiteral extends LiteralExpr {
         return value.doubleValue();
     }
 
-    @Override
-    protected void toThrift(TExprNode msg) {
-        msg.node_type = TExprNodeType.LARGE_INT_LITERAL;
-        msg.large_int_literal = new TLargeIntLiteral(value.toString());
-    }
 
     @Override
     public Expr uncheckedCastTo(Type targetType) throws AnalysisException {

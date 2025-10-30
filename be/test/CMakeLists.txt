@@ -124,6 +124,7 @@ set(EXEC_FILES
         ./exprs/agg/window_test.cpp
         ./exprs/agg/agg_compressed_key_test.cpp
         ./exprs/agg/agg_state_functions_test.cpp
+        ./exprs/ai_functions_test.cpp
         ./exprs/arithmetic_expr_test.cpp
         ./exprs/arithmetic_operation_test.cpp
         ./exprs/array_element_expr_test.cpp
@@ -255,6 +256,7 @@ set(EXEC_FILES
         ./http/stream_load_test.cpp
         ./http/transaction_stream_load_test.cpp
         ./http/action/update_config_action_test.cpp
+        ./http/action/proc_profile_e2e_test.cpp
         ./io/array_input_stream_test.cpp
         ./io/compressed_input_stream_test.cpp
         ./io/io_profiler_test.cpp
@@ -419,7 +421,9 @@ set(EXEC_FILES
         ./udf/java/java_udf_test.cpp
         ./util/table_metrics_mgr_test.cpp
         ./util/jvm_metrics_test.cpp
-)
+        ./util/llm_cache_test.cpp
+        ./util/llm_query_service_test.cpp
+        )
 
 if (${USE_AVX512})
     list(APPEND EXEC_FILES ./simd/delta_decode_test.cpp)

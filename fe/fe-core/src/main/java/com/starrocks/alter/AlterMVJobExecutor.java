@@ -57,9 +57,12 @@ import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.SetStmtAnalyzer;
+import com.starrocks.sql.analyzer.mv.IVMAnalyzer;
 import com.starrocks.sql.ast.AlterMaterializedViewStatusClause;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
+import com.starrocks.sql.ast.ParseNode;
+import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RefreshSchemeClause;
 import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetStmt;
@@ -84,7 +87,9 @@ import org.threeten.extra.PeriodDuration;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
@@ -152,8 +157,42 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             partitionRefreshStrategy = PropertyAnalyzer.analyzePartitionRefreshStrategy(properties);
         }
         String mvRefreshMode = null;
+        MaterializedView.RefreshMode currentRefreshMode = MaterializedView.RefreshMode.PCT;
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_MV_REFRESH_MODE)) {
             mvRefreshMode = PropertyAnalyzer.analyzeRefreshMode(properties);
+
+            // cannot alter original pct based mv to incremental or auto, only support original ivm/pct based mv
+            currentRefreshMode = MaterializedView.RefreshMode.valueOf(mvRefreshMode.toUpperCase(Locale.ROOT));
+            if (currentRefreshMode.isIncrementalOrAuto()) {
+                ParseNode mvDefinedQueryParseNode = materializedView.getDefineQueryParseNode();
+                if (mvDefinedQueryParseNode != null && (mvDefinedQueryParseNode instanceof QueryStatement)) {
+                    QueryStatement queryStatement = (QueryStatement) mvDefinedQueryParseNode;
+                    IVMAnalyzer ivmAnalyzer = new IVMAnalyzer(context, queryStatement);
+
+                    Optional<IVMAnalyzer.IVMAnalyzeResult> result = Optional.empty();
+                    try {
+                        result = ivmAnalyzer.rewrite(
+                                MaterializedView.RefreshMode.valueOf(mvRefreshMode.toUpperCase(Locale.ROOT)));
+                    } catch (SemanticException e) {
+                        throw new SemanticException("Cannot alter materialized view refresh mode to %s: %s",
+                                mvRefreshMode, e.getMessage());
+                    }
+                    if (result.isEmpty()) {
+                        throw new SemanticException("Cannot alter materialized view refresh mode to %s," +
+                                " because the materialized view is not eligible for %s refresh mode",
+                                mvRefreshMode, mvRefreshMode);
+                    }
+                    // if materialized's original refresh mode is not auto or ivm, throw exception
+                    if (!materializedView.getCurrentRefreshMode().isIncrementalOrAuto()) {
+                        throw new SemanticException("Cannot alter materialized view refresh mode to %s," +
+                                " only support alter original incremental/auto based materialized view",
+                                mvRefreshMode);
+                    }
+                    currentRefreshMode = result.get().currentRefreshMode();
+                } else {
+                    throw new SemanticException("Cannot alter materialized view refresh mode to %s", mvRefreshMode);
+                }
+            }
         }
         String resourceGroup = null;
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_RESOURCE_GROUP)) {
@@ -363,6 +402,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             curProp.put(PropertyAnalyzer.PROPERTIES_MV_REFRESH_MODE, String.valueOf(mvRefreshMode));
             materializedView.getTableProperty().setMvRefreshMode(mvRefreshMode);
             isChanged = true;
+            materializedView.setCurrentRefreshMode(currentRefreshMode);
         } else if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT) &&
                 materializedView.getTableProperty().getAutoRefreshPartitionsLimit() != autoRefreshPartitionsLimit) {
             curProp.put(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT, String.valueOf(autoRefreshPartitionsLimit));
@@ -788,4 +828,19 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         }
     }
 
+    /**
+     * Inactive the materialized view because of its task is failed for consecutive times and write the edit log.
+     */
+    public static void inactiveForConsecutiveFailures(MaterializedView mv) {
+        if (mv == null) {
+            return;
+        }
+        final String inactiveReason = MaterializedViewExceptions.inactiveReasonForConsecutiveFailures(mv.getName());
+        // inactive related mv
+        mv.setInactiveAndReason(inactiveReason);
+        // write edit log
+        AlterMaterializedViewStatusLog log = new AlterMaterializedViewStatusLog(mv.getDbId(),
+                mv.getId(), AlterMaterializedViewStatusClause.INACTIVE, inactiveReason);
+        GlobalStateMgr.getCurrentState().getEditLog().logAlterMvStatus(log);
+    }
 }

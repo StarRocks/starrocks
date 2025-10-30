@@ -29,6 +29,7 @@ import com.starrocks.sql.ast.AlterUserStmt;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
+import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.CleanTemporaryTableStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
@@ -107,6 +108,7 @@ import com.starrocks.sql.ast.expression.InPredicate;
 import com.starrocks.sql.ast.expression.InformationFunction;
 import com.starrocks.sql.ast.expression.IsNullPredicate;
 import com.starrocks.sql.ast.expression.LambdaFunctionExpr;
+import com.starrocks.sql.ast.expression.LargeInPredicate;
 import com.starrocks.sql.ast.expression.LargeStringLiteral;
 import com.starrocks.sql.ast.expression.LikePredicate;
 import com.starrocks.sql.ast.expression.LimitElement;
@@ -426,7 +428,14 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
         sb.append(")");
 
         if (stmt.getBrokerDesc() != null) {
-            sb.append(stmt.getBrokerDesc());
+            BrokerDesc brokerDesc = stmt.getBrokerDesc();
+            sb.append(" WITH BROKER ").append(brokerDesc.getName());
+            Map<String, String> properties = brokerDesc.getProperties();
+
+            if (properties != null && !properties.isEmpty()) {
+                PrintableMap<String, String> printableMap = new PrintableMap<>(properties, " = ", true, false, true);
+                sb.append(" (").append(printableMap.toString()).append(")");
+            }
         }
 
         if (stmt.getCluster() != null) {
@@ -1255,6 +1264,18 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
             strBuilder.append((i + 1 != node.getChildren().size()) ? ", " : "");
         }
         strBuilder.append(")");
+        return strBuilder.toString();
+    }
+
+    @Override
+    public String visitLargeInPredicate(LargeInPredicate node, Void context) {
+        StringBuilder strBuilder = new StringBuilder();
+        String notStr = (node.isNotIn()) ? "NOT " : "";
+        
+        strBuilder.append(printWithParentheses(node.getCompareExpr())).append(" ").append(notStr).append("IN (");
+        strBuilder.append(node.getRawText());
+        strBuilder.append(")");
+        
         return strBuilder.toString();
     }
 

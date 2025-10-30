@@ -4,7 +4,7 @@ displayed_sidebar: docs
 
 # CREATE ROLE
 
-import UserManagementPriv from '../../../_assets/commonMarkdown/userManagementPriv.md'
+import UserManagementPriv from '../../../_assets/commonMarkdown/userManagementPriv.mdx'
 
 ## 功能
 

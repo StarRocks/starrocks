@@ -839,6 +839,10 @@ public class AnalyzerUtils {
         new AnalyzerUtils.OlapTableCollector(olapTables).visit(statementBase);
     }
 
+    public static void collectSourceTables(StatementBase statementBase, List<Table> sourceTables) {
+        new SourceTablesCollector(sourceTables).visit(statementBase);
+    }
+
     public static void collectSpecifyExternalTables(StatementBase statementBase, List<Table> tables,
                                                     Predicate<Table> filter) {
         new ExternalTableCollector(tables, filter).visit(statementBase);
@@ -1023,6 +1027,22 @@ public class AnalyzerUtils {
             olapTables.add(table);
             idMap.put(tableIndexId, copied);
             return copied;
+        }
+    }
+
+    private static class SourceTablesCollector extends TableCollector {
+        private List<Table> sourceTables;
+
+        public SourceTablesCollector(List<Table> sourceTables) {
+            super();
+            this.sourceTables = sourceTables;
+        }
+
+        @Override
+        public Void visitTable(TableRelation node, Void context) {
+            super.visitTable(node, context);
+            sourceTables.add(node.getTable());
+            return null;
         }
     }
 

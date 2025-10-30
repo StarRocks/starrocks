@@ -359,6 +359,7 @@ inline Status DeltaWriterImpl::reset_memtable() {
         _mem_table = std::make_unique<MemTable>(_tablet_id, &_write_schema_for_mem_table, _mem_table_sink.get(),
                                                 _max_buffer_size, _mem_tracker);
     }
+    RETURN_IF_ERROR(_mem_table->prepare());
     _mem_table->set_write_buffer_row(_max_buffer_rows);
     return Status::OK();
 }

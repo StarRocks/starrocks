@@ -225,10 +225,6 @@ public class ColumnDef implements ParseNode {
         return defaultValueDef;
     }
 
-    public void setDefaultValueDef(DefaultValueDef defaultValueDef) {
-        this.defaultValueDef = defaultValueDef;
-    }
-
     public String getName() {
         return name;
     }

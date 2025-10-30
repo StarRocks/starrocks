@@ -20,8 +20,8 @@ import com.starrocks.planner.PlanNode;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
 import com.starrocks.sql.ast.expression.JoinOperator;
-import com.starrocks.sql.ast.expression.TableRef;
 import com.starrocks.sql.optimizer.operator.stream.IMTInfo;
 import com.starrocks.thrift.TEqJoinCondition;
 import com.starrocks.thrift.TExplainLevel;
@@ -38,11 +38,6 @@ public class StreamJoinNode extends JoinNode {
     // TODO: support bi-stream join
     private IMTInfo rightIMT;
 
-    public StreamJoinNode(PlanNodeId id, PlanNode outer, PlanNode inner, TableRef innerRef, List<Expr> eqJoinConjuncts,
-                          List<Expr> otherJoinConjuncts) {
-        super("StreamJoin", id, outer, inner, JoinOperator.INNER_JOIN, eqJoinConjuncts, otherJoinConjuncts);
-    }
-
     public StreamJoinNode(PlanNodeId id, PlanNode outer, PlanNode inner, JoinOperator joinOp,
                           List<Expr> eqJoinConjuncts, List<Expr> otherJoinConjuncts) {
         super("StreamJoin", id, outer, inner, joinOp, eqJoinConjuncts, otherJoinConjuncts);
@@ -57,14 +52,15 @@ public class StreamJoinNode extends JoinNode {
         if (CollectionUtils.isNotEmpty(eqJoinConjuncts)) {
             for (BinaryPredicate eqJoinPredicate : eqJoinConjuncts) {
                 TEqJoinCondition eqJoinCondition = new TEqJoinCondition(
-                        eqJoinPredicate.getChild(0).treeToThrift(), eqJoinPredicate.getChild(1).treeToThrift());
+                        ExprToThriftVisitor.treeToThrift(eqJoinPredicate.getChild(0)),
+                        ExprToThriftVisitor.treeToThrift(eqJoinPredicate.getChild(1)));
                 eqJoinCondition.setOpcode(eqJoinPredicate.getOp().getOpcode());
                 msg.stream_join_node.addToEq_join_conjuncts(eqJoinCondition);
             }
         }
         if (CollectionUtils.isNotEmpty(otherJoinConjuncts)) {
             for (Expr e : otherJoinConjuncts) {
-                msg.stream_join_node.addToOther_join_conjuncts(e.treeToThrift());
+                msg.stream_join_node.addToOther_join_conjuncts(ExprToThriftVisitor.treeToThrift(e));
             }
             String sqlJoinPredicate = otherJoinConjuncts.stream().map(Expr::toSql).collect(Collectors.joining(","));
             msg.stream_join_node.setSql_join_predicates(sqlJoinPredicate);

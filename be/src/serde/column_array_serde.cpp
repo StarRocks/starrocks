@@ -15,8 +15,6 @@
 #include "serde/column_array_serde.h"
 
 #include <fmt/format.h>
-#include <lz4/lz4.h>
-#include <lz4/lz4frame.h>
 #include <streamvbyte.h>
 #include <streamvbytedelta.h>
 
@@ -38,6 +36,7 @@
 #include "types/hll.h"
 #include "types/variant_value.h"
 #include "util/coding.h"
+#include "util/compression/compression_headers.h"
 #include "util/json.h"
 #include "util/percentile_value.h"
 

@@ -276,6 +276,7 @@ dependencies {
     implementation("org.xerial.snappy:snappy-java")
     implementation("software.amazon.awssdk:bundle")
     implementation("tools.profiler:async-profiler")
+    implementation("com.github.vertical-blank:sql-formatter:2.0.4")
     // dependency sync end
 
     // extra dependencies pom.xml does not have

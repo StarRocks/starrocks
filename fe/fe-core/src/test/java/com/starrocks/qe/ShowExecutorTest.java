@@ -226,7 +226,7 @@ public class ShowExecutorTest {
                 minTimes = 0;
                 result = Lists.newArrayList(column1, column2);
 
-                mv.getOrderedOutputColumns();
+                mv.getOrderedOutputColumns(anyBoolean);
                 minTimes = 0;
                 result = Lists.newArrayList(column1, column2);
 

@@ -247,7 +247,7 @@ public class PushDownAggregateGroupingSetsRule extends TransformationRule {
     /*
      * select a, b, c, d, null, sum(x) x from t group by rollup(a, b, c, d)
      */
-    private OptExpression buildSubRepeatConsume(ColumnRefFactory factory,
+    public OptExpression buildSubRepeatConsume(ColumnRefFactory factory,
                                                 Map<ColumnRefOperator, ColumnRefOperator> outputs,
                                                 LogicalAggregationOperator aggregate, LogicalRepeatOperator repeat,
                                                 int cteId) {

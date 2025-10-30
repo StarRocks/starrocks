@@ -31,12 +31,12 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.persist.TableRefPersist;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.Delimiter;
 import com.starrocks.sql.ast.expression.TableName;
-import com.starrocks.sql.ast.expression.TableRef;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.net.URI;
@@ -77,21 +77,21 @@ public class ExportStmt extends StatementBase {
     private boolean includeQueryId = true;
 
     // may catalog.db.table
-    private TableRef tableRef;
+    private TableRefPersist tableRef;
     private long exportStartTime;
     private boolean sync;
 
-    public ExportStmt(TableRef tableRef, List<String> columnNames, String path,
+    public ExportStmt(TableRefPersist tableRef, List<String> columnNames, String path,
                       Map<String, String> properties, BrokerDesc brokerDesc) {
         this(tableRef, columnNames, path, properties, brokerDesc, NodePosition.ZERO);
     }
 
-    public ExportStmt(TableRef tableRef, List<String> columnNames, String path,
+    public ExportStmt(TableRefPersist tableRef, List<String> columnNames, String path,
                       Map<String, String> properties, BrokerDesc brokerDesc, NodePosition pos) {
         this(tableRef, columnNames, path, properties, brokerDesc, pos, false);
     }
 
-    public ExportStmt(TableRef tableRef, List<String> columnNames, String path,
+    public ExportStmt(TableRefPersist tableRef, List<String> columnNames, String path,
                       Map<String, String> properties, BrokerDesc brokerDesc, NodePosition pos, boolean sync) {
         super(pos);
         this.tableRef = tableRef;
@@ -135,7 +135,7 @@ public class ExportStmt extends StatementBase {
         return tblName;
     }
 
-    public TableRef getTableRef() {
+    public TableRefPersist getTableRef() {
         return tableRef;
     }
 

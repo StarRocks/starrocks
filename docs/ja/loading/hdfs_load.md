@@ -6,11 +6,11 @@ keywords: ['Broker Load']
 
 # HDFS からのデータロード
 
-import LoadMethodIntro from '../_assets/commonMarkdown/loadMethodIntro.md'
+import LoadMethodIntro from '../_assets/commonMarkdown/loadMethodIntro.mdx'
 
-import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
+import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.mdx'
 
-import PipeAdvantages from '../_assets/commonMarkdown/pipeAdvantages.md'
+import PipeAdvantages from '../_assets/commonMarkdown/pipeAdvantages.mdx'
 
 StarRocks は、HDFS からデータをロードするために次のオプションを提供します。
 

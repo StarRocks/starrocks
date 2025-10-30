@@ -15,9 +15,6 @@
 
 package com.starrocks.catalog;
 
-import com.google.common.base.Preconditions;
-import com.starrocks.thrift.TTypeDesc;
-
 /**
  * A pseudo-type cannot be used as a column data type, but it can be used to declare a function's argument or
  * result type. Each of the available pseudo-types is useful in situations where a function's behavior does not
@@ -34,11 +31,6 @@ public class PseudoType extends Type {
     @Override
     protected String prettyPrint(int lpad) {
         return null;
-    }
-
-    @Override
-    public void toThrift(TTypeDesc container) {
-        Preconditions.checkArgument(false, "PseudoType should not exposed to external");
     }
 
     @Override

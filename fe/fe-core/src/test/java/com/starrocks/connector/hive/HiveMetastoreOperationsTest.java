@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.hive;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnBuilder;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.PartitionKey;
@@ -371,7 +371,7 @@ public class HiveMetastoreOperationsTest {
                 "my table comment");
         List<Column> columns = stmt.getColumnDefs()
                 .stream()
-                .map(columnDef -> Column.fromColumnDef(null, columnDef))
+                .map(columnDef -> ColumnBuilder.buildGeneratedColumn(null, columnDef))
                 .collect(Collectors.toList());
         stmt.setColumns(columns);
 
@@ -421,7 +421,8 @@ public class HiveMetastoreOperationsTest {
                 new HashMap<>(),
                 "my table comment");
         List<Column> columns =
-                stmt.getColumnDefs().stream().map(def -> Column.fromColumnDef(null, def)).collect(Collectors.toList());
+                stmt.getColumnDefs().stream().map(def -> ColumnBuilder.buildGeneratedColumn(null, def))
+                        .collect(Collectors.toList());
         stmt.setColumns(columns);
 
         Assertions.assertTrue(mockedHmsOps.createTable(stmt));
@@ -460,7 +461,8 @@ public class HiveMetastoreOperationsTest {
                 new HashMap<>(),
                 "my table comment");
         List<Column> columns =
-                stmt.getColumnDefs().stream().map(def -> Column.fromColumnDef(null, def)).collect(Collectors.toList());
+                stmt.getColumnDefs().stream().map(def -> ColumnBuilder.buildGeneratedColumn(null, def))
+                        .collect(Collectors.toList());
         stmt.setColumns(columns);
 
         Assertions.assertTrue(mockedHmsOps.createTable(stmt));
@@ -498,7 +500,8 @@ public class HiveMetastoreOperationsTest {
                 new HashMap<>(),
                 "my table comment");
         List<Column> columns =
-                stmt.getColumnDefs().stream().map(def -> Column.fromColumnDef(null, def)).collect(Collectors.toList());
+                stmt.getColumnDefs().stream().map(def -> ColumnBuilder.buildGeneratedColumn(null, def))
+                        .collect(Collectors.toList());
         stmt.setColumns(columns);
 
         Assertions.assertTrue(mockedHmsOps.createTable(stmt));
@@ -537,7 +540,7 @@ public class HiveMetastoreOperationsTest {
                 "my table comment");
         List<Column> columns = stmt.getColumnDefs()
                 .stream()
-                .map(columnDef -> Column.fromColumnDef(null, columnDef))
+                .map(columnDef -> ColumnBuilder.buildGeneratedColumn(null, columnDef))
                 .collect(Collectors.toList());
         stmt.setColumns(columns);
 

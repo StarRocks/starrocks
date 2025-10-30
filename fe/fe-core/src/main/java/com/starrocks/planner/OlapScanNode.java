@@ -84,6 +84,7 @@ import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.TableSampleClause;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
@@ -127,6 +128,9 @@ import java.util.stream.IntStream;
 
 public class OlapScanNode extends ScanNode {
     private static final Logger LOG = LogManager.getLogger(OlapScanNode.class);
+
+    // Cached value of estimated scan range memory footprint
+    private static volatile long estimatedScanRangeFootprint = 0;
 
     private final List<TScanRangeLocations> result = new ArrayList<>();
     private final List<String> selectedPartitionNames = Lists.newArrayList();
@@ -193,9 +197,6 @@ public class OlapScanNode extends ScanNode {
 
     private VectorSearchOptions vectorSearchOptions = new VectorSearchOptions();
 
-    private boolean calcaulatedScanRange = false;
-
-    private long totalScanRangeBytes = 0;
 
     // Set to true after it's confirmed at some point during the execution of this request that there is some living CN.
     // Set just once per query.
@@ -565,6 +566,7 @@ public class OlapScanNode extends ScanNode {
         selectedPartitionVersions.add(visibleVersion);
 
         checkSomeAliveComputeNode();
+        boolean checkScanRangeSize = false;
         for (Tablet tablet : tablets) {
             long tabletId = tablet.getId();
             LOG.debug("{} tabletId={}", (logNum++), tabletId);
@@ -680,14 +682,23 @@ public class OlapScanNode extends ScanNode {
             scanRangeLocations.setScan_range(scanRange);
 
             bucketSeq2locations.put(tabletId2BucketSeq.get(tabletId), scanRangeLocations);
-            if (!calcaulatedScanRange) {
-                long scanRangeSize = SizeEstimator.estimate(scanRangeLocations);
+            if (!checkScanRangeSize) {
+                long scanRangeSize = getEstimatedScanRangeFootprint(scanRange);
                 checkIfScanRangeNumSafe(scanRangeSize);
-                calcaulatedScanRange = true;
+                checkScanRangeSize = true;
             }
 
             result.add(scanRangeLocations);
         }
+    }
+
+    // Estimate the memory footprint of a TScanRange, and cache it for future usage
+    private long getEstimatedScanRangeFootprint(TScanRange scanRange) {
+        if (estimatedScanRangeFootprint > 0) {
+            return estimatedScanRangeFootprint;
+        }
+        estimatedScanRangeFootprint = SizeEstimator.estimate(scanRange);
+        return estimatedScanRangeFootprint;
     }
 
     public void computePartitionInfo() throws AnalysisException {
@@ -788,7 +799,7 @@ public class OlapScanNode extends ScanNode {
             }
         }
 
-        totalScanRangeBytes = scanRangeSize * totalTabletsNum;
+        long totalScanRangeBytes = scanRangeSize * totalTabletsNum;
         if (totalScanRangeBytes > 1024 * 1024) {
             Runtime runtime = Runtime.getRuntime();
             long freeMemory = runtime.freeMemory();
@@ -1052,7 +1063,7 @@ public class OlapScanNode extends ScanNode {
             }
 
             if (!bucketExprs.isEmpty()) {
-                msg.lake_scan_node.setBucket_exprs(Expr.treesToThrift(bucketExprs));
+                msg.lake_scan_node.setBucket_exprs(ExprToThriftVisitor.treesToThrift(bucketExprs));
             }
 
             if (CollectionUtils.isNotEmpty(columnAccessPaths)) {
@@ -1110,7 +1121,7 @@ public class OlapScanNode extends ScanNode {
             msg.olap_scan_node.setOutput_asc_hint(sortKeyAscHint);
             partitionKeyAscHint.ifPresent(aBoolean -> msg.olap_scan_node.setPartition_order_hint(aBoolean));
             if (!bucketExprs.isEmpty()) {
-                msg.olap_scan_node.setBucket_exprs(Expr.treesToThrift(bucketExprs));
+                msg.olap_scan_node.setBucket_exprs(ExprToThriftVisitor.treesToThrift(bucketExprs));
             }
 
             if (CollectionUtils.isNotEmpty(columnAccessPaths)) {
@@ -1578,7 +1589,7 @@ public class OlapScanNode extends ScanNode {
         this.gtid = gtid;
     }
 
-    // clear scan node， reduce body size
+    // clear scan node，reduce body size
     public void clearScanNodeForThriftBuild() {
         sortColumn = null;
         this.selectedIndexId = -1;

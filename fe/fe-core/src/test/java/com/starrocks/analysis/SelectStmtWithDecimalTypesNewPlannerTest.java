@@ -77,6 +77,7 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
                 "\"enable_persistent_index\" = \"true\"\n" +
                 ");");
         FeConstants.enablePruneEmptyOutputScan = false;
+        FeConstants.runningUnitTest = false;
     }
 
     private static String removeSlotIds(String s) {

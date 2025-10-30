@@ -2,13 +2,13 @@
 displayed_sidebar: docs
 ---
 
-import BEConfigMethod from '../../_assets/commonMarkdown/BE_config_method.md'
+import BEConfigMethod from '../../_assets/commonMarkdown/BE_config_method.mdx'
 
-import CNConfigMethod from '../../_assets/commonMarkdown/CN_config_method.md'
+import CNConfigMethod from '../../_assets/commonMarkdown/CN_config_method.mdx'
 
-import PostBEConfig from '../../_assets/commonMarkdown/BE_dynamic_note.md'
+import PostBEConfig from '../../_assets/commonMarkdown/BE_dynamic_note.mdx'
 
-import StaticBEConfigNote from '../../_assets/commonMarkdown/StaticBE_config_note.md'
+import StaticBEConfigNote from '../../_assets/commonMarkdown/StaticBE_config_note.mdx'
 
 # BE Configuration
 
@@ -2289,6 +2289,15 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Introduced in: -
 -->
 
+##### flamegraph_tool_dir
+
+- Default: `${STARROCKS_HOME}/bin/flamegraph`
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: Directory of the flamegraph tool, which should contain pprof, stackcollapse-go.pl, and flamegraph.pl scripts for generating flame graphs from profile data.
+- Introduced in: -
+
 ##### enable_prefetch
 
 - Default: true
@@ -3322,7 +3331,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 
 ##### json_flat_sparsity_factor
 
-- Default: 0.9
+- Default: 0.3
 - Type: Double
 - Unit:
 - Is mutable: Yes
@@ -4665,6 +4674,24 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: Whether to allow vertical compaction tasks to cache data on local disks in a shared-data cluster.
 - Introduced in: v3.1.7, v3.2.3
 
+##### lake_clear_corrupted_cache_meta
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to allow the system to clear the corrupted metadata cache in a shared-data cluster.
+- Introduced in: v3.3
+
+##### lake_clear_corrupted_cache_data
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to allow the system to clear the corrupted data cache in a shared-data cluster.
+- Introduced in: v3.4
+
 <!--
 ##### dictionary_cache_refresh_timeout_ms
 
@@ -5324,3 +5351,14 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Is mutable: Yes
 - Description: The interval that the secondary replica checks it's status on the primary replica if the last check rpc fails.
 - Introduced in: 3.5.1
+
+##### enable_resolve_hostname_to_ip_in_load_error_url
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: For `error_urls` debugging, whether to allow operators to choose between using original hostnames from FE heartbeat or forcing resolution to IP addresses based on their environment needs.
+  - `true`: Resolve hostnames to IPs.
+  - `false` (Default): Keeps the original hostname in the error URL.
+- Introduced in: v4.0.1

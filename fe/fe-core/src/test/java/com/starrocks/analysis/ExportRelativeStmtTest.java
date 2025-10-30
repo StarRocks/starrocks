@@ -3,6 +3,7 @@ package com.starrocks.analysis;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.persist.ModifyBrokerInfo;
+import com.starrocks.persist.TableRefPersist;
 import com.starrocks.qe.ShowResultMetaFactory;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
@@ -12,7 +13,6 @@ import com.starrocks.sql.ast.CancelExportStmt;
 import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.ShowExportStmt;
 import com.starrocks.sql.ast.expression.TableName;
-import com.starrocks.sql.ast.expression.TableRef;
 import com.starrocks.sql.common.AuditEncryptionChecker;
 import com.starrocks.system.BrokerHbResponse;
 import org.junit.jupiter.api.Assertions;
@@ -163,7 +163,7 @@ public class ExportRelativeStmtTest {
         TableName tb = new TableName(dbName, tableName);
         List<String> columnLst = Lists.newArrayList("c1", "c2");
 
-        ExportStmt stmt1 = new ExportStmt(new TableRef(tb, null), columnLst, path, new HashMap<>(), null);
+        ExportStmt stmt1 = new ExportStmt(new TableRefPersist(tb, null), columnLst, path, new HashMap<>(), null);
 
         try {
             Analyzer.analyze(stmt1, AnalyzeTestUtil.getConnectContext());

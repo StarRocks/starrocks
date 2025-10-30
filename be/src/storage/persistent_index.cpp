@@ -2185,7 +2185,9 @@ Status ShardByLengthMutableIndex::commit(MutableIndexMetaPB* meta, const EditVer
         size_t snapshot_size = _index_file->size();
         // special case, snapshot file was written by phmap::BinaryOutputArchive which does not use system profiled API
         // so add write stats manually
+#ifndef __APPLE__
         IOProfiler::add_write(snapshot_size, watch.elapsed_time());
+#endif
         meta->clear_wals();
         IndexSnapshotMetaPB* snapshot = meta->mutable_snapshot();
         version.to_pb(snapshot->mutable_version());
@@ -2273,7 +2275,9 @@ Status ShardByLengthMutableIndex::load(const MutableIndexMetaPB& meta) {
         RETURN_IF_ERROR(load_snapshot(ar, dumped_shard_idxes));
         // special case, snapshot file was written by phmap::BinaryOutputArchive which does not use system profiled API
         // so add read stats manually
+#ifndef __APPLE__
         IOProfiler::add_read(snapshot_size, watch.elapsed_time());
+#endif
     }
     // if mutable index is empty, set _offset as 0, otherwise set _offset as snapshot size
     _offset = snapshot_off + snapshot_size;
@@ -3785,7 +3789,9 @@ public:
               _io_stat_entry(io_stat_entry) {}
 
     void run() override {
+#ifndef __APPLE__
         auto scope = IOProfiler::scope(_io_stat_entry);
+#endif
         WARN_IF_ERROR(_index->get_from_one_immutable_index(_immu_index, _num, _keys, _values, _keys_info_by_key_size,
                                                            _found_keys_info),
                       "Failed to run GetFromImmutableIndexTask");

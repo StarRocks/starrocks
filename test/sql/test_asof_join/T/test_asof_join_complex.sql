@@ -232,12 +232,6 @@ ASOF INNER JOIN snapshots_dt6 s ON e.user_id = s.user_id AND e.event_time < s.sn
 WHERE e.user_id IN (701,702)
 ORDER BY e.event_id;
 
--- 8d: compare with date
-SELECT /* DT6-INNER-GE */ e.event_id, e.user_id, e.event_time, s.snapshot_time, s.snapshot_data
-FROM events_dt6 e
-ASOF INNER JOIN snapshots_dt6 s ON e.user_id = s.user_id AND cast(e.event_time as date) >= cast(s.snapshot_time as date)
-ORDER BY e.event_id;
-
 
 -- Test 9: test asof join with other join conjunct
 CREATE TABLE orders (

@@ -206,6 +206,68 @@ The various joins supported by StarRocks can be classified as equi-joins and non
   LEFT JOIN t2 ON t1.id > t2.id;
   ```
 
+## ASOF Join
+
+An ASOF Join is a type of temporal or range-based join commonly used in time-series analytics. It allows joining two tables based on equality of certain keys and a non-equality condition on time or sequence fields, for example, `t1.time >= t2.time`. The ASOF Join selects the most recent matching row from the right-side table for each row on the left-side table. Supported from v4.0 onwards.
+
+In real-world scenarios, analytics involving time-series data often encounter the following challenges:
+- Data collection timing misalignment (for example, different sensor sampling times)
+- Small discrepancies between event occurrence and recording times
+- Need to find the closest historical record for a given timestamp
+
+Traditional equality joins (INNER Join) often result in significant data loss when handling such data, while inequality joins can lead to performance issues. The ASOF Join was designed to address these specific challenges.
+
+ASOF Joins are commonly used in the following cases:
+
+- **Financial Market Analysis**
+  - Matching stock prices with trading volumes
+  - Aligning data from different markets
+  - Derivative pricing reference data matching
+- **IoT Data Processing**
+  - Aligning multiple sensor data streams
+  - Correlating device state changes
+  - Time-series data interpolation
+- **Log Analysis**
+  - Correlating system events with user actions
+  - Matching logs from different services
+  - Fault analysis and problem tracking
+
+Syntax:
+
+```SQL
+SELECT [select_list]
+FROM left_table [AS left_alias]
+ASOF LEFT JOIN right_table [AS right_alias]
+    ON equality_condition
+    AND asof_condition
+[WHERE ...]
+[ORDER BY ...]
+```
+
+- `ASOF LEFT JOIN`: Performs a non-equality join based on the nearest match in time or sequence. ASOF LEFT JOIN returns all rows from the left table, filling unmatched right-side rows with NULL.
+- `equality_condition`: A standard equality constraint (for example, matching ticker symbols or IDs).
+- `asof_condition`: A range condition typically written as `left.time >= right.time`, indicating to search the most recent `right.time` records that does not exceed `left.time`. 
+
+:::note
+Only DATE and DATETIME types are supported in `asof_condition`. And only one `asof_condition` is supported.
+:::
+
+Example:
+
+```SQL
+SELECT *
+FROM holdings h ASOF LEFT JOIN prices p             
+ON h.ticker = p.ticker            
+AND h.when >= p.when
+ORDER BY ALL;
+```
+
+Limitations:
+
+- Currently, only Inner Join (default) and Left Outer Join are supported.
+- Only DATE and DATETIME types are supported in `asof_condition`.
+- Only one `asof_condition` is supported.
+
 ### ORDER BY
 
 The ORDER BY clause of a SELECT statement sorts the result set by comparing the values from one or more columns.

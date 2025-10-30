@@ -47,9 +47,6 @@ import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.optimizer.validate.ValidateException;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.thrift.TDecimalLiteral;
-import com.starrocks.thrift.TExprNode;
-import com.starrocks.thrift.TExprNodeType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -396,15 +393,6 @@ public class DecimalLiteral extends LiteralExpr {
         return value.doubleValue();
     }
 
-    @Override
-    protected void toThrift(TExprNode msg) {
-        // TODO(hujie01) deal with loss information
-        msg.setNode_type(TExprNodeType.DECIMAL_LITERAL);
-        TDecimalLiteral decimalLiteral = new TDecimalLiteral();
-        decimalLiteral.setValue(value.toPlainString());
-        decimalLiteral.setInteger_value(packDecimal());
-        msg.setDecimal_literal(decimalLiteral);
-    }
 
     @Override
     public void swapSign() throws NotImplementedException {

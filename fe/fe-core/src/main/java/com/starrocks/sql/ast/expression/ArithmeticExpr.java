@@ -44,12 +44,11 @@ import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.thrift.TExprNode;
-import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.thrift.TExprOpcode;
 
 import java.util.Arrays;
@@ -294,6 +293,14 @@ public class ArithmeticExpr extends Expr {
                     result.rhsTargetType = ScalarType.createDecimalV3Type(commonPtype, rhsPrecision, rhsScale);
                     return result;
                 } else if (returnScale <= maxDecimalPrecision) {
+                    ConnectContext connectContext = ConnectContext.get();
+                    if (connectContext != null && connectContext.getSessionVariable().isDecimalOverflowToDouble()) {
+                        // Convert to double when precision overflow and session variable is enabled
+                        result.returnType = Type.DOUBLE;
+                        result.lhsTargetType = Type.DOUBLE;
+                        result.rhsTargetType = Type.DOUBLE;
+                        return result;
+                    }
                     // returnPrecision > maxDecimalPrecision(38 or 76) and returnScale <= maxDecimalPrecision,
                     // the multiplication is computable but the result maybe overflow,
                     // so use decimal128 or decimal256 arithmetic and adopt maximum decimal precision(38) or precision(76)
@@ -426,12 +433,6 @@ public class ArithmeticExpr extends Expr {
         return new ArithmeticExpr(this);
     }
 
-    @Override
-    protected void toThrift(TExprNode msg) {
-        msg.node_type = TExprNodeType.ARITHMETIC_EXPR;
-        msg.setOpcode(op.getOpcode());
-        msg.setOutput_column(outputColumn);
-    }
 
     @Override
     public boolean equalsWithoutChild(Object obj) {

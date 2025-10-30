@@ -374,6 +374,12 @@ SHOW CREATE SECURITY INTEGRATION LDAP1；
 `ldap_bind_root_pwd` is masked when SHOW CREATE SECURITY INTEGRATION is executed.
 :::
 
+## Connect to StarRocks via a security integration
+
+- For instructions on how to connect to StarRocks via LDAP, see [LDAP Authentication - Connect to StarRocks](./ldap_authentication.md#connect-from-mysql-client-with-ldap).
+- For instructions on how to connect to StarRocks via JWT, see [JSON Web Token Authentication - Connect to StarRocks](./jwt_authentication.md#connect-from-mysql-client-with-jwt).
+- For instructions on how to connect to StarRocks via OAuth 2.0, see [OAuth 2.0 Authentication - Connect to StarRocks](./oauth2_authentication.md#connect-from-jdbc-client-with-oauth-20).
+
 ## See also
 
 - For instructions on how to manually authenticate users via LDAP in StarRocks, see [LDAP Authentication](./ldap_authentication.md).

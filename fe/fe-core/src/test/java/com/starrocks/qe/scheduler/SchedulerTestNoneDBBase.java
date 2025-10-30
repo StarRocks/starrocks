@@ -88,7 +88,9 @@ public class SchedulerTestNoneDBBase extends PlanTestNoneDBBase {
 
         Config.statistic_collect_interval_sec = prevStatisticCollectIntervalSec;
         Config.tablet_sched_disable_colocate_overall_balance = false;
-        connectContext.getSessionVariable().setPipelineDop(0);
+        if (connectContext != null && connectContext.getSessionVariable() != null) {
+            connectContext.getSessionVariable().setPipelineDop(0);
+        }
     }
 
     @BeforeEach

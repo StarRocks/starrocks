@@ -119,6 +119,8 @@ public class SelectStmtTest {
                 .withTable(createTable1)
                 .withTable(createTableWithPrimaryKey);
         FeConstants.enablePruneEmptyOutputScan = false;
+
+        starRocksAssert.getCtx().getSessionVariable().setEnableLocalShuffleAgg(false);
     }
 
     @BeforeEach

@@ -38,21 +38,8 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSortedMap;
-import com.google.common.collect.Lists;
 import com.starrocks.catalog.combinator.AggStateDesc;
-import com.starrocks.common.Pair;
-import com.starrocks.proto.PScalarType;
-import com.starrocks.proto.PTypeDesc;
-import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.thrift.TColumnType;
-import com.starrocks.thrift.TPrimitiveType;
-import com.starrocks.thrift.TScalarType;
-import com.starrocks.thrift.TStructField;
-import com.starrocks.thrift.TTypeDesc;
-import com.starrocks.thrift.TTypeNode;
-import com.starrocks.thrift.TTypeNodeType;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -104,7 +91,7 @@ public abstract class Type implements Cloneable {
             PrimitiveType.INVALID_TYPE, PrimitiveType.NULL_TYPE, PrimitiveType.DECIMALV2,
             PrimitiveType.DECIMAL32, PrimitiveType.DECIMAL64, PrimitiveType.DECIMAL128, PrimitiveType.DECIMAL256,
             PrimitiveType.TIME, PrimitiveType.JSON, PrimitiveType.FUNCTION,
-            PrimitiveType.BINARY, PrimitiveType.VARBINARY);
+            PrimitiveType.BINARY, PrimitiveType.VARBINARY, PrimitiveType.VARIANT);
 
     // Static constant types for scalar types that don't require additional information.
     public static final ScalarType INVALID = new ScalarType(PrimitiveType.INVALID_TYPE);
@@ -156,6 +143,7 @@ public abstract class Type implements Cloneable {
     public static final ScalarType BITMAP = new ScalarType(PrimitiveType.BITMAP);
     public static final ScalarType PERCENTILE = new ScalarType(PrimitiveType.PERCENTILE);
     public static final ScalarType JSON = new ScalarType(PrimitiveType.JSON);
+    public static final ScalarType VARIANT = new ScalarType(PrimitiveType.VARIANT);
     public static final ScalarType UNKNOWN_TYPE = ScalarType.createUnknownType();
     public static final ScalarType FUNCTION = new ScalarType(PrimitiveType.FUNCTION);
     public static final ScalarType VARBINARY = new ScalarType(PrimitiveType.VARBINARY);
@@ -228,6 +216,7 @@ public abstract class Type implements Cloneable {
                     .add(ANY_MAP)
                     .add(ANY_STRUCT)
                     .add(JSON)
+                    .add(VARIANT)
                     .add(FUNCTION)
                     .add(VARBINARY)
                     .add(UNKNOWN_TYPE)
@@ -578,6 +567,41 @@ public abstract class Type implements Cloneable {
         compatibilityMatrix[JSON.ordinal()][DECIMAL128.ordinal()] = PrimitiveType.INVALID_TYPE;
         compatibilityMatrix[JSON.ordinal()][DECIMAL256.ordinal()] = PrimitiveType.INVALID_TYPE;
 
+        // VARIANT
+        for (PrimitiveType type : PrimitiveType.VARIANT_COMPATIBLE_TYPE) {
+            ScalarType scalar = ScalarType.createType(type);
+            // VARIANT can store primitive values and should be able to cast to them
+            compatibilityMatrix[scalar.ordinal()][VARIANT.ordinal()] = PrimitiveType.VARIANT;
+        }
+        for (PrimitiveType type : PrimitiveType.VARIANT_INCOMPATIBLE_TYPES) {
+            ScalarType scalar = ScalarType.createType(type);
+            compatibilityMatrix[scalar.ordinal()][VARIANT.ordinal()] = PrimitiveType.INVALID_TYPE;
+        }
+        // VARIANT is incompatible with temporal types (cannot directly cast)
+        compatibilityMatrix[VARIANT.ordinal()][DATE.ordinal()] = PrimitiveType.INVALID_TYPE;
+        compatibilityMatrix[VARIANT.ordinal()][DATETIME.ordinal()] = PrimitiveType.INVALID_TYPE;
+        compatibilityMatrix[VARIANT.ordinal()][TIME.ordinal()] = PrimitiveType.INVALID_TYPE;
+
+        // VARIANT is incompatible with all decimal types
+        // VARIANT stores decimals in its own format, not compatible with StarRocks decimal types
+        compatibilityMatrix[VARIANT.ordinal()][DECIMALV2.ordinal()] = PrimitiveType.INVALID_TYPE;
+        compatibilityMatrix[VARIANT.ordinal()][DECIMAL32.ordinal()] = PrimitiveType.INVALID_TYPE;
+        compatibilityMatrix[VARIANT.ordinal()][DECIMAL64.ordinal()] = PrimitiveType.INVALID_TYPE;
+        compatibilityMatrix[VARIANT.ordinal()][DECIMAL128.ordinal()] = PrimitiveType.INVALID_TYPE;
+        compatibilityMatrix[VARIANT.ordinal()][DECIMAL256.ordinal()] = PrimitiveType.INVALID_TYPE;
+
+        // VARIANT is incompatible with complex/aggregate types
+        compatibilityMatrix[VARIANT.ordinal()][HLL.ordinal()] = PrimitiveType.INVALID_TYPE;
+        compatibilityMatrix[VARIANT.ordinal()][BITMAP.ordinal()] = PrimitiveType.INVALID_TYPE;
+        compatibilityMatrix[VARIANT.ordinal()][PERCENTILE.ordinal()] = PrimitiveType.INVALID_TYPE;
+
+        // VARIANT and JSON have different internal representations - should be invalid
+        compatibilityMatrix[VARIANT.ordinal()][JSON.ordinal()] = PrimitiveType.INVALID_TYPE;
+
+        // VARIANT is incompatible with binary and special types
+        compatibilityMatrix[VARIANT.ordinal()][VARBINARY.ordinal()] = PrimitiveType.INVALID_TYPE;
+        compatibilityMatrix[VARIANT.ordinal()][UNKNOWN_TYPE.ordinal()] = PrimitiveType.INVALID_TYPE;
+
         // binary type
         for (PrimitiveType type : PrimitiveType.BINARY_INCOMPATIBLE_TYPE_LIST) {
             ScalarType scalar = ScalarType.createType(type);
@@ -805,7 +829,7 @@ public abstract class Type implements Cloneable {
     public boolean canApplyToNumeric() {
         // TODO(mofei) support sum, avg for JSON
         return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isBinaryType() && !isStructType() &&
-                !isMapType() && !isArrayType();
+                !isMapType() && !isArrayType() && !isVariantType();
     }
 
     public boolean canJoinOn() {
@@ -824,7 +848,8 @@ public abstract class Type implements Cloneable {
             return true;
         }
 
-        return !isOnlyMetricType() && !isJsonType() && !isFunctionType();
+        return !isOnlyMetricType() && !isJsonType() && !isFunctionType() &&
+                !isVariantType();
     }
 
     public boolean canGroupBy() {
@@ -842,7 +867,8 @@ public abstract class Type implements Cloneable {
             }
             return true;
         }
-        return !isOnlyMetricType() && !isJsonType() && !isFunctionType();
+        return !isOnlyMetricType() && !isJsonType() && !isFunctionType() &&
+                !isVariantType();
     }
 
     public boolean canOrderBy() {
@@ -850,7 +876,8 @@ public abstract class Type implements Cloneable {
         if (isArrayType()) {
             return ((ArrayType) this).getItemType().canOrderBy();
         }
-        return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isStructType() && !isMapType();
+        return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isStructType() &&
+                !isMapType() && !isVariantType();
     }
 
     public boolean canPartitionBy() {
@@ -859,7 +886,7 @@ public abstract class Type implements Cloneable {
             return ((ArrayType) this).getItemType().canPartitionBy();
         }
         return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isBinaryType() && !isStructType() &&
-                !isMapType();
+                !isMapType() && !isVariantType();
     }
 
     public boolean canDistinct() {
@@ -874,20 +901,20 @@ public abstract class Type implements Cloneable {
             return ((MapType) this).getKeyType().canDistinct() && ((MapType) this).getValueType().canDistinct();
         }
         return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isBinaryType() && !isStructType() &&
-                !isMapType();
+                !isMapType() && !isVariantType();
     }
 
     public boolean canStatistic() {
         // TODO(mofei) support statistic by for JSON
         return !isOnlyMetricType() && !isJsonType() && !isStructType() && !isFunctionType()
-                && !isBinaryType();
+                && !isBinaryType() && !isVariantType();
     }
 
     public boolean canDistributedBy() {
         // TODO(mofei) support distributed by for JSON
         // Allow VARBINARY as distribution key
         return !isComplexType() && !isFloatingPointType() && !isOnlyMetricType() && !isJsonType()
-                && !isFunctionType();
+                && !isFunctionType() && !isVariantType();
     }
 
     public boolean canBeWindowFunctionArgumentTypes() {
@@ -933,6 +960,10 @@ public abstract class Type implements Cloneable {
 
     public boolean isJsonType() {
         return isScalarType(PrimitiveType.JSON);
+    }
+
+    public boolean isVariantType() {
+        return isScalarType(PrimitiveType.VARIANT);
     }
 
     public boolean isPercentile() {
@@ -1069,22 +1100,6 @@ public abstract class Type implements Cloneable {
         }
         throw new IllegalStateException("getTypeSize() not implemented for type " + toSql());
     }
-
-    public TTypeDesc toThrift() {
-        TTypeDesc container = new TTypeDesc();
-        container.setTypes(new ArrayList<TTypeNode>());
-        toThrift(container);
-        return container;
-    }
-
-    public TColumnType toColumnTypeThrift() {
-        return null;
-    }
-
-    /**
-     * Subclasses should override this method to add themselves to the thrift container.
-     */
-    public abstract void toThrift(TTypeDesc container);
 
     /**
      * Returns true if the other can be fully compatible with this type.
@@ -1262,167 +1277,6 @@ public abstract class Type implements Cloneable {
             Preconditions.checkState(isScalarType());
         }
         return false;
-    }
-
-    public static List<TTypeDesc> toThrift(Type[] types) {
-        return toThrift(Lists.newArrayList(types));
-    }
-
-    public static List<TTypeDesc> toThrift(ArrayList<Type> types) {
-        ArrayList<TTypeDesc> result = Lists.newArrayList();
-        for (Type t : types) {
-            result.add(t.toThrift());
-        }
-        return result;
-    }
-
-    public static Type fromThrift(TTypeDesc thrift) {
-        Preconditions.checkState(thrift.types.size() > 0);
-        Pair<Type, Integer> t = fromThrift(thrift, 0);
-        Preconditions.checkState(t.second.equals(thrift.getTypesSize()));
-        return t.first;
-    }
-
-    /**
-     * Constructs a ColumnType rooted at the TTypeNode at nodeIdx in TColumnType.
-     * Returned pair: The resulting ColumnType and the next nodeIdx that is not a child
-     * type of the result.
-     */
-    protected static Pair<Type, Integer> fromThrift(TTypeDesc col, int nodeIdx) {
-        TTypeNode node = col.getTypes().get(nodeIdx);
-        Type type = null;
-        int tmpNodeIdx = nodeIdx;
-        switch (node.getType()) {
-            case SCALAR: {
-                Preconditions.checkState(node.isSetScalar_type());
-                TScalarType scalarType = node.getScalar_type();
-                if (scalarType.getType() == TPrimitiveType.CHAR) {
-                    Preconditions.checkState(scalarType.isSetLen());
-                    type = ScalarType.createCharType(scalarType.getLen());
-                } else if (scalarType.getType() == TPrimitiveType.VARCHAR) {
-                    Preconditions.checkState(scalarType.isSetLen());
-                    type = ScalarType.createVarcharType(scalarType.getLen());
-                } else if (scalarType.getType() == TPrimitiveType.VARBINARY) {
-                    type = ScalarType.createVarbinary(scalarType.getLen());
-                } else if (scalarType.getType() == TPrimitiveType.HLL) {
-                    type = ScalarType.createHllType();
-                } else if (scalarType.getType() == TPrimitiveType.DECIMAL) {
-                    Preconditions.checkState(scalarType.isSetPrecision()
-                            && scalarType.isSetScale());
-                    type = ScalarType.createDecimalV2Type(scalarType.getPrecision(),
-                            scalarType.getScale());
-                } else if (scalarType.getType() == TPrimitiveType.DECIMALV2) {
-                    Preconditions.checkState(scalarType.isSetPrecision()
-                            && scalarType.isSetScale());
-                    type = ScalarType.createDecimalV2Type(scalarType.getPrecision(),
-                            scalarType.getScale());
-                } else if (scalarType.getType() == TPrimitiveType.DECIMAL32 ||
-                        scalarType.getType() == TPrimitiveType.DECIMAL64 ||
-                        scalarType.getType() == TPrimitiveType.DECIMAL128 ||
-                        scalarType.getType() == TPrimitiveType.DECIMAL256) {
-                    Preconditions.checkState(scalarType.isSetPrecision() && scalarType.isSetScale());
-                    type = ScalarType.createDecimalV3Type(
-                            PrimitiveType.fromThrift(scalarType.getType()),
-                            scalarType.getPrecision(),
-                            scalarType.getScale());
-                } else {
-                    type = ScalarType.createType(
-                            PrimitiveType.fromThrift(scalarType.getType()));
-                }
-                ++tmpNodeIdx;
-                break;
-            }
-            case ARRAY: {
-                Preconditions.checkState(tmpNodeIdx + 1 < col.getTypesSize());
-                Pair<Type, Integer> childType = fromThrift(col, tmpNodeIdx + 1);
-                type = new ArrayType(childType.first);
-                tmpNodeIdx = childType.second;
-                break;
-            }
-            case MAP: {
-                Preconditions.checkState(tmpNodeIdx + 2 < col.getTypesSize());
-                Pair<Type, Integer> keyType = fromThrift(col, tmpNodeIdx + 1);
-                Pair<Type, Integer> valueType = fromThrift(col, keyType.second);
-                type = new MapType(keyType.first, valueType.first);
-                tmpNodeIdx = valueType.second;
-                break;
-            }
-            case STRUCT: {
-                Preconditions.checkState(tmpNodeIdx + node.getStruct_fieldsSize() < col.getTypesSize());
-                ArrayList<StructField> structFields = Lists.newArrayList();
-                ++tmpNodeIdx;
-                for (int i = 0; i < node.getStruct_fieldsSize(); ++i) {
-                    TStructField thriftField = node.getStruct_fields().get(i);
-                    String name = thriftField.getName();
-                    String comment = null;
-                    if (thriftField.isSetComment()) {
-                        comment = thriftField.getComment();
-                    }
-                    Pair<Type, Integer> res = fromThrift(col, tmpNodeIdx);
-                    tmpNodeIdx = res.second;
-                    structFields.add(new StructField(name, res.first, comment));
-                }
-                type = new StructType(structFields);
-                break;
-            }
-        }
-        return new Pair<Type, Integer>(type, tmpNodeIdx);
-    }
-
-    public static Type fromProtobuf(PTypeDesc pTypeDesc) {
-        return fromProtobuf(pTypeDesc, 0).first;
-    }
-
-    private static Pair<Type, Integer> fromProtobuf(PTypeDesc pTypeDesc, int nodeIndex) {
-        Preconditions.checkState(pTypeDesc.types.size() > nodeIndex);
-        TTypeNodeType tTypeNodeType = TTypeNodeType.findByValue(pTypeDesc.types.get(nodeIndex).type);
-        switch (tTypeNodeType) {
-            case SCALAR: {
-                PScalarType scalarType = pTypeDesc.types.get(nodeIndex).scalarType;
-                return new Pair<>(ScalarType.createType(scalarType), 1);
-            }
-            case ARRAY: {
-                Preconditions.checkState(pTypeDesc.types.size() > nodeIndex + 1);
-                Pair<Type, Integer> res = fromProtobuf(pTypeDesc, nodeIndex + 1);
-                return new Pair<>(new ArrayType(res.first), 1 + res.second);
-            }
-            case MAP: {
-                Preconditions.checkState(pTypeDesc.types.size() > nodeIndex + 2);
-                Pair<Type, Integer> keyRes = fromProtobuf(pTypeDesc, nodeIndex + 1);
-                int keyStep = keyRes.second;
-
-                Pair<Type, Integer> valueRes = fromProtobuf(pTypeDesc, nodeIndex + 1 + keyStep);
-                int valueStep = valueRes.second;
-                return new Pair<>(new MapType(keyRes.first, valueRes.first), 1 + keyStep + valueStep);
-            }
-            case STRUCT: {
-                Preconditions.checkState(pTypeDesc.types.size() >=
-                        nodeIndex + 1 + pTypeDesc.types.get(nodeIndex).structFields.size());
-                ArrayList<StructField> fields = new ArrayList<>();
-
-                int totalStep = 0;
-                for (int i = 0; i < pTypeDesc.types.get(nodeIndex).structFields.size(); ++i) {
-                    String fieldName = pTypeDesc.types.get(nodeIndex).structFields.get(i).name;
-                    Pair<Type, Integer> res = fromProtobuf(pTypeDesc, nodeIndex + 1 + totalStep);
-                    fields.add(new StructField(fieldName, res.first));
-                    totalStep += res.second;
-                }
-                return new Pair<>(new StructType(fields), 1 + totalStep);
-            }
-        }
-        // NEVER REACH.
-        Preconditions.checkState(false);
-        return null;
-    }
-
-    /**
-     * Utility function to get the primitive type of a thrift type that is known
-     * to be scalar.
-     */
-    public TPrimitiveType getTPrimitiveType(TTypeDesc ttype) {
-        Preconditions.checkState(ttype.getTypesSize() == 1);
-        Preconditions.checkState(ttype.types.get(0).getType() == TTypeNodeType.SCALAR);
-        return ttype.types.get(0).scalar_type.getType();
     }
 
     /**
@@ -1641,8 +1495,6 @@ public abstract class Type implements Cloneable {
         }
     }
 
-
-
     /**
      * @return scalar scale if type is decimal
      * 31 if type is float or double
@@ -1691,7 +1543,8 @@ public abstract class Type implements Cloneable {
         if (type.isArrayType()) {
             return getInnermostType(((ArrayType) type).getItemType());
         }
-        throw new SemanticException("Cannot get innermost type of '" + type + "'");
+
+        return null;
     }
 
     public String canonicalName() {

@@ -36,6 +36,8 @@ import com.starrocks.thrift.TAnalyzeStatusReq;
 import com.starrocks.thrift.TAnalyzeStatusRes;
 import com.starrocks.thrift.TSchemaTableType;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.Collection;
 import java.util.List;
@@ -46,6 +48,7 @@ import java.util.Optional;
  */
 public class AnalyzeStatusSystemTable extends SystemTable {
 
+    private static final Logger LOG = LogManager.getLogger(AnalyzeStatusSystemTable.class);
     private static final String NAME = "analyze_status";
     private static final List<Column> COLUMNS;
 
@@ -117,6 +120,13 @@ public class AnalyzeStatusSystemTable extends SystemTable {
                     continue;
                 }
             } catch (MetaNotFoundException ignored) {
+                continue;
+            } catch (Throwable e) {
+                // TODO: change the exception into an checked exception in MetadataMgr.getTable
+                // The underlying SDK might throw an deep exception with this message
+                if (!(e.getMessage() != null && e.getMessage().contains("table not found"))) {
+                    LOG.warn("failed to get table meta", e);
+                }
                 continue;
             }
 

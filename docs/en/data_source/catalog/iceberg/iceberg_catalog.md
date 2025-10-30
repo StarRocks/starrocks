@@ -107,6 +107,7 @@ CREATE EXTERNAL CATALOG <catalog_name>
 PROPERTIES
 (
     "type" = "iceberg",
+    [SecurityParams],
     MetastoreParams,
     StorageCredentialParams,
     MetadataRelatedParams
@@ -131,6 +132,20 @@ The description of the Iceberg catalog. This parameter is optional.
 #### type
 
 The type of your data source. Set the value to `iceberg`.
+
+#### SecurityParams
+
+Parameter(s) about how StarRocks manages data access to the catalog.
+
+For detailed instructions on managing data access for Iceberg Catalogs, see [Security Setup for Iceberg REST Catalog](./iceberg_rest_security.md).
+
+##### catalog.access.control
+
+The data access control policy. Valid values:
+
+- `native` (Default): The StarRocks built-in data access control system is used.
+- `allowall`: All data access checks are delegated to the Catalog itself.
+- `ranger`: Data access checks are delegated to Apache Ranger.
 
 #### MetastoreParams
 

@@ -351,7 +351,7 @@ public class ExternalOlapTable extends OlapTable {
                 TRangePartitionDesc rangePartitionDesc = tPartitionInfo.getRange_partition_desc();
                 List<Column> columns = new ArrayList<Column>();
                 for (TColumnMeta columnMeta : rangePartitionDesc.getColumns()) {
-                    Type type = Type.fromThrift(columnMeta.getColumnType());
+                    Type type = TypeDeserializer.fromThrift(columnMeta.getColumnType());
                     Column column = new Column(columnMeta.getColumnName(), type);
                     if (columnMeta.isSetKey()) {
                         column.setIsKey(columnMeta.isKey());
@@ -417,7 +417,7 @@ public class ExternalOlapTable extends OlapTable {
         for (TIndexMeta indexMeta : meta.getIndexes()) {
             List<Column> columns = new ArrayList<>();
             for (TColumnMeta columnMeta : indexMeta.getSchema_meta().getColumns()) {
-                Type type = Type.fromThrift(columnMeta.getColumnType());
+                Type type = TypeDeserializer.fromThrift(columnMeta.getColumnType());
                 Column column = new Column(columnMeta.getColumnName(), type, columnMeta.isAllowNull());
                 if (columnMeta.isSetKey()) {
                     column.setIsKey(columnMeta.isKey());

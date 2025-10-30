@@ -3,11 +3,11 @@ displayed_sidebar: docs
 keywords: ['Canshu']
 ---
 
-import BEConfigMethod from '../../_assets/commonMarkdown/BE_config_method.md'
+import BEConfigMethod from '../../_assets/commonMarkdown/BE_config_method.mdx'
 
-import PostBEConfig from '../../_assets/commonMarkdown/BE_dynamic_note.md'
+import PostBEConfig from '../../_assets/commonMarkdown/BE_dynamic_note.mdx'
 
-import StaticBEConfigNote from '../../_assets/commonMarkdown/StaticBE_config_note.md'
+import StaticBEConfigNote from '../../_assets/commonMarkdown/StaticBE_config_note.mdx'
 
 # BE 配置项
 
@@ -2235,6 +2235,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：
 - 引入版本：-
 -->
+
+##### flamegraph_tool_dir
+
+- 默认值：`${STARROCKS_HOME}/bin/flamegraph`
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：火焰图工具的目录，该目录应包含 pprof、stackcollapse-go.pl 和 flamegraph.pl 脚本，用于从性能分析数据生成火焰图。
+- 引入版本：-
 
 ##### enable_prefetch
 
@@ -4606,6 +4615,24 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：存算分离集群下，是否允许 Vertical Compaction 任务在执行时缓存数据到本地磁盘上。`true` 表示启用，`false` 表示不启用。
 - 引入版本：v3.1.7, v3.2.3
 
+##### lake_clear_corrupted_cache_meta
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群下，是否允许自动清理损坏的元数据缓存。
+- 引入版本：v3.3
+
+##### lake_clear_corrupted_cache_data
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群下，是否允许自动清理损坏的数据缓存。
+- 引入版本：v3.4
+
 <!--
 ##### dictionary_cache_refresh_timeout_ms
 
@@ -5301,3 +5328,14 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型: -
 - 是否动态: 否
 - 描述: table metrics中表的最大数量, metrics/接口最多返回max_table_metrics_num个表的metrics。
+
+##### enable_resolve_hostname_to_ip_in_load_error_url
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否动态: 是
+- 描述: `error_urls` Debug 过程中，是否允许 Operator 根据环境需求选择使用 FE 心跳的原始主机名，或强制解析为 IP 地址。
+  - `true`：将主机名解析为 IP 地址。
+  - `false`（默认）：在错误 URL 中保留原始主机名。
+- 引入版本：v4.0.1
