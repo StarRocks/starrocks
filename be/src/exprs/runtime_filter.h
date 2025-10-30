@@ -360,13 +360,13 @@ protected:
 template <typename F>
 concept HashValueForEachFunc = requires(F f, size_t index, uint32_t& hash_value) {
     { f(index, hash_value) }
-    -> std::same_as<void>;
+    ->std::same_as<void>;
 };
 
 template <typename F>
 concept HashValueAndBucketIdForEachFunc = requires(F f, size_t index, uint32_t& hash_value, uint32_t& bucket_id) {
     { f(index, hash_value, bucket_id) }
-    -> std::same_as<void>;
+    ->std::same_as<void>;
 };
 
 struct FullScanIterator {
