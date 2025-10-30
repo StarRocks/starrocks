@@ -115,6 +115,7 @@ import org.apache.iceberg.Schema;
 import org.apache.iceberg.SchemaParser;
 import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.SnapshotRef;
+import org.apache.iceberg.SnapshotUpdate;
 import org.apache.iceberg.SortOrder;
 import org.apache.iceberg.StarRocksIcebergTableScan;
 import org.apache.iceberg.TableScan;
@@ -184,6 +185,8 @@ public class IcebergMetadata implements ConnectorMetadata {
     public static final String FILE_FORMAT = "file_format";
     public static final String COMPRESSION_CODEC = "compression_codec";
     public static final String COMMENT = "comment";
+    public static final String ENGINE_NAME = "engine-name";
+    public static final String ENGINE_VERSION = "engine-version";
     public static final String STARROCKS_USER = "starrocks_user";
 
     private final String catalogName;
@@ -392,14 +395,20 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
 
         DeleteFiles deleteFiles = table.newDelete().deleteFromRowFilter(Expressions.alwaysTrue());
-        deleteFiles.set(STARROCKS_USER, context.getCurrentUserIdentity() != null ?
-                context.getCurrentUserIdentity().getUser() : "None");
+        updateCommitInfo(deleteFiles, context);
         try {
             deleteFiles.commit();
         } catch (UncheckedIOException | ValidationException | CommitFailedException | CommitStateUnknownException e) {
             LOG.error("Failed to truncate iceberg table: {}.{}", dbName, tableName, e);
             throw new StarRocksConnectorException("Failed to truncate iceberg table: %s.%s", dbName, tableName, e);
         }
+    }
+
+    private void updateCommitInfo(SnapshotUpdate update, ConnectContext context) {
+        update.set(ENGINE_NAME, "StarRocks");
+        update.set(ENGINE_VERSION, GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().getFeVersion());
+        update.set(STARROCKS_USER, context.getCurrentUserIdentity() != null ?
+                context.getCurrentUserIdentity().getUser() : "None");
     }
 
     @Override
