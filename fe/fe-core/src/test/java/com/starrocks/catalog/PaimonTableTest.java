@@ -16,8 +16,6 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.starrocks.connector.ColumnTypeConverter;
-import com.starrocks.connector.ConnectorProperties;
-import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.paimon.PaimonMetadata;
 import com.starrocks.qe.ConnectContext;
@@ -129,9 +127,7 @@ public class PaimonTableTest {
         //1.initialize env、db、table
         java.nio.file.Path tmpDir = Files.createTempDirectory("tmp_");
         Catalog catalog = CatalogFactory.createCatalog(CatalogContext.create(new Path(tmpDir.toString())));
-        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
-        PaimonMetadata metadata = new PaimonMetadata("paimon_catalog", new HdfsEnvironment(), catalog,
-                new ConnectorProperties(ConnectorType.PAIMON));
+        PaimonMetadata metadata = new PaimonMetadata("paimon_catalog", new HdfsEnvironment(), catalog);
 
         catalog.createDatabase("test_db", true);
 
@@ -149,13 +145,13 @@ public class PaimonTableTest {
 
         //2.check
         //2.1 check not system table
-        PaimonTable paimonNotSystemTable = (PaimonTable) metadata.getTable(connectContext, "test_db", "test_table");
+        PaimonTable paimonNotSystemTable = (PaimonTable) metadata.getTable("test_db", "test_table");
         org.junit.jupiter.api.Assertions.assertEquals(paimonNotSystemTable.getUUID().split("\\.").length, 4);
         org.junit.jupiter.api.Assertions.assertTrue(
                 paimonNotSystemTable.getUUID().contains("paimon_catalog.test_db.test_table"));
 
         //2.2 check system table
-        PaimonTable paimonSystemTable = (PaimonTable) metadata.getTable(connectContext, "test_db", "test_table$snapshots");
+        PaimonTable paimonSystemTable = (PaimonTable) metadata.getTable("test_db", "test_table$snapshots");
         org.junit.jupiter.api.Assertions.assertEquals(paimonSystemTable.getUUID().split("\\.").length, 4);
         org.junit.jupiter.api.Assertions.assertTrue(
                 paimonSystemTable.getUUID().contains("paimon_catalog.test_db.test_table$snapshots"));
