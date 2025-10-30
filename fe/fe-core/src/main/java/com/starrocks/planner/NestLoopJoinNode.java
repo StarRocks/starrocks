@@ -20,6 +20,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
 import com.starrocks.sql.ast.expression.JoinOperator;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.thrift.TNestLoopJoinNode;
@@ -119,7 +120,7 @@ public class NestLoopJoinNode extends JoinNode implements RuntimeFilterBuildNode
 
         if (CollectionUtils.isNotEmpty(otherJoinConjuncts)) {
             for (Expr e : otherJoinConjuncts) {
-                msg.nestloop_join_node.addToJoin_conjuncts(e.treeToThrift());
+                msg.nestloop_join_node.addToJoin_conjuncts(ExprToThriftVisitor.treeToThrift(e));
             }
             String sqlJoinPredicate = otherJoinConjuncts.stream().map(Expr::toSql).collect(Collectors.joining(","));
             msg.nestloop_join_node.setSql_join_conjuncts(sqlJoinPredicate);
@@ -136,7 +137,7 @@ public class NestLoopJoinNode extends JoinNode implements RuntimeFilterBuildNode
         }
         if (commonSlotMap != null) {
             commonSlotMap.forEach((key, value) ->
-                    msg.nestloop_join_node.putToCommon_slot_map(key.asInt(), value.treeToThrift()));
+                    msg.nestloop_join_node.putToCommon_slot_map(key.asInt(), ExprToThriftVisitor.treeToThrift(value)));
         }
     }
 

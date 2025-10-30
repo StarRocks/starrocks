@@ -73,7 +73,7 @@ public class ExprToThriftVisitorTest {
     }
 
     private static TExprNode convert(Expr expr) {
-        TExpr thrift = expr.treeToThrift();
+        TExpr thrift = ExprToThriftVisitor.treeToThrift(expr);
         Assertions.assertFalse(thrift.getNodes().isEmpty(), "No nodes produced");
         return thrift.getNodes().get(0);
     }

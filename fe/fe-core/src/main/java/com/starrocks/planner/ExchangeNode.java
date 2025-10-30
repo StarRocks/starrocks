@@ -40,6 +40,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.operator.TopNType;
@@ -201,7 +202,7 @@ public class ExchangeNode extends PlanNode {
         }
         if (mergeInfo != null) {
             TSortInfo sortInfo = new TSortInfo(
-                    Expr.treesToThrift(mergeInfo.getOrderingExprs()), mergeInfo.getIsAscOrder(),
+                    ExprToThriftVisitor.treesToThrift(mergeInfo.getOrderingExprs()), mergeInfo.getIsAscOrder(),
                     mergeInfo.getNullsFirst());
             msg.exchange_node.setSort_info(sortInfo);
             msg.exchange_node.setOffset(offset);

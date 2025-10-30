@@ -21,6 +21,7 @@ import com.starrocks.planner.FragmentNormalizer;
 import com.starrocks.planner.PlanNode;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
 import com.starrocks.sql.optimizer.operator.stream.IMTInfo;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TExpr;
@@ -85,7 +86,9 @@ public class StreamAggNode extends PlanNode {
         msg.node_type = TPlanNodeType.STREAM_AGG_NODE;
 
         List<TExpr> aggregateFunctions =
-                aggInfo.getMaterializedAggregateExprs().stream().map(Expr::treeToThrift).collect(Collectors.toList());
+                aggInfo.getMaterializedAggregateExprs().stream()
+                        .map(ExprToThriftVisitor::treeToThrift)
+                        .collect(Collectors.toList());
         msg.stream_agg_node = new TStreamAggregationNode();
         msg.stream_agg_node.setAggregate_functions(aggregateFunctions);
 
@@ -97,7 +100,7 @@ public class StreamAggNode extends PlanNode {
         // Grouping expression
         List<Expr> groupingExprs = aggInfo.getGroupingExprs();
         if (CollectionUtils.isNotEmpty(groupingExprs)) {
-            msg.stream_agg_node.setGrouping_exprs(Expr.treesToThrift(groupingExprs));
+            msg.stream_agg_node.setGrouping_exprs(ExprToThriftVisitor.treesToThrift(groupingExprs));
         }
         String groupingStr = groupingExprs.stream().map(Expr::toSql).collect(Collectors.joining(", "));
         msg.stream_agg_node.setSql_grouping_keys(groupingStr);
