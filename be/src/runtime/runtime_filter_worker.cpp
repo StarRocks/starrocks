@@ -20,14 +20,10 @@
 #include <random>
 #include <utility>
 
-#include "column/bytes.h"
 #include "common/config.h"
 #include "exec/hash_join_node.h"
 #include "exec/pipeline/query_context.h"
-#include "exprs/agg_in_runtime_filter.h"
-#include "exprs/runtime_filter.h"
 #include "exprs/runtime_filter_bank.h"
-#include "gen_cpp/PlanNodes_types.h"
 #include "gen_cpp/Types_types.h" // for TUniqueId
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/current_thread.h"
@@ -37,9 +33,7 @@
 #include "runtime/runtime_state.h"
 #include "service/backend_options.h"
 #include "util/brpc_stub_cache.h"
-#include "util/defer_op.h"
 #include "util/internal_service_recoverable_stub.h"
-#include "util/metrics.h"
 #include "util/thread.h"
 #include "util/time.h"
 #include "util/time_guard.h"
@@ -931,7 +925,8 @@ static inline void receive_total_runtime_filter_pipeline(PTransmitRuntimeFilterP
     }
 }
 
-void RuntimeFilterWorker::_receive_total_runtime_filter(PTransmitRuntimeFilterParams& request) {
+void RuntimeFilterWorker::_receive_total_runtime_filter(PTransmitRuntimeFilterParams& request, int timeout_ms,
+                                                        int64_t rpc_http_min_size) {
     auto [query_ctx, mem_tracker] = get_mem_tracker(request.query_id(), request.is_pipeline());
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker.get());
     // deserialize once, and all fragment instance shared that runtime filter.
@@ -942,6 +937,7 @@ void RuntimeFilterWorker::_receive_total_runtime_filter(PTransmitRuntimeFilterPa
     if (rf == nullptr) {
         return;
     }
+
     if (rf->type() != RuntimeFilterSerializeType::IN_FILTER) {
         rf->get_membership_filter()->set_global();
     }
@@ -1001,8 +997,7 @@ void RuntimeFilterWorker::_receive_total_runtime_filter(PTransmitRuntimeFilterPa
         closure->debug_info = "forward total runtime filter";
         closure->result.set_filter_id(request.filter_id());
         closure->ref();
-        send_rpc_runtime_filter(addr, closure, config::send_rpc_runtime_filter_timeout_ms,
-                                config::send_runtime_filter_via_http_rpc_min_size, request);
+        send_rpc_runtime_filter(addr, closure, timeout_ms, rpc_http_min_size, request);
     }
 }
 
@@ -1031,7 +1026,7 @@ void RuntimeFilterWorker::_process_send_broadcast_runtime_filter_event(
     }
     auto& last_dest = destinations[last_dest_idx];
     if (last_dest.address == local) {
-        _deliver_broadcast_runtime_filter_local(params, last_dest);
+        _deliver_broadcast_runtime_filter_local(params, last_dest, timeout_ms, rpc_http_min_size);
         destinations.resize(last_dest_idx);
     }
 
@@ -1121,7 +1116,8 @@ void RuntimeFilterWorker::_deliver_broadcast_runtime_filter_passthrough(
 }
 
 void RuntimeFilterWorker::_deliver_broadcast_runtime_filter_local(PTransmitRuntimeFilterParams& param,
-                                                                  const TRuntimeFilterDestination& local_dest) {
+                                                                  const TRuntimeFilterDestination& local_dest,
+                                                                  int timeout_ms, int64_t rpc_http_min_size) {
     param.clear_forward_targets();
     param.clear_probe_finst_ids();
     for (auto& id : local_dest.finstance_ids) {
@@ -1130,7 +1126,7 @@ void RuntimeFilterWorker::_deliver_broadcast_runtime_filter_local(PTransmitRunti
         finst_id->set_lo(id.lo);
     }
     _exec_env->add_rf_event({param.query_id(), param.filter_id(), "", "DELIVER_BROADCAST_RF_LOCAL"});
-    _receive_total_runtime_filter(param);
+    _receive_total_runtime_filter(param, timeout_ms, rpc_http_min_size);
 }
 
 void RuntimeFilterWorker::_deliver_part_runtime_filter(std::vector<TNetworkAddress>&& transmit_addrs,
@@ -1163,7 +1159,8 @@ void RuntimeFilterWorker::execute() {
         switch (ev.type) {
         case RECEIVE_TOTAL_RF: {
             _metrics->update_rf_bytes(ev.type, -ev.transmit_rf_request.data().size());
-            _receive_total_runtime_filter(ev.transmit_rf_request);
+            _receive_total_runtime_filter(ev.transmit_rf_request, ev.transmit_timeout_ms,
+                                          ev.transmit_via_http_min_size);
             break;
         }
 
