@@ -36,12 +36,21 @@ import com.starrocks.sql.ast.ListPartitionDesc;
 import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.PartitionSpec;
+import org.apache.iceberg.Partitioning;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.SortField;
 import org.apache.iceberg.SortOrder;
+import org.apache.iceberg.StructLike;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.types.Types;
+<<<<<<< HEAD
+=======
+import org.apache.iceberg.util.StructProjection;
+import org.junit.jupiter.api.Assertions;
+>>>>>>> f380750d00 ([Enhancement] Support collect statistics for iceberg table with partition evolution (#64551))
 import org.junit.jupiter.api.Test;
+import org.mockito.MockedStatic;
+import org.mockito.Mockito;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -60,6 +69,8 @@ import static org.apache.iceberg.TableProperties.PARQUET_COMPRESSION;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 public class IcebergApiConverterTest {
 
@@ -153,7 +164,7 @@ public class IcebergApiConverterTest {
     }
 
     @Test
-    public void testIdentityPartitionNames() {
+    public void testIdentityPartitionNames() throws Exception {
         List<Types.NestedField> fields = Lists.newArrayList();
         fields.add(Types.NestedField.optional(1, "id", new Types.IntegerType()));
         fields.add(Types.NestedField.optional(2, "dt", new Types.DateType()));
@@ -162,19 +173,36 @@ public class IcebergApiConverterTest {
         Schema schema = new Schema(fields);
         PartitionSpec.Builder builder = PartitionSpec.builderFor(schema);
         PartitionSpec partitionSpec = builder.identity("dt").build();
-        String partitionName = convertIcebergPartitionToPartitionName(partitionSpec, DataFiles.data(partitionSpec,
-                "dt=2022-08-01"));
-        assertEquals("dt=2022-08-01", partitionName);
+        org.apache.iceberg.Table table = mock(org.apache.iceberg.Table.class);
+        when(table.spec()).thenReturn(partitionSpec);
+        when(table.schema()).thenReturn(schema);
+        try (MockedStatic<Partitioning> mockedStatic = Mockito.mockStatic(Partitioning.class)) {
+            mockedStatic.when(() -> Partitioning.partitionType(table)).thenReturn(partitionSpec.partitionType());
 
+            StructLike partitionData = DataFiles.data(partitionSpec, "dt=2022-08-01");
+            StructProjection partition = StructProjection.create(schema, schema);
+            partition.wrap(partitionData);
+            String partitionName = convertIcebergPartitionToPartitionName(table, partitionSpec, partition);
+            assertEquals("dt=2022-08-01", partitionName);
+        }
+
+        // Second test case
         builder = PartitionSpec.builderFor(schema);
         partitionSpec = builder.identity("id").identity("dt").build();
-        partitionName = convertIcebergPartitionToPartitionName(partitionSpec, DataFiles.data(partitionSpec,
-                "id=1/dt=2022-08-01"));
-        assertEquals("id=1/dt=2022-08-01", partitionName);
+        when(table.spec()).thenReturn(partitionSpec);
+        try (MockedStatic<Partitioning> mockedStatic = Mockito.mockStatic(Partitioning.class)) {
+            mockedStatic.when(() -> Partitioning.partitionType(table)).thenReturn(partitionSpec.partitionType());
+
+            StructLike partitionData = DataFiles.data(partitionSpec, "id=1/dt=2022-08-01");
+            StructProjection partition = StructProjection.create(schema, schema);
+            partition.wrap(partitionData);
+            String partitionName = convertIcebergPartitionToPartitionName(table, partitionSpec, partition);
+            assertEquals("id=1/dt=2022-08-01", partitionName);
+        }
     }
 
     @Test
-    public void testNonIdentityPartitionNames() {
+    public void testNonIdentityPartitionNames() throws Exception {
         List<Types.NestedField> fields = Lists.newArrayList();
         fields.add(Types.NestedField.optional(1, "id", new Types.IntegerType()));
         fields.add(Types.NestedField.optional(2, "ts", Types.TimestampType.withoutZone()));
@@ -183,15 +211,34 @@ public class IcebergApiConverterTest {
         Schema schema = new Schema(fields);
         PartitionSpec.Builder builder = PartitionSpec.builderFor(schema);
         PartitionSpec partitionSpec = builder.hour("ts").build();
-        String partitionName = convertIcebergPartitionToPartitionName(partitionSpec, DataFiles.data(partitionSpec,
-                "ts_hour=62255"));
-        assertEquals("ts_hour=1977-02-06-23", partitionName);
+        org.apache.iceberg.Table table = mock(org.apache.iceberg.Table.class);
+        when(table.spec()).thenReturn(partitionSpec);
+        when(table.schema()).thenReturn(schema);
 
+        try (MockedStatic<Partitioning> mockedStatic = Mockito.mockStatic(Partitioning.class)) {
+            mockedStatic.when(() -> Partitioning.partitionType(table)).thenReturn(partitionSpec.partitionType());
+
+            StructLike partitionData = DataFiles.data(partitionSpec, "ts_hour=62255");
+            StructProjection partition = StructProjection.create(schema, schema);
+            partition.wrap(partitionData);
+            String partitionName = convertIcebergPartitionToPartitionName(table, partitionSpec, partition);
+            assertEquals("ts_hour=1977-02-06-23", partitionName);
+        }
+
+        // Second test case
         builder = PartitionSpec.builderFor(schema);
         partitionSpec = builder.hour("ts").truncate("data", 2).build();
-        partitionName = convertIcebergPartitionToPartitionName(partitionSpec, DataFiles.data(partitionSpec,
-                "ts_hour=365/data_trunc=xy"));
-        assertEquals("ts_hour=1970-01-16-05/data_trunc=xy", partitionName);
+        when(table.spec()).thenReturn(partitionSpec);
+
+        try (MockedStatic<Partitioning> mockedStatic = Mockito.mockStatic(Partitioning.class)) {
+            mockedStatic.when(() -> Partitioning.partitionType(table)).thenReturn(partitionSpec.partitionType());
+
+            StructLike partitionData = DataFiles.data(partitionSpec, "ts_hour=365/data_trunc=xy");
+            StructProjection partition = StructProjection.create(schema, schema);
+            partition.wrap(partitionData);
+            String partitionName = convertIcebergPartitionToPartitionName(table, partitionSpec, partition);
+            assertEquals("ts_hour=1970-01-16-05/data_trunc=xy", partitionName);
+        }
     }
 
     @Test
