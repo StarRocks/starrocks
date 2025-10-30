@@ -15,6 +15,7 @@
 package com.starrocks.sql.ast.expression;
 
 import com.google.common.base.Preconditions;
+import com.starrocks.catalog.TypeSerializer;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.common.ErrorType;
@@ -240,7 +241,7 @@ public class ExprToThriftVisitor implements AstVisitorExtendInterface<Void, TExp
         msg.setOpcode(node.getOpcode());
         msg.setOutput_column(node.getOutputColumn());
         if (node.getChild(0).getType().isComplexType()) {
-            msg.setChild_type_desc(node.getChild(0).getType().toThrift());
+            msg.setChild_type_desc(TypeSerializer.toThrift(node.getChild(0).getType()));
         } else {
             msg.setChild_type(node.getChild(0).getType().getPrimitiveType().toThrift());
         }
@@ -279,7 +280,7 @@ public class ExprToThriftVisitor implements AstVisitorExtendInterface<Void, TExp
         msg.setOpcode(node.getOpcode());
         msg.setVector_opcode(node.getVectorOpcode());
         if (node.getChild(0).getType().isComplexType()) {
-            msg.setChild_type_desc(node.getChild(0).getType().toThrift());
+            msg.setChild_type_desc(TypeSerializer.toThrift(node.getChild(0).getType()));
         } else {
             msg.setChild_type(node.getChild(0).getType().getPrimitiveType().toThrift());
         }
@@ -314,7 +315,7 @@ public class ExprToThriftVisitor implements AstVisitorExtendInterface<Void, TExp
         msg.setOpcode(node.getOpcode());
         msg.setVector_opcode(node.getVectorOpcode());
         if (node.getChild(0).getType().isComplexType()) {
-            msg.setChild_type_desc(node.getChild(0).getType().toThrift());
+            msg.setChild_type_desc(TypeSerializer.toThrift(node.getChild(0).getType()));
         } else {
             msg.setChild_type(node.getChild(0).getType().getPrimitiveType().toThrift());
         }

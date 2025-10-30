@@ -181,6 +181,9 @@ public class TypeDef implements ParseNode {
 
     private void analyzeArrayType(ArrayType type) {
         Type baseType = Type.getInnermostType(type);
+        if (baseType == null) {
+            throw new SemanticException("Cannot get innermost type of '" + type + "'");
+        }
         analyze(baseType);
         if (baseType.isHllType() || baseType.isBitmapType() || baseType.isPseudoType() || baseType.isPercentile()) {
             throw new SemanticException("Invalid data type: " + type.toSql());

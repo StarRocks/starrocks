@@ -20,14 +20,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.google.gson.JsonArray;
-import com.google.gson.JsonDeserializationContext;
-import com.google.gson.JsonDeserializer;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParseException;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.sql.analyzer.SemanticException;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -293,26 +286,6 @@ public class StructType extends Type {
             structFields.add(field.clone());
         }
         return new StructType(structFields);
-    }
-
-    // Todo: remove it after remove selectedFields
-    public static class StructTypeDeserializer implements JsonDeserializer<StructType> {
-        @Override
-        public StructType deserialize(JsonElement jsonElement, java.lang.reflect.Type type,
-                                      JsonDeserializationContext jsonDeserializationContext)
-                throws JsonParseException {
-            JsonObject dumpJsonObject = jsonElement.getAsJsonObject();
-            boolean isNamed = false;
-            if (dumpJsonObject.get("named") != null) {
-                isNamed = dumpJsonObject.get("named").getAsBoolean();
-            }
-            JsonArray fields = dumpJsonObject.getAsJsonArray("fields");
-            ArrayList<StructField> structFields = new ArrayList<>(fields.size());
-            for (JsonElement field : fields) {
-                structFields.add(GsonUtils.GSON.fromJson(field, StructField.class));
-            }
-            return new StructType(structFields, isNamed);
-        }
     }
 
     public String toMysqlDataTypeString() {

@@ -17,12 +17,13 @@ package com.starrocks.planner;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Type;
-import com.starrocks.thrift.TRawValuesNode;
+import com.starrocks.catalog.TypeSerializer;
 import com.starrocks.thrift.TExplainLevel;
-import com.starrocks.thrift.TPlanNode;
-import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TNormalPlanNode;
 import com.starrocks.thrift.TNormalRawValuesNode;
+import com.starrocks.thrift.TPlanNode;
+import com.starrocks.thrift.TPlanNodeType;
+import com.starrocks.thrift.TRawValuesNode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -93,7 +94,7 @@ public class RawValuesNode extends PlanNode {
         msg.node_type = TPlanNodeType.RAW_VALUES_NODE;
         msg.raw_values_node = new TRawValuesNode();
         msg.raw_values_node.tuple_id = tupleIds.get(0).asInt();
-        msg.raw_values_node.constant_type = constantType.toThrift();
+        msg.raw_values_node.constant_type = TypeSerializer.toThrift(constantType);
         PrimitiveType primitiveType = constantType.getPrimitiveType();
 
         if (primitiveType.isIntegerType()) {

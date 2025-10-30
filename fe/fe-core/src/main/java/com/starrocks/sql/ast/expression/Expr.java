@@ -45,6 +45,7 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
+import com.starrocks.catalog.TypeSerializer;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.TreeNode;
@@ -640,7 +641,7 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         Preconditions.checkState(java.util.Objects.equals(type, AnalyzerUtils.replaceNullType2Boolean(type)),
                 "NULL_TYPE is illegal in thrift stage");
 
-        msg.type = type.toThrift();
+        msg.type = TypeSerializer.toThrift(type);
         msg.num_children = children.size();
         msg.setHas_nullable_child(hasNullableChild());
         msg.setIs_nullable(isNullable());

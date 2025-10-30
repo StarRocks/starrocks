@@ -9435,10 +9435,11 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             }
             return ScalarType.createUnifiedDecimalType(10, 0);
         } else if (context.DECIMAL32() != null || context.DECIMAL64() != null || context.DECIMAL128() != null) {
-            try {
-                ScalarType.checkEnableDecimalV3();
-            } catch (AnalysisException e) {
-                throw new SemanticException(e.getMessage());
+            if (!Config.enable_decimal_v3) {
+                throw new SemanticException("Config field enable_decimal_v3 is false now, " +
+                        "turn it on before decimal32/64/128/256 are used, " +
+                        "execute cmd 'admin set frontend config (\"enable_decimal_v3\" = \"true\")' " +
+                        "on every FE server");
             }
             final PrimitiveType primitiveType = PrimitiveType.valueOf(context.children.get(0).getText().toUpperCase());
             if (precision != null) {

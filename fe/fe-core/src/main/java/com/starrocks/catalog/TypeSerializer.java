@@ -22,12 +22,21 @@ import com.starrocks.thrift.TTypeDesc;
 import com.starrocks.thrift.TTypeNode;
 import com.starrocks.thrift.TTypeNodeType;
 
+import java.util.ArrayList;
+
 /**
  * Utility class for serializing Type objects to Thrift format.
  * This class centralizes all type serialization logic.
  * For deserialization, see {@link TypeDeserializer}.
  */
 public class TypeSerializer {
+
+    public static TTypeDesc toThrift(Type type) {
+        TTypeDesc container = new TTypeDesc();
+        container.setTypes(new ArrayList<>());
+        TypeSerializer.toThrift(type, container);
+        return container;
+    }
 
     /**
      * Converts a Type to its Thrift representation.

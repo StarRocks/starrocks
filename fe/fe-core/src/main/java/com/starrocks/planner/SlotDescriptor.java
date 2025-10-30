@@ -42,6 +42,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnStats;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
+import com.starrocks.catalog.TypeSerializer;
 import com.starrocks.common.FeConstants;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.Expr;
@@ -264,10 +265,10 @@ public class SlotDescriptor {
         tSlotDescriptor.setId(id.asInt());
         tSlotDescriptor.setParent(parent.getId().asInt());
         if (originType != null) {
-            tSlotDescriptor.setSlotType(originType.toThrift());
+            tSlotDescriptor.setSlotType(TypeSerializer.toThrift(originType));
         } else {
             type = type.isNull() ? ScalarType.BOOLEAN : type;
-            tSlotDescriptor.setSlotType(type.toThrift());
+            tSlotDescriptor.setSlotType(TypeSerializer.toThrift(type));
             if (column != null) {
                 LOG.debug("column id:{}, column unique id:{}",
                         column.getColumnId(), column.getUniqueId());

@@ -48,8 +48,10 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.thrift.TFunction;
 import com.starrocks.thrift.TFunctionBinaryType;
+import com.starrocks.thrift.TTypeDesc;
 import org.apache.commons.lang.ArrayUtils;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -496,6 +498,7 @@ public class Function implements Writable {
         }
         return true;
     }
+
     /**
      * Returns true if 'this' is a supertype of 'other'. Each argument in other must
      * be implicitly castable to the matching argument in this.
@@ -743,8 +746,14 @@ public class Function implements Writable {
         if (location != null) {
             fn.setHdfs_location(location.toString());
         }
-        fn.setArg_types(Type.toThrift(argTypes));
-        fn.setRet_type(getReturnType().toThrift());
+
+        ArrayList<TTypeDesc> result = Lists.newArrayList();
+        for (Type t : argTypes) {
+            result.add(TypeSerializer.toThrift(t));
+        }
+        fn.setArg_types(result);
+
+        fn.setRet_type(TypeSerializer.toThrift(getReturnType()));
         fn.setHas_var_args(hasVarArgs);
         fn.setId(id);
         fn.setFid(functionId);
@@ -904,7 +913,6 @@ public class Function implements Writable {
         }
         return obj != null && obj.getClass() == this.getClass() && isIdentical((Function) obj);
     }
-
 
     // just shallow copy
     public Function copy() {
