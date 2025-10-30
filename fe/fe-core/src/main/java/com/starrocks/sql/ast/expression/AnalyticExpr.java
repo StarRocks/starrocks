@@ -417,7 +417,7 @@ public class AnalyticExpr extends Expr {
         // all children information is contained in the group of fnCall, partitionExprs, orderByElements and window,
         // so need to calculate super's hashCode.
         // field window is correlated with field resetWindow, so no need to add resetWindow when calculating hashCode.
-        return Objects.hash(type, opcode, fnCall, partitionExprs, orderByElements, window, partitionHint, skewHint,
+        return Objects.hash(type, fnCall, partitionExprs, orderByElements, window, partitionHint, skewHint,
                 useHashBasedPartition, isSkewed);
     }
 }

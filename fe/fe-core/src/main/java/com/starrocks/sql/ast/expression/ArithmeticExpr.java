@@ -49,7 +49,6 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.thrift.TExprOpcode;
 
 import java.util.Arrays;
 import java.util.Map;
@@ -439,7 +438,7 @@ public class ArithmeticExpr extends Expr {
         if (!super.equalsWithoutChild(obj)) {
             return false;
         }
-        return ((ArithmeticExpr) obj).opcode == opcode;
+        return op == ((ArithmeticExpr) obj).op;
     }
 
     public static Type getCommonType(Type t1, Type t2) {
@@ -525,35 +524,31 @@ public class ArithmeticExpr extends Expr {
     }
 
     public enum Operator {
-        MULTIPLY("*", "multiply", OperatorPosition.BINARY_INFIX, TExprOpcode.MULTIPLY, true),
-        DIVIDE("/", "divide", OperatorPosition.BINARY_INFIX, TExprOpcode.DIVIDE, true),
-        MOD("%", "mod", OperatorPosition.BINARY_INFIX, TExprOpcode.MOD, false),
-        INT_DIVIDE("DIV", "int_divide", OperatorPosition.BINARY_INFIX, TExprOpcode.INT_DIVIDE, true),
-        ADD("+", "add", OperatorPosition.BINARY_INFIX, TExprOpcode.ADD, true),
-        SUBTRACT("-", "subtract", OperatorPosition.BINARY_INFIX, TExprOpcode.SUBTRACT, true),
-        BITAND("&", "bitand", OperatorPosition.BINARY_INFIX, TExprOpcode.BITAND, false),
-        BITOR("|", "bitor", OperatorPosition.BINARY_INFIX, TExprOpcode.BITOR, false),
-        BITXOR("^", "bitxor", OperatorPosition.BINARY_INFIX, TExprOpcode.BITXOR, false),
-        BITNOT("~", "bitnot", OperatorPosition.UNARY_PREFIX, TExprOpcode.BITNOT, false),
-        FACTORIAL("!", "factorial", OperatorPosition.UNARY_POSTFIX, TExprOpcode.FACTORIAL, true),
-        BIT_SHIFT_LEFT("BITSHIFTLEFT", "bitShiftLeft", OperatorPosition.BINARY_INFIX, TExprOpcode.BIT_SHIFT_LEFT,
-                false),
-        BIT_SHIFT_RIGHT("BITSHIFTRIGHT", "bitShiftRight", OperatorPosition.BINARY_INFIX, TExprOpcode.BIT_SHIFT_RIGHT,
-                false),
+        MULTIPLY("*", "multiply", OperatorPosition.BINARY_INFIX, true),
+        DIVIDE("/", "divide", OperatorPosition.BINARY_INFIX, true),
+        MOD("%", "mod", OperatorPosition.BINARY_INFIX, false),
+        INT_DIVIDE("DIV", "int_divide", OperatorPosition.BINARY_INFIX, true),
+        ADD("+", "add", OperatorPosition.BINARY_INFIX, true),
+        SUBTRACT("-", "subtract", OperatorPosition.BINARY_INFIX, true),
+        BITAND("&", "bitand", OperatorPosition.BINARY_INFIX, false),
+        BITOR("|", "bitor", OperatorPosition.BINARY_INFIX, false),
+        BITXOR("^", "bitxor", OperatorPosition.BINARY_INFIX, false),
+        BITNOT("~", "bitnot", OperatorPosition.UNARY_PREFIX, false),
+        FACTORIAL("!", "factorial", OperatorPosition.UNARY_POSTFIX, true),
+        BIT_SHIFT_LEFT("BITSHIFTLEFT", "bitShiftLeft", OperatorPosition.BINARY_INFIX, false),
+        BIT_SHIFT_RIGHT("BITSHIFTRIGHT", "bitShiftRight", OperatorPosition.BINARY_INFIX, false),
         BIT_SHIFT_RIGHT_LOGICAL("BITSHIFTRIGHTLOGICAL", "bitShiftRightLogical", OperatorPosition.BINARY_INFIX,
-                TExprOpcode.BIT_SHIFT_RIGHT_LOGICAL, false);
+                false);
 
         private final String description;
         private final String name;
         private final OperatorPosition pos;
-        private final TExprOpcode opcode;
         private final boolean monotonic;
 
-        Operator(String description, String name, OperatorPosition pos, TExprOpcode opcode, boolean monotonic) {
+        Operator(String description, String name, OperatorPosition pos, boolean monotonic) {
             this.description = description;
             this.name = name;
             this.pos = pos;
-            this.opcode = opcode;
             this.monotonic = monotonic;
         }
 
@@ -568,10 +563,6 @@ public class ArithmeticExpr extends Expr {
 
         public OperatorPosition getPos() {
             return pos;
-        }
-
-        public TExprOpcode getOpcode() {
-            return opcode;
         }
 
         public boolean isBinary() {

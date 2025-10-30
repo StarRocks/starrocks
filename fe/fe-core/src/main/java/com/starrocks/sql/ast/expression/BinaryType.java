@@ -15,18 +15,17 @@
 package com.starrocks.sql.ast.expression;
 
 import com.google.common.collect.ImmutableMap;
-import com.starrocks.thrift.TExprOpcode;
 
 import java.util.Map;
 
 public enum BinaryType {
-    EQ("=", "eq", TExprOpcode.EQ, false),
-    NE("!=", "ne", TExprOpcode.NE, false),
-    LE("<=", "le", TExprOpcode.LE, true),
-    GE(">=", "ge", TExprOpcode.GE, true),
-    LT("<", "lt", TExprOpcode.LT, true),
-    GT(">", "gt", TExprOpcode.GT, true),
-    EQ_FOR_NULL("<=>", "eq_for_null", TExprOpcode.EQ_FOR_NULL, false);
+    EQ("=", "eq", false),
+    NE("!=", "ne", false),
+    LE("<=", "le", true),
+    GE(">=", "ge", true),
+    LT("<", "lt", true),
+    GT(">", "gt", true),
+    EQ_FOR_NULL("<=>", "eq_for_null", false);
 
     private static final Map<BinaryType, BinaryType> BINARY_COMMUTATIVE_MAP =
             ImmutableMap.<BinaryType, BinaryType>builder()
@@ -51,16 +50,13 @@ public enum BinaryType {
 
     private final String type;
     private final String name;
-    private final TExprOpcode opcode;
     private final boolean monotonic;
 
     BinaryType(String description,
                String name,
-               TExprOpcode opcode,
                boolean monotonic) {
         this.type = description;
         this.name = name;
-        this.opcode = opcode;
         this.monotonic = monotonic;
     }
 
@@ -71,10 +67,6 @@ public enum BinaryType {
 
     public String getName() {
         return name;
-    }
-
-    public TExprOpcode getOpcode() {
-        return opcode;
     }
 
     public boolean isEqual() {

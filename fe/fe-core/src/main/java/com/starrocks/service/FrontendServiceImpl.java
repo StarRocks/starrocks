@@ -65,6 +65,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.catalog.TypeSerializer;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.catalog.system.information.AnalyzeStatusSystemTable;
 import com.starrocks.catalog.system.information.ColumnStatsUsageSystemTable;
@@ -888,7 +889,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         for (Column column : table.getBaseSchema()) {
             final TColumnDesc desc =
-                    new TColumnDesc(column.getName(), column.getPrimitiveType().toThrift());
+                    new TColumnDesc(column.getName(), TypeSerializer.toThrift(column.getPrimitiveType()));
             final Integer precision = column.getType().getPrecision();
             if (precision != null) {
                 desc.setColumnPrecision(precision);

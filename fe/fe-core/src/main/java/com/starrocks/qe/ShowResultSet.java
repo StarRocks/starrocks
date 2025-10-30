@@ -36,9 +36,10 @@ package com.starrocks.qe;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
+import com.starrocks.catalog.TypeDeserializer;
+import com.starrocks.catalog.TypeSerializer;
 import com.starrocks.thrift.TColumnDefinition;
 import com.starrocks.thrift.TColumnType;
 import com.starrocks.thrift.TShowResultSet;
@@ -72,7 +73,7 @@ public class ShowResultSet {
             TColumnDefinition definition = (TColumnDefinition) resultSet.getMetaData().getColumns().get(i);
             columns.add(new Column(
                     definition.getColumnName(),
-                    ScalarType.createType(PrimitiveType.fromThrift(definition.getColumnType().getType())))
+                    ScalarType.createType(TypeDeserializer.fromThrift(definition.getColumnType().getType())))
             );
         }
         this.metaData = new ShowResultSetMetaData(columns);
@@ -144,7 +145,7 @@ public class ShowResultSet {
         if (type instanceof ScalarType) {
             ScalarType scalarType = (ScalarType) type;
             TColumnType thrift = new TColumnType();
-            thrift.type = scalarType.getPrimitiveType().toThrift();
+            thrift.type = TypeSerializer.toThrift(scalarType.getPrimitiveType());
             if (scalarType.getPrimitiveType().isVariableLengthType()) {
                 thrift.setLen(scalarType.getLength());
             }
