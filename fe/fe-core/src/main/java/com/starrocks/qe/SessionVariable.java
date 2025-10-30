@@ -663,6 +663,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_PIPELINE_EVENT_SCHEDULER = "enable_pipeline_event_scheduler";
 
+    public static final String ENABLE_SPLIT_TOPN_AGG = "enable_split_topn_agg";
+
     // Flag to control whether to proxy follower's query statement to leader/follower.
     public enum FollowerQueryForwardMode {
         DEFAULT,    // proxy queries by the follower's replay progress (default)
@@ -1318,6 +1320,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = CBO_JSON_V2_DICT_OPT)
     private boolean cboJSONV2DictOpt = true;
+
+    @VarAttr(name = ENABLE_SPLIT_TOPN_AGG)
+    private boolean enableSplitTopNAgg = true;
 
     /*
      * the parallel exec instance num for one Fragment in one BE
@@ -2015,6 +2020,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_DROP_TABLE_CHECK_MV_DEPENDENCY)
     public boolean enableDropTableCheckMvDependency = false;
+
+    public boolean isEnableSplitTopNAgg() {
+        return enableSplitTopNAgg;
+    }
 
     public boolean isEnableDesensitizeExplain() {
         return enableDesensitizeExplain;

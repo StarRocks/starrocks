@@ -3193,4 +3193,23 @@ public class AggregateTest extends PlanTestBase {
             FeConstants.runningUnitTest = false;
         }
     }
+
+    @Test
+    public void testSplitTopNAgg() throws Exception {
+        String plan = getFragmentPlan("SELECT L_ORDERKEY, L_PARTKEY, COUNT(*) AS c, SUM(L_EXTENDEDPRICE), AVG(L_QUANTITY) "
+                + "FROM lineitem_partition "
+                + "WHERE L_LINENUMBER <> 123 "
+                + "GROUP BY L_ORDERKEY, L_PARTKEY "
+                + "ORDER BY c DESC LIMIT 10;");
+
+        assertContains(plan, "  4:AGGREGATE (update finalize)\n"
+                + "  |  output: count(*)\n"
+                + "  |  group by: 21: L_ORDERKEY, 22: L_PARTKEY");
+
+        assertContains(plan, "HASH JOIN\n"
+                + "  |  join op: INNER JOIN (BROADCAST)\n"
+                + "  |  colocate: false, reason: \n"
+                + "  |  equal join conjunct: 1: L_ORDERKEY = 21: L_ORDERKEY\n"
+                + "  |  equal join conjunct: 2: L_PARTKEY = 22: L_PARTKEY");
+    }
 }
