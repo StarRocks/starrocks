@@ -27,7 +27,6 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.backup.Status;
-import com.starrocks.backup.mv.MvBackupInfo;
 import com.starrocks.backup.mv.MvBaseTableBackupInfo;
 import com.starrocks.backup.mv.MvRestoreContext;
 import com.starrocks.catalog.constraint.ForeignKeyConstraint;
@@ -2351,26 +2350,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
     public String inspectMeta() {
         return GsonUtils.GSON.toJson(this);
-    }
-
-    @Override
-    public Status resetIdsForRestore(GlobalStateMgr globalStateMgr,
-                                     Database db, int restoreReplicationNum,
-                                     MvRestoreContext mvRestoreContext) {
-        // change db_id to new restore id
-        MvId oldMvId = new MvId(dbId, id);
-
-        this.dbId = db.getId();
-        Status status = super.resetIdsForRestore(globalStateMgr, db, restoreReplicationNum, mvRestoreContext);
-        if (!status.ok()) {
-            return status;
-        }
-        // store new mvId to for old mvId
-        MvId newMvId = new MvId(dbId, id);
-        MvBackupInfo mvBackupInfo = mvRestoreContext.getMvIdToTableNameMap()
-                .computeIfAbsent(oldMvId, x -> new MvBackupInfo(db.getFullName(), name));
-        mvBackupInfo.setLocalMvId(newMvId);
-        return Status.OK;
     }
 
     /**
