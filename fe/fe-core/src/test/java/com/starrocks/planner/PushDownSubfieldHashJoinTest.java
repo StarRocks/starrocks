@@ -33,11 +33,12 @@ public class PushDownSubfieldHashJoinTest {
 
     @BeforeAll
     public static void setUp() throws Exception {
+        FeConstants.runningUnitTest = true;
         UtFrameUtils.createMinStarRocksCluster();
         ctx = UtFrameUtils.createDefaultCtx();
         ctx.getSessionVariable().setEnablePipelineEngine(true);
         ctx.getSessionVariable().setCboPushDownAggregateMode(-1);
-        FeConstants.runningUnitTest = true;
+        ctx.getSessionVariable().setOptimizerExecuteTimeout(10000);
         starRocksAssert = new StarRocksAssert(ctx);
         starRocksAssert.withDatabase(StatsConstants.STATISTICS_DB_NAME)
                 .useDatabase(StatsConstants.STATISTICS_DB_NAME)
