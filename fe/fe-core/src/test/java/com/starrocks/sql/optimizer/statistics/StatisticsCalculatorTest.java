@@ -53,10 +53,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
-import mockit.Mocked;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -391,24 +389,24 @@ public class StatisticsCalculatorTest {
     }
 
     @Test
-    public void testLogicalOlapTableScanPartitionPrune1(@Mocked CachedStatisticStorage cachedStatisticStorage) {
+    public void testLogicalOlapTableScanPartitionPrune1() {
         FeConstants.runningUnitTest = true;
         ColumnRefOperator idDate = columnRefFactory.create("id_date", Type.DATE, true);
 
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         Table table = globalStateMgr.getLocalMetastore().getDb("statistics_test").getTable("test_all_type");
 
-        new Expectations() {
-            {
-                cachedStatisticStorage.getColumnStatistics(table, Lists.newArrayList("id_date"));
-                result = new ColumnStatistic(0, Utils.getLongFromDateTime(LocalDateTime.of(2014, 12, 01, 0, 0, 0)),
-                            0, 0, 30);
-                minTimes = 0;
+        new MockUp<CachedStatisticStorage>() {
+            @Mock
+            public List<ColumnStatistic> getColumnStatistics(Table table, List<String> columns) {
+                return List.of(new ColumnStatistic(0, Utils.getLongFromDateTime(
+                        LocalDateTime.of(2014, 12, 01, 0, 0, 0)), 0, 0, 30));
+            }
 
-                cachedStatisticStorage.getColumnStatistic(table, "id_date");
-                result = new ColumnStatistic(0, Utils.getLongFromDateTime(LocalDateTime.of(2014, 12, 01, 0, 0, 0)),
-                            0, 0, 30);
-                minTimes = 0;
+            @Mock
+            public ColumnStatistic getColumnStatistic(Table table, String column) {
+                return new ColumnStatistic(0, Utils.getLongFromDateTime(
+                        LocalDateTime.of(2014, 12, 01, 0, 0, 0)), 0, 0, 30);
             }
         };
 
@@ -486,7 +484,7 @@ public class StatisticsCalculatorTest {
     }
 
     @Test
-    public void testLogicalOlapTableScanPartitionPrune2(@Mocked CachedStatisticStorage cachedStatisticStorage) {
+    public void testLogicalOlapTableScanPartitionPrune2() {
         FeConstants.runningUnitTest = true;
         ColumnRefOperator idDate = columnRefFactory.create("id_date", Type.DATE, true);
 
@@ -494,17 +492,17 @@ public class StatisticsCalculatorTest {
         OlapTable table = (OlapTable) globalStateMgr.getLocalMetastore().getDb("statistics_test")
                     .getTable("test_all_type_day_partition");
 
-        new Expectations() {
-            {
-                cachedStatisticStorage.getColumnStatistics(table, Lists.newArrayList("id_date"));
-                result = new ColumnStatistic(Utils.getLongFromDateTime(LocalDateTime.of(2020, 4, 23, 0, 0, 0)),
-                            Utils.getLongFromDateTime(LocalDateTime.of(2020, 4, 25, 0, 0, 0)), 0, 0, 3);
-                minTimes = 0;
+        new MockUp<CachedStatisticStorage>() {
+            @Mock
+            public List<ColumnStatistic> getColumnStatistics(Table table, List<String> columns) {
+                return List.of(new ColumnStatistic(Utils.getLongFromDateTime(LocalDateTime.of(2020, 4, 23, 0, 0, 0)),
+                        Utils.getLongFromDateTime(LocalDateTime.of(2020, 4, 25, 0, 0, 0)), 0, 0, 3));
+            }
 
-                cachedStatisticStorage.getColumnStatistic(table, "id_date");
-                result = new ColumnStatistic(Utils.getLongFromDateTime(LocalDateTime.of(2020, 4, 23, 0, 0, 0)),
-                            Utils.getLongFromDateTime(LocalDateTime.of(2020, 4, 25, 0, 0, 0)), 0, 0, 3);
-                minTimes = 0;
+            @Mock
+            public ColumnStatistic getColumnStatistic(Table table, String column) {
+                return new ColumnStatistic(Utils.getLongFromDateTime(LocalDateTime.of(2020, 4, 23, 0, 0, 0)),
+                        Utils.getLongFromDateTime(LocalDateTime.of(2020, 4, 25, 0, 0, 0)), 0, 0, 3);
             }
         };
 
