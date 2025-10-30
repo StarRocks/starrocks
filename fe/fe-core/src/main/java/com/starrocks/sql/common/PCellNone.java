@@ -18,6 +18,7 @@ package com.starrocks.sql.common;
  * PCellNone is a special PCell that represents the absence of a partition cell which can be used for non-partitioned tables.
  */
 public final class PCellNone extends PCell {
+    @Override
     public boolean isIntersected(PCell o) {
         return false;
     }

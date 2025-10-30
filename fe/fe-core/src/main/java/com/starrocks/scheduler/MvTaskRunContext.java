@@ -18,7 +18,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
-import com.starrocks.sql.common.PCell;
+import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.plan.ExecPlan;
 
 import java.util.Map;
@@ -33,9 +33,9 @@ public class MvTaskRunContext extends TaskRunContext {
     //mvPartition -> baseTable -> basePartitions
     private Map<String, Map<Table, Set<String>>> mvRefBaseTableIntersectedPartitions;
     // all the RefBaseTable's partition name to its partition range/list cell.
-    private Map<Table, Map<String, PCell>> refBaseTableToCellMap;
+    private Map<Table, PCellSortedSet> refBaseTableToCellMap;
     // mv to its partition range/list cell.
-    private Map<String, PCell> mvToCellMap;
+    private PCellSortedSet mvToCellMap;
 
     // the external ref base table's mv partition name to original partition names map because external
     // table supports multi partition columns, one converted partition name(mv partition name) may have
@@ -100,11 +100,11 @@ public class MvTaskRunContext extends TaskRunContext {
         this.nextPartitionValues = nextPartitionValues;
     }
 
-    public Map<Table, Map<String, PCell>> getRefBaseTableToCellMap() {
+    public Map<Table, PCellSortedSet> getRefBaseTableToCellMap() {
         return refBaseTableToCellMap;
     }
 
-    public void setRefBaseTableToCellMap(Map<Table, Map<String, PCell>> refBaseTableToCellMap) {
+    public void setRefBaseTableToCellMap(Map<Table, PCellSortedSet> refBaseTableToCellMap) {
         this.refBaseTableToCellMap = refBaseTableToCellMap;
     }
 
@@ -117,11 +117,11 @@ public class MvTaskRunContext extends TaskRunContext {
         this.externalRefBaseTableMVPartitionMap = externalRefBaseTableMVPartitionMap;
     }
 
-    public Map<String, PCell> getMVToCellMap() {
+    public PCellSortedSet getMVToCellMap() {
         return mvToCellMap;
     }
 
-    public void setMVToCellMap(Map<String, PCell> mvToCellMap) {
+    public void setMVToCellMap(PCellSortedSet mvToCellMap) {
         this.mvToCellMap = mvToCellMap;
     }
 
