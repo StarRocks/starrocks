@@ -34,8 +34,14 @@ class ProcProfileCollectorTest {
 
         // count the number of files in the directory
         Function<Void, Integer> countFiles = (x) -> {
+            if (!profileDir.exists() || !profileDir.isDirectory()) {
+                return 0;
+            }
             int count = 0;
             String[] files = profileDir.list();
+            if (files == null) {
+                return 0;
+            }
             for (String filename : files) {
                 if (filename.startsWith("cpu-profile-") && filename.endsWith(".tar.gz")) {
                     count++;
@@ -52,6 +58,6 @@ class ProcProfileCollectorTest {
 
         collector.runAfterCatalogReady();
         int afterCount = countFiles.apply(null);
-        assertTrue(afterCount > prevCount);
+        assertTrue(afterCount > prevCount, String.format("prev: %d, after: %d", prevCount, afterCount));
     }
 }
