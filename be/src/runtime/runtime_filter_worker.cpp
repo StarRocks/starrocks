@@ -298,7 +298,7 @@ void RuntimeFilterPort::receive_runtime_filter(int32_t filter_id, const RuntimeF
     if (it == _listeners.end()) return;
     auto& wait_list = it->second;
     VLOG_FILE << "RuntimeFilterPort::receive_runtime_filter(local). filter_id = " << filter_id
-              << ", wait_list_size = " << wait_list.size() << "filter = " << rf->debug_string();
+              << ", wait_list_size = " << wait_list.size() << ", filter = " << rf->debug_string();
     for (auto* rf_desc : wait_list) {
         rf_desc->set_runtime_filter(rf);
     }
@@ -626,11 +626,13 @@ void RuntimeFilterMerger::_send_total_runtime_filter(int rf_version, int32_t fil
     int64_t now = UnixMillis();
     status->broadcast_filter_ts = now;
 
-    VLOG_FILE << "RuntimeFilterMerger::_send_total_runtime_filter. target_nodes[0] = " << target_nodes->at(0)
-              << ", target_nodes_size = " << target_nodes->size() << ", filter_id = " << request.filter_id()
-              << ", latency(last-first = " << status->recv_last_filter_ts - status->recv_first_filter_ts
-              << ", send-first = " << status->broadcast_filter_ts - status->recv_first_filter_ts << ")"
-              << ", filter = " << out->debug_string();
+    if (VLOG_FILE_IS_ON) {
+        VLOG_FILE << "RuntimeFilterMerger::_send_total_runtime_filter. target_nodes[0] = " << target_nodes->at(0)
+                  << ", target_nodes_size = " << target_nodes->size() << ", filter_id = " << request.filter_id()
+                  << ", latency(last-first = " << status->recv_last_filter_ts - status->recv_first_filter_ts
+                  << ", send-first = " << status->broadcast_filter_ts - status->recv_first_filter_ts << ")"
+                  << ", filter = " << out->debug_string();
+    }
     request.set_broadcast_timestamp(now);
 
     std::map<TNetworkAddress, std::vector<TUniqueId>> nodes_to_frag_insts;
@@ -663,6 +665,17 @@ void RuntimeFilterMerger::_send_total_runtime_filter(int rf_version, int32_t fil
         if (it.first != local) {
             targets.emplace_back(it.first, it.second);
         }
+    }
+
+    if (VLOG_FILE_IS_ON) {
+        std::string targets_string;
+        for (const auto& t : targets) {
+            targets_string += t.first.hostname + ":" + std::to_string(t.first.port);
+            targets_string += ", ";
+        }
+
+        VLOG_FILE << "RuntimeFilterMerger::_send_total_runtime_filter. targets = [" << targets_string
+                  << "], filter_id = " << request.filter_id() << ", filter = " << out->debug_string();
     }
 
     size_t index = 0;
@@ -705,7 +718,8 @@ void RuntimeFilterMerger::_send_total_runtime_filter(int rf_version, int32_t fil
 
         if (half != 0) {
             VLOG_FILE << "RuntimeFilterMerger::_send_total_runtime_filter. target " << t.first << " will forward to "
-                      << half << " nodes. nodes[0] = " << request.forward_targets(0).DebugString();
+                      << half << " nodes. nodes[0] = " << request.forward_targets(0).host() << ":"
+                      << request.forward_targets(0).port();
         }
 
         index += (1 + half);
@@ -974,8 +988,9 @@ void RuntimeFilterWorker::_receive_total_runtime_filter(PTransmitRuntimeFilterPa
         }
 
         if (half != 0) {
-            VLOG_FILE << "RuntimeFilterWorker::receive_total_rf. target " << addr << " will forward to " << half
-                      << " nodes. nodes[0] = " << request.forward_targets(0).DebugString();
+            VLOG_FILE << "RuntimeFilterWorker::receive_total_runtime_filter. target " << addr << " will forward to "
+                      << half << " nodes. nodes[0] = " << request.forward_targets(0).host() << ":"
+                      << request.forward_targets(0).port();
         }
 
         index += (1 + half);
