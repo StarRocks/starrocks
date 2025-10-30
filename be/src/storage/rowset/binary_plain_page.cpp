@@ -136,14 +136,6 @@ bool BinaryPlainPageDecoder<Type>::append_range(uint32_t idx, uint32_t end, Colu
 
         size_t append_bytes_length = offsets.back() - begin_offset;
         size_t old_bytes_size = bytes.size();
-        // try to reserve to avoid extra memcpy
-        if (bytes.capacity() == 0 && end - idx == _num_elems) {
-            // We assume each row is roughly the same size and then estimate the required buffer size.
-            size_t chunk_size = config::vector_chunk_size;
-            size_t read_rows = std::min<size_t>(end - idx, chunk_size);
-            size_t reserve_length = config::data_page_size * 1.5 / read_rows * chunk_size;
-            bytes.reserve(reserve_length);
-        }
 
         bytes.resize(old_bytes_size + append_bytes_length);
         // TODO: need did some optimize for large memory copy
@@ -298,19 +290,7 @@ bool BinaryPlainPageDecoder<Type>::next_range_with_filter(
             return true;
         }
 
-        // todo: optimize case when selected_count == num_rows
-        offsets.reserve(original_offset_size + selected_count);
-
         auto& temp_offset_in_column = temp_column->get_offset();
-
-        size_t total_bytes_to_append = 0;
-        for (uint32_t i = 0; i < num_rows; i++) {
-            if (selection[i]) {
-                total_bytes_to_append += temp_offset_in_column[i + 1] - temp_offset_in_column[i];
-            }
-        }
-
-        bytes.reserve(bytes.size() + total_bytes_to_append);
 
         uint32_t current_offset = begin_offset;
         for (uint32_t i = 0; i < num_rows; i++) {
