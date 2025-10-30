@@ -93,7 +93,7 @@ LDAP 认证要求客户端将明文密码传递给 StarRocks。有三种方式�
 执行时添加 `--default-auth mysql_clear_password --enable-cleartext-plugin`：
 
 ```sql
-mysql -utom -P8030 -h127.0.0.1 -p --default-auth mysql_clear_password --enable-cleartext-plugin
+mysql -utom -P9030 -h127.0.0.1 -p --default-auth mysql_clear_password --enable-cleartext-plugin
 ```
 
 ### 从 JDBC/ODBC 客户端连接 LDAP
