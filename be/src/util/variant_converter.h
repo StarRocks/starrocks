@@ -95,8 +95,6 @@ template <LogicalType ResultType, bool AllowThrowException>
 static Status cast_variant_value_to(const Variant& variant, const cctz::time_zone& zone,
                                     ColumnBuilder<ResultType>& result) {
     if constexpr (!lt_is_arithmetic<ResultType> && !lt_is_string<ResultType> && ResultType != TYPE_VARIANT) {
-        std::cerr << "Cannot cast variant of type " << VariantUtil::type_to_string(variant.type()) << " to "
-                  << logical_type_to_string(ResultType) << std::endl;
         if constexpr (AllowThrowException) {
             return Status::NotSupported(
                     fmt::format("Cannot cast variant to type {}", logical_type_to_string(ResultType)));
@@ -106,38 +104,13 @@ static Status cast_variant_value_to(const Variant& variant, const cctz::time_zon
         return Status::OK();
     }
 
+    VariantValue variant_value = VariantValue::of_variant(variant);
     if constexpr (ResultType == TYPE_VARIANT) {
-        // For TYPE_VARIANT, directly convert back to VariantValue
-        auto variant_value_result = variant.to_value();
-        if (!variant_value_result.ok()) {
-            std::cerr << "Failed to convert variant to VariantValue: " << variant_value_result.status().to_string()
-                      << std::endl;
-            if constexpr (AllowThrowException) {
-                return variant_value_result.status();
-            } else {
-                result.append_null();
-                return Status::OK();
-            }
-        }
-        std::cout << "Converting variant to VariantValue: " << variant_value_result->to_string() << std::endl;
-        result.append(std::move(variant_value_result.value()));
+        result.append(std::move(variant_value));
         return Status::OK();
     }
 
     // For non-variant types, we need the VariantValue for string conversion
-    auto variant_value_result = variant.to_value();
-    if (!variant_value_result.ok()) {
-        if constexpr (AllowThrowException) {
-            return variant_value_result.status();
-        } else {
-            result.append_null();
-            return Status::OK();
-        }
-    }
-
-    VariantValue variant_value = std::move(variant_value_result.value());
-    std::cout << "Converting non-variant type from VariantValue: " << variant_value.to_string() << std::endl;
-
     Status status;
     if constexpr (ResultType == TYPE_BOOLEAN) {
         status = cast_variant_to_bool(variant, result);
