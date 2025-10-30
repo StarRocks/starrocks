@@ -43,9 +43,11 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.combinator.AggStateDesc;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Writable;
+import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.sql.ast.HdfsURI;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FunctionName;
+import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TFunction;
 import com.starrocks.thrift.TFunctionBinaryType;
 import org.apache.commons.lang.ArrayUtils;
@@ -153,6 +155,9 @@ public class Function implements Writable {
     private Vector<Pair<String, Expr>> defaultArgExprs;
 
     private boolean isMetaFunction = false;
+
+    @SerializedName(value = "cloud_configuration")
+    private CloudConfiguration cloudConfiguration;
 
     // Only used for serialization
     protected Function() {
@@ -272,6 +277,14 @@ public class Function implements Writable {
 
     public void setLocation(HdfsURI loc) {
         location = loc;
+    }
+
+    public CloudConfiguration getCloudConfiguration() {
+        return cloudConfiguration;
+    }
+
+    public void setCloudConfiguration(CloudConfiguration cloudConfiguration) {
+        this.cloudConfiguration = cloudConfiguration;
     }
 
     public TFunctionBinaryType getBinaryType() {
@@ -742,6 +755,11 @@ public class Function implements Writable {
         fn.setBinary_type(binaryType);
         if (location != null) {
             fn.setHdfs_location(location.toString());
+        }
+        if (cloudConfiguration != null) {
+            TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();
+            cloudConfiguration.toThrift(tCloudConfiguration);
+            fn.setCloud_configuration(tCloudConfiguration);
         }
         fn.setArg_types(Type.toThrift(argTypes));
         fn.setRet_type(getReturnType().toThrift());

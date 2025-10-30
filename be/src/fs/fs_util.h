@@ -167,7 +167,6 @@ inline StatusOr<int64_t> copy_file(const std::string& src_path, const std::strin
     RETURN_IF_ERROR(dst_file->close());
     return ncopy;
 }
-
 // copy the file range [offset, offset + size] from src path to dest path, it will overwrite the existing files
 inline Status copy_file_by_range(const std::string& src_path, const std::string& dst_path, int64_t offset,
                                  int64_t size) {
