@@ -495,6 +495,13 @@ Status SegmentIterator::ScanContext::read_columns(Chunk* chunk, const SparseRang
             continue;
         }
 
+        // reserve std::min(chunk_size, segment rows) rows
+        // for binary column, we must reserve enough memory to avoid extra memcpy
+        // but if segment is small and there are lots of segments, we can't reserve too much unnecessary memory
+        if (col->capacity() == 0) {
+            column_iterators[i]->reserve_col(range.span_size(), col.get());
+        }
+
         if (!predicate_col_late_materialize_read) {
             RETURN_IF_ERROR(column_iterators[i]->next_batch(range, col.get()));
         } else {
