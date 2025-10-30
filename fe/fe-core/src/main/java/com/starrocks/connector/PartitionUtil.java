@@ -62,8 +62,10 @@ import org.apache.hadoop.hive.common.FileUtils;
 import org.apache.iceberg.PartitionData;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
+import org.apache.iceberg.Partitioning;
 import org.apache.iceberg.StructLike;
 import org.apache.iceberg.types.Types;
+import org.apache.iceberg.util.StructProjection;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -778,24 +780,31 @@ public class PartitionUtil {
     // if the partition field is explicitly named, use this name without change
     // if the partition field is not identity transform, column name is appended by its transform name (e.g. col1_hour)
     // if all partition fields are no longer active (dropped by partition evolution), return "ICEBERG_DEFAULT_PARTITION"
-    public static String convertIcebergPartitionToPartitionName(PartitionSpec partitionSpec, StructLike partition) {
+    public static String convertIcebergPartitionToPartitionName(org.apache.iceberg.Table table, PartitionSpec spec,
+                                                                StructProjection partition) {
         StringBuilder sb = new StringBuilder();
-        for (int index = 0; index < partitionSpec.fields().size(); ++index) {
-            PartitionField partitionField = partitionSpec.fields().get(index);
-            // skip inactive partition field
-            if (partitionField.transform().isVoid()) {
-                continue;
-            }
-            org.apache.iceberg.types.Type type = partitionSpec.partitionType().fieldType(partitionField.name());
-            sb.append(partitionField.name());
-            sb.append("=");
-            String value = partitionField.transform().toHumanString(type, getPartitionValue(partition, index,
-                    partitionSpec.javaClasses()[index]));
-            sb.append(value);
-            sb.append("/");
-        }
+        // partition have all active partition types, so we need to get full partition type from table
+        Types.StructType partitionType = Partitioning.partitionType(table);
 
-        if (sb.length() > 0) {
+        for (int i = 0; i < partitionType.fields().size(); i++) {
+            Types.NestedField field = partitionType.fields().get(i);
+            for (PartitionField partitionField : spec.fields()) {
+                if (partitionField.fieldId() == field.fieldId()) {
+                    // skip inactive partition field
+                    if (partitionField.transform().isVoid()) {
+                        continue;
+                    }
+                    org.apache.iceberg.types.Type type = spec.partitionType().fieldType(partitionField.name());
+                    sb.append(partitionField.name());
+                    sb.append("=");
+                    String value = partitionField.transform().toHumanString(type,
+                            getPartitionValue(partition, i, type.typeId().javaClass()));
+                    sb.append(value);
+                    sb.append("/");
+                }
+            }
+        }
+        if (!sb.isEmpty()) {
             return sb.substring(0, sb.length() - 1);
         }
         return ICEBERG_DEFAULT_PARTITION;
