@@ -1,0 +1,53 @@
+diff --git a/fe/fe-core/src/main/java/com/starrocks/persist/gson/GsonUtils.java b/fe/fe-core/src/main/java/com/starrocks/persist/gson/GsonUtils.java
+index 7c1b2ce365..2b65f7a532 100644
+--- a/fe/fe-core/src/main/java/com/starrocks/persist/gson/GsonUtils.java
++++ b/fe/fe-core/src/main/java/com/starrocks/persist/gson/GsonUtils.java
+@@ -120,6 +120,7 @@ import com.starrocks.catalog.TableFunction;
+ import com.starrocks.catalog.Tablet;
+ import com.starrocks.catalog.View;
+ import com.starrocks.encryption.EncryptionKeyPBAdapter;
++import com.starrocks.epack.warehouse.LocalWarehouse;
+ import com.starrocks.lake.LakeMaterializedView;
+ import com.starrocks.lake.LakeTable;
+ import com.starrocks.lake.LakeTablet;
+@@ -342,7 +343,8 @@ public class GsonUtils {
+ 
+     private static final RuntimeTypeAdapterFactory<Warehouse> WAREHOUSE_TYPE_ADAPTER_FACTORY = RuntimeTypeAdapterFactory
+             .of(Warehouse.class, "clazz")
+-            .registerSubtype(DefaultWarehouse.class, "DefaultWarehouse");
++            .registerSubtype(DefaultWarehouse.class, "DefaultWarehouse")
++            .registerSubtype(LocalWarehouse.class, "LocalWarehouse");
+ 
+     public static final RuntimeTypeAdapterFactory<LoadJob> LOAD_JOB_TYPE_RUNTIME_ADAPTER_FACTORY =
+             RuntimeTypeAdapterFactory.of(LoadJob.class, "clazz")
+diff --git a/fe/fe-core/src/main/java/com/starrocks/server/GlobalStateMgr.java b/fe/fe-core/src/main/java/com/starrocks/server/GlobalStateMgr.java
+index 90883ee599..80f6ccfc18 100644
+--- a/fe/fe-core/src/main/java/com/starrocks/server/GlobalStateMgr.java
++++ b/fe/fe-core/src/main/java/com/starrocks/server/GlobalStateMgr.java
+@@ -119,6 +119,8 @@ import com.starrocks.consistency.LockChecker;
+ import com.starrocks.consistency.MetaRecoveryDaemon;
+ import com.starrocks.encryption.KeyMgr;
+ import com.starrocks.encryption.KeyRotationDaemon;
++import com.starrocks.epack.warehouse.WarehouseManagerEPack;
++import com.starrocks.epack.warehouse.WarehouseSlotManager;
+ import com.starrocks.ha.FrontendNodeType;
+ import com.starrocks.ha.HAProtocol;
+ import com.starrocks.ha.LeaderInfo;
+@@ -750,7 +752,7 @@ public class GlobalStateMgr {
+         this.analyzeMgr = new AnalyzeMgr();
+         this.localMetastore = new LocalMetastore(this, recycleBin, colocateTableIndex);
+         this.temporaryTableMgr = new TemporaryTableMgr();
+-        this.warehouseMgr = new WarehouseManager();
++        this.warehouseMgr = new WarehouseManagerEPack();
+         this.historicalNodeMgr = new HistoricalNodeMgr();
+         this.connectorMgr = new ConnectorMgr();
+         this.connectorTblMetaInfoMgr = new ConnectorTblMetaInfoMgr();
+@@ -776,7 +778,7 @@ public class GlobalStateMgr {
+         if (RunMode.isSharedDataMode()) {
+             this.storageVolumeMgr = new SharedDataStorageVolumeMgr();
+             this.autovacuumDaemon = new AutovacuumDaemon();
+-            this.slotManager = new SlotManager(resourceUsageMonitor);
++            this.slotManager = new WarehouseSlotManager(resourceUsageMonitor);
+         } else {
+             this.storageVolumeMgr = new SharedNothingStorageVolumeMgr();
+             this.slotManager = new SlotManager(resourceUsageMonitor);
