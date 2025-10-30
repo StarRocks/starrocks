@@ -15,12 +15,7 @@
 package com.starrocks.connector.metadata.iceberg;
 
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.StructField;
-import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.metadata.MetadataTable;
@@ -29,6 +24,11 @@ import com.starrocks.planner.DescriptorTable;
 import com.starrocks.thrift.THdfsTable;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.StructField;
+import com.starrocks.type.StructType;
 
 import java.util.List;
 

@@ -14,7 +14,6 @@
 
 package com.starrocks.connector.kudu;
 
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
@@ -25,6 +24,7 @@ import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.type.Type;
 import org.apache.kudu.Schema;
 import org.apache.kudu.client.KuduPredicate;
 import org.junit.jupiter.api.Assertions;

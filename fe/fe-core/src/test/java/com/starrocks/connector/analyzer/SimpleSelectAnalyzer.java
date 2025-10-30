@@ -18,7 +18,6 @@ package com.starrocks.connector.analyzer;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.TreeNode;
 import com.starrocks.sql.analyzer.AnalyzeState;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
@@ -42,6 +41,7 @@ import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.LimitElement;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.type.Type;
 
 import java.util.ArrayList;
 import java.util.Collections;

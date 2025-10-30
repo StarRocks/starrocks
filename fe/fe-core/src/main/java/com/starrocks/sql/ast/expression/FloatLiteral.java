@@ -34,13 +34,13 @@
 
 package com.starrocks.sql.ast.expression;
 
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.Type;
 
 import java.math.BigDecimal;
 import java.nio.ByteBuffer;

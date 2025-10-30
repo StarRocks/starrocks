@@ -15,7 +15,6 @@
 package com.starrocks.sql.formatter;
 
 import com.google.common.base.Joiner;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Field;
@@ -44,6 +43,7 @@ import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.MapExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.TableName;
+import com.starrocks.type.Type;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 

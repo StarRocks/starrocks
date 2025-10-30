@@ -12,17 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.catalog;
+package com.starrocks.type;
 
-public enum ComplexTypeAccessPathType {
-    // Only access map's key column
-    MAP_KEY,
-    // Only access map's value column
-    MAP_VALUE,
-    // Only access struct specific subfield
-    STRUCT_SUBFIELD,
-    // Access all subfields for complex type.
-    // For example, map type will load key & value column.
-    // Struct type will load all subfields
-    ALL_SUBFIELDS
+public class AnyStructType extends PseudoType {
+    @Override
+    public boolean equals(Object obj) {
+        return obj instanceof AnyStructType;
+    }
+
+    @Override
+    public boolean matchesType(Type t) {
+        return t instanceof AnyStructType || t instanceof AnyElementType || t.isStructType();
+    }
+
+    @Override
+    public String toString() {
+        return "PseudoType.AnyStructType";
+    }
 }

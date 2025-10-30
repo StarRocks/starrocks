@@ -16,10 +16,10 @@ package com.starrocks.sql.optimizer.operator.scalar;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.ast.expression.MatchExpr;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.type.Type;
 
 import java.util.List;
 import java.util.Objects;

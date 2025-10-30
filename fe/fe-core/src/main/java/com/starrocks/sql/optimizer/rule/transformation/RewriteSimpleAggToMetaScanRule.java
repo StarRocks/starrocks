@@ -24,7 +24,6 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.Type;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -47,6 +46,7 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.statistics.IMinMaxStatsMgr;
 import com.starrocks.sql.optimizer.statistics.StatsVersion;
 import com.starrocks.statistic.StatisticUtils;
+import com.starrocks.type.Type;
 
 import java.time.LocalDateTime;
 import java.util.Collections;

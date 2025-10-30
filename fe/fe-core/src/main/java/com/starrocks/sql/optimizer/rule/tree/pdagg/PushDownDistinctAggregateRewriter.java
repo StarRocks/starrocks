@@ -21,7 +21,6 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.Type;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
 import com.starrocks.sql.ast.expression.AnalyticWindow;
@@ -42,6 +41,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.task.TaskContext;
+import com.starrocks.type.Type;
 
 import java.util.ArrayList;
 import java.util.Collection;

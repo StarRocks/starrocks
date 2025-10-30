@@ -33,6 +33,8 @@ import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWriteQuorumType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.Type;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;

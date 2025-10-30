@@ -52,6 +52,11 @@ import com.starrocks.catalog.combinator.StateUnionCombinator;
 import com.starrocks.sql.analyzer.PolymorphicFunctionAnalyzer;
 import com.starrocks.sql.ast.expression.ArithmeticExpr;
 import com.starrocks.sql.ast.expression.FunctionName;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.StructField;
+import com.starrocks.type.StructType;
+import com.starrocks.type.Type;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

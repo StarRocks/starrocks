@@ -15,7 +15,6 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
@@ -35,6 +34,7 @@ import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TResultBatch;
 import com.starrocks.thrift.TResultSinkType;
+import com.starrocks.type.Type;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;

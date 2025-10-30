@@ -16,6 +16,7 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.combinator.AggStateDesc;
+import com.starrocks.type.Type;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 

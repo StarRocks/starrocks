@@ -43,12 +43,12 @@ import com.google.common.collect.Sets;
 import com.google.common.collect.TreeRangeMap;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PartitionKey;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.NullLiteral;
+import com.starrocks.type.Type;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

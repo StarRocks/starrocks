@@ -16,7 +16,6 @@ package com.starrocks.sql;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.TableFunctionTable;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.FeConstants;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
@@ -38,6 +37,7 @@ import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TPartialUpdateMode;
+import com.starrocks.type.Type;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Test;
 

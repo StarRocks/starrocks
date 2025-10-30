@@ -15,12 +15,12 @@
 package com.starrocks.connector.delta;
 
 import com.google.common.collect.ImmutableList;
-import com.starrocks.catalog.ArrayType;
-import com.starrocks.catalog.MapType;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.StructType;
-import com.starrocks.catalog.Type;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.MapType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.StructType;
+import com.starrocks.type.Type;
 import io.delta.kernel.types.BinaryType;
 import io.delta.kernel.types.DataType;
 import io.delta.kernel.types.IntegerType;

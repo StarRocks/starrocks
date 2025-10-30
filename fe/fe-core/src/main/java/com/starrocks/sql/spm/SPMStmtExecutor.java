@@ -15,7 +15,6 @@
 package com.starrocks.sql.spm;
 
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Type;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultMetaFactory;
 import com.starrocks.qe.ShowResultSet;
@@ -34,6 +33,7 @@ import com.starrocks.sql.ast.spm.ControlBaselinePlanStmt;
 import com.starrocks.sql.ast.spm.CreateBaselinePlanStmt;
 import com.starrocks.sql.ast.spm.DropBaselinePlanStmt;
 import com.starrocks.sql.ast.spm.ShowBaselinePlanStmt;
+import com.starrocks.type.Type;
 
 import java.time.format.DateTimeFormatter;
 import java.util.List;
