@@ -97,6 +97,7 @@ public class SlotDescriptor {
         this.isMaterialized = false;
         this.isOutputColumn = false;
         this.isNullable = true;
+        System.out.println("=== SlotDescriptor created === id = " + id.asInt());
     }
 
     public SlotDescriptor(SlotId id, String name, Type type, boolean isNullable) {
@@ -160,6 +161,7 @@ public class SlotDescriptor {
     public void setColumn(Column column) {
         this.column = column;
         this.originType = column.getType();
+        this.label_ = column.getName();
         if (this.originType.isScalarType()) {
             ScalarType scalarType = (ScalarType) this.originType;
             if (this.originType.isDecimalV3()) {
@@ -227,11 +229,18 @@ public class SlotDescriptor {
     }
 
     public void setLabel(String label) {
+        System.out.println("=== setLabel called === label = " + label);
         label_ = label;
     }
 
     public void setSourceExpr(Expr expr) {
         sourceExprs_ = Collections.singletonList(expr);
+        if (label_ == null) {
+            this.label_ = expr.toSql();  // ✅ fallback
+            System.out.println("=== setSourceExpr fallback label_ = " + label_);
+        }
+        System.out.println("=== setSourceExpr expr = " + expr.toSql());
+        System.out.println("=== setSourceExpr fallback label_ = " + label_);
     }
 
     public List<Expr> getSourceExprs() {
@@ -243,6 +252,7 @@ public class SlotDescriptor {
      */
     public void initFromExpr(Expr expr) {
         setLabel(expr.toSql());
+        System.out.println("=== initFromExpr === expr.toSql() = " + expr.toSql());
         Preconditions.checkState(sourceExprs_.isEmpty());
         setSourceExpr(expr);
         setStats(ColumnStats.fromExpr(expr));
@@ -287,11 +297,40 @@ public class SlotDescriptor {
         tSlotDescriptor.setByteOffset(-1);
         tSlotDescriptor.setNullIndicatorByte(-1);
         tSlotDescriptor.setNullIndicatorBit(nullIndicatorBit);
-        String colName = "";
-        if (column != null) {
-            colName = column.isShadowColumn() ? column.getName() : column.getColumnId().getId();
+//        String colName = "";
+//        if (column != null) {
+//            colName = column.isShadowColumn() ? column.getName() : column.getColumnId().getId();
+//        }
+//        tSlotDescriptor.setColName(colName);
+        /*String colName = label_;
+        System.out.println("=== FE patch is active === label_ = " + label_);
+        if (Strings.isNullOrEmpty(colName) && column != null) {
+            //colName = column.isShadowColumn() ? column.getName() : column.getColumnId().getId();
+            colName = column.getName();
+            System.out.println("=== FE patch is active === label_ = " + label_ + ", fallback colName = " + colName);
+        }
+        tSlotDescriptor.setColName(colName);*/
+
+        String colName = label_;
+        System.out.println("=== FE patch is active === label_ = " + label_);
+        if (Strings.isNullOrEmpty(colName)) {
+            if (column != null) {
+                colName = column.getName();
+                System.out.println("=== FE patch is active === fallback colName = " + colName);
+            } else if (sourceExprs_ != null && !sourceExprs_.isEmpty()) {
+                colName = sourceExprs_.get(0).toSql();
+                System.out.println("=== FE patch is active === fallback expr colName = " + colName);
+            } else {
+                colName = "col_" + id.asInt();
+                System.out.println("=== FE patch is active === fallback default colName = " + colName);
+            }
         }
         tSlotDescriptor.setColName(colName);
+        System.out.println("=== FE patch is active === label_ = " + label_);
+        System.out.println("=== FE patch is active === column = " + (column != null ? column.getName() : "null"));
+        System.out.println("=== FE patch is active === sourceExpr = " + (sourceExprs_ != null && !sourceExprs_.isEmpty() ? sourceExprs_.get(0).toSql() : "null"));
+        System.out.println("=== FE patch is active === final colName = " + colName);
+
         tSlotDescriptor.setSlotIdx(-1);
         tSlotDescriptor.setIsMaterialized(true);
         tSlotDescriptor.setIsOutputColumn(isOutputColumn);

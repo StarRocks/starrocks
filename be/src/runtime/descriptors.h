@@ -93,6 +93,10 @@ public:
     SlotDescriptor(SlotId id, std::string name, TypeDescriptor type);
 
     SlotId id() const { return _id; }
+
+    const std::string& label() const { return _label.empty() ? _col_name : _label; }
+    void set_label(const std::string& label) { _label = label; }
+
     const TypeDescriptor& type() const { return _type; }
     TypeDescriptor& type() { return _type; }
     TupleId parent() const { return _parent; }
@@ -121,6 +125,7 @@ private:
     friend class IcebergDeleteFileMeta;
 
     const SlotId _id;
+    std::string _label;
     TypeDescriptor _type;
     const TupleId _parent;
     const NullIndicatorOffset _null_indicator_offset;
