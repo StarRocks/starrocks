@@ -48,6 +48,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.expression.DecimalLiteral;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
@@ -224,7 +225,7 @@ public class AggregationNode extends PlanNode implements RuntimeFilterBuildNode 
         StringBuilder sqlAggFuncBuilder = new StringBuilder();
         // only serialize agg exprs that are being materialized
         for (FunctionCallExpr e : aggInfo.getMaterializedAggregateExprs()) {
-            aggregateFunctions.add(e.treeToThrift());
+            aggregateFunctions.add(ExprToThriftVisitor.treeToThrift(e));
             if (sqlAggFuncBuilder.length() > 0) {
                 sqlAggFuncBuilder.append(", ");
             }
@@ -245,7 +246,7 @@ public class AggregationNode extends PlanNode implements RuntimeFilterBuildNode 
 
         List<Expr> groupingExprs = aggInfo.getGroupingExprs();
         if (groupingExprs != null) {
-            msg.agg_node.setGrouping_exprs(Expr.treesToThrift(groupingExprs));
+            msg.agg_node.setGrouping_exprs(ExprToThriftVisitor.treesToThrift(groupingExprs));
             StringBuilder sqlGroupingKeysBuilder = new StringBuilder();
             for (Expr e : groupingExprs) {
                 if (sqlGroupingKeysBuilder.length() > 0) {
@@ -283,13 +284,13 @@ public class AggregationNode extends PlanNode implements RuntimeFilterBuildNode 
             }
 
             if (minMaxStats.size() == 2 * groupingExprs.size()) {
-                msg.agg_node.setGroup_by_min_max(Expr.treesToThrift(minMaxStats));
+                msg.agg_node.setGroup_by_min_max(ExprToThriftVisitor.treesToThrift(minMaxStats));
             }
         }
 
         List<Expr> intermediateAggrExprs = aggInfo.getIntermediateAggrExprs();
         if (intermediateAggrExprs != null && !intermediateAggrExprs.isEmpty()) {
-            msg.agg_node.setIntermediate_aggr_exprs(Expr.treesToThrift(intermediateAggrExprs));
+            msg.agg_node.setIntermediate_aggr_exprs(ExprToThriftVisitor.treesToThrift(intermediateAggrExprs));
         }
 
         if (!buildRuntimeFilters.isEmpty()) {

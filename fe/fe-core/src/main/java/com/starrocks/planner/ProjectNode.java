@@ -18,6 +18,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TNormalPlanNode;
@@ -60,8 +61,9 @@ public class ProjectNode extends PlanNode {
     protected void toThrift(TPlanNode msg) {
         msg.node_type = TPlanNodeType.PROJECT_NODE;
         msg.project_node = new TProjectNode();
-        slotMap.forEach((key, value) -> msg.project_node.putToSlot_map(key.asInt(), value.treeToThrift()));
-        commonSlotMap.forEach((key, value) -> msg.project_node.putToCommon_slot_map(key.asInt(), value.treeToThrift()));
+        slotMap.forEach((key, value) -> msg.project_node.putToSlot_map(key.asInt(), ExprToThriftVisitor.treeToThrift(value)));
+        commonSlotMap.forEach((key, value) -> msg.project_node.putToCommon_slot_map(
+                key.asInt(), ExprToThriftVisitor.treeToThrift(value)));
     }
 
     @Override

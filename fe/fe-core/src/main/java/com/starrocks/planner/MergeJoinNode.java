@@ -37,6 +37,7 @@ package com.starrocks.planner;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
 import com.starrocks.sql.ast.expression.JoinOperator;
 import com.starrocks.thrift.TEqJoinCondition;
 import com.starrocks.thrift.TMergeJoinNode;
@@ -65,8 +66,9 @@ public class MergeJoinNode extends JoinNode {
         msg.merge_join_node.distribution_mode = distrMode.toThrift();
         StringBuilder sqlJoinPredicatesBuilder = new StringBuilder();
         for (BinaryPredicate eqJoinPredicate : eqJoinConjuncts) {
-            TEqJoinCondition eqJoinCondition = new TEqJoinCondition(eqJoinPredicate.getChild(0).treeToThrift(),
-                    eqJoinPredicate.getChild(1).treeToThrift());
+            TEqJoinCondition eqJoinCondition = new TEqJoinCondition(
+                    ExprToThriftVisitor.treeToThrift(eqJoinPredicate.getChild(0)),
+                    ExprToThriftVisitor.treeToThrift(eqJoinPredicate.getChild(1)));
             eqJoinCondition.setOpcode(eqJoinPredicate.getOp().getOpcode());
             msg.merge_join_node.addToEq_join_conjuncts(eqJoinCondition);
             if (sqlJoinPredicatesBuilder.length() > 0) {
@@ -75,7 +77,7 @@ public class MergeJoinNode extends JoinNode {
             sqlJoinPredicatesBuilder.append(eqJoinPredicate.toSql());
         }
         for (Expr e : otherJoinConjuncts) {
-            msg.merge_join_node.addToOther_join_conjuncts(e.treeToThrift());
+            msg.merge_join_node.addToOther_join_conjuncts(ExprToThriftVisitor.treeToThrift(e));
             if (sqlJoinPredicatesBuilder.length() > 0) {
                 sqlJoinPredicatesBuilder.append(", ");
             }
@@ -104,7 +106,7 @@ public class MergeJoinNode extends JoinNode {
         msg.merge_join_node.setBuild_runtime_filters_from_planner(
                 ConnectContext.get().getSessionVariable().getEnableGlobalRuntimeFilter());
         if (partitionExprs != null) {
-            msg.merge_join_node.setPartition_exprs(Expr.treesToThrift(partitionExprs));
+            msg.merge_join_node.setPartition_exprs(ExprToThriftVisitor.treesToThrift(partitionExprs));
         }
         msg.setFilter_null_value_columns(filter_null_value_columns);
 
