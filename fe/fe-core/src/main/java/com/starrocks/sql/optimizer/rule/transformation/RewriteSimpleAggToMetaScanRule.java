@@ -274,6 +274,7 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
                         .getStats(new ColumnIdentifier(table.getId(), c.getColumnId()),
                                 new StatsVersion(-1, lastUpdateTimestamp));
                 if (minMax.isEmpty()) {
+                    newAggCalls.put(entry.getKey(), entry.getValue());
                     continue;
                 }
 
