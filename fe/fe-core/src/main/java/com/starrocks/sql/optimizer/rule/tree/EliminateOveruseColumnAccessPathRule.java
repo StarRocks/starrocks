@@ -40,7 +40,7 @@ package com.starrocks.sql.optimizer.rule.tree;
  * <p>The rule processes the query tree top-down, propagating column usage information from parent
  * operators to child operators to make informed decisions about which access paths can be eliminated.</p>
  */
-import com.google.common.base.Preconditions;
+
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.ColumnAccessPath;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -49,6 +49,8 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.task.TaskContext;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
@@ -58,6 +60,8 @@ import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 public class EliminateOveruseColumnAccessPathRule implements TreeRewriteRule {
+    private static final Logger LOG = LogManager.getLogger(EliminateOveruseColumnAccessPathRule.class);
+
     @Override
     public OptExpression rewrite(OptExpression root, TaskContext taskContext) {
         Visitor.processTopdown(root, ColumnRefSet.of());
@@ -80,8 +84,10 @@ public class EliminateOveruseColumnAccessPathRule implements TreeRewriteRule {
 
         @Override
         public Optional<ColumnRefSet> visitPhysicalOlapScan(OptExpression optExpression,
-                                                        ColumnRefSet parentUsedColumnRefs) {
-            Preconditions.checkState(parentUsedColumnRefs != null);
+                                                            ColumnRefSet parentUsedColumnRefs) {
+            if (parentUsedColumnRefs == null) {
+                throw new IllegalStateException("parentUsedColumnRefs is null in visitPhysicalOlapScan");
+            }
             PhysicalScanOperator scan = optExpression.getOp().cast();
             if (parentUsedColumnRefs.isEmpty() || scan.getColumnAccessPaths() == null ||
                     scan.getColumnAccessPaths().isEmpty()) {
@@ -98,13 +104,21 @@ public class EliminateOveruseColumnAccessPathRule implements TreeRewriteRule {
             List<ColumnAccessPath> nonSubfieldPruningProjectings = accessPathGroups.get(false);
             List<ColumnAccessPath> subfieldPruningProjectings = accessPathGroups.get(true);
 
-            if (subfieldPruningProjectings.isEmpty()) {
+            if (subfieldPruningProjectings == null || subfieldPruningProjectings.isEmpty()) {
                 return Optional.empty();
             }
 
             Map<String, ColumnRefOperator> columnNameToIdMap = scan.getColRefToColumnMetaMap().entrySet()
                     .stream()
                     .collect(Collectors.toMap(e -> e.getValue().getName(), Map.Entry::getKey));
+
+            for (ColumnAccessPath accessPath : subfieldPruningProjectings) {
+                if (!columnNameToIdMap.containsKey(accessPath.getPath())) {
+                    LOG.warn("ColumnAccessPath {} not found in scan's column map {}, skip eliminating overuse",
+                            accessPath.getPath(), scan.getColRefToColumnMetaMap());
+                    return Optional.empty();
+                }
+            }
 
             Predicate<ColumnAccessPath> isOveruseProjecting = accessPath ->
                     columnNameToIdMap.containsKey(accessPath.getPath()) &&
