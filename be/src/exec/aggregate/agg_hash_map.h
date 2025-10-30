@@ -701,6 +701,9 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
                 max_one_row_size = 0;
                 mem_pool->clear();
                 buffer = mem_pool->allocate(cur_max_one_row_size + SLICE_MEMEQUAL_OVERFLOW_PADDING);
+                if (buffer == nullptr) {
+                    throw std::bad_alloc();
+                }
                 return compute_agg_states_by_rows<Func, HTBuildOp>(chunk_size, key_columns, pool,
                                                                    std::move(allocate_func), agg_states, extra,
                                                                    cur_max_one_row_size);
@@ -710,6 +713,9 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
             // reserved extra SLICE_MEMEQUAL_OVERFLOW_PADDING bytes to prevent SIMD instructions
             // from accessing out-of-bound memory.
             buffer = mem_pool->allocate(batch_allocate_size);
+            if (buffer == nullptr) {
+                throw std::bad_alloc();
+            }
         }
         // process by cols
         return compute_agg_states_by_cols<Func, HTBuildOp>(chunk_size, key_columns, pool, std::move(allocate_func),
