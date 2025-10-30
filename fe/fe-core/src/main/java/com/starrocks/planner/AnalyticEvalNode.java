@@ -42,6 +42,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.expression.AnalyticWindow;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.thrift.TAnalyticNode;
@@ -159,7 +160,7 @@ public class AnalyticEvalNode extends PlanNode {
             msg.analytic_node.setIntermediate_tuple_id(intermediateTupleDesc.getId().asInt());
         }
         msg.analytic_node.setOutput_tuple_id(outputTupleDesc.getId().asInt());
-        msg.analytic_node.setPartition_exprs(Expr.treesToThrift(substitutedPartitionExprs));
+        msg.analytic_node.setPartition_exprs(ExprToThriftVisitor.treesToThrift(substitutedPartitionExprs));
         StringBuilder sqlPartitionKeysBuilder = new StringBuilder();
         for (Expr e : substitutedPartitionExprs) {
             if (sqlPartitionKeysBuilder.length() > 0) {
@@ -171,8 +172,8 @@ public class AnalyticEvalNode extends PlanNode {
             msg.analytic_node.setSql_partition_keys(sqlPartitionKeysBuilder.toString());
         }
         msg.analytic_node.setOrder_by_exprs(
-                Expr.treesToThrift(OrderByElement.getOrderByExprs(orderByElements)));
-        msg.analytic_node.setAnalytic_functions(Expr.treesToThrift(analyticFnCalls));
+                ExprToThriftVisitor.treesToThrift(OrderByElement.getOrderByExprs(orderByElements)));
+        msg.analytic_node.setAnalytic_functions(ExprToThriftVisitor.treesToThrift(analyticFnCalls));
         StringBuilder sqlAggFuncBuilder = new StringBuilder();
         // only serialize agg exprs that are being materialized
         for (Expr e : analyticFnCalls) {
@@ -198,11 +199,11 @@ public class AnalyticEvalNode extends PlanNode {
         }
 
         if (partitionByEq != null) {
-            msg.analytic_node.setPartition_by_eq(partitionByEq.treeToThrift());
+            msg.analytic_node.setPartition_by_eq(ExprToThriftVisitor.treeToThrift(partitionByEq));
         }
 
         if (orderByEq != null) {
-            msg.analytic_node.setOrder_by_eq(orderByEq.treeToThrift());
+            msg.analytic_node.setOrder_by_eq(ExprToThriftVisitor.treeToThrift(orderByEq));
         }
 
         msg.analytic_node.setUse_hash_based_partition(useHashBasedPartition);

@@ -37,7 +37,6 @@ import com.starrocks.rpc.ConfigurableSerDesFactory;
 import com.starrocks.rpc.PBackendService;
 import com.starrocks.rpc.PExecShortCircuitRequest;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.TDescriptorTable;
@@ -239,7 +238,7 @@ public class ShortCircuitHybridExecutor extends ShortCircuitExecutor {
         List<TKeyLiteralExpr> keyLiteralExprs = keyTuples.stream().map(keyTuple -> {
             TKeyLiteralExpr keyLiteralExpr = new TKeyLiteralExpr();
             keyLiteralExpr.setLiteral_exprs(keyTuple.stream()
-                    .map(Expr::treeToThrift)
+                    .map(com.starrocks.sql.ast.expression.ExprToThriftVisitor::treeToThrift)
                     .collect(Collectors.toList()));
             return keyLiteralExpr;
         }).collect(Collectors.toList());
@@ -252,7 +251,7 @@ public class ShortCircuitHybridExecutor extends ShortCircuitExecutor {
             TExecShortCircuitParams commonRequest = new TExecShortCircuitParams();
             commonRequest.setDesc_tbl(tDescriptorTable);
             commonRequest.setOutput_exprs(planFragment.getOutputExprs().stream()
-                    .map(Expr::treeToThrift).collect(Collectors.toList()));
+                    .map(com.starrocks.sql.ast.expression.ExprToThriftVisitor::treeToThrift).collect(Collectors.toList()));
             commonRequest.setIs_binary_row(isBinaryRow);
             commonRequest.setEnable_profile(enableProfile);
             if (planFragment.getSink() != null) {

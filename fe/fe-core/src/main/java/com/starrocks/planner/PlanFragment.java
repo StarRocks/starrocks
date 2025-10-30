@@ -46,6 +46,7 @@ import com.starrocks.connector.BucketProperty;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import com.starrocks.thrift.TCacheParam;
@@ -462,7 +463,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
             result.setPlan(planRoot.treeToThrift());
         }
         if (outputExprs != null) {
-            result.setOutput_exprs(Expr.treesToThrift(outputExprs));
+            result.setOutput_exprs(ExprToThriftVisitor.treesToThrift(outputExprs));
         }
         if (sink != null) {
             result.setOutput_sink(sink.toThrift());
@@ -475,7 +476,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         if (MapUtils.isNotEmpty(queryGlobalDictExprs)) {
             Preconditions.checkState(!queryGlobalDicts.isEmpty(), "Global dict expression error!");
             Map<Integer, TExpr> exprs = Maps.newHashMap();
-            queryGlobalDictExprs.forEach((k, v) -> exprs.put(k, v.treeToThrift()));
+            queryGlobalDictExprs.forEach((k, v) -> exprs.put(k, ExprToThriftVisitor.treeToThrift(v)));
             result.setQuery_global_dict_exprs(exprs);
         }
         if (!loadGlobalDicts.isEmpty()) {

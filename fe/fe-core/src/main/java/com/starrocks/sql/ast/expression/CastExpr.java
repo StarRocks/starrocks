@@ -164,31 +164,6 @@ public class CastExpr extends Expr {
         return e;
     }
 
-    /**
-     * Returns child expr if this expr is an implicit cast, otherwise returns 'this'.
-     */
-    @Override
-    public Expr ignoreImplicitCast() {
-        if (isImplicit) {
-            // we don't expect to see to consecutive implicit casts
-            Preconditions.checkState(
-                    !(getChild(0) instanceof CastExpr) || !((CastExpr) getChild(0)).isImplicit());
-            return getChild(0);
-        } else {
-            return this;
-        }
-    }
-
-    public boolean canHashPartition() {
-        if (type.isFixedPointType() && getChild(0).getType().isFixedPointType()) {
-            return true;
-        }
-        if (type.isDateType() && getChild(0).getType().isDateType()) {
-            return true;
-        }
-        return false;
-    }
-
     @Override
     public boolean isNullable() {
         Expr fromExpr = getChild(0);

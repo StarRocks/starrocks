@@ -44,7 +44,6 @@ import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
-import com.starrocks.planner.FragmentNormalizer;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.SlotId;
 import com.starrocks.planner.TupleId;
@@ -52,9 +51,6 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.QualifiedName;
-import com.starrocks.thrift.TExprNode;
-import com.starrocks.thrift.TExprNodeType;
-import com.starrocks.thrift.TSlotRef;
 
 import java.util.List;
 
@@ -312,20 +308,6 @@ public class SlotRef extends Expr {
         return tblName;
     }
 
-
-    @Override
-    public void toNormalForm(TExprNode msg, FragmentNormalizer normalizer) {
-        msg.node_type = TExprNodeType.SLOT_REF;
-        if (desc != null) {
-            SlotId slotId = normalizer.isNotRemappingSlotId() ? desc.getId() : normalizer.remapSlotId(desc.getId());
-            // tuple id is meaningless here
-            msg.slot_ref = new TSlotRef(slotId.asInt(), 0);
-        } else {
-            // slot id and tuple id are meaningless here
-            msg.slot_ref = new TSlotRef(0, 0);
-        }
-        msg.setOutput_column(outputColumn);
-    }
 
     @Override
     public int hashCode() {
