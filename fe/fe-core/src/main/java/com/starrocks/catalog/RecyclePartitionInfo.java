@@ -38,6 +38,12 @@ public abstract class RecyclePartitionInfo extends JsonWriter {
     @SerializedName(value = "recoverable")
     protected boolean recoverable;
 
+    /**
+     * partition retention period in `second` unit
+     */
+    @SerializedName(value = "retentionPeriod")
+    protected long retentionPeriod = 0L;
+
     public RecyclePartitionInfo() {
         recoverable = true;
     }
@@ -88,6 +94,14 @@ public abstract class RecyclePartitionInfo extends JsonWriter {
 
     public void setRecoverable(boolean recoverable) {
         this.recoverable = recoverable;
+    }
+
+    public void setRetentionPeriod(long retentionPeriod) {
+        this.retentionPeriod = retentionPeriod;
+    }
+
+    public long getRetentionPeriod() {
+        return retentionPeriod;
     }
 
     public boolean delete() {
