@@ -15,6 +15,7 @@
 package com.starrocks.connector.iceberg;
 
 import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
@@ -194,13 +195,10 @@ public class IcebergPartitionUtils {
         return ts >= '2023-01-01 12:00:00' and ts < '2023-01-01 13:00:00'
     */
     public static Range<String> toPartitionRange(IcebergTable table, String partitionColumn,
-                                                 String partitionValue,
+                                                 String partitionValue, PartitionField partitionField,
                                                  boolean isFromIcebergTime) {
-        PartitionField partitionField = table.getPartitionFiled(partitionColumn);
-        if (partitionField == null) {
-            throw new StarRocksConnectorException("Partition column %s not found in table %s.%s.%s",
-                    partitionColumn, table.getCatalogName(), table.getCatalogDBName(), table.getCatalogTableName());
-        }
+        Preconditions.checkArgument(partitionField != null,
+                "Partition field is null for column: %s", partitionColumn);
         IcebergPartitionTransform transform = IcebergPartitionTransform.fromString(partitionField.transform().toString());
         if (transform == IcebergPartitionTransform.IDENTITY) {
             return Range.singleton(partitionValue);
@@ -235,13 +233,10 @@ public class IcebergPartitionUtils {
      * partition value      : 2023-01-02
      * generated predicate  : dt >= '2023-01-01 00:08:00' and dt < '2023-01-02:00:08:00'
      */
-    public static String convertPartitionTransformToPredicate(IcebergTable table, String partitionColumn,
-                                                              String partitionValue) {
-
-        PartitionField partitionField = table.getPartitionFiled(partitionColumn);
-        if (partitionField == null) {
-            throw new StarRocksConnectorException("Partition column %s not found in table %s.%s.%s",
-                    partitionColumn, table.getCatalogName(), table.getCatalogDBName(), table.getCatalogTableName());
+    public static String convertPartitionTransformToPredicate(IcebergTable table, PartitionField partitionField,
+                                                              String partitionColumn, String partitionValue) {
+        if (partitionField == null || Strings.isNullOrEmpty(partitionColumn) || Strings.isNullOrEmpty(partitionValue)) {
+            throw new StarRocksConnectorException("Partition field/column/value is null");
         }
         IcebergPartitionTransform transform =
                 IcebergPartitionTransform.fromString(partitionField.transform().toString());
@@ -274,7 +269,7 @@ public class IcebergPartitionUtils {
             return String.format("%s(%s, %d) = '%s'", fn, partitionCol, width, partitionValue);
         }
 
-        Range<String> range = toPartitionRange(table, partitionColumn, partitionValue, true);
+        Range<String> range = toPartitionRange(table, partitionColumn, partitionValue, partitionField, true);
         if (range.lowerEndpoint().equals(range.upperEndpoint())) {
             return String.format("%s = '%s'", partitionCol, range.lowerEndpoint());
         } else {
@@ -331,7 +326,8 @@ public class IcebergPartitionUtils {
                     throw new StarRocksConnectorException("Partition value must be literal");
                 }
                 String partitionVal = ((LiteralExpr) expr).getStringValue();
-                Range<String> range = toPartitionRange(table, partitionColName, partitionVal, false);
+                Range<String> range = toPartitionRange(table, partitionColName, partitionVal, partitionField,
+                        false);
                 Preconditions.checkArgument(!range.lowerEndpoint().equals(range.upperEndpoint()),
                         "Partition value must be range");
                 try {

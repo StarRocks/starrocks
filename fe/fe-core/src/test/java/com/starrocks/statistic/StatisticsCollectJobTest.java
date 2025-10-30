@@ -19,7 +19,6 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -28,7 +27,6 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.connector.PartitionInfo;
-import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.partitiontraits.DefaultTraits;
 import com.starrocks.connector.statistics.ConnectorTableColumnStats;
 import com.starrocks.qe.ConnectContext;
@@ -42,7 +40,6 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.commons.lang3.StringUtils;
-import org.apache.iceberg.PartitionField;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -60,10 +57,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-
-import static org.hamcrest.CoreMatchers.containsString;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
     private static long t0StatsTableId = 0;
@@ -1292,7 +1285,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
     }
 
     @Test
-    public void testExternalFullStatisticsBuildCollectSQLWithException2() {
+    public void testExternalFullStatisticsBuildCollectSQL() {
         // test partition field is null
         Database database =
                 connectContext.getGlobalStateMgr().getMetadataMgr().getDb(connectContext, "iceberg0", "partitioned_db");
@@ -1307,39 +1300,9 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         StatsConstants.AnalyzeType.FULL,
                         StatsConstants.ScheduleType.ONCE,
                         Maps.newHashMap());
-        new MockUp<IcebergTable>() {
-            @Mock
-            public PartitionField getPartitionFiled(String colName) {
-                return null;
-            }
-        };
 
-        Throwable exception = assertThrows(StarRocksConnectorException.class, () -> collectJob.buildCollectSQLList(1));
-        assertThat(exception.getMessage(), containsString("Partition column date not found in table iceberg0.partitioned_db.t1"));
-    }
-
-    @Test
-    public void testExternalFullStatisticsBuildCollectSQLWithException3() {
-        // test partition transform is bucket
-        Database database =
-                connectContext.getGlobalStateMgr().getMetadataMgr()
-                        .getDb(connectContext, "iceberg0", "partitioned_transforms_db");
-        Table table =
-                connectContext.getGlobalStateMgr().getMetadataMgr()
-                        .getTable(connectContext, "iceberg0", "partitioned_transforms_db",
-                                "t0_date_month_identity_evolution");
-        ExternalFullStatisticsCollectJob collectJob = (ExternalFullStatisticsCollectJob)
-                StatisticsCollectJobFactory.buildExternalStatisticsCollectJob("iceberg0",
-                        database,
-                        table, null,
-                        Lists.newArrayList("id", "data", "ts"),
-                        StatsConstants.AnalyzeType.FULL,
-                        StatsConstants.ScheduleType.ONCE,
-                        Maps.newHashMap());
-
-        Throwable exception = assertThrows(StarRocksConnectorException.class, () -> collectJob.buildCollectSQLList(1));
-        assertThat(exception.getMessage(), containsString("Do not supported analyze iceberg table" +
-                " t0_date_month_identity_evolution with partition evolution"));
+        List<List<String>> collectSqlList =  collectJob.buildCollectSQLList(1);
+        assertContains(collectSqlList.get(0).toString(), "date` = '2020-01-01'");
     }
 
     @Test
