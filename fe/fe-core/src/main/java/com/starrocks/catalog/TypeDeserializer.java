@@ -148,7 +148,7 @@ public class TypeDeserializer {
         switch (tTypeNodeType) {
             case SCALAR: {
                 PScalarType scalarType = pTypeDesc.types.get(nodeIndex).scalarType;
-                return new Pair<>(ScalarType.createType(scalarType), 1);
+                return new Pair<>(createType(scalarType), 1);
             }
             case ARRAY: {
                 Preconditions.checkState(pTypeDesc.types.size() > nodeIndex + 1);
@@ -182,5 +182,27 @@ public class TypeDeserializer {
         // NEVER REACH.
         Preconditions.checkState(false);
         return null;
+    }
+
+    public static ScalarType createType(PScalarType ptype) {
+        TPrimitiveType tPrimitiveType = TPrimitiveType.findByValue(ptype.type);
+
+        switch (tPrimitiveType) {
+            case CHAR:
+                return ScalarType.createCharType(ptype.len);
+            case VARCHAR:
+                return ScalarType.createVarcharType(ptype.len);
+            case VARBINARY:
+                return ScalarType.createVarbinary(ptype.len);
+            case DECIMALV2:
+                return ScalarType.createDecimalV2Type(ptype.precision, ptype.precision);
+            case DECIMAL32:
+            case DECIMAL64:
+            case DECIMAL128:
+            case DECIMAL256:
+                return ScalarType.createDecimalV3Type(PrimitiveType.fromThrift(tPrimitiveType), ptype.precision, ptype.scale);
+            default:
+                return ScalarType.createType(PrimitiveType.fromThrift(tPrimitiveType));
+        }
     }
 }

@@ -38,13 +38,8 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSortedMap;
-import com.google.common.collect.Lists;
 import com.starrocks.catalog.combinator.AggStateDesc;
-import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.thrift.TTypeDesc;
-import com.starrocks.thrift.TTypeNode;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -1106,13 +1101,6 @@ public abstract class Type implements Cloneable {
         throw new IllegalStateException("getTypeSize() not implemented for type " + toSql());
     }
 
-    public TTypeDesc toThrift() {
-        TTypeDesc container = new TTypeDesc();
-        container.setTypes(new ArrayList<TTypeNode>());
-        TypeSerializer.toThrift(this, container);
-        return container;
-    }
-
     /**
      * Returns true if the other can be fully compatible with this type.
      * fully compatible means that all possible values of this type can be represented by the other type,
@@ -1289,18 +1277,6 @@ public abstract class Type implements Cloneable {
             Preconditions.checkState(isScalarType());
         }
         return false;
-    }
-
-    public static List<TTypeDesc> toThrift(Type[] types) {
-        return toThrift(Lists.newArrayList(types));
-    }
-
-    public static List<TTypeDesc> toThrift(ArrayList<Type> types) {
-        ArrayList<TTypeDesc> result = Lists.newArrayList();
-        for (Type t : types) {
-            result.add(t.toThrift());
-        }
-        return result;
     }
 
     /**
@@ -1519,8 +1495,6 @@ public abstract class Type implements Cloneable {
         }
     }
 
-
-
     /**
      * @return scalar scale if type is decimal
      * 31 if type is float or double
@@ -1569,7 +1543,8 @@ public abstract class Type implements Cloneable {
         if (type.isArrayType()) {
             return getInnermostType(((ArrayType) type).getItemType());
         }
-        throw new SemanticException("Cannot get innermost type of '" + type + "'");
+
+        return null;
     }
 
     public String canonicalName() {
