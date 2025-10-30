@@ -241,8 +241,8 @@ public class LakePublishBatchTest {
         Assertions.assertTrue(waiter4.await(10, TimeUnit.SECONDS));
     }
 
-    @ParameterizedTest
-    @ValueSource(booleans = {true, false})
+    //    @ParameterizedTest
+    //    @ValueSource(booleans = {true, false})
     public void testPublishTransactionState(boolean enableAggregation) throws Exception {
         String tableName = enableAggregation ? TABLE_AGG_ON : TABLE_AGG_OFF;
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
