@@ -16,6 +16,7 @@ package com.starrocks.sql.optimizer.operator.scalar;
 
 import com.starrocks.catalog.Type;
 import com.starrocks.common.util.SRStringUtils;
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 
@@ -34,6 +35,7 @@ public final class ColumnRefOperator extends ScalarOperator {
     private final int id;
     private final String name;
     private boolean nullable;
+    private ColumnRefFactory parent = null;
 
     public ColumnRefOperator(int id, Type type, String name, boolean nullable) {
         super(OperatorType.VARIABLE, type);
@@ -43,12 +45,17 @@ public final class ColumnRefOperator extends ScalarOperator {
     }
 
     public ColumnRefOperator(int id, Type type, String name, boolean nullable, boolean isLambdaArgument) {
-        // lambda arguments cannot be seen by outer scopes, so set it a different
-        // operator type.
+        this(id, type, name, nullable, isLambdaArgument, null);
+    }
+
+    public ColumnRefOperator(int id, Type type, String name, boolean nullable, boolean isLambdaArgument,
+                             ColumnRefFactory parent) {
+        // lambda arguments cannot be seen by outer scopes, so set it a different operator type.
         super(isLambdaArgument ? OperatorType.LAMBDA_ARGUMENT : OperatorType.VARIABLE, type);
         this.id = id;
         this.name = requireNonNull(name, "name is null");
         this.nullable = nullable;
+        this.parent = parent;
     }
 
     public int getId() {
@@ -196,5 +203,9 @@ public final class ColumnRefOperator extends ScalarOperator {
     @Override
     public String debugString() {
         return "col";
+    }
+
+    public ColumnRefFactory getParent() {
+        return this.parent;
     }
 }
