@@ -23,6 +23,7 @@
 #include "storage/olap_common.h"
 #include "storage/options.h"
 #include "storage/predicate_tree/predicate_tree.hpp"
+#include "storage/rowset/segment_options.h"
 #include "storage/runtime_filter_predicate.h"
 #include "storage/runtime_range_pruner.h"
 #include "storage/seek_range.h"
@@ -99,6 +100,13 @@ public:
 
     TTableSampleOptions sample_options;
     bool enable_join_runtime_filter_pushdown = false;
+
+    std::optional<SegmentReadOptions> seg_opts;
+
+    SegmentReadOptions* reuse_segment_options() {
+        DCHECK(seg_opts.has_value());
+        return &seg_opts.value();
+    }
 };
 
 } // namespace starrocks

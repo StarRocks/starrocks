@@ -52,6 +52,11 @@ public:
     void close(RuntimeState* state) override;
     void update_chunk_exec_stats(RuntimeState* state) override;
 
+    // Reuse this ChunkSource to process another morsel
+    Status reuse(MorselPtr&& morsel) override;
+
+    int64_t tablet_id() const;
+
 private:
     Status _read_chunk(RuntimeState* state, ChunkPtr* chunk) override;
 

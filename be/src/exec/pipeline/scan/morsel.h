@@ -165,6 +165,8 @@ public:
         return std::tuple<int64_t, int64_t>{_owner_id, _version};
     }
 
+    virtual bool can_reuse(ScanMorsel& other) { return false; }
+
     void set_split_context(ScanSplitContextPtr&& split_context) {
         if (split_context == nullptr) return;
         _split_context = std::move(split_context);
@@ -212,6 +214,8 @@ public:
     }
 
     RowidRangeOptionPtr get_rowid_range_option() { return _rowid_range_option; }
+
+    bool can_reuse(ScanMorsel& other) override;
 
 private:
     RowidRangeOptionPtr _rowid_range_option;

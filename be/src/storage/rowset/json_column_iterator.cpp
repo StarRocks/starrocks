@@ -434,7 +434,8 @@ Status JsonDynamicFlatIterator::seek_to_ordinal(ordinal_t ord) {
 Status JsonDynamicFlatIterator::get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
                                                            const ColumnPredicate* del_predicate,
                                                            SparseRange<>* row_ranges, CompoundNodeType pred_relation) {
-    return _json_iter->get_row_ranges_by_zone_map(predicates, del_predicate, row_ranges, pred_relation);
+    return _json_iter->get_row_ranges_by_zone_map(predicates, del_predicate, row_ranges, pred_relation,
+                                                  SparseRange<>());
 }
 
 class JsonMergeIterator final : public ColumnIterator {

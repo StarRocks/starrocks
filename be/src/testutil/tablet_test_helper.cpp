@@ -87,7 +87,9 @@ std::vector<ChunkIteratorPtr> TabletTestHelper::create_segment_iterators(const T
     RowsetReadOptions rowset_opts;
     rowset_opts.version = version.second;
     rowset_opts.stats = _stats;
-    auto st = new_rowset->get_segment_iterators(*tablet.tablet_schema()->schema(), rowset_opts, &seg_iters);
+    SegmentReadOptions seg_options;
+    auto st =
+            new_rowset->get_segment_iterators(*tablet.tablet_schema()->schema(), rowset_opts, seg_options, &seg_iters);
     CHECK(st.ok());
     return seg_iters;
 }

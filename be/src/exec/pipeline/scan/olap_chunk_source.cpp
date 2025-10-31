@@ -15,6 +15,7 @@
 #include "exec/pipeline/scan/olap_chunk_source.h"
 
 #include <cstdint>
+#include <sstream>
 #include <string_view>
 #include <unordered_map>
 
@@ -42,6 +43,7 @@
 #include "storage/runtime_range_pruner.hpp"
 #include "storage/storage_engine.h"
 #include "storage/tablet_index.h"
+#include "storage/tablet_reader_params.h"
 #include "types/logical_type.h"
 #include "util/runtime_profile.h"
 #include "util/table_metrics.h"
@@ -102,6 +104,10 @@ Status OlapChunkSource::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(_init_olap_reader(_runtime_state));
 
     return Status::OK();
+}
+
+int64_t OlapChunkSource::tablet_id() const {
+    return _tablet->tablet_id();
 }
 
 void OlapChunkSource::update_chunk_exec_stats(RuntimeState* state) {
@@ -906,6 +912,21 @@ void OlapChunkSource::_update_counter() {
         COUNTER_UPDATE(ADD_CHILD_COUNTER(_runtime_profile, "SampleBuildHistogramCount", TUnit::UNIT, parent_name),
                        _reader->stats().sample_build_histogram_count);
     }
+}
+
+Status OlapChunkSource::reuse(MorselPtr&& morsel) {
+    _morsel = std::move(morsel);
+
+    _status = Status::OK();
+
+    // update rowid_range in TabletReaderParams
+    _morsel->init_tablet_reader_params(&_params);
+    _params.reuse_chunk_source = true;
+
+    RETURN_IF_ERROR(_reader->reuse(_params));
+    _prj_iter = _reader;
+
+    return Status::OK();
 }
 
 } // namespace starrocks::pipeline
