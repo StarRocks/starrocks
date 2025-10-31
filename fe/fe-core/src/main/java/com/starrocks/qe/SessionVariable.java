@@ -987,6 +987,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_INSERT_SELECT_EXTERNAL_AUTO_REFRESH = "enable_insert_select_external_auto_refresh";
 
+    public static final String ENABLE_PRE_AGG_TOP_N_PUSH_DOWN = "enable_pre_agg_top_n_push_down";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -2034,6 +2036,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_INSERT_SELECT_EXTERNAL_AUTO_REFRESH)
     private boolean enableInsertSelectExternalAutoRefresh = true;
+
+    @VarAttr(name = ENABLE_PRE_AGG_TOP_N_PUSH_DOWN, flag = VariableMgr.INVISIBLE)
+    private boolean enablePreAggTopNPushDown = true;
 
     public int getCboPruneJsonSubfieldDepth() {
         return cboPruneJsonSubfieldDepth;
@@ -5491,6 +5496,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableInsertSelectExternalAutoRefresh(boolean enableInsertSelectExternalAutoRefresh) {
         this.enableInsertSelectExternalAutoRefresh = enableInsertSelectExternalAutoRefresh;
+    }
+
+    public void setEnablePreAggTopNPushDown(boolean enablePreAggTopNPushDown) {
+        this.enablePreAggTopNPushDown = enablePreAggTopNPushDown;
+    }
+
+    public boolean isEnablePreAggTopNPushDown() {
+        return enablePreAggTopNPushDown;
     }
 
     // Serialize to thrift object
