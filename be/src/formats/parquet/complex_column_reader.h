@@ -182,6 +182,9 @@ public:
         }
     }
 
+    bool can_use_dict_filter(ExprContext* ctx, bool is_decode_needed, const SlotId slotId,
+                             const std::vector<std::string>& sub_field_path, const size_t& layer) override;
+
     bool try_to_use_dict_filter(ExprContext* ctx, bool is_decode_needed, const SlotId slotId,
                                 const std::vector<std::string>& sub_field_path, const size_t& layer) override;
 

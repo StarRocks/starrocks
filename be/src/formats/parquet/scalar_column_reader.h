@@ -154,6 +154,9 @@ public:
     bool try_to_use_dict_filter(ExprContext* ctx, bool is_decode_needed, const SlotId slotId,
                                 const std::vector<std::string>& sub_field_path, const size_t& layer) override;
 
+    bool can_use_dict_filter(ExprContext* ctx, bool is_decode_needed, const SlotId slotId,
+                             const std::vector<std::string>& sub_field_path, const size_t& layer) override;
+
     Status rewrite_conjunct_ctxs_to_predicate(bool* is_group_filtered, const std::vector<std::string>& sub_field_path,
                                               const size_t& layer) override {
         DCHECK_EQ(sub_field_path.size(), layer);
@@ -231,6 +234,9 @@ public:
 
     bool try_to_use_dict_filter(ExprContext* ctx, bool is_decode_needed, const SlotId slotId,
                                 const std::vector<std::string>& sub_field_path, const size_t& layer) override;
+
+    bool can_use_dict_filter(ExprContext* ctx, bool is_decode_needed, const SlotId slotId,
+                             const std::vector<std::string>& sub_field_path, const size_t& layer) override;
 
     Status rewrite_conjunct_ctxs_to_predicate(bool* is_group_filtered, const std::vector<std::string>& sub_field_path,
                                               const size_t& layer) override {
