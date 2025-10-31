@@ -58,6 +58,10 @@ Status ArrowResultWriter::append_chunk(Chunk* chunk) {
 }
 
 Status ArrowResultWriter::close() {
+<<<<<<< HEAD
+=======
+    VLOG_ROW << "[Flight] ArrowResultWriter::close() called";
+>>>>>>> 49eb8b6ef1 ([BugFix] Fix bugs for Arrow Flight SQL (#64736))
     return Status::OK();
 }
 

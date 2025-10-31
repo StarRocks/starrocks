@@ -388,9 +388,38 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
                     new ArrowFlightSqlConnectProcessor(ctx);
             arrowConnectProcessor.processOnce();
 
+<<<<<<< HEAD
             if (ctx.getState().getStateType() == QueryState.MysqlStateType.ERR) {
                 throw new RuntimeException("Process Query Error: " + ctx.getState().getErrorMessage());
             }
+=======
+                    ctx.setDeploymentFinished(null);
+                    processorFinished.complete(null);
+                } catch (Throwable t) {
+                    processorFinished.completeExceptionally(t);
+                }
+            });
+
+            // Wait util deployment finished or ArrowFlightSqlConnectProcessor finished.
+            SessionVariable sv = ctx.getSessionVariable();
+            Coordinator coordinator = ctx.waitForDeploymentFinished(sv.getQueryTimeoutS() * 1000L);
+
+            // ------------------------------------------------------------------------------------
+            // FE task will return FE as endpoint.
+            // ------------------------------------------------------------------------------------
+            if (ctx.returnFromFE()) {
+                processorFinished.get();
+                if (ctx.getState().isError()) {
+                    throw new RuntimeException(String.format("failed to process query [queryID=%s] [error=%s]",
+                            DebugUtil.printId(ctx.getExecutionId()),
+                            ctx.getState().getErrorMessage()));
+                }
+                String queryId = DebugUtil.printId(ctx.getExecutionId());
+                if (ctx.getResult(queryId) == null) {
+                    ctx.setEmptyResultIfNotExist(queryId);
+                }
+                final ByteString handle = buildFETicket(ctx);
+>>>>>>> 49eb8b6ef1 ([BugFix] Fix bugs for Arrow Flight SQL (#64736))
 
             if (ctx.returnFromFE()) {
                 final ByteString handle = ByteString.copyFromUtf8(peerIdentity + ":" + ctx.getQueryId());
@@ -402,6 +431,7 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
                 return getFlightInfoForSchema(ticketStatement, flightDescriptor, ctx.getResult().getSchema());
             }
 
+<<<<<<< HEAD
             DefaultCoordinator coordinator = (DefaultCoordinator) ctx.getCoordinator();
             TNetworkAddress address = coordinator.getReceiver().getAddress();
             long beId = coordinator.getReceiver().getBackendId();
@@ -409,6 +439,15 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
             if (be == null) {
                 throw CallStatus.INTERNAL.withDescription("Backend information unavailable for BE ID: " + beId)
                         .toRuntimeException();
+=======
+            // ------------------------------------------------------------------------------------
+            // Query task will wait until deployment to BE is finished and return BE as endpoint.
+            // ------------------------------------------------------------------------------------
+            if (coordinator == null || ctx.getState().isError()) {
+                throw new RuntimeException(String.format("failed to process query [queryID=%s] [error=%s]",
+                        DebugUtil.printId(ctx.getExecutionId()),
+                        ctx.getState().getErrorMessage()));
+>>>>>>> 49eb8b6ef1 ([BugFix] Fix bugs for Arrow Flight SQL (#64736))
             }
 
             TUniqueId resultFragmentId =
