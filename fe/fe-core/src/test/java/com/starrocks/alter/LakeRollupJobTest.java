@@ -38,11 +38,6 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-<<<<<<< HEAD
-import java.util.stream.Collectors;
-=======
-import java.util.Optional;
->>>>>>> 62b97679bb ([UT] Fix unstable lake rollup ut (#64721))
 
 public class LakeRollupJobTest {
     private static final String DB = "db_for_lake_mv";
