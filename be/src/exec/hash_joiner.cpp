@@ -268,6 +268,7 @@ StatusOr<ChunkPtr> HashJoiner::_pull_probe_output_chunk(RuntimeState* state) {
 
     if (_phase == HashJoinPhase::PROBE || !_hash_join_prober->probe_chunk_empty()) {
         ASSIGN_OR_RETURN(chunk, _hash_join_prober->probe_chunk(state))
+        RETURN_IF_ERROR(chunk->capacity_limit_reached());
         return chunk;
     }
 
