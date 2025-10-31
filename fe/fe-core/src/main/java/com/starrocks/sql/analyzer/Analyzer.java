@@ -109,6 +109,7 @@ import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RecoverDbStmt;
 import com.starrocks.sql.ast.RecoverPartitionStmt;
 import com.starrocks.sql.ast.RecoverTableStmt;
+import com.starrocks.sql.ast.RefreshCacheStatsStatement;
 import com.starrocks.sql.ast.RefreshDictionaryStmt;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshTableStmt;
@@ -914,6 +915,12 @@ public class Analyzer {
 
         @Override
         public Void visitDataCacheSelectStatement(DataCacheSelectStatement statement, ConnectContext context) {
+            DataCacheStmtAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitRefreshCacheStatsStatement(RefreshCacheStatsStatement statement, ConnectContext context) {
             DataCacheStmtAnalyzer.analyze(statement, context);
             return null;
         }
