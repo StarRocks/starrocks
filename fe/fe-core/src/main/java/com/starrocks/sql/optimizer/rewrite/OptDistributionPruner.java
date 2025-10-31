@@ -74,8 +74,7 @@ public class OptDistributionPruner {
                 } else {
                     filters = operator.getColumnFilters();
                 }
-                distributionPruner = new HashDistributionPruner(index.getVirtualBuckets(),
-                        index.getTabletIds(),
+                distributionPruner = new HashDistributionPruner(index.getTabletIdsInOrder(),
                         MetaUtils.getColumnsByColumnIds(idToColumn, info.getDistributionColumns()),
                         filters);
                 return distributionPruner.prune();
@@ -84,6 +83,6 @@ public class OptDistributionPruner {
             LOG.warn("distribution prune failed. ", e);
         }
 
-        return index.getTabletIds();
+        return index.getTabletIdsInOrder();
     }
 }

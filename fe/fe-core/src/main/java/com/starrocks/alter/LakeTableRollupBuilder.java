@@ -34,7 +34,6 @@ import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -105,18 +104,12 @@ public class LakeTableRollupBuilder extends AlterJobV2Builder {
 
                 TabletMeta shadowTabletMeta =
                         new TabletMeta(dbId, olapTable.getId(), physicalPartitionId, rollupIndexId, medium, true);
-                Map<Long, Long> tabletIdMap = new HashMap<>();
                 for (int i = 0; i < originTablets.size(); i++) {
                     Tablet originTablet = originTablets.get(i);
                     Tablet shadowTablet = new LakeTablet(shadowTabletIds.get(i));
                     mvIndex.addTablet(shadowTablet, shadowTabletMeta);
                     mvJob.addTabletIdMap(physicalPartitionId, shadowTablet.getId(), originTablet.getId());
-                    tabletIdMap.put(originTablet.getId(), shadowTablet.getId());
                 }
-
-                List<Long> virtualBuckets = new ArrayList<>(baseIndex.getVirtualBuckets());
-                virtualBuckets.replaceAll(tabletId -> tabletIdMap.get(tabletId));
-                mvIndex.setVirtualBuckets(virtualBuckets);
 
                 mvJob.addMVIndex(physicalPartitionId, mvIndex);
                 LOG.debug("create materialized view index {} based on index {} in partition {}:{}",

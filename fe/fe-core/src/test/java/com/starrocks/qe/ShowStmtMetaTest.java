@@ -942,15 +942,14 @@ public class ShowStmtMetaTest {
         TableRef tableRef = new TableRef(QualifiedName.of(List.of("test_db", "test_table")), null, NodePosition.ZERO);
         ShowDataDistributionStmt stmt = new ShowDataDistributionStmt(tableRef);
         ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
-        Assertions.assertEquals(8, metaData.getColumnCount());
+        Assertions.assertEquals(7, metaData.getColumnCount());
         Assertions.assertEquals("PartitionName", metaData.getColumn(0).getName());
         Assertions.assertEquals("SubPartitionId", metaData.getColumn(1).getName());
         Assertions.assertEquals("MaterializedIndexName", metaData.getColumn(2).getName());
-        Assertions.assertEquals("VirtualBuckets", metaData.getColumn(3).getName());
-        Assertions.assertEquals("RowCount", metaData.getColumn(4).getName());
-        Assertions.assertEquals("RowCount%", metaData.getColumn(5).getName());
-        Assertions.assertEquals("DataSize", metaData.getColumn(6).getName());
-        Assertions.assertEquals("DataSize%", metaData.getColumn(7).getName());
+        Assertions.assertEquals("RowCount", metaData.getColumn(3).getName());
+        Assertions.assertEquals("RowCount%", metaData.getColumn(4).getName());
+        Assertions.assertEquals("DataSize", metaData.getColumn(5).getName());
+        Assertions.assertEquals("DataSize%", metaData.getColumn(6).getName());
     }
 
     @Test
