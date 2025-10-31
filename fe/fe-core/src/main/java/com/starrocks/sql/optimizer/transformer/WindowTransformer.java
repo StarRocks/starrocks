@@ -32,6 +32,7 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.NullLiteral;
+import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
@@ -132,6 +133,36 @@ public class WindowTransformer {
                 AnalyticExpr.checkDefaultValue(callExpr);
                 // check the value whether out of range
                 callExpr.uncheckedCastChild(Type.BIGINT, 1);
+
+                // MySQL-compatible: when third parameter exists and is non-null, prefer its type
+                // as return/common type. Cast both first and third arguments to this target type.
+                if (callExpr.getChildren().size() == 3) {
+                    Type thirdType = callExpr.getChild(2).getType();
+                    Type targetType;
+                    if (callExpr.getChild(2) instanceof NullLiteral) {
+                        targetType = firstType;
+                    } else if (thirdType.isStringType() || thirdType.isArrayType() || thirdType.isJsonType()) {
+                        targetType = thirdType;
+                    } else {
+                        targetType = TypeManager.getCommonSuperType(firstType, thirdType);
+                        if (!targetType.isValid()) {
+                            targetType = firstType;
+                        }
+                    }
+                    try {
+                        callExpr.uncheckedCastChild(targetType, 0);
+                        callExpr.uncheckedCastChild(targetType, 2);
+                        // Rebind function with new argument types to ensure result type matches targetType
+                        Type[] argTypes = new Type[] {targetType, Type.BIGINT, targetType};
+                        Function rebound = Expr.getBuiltinFunction(callExpr.getFnName().getFunction(), argTypes,
+                                Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+                        if (rebound != null) {
+                            callExpr.setFn(rebound);
+                        }
+                    } catch (AnalysisException e) {
+                        throw new SemanticException(e.getMessage());
+                    }
+                }
 
                 AnalyticWindow.BoundaryType rightBoundaryType = AnalyticWindow.BoundaryType.FOLLOWING;
                 if (callExpr.getFnName().getFunction().equalsIgnoreCase(AnalyticExpr.LAG)) {

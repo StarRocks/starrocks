@@ -1,0 +1,131 @@
+-- name: test_lead_lag_support_col_type
+CREATE TABLE test_col_value (
+    col_1 INT,
+    col_2 INT,
+    col_3 INT NOT NULL
+) PROPERTIES (
+    "compression"        = "LZ4",
+    "replicated_storage" = "true",
+    "replication_num"    = "1"
+);
+-- result:
+-- !result
+INSERT INTO test_col_value (col_1, col_2, col_3) VALUES (1, 1, 11), (2, 2, 22), (3, 3, 33), (4, NULL, 44), (5, 5, 55), (6, 6, 66);
+-- result:
+-- !result
+SELECT col_1, col_2 , LAG(col_2, 2, col_3) OVER (ORDER BY col_1) AS lag_result FROM test_col_value;
+-- result:
+1	1	11
+2	2	22
+3	3	1
+4	None	2
+5	5	3
+6	6	None
+-- !result
+SELECT col_1, col_2 , LEAD(col_2, 2, col_3) OVER (ORDER BY col_1) AS lag_result FROM test_col_value;
+-- result:
+1	1	3
+2	2	None
+3	3	5
+4	None	6
+5	5	55
+6	6	66
+-- !result
+SELECT col_1, col_2 , LAG(col_2, 2, col_3 * 2 + 99) OVER (ORDER BY col_1) AS lag_result FROM test_col_value;
+-- result:
+1	1	121
+2	2	143
+3	3	1
+4	None	2
+5	5	3
+6	6	None
+-- !result
+SELECT col_1, col_2 , LEAD(col_2, 2, col_3 * 2 + 99) OVER (ORDER BY col_1) AS lag_result FROM test_col_value;
+-- result:
+1	1	3
+2	2	None
+3	3	5
+4	None	6
+5	5	209
+6	6	231
+-- !result
+SELECT col_1, col_2 , LAG(col_2 IGNORE NULLS, 2, col_3) OVER (ORDER BY col_1) AS lag_result FROM test_col_value;
+-- result:
+1	1	11
+2	2	22
+3	3	1
+4	None	2
+5	5	2
+6	6	3
+-- !result
+SELECT col_1, col_2 , LEAD(col_2 IGNORE NULLS, 2, col_3) OVER (ORDER BY col_1) AS lag_result FROM test_col_value;
+-- result:
+1	1	3
+2	2	5
+3	3	6
+4	None	6
+5	5	55
+6	6	66
+-- !result
+CREATE TABLE test_col_value2 (
+    col_1 INT,
+    col_2 INT,
+    col_3 VARCHAR(255) NOT NULL
+) PROPERTIES (
+    "compression"        = "LZ4",
+    "replicated_storage" = "true",
+    "replication_num"    = "1"
+);
+-- result:
+-- !result
+INSERT INTO test_col_value2 (col_1, col_2, col_3) VALUES (1, 1, '11'), (2, 2, '22'), (3, 3, '33'), (4, NULL, '44'), (5, 5, '55'), (6, 6, '66'), (7, 7, '7djaiojdoa'), (8, NULL, '8djaiojdoa'), (9, 9, '0djagdfoi');
+-- result:
+-- !result
+SELECT col_1, col_2 , LAG(col_2, 2, col_3) OVER (ORDER BY col_1) AS lag_result FROM test_col_value2;
+-- result:
+1	1	11
+2	2	22
+3	3	1
+4	None	2
+5	5	3
+6	6	None
+7	7	5
+8	None	6
+9	9	7
+-- !result
+SELECT col_1, col_2 , LEAD(col_2, 2, col_3) OVER (ORDER BY col_1) AS lag_result FROM test_col_value2;
+-- result:
+1	1	3
+2	2	None
+3	3	5
+4	None	6
+5	5	7
+6	6	None
+7	7	9
+8	None	8djaiojdoa
+9	9	0djagdfoi
+-- !result
+SELECT col_1, col_2 , LAG(col_2 IGNORE NULLS, 2, col_3) OVER (ORDER BY col_1) AS lag_result FROM test_col_value2;
+-- result:
+1	1	11
+2	2	22
+3	3	1
+4	None	2
+5	5	2
+6	6	3
+7	7	5
+8	None	6
+9	9	6
+-- !result
+SELECT col_1, col_2 , LEAD(col_2 IGNORE NULLS, 2, col_3) OVER (ORDER BY col_1) AS lag_result FROM test_col_value2;
+-- result:
+1	1	3
+2	2	5
+3	3	6
+4	None	6
+5	5	7
+6	6	9
+7	7	None
+8	None	None
+9	9	None
+-- !result

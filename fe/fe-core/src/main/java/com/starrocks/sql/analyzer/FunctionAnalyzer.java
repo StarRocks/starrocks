@@ -288,15 +288,6 @@ public class FunctionAnalyzer {
             if (!functionCallExpr.isAnalyticFnCall()) {
                 throw new SemanticException(fnName.getFunction() + " only used in analytic function",
                         functionCallExpr.getPos());
-            } else {
-                if (functionCallExpr.getChildren().size() > 2) {
-                    if (!functionCallExpr.getChild(2).isConstant()) {
-                        throw new SemanticException(
-                                "The default parameter (parameter 3) of LAG must be a constant: "
-                                        + functionCallExpr.toSql(), functionCallExpr.getChild(2).getPos());
-                    }
-                }
-                return;
             }
         }
 
