@@ -363,7 +363,7 @@ public class StreamLoadScanNode extends LoadScanNode {
         }
 
         for (Expr conjunct : precedingFilterConjuncts) {
-            paramCreateContext.params.addToPreceding_filter_exprs(conjunct.treeToThrift());
+            paramCreateContext.params.addToPreceding_filter_exprs(ExprToThriftVisitor.treeToThrift(conjunct));
         }
 
         paramCreateContext.params.setDest_sid_to_src_sid_without_trans(destSidToSrcSidWithoutTrans);

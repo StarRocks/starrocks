@@ -19,10 +19,10 @@ import com.starrocks.persist.OriginStatementInfo;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.ImportWhereStmt;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.thrift.TExprOpcode;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -90,7 +90,7 @@ public class RoutineLoadDescTest {
         Assertions.assertTrue(precedingFilter.isPrecedingFilter());
         Expr expr = precedingFilter.getExpr();
         Assertions.assertInstanceOf(BinaryPredicate.class, expr);
-        Assertions.assertEquals(TExprOpcode.EQ, expr.getOpcode());
+        Assertions.assertEquals(BinaryType.EQ, ((BinaryPredicate) expr).getOp());
         List<Expr> children = expr.getChildren();
         Assertions.assertEquals(2, children.size());
         Assertions.assertInstanceOf(SlotRef.class, children.get(0));
