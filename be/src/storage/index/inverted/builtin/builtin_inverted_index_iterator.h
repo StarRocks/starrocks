@@ -39,8 +39,6 @@ private:
 
     Status _wildcard_query(const Slice* search_query, roaring::Roaring* bit_map);
 
-    Status _init_like_context(const Slice& s);
-
     std::unique_ptr<BitmapIndexIterator> _bitmap_itr;
     std::unique_ptr<FunctionContext> _like_context;
 };
