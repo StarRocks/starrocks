@@ -48,6 +48,10 @@ under the License.
         <async.profiler.lib>${env.STARROCKS_HOME}/build-support/libasyncProfiler.so</async.profiler.lib>
         <async.profiler.output>${env.STARROCKS_HOME}/output/fe/log/proc_profile/prof-%t-%p.html</async.profiler.output>
         <async.profiler.arg></async.profiler.arg>
+        
+        <!-- JaCoCo incremental coverage properties -->
+        <jacoco.base.branch>${env.JACOCO_BASE_BRANCH:-main}</jacoco.base.branch>
+        <jacoco.includes>${env.JACOCO_INCLUDES:-com/starrocks/**}</jacoco.includes>
     </properties>
 
     <profiles>
@@ -944,6 +948,28 @@ under the License.
                     </execution>
                 </executions>
             </plugin>
+            
+            <!-- Load generated JaCoCo includes properties -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>properties-maven-plugin</artifactId>
+                <version>1.1.0</version>
+                <executions>
+                    <execution>
+                        <id>load-jacoco-includes</id>
+                        <phase>process-sources</phase>
+                        <goals>
+                            <goal>read-project-properties</goal>
+                        </goals>
+                        <configuration>
+                            <files>
+                                <file>${project.build.directory}/jacoco-includes.properties</file>
+                            </files>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            
             <!-- fe ut coverage-->
             <plugin>
                 <groupId>org.jacoco</groupId>
@@ -963,7 +989,8 @@ under the License.
                         </goals>
                         <configuration>
                             <includes>
-                                <include>com/starrocks/**</include>
+                                <!-- Dynamic includes will be loaded from generated file -->
+                                <include>${jacoco.includes}</include>
                             </includes>
                             <excludes>
                                 <exclude>com/starrocks/proto/**</exclude>
@@ -1070,7 +1097,7 @@ under the License.
             <!-- also parse the proto for FE -->
             <plugin>
                 <artifactId>maven-antrun-plugin</artifactId>
-                <version>1.8</version>
+                <version>3.1.0</version>
                 <executions>
                     <execution>
                         <id>generate-sources</id>
@@ -1133,6 +1160,23 @@ under the License.
                         <goals>
                             <goal>run</goal>
                         </goals>
+                    </execution>
+                    <execution>
+                        <id>generate-jacoco-includes</id>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <target>
+                                <exec executable="bash" dir="${project.basedir}" failonerror="false">
+                                    <arg value="../../build-support/generate-jacoco-includes.sh"/>
+                                    <arg value="${jacoco.base.branch}"/>
+                                    <arg value="target/jacoco-includes.txt"/>
+                                    <arg value="target/jacoco-includes.properties"/>
+                                </exec>
+                            </target>
+                        </configuration>
                     </execution>
                 </executions>
             </plugin>
