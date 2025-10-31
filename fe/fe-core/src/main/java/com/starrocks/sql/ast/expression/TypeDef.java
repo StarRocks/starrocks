@@ -221,7 +221,6 @@ public class TypeDef implements ParseNode {
         return parsedType.toString();
     }
 
-    @Override
     public String toSql() {
         return parsedType.toSql();
     }

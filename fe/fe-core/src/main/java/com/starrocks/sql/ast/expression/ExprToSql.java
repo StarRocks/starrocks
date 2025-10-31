@@ -24,7 +24,6 @@ public class ExprToSql {
      * toSql is an obsolete interface, because of historical reasons, the implementation of toSql is not rigorous enough.
      * Newly developed code should use AstToSQLBuilder::toSQL instead
      */
-    @Deprecated
     public static String toSql(Expr expr) {
         ExprExplainVisitor explain = new ExprExplainVisitor();
         return explain.visit(expr);

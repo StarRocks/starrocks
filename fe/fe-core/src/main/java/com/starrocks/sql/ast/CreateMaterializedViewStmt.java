@@ -352,7 +352,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
         }
         if (selectRelation.hasHavingClause()) {
             throw new UnsupportedMVException("The having clause is not supported in add materialized view clause, expr:"
-                    + selectRelation.getHavingClause().toSql());
+                    + ExprToSql.toSql(selectRelation.getHavingClause()));
         }
         analyzeOrderByClause(selectRelation, beginIndexOfAggregation);
         if (selectRelation.hasLimit()) {
@@ -452,7 +452,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                 // current version not support count(distinct) function in creating materialized view
                 if (!isReplay && functionCallExpr.isDistinct()) {
                     throw new UnsupportedMVException(
-                            "Materialized view does not support distinct function " + functionCallExpr.toSql());
+                            "Materialized view does not support distinct function " + ExprToSql.toSql(functionCallExpr));
                 }
                 if (!FN_NAME_TO_PATTERN.containsKey(functionName)) {
                     // eg: avg_union(avg_state(xxx))
@@ -462,7 +462,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
 
                         throw new UnsupportedMVException(
                                 "Materialized view does not support function:%s, supported functions are: %s",
-                                functionCallExpr.toSql(), FN_NAME_TO_PATTERN.keySet());
+                                ExprToSql.toSql(functionCallExpr), FN_NAME_TO_PATTERN.keySet());
                     }
                     if (!mvColumnPattern.match(functionCallExpr)) {
                         throw new UnsupportedMVException(
@@ -496,7 +496,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                 }
 
                 mvColumnItemList.add(mvColumnItem);
-                joiner.add(selectListItemExpr.toSql());
+                joiner.add(ExprToSql.toSql(selectListItemExpr));
             }
             Set<String> fullSchemaColNames = table.getFullSchema().stream().map(Column::getName).collect(Collectors.toSet());
             if (fullSchemaColNames.contains(mvColumnItem.getName())) {
@@ -729,7 +729,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
             if (!(orderByElement instanceof SlotRef)) {
                 throw new UnsupportedMVException(
                         "The column in order clause must be original column without calculation. "
-                                + "Error column: " + orderByElement.toSql());
+                                + "Error column: " + ExprToSql.toSql(orderByElement));
             }
             MVColumnItem mvColumnItem = mvColumnItemList.get(i);
             SlotRef slotRef = (SlotRef) orderByElement;

@@ -38,6 +38,7 @@ import com.starrocks.qe.SessionVariableConstants;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.expression.ArrayExpr;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.FunctionName;
@@ -248,7 +249,7 @@ public class FunctionAnalyzer {
                                                   FunctionParams fnParams,
                                                   FunctionCallExpr functionCallExpr) {
         if (fnParams.isStar() && !fnName.getFunction().equals(FunctionSet.COUNT)) {
-            throw new SemanticException("'*' can only be used in conjunction with COUNT: " + functionCallExpr.toSql(),
+            throw new SemanticException("'*' can only be used in conjunction with COUNT: " + ExprToSql.toSql(functionCallExpr),
                     functionCallExpr.getPos());
         }
 
@@ -256,7 +257,7 @@ public class FunctionAnalyzer {
             // for multiple exprs count must be qualified with distinct
             if (functionCallExpr.getChildren().size() > 1 && !fnParams.isDistinct()) {
                 throw new SemanticException(
-                        "COUNT must have DISTINCT for multiple arguments: " + functionCallExpr.toSql(),
+                        "COUNT must have DISTINCT for multiple arguments: " + ExprToSql.toSql(functionCallExpr),
                         functionCallExpr.getPos());
             }
             return;
@@ -269,7 +270,7 @@ public class FunctionAnalyzer {
         if (fnName.getFunction().equals(FunctionSet.GROUP_CONCAT)) {
             if (functionCallExpr.getChildren().size() - fnParams.getOrderByElemNum() < 2) {
                 throw new SemanticException(
-                        "group_concat requires at least one parameter: " + functionCallExpr.toSql(),
+                        "group_concat requires at least one parameter: " + ExprToSql.toSql(functionCallExpr),
                         functionCallExpr.getPos());
             }
 
@@ -279,7 +280,7 @@ public class FunctionAnalyzer {
             if (!arg1.getType().isStringType() && !arg1.getType().isNull()) {
                 throw new SemanticException(
                         "group_concat requires separator to be of getType() STRING: " +
-                                functionCallExpr.toSql(), arg1.getPos());
+                                ExprToSql.toSql(functionCallExpr), arg1.getPos());
             }
             return;
         }
@@ -294,7 +295,7 @@ public class FunctionAnalyzer {
                     if (!functionCallExpr.getChild(2).isConstant()) {
                         throw new SemanticException(
                                 "The default parameter (parameter 3) of LAG must be a constant: "
-                                        + functionCallExpr.toSql(), functionCallExpr.getChild(2).getPos());
+                                        + ExprToSql.toSql(functionCallExpr), functionCallExpr.getChild(2).getPos());
                     }
                 }
                 return;
@@ -305,7 +306,7 @@ public class FunctionAnalyzer {
             if (!functionCallExpr.getChild(1).isConstant()) {
                 throw new SemanticException(
                         "The delta parameter (parameter 2) of SESSION_NUMBER must be a constant: "
-                                + functionCallExpr.toSql(), functionCallExpr.getChild(1).getPos());
+                                + ExprToSql.toSql(functionCallExpr), functionCallExpr.getChild(1).getPos());
             }
         }
 
@@ -365,7 +366,7 @@ public class FunctionAnalyzer {
         if (fnName.getFunction().equals(FunctionSet.MAX_BY) || fnName.getFunction().equals(FunctionSet.MIN_BY)) {
             if (functionCallExpr.getChildren().size() != 2 || functionCallExpr.getChildren().isEmpty()) {
                 throw new SemanticException(
-                        fnName.getFunction() + " requires two parameters: " + functionCallExpr.toSql(),
+                        fnName.getFunction() + " requires two parameters: " + ExprToSql.toSql(functionCallExpr),
                         functionCallExpr.getPos());
             }
 
@@ -392,7 +393,7 @@ public class FunctionAnalyzer {
                 !(arg instanceof NullLiteral)) ||
                 !arg.getType().canApplyToNumeric())) {
             throw new SemanticException(
-                    fnName.getFunction() + " requires a numeric parameter: " + functionCallExpr.toSql(),
+                    fnName.getFunction() + " requires a numeric parameter: " + ExprToSql.toSql(functionCallExpr),
                     functionCallExpr.getPos());
         }
 
@@ -538,7 +539,7 @@ public class FunctionAnalyzer {
                 if (!k.isPresent() || k.get() >= Integer.MAX_VALUE || k.get() < 0) {
                     throw new SemanticException(
                             "The second parameter of DICT_MERGE must be a constant positive integer: " +
-                                    functionCallExpr.toSql(), kExpr.getPos());
+                                    ExprToSql.toSql(functionCallExpr), kExpr.getPos());
                 }
             }
         }
@@ -554,7 +555,7 @@ public class FunctionAnalyzer {
                 if (!k.isPresent() || k.get() <= 0) {
                     throw new SemanticException(
                             "The second parameter of APPROX_TOP_K must be a constant positive integer: " +
-                                    functionCallExpr.toSql(), kExpr.getPos());
+                                    ExprToSql.toSql(functionCallExpr), kExpr.getPos());
                 }
             }
             if (functionCallExpr.hasChild(2)) {
@@ -563,23 +564,23 @@ public class FunctionAnalyzer {
                 if (!counterNum.isPresent() || counterNum.get() <= 0) {
                     throw new SemanticException(
                             "The third parameter of APPROX_TOP_K must be a constant positive integer: " +
-                                    functionCallExpr.toSql(), counterNumExpr.getPos());
+                                    ExprToSql.toSql(functionCallExpr), counterNumExpr.getPos());
                 }
             }
             if (k.isPresent() && k.get() > FeConstants.MAX_COUNTER_NUM_OF_TOP_K) {
                 throw new SemanticException("The maximum number of the second parameter is "
-                        + FeConstants.MAX_COUNTER_NUM_OF_TOP_K + ", " + functionCallExpr.toSql(), kExpr.getPos());
+                        + FeConstants.MAX_COUNTER_NUM_OF_TOP_K + ", " + ExprToSql.toSql(functionCallExpr), kExpr.getPos());
             }
             if (counterNum.isPresent()) {
                 if (counterNum.get() > FeConstants.MAX_COUNTER_NUM_OF_TOP_K) {
                     throw new SemanticException("The maximum number of the third parameter is "
-                            + FeConstants.MAX_COUNTER_NUM_OF_TOP_K + ", " + functionCallExpr.toSql(),
+                            + FeConstants.MAX_COUNTER_NUM_OF_TOP_K + ", " + ExprToSql.toSql(functionCallExpr),
                             counterNumExpr.getPos());
                 }
                 if (k.get() > counterNum.get()) {
                     throw new SemanticException(
                             "The second parameter must be smaller than or equal to the third parameter" +
-                                    functionCallExpr.toSql(), kExpr.getPos());
+                                    ExprToSql.toSql(functionCallExpr), kExpr.getPos());
                 }
             }
         }

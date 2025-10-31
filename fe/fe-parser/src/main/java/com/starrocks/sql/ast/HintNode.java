@@ -46,7 +46,6 @@ public abstract class HintNode implements Comparable<HintNode>, ParseNode {
 
     public abstract Map<String, String> getValue();
 
-    @Override
     public String toSql() {
         return hintStr;
     }

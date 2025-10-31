@@ -382,7 +382,7 @@ public class DataDescription implements ParseNode {
         for (Expr columnExpr : columnMappingList) {
             if (!(columnExpr instanceof BinaryPredicate)) {
                 throw new AnalysisException("Mapping function expr only support the column or eq binary predicate. "
-                        + "Expr: " + columnExpr.toSql());
+                        + "Expr: " + ExprToSql.toSql(columnExpr));
             }
             BinaryPredicate predicate = (BinaryPredicate) columnExpr;
             if (predicate.getOp() != BinaryType.EQ) {
@@ -434,7 +434,7 @@ public class DataDescription implements ParseNode {
             } else {
                 if (isHadoopLoad) {
                     // hadoop function only support slot, string and null parameters
-                    throw new AnalysisException("Mapping function args error, arg: " + paramExpr.toSql());
+                    throw new AnalysisException("Mapping function args error, arg: " + ExprToSql.toSql(paramExpr));
                 }
             }
         }

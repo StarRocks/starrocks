@@ -182,7 +182,7 @@ public abstract class FunctionalExprProvider<U> {
 
         if (!(predicate.getChild(0) instanceof SlotRef)) {
             throw new SemanticException(
-                    String.format("`%s` is not allowed in `where` clause.", predicate.getChild(0).toSql()));
+                    String.format("`%s` is not allowed in `where` clause.", ExprToSql.toSql(predicate.getChild(0))));
         }
         String leftKey = ((SlotRef) predicate.getChild(0)).getColumnName();
         Optional<ColumnValueSupplier<U>> colValSupplier =
@@ -279,7 +279,7 @@ public abstract class FunctionalExprProvider<U> {
         for (OrderByElement orderByElement : orderByElements) {
             if (!(orderByElement.getExpr() instanceof SlotRef)) {
                 throw new SemanticException(
-                        String.format("`%s` is not allowed in `order by` clause.", orderByElement.toSql()));
+                        String.format("`%s` is not allowed in `order by` clause.", ExprToSql.toSql(orderByElement.getExpr())));
             }
             SlotRef slotRef = (SlotRef) orderByElement.getExpr();
             Optional<ColumnValueSupplier<U>> colValSupplier = delegateWhereSuppliers().parallelStream()

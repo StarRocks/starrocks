@@ -47,6 +47,7 @@ import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
 import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.common.PermutationGenerator;
 import com.starrocks.sql.formatter.ExprExplainVisitor;
 import com.starrocks.sql.formatter.ExprVerboseVisitor;
@@ -626,7 +627,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         if (exprs == null) {
             return "";
         }
-        return exprs.stream().map(Expr::toSql).collect(Collectors.joining(", "));
+        return exprs.stream().map(ExprToSql::toSql).collect(Collectors.joining(", "));
     }
 
     protected String explainExpr(Expr... exprs) {

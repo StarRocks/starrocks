@@ -331,7 +331,7 @@ public class AggregationAnalyzer {
                             SqlModeHelper.MODE_ONLY_FULL_GROUP_BY)) {
                         if (!analyzeState.getColumnNotInGroupBy().contains(expr)) {
                             throw new SemanticException(
-                                    PARSER_ERROR_MSG.unsupportedNoGroupBySubquery(expr.toSql(), ExprToSql.toSql(node)),
+                                    PARSER_ERROR_MSG.unsupportedNoGroupBySubquery(ExprToSql.toSql(expr), ExprToSql.toSql(node)),
                                     expr.getPos());
                         }
                     } else {

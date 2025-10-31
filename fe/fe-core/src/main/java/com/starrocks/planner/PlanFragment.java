@@ -568,7 +568,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
 
         StringBuilder outputBuilder = new StringBuilder();
         if (CollectionUtils.isNotEmpty(outputExprs)) {
-            outputBuilder.append(outputExprs.stream().map(Expr::toSql)
+            outputBuilder.append(outputExprs.stream().map(ExprToSql::toSql)
                     .collect(Collectors.joining(" | ")));
 
         }
@@ -606,7 +606,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         }
         if (CollectionUtils.isNotEmpty(outputExprs)) {
             str.append("  Output Exprs:");
-            str.append(outputExprs.stream().map(Expr::toSql)
+            str.append(outputExprs.stream().map(ExprToSql::toSql)
                     .collect(Collectors.joining(" | ")));
         }
         str.append("\n");
@@ -632,7 +632,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         StringBuilder outputBuilder = new StringBuilder();
         if (CollectionUtils.isNotEmpty(outputExprs)) {
             str.append("  Output Exprs:");
-            outputBuilder.append(outputExprs.stream().map(Expr::toSql)
+            outputBuilder.append(outputExprs.stream().map(ExprToSql::toSql)
                     .collect(Collectors.joining(" | ")));
         }
         str.append(outputBuilder.toString());

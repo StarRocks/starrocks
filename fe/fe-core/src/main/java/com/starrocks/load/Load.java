@@ -74,8 +74,8 @@ import com.starrocks.sql.ast.expression.CastExpr;
 import com.starrocks.sql.ast.expression.DictQueryExpr;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
-import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.ExprToSql;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.sql.ast.expression.FunctionParams;
@@ -403,7 +403,7 @@ public class Load {
                             throw new AnalysisException("const load op type column should only be upsert(0)/delete(1)");
                         }
                     }
-                    LOG.info("load __op column expr: " + (expr != null ? expr.toSql() : "null"));
+                    LOG.info("load __op column expr: " + (expr != null ? ExprToSql.toSql(expr) : "null"));
                     break;
                 }
             }

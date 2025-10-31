@@ -52,6 +52,7 @@ import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.sql.ast.expression.CastExpr;
 import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.LiteralExpr;
@@ -488,7 +489,7 @@ public class PartitionDescAnalyzer {
                         }
                     }
                 } else {
-                    throw new AnalysisException("Unsupported expr:" + expr.toSql());
+                    throw new AnalysisException("Unsupported expr:" + ExprToSql.toSql(expr));
                 }
             }
             rangePartitionDesc.setPartitionType(desc.getPartitionType());

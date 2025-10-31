@@ -21,6 +21,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariableConstants;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.MapType;
 import com.starrocks.type.PrimitiveType;
@@ -128,7 +129,7 @@ public class TypeManager {
 
             if (!Type.canCastTo(expr.getType(), targetType)) {
                 throw new SemanticException(
-                        "Cannot cast '" + expr.toSql() + "' from " + expr.getType() + " to " + targetType);
+                        "Cannot cast '" + ExprToSql.toSql(expr) + "' from " + expr.getType() + " to " + targetType);
             }
             return expr.uncheckedCastTo(targetType);
         } catch (AnalysisException e) {

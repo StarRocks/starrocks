@@ -79,7 +79,7 @@ public class ColumnView {
                 .ifPresent(type -> cvo.setType(TypeView.viewOf(type)));
 
         Optional.ofNullable(column.getAggregationType())
-                .ifPresent(aggType -> cvo.setAggregationType(aggType.toSql()));
+                .ifPresent(aggType -> cvo.setAggregationType(aggType.getSqlName()));
 
         cvo.setKey(column.isKey());
         cvo.setAllowNull(column.isAllowNull());

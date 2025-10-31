@@ -606,6 +606,7 @@ public class MaterializedViewAnalyzer {
 
         /**
          * NOTE: order or column names of the defined query may be changed when generating.
+         *
          * @return : Generate materialized view's columns and corresponding output expression index pair
          * from creating materialized view statement.
          */
@@ -767,7 +768,8 @@ public class MaterializedViewAnalyzer {
             for (OrderByElement orderByElement : orderByElements) {
                 String column = orderByElement.castAsSlotRef();
                 if (column == null) {
-                    throw new SemanticException("Unknown column '%s' in order by clause", orderByElement.getExpr().toSql());
+                    throw new SemanticException("Unknown column '%s' in order by clause",
+                            ExprToSql.toSql(orderByElement.getExpr()));
                 }
                 sortKeys.add(column);
             }
@@ -888,7 +890,7 @@ public class MaterializedViewAnalyzer {
             Expr expr = MVPartitionSlotRefResolver.resolveExpr(partitionColumnExpr, queryStatement);
             if (expr == null) {
                 throw new SemanticException("Cannot resolve materialized view's partition expression:%s",
-                        partitionColumnExpr.toSql());
+                        ExprToSql.toSql(partitionColumnExpr));
             }
             return expr;
         }
@@ -924,7 +926,7 @@ public class MaterializedViewAnalyzer {
             List<SlotRef> slotRefs = expr.collectAllSlotRefs();
             if (slotRefs.size() != 1) {
                 throw new SemanticException("Materialized view partition expression %s must ref to one column",
-                        partitionColumnExpr.toSql());
+                        ExprToSql.toSql(partitionColumnExpr));
             }
             SlotRef slotRef = slotRefs.get(0);
             Table table = getPartitionByExprRefBaseTable(connectContext, aliasTableMap, slotRef);
@@ -971,7 +973,7 @@ public class MaterializedViewAnalyzer {
             List<SlotRef> slotRefs = resolvedPartitionByExpr.collectAllSlotRefs();
             if (slotRefs.size() != 1) {
                 throw new SemanticException("Materialized view partition expression %s must ref to one column",
-                        partitionByExpr.toSql());
+                        ExprToSql.toSql(partitionByExpr));
             }
             SlotRef slotRef = slotRefs.get(0);
             Table table = getPartitionByExprRefBaseTable(session, tableNameTableMap, slotRef);
@@ -1013,7 +1015,7 @@ public class MaterializedViewAnalyzer {
                     }
                 } catch (Exception e) {
                     throw new SemanticException("Please check the partition expression %s, " +
-                            "it should refer base table's partition column directly", expr.toSql());
+                            "it should refer base table's partition column directly", ExprToSql.toSql(expr));
                 }
             }
             return changedPartitionByExprs;
@@ -1205,7 +1207,7 @@ public class MaterializedViewAnalyzer {
                     if (!(mvPartitionByExpr instanceof SlotRef)) {
                         throw new SemanticException("List materialized view's partition expression can only " +
                                 "refer ref-base-table's partition expression without transforms but contains: %s",
-                                mvPartitionByExpr.toSql());
+                                ExprToSql.toSql(mvPartitionByExpr));
                     }
                     OlapTable olapTable = (OlapTable) refBaseTable;
                     PartitionInfo refPartitionInfo = olapTable.getPartitionInfo();
@@ -1258,7 +1260,7 @@ public class MaterializedViewAnalyzer {
                 Column generatedCol = getGeneratedPartitionColumn(statement, adjustedPartitionByExpr, placeholder);
                 if (generatedCol == null) {
                     throw new SemanticException("Create generated partition expression column failed:",
-                            partitionByExpr.toSql());
+                            ExprToSql.toSql(partitionByExpr));
                 }
                 placeholder += 1;
                 generatedPartitionColumns.put(i, generatedCol);
@@ -1336,7 +1338,7 @@ public class MaterializedViewAnalyzer {
                 }
             } else {
                 throw new SemanticException(String.format("Materialized view partition function derived from " +
-                        partitionByExpr.toSql() + " of base table %s is not supported yet", table.getName()),
+                        ExprToSql.toSql(partitionByExpr) + " of base table %s is not supported yet", table.getName()),
                         partitionByExpr.getPos());
             }
         }
@@ -1419,7 +1421,7 @@ public class MaterializedViewAnalyzer {
                                 if (!isDateTruncWithUnit(partitionByExpr, transform.name())) {
                                     throw new SemanticException("Materialized view partition expr %s " +
                                             "must be the same with base table partition transform %s, please use date_trunc" +
-                                            "(<transform>, <partition_colum_name>) instead.", partitionByExpr.toSql(),
+                                            "(<transform>, <partition_colum_name>) instead.", ExprToSql.toSql(partitionByExpr),
                                             transform.name());
                                 }
                                 // mark the statement with partition transform to use list partition mv later.
@@ -1430,7 +1432,8 @@ public class MaterializedViewAnalyzer {
                                         !MvUtils.isFuncCallExpr(partitionByExpr, FunctionSet.DATE_TRUNC)) {
                                     throw new SemanticException("Materialized view partition expr %s: " +
                                             "only support ref partition column for transform %s, please use " +
-                                            "<partition_column_name> instead.", partitionByExpr.toSql(), transform.name());
+                                            "<partition_column_name> instead.",
+                                            ExprToSql.toSql(partitionByExpr), transform.name());
                                 }
                                 break;
                             default:
@@ -1571,7 +1574,7 @@ public class MaterializedViewAnalyzer {
                         .map(Column::getName)
                         .collect(Collectors.toList());
                 throw new SemanticException(String.format("Please use `DISTRIBUTED BY HASH(%s)` instead of `DISTRIBUTED BY " +
-                        "RANDOM` for incremental materialized view, or remove `DISTRIBUTED BY RANDOM` instead.",
+                                "RANDOM` for incremental materialized view, or remove `DISTRIBUTED BY RANDOM` instead.",
                         Joiner.on(",").join(keyColNames)),
                         statement.getPartitionByExprs().get(0).getPos());
             }
@@ -1595,7 +1598,6 @@ public class MaterializedViewAnalyzer {
                 }
                 statement.setDistributionDesc(distributionDesc);
             }
-
 
             Set<String> columnSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
             for (Column columnDef : mvColumnItems) {
@@ -1863,7 +1865,7 @@ public class MaterializedViewAnalyzer {
         List<SlotRef> slotRefs = partitionByExpr.collectAllSlotRefs();
         if (slotRefs.size() != 1) {
             throw new SemanticException("Partition expr only can ref one slot refs:",
-                    partitionByExpr.toSql());
+                    ExprToSql.toSql(partitionByExpr));
         }
         SlotRef slotRef = slotRefs.get(0);
         TableName refTableName = slotRef.getTblNameWithoutAnalyzed();
@@ -1927,7 +1929,7 @@ public class MaterializedViewAnalyzer {
         List<SlotRef> slotRefs = originalPartitionByExpr.collectAllSlotRefs();
         if (slotRefs.size() != 1) {
             throw new SemanticException("Partition expr only can ref one slot refs:",
-                    originalPartitionByExpr.toSql());
+                    ExprToSql.toSql(originalPartitionByExpr));
         }
         SlotRef slotRef = slotRefs.get(0);
         tryToResolveRefToMVColumns(mvColumns, slotRef, mvTableName);

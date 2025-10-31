@@ -121,7 +121,7 @@ public class OrderByElement implements ParseNode {
 
     public String toSql() {
         StringBuilder strBuilder = new StringBuilder();
-        strBuilder.append(expr.toSql());
+        strBuilder.append(ExprToSql.toSql(expr));
         strBuilder.append(isAsc ? " ASC" : " DESC");
 
         // When ASC and NULLS FIRST or DESC and NULLS LAST, we do not print NULLS FIRST/LAST

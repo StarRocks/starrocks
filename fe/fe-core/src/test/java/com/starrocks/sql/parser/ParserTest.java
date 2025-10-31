@@ -33,6 +33,7 @@ import com.starrocks.sql.ast.SplitTabletClause;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.expression.CompoundPredicate;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.JoinOperator;
 import com.starrocks.type.PrimitiveType;
@@ -336,9 +337,9 @@ class ParserTest {
         t2.start();
         latch.await(10, TimeUnit.SECONDS);
         Assertions.assertTrue(exprs[0] instanceof CompoundPredicate,
-                exprs[0].toSql() + "should be a compound or predicate");
+                ExprToSql.toSql(exprs[0]) + "should be a compound or predicate");
         Assertions.assertTrue(exprs[1] instanceof FunctionCallExpr,
-                exprs[1].toSql() + "should be a concat function call");
+                ExprToSql.toSql(exprs[1]) + "should be a concat function call");
     }
 
     @ParameterizedTest

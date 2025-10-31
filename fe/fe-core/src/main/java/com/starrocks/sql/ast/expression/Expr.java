@@ -50,15 +50,6 @@ import com.starrocks.planner.TupleId;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.ParseNode;
-import com.starrocks.sql.formatter.AST2SQLVisitor;
-import com.starrocks.sql.formatter.ExprExplainVisitor;
-import com.starrocks.sql.formatter.ExprVerboseVisitor;
-import com.starrocks.sql.formatter.FormatOptions;
-import com.starrocks.sql.common.UnsupportedException;
-import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
-import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.type.Type;
 import org.roaringbitmap.RoaringBitmap;
@@ -294,36 +285,6 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
             strings.add(expr.debugString());
         }
         return "(" + Joiner.on(" ").join(strings) + ")";
-    }
-
-    /**
-     * toSql is an obsolete interface, because of historical reasons, the implementation of toSql is not rigorous enough.
-     * Newly developed code should use AstToSQLBuilder::toSQL instead
-     */
-    @Deprecated
-    public String toSql() {
-        Preconditions.checkState(!printSqlInParens);
-        ExprExplainVisitor explain = new ExprExplainVisitor();
-        return explain.visit(this);
-    }
-
-    /**
-     * `toSqlWithoutTbl` will return sql without table name for column name, so it can be easier to compare two expr.
-     */
-    public String toSqlWithoutTbl() {
-        return AST2SQLVisitor.withOptions(
-                FormatOptions.allEnable().setColumnSimplifyTableName(false).setColumnWithTableName(false)
-                        .setEnableDigest(false)).visit(this);
-    }
-
-    public String explain() {
-        Preconditions.checkState(!printSqlInParens);
-        ExprVerboseVisitor explain = new ExprVerboseVisitor();
-        return explain.visit(this);
-    }
-
-    public String toMySql() {
-        return toSql();
     }
 
     public String debugString() {

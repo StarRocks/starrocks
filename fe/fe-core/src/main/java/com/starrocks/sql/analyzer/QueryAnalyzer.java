@@ -189,7 +189,7 @@ public class QueryAnalyzer {
                     continue;
                 }
 
-                slotRefToAlias.put(((SlotRef) item.getExpr()).toSql(), item.getAlias());
+                slotRefToAlias.put(ExprToSql.toSql(item.getExpr()), item.getAlias());
             }
             List<SlotRef> allRefSlotRefs = new ArrayList<>();
             for (Map.Entry<Expr, SlotRef> entry : generatedExprToColumnRef.entrySet()) {

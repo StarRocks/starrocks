@@ -263,7 +263,7 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
             if (sqlSortKeysBuilder.length() > 0) {
                 sqlSortKeysBuilder.append(", ");
             }
-            sqlSortKeysBuilder.append(expr.next().toSql().replaceAll("<slot\\s[0-9]+>\\s+", "")).append(" ");
+            sqlSortKeysBuilder.append(ExprToSql.toSql(expr.next()).replaceAll("<slot\\s[0-9]+>\\s+", "")).append(" ");
             sqlSortKeysBuilder.append(direction.next() ? "ASC" : "DESC");
         }
         if (sqlSortKeysBuilder.length() > 0) {
@@ -359,7 +359,7 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
                     output.append(", ");
                 }
                 if (detailLevel.equals(TExplainLevel.NORMAL)) {
-                    output.append(expr.toSql());
+                    output.append(ExprToSql.toSql(expr));
                 } else {
                     output.append(ExprToSql.explain(expr));
                 }
