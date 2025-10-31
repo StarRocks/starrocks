@@ -81,7 +81,7 @@ public class TypeSerializerTest {
             TypeSerializer.toThrift(type, container);
 
             Assertions.assertEquals(1, container.types.size());
-            assertScalarTypeNode(container.types.get(0), primitiveType.toThrift());
+            assertScalarTypeNode(container.types.get(0), TypeSerializer.toThrift(primitiveType));
         }
     }
 

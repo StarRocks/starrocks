@@ -16,6 +16,7 @@ package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.starrocks.thrift.TPrimitiveType;
 import com.starrocks.thrift.TScalarType;
 import com.starrocks.thrift.TStructField;
 import com.starrocks.thrift.TTypeDesc;
@@ -30,6 +31,82 @@ import java.util.ArrayList;
  * For deserialization, see {@link TypeDeserializer}.
  */
 public class TypeSerializer {
+
+    private TypeSerializer() {
+    }
+
+    public static TPrimitiveType toThrift(PrimitiveType primitiveType) {
+        switch (primitiveType) {
+            case INVALID_TYPE:
+                return TPrimitiveType.INVALID_TYPE;
+            case NULL_TYPE:
+                return TPrimitiveType.NULL_TYPE;
+            case BOOLEAN:
+                return TPrimitiveType.BOOLEAN;
+            case TINYINT:
+                return TPrimitiveType.TINYINT;
+            case SMALLINT:
+                return TPrimitiveType.SMALLINT;
+            case INT:
+                return TPrimitiveType.INT;
+            case BIGINT:
+                return TPrimitiveType.BIGINT;
+            case LARGEINT:
+                return TPrimitiveType.LARGEINT;
+            case FLOAT:
+                return TPrimitiveType.FLOAT;
+            case DOUBLE:
+                return TPrimitiveType.DOUBLE;
+            case DATE:
+                return TPrimitiveType.DATE;
+            case DATETIME:
+                return TPrimitiveType.DATETIME;
+            case CHAR:
+                return TPrimitiveType.CHAR;
+            case VARCHAR:
+                return TPrimitiveType.VARCHAR;
+            case DECIMALV2:
+                return TPrimitiveType.DECIMALV2;
+            case HLL:
+                return TPrimitiveType.HLL;
+            case TIME:
+                return TPrimitiveType.TIME;
+            case BITMAP:
+                return TPrimitiveType.OBJECT;
+            case PERCENTILE:
+                return TPrimitiveType.PERCENTILE;
+            case DECIMAL32:
+                return TPrimitiveType.DECIMAL32;
+            case DECIMAL64:
+                return TPrimitiveType.DECIMAL64;
+            case DECIMAL128:
+                return TPrimitiveType.DECIMAL128;
+            case DECIMAL256:
+                return TPrimitiveType.DECIMAL256;
+            case JSON:
+                return TPrimitiveType.JSON;
+            case VARIANT:
+                return TPrimitiveType.VARIANT;
+            case FUNCTION:
+                return TPrimitiveType.FUNCTION;
+            case BINARY:
+                return TPrimitiveType.BINARY;
+            case VARBINARY:
+                return TPrimitiveType.VARBINARY;
+            case UNKNOWN_TYPE:
+                return TPrimitiveType.INVALID_TYPE;
+            default:
+                throw new IllegalArgumentException("Unknown primitive type: " + primitiveType);
+        }
+    }
+
+    public static java.util.List<TPrimitiveType> toThrift(PrimitiveType[] types) {
+        java.util.List<TPrimitiveType> result = Lists.newArrayList();
+        for (PrimitiveType type : types) {
+            result.add(toThrift(type));
+        }
+        return result;
+    }
 
     public static TTypeDesc toThrift(Type type) {
         TTypeDesc container = new TTypeDesc();
@@ -72,7 +149,7 @@ public class TypeSerializer {
             case HLL: {
                 node.setType(TTypeNodeType.SCALAR);
                 TScalarType scalarType = new TScalarType();
-                scalarType.setType(primitiveType.toThrift());
+                scalarType.setType(TypeSerializer.toThrift(primitiveType));
                 scalarType.setLen(type.getLength());
                 node.setScalar_type(scalarType);
                 break;
@@ -84,7 +161,7 @@ public class TypeSerializer {
             case DECIMAL256: {
                 node.setType(TTypeNodeType.SCALAR);
                 TScalarType scalarType = new TScalarType();
-                scalarType.setType(primitiveType.toThrift());
+                scalarType.setType(TypeSerializer.toThrift(primitiveType));
                 scalarType.setScale(type.getScalarScale());
                 scalarType.setPrecision(type.getScalarPrecision());
                 node.setScalar_type(scalarType);
@@ -93,7 +170,7 @@ public class TypeSerializer {
             default: {
                 node.setType(TTypeNodeType.SCALAR);
                 TScalarType scalarType = new TScalarType();
-                scalarType.setType(primitiveType.toThrift());
+                scalarType.setType(TypeSerializer.toThrift(primitiveType));
                 node.setScalar_type(scalarType);
                 break;
             }

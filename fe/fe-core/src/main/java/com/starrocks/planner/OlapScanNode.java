@@ -63,6 +63,7 @@ import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.Type;
+import com.starrocks.catalog.TypeSerializer;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
@@ -1017,7 +1018,7 @@ public class OlapScanNode extends ScanNode {
                     for (Integer sortKeyIdx : indexMeta.getSortKeyIdxes()) {
                         Column col = indexMeta.getSchema().get(sortKeyIdx);
                         keyColumnNames.add(col.getName());
-                        keyColumnTypes.add(col.getPrimitiveType().toThrift());
+                        keyColumnTypes.add(TypeSerializer.toThrift(col.getPrimitiveType()));
                     }
                 } else {
                     for (Column col : olapTable.getSchemaByIndexId(selectedIndexId)) {
@@ -1026,7 +1027,7 @@ public class OlapScanNode extends ScanNode {
                         }
 
                         keyColumnNames.add(col.getName());
-                        keyColumnTypes.add(col.getPrimitiveType().toThrift());
+                        keyColumnTypes.add(TypeSerializer.toThrift(col.getPrimitiveType()));
                     }
                 }
             }
@@ -1511,7 +1512,7 @@ public class OlapScanNode extends ScanNode {
                     break;
                 }
                 keyColumnNames.add(col.getName());
-                keyColumnTypes.add(col.getPrimitiveType().toThrift());
+                keyColumnTypes.add(TypeSerializer.toThrift(col.getPrimitiveType()));
             }
         }
         scanNode.setKey_column_names(keyColumnNames);

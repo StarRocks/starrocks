@@ -33,6 +33,7 @@ import com.starrocks.thrift.TDictionaryGetExpr;
 import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
+import com.starrocks.thrift.TExprOpcode;
 import com.starrocks.thrift.TFloatLiteral;
 import com.starrocks.thrift.TFunction;
 import com.starrocks.thrift.TInPredicate;
@@ -151,7 +152,7 @@ public class ExprToThriftVisitor implements AstVisitorExtendInterface<Void, TExp
     @Override
     public Void visitArithmeticExpr(ArithmeticExpr node, TExprNode msg) {
         msg.node_type = TExprNodeType.ARITHMETIC_EXPR;
-        msg.setOpcode(node.getOp().getOpcode());
+        msg.setOpcode(ExprOpcodeRegistry.getArithmeticOpcode(node.getOp()));
         msg.setOutput_column(node.getOutputColumn());
         return null;
     }
@@ -223,7 +224,7 @@ public class ExprToThriftVisitor implements AstVisitorExtendInterface<Void, TExp
     public Void visitCaseWhenExpr(CaseExpr node, TExprNode msg) {
         msg.node_type = TExprNodeType.CASE_EXPR;
         msg.case_expr = new TCaseExpr(node.hasCaseExpr(), node.hasElseExpr());
-        msg.setChild_type(node.getChild(0).getType().getPrimitiveType().toThrift());
+        msg.setChild_type(TypeSerializer.toThrift(node.getChild(0).getType().getPrimitiveType()));
         return null;
     }
 
@@ -268,7 +269,7 @@ public class ExprToThriftVisitor implements AstVisitorExtendInterface<Void, TExp
     @Override
     public Void visitMatchExpr(MatchExpr node, TExprNode msg) {
         msg.node_type = TExprNodeType.MATCH_EXPR;
-        msg.setOpcode(node.getMatchOperator().getOpcode());
+        msg.setOpcode(ExprOpcodeRegistry.getMatchOpcode(node.getMatchOperator()));
         return null;
     }
 
@@ -296,12 +297,12 @@ public class ExprToThriftVisitor implements AstVisitorExtendInterface<Void, TExp
     @Override
     public Void visitCastExpr(CastExpr node, TExprNode msg) {
         msg.node_type = TExprNodeType.CAST_EXPR;
-        msg.setOpcode(node.getOpcode());
+        msg.setOpcode(ExprOpcodeRegistry.getCastOpcode());
         msg.setOutput_column(node.getOutputColumn());
         if (node.getChild(0).getType().isComplexType()) {
             msg.setChild_type_desc(TypeSerializer.toThrift(node.getChild(0).getType()));
         } else {
-            msg.setChild_type(node.getChild(0).getType().getPrimitiveType().toThrift());
+            msg.setChild_type(TypeSerializer.toThrift(node.getChild(0).getType().getPrimitiveType()));
         }
         return null;
     }
@@ -335,12 +336,12 @@ public class ExprToThriftVisitor implements AstVisitorExtendInterface<Void, TExp
     @Override
     public Void visitBinaryPredicate(BinaryPredicate node, TExprNode msg) {
         msg.node_type = TExprNodeType.BINARY_PRED;
-        msg.setOpcode(node.getOpcode());
-        msg.setVector_opcode(node.getVectorOpcode());
+        msg.setOpcode(ExprOpcodeRegistry.getBinaryOpcode(node.getOp()));
+        msg.setVector_opcode(TExprOpcode.INVALID_OPCODE);
         if (node.getChild(0).getType().isComplexType()) {
             msg.setChild_type_desc(TypeSerializer.toThrift(node.getChild(0).getType()));
         } else {
-            msg.setChild_type(node.getChild(0).getType().getPrimitiveType().toThrift());
+            msg.setChild_type(TypeSerializer.toThrift(node.getChild(0).getType().getPrimitiveType()));
         }
         return null;
     }
@@ -370,12 +371,12 @@ public class ExprToThriftVisitor implements AstVisitorExtendInterface<Void, TExp
         Preconditions.checkState(!node.contains(Subquery.class));
         msg.in_predicate = new TInPredicate(node.isNotIn());
         msg.node_type = TExprNodeType.IN_PRED;
-        msg.setOpcode(node.getOpcode());
-        msg.setVector_opcode(node.getVectorOpcode());
+        msg.setOpcode(ExprOpcodeRegistry.getInPredicateOpcode(node.isNotIn()));
+        msg.setVector_opcode(TExprOpcode.INVALID_OPCODE);
         if (node.getChild(0).getType().isComplexType()) {
             msg.setChild_type_desc(TypeSerializer.toThrift(node.getChild(0).getType()));
         } else {
-            msg.setChild_type(node.getChild(0).getType().getPrimitiveType().toThrift());
+            msg.setChild_type(TypeSerializer.toThrift(node.getChild(0).getType().getPrimitiveType()));
         }
         return null;
     }
@@ -393,7 +394,7 @@ public class ExprToThriftVisitor implements AstVisitorExtendInterface<Void, TExp
     @Override
     public Void visitTimestampArithmeticExpr(TimestampArithmeticExpr node, TExprNode msg) {
         msg.node_type = TExprNodeType.COMPUTE_FUNCTION_CALL;
-        msg.setOpcode(node.getOpcode());
+        msg.setOpcode(ExprOpcodeRegistry.getExprOpcode(node));
         return null;
     }
 

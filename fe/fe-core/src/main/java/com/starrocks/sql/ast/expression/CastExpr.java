@@ -43,7 +43,6 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.thrift.TExprOpcode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -143,7 +142,6 @@ public class CastExpr extends Expr {
             return;
         }
 
-        this.opcode = TExprOpcode.CAST;
         FunctionName fnName = new FunctionName(getFnName(type));
         Function searchDesc = new Function(fnName, collectChildReturnTypes(), Type.INVALID, false);
         if (isImplicit) {
@@ -194,10 +192,6 @@ public class CastExpr extends Expr {
         }
         CastExpr castExpr = (CastExpr) o;
 
-        if (this.opcode != castExpr.opcode) {
-            return false;
-        }
-
         if (targetTypeDef != null) {
             return targetTypeDef.getType().equals(castExpr.getTargetTypeDef().getType());
         }
@@ -206,7 +200,7 @@ public class CastExpr extends Expr {
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), targetTypeDef == null ? null : targetTypeDef.getType(), opcode);
+        return Objects.hash(super.hashCode(), targetTypeDef == null ? null : targetTypeDef.getType());
     }
 
     @Override

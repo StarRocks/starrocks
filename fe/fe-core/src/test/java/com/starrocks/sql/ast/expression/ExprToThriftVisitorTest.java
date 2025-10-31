@@ -33,7 +33,6 @@ import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
-import com.starrocks.thrift.TExprOpcode;
 import com.starrocks.thrift.TInPredicate;
 import com.starrocks.thrift.TInfoFunc;
 import org.junit.jupiter.api.Assertions;
@@ -382,7 +381,6 @@ public class ExprToThriftVisitorTest {
                                 new IntLiteral(1), "DAY", false);
                 expr.setType(Type.DATE);
                 expr.setOriginType(Type.DATE);
-                expr.opcode = TExprOpcode.ADD;
                 return expr;
             } catch (AnalysisException e) {
                 throw new RuntimeException(e);
