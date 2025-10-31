@@ -40,6 +40,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+import com.starrocks.sql.optimizer.statistics.Statistics;
 
 import java.util.List;
 import java.util.Map;
@@ -88,6 +90,12 @@ public class SplitTopNAggregateRule extends TransformationRule {
                     .stream().anyMatch(e -> !e.getKey().equals(e.getValue()))) {
                 return false;
             }
+        }
+
+        Statistics ss = input.inputAt(0).getStatistics();
+        if (ss.getColumnStatistics().values().stream().noneMatch(ColumnStatistic::isUnknown)
+                && ss.getOutputRowCount() < (topN.getLimit() * 10)) {
+            return false;
         }
         return true;
     }
