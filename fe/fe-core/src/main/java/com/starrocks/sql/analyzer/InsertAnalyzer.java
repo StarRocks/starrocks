@@ -288,7 +288,8 @@ public class InsertAnalyzer {
                         String missingKeyColumns = String.join(",", requiredKeyColumns);
                         ErrorReport.reportSemanticException(ErrorCode.ERR_MISSING_KEY_COLUMNS, missingKeyColumns);
                     }
-                    if (targetColumns.size() < olapTable.getBaseSchemaWithoutGeneratedColumn().size()) {
+                    if (targetColumns.size() < olapTable.getBaseSchemaWithoutGeneratedColumn().size() && 
+                            session.getSessionVariable().isEnableInsertPartialUpdate()) {
                         insertStmt.setUsePartialUpdate();
                         // mark if partial update for auto increment column if and only if:
                         // 1. There is auto increment defined in base schema

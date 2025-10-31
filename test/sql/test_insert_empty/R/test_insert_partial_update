@@ -25,6 +25,23 @@ select * from test order by pk;
 1	v0	11
 2	v2	2
 -- !result
+insert into test values(1, 'v0', 1), (2, 'v2', 2);
+-- result:
+-- !result
+set enable_insert_partial_update = false;
+-- result:
+-- !result
+insert into test (pk, v1) values(1, 111);
+-- result:
+-- !result
+select * from test order by pk;
+-- result:
+1	defaultv0	111
+2	v2	2
+-- !result
+set enable_insert_partial_update = true;
+-- result:
+-- !result
 create table test2 (pk bigint NOT NULL, v0 string not null, v1 int not null default '100001')
 primary KEY (pk) DISTRIBUTED BY HASH(pk) BUCKETS 1 PROPERTIES("replication_num" = "1");
 -- result:
@@ -38,6 +55,25 @@ insert into test2 (pk, v1) values(1, 11), (3, 3);
 select * from test2 order by pk;
 -- result:
 1	v0	11
+2	v2	2
+3		3
+-- !result
+insert into test2 values(1, 'v0', 1), (2, 'v2', 2);
+-- result:
+-- !result
+set enable_insert_partial_update = false;
+-- result:
+-- !result
+insert into test2 (pk, v1) values(1, 11), (3, 3);
+-- result:
+E: (1064, "Getting analyzing error. Detail message: 'v0' must be explicitly mentioned in column permutation:  pk  v1 .")
+-- !result
+set enable_insert_partial_update = true;
+-- result:
+-- !result
+select * from test2 order by pk;
+-- result:
+1	v0	1
 2	v2	2
 3		3
 -- !result
