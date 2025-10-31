@@ -980,6 +980,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_INSERT_SELECT_EXTERNAL_AUTO_REFRESH = "enable_insert_select_external_auto_refresh";
 
+    public static final String PUSH_DOWN_HEAVY_EXPRS = "push_down_heavy_exprs";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -2013,6 +2015,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_INSERT_SELECT_EXTERNAL_AUTO_REFRESH)
     private boolean enableInsertSelectExternalAutoRefresh = true;
+
+    @VarAttr(name = PUSH_DOWN_HEAVY_EXPRS)
+    private boolean pushDownHeavyExprs = true;
 
     public int getCboPruneJsonSubfieldDepth() {
         return cboPruneJsonSubfieldDepth;
@@ -5436,6 +5441,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableInsertSelectExternalAutoRefresh(boolean enableInsertSelectExternalAutoRefresh) {
         this.enableInsertSelectExternalAutoRefresh = enableInsertSelectExternalAutoRefresh;
+    }
+
+    public void setPushDownHeavyExprs(boolean flag) {
+        this.pushDownHeavyExprs = flag;
+    }
+
+    public boolean isPushDownHeavyExprs() {
+        return this.pushDownHeavyExprs;
     }
 
     // Serialize to thrift object

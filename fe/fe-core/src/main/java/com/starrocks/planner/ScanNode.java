@@ -36,9 +36,13 @@ package com.starrocks.planner;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.MoreObjects;
+<<<<<<< HEAD
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
+=======
+import com.google.common.collect.Maps;
+>>>>>>> 6fa4aac724 ([Enhancement] Push down heavy exprs involving regexp to storage layer to leverage io threads to evaluate (#64727))
 import com.starrocks.catalog.ColumnAccessPath;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.BucketProperty;
@@ -77,6 +81,8 @@ public abstract class ScanNode extends PlanNode {
     // NOTE: To avoid trigger a new compute resource creation, set the value when the scan node needs to use it.
     // The compute resource used by this scan node.
     protected ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
+
+    private Map<SlotId, Expr> heavyExprs = Maps.newHashMap();
 
     public ScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc.getId().asList(), planNodeName);
@@ -251,5 +257,13 @@ public abstract class ScanNode extends PlanNode {
             output.append("\n");
         }
         return output.toString();
+    }
+
+    public void setHeavyExprs(Map<SlotId, Expr> heavyExprs) {
+        this.heavyExprs = heavyExprs;
+    }
+
+    public Map<SlotId, Expr> getHeavyExprs() {
+        return heavyExprs;
     }
 }
