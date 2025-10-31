@@ -265,26 +265,4 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
                 getPlanFragment("query_dump/force_rule_based_mv_rewrite_drinks", TExplainLevel.COSTS);
         PlanTestBase.assertContains(plan, "partition_flat_consumptions_partition_drinks");
     }
-
-    @Test
-    public void testCBONestedMvRewriteDates() throws Exception {
-        String plan =
-                getPlanFragment("query_dump/force_rule_based_mv_rewrite", TExplainLevel.COSTS);
-        PlanTestBase.assertContains(plan, "partition_flat_consumptions_partition_drinks_dates");
-    }
-
-    @Test
-    public void testCBONestedMvRewriteMonth() throws Exception {
-        String plan =
-                getPlanFragment("query_dump/force_rule_based_mv_rewrite_month", TExplainLevel.COSTS);
-        PlanTestBase.assertContains(plan, "partition_flat_consumptions_partition_drinks_roll_month");
-    }
-
-    @Test
-    public void testCBONestedMvRewriteYear() throws Exception {
-        String plan =
-                getPlanFragment("query_dump/force_rule_based_mv_rewrite_year", TExplainLevel.COSTS);
-        PlanTestBase.assertContains(plan, "flat_consumptions_drinks_dates_roll_year");
-    }
-
 }

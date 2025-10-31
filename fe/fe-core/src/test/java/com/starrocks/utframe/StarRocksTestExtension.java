@@ -12,18 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.sql.optimizer.rule.transformation.materialization;
+package com.starrocks.utframe;
 
 import com.google.common.base.Strings;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.utframe.StarRocksTestBase;
 import org.junit.jupiter.api.extension.AfterEachCallback;
 import org.junit.jupiter.api.extension.BeforeEachCallback;
 import org.junit.jupiter.api.extension.ExtensionContext;
 import org.junit.jupiter.api.extension.TestWatcher;
 
-public class MVTraceExtension implements BeforeEachCallback, AfterEachCallback, TestWatcher {
+public class StarRocksTestExtension implements BeforeEachCallback, AfterEachCallback, TestWatcher {
     private long startTime;
 
     @Override
