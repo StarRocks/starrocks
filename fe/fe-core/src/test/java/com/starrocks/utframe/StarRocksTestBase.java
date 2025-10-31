@@ -16,12 +16,17 @@ package com.starrocks.utframe;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.common.PCellSortedSet;
+import com.starrocks.sql.common.PCellWithName;
+import com.starrocks.sql.common.PRangeCell;
 import com.starrocks.sql.common.QueryDebugOptions;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
@@ -32,7 +37,9 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Basic test class for StarRocks.
@@ -182,5 +189,13 @@ public abstract class StarRocksTestBase {
             System.out.println(pr);
         }
         Tracers.close();
+    }
+
+    public static Map<String, Range<PartitionKey>> toRangeMap(PCellSortedSet input) {
+        if (input == null) {
+            return null;
+        }
+        return input.stream()
+                .collect(Collectors.toMap(PCellWithName::name, v -> ((PRangeCell) v.cell()).getRange()));
     }
 }

@@ -48,6 +48,7 @@ import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.PCell;
+import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.PListCell;
 import com.starrocks.sql.common.PRangeCell;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -329,7 +330,7 @@ public final class ExternalTableCompensation extends TableCompensation {
             return null;
         }
         // use update info's partition to cells since it's accurate.
-        Map<String, PCell> nameToPartitionKeys = baseTableUpdateInfo.getPartitionToCells();
+        PCellSortedSet nameToPartitionKeys = baseTableUpdateInfo.getPartitionToCells();
         MaterializedView mv = mvUpdateInfo.getMv();
         Map<Table, List<Column>> refBaseTablePartitionColumns = mv.getRefBaseTablePartitionColumns();
         if (!refBaseTablePartitionColumns.containsKey(refBaseTable)) {
@@ -338,10 +339,10 @@ public final class ExternalTableCompensation extends TableCompensation {
         List<Column> partitionColumns = refBaseTablePartitionColumns.get(refBaseTable);
         try {
             for (String partitionName : toRefreshPartitionNames) {
-                if (!nameToPartitionKeys.containsKey(partitionName)) {
+                if (!nameToPartitionKeys.containsName(partitionName)) {
                     return null;
                 }
-                PCell pCell = nameToPartitionKeys.get(partitionName);
+                PCell pCell = nameToPartitionKeys.getPCell(partitionName);
                 if (pCell instanceof PRangeCell) {
                     toRefreshPartitionKeys.add(((PRangeCell) pCell));
                 } else if (pCell instanceof PListCell) {

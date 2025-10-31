@@ -16,7 +16,6 @@ package com.starrocks.sql.common.mv;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.PartitionKey;
@@ -27,12 +26,14 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.MaxLiteral;
+import com.starrocks.sql.common.PCellSortedSet;
+import com.starrocks.sql.common.PCellWithName;
+import com.starrocks.sql.common.PRangeCell;
 import com.starrocks.sql.common.PartitionMapping;
 import com.starrocks.sql.common.SyncPartitionUtils;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 import static com.starrocks.sql.common.SyncPartitionUtils.convertToDatePartitionRange;
@@ -56,13 +57,13 @@ public class MVEagerRangePartitionMapper extends MVRangePartitionMapper {
     public static final MVEagerRangePartitionMapper INSTANCE = new MVEagerRangePartitionMapper();
 
     @Override
-    public Map<String, Range<PartitionKey>> toMappingRanges(Map<String, Range<PartitionKey>> baseRangeMap,
-                                                            String granularity, PrimitiveType partitionType) {
-
-        Map<String, Range<PartitionKey>> result = Maps.newTreeMap();
+    public PCellSortedSet toMappingRanges(PCellSortedSet baseRangeMap,
+                                          String granularity, PrimitiveType partitionType) {
+        PCellSortedSet result = PCellSortedSet.of();
         Set<PartitionMapping> mappings = Sets.newHashSet();
-        for (Map.Entry<String, Range<PartitionKey>> rangeEntry : baseRangeMap.entrySet()) {
-            List<PartitionMapping> rangeMappings = toMappingRanges(rangeEntry.getValue(), granularity);
+        for (PCellWithName rangeEntry : baseRangeMap.getPartitions()) {
+            PRangeCell rangeCell = rangeEntry.cell().cast();
+            List<PartitionMapping> rangeMappings = toMappingRanges(rangeCell.getRange(), granularity);
             mappings.addAll(rangeMappings);
         }
         try {
@@ -76,7 +77,7 @@ public class MVEagerRangePartitionMapper extends MVRangePartitionMapper {
                 PartitionKey lowerPartitionKey = toPartitionKey(lowerDateTime, partitionType);
                 PartitionKey upperPartitionKey = toPartitionKey(upperDateTime, partitionType);
                 Range<PartitionKey> range = Range.closedOpen(lowerPartitionKey, upperPartitionKey);
-                result.put(mvPartitionName, range);
+                result.add(mvPartitionName, PRangeCell.of(range));
             }
         } catch (AnalysisException e) {
             throw new SemanticException("Convert to PartitionMapping failed:", e);

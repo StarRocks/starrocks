@@ -116,6 +116,7 @@ import com.starrocks.sql.ast.expression.Subquery;
 import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.PCell;
+import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.PListCell;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -143,7 +144,6 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Queue;
 import java.util.Set;
-import java.util.TreeMap;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
@@ -1448,9 +1448,8 @@ public class AnalyzerUtils {
                     ImmutableMap.of("replication_num", String.valueOf(replicationNum));
 
             // table partitions for check
-            TreeMap<String, PCell> tablePartitions = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
-            tablePartitions.putAll(olapTable.getListPartitionItems());
-            List<String> partitionColNames = Lists.newArrayList();
+            PCellSortedSet tablePartitions = olapTable.getListPartitionItems();
+            Set<String> partitionColNameSet = Sets.newHashSet();
             List<PartitionDesc> partitionDescs = Lists.newArrayList();
             for (List<String> partitionValue : partitionValues) {
                 List<String> formattedPartitionValue = Lists.newArrayList();
@@ -1470,7 +1469,7 @@ public class AnalyzerUtils {
                     }
                     partitionName = partitionNamePrefix + PARTITION_NAME_PREFIX_SPLIT + partitionName;
                 }
-                if (!partitionColNames.contains(partitionName)) {
+                if (!partitionColNameSet.contains(partitionName)) {
                     List<List<String>> partitionItems = Collections.singletonList(partitionValue);
                     PListCell cell = new PListCell(partitionItems);
                     partitionName = calculateUniquePartitionName(partitionName, cell, tablePartitions);
@@ -1478,12 +1477,13 @@ public class AnalyzerUtils {
                             partitionName, partitionItems, partitionProperties);
                     multiItemListPartitionDesc.setSystem(true);
                     partitionDescs.add(multiItemListPartitionDesc);
-                    partitionColNames.add(partitionName);
+                    partitionColNameSet.add(partitionName);
 
                     // update table partition
-                    tablePartitions.put(partitionName, cell);
+                    tablePartitions.add(partitionName, cell);
                 }
             }
+            List<String> partitionColNames = Lists.newArrayList(partitionColNameSet);
             ListPartitionDesc listPartitionDesc = new ListPartitionDesc(partitionColNames, partitionDescs);
             listPartitionDesc.setSystem(true);
             return new AddPartitionClause(listPartitionDesc, distributionDesc,
@@ -1497,11 +1497,11 @@ public class AnalyzerUtils {
      * Calculate the unique partition name for list partition.
      */
     public static String calculateUniquePartitionName(String partitionName, PCell cell,
-                                                      Map<String, PCell> tablePartitions) throws AnalysisException {
+                                                      PCellSortedSet tablePartitions) throws AnalysisException {
         String orignialPartitionName = partitionName;
         int i = 0;
         // If the partition name already exists and their partition values are different, change the partition name.
-        while (tablePartitions.containsKey(partitionName) && !tablePartitions.get(partitionName).equals(cell)) {
+        while (tablePartitions.containsName(partitionName) && !tablePartitions.getPCell(partitionName).equals(cell)) {
             // ensure partition name is unique with case-insensitive
             int diff = orignialPartitionName.hashCode();
             partitionName = orignialPartitionName + "_" + Integer.toHexString(diff + i);

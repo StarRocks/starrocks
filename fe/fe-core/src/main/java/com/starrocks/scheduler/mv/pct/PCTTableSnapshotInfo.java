@@ -15,14 +15,12 @@ package com.starrocks.scheduler.mv.pct;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
-import com.google.common.collect.Range;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
-import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
@@ -32,7 +30,7 @@ import com.starrocks.scheduler.mv.BaseTableSnapshotInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.common.ListPartitionDiffer;
-import com.starrocks.sql.common.PListCell;
+import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import org.apache.logging.log4j.LogManager;
@@ -116,13 +114,14 @@ public class PCTTableSnapshotInfo extends BaseTableSnapshotInfo {
                 return !snapShotOlapTable.getVisiblePartitionNames().equals(partitionNames);
             } else if (snapshotPartitionInfo.isListPartition()) {
                 OlapTable snapshotOlapTable = (OlapTable) baseTable;
-                Map<String, PListCell> snapshotPartitionMap = snapshotOlapTable.getListPartitionItems();
-                Map<String, PListCell> currentPartitionMap = snapshotOlapTable.getListPartitionItems();
+                PCellSortedSet snapshotPartitionMap = snapshotOlapTable.getListPartitionItems();
+                PCellSortedSet currentPartitionMap = snapshotOlapTable.getListPartitionItems();
                 return ListPartitionDiffer.hasListPartitionChanged(snapshotPartitionMap, currentPartitionMap);
             } else {
-                Map<String, Range<PartitionKey>> snapshotPartitionMap = snapShotOlapTable.getRangePartitionMap();
-                Map<String, Range<PartitionKey>> currentPartitionMap = ((OlapTable) table).getRangePartitionMap();
-                return SyncPartitionUtils.hasRangePartitionChanged(snapshotPartitionMap, currentPartitionMap);
+                PCellSortedSet snapshotPartitionMap = snapShotOlapTable.getRangePartitionMap();
+                PCellSortedSet currentPartitionMap = ((OlapTable) table).getRangePartitionMap();
+                return SyncPartitionUtils.hasRangePartitionChanged(snapshotPartitionMap,
+                    currentPartitionMap);
             }
         } else if (ConnectorPartitionTraits.isSupported(baseTable.getType())) {
             if (baseTable.isUnPartitioned()) {
@@ -148,9 +147,9 @@ public class PCTTableSnapshotInfo extends BaseTableSnapshotInfo {
                 return false;
             }
             Expr rangePartitionExpr = rangePartitionExprOpt.get();
-            Map<String, Range<PartitionKey>> snapshotPartitionMap = PartitionUtil.getPartitionKeyRange(
+            PCellSortedSet snapshotPartitionMap = PartitionUtil.getPartitionKeyRange(
                     baseTable, partitionColumn, rangePartitionExpr);
-            Map<String, Range<PartitionKey>> currentPartitionMap = PartitionUtil.getPartitionKeyRange(
+            PCellSortedSet currentPartitionMap = PartitionUtil.getPartitionKeyRange(
                     table, partitionColumn, rangePartitionExpr);
             return SyncPartitionUtils.hasRangePartitionChanged(snapshotPartitionMap, currentPartitionMap);
         } else {

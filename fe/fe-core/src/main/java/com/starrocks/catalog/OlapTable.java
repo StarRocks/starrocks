@@ -106,7 +106,9 @@ import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.MetaUtils;
-import com.starrocks.sql.common.PCell;
+import com.starrocks.sql.common.PCellNone;
+import com.starrocks.sql.common.PCellSortedSet;
+import com.starrocks.sql.common.PCellWithName;
 import com.starrocks.sql.common.PListCell;
 import com.starrocks.sql.common.PRangeCell;
 import com.starrocks.sql.optimizer.rule.mv.MVUtils;
@@ -1059,10 +1061,10 @@ public class OlapTable extends Table {
     /**
      * @return : table's partition name to range partition key mapping.
      */
-    public Map<String, Range<PartitionKey>> getRangePartitionMap() {
+    public PCellSortedSet getRangePartitionMap() {
         Preconditions.checkState(partitionInfo instanceof RangePartitionInfo);
         RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
-        Map<String, Range<PartitionKey>> rangePartitionMap = Maps.newHashMap();
+        PCellSortedSet result = PCellSortedSet.of();
         for (Map.Entry<Long, Partition> partitionEntry : idToPartition.entrySet()) {
             Long partitionId = partitionEntry.getKey();
             String partitionName = partitionEntry.getValue().getName();
@@ -1074,9 +1076,9 @@ public class OlapTable extends Table {
             if (!nameToPartition.containsKey(partitionName)) {
                 continue;
             }
-            rangePartitionMap.put(partitionName, rangePartitionInfo.getRange(partitionId));
+            result.add(PCellWithName.of(partitionName, PRangeCell.of(rangePartitionInfo.getRange(partitionId))));
         }
-        return rangePartitionMap;
+        return result;
     }
 
     /**
@@ -1087,7 +1089,7 @@ public class OlapTable extends Table {
      * partition columns   : (a, b, c)
      * values              : [[1, 2, 3], [4, 5, 6]]
      */
-    public Map<String, PListCell> getListPartitionItems() {
+    public PCellSortedSet getListPartitionItems() {
         return getListPartitionItems(Optional.empty());
     }
 
@@ -1095,7 +1097,7 @@ public class OlapTable extends Table {
      * Return the partition items of the selected partition columns if selectedPartitionCols is not null, otherwise return
      * all partition items.
      */
-    public Map<String, PListCell> getListPartitionItems(Optional<List<Column>> selectedPartitionCols) {
+    public PCellSortedSet getListPartitionItems(Optional<List<Column>> selectedPartitionCols) {
         Preconditions.checkState(partitionInfo instanceof ListPartitionInfo, "partition info is not list partition");
         ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
         List<Column> partitionCols = listPartitionInfo.getPartitionColumns(this.idToColumn);
@@ -1112,7 +1114,7 @@ public class OlapTable extends Table {
                 colIdxes.add(idx);
             }
         }
-        Map<String, PListCell> partitionItems = Maps.newHashMap();
+        PCellSortedSet result = PCellSortedSet.of();
         for (Map.Entry<Long, Partition> partitionEntry : idToPartition.entrySet()) {
             Long partitionId = partitionEntry.getKey();
             String partitionName = partitionEntry.getValue().getName();
@@ -1131,7 +1133,7 @@ public class OlapTable extends Table {
                 for (LiteralExpr val : literalValues) {
                     cellValue.add(Lists.newArrayList(val.getStringValue()));
                 }
-                partitionItems.put(partitionName, new PListCell(cellValue));
+                result.add(PCellWithName.of(partitionName, new PListCell(cellValue)));
             }
 
             // multi items
@@ -1157,10 +1159,10 @@ public class OlapTable extends Table {
                     }
                     multiValues.add(values);
                 }
-                partitionItems.put(partitionName, new PListCell(multiValues));
+                result.add(PCellWithName.of(partitionName, new PListCell(multiValues)));
             }
         }
-        return partitionItems;
+        return result;
     }
 
     @Override
@@ -3521,26 +3523,21 @@ public class OlapTable extends Table {
      * Return partition name and associate partition cell with specific partition columns.
      * If partitionColumnsOpt is empty, return partition cell with all partition columns.
      */
-    public Map<String, PCell> getPartitionCells(Optional<List<Column>> partitionColumnsOpt) {
+    public PCellSortedSet getPartitionCells(Optional<List<Column>> partitionColumnsOpt) {
         PartitionInfo partitionInfo = this.getPartitionInfo();
         if (partitionInfo.isUnPartitioned()) {
-            return null;
-        }
-        if (partitionInfo.isRangePartition()) {
-            Preconditions.checkArgument(partitionColumnsOpt.isEmpty() || partitionColumnsOpt.get().size() == 1);
-            Map<String, Range<PartitionKey>> rangeMap = getRangePartitionMap();
-            if (rangeMap == null) {
-                return null;
-            }
-            return rangeMap.entrySet().stream().collect(Collectors.toMap(x -> x.getKey(), x -> new PRangeCell(x.getValue())));
+            List<PCellWithName> pCellWithNames = getPartitionNames()
+                    .stream()
+                    .map(p -> PCellWithName.of(p, new PCellNone()))
+                    .collect(Collectors.toList());
+            return PCellSortedSet.of(pCellWithNames);
+        } else if (partitionInfo.isRangePartition()) {
+            return getRangePartitionMap();
         } else if (partitionInfo.isListPartition()) {
-            Map<String, PListCell> listMap = getListPartitionItems(partitionColumnsOpt);
-            if (listMap == null) {
-                return null;
-            }
-            return listMap.entrySet().stream().collect(Collectors.toMap(x -> x.getKey(), x -> x.getValue()));
+            return getListPartitionItems(partitionColumnsOpt);
+        } else {
+            return PCellSortedSet.of();
         }
-        return null;
     }
 
     public boolean allowUpdateFileBundling() {
