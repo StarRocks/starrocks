@@ -261,9 +261,9 @@ datacache_auto_adjust_enable=true
 
 After automatic scaling is enabled:
 
-- When the disk usage exceeds the threshold specified by the BE parameter `disk_high_level` (default value is `80`, that is, 80% of disk space), the system will automatically evict cache data to free up disk space.
+- When the disk usage exceeds the threshold specified by the BE parameter `disk_high_level` (default value is `90`, that is, 90% of disk space), the system will automatically evict cache data to free up disk space.
 - When the disk usage is consistently below the threshold specified by the BE parameter `disk_low_level` (default value is `60`, that is, 60% of disk space), and the current disk space used by Data Cache is full, the system will automatically expand the cache capacity.
-- When automatically scaling the cache capacity, the system will aim to adjust the cache capacity to the level specified by the BE parameter `disk_safe_level` (default value is `70`, that is, 70% of disk space).
+- When automatically scaling the cache capacity, the system will aim to adjust the cache capacity to the level specified by the BE parameter `disk_safe_level` (default value is `80`, that is, 80% of disk space).
 
 ## Cache Sharing
 
