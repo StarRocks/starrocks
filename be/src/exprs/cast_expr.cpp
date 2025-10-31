@@ -981,25 +981,29 @@ static ColumnPtr cast_from_string_to_time_fn(ColumnPtr& column) {
         int hour = 0, minute = 0, second = 0;
         char* first_colon = (char*)memchr(first_char, ':', time.size);
         if (first_colon != nullptr) {
+            // Parse HH format
+            StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
+            auto int_value = StringParser::string_to_unsigned_int<uint64_t>(reinterpret_cast<char*>(first_char),
+                                                                            first_colon - first_char, &parse_result);
+            if (UNLIKELY(parse_result != StringParser::PARSE_SUCCESS)) {
+                if constexpr (AllowThrowException) {
+                    THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(TYPE_VARCHAR, TYPE_TIME, time.to_string());
+                }
+                builder.append_null();
+                continue;
+            } else {
+                hour = int_value;
+            }
+
             char* second_colon = (char*)memchr(first_colon + 1, ':', end_char - first_colon - 1);
             if (second_colon != nullptr) {
                 char* third_colon = (char*)memchr(second_colon + 1, ':', end_char - second_colon - 1);
                 if (third_colon != nullptr) {
+                    if constexpr (AllowThrowException) {
+                        THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(TYPE_VARCHAR, TYPE_TIME, time.to_string());
+                    }
                     builder.append_null();
                 } else {
-                    StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
-                    auto int_value = StringParser::string_to_unsigned_int<uint64_t>(
-                            reinterpret_cast<char*>(first_char), first_colon - first_char, &parse_result);
-                    if (UNLIKELY(parse_result != StringParser::PARSE_SUCCESS)) {
-                        if constexpr (AllowThrowException) {
-                            THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(TYPE_VARCHAR, TYPE_TIME, time.to_string());
-                        }
-                        builder.append_null();
-                        continue;
-                    } else {
-                        hour = int_value;
-                    }
-
                     int_value = StringParser::string_to_unsigned_int<uint64_t>(
                             reinterpret_cast<char*>(first_colon + 1), second_colon - first_colon - 1, &parse_result);
                     if (UNLIKELY(parse_result != StringParser::PARSE_SUCCESS)) {
@@ -1036,10 +1040,27 @@ static ColumnPtr cast_from_string_to_time_fn(ColumnPtr& column) {
                     builder.append(seconds);
                 }
             } else {
-                if constexpr (AllowThrowException) {
-                    THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(TYPE_VARCHAR, TYPE_TIME, time.to_string());
+                int_value = StringParser::string_to_unsigned_int<uint64_t>(reinterpret_cast<char*>(first_colon + 1),
+                                                                           end_char - first_colon - 1, &parse_result);
+                if (UNLIKELY(parse_result != StringParser::PARSE_SUCCESS)) {
+                    if constexpr (AllowThrowException) {
+                        THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(TYPE_VARCHAR, TYPE_TIME, time.to_string());
+                    }
+                    builder.append_null();
+                    continue;
+                } else {
+                    minute = int_value;
                 }
-                builder.append_null();
+
+                if (minute >= 60) {
+                    if constexpr (AllowThrowException) {
+                        THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(TYPE_VARCHAR, TYPE_TIME, time.to_string());
+                    }
+                    builder.append_null();
+                    continue;
+                }
+                int64_t seconds = hour * 3600 + minute * 60 + second;
+                builder.append(seconds);
             }
         } else {
             if constexpr (AllowThrowException) {
