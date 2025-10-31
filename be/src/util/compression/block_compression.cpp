@@ -39,8 +39,6 @@
 #ifdef __x86_64__
 #include <libdeflate.h>
 #endif
-#include <snappy/snappy-sinksource.h>
-#include <snappy/snappy.h>
 #include <zlib.h>
 
 #include "gutil/endian.h"

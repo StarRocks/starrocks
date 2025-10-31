@@ -4,9 +4,6 @@
 
 #include "storage/sstable/table_builder.h"
 
-#include <snappy/snappy-sinksource.h>
-#include <snappy/snappy.h>
-
 #include "common/status.h"
 #include "fs/fs.h"
 #include "storage/sstable/block_builder.h"
@@ -16,6 +13,7 @@
 #include "storage/sstable/filter_policy.h"
 #include "storage/sstable/format.h"
 #include "testutil/sync_point.h"
+#include "util/compression/compression_headers.h"
 #include "util/crc32c.h"
 #include "util/slice.h"
 
