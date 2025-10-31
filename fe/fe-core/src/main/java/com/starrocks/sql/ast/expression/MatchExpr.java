@@ -20,7 +20,6 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.thrift.TExprOpcode;
 
 import java.util.Objects;
 
@@ -60,24 +59,18 @@ public class MatchExpr extends Expr {
     }
 
     public enum MatchOperator {
-        MATCH("MATCH", TExprOpcode.MATCH),
-        MATCH_ANY("MATCH_ANY", TExprOpcode.MATCH_ANY),
-        MATCH_ALL("MATCH_ALL", TExprOpcode.MATCH_ALL);
+        MATCH("MATCH"),
+        MATCH_ANY("MATCH_ANY"),
+        MATCH_ALL("MATCH_ALL");
 
         private final String name;
-        private final TExprOpcode opcode;
 
-        MatchOperator(String name, TExprOpcode opCode) {
+        MatchOperator(String name) {
             this.name = name;
-            this.opcode = opCode;
         }
 
         public String getName() {
             return name;
-        }
-
-        public TExprOpcode getOpcode() {
-            return opcode;
         }
     }
 

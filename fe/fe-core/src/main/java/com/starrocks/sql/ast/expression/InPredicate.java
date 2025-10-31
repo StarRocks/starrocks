@@ -40,7 +40,6 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.thrift.TExprOpcode;
 
 import java.util.List;
 
@@ -65,13 +64,11 @@ public class InPredicate extends Predicate {
         children.add(compareExpr);
         children.addAll(inList);
         this.isNotIn = isNotIn;
-        this.opcode = isNotIn ? TExprOpcode.FILTER_NOT_IN : TExprOpcode.FILTER_IN;
     }
 
     protected InPredicate(InPredicate other) {
         super(other);
         isNotIn = other.isNotIn();
-        this.opcode = isNotIn ? TExprOpcode.FILTER_NOT_IN : TExprOpcode.FILTER_IN;
     }
 
     public int getInElementNum() {
@@ -96,7 +93,6 @@ public class InPredicate extends Predicate {
         children.add(compareExpr);
         children.add(subquery);
         this.isNotIn = isNotIn;
-        this.opcode = isNotIn ? TExprOpcode.FILTER_NOT_IN : TExprOpcode.FILTER_IN;
     }
 
     /**
@@ -143,10 +139,6 @@ public class InPredicate extends Predicate {
             return isNotIn == expr.isNotIn;
         }
         return false;
-    }
-
-    public void setOpcode(TExprOpcode opcode) {
-        this.opcode = opcode;
     }
 
     @Override

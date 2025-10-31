@@ -36,6 +36,7 @@ package com.starrocks.planner;
 
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.ExprOpcodeRegistry;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
 import com.starrocks.sql.ast.expression.JoinOperator;
@@ -69,7 +70,7 @@ public class MergeJoinNode extends JoinNode {
             TEqJoinCondition eqJoinCondition = new TEqJoinCondition(
                     ExprToThriftVisitor.treeToThrift(eqJoinPredicate.getChild(0)),
                     ExprToThriftVisitor.treeToThrift(eqJoinPredicate.getChild(1)));
-            eqJoinCondition.setOpcode(eqJoinPredicate.getOp().getOpcode());
+            eqJoinCondition.setOpcode(ExprOpcodeRegistry.getBinaryOpcode(eqJoinPredicate.getOp()));
             msg.merge_join_node.addToEq_join_conjuncts(eqJoinCondition);
             if (sqlJoinPredicatesBuilder.length() > 0) {
                 sqlJoinPredicatesBuilder.append(", ");

@@ -322,7 +322,7 @@ public class FunctionCallExpr extends Expr {
     @Override
     public int hashCode() {
         // @Note: fnParams is different with children Expr. use children plz.
-        return Objects.hash(super.hashCode(), type, opcode, fnName, nondeterministicId);
+        return Objects.hash(super.hashCode(), type, fnName, nondeterministicId);
     }
 
     @Override

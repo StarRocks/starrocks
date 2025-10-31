@@ -68,7 +68,6 @@ import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.plan.ScalarOperatorToExpr;
-import com.starrocks.thrift.TExprOpcode;
 import org.roaringbitmap.RoaringBitmap;
 
 import java.lang.reflect.Method;
@@ -152,9 +151,6 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
 
     protected boolean isAnalyzed = false;  // true after analyze() has been called
 
-    protected TExprOpcode opcode;  // opcode for this expr
-    protected TExprOpcode vectorOpcode;  // vector opcode for this expr
-
     // estimated probability of a predicate evaluating to true;
     // set during analysis;
     // between 0 and 1 if valid: invalid: -1
@@ -201,8 +197,6 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         pos = NodePosition.ZERO;
         type = Type.INVALID;
         originType = Type.INVALID;
-        opcode = TExprOpcode.INVALID_OPCODE;
-        vectorOpcode = TExprOpcode.INVALID_OPCODE;
         selectivity = -1.0;
         numDistinctValues = -1;
     }
@@ -211,8 +205,6 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         this.pos = pos;
         type = Type.INVALID;
         originType = Type.INVALID;
-        opcode = TExprOpcode.INVALID_OPCODE;
-        vectorOpcode = TExprOpcode.INVALID_OPCODE;
         selectivity = -1.0;
         numDistinctValues = -1;
     }
@@ -226,7 +218,6 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         isAnalyzed = other.isAnalyzed;
         selectivity = other.selectivity;
         numDistinctValues = other.numDistinctValues;
-        opcode = other.opcode;
         isConstant = other.isConstant;
         fn = other.fn;
         printSqlInParens = other.printSqlInParens;
@@ -309,10 +300,6 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         this.originType = originType;
     }
 
-    public TExprOpcode getOpcode() {
-        return opcode;
-    }
-
     public long getNumDistinctValues() {
         return numDistinctValues;
     }
@@ -323,10 +310,6 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
 
     public int getOutputColumn() {
         return outputColumn;
-    }
-
-    public TExprOpcode getVectorOpcode() {
-        return vectorOpcode;
     }
 
     public boolean isFilter() {
@@ -673,7 +656,7 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         // may be null.
         // NOTE that all the types of the related member variables must implement hashCode() and equals().
         if (id == null) {
-            int result = 31 * Objects.hashCode(type) + Objects.hashCode(opcode.getValue());
+            int result = 31 * Objects.hashCode(type);
             for (Expr child : children) {
                 result = 31 * result + Objects.hashCode(child);
             }

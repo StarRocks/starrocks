@@ -37,55 +37,52 @@ package com.starrocks.catalog;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSetMultimap;
-import com.google.common.collect.Lists;
-import com.starrocks.thrift.TPrimitiveType;
 
 import java.util.Arrays;
-import java.util.List;
 
 public enum PrimitiveType {
-    INVALID_TYPE("INVALID_TYPE", -1, TPrimitiveType.INVALID_TYPE),
+    INVALID_TYPE("INVALID_TYPE", -1),
     // NULL_TYPE - used only in LiteralPredicate and NullLiteral to make NULLs compatible
     // with all other types.
-    NULL_TYPE("NULL_TYPE", 1, TPrimitiveType.NULL_TYPE),
-    BOOLEAN("BOOLEAN", 1, TPrimitiveType.BOOLEAN),
-    TINYINT("TINYINT", 1, TPrimitiveType.TINYINT),
-    SMALLINT("SMALLINT", 2, TPrimitiveType.SMALLINT),
-    INT("INT", 4, TPrimitiveType.INT),
-    BIGINT("BIGINT", 8, TPrimitiveType.BIGINT),
-    LARGEINT("LARGEINT", 16, TPrimitiveType.LARGEINT),
-    FLOAT("FLOAT", 4, TPrimitiveType.FLOAT),
-    DOUBLE("DOUBLE", 8, TPrimitiveType.DOUBLE),
-    DATE("DATE", 16, TPrimitiveType.DATE),
-    DATETIME("DATETIME", 16, TPrimitiveType.DATETIME),
+    NULL_TYPE("NULL_TYPE", 1),
+    BOOLEAN("BOOLEAN", 1),
+    TINYINT("TINYINT", 1),
+    SMALLINT("SMALLINT", 2),
+    INT("INT", 4),
+    BIGINT("BIGINT", 8),
+    LARGEINT("LARGEINT", 16),
+    FLOAT("FLOAT", 4),
+    DOUBLE("DOUBLE", 8),
+    DATE("DATE", 16),
+    DATETIME("DATETIME", 16),
     // Fixed length char array.
-    CHAR("CHAR", 16, TPrimitiveType.CHAR),
+    CHAR("CHAR", 16),
     // 8-byte pointer and 4-byte length indicator (12 bytes total).
     // Aligning to 8 bytes so 16 total.
-    VARCHAR("VARCHAR", 16, TPrimitiveType.VARCHAR),
+    VARCHAR("VARCHAR", 16),
 
-    DECIMALV2("DECIMALV2", 16, TPrimitiveType.DECIMALV2),
+    DECIMALV2("DECIMALV2", 16),
 
-    HLL("HLL", 16, TPrimitiveType.HLL),
-    TIME("TIME", 8, TPrimitiveType.TIME),
+    HLL("HLL", 16),
+    TIME("TIME", 8),
     // we use OBJECT type represent BITMAP type in Backend
-    BITMAP("BITMAP", 16, TPrimitiveType.OBJECT),
-    PERCENTILE("PERCENTILE", 16, TPrimitiveType.PERCENTILE),
-    DECIMAL32("DECIMAL32", 4, TPrimitiveType.DECIMAL32),
-    DECIMAL64("DECIMAL64", 8, TPrimitiveType.DECIMAL64),
-    DECIMAL128("DECIMAL128", 16, TPrimitiveType.DECIMAL128),
-    DECIMAL256("DECIMAL256", 32, TPrimitiveType.DECIMAL256),
+    BITMAP("BITMAP", 16),
+    PERCENTILE("PERCENTILE", 16),
+    DECIMAL32("DECIMAL32", 4),
+    DECIMAL64("DECIMAL64", 8),
+    DECIMAL128("DECIMAL128", 16),
+    DECIMAL256("DECIMAL256", 32),
 
-    JSON("JSON", 16, TPrimitiveType.JSON),
-    VARIANT("VARIANT", 16, TPrimitiveType.VARIANT),
+    JSON("JSON", 16),
+    VARIANT("VARIANT", 16),
 
-    FUNCTION("FUNCTION", 8, TPrimitiveType.FUNCTION),
+    FUNCTION("FUNCTION", 8),
 
-    BINARY("BINARY", -1, TPrimitiveType.BINARY),
-    VARBINARY("VARBINARY", 16, TPrimitiveType.VARBINARY),
+    BINARY("BINARY", -1),
+    VARBINARY("VARBINARY", 16),
 
     // If external table column type is unsupported, it will be converted to UNKNOWN_TYPE
-    UNKNOWN_TYPE("UNKNOWN_TYPE", -1, TPrimitiveType.INVALID_TYPE);
+    UNKNOWN_TYPE("UNKNOWN_TYPE", -1);
 
     private static final int DATE_INDEX_LEN = 3;
     private static final int DATETIME_INDEX_LEN = 8;
@@ -215,12 +212,10 @@ public enum PrimitiveType {
 
     private final String description;
     private final int slotSize;  // size of tuple slot for this type
-    private final TPrimitiveType thriftType;
 
-    PrimitiveType(String description, int slotSize, TPrimitiveType thriftType) {
+    PrimitiveType(String description, int slotSize) {
         this.description = description;
         this.slotSize = slotSize;
-        this.thriftType = thriftType;
     }
 
     public static ImmutableList<PrimitiveType> getIntegerTypeList() {
@@ -233,71 +228,6 @@ public enum PrimitiveType {
             return true;
         }
         return IMPLICIT_CAST_MAP.get(type).contains(target);
-    }
-
-    public static PrimitiveType fromThrift(TPrimitiveType tPrimitiveType) {
-        switch (tPrimitiveType) {
-            case NULL_TYPE:
-                return NULL_TYPE;
-            case BOOLEAN:
-                return BOOLEAN;
-            case TINYINT:
-                return TINYINT;
-            case SMALLINT:
-                return SMALLINT;
-            case INT:
-                return INT;
-            case BIGINT:
-                return BIGINT;
-            case LARGEINT:
-                return LARGEINT;
-            case FLOAT:
-                return FLOAT;
-            case DOUBLE:
-                return DOUBLE;
-            case VARCHAR:
-                return VARCHAR;
-            case CHAR:
-                return CHAR;
-            case HLL:
-                return HLL;
-            case OBJECT:
-                return BITMAP;
-            case PERCENTILE:
-                return PERCENTILE;
-            case DECIMAL32:
-                return DECIMAL32;
-            case DECIMAL64:
-                return DECIMAL64;
-            case DECIMAL128:
-                return DECIMAL128;
-            case DECIMAL256:
-                return DECIMAL256;
-            case DATE:
-                return DATE;
-            case DATETIME:
-                return DATETIME;
-            case TIME:
-                return TIME;
-            case VARBINARY:
-                return VARBINARY;
-            case JSON:
-                return JSON;
-            case FUNCTION:
-                return FUNCTION;
-            case VARIANT:
-                return VARIANT;
-            default:
-                return INVALID_TYPE;
-        }
-    }
-
-    public static List<TPrimitiveType> toThrift(PrimitiveType[] types) {
-        List<TPrimitiveType> result = Lists.newArrayList();
-        for (PrimitiveType t : types) {
-            result.add(t.toThrift());
-        }
-        return result;
     }
 
     public static int getMaxSlotSize() {
@@ -397,10 +327,6 @@ public enum PrimitiveType {
     @Override
     public String toString() {
         return description;
-    }
-
-    public TPrimitiveType toThrift() {
-        return thriftType;
     }
 
     public int getSlotSize() {
