@@ -1367,7 +1367,11 @@ struct TStreamAggregationNode {
   24: optional i32 agg_func_set_version = 1
 }
 
-
+struct TPlanNodeCommon {
+  // heavy_exprs are extracted from projection and shall be push down to ScanNode and
+  // it is evaluated by ScanNode's ChunkSource in io threads.
+  1: optional map<Types.TSlotId, Exprs.TExpr> heavy_exprs
+}
 // This is essentially a union of all messages corresponding to subclasses
 // of PlanNode.
 struct TPlanNode {
@@ -1384,6 +1388,7 @@ struct TPlanNode {
 
   // Produce data in compact format.
   8: required bool compact_data
+  9: optional TPlanNodeCommon common
 
   // one field per PlanNode subclass
   11: optional THashJoinNode hash_join_node
