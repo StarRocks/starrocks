@@ -43,6 +43,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
 import com.starrocks.sql.optimizer.operator.TopNType;
 import com.starrocks.thrift.TExplainLevel;
@@ -338,9 +339,9 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
             for (Expr fnCall : preAggFnCalls) {
                 strings.add("[");
                 if (detailLevel.equals(TExplainLevel.NORMAL)) {
-                    strings.add(fnCall.toSql());
+                    strings.add(ExprToSql.toSql(fnCall));
                 } else {
-                    strings.add(fnCall.explain());
+                    strings.add(ExprToSql.explain(fnCall));
                 }
                 strings.add("]");
             }
@@ -360,7 +361,7 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
                 if (detailLevel.equals(TExplainLevel.NORMAL)) {
                     output.append(expr.toSql());
                 } else {
-                    output.append(expr.explain());
+                    output.append(ExprToSql.explain(expr));
                 }
             }
             output.append("\n");

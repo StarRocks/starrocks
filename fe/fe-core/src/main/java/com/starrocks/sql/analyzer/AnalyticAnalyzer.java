@@ -24,6 +24,7 @@ import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.expression.AnalyticExpr;
 import com.starrocks.sql.ast.expression.AnalyticWindow;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.NullLiteral;
@@ -38,7 +39,7 @@ public class AnalyticAnalyzer {
         for (Expr e : analyticExpr.getPartitionExprs()) {
             if (e.isConstant()) {
                 throw new SemanticException("Expressions in the PARTITION BY clause must not be constant: "
-                        + e.toSql() + " (in " + analyticExpr.toSql() + ")", e.getPos());
+                        + ExprToSql.toSql(e) + " (in " + analyticExpr.toSql() + ")", e.getPos());
             }
             if (!e.getType().canPartitionBy()) {
                 throw new SemanticException(e.getType().toSql() + " type can't as partition by column", e.getPos());
@@ -57,7 +58,7 @@ public class AnalyticAnalyzer {
 
         FunctionCallExpr analyticFunction = analyticExpr.getFnCall();
         if (analyticFunction.getParams().isDistinct()) {
-            throw new SemanticException("DISTINCT not allowed in analytic function: " + analyticFunction.toSql(),
+            throw new SemanticException("DISTINCT not allowed in analytic function: " + ExprToSql.toSql(analyticFunction),
                     analyticExpr.getPos());
         }
 
@@ -90,7 +91,7 @@ public class AnalyticAnalyzer {
             if (!isPositiveConstantInteger(offset)) {
                 throw new SemanticException(
                         "The offset parameter of LEAD/LAG must be a constant positive integer: " +
-                                analyticFunction.toSql(), analyticFunction.getPos());
+                                ExprToSql.toSql(analyticFunction), analyticFunction.getPos());
             }
 
             // TODO: remove this check when the backend can handle non-constants
@@ -132,7 +133,7 @@ public class AnalyticAnalyzer {
             if (!isPositiveConstantInteger(numBuckets)) {
                 throw new SemanticException(
                         "The num_buckets parameter of NTILE must be a constant positive integer: " +
-                                analyticFunction.toSql(), numBuckets.getPos());
+                                ExprToSql.toSql(analyticFunction), numBuckets.getPos());
             }
         }
 
@@ -140,7 +141,7 @@ public class AnalyticAnalyzer {
         if (analyticExpr.getWindow() != null) {
             if ((isRankingFn(analyticFunction.getFn()) || isCumeFn(analyticFunction.getFn()) ||
                     isOffsetFn(analyticFunction.getFn()) || isHllAggFn(analyticFunction.getFn()))) {
-                throw new SemanticException("Windowing clause not allowed with '" + analyticFunction.toSql() + "'",
+                throw new SemanticException("Windowing clause not allowed with '" + ExprToSql.toSql(analyticFunction) + "'",
                         analyticExpr.getPos());
             }
 

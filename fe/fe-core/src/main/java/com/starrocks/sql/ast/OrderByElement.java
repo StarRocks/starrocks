@@ -37,6 +37,7 @@ package com.starrocks.sql.ast;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -157,7 +158,7 @@ public class OrderByElement implements ParseNode {
 
     public String explain() {
         StringBuilder strBuilder = new StringBuilder();
-        strBuilder.append(expr.explain());
+        strBuilder.append(ExprToSql.explain(expr));
         strBuilder.append(isAsc ? " ASC" : " DESC");
         if (nullsFirstParam != null) {
             if (isAsc && !nullsFirstParam) {

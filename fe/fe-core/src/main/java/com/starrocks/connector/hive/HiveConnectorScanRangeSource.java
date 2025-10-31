@@ -34,6 +34,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -181,7 +182,7 @@ public class HiveConnectorScanRangeSource extends ConnectorScanRangeSource {
                     dataCacheOptions.add(null);
                     if (!op.isConstantRef()) {
                         LOG.warn(String.format("ConstFolding failed for expr: %s, rewrite scalarOperator is %s",
-                                rewritedExpr.toMySql(), op.debugString()));
+                                ExprToSql.toMySql(rewritedExpr), op.debugString()));
                     }
                 }
             }

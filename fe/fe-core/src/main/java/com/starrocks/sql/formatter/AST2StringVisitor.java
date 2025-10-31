@@ -100,6 +100,7 @@ import com.starrocks.sql.ast.expression.DictQueryExpr;
 import com.starrocks.sql.ast.expression.DictionaryGetExpr;
 import com.starrocks.sql.ast.expression.ExistsPredicate;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.FieldReference;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.FunctionParams;
@@ -881,7 +882,7 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
 
     @Override
     public String visitExpression(Expr node, Void context) {
-        return node.toSql();
+        return ExprToSql.toSql(node);
     }
 
     @Override
@@ -1513,7 +1514,7 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
 
     @Override
     public String visitDictionaryGetExpr(DictionaryGetExpr node, Void context) {
-        return node.toSql();
+        return ExprToSql.toSql(node);
     }
 
     private String visitAstList(List<? extends ParseNode> contexts) {

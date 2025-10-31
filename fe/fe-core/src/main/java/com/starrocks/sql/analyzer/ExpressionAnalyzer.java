@@ -72,6 +72,7 @@ import com.starrocks.sql.ast.expression.DictionaryGetExpr;
 import com.starrocks.sql.ast.expression.ExistsPredicate;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprId;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.FieldReference;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.FunctionName;
@@ -308,7 +309,7 @@ public class ExpressionAnalyzer {
             if (expression.getChild(0).getChildren().size() != 3) {
                 Expr child = expression.getChild(0);
                 throw new SemanticException("The left part of map lambda function (" +
-                        child.toSql() + ") should have 2 arguments, but there are "
+                        ExprToSql.toSql(child) + ") should have 2 arguments, but there are "
                         + (child.getChildren().size() - 1) + " arguments", child.getPos());
             }
             Expr expr = expression.getChild(1);
@@ -357,10 +358,10 @@ public class ExpressionAnalyzer {
         try {
             hasLambdaFunc = expression.hasLambdaFunction(expression);
         } catch (SemanticException e) {
-            throw e.appendOnlyOnceMsg(expression.toSql(), expression.getPos());
+            throw e.appendOnlyOnceMsg(ExprToSql.toSql(expression), expression.getPos());
         }
         if (hasLambdaFunc) {
-            String originalSQL = expression.toSql();
+            String originalSQL = ExprToSql.toSql(expression);
             try {
                 analyzeHighOrderFunction(visitor, expression, scope);
                 visitor.visit(expression, scope);
@@ -407,7 +408,7 @@ public class ExpressionAnalyzer {
             // 'col' will be parsed as StringLiteral, it's invalid.
             // TODO(SmithCruise) We should handle this problem in parser in the future.
             if (!child.getType().isStructType()) {
-                throw new SemanticException(child.toSql() + " must be a struct type, check if you are using `'`",
+                throw new SemanticException(ExprToSql.toSql(child) + " must be a struct type, check if you are using `'`",
                         child.getPos());
             }
 
@@ -629,7 +630,7 @@ public class ExpressionAnalyzer {
                         Type.canCastTo(child.getType(), Type.BOOLEAN)) {
                     node.getChildren().set(i, new CastExpr(Type.BOOLEAN, child));
                 } else {
-                    throw new SemanticException(child.toSql() + " can not be converted to boolean type.");
+                    throw new SemanticException(ExprToSql.toSql(child) + " can not be converted to boolean type.");
                 }
             }
             return null;

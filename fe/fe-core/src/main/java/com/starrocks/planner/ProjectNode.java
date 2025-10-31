@@ -18,6 +18,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.thrift.TExplainLevel;
@@ -85,7 +86,7 @@ public class ProjectNode extends PlanNode {
             output.append(prefix);
             if (detailLevel == TExplainLevel.VERBOSE) {
                 output.append(kv.first).append(" <-> ")
-                        .append(kv.second.explain()).append("\n");
+                        .append(ExprToSql.explain(kv.second)).append("\n");
             } else {
                 output.append("<slot ").
                         append(kv.first).
@@ -100,7 +101,7 @@ public class ProjectNode extends PlanNode {
             for (Map.Entry<SlotId, Expr> kv : commonSlotMap.entrySet()) {
                 output.append(prefix);
                 if (detailLevel == TExplainLevel.VERBOSE) {
-                    output.append(kv.getKey()).append(" <-> ").append(kv.getValue().explain()).append("\n");
+                    output.append(kv.getKey()).append(" <-> ").append(ExprToSql.explain(kv.getValue())).append("\n");
                 } else {
                     output.append("<slot ").
                             append(kv.getKey()).
