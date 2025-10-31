@@ -29,7 +29,9 @@
     "fs-extra": "^11.1.1",
     "prism-react-renderer": "^2.1.0",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "react-dom": "^18.2.0",
+    "react-modal": "^3.16.3",
+    "react-resizable": "^3.0.5"
   },
   "overrides": {
     "react-router": {
