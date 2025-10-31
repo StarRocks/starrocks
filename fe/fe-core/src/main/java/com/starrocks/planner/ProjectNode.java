@@ -185,17 +185,28 @@ public class ProjectNode extends PlanNode {
     public boolean isTrivial() {
         return slotMap.entrySet().stream().allMatch(
                 e -> e.getValue() instanceof SlotRef && ((SlotRef) e.getValue()).getSlotId().equals(e.getKey())) &&
-                commonSlotMap.isEmpty();
+                commonSlotMap.isEmpty() &&
+                (!(getChild(0) instanceof ScanNode) || ((ScanNode) getChild(0)).getHeavyExprs().isEmpty());
     }
 
     @Override
     protected void toNormalForm(TNormalPlanNode planNode, FragmentNormalizer normalizer) {
         TNormalProjectNode projectNode = new TNormalProjectNode();
+        projectNode.setCse_slot_ids(Lists.newArrayList());
+        projectNode.setCse_exprs(Lists.newArrayList());
+        if ((getChild(0) instanceof ScanNode)) {
+            ScanNode scanNode = (ScanNode) getChild(0);
+            normalizer.addSlotsUseAggColumns(scanNode.getHeavyExprs());
+            Pair<List<Integer>, List<ByteBuffer>> slotIdsAndHeavyExprs =
+                    normalizer.normalizeSlotIdsAndExprs(scanNode.getHeavyExprs());
+            projectNode.getCse_slot_ids().addAll(slotIdsAndHeavyExprs.first);
+            projectNode.getCse_exprs().addAll(slotIdsAndHeavyExprs.second);
+        }
         normalizer.addSlotsUseAggColumns(commonSlotMap);
         normalizer.addSlotsUseAggColumns(slotMap);
         Pair<List<Integer>, List<ByteBuffer>> cseSlotIdsAndExprs = normalizer.normalizeSlotIdsAndExprs(commonSlotMap);
-        projectNode.setCse_slot_ids(cseSlotIdsAndExprs.first);
-        projectNode.setCse_exprs(cseSlotIdsAndExprs.second);
+        projectNode.getCse_slot_ids().addAll(cseSlotIdsAndExprs.first);
+        projectNode.getCse_exprs().addAll(cseSlotIdsAndExprs.second);
 
         Pair<List<Integer>, List<ByteBuffer>> slotIdAndExprs = normalizer.normalizeSlotIdsAndExprs(slotMap);
         projectNode.setSlot_ids(slotIdAndExprs.first);
