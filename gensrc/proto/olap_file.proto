@@ -314,6 +314,7 @@ message TabletMetaPB {
     optional BinlogConfigPB binlog_config = 52;
     optional BinlogLsnPB binlog_min_lsn = 53;
     optional string storage_type = 54; // storage layout type: column[default]|column_with_row|row
+    optional bool enable_null_primary_key = 55;
     optional bool enable_shortcut_compaction = 60 [default = true];
     optional int32 primary_index_cache_expire_sec = 61 [default = 0];
     // If the tablet is replicated from another cluster, the source_schema saved the schema in the cluster

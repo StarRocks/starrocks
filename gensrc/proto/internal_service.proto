@@ -205,6 +205,7 @@ message PTabletWriterOpenRequest {
     // for multi olap table sink
     optional int64 sink_id = 36 [default = 0];
     optional bytes encryption_meta = 37;
+    optional bool enable_null_primary_key = 38;
 };
 
 message PTabletWriterOpenResult {
@@ -703,6 +704,7 @@ message PProcessDictionaryCacheRequest {
     optional int32 key_size = 6;
     optional bool is_cancel = 7;
     optional PProcessDictionaryCacheRequestType type = 8;
+    optional bool enable_null_primary_key = 9;
 };
 
 message PProcessDictionaryCacheResult {

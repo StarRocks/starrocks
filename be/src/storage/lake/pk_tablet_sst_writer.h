@@ -31,6 +31,7 @@ class PersistentIndexSstableStreamBuilder;
 
 class DefaultSSTWriter {
 public:
+    DefaultSSTWriter(bool enable_null_primary_key) : _enable_null_primary_key(enable_null_primary_key) {}
     virtual ~DefaultSSTWriter() = default;
     virtual Status append_sst_record(const Chunk& data) { return Status::OK(); }
     virtual Status reset_sst_writer(const std::shared_ptr<LocationProvider>& location_provider,
@@ -39,12 +40,20 @@ public:
     }
     virtual StatusOr<FileInfo> flush_sst_writer() { return Status::OK(); }
     virtual bool has_file_info() const { return false; }
+    virtual bool enable_null_primary_key() { return _enable_null_primary_key; }
+
+private:
+    bool _enable_null_primary_key;
 };
 
 class PkTabletSSTWriter : public DefaultSSTWriter {
 public:
-    PkTabletSSTWriter(const TabletSchemaCSPtr& tablet_schema_ptr, TabletManager* tablet_mgr, int64_t tablet_id)
-            : _tablet_schema_ptr(tablet_schema_ptr), _tablet_mgr(tablet_mgr), _tablet_id(tablet_id) {}
+    PkTabletSSTWriter(bool enable_null_primary_key, const TabletSchemaCSPtr& tablet_schema_ptr,
+                      TabletManager* tablet_mgr, int64_t tablet_id)
+            : DefaultSSTWriter(enable_null_primary_key),
+              _tablet_schema_ptr(tablet_schema_ptr),
+              _tablet_mgr(tablet_mgr),
+              _tablet_id(tablet_id) {}
     ~PkTabletSSTWriter() override = default;
     Status append_sst_record(const Chunk& data) override;
     Status reset_sst_writer(const std::shared_ptr<LocationProvider>& location_provider,

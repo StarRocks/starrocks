@@ -39,6 +39,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_ENABLE_NULL_PRIMARY_KEY;
+
 public class DictionaryMgrTest {
     @Mocked
     private GlobalStateMgr globalStateMgr;
@@ -116,6 +118,20 @@ public class DictionaryMgrTest {
                 result = dictionariesMapById;
             }
         };
+    }
+
+    @Test
+    public void testDictionaryWithNullKey() throws Exception {
+        List<String> dictionaryKeys = Lists.newArrayList();
+        List<String> dictionaryValues = Lists.newArrayList();
+        dictionaryKeys.add("key");
+        dictionaryValues.add("value");
+        Map<String, String> properties = new HashMap<>();
+        properties.put(PROPERTIES_ENABLE_NULL_PRIMARY_KEY, "true");
+        Dictionary dictionary = new Dictionary(
+                1, "dict", "t", "default_catalog", "testDb", dictionaryKeys, dictionaryValues, properties);
+        dictionary.buildDictionaryProperties();
+        Assertions.assertTrue(dictionary.isEnableNullPrimaryKey());
     }
 
     @Test

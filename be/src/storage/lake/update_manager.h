@@ -165,7 +165,8 @@ public:
 
     void evict_cache(int64_t memory_urgent_level, int64_t memory_high_level);
     void preload_update_state(const TxnLog& op_write, Tablet* tablet);
-    void preload_compaction_state(const TxnLog& txnlog, const Tablet& tablet, const TabletSchemaCSPtr& tablet_schema);
+    void preload_compaction_state(const TxnLog& txnlog, const Tablet& tablet, const TabletSchemaCSPtr& tablet_schema,
+                                  bool enable_null_primary_key);
 
     // check if pk index's cache ref == ref_cnt
     bool TEST_check_primary_index_cache_ref(uint32_t tablet_id, uint32_t ref_cnt);

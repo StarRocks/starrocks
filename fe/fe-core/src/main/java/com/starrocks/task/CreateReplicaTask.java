@@ -66,6 +66,7 @@ public class CreateReplicaTask extends AgentTask {
     private final int compressionLevel;
     private final TStorageMedium storageMedium;
     private final boolean enablePersistentIndex;
+    private final boolean enableNullPrimaryKey;
     private TPersistentIndexType persistentIndexType;
 
     private BinlogConfig binlogConfig;
@@ -99,6 +100,7 @@ public class CreateReplicaTask extends AgentTask {
         this.storageMedium = builder.getStorageMedium();
         this.latch = builder.getLatch();
         this.enablePersistentIndex = builder.isEnablePersistentIndex();
+        this.enableNullPrimaryKey = builder.isEnableNullPrimaryKey();
         this.primaryIndexCacheExpireSec = builder.getPrimaryIndexCacheExpireSec();
         this.persistentIndexType = builder.getPersistentIndexType();
         this.tabletType = builder.getTabletType();
@@ -169,6 +171,7 @@ public class CreateReplicaTask extends AgentTask {
         createTabletReq.setTablet_schema(tabletSchema);
         createTabletReq.setVersion(version);
         createTabletReq.setStorage_medium(storageMedium);
+        createTabletReq.setEnable_null_primary_key(enableNullPrimaryKey);
         createTabletReq.setEnable_persistent_index(enablePersistentIndex);
         if (persistentIndexType != null) {
             createTabletReq.setPersistent_index_type(persistentIndexType);
@@ -218,6 +221,7 @@ public class CreateReplicaTask extends AgentTask {
         private int compressionLevel;
         private TStorageMedium storageMedium;
         private boolean enablePersistentIndex;
+        private boolean enableNullPrimaryKey;
         private TPersistentIndexType persistentIndexType;
         private BinlogConfig binlogConfig;
         private FlatJsonConfig flatJsonConfig;
@@ -324,6 +328,15 @@ public class CreateReplicaTask extends AgentTask {
 
         public Builder setStorageMedium(TStorageMedium storageMedium) {
             this.storageMedium = storageMedium;
+            return this;
+        }
+
+        public boolean isEnableNullPrimaryKey() {
+            return enableNullPrimaryKey;
+        }
+
+        public Builder setEnableNullPrimaryKey(boolean enableNullPrimaryKey) {
+            this.enableNullPrimaryKey = enableNullPrimaryKey;
             return this;
         }
 

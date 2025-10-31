@@ -1056,18 +1056,18 @@ PrimaryIndex::~PrimaryIndex() {
     }
 }
 
-PrimaryIndex::PrimaryIndex(const Schema& pk_schema) {
-    _set_schema(pk_schema);
+PrimaryIndex::PrimaryIndex(const Schema& pk_schema, bool enable_null_primary_key) {
+    _set_schema(pk_schema, enable_null_primary_key);
 }
 
-void PrimaryIndex::_set_schema(const Schema& pk_schema) {
+void PrimaryIndex::_set_schema(const Schema& pk_schema, bool enable_null_primary_key) {
     _pk_schema = pk_schema;
     std::vector<ColumnId> sort_key_idxes(pk_schema.num_fields());
     for (ColumnId i = 0; i < pk_schema.num_fields(); ++i) {
         sort_key_idxes[i] = i;
     }
     _enc_pk_type = PrimaryKeyEncoder::encoded_primary_key_type(_pk_schema, sort_key_idxes);
-    _key_size = PrimaryKeyEncoder::get_encoded_fixed_size(_pk_schema);
+    _key_size = PrimaryKeyEncoder::get_encoded_fixed_size(_pk_schema, enable_null_primary_key);
     _pkey_to_rssid_rowid = create_hash_index(_enc_pk_type, _key_size);
 }
 
@@ -1171,7 +1171,9 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
         pk_columns[i] = (ColumnId)i;
     }
     auto pkey_schema = ChunkHelper::convert_schema(tablet_schema_ptr, pk_columns);
-    _set_schema(pkey_schema);
+
+    bool enable_null_primary_key = tablet->get_enable_null_primary_key();
+    _set_schema(pkey_schema, enable_null_primary_key);
 
     // load persistent index if enable persistent index meta
 
@@ -1215,8 +1217,8 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
 
     OlapReaderStatistics stats;
     MutableColumnPtr pk_column;
-    if (pk_columns.size() > 1) {
-        RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
+    if (pk_columns.size() > 1 || enable_null_primary_key) {
+        RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, enable_null_primary_key));
     }
     // only hold pkey, so can use larger chunk size
     vector<uint32_t> rowids;
@@ -1250,8 +1252,8 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
                     Column* pkc = nullptr;
                     if (pk_column) {
                         pk_column->reset_column();
-                        TRY_CATCH_BAD_ALLOC(
-                                PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get()));
+                        TRY_CATCH_BAD_ALLOC(PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(),
+                                                                      pk_column.get(), enable_null_primary_key));
                         pkc = pk_column.get();
                     } else {
                         pkc = chunk->columns()[0].get();
@@ -1550,7 +1552,7 @@ std::string PrimaryIndex::to_string() const {
 }
 
 std::unique_ptr<PrimaryIndex> TEST_create_primary_index(const Schema& pk_schema) {
-    return std::make_unique<PrimaryIndex>(pk_schema);
+    return std::make_unique<PrimaryIndex>(pk_schema, false);
 }
 
 Status PrimaryIndex::major_compaction(DataDir* data_dir, int64_t tablet_id, std::shared_timed_mutex* mutex,
@@ -1578,7 +1580,7 @@ Status PrimaryIndex::reset(Tablet* tablet, EditVersion version, PersistentIndexM
         pk_columns[i] = (ColumnId)i;
     }
     auto pkey_schema = ChunkHelper::convert_schema(tablet_schema_ptr, pk_columns);
-    _set_schema(pkey_schema);
+    _set_schema(pkey_schema, tablet->get_enable_null_primary_key());
 
     if (tablet->get_enable_persistent_index()) {
         if (_persistent_index != nullptr) {
