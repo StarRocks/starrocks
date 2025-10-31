@@ -359,7 +359,11 @@ public class PropertyAnalyzer {
 
         } else if (hasCoolDownTTL) {
             if (!hasMedium) {
-                throw new AnalysisException("Invalid data property. storage medium property is not found");
+                if (Config.tablet_sched_storage_cooldown_second > 0) {
+                    storageMedium = inferredDataProperty.getStorageMedium();
+                } else {
+                    throw new AnalysisException("Invalid data property. storage medium property is not found");
+                }
             }
             if (storageMedium == TStorageMedium.HDD) {
                 throw new AnalysisException("Can not assign cooldown ttl to table with HDD storage medium");
