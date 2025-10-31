@@ -31,7 +31,6 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -96,19 +95,13 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
                         new TabletMeta(dbId, tableId, physicalPartitionId, shadowIndexId, medium, true);
                 MaterializedIndex shadowIndex =
                         new MaterializedIndex(shadowIndexId, MaterializedIndex.IndexState.SHADOW, shardGroupId);
-                Map<Long, Long> tabletIdMap = new HashMap<>();
                 for (int i = 0; i < originTablets.size(); i++) {
                     Tablet originTablet = originTablets.get(i);
                     Tablet shadowTablet = new LakeTablet(shadowTabletIds.get(i));
                     shadowIndex.addTablet(shadowTablet, shadowTabletMeta);
                     schemaChangeJob
                             .addTabletIdMap(physicalPartitionId, shadowIndexId, shadowTablet.getId(), originTablet.getId());
-                    tabletIdMap.put(originTablet.getId(), shadowTablet.getId());
                 }
-
-                List<Long> virtualBuckets = new ArrayList<>(originIndex.getVirtualBuckets());
-                virtualBuckets.replaceAll(tabletId -> tabletIdMap.get(tabletId));
-                shadowIndex.setVirtualBuckets(virtualBuckets);
 
                 schemaChangeJob.addPartitionShadowIndex(physicalPartitionId, shadowIndexId, shadowIndex);
             } // end for physicalPartition

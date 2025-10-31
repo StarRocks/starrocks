@@ -1006,7 +1006,6 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
                 .addColumn(new Column("PartitionName", ScalarType.createVarchar(30)))
                 .addColumn(new Column("SubPartitionId", ScalarType.createVarchar(30)))
                 .addColumn(new Column("MaterializedIndexName", ScalarType.createVarchar(30)))
-                .addColumn(new Column("VirtualBuckets", ScalarType.createVarchar(30)))
                 .addColumn(new Column("RowCount", ScalarType.createVarchar(30)))
                 .addColumn(new Column("RowCount%", ScalarType.createVarchar(10)))
                 .addColumn(new Column("DataSize", ScalarType.createVarchar(30)))
