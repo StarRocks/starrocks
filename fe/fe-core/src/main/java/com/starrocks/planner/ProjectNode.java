@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TNormalPlanNode;
@@ -167,7 +168,7 @@ public class ProjectNode extends PlanNode {
         }
 
         Optional<List<Expr>> optProbeExprCandidates = candidatesOfSlotExpr(probeExpr, couldBound(description, descTbl));
-        optProbeExprCandidates.ifPresent(exprs -> exprs.removeIf(probeExprCandidate -> probeExprCandidate.containsDictMappingExpr()));
+        optProbeExprCandidates.ifPresent(exprs -> exprs.removeIf(ExprUtils::containsDictMappingExpr));
 
         return pushdownRuntimeFilterForChildOrAccept(context, probeExpr,
                 optProbeExprCandidates,

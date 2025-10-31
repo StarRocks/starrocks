@@ -21,7 +21,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.connector.metadata.MetadataTableType;
-import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.AggType;
@@ -76,7 +76,7 @@ public class IcebergPartitionsTableRewriteRule extends TransformationRule {
                     groupingKeys.add(columnRefOperator);
                     break;
                 case "spec_id":
-                    fun = Expr.getBuiltinFunction("any_value", argTypes, Function.CompareMode.IS_IDENTICAL);
+                    fun = ExprUtils.getBuiltinFunction("any_value", argTypes, Function.CompareMode.IS_IDENTICAL);
                     agg = new CallOperator("any_value", Type.INT, Lists.newArrayList(columnRefOperator), fun);
                     break;
                 case "record_count":
@@ -86,11 +86,11 @@ public class IcebergPartitionsTableRewriteRule extends TransformationRule {
                 case "file_count":
                 case "position_delete_file_count":
                 case "equality_delete_file_count":
-                    fun = Expr.getBuiltinFunction("sum", argTypes, Function.CompareMode.IS_IDENTICAL);
+                    fun = ExprUtils.getBuiltinFunction("sum", argTypes, Function.CompareMode.IS_IDENTICAL);
                     agg = new CallOperator("sum", Type.BIGINT, Lists.newArrayList(columnRefOperator), fun);
                     break;
                 case "last_updated_at":
-                    fun = Expr.getBuiltinFunction("max", argTypes, Function.CompareMode.IS_IDENTICAL);
+                    fun = ExprUtils.getBuiltinFunction("max", argTypes, Function.CompareMode.IS_IDENTICAL);
                     agg = new CallOperator("max", Type.DATETIME, Lists.newArrayList(columnRefOperator), fun);
                     break;
                 default:

@@ -26,7 +26,6 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RangePartitionInfo;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
@@ -104,7 +103,7 @@ public class PartitionPruneRuleTest {
         keyRange.put(5L, Range.closed(p5, p6));
 
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-        ColumnRefOperator column1 = columnRefFactory.create("dealDate", ScalarType.DATE, false);
+        ColumnRefOperator column1 = columnRefFactory.create("dealDate", Type.DATE, false);
         Map<ColumnRefOperator, Column> scanColumnMap = Maps.newHashMap();
         scanColumnMap.put(column1, new Column("dealDate", Type.DATE, false));
         Map<Column, ColumnRefOperator> scanMetaColMap = Maps.newHashMap();
@@ -211,8 +210,8 @@ public class PartitionPruneRuleTest {
         keyRange.put(5L, Range.closed(p5, p6));
 
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-        ColumnRefOperator column1 = columnRefFactory.create("dealDate", ScalarType.DATE, false);
-        ColumnRefOperator column2 = columnRefFactory.create("main_brand_id", ScalarType.INT, false);
+        ColumnRefOperator column1 = columnRefFactory.create("dealDate", Type.DATE, false);
+        ColumnRefOperator column2 = columnRefFactory.create("main_brand_id", Type.INT, false);
         Map<ColumnRefOperator, Column> scanColumnMap = Maps.newHashMap();
         scanColumnMap.put(column1, new Column("dealDate", Type.DATE, false));
         scanColumnMap.put(column2, new Column("main_brand_id", Type.INT, false));
@@ -292,7 +291,7 @@ public class PartitionPruneRuleTest {
             throws AnalysisException {
         FeConstants.runningUnitTest = true;
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-        ColumnRefOperator column = columnRefFactory.create("province", ScalarType.STRING, false);
+        ColumnRefOperator column = columnRefFactory.create("province", Type.STRING, false);
         Map<ColumnRefOperator, Column> scanColumnMap = Maps.newHashMap();
         scanColumnMap.put(column, new Column("province", Type.STRING, false));
         Map<Column, ColumnRefOperator> columnMetaToColRefMap = new HashMap<>();
@@ -376,7 +375,7 @@ public class PartitionPruneRuleTest {
             throws AnalysisException {
         FeConstants.runningUnitTest = true;
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-        ColumnRefOperator column = columnRefFactory.create("province", ScalarType.STRING, false);
+        ColumnRefOperator column = columnRefFactory.create("province", Type.STRING, false);
         Map<ColumnRefOperator, Column> scanColumnMap = Maps.newHashMap();
         scanColumnMap.put(column, new Column("province", Type.STRING, false));
         Map<Column, ColumnRefOperator> columnMetaToColRefMap = new HashMap<>();

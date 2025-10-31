@@ -28,6 +28,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.expression.ArithmeticExpr;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.sql.ast.expression.FunctionParams;
@@ -200,11 +201,11 @@ public class DecimalV3FunctionAnalyzer {
                 returnScale = Math.max(expectedScale, 0);
             }
             returnType = ScalarType.createType(returnPrimitiveType, -1, returnPrecision, returnScale);
-        } else if (Expr.containsSlotRef(secondArg)) {
+        } else if (ExprUtils.containsSlotRef(secondArg)) {
             returnScale = originalScale;
             returnType = ScalarType.createType(returnPrimitiveType, -1, returnPrecision, returnScale);
         } else {
-            return Expr.getBuiltinFunction(fn.getFunctionName().getFunction(), new Type[] {Type.DOUBLE, Type.INT},
+            return ExprUtils.getBuiltinFunction(fn.getFunctionName().getFunction(), new Type[] {Type.DOUBLE, Type.INT},
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         }
 
@@ -280,7 +281,7 @@ public class DecimalV3FunctionAnalyzer {
     // FunctionSet contains wildcard decimal types which is invalid in BE, so it is forbidden to be used
     // without decimal type rectification.
     public static Function convertSumToMultiDistinctSum(Function sumFn, Type argType) {
-        AggregateFunction fn = (AggregateFunction) Expr.getBuiltinFunction(FunctionSet.MULTI_DISTINCT_SUM,
+        AggregateFunction fn = (AggregateFunction) ExprUtils.getBuiltinFunction(FunctionSet.MULTI_DISTINCT_SUM,
                 new Type[] {argType},
                 IS_NONSTRICT_SUPERTYPE_OF);
         Preconditions.checkArgument(fn != null);
@@ -388,7 +389,7 @@ public class DecimalV3FunctionAnalyzer {
             argumentTypes = clone;
         }
 
-        return Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+        return ExprUtils.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
     }
 
     public static Function getDecimalV3Function(ConnectContext session,
@@ -412,12 +413,12 @@ public class DecimalV3FunctionAnalyzer {
             // yields a zero, so we use double instead of decimal128(38,9) to compute stddev and variance of
             // decimal types.
             Type[] doubleArgTypes = Stream.of(argumentTypes).map(t -> Type.DOUBLE).toArray(Type[]::new);
-            return Expr.getBuiltinFunction(fnName, doubleArgTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+            return ExprUtils.getBuiltinFunction(fnName, doubleArgTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         }
 
         // modify search argument types
         argumentTypes = normalizeDecimalArgTypes(argumentTypes, fnName);
-        Function fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+        Function fn = ExprUtils.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
 
         if (fn == null) {
             fn = AnalyzerUtils.getUdfFunction(session, new FunctionName(fnName), argumentTypes);

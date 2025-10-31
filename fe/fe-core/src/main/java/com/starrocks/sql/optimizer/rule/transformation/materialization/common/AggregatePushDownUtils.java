@@ -22,7 +22,7 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
-import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.MvRewriteContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -266,7 +266,7 @@ public class AggregatePushDownUtils {
                 return null;
             }
             Type[] argTypes = newArgs.stream().map(ScalarOperator::getType).toArray(Type[]::new);
-            Function newFunc = Expr.getBuiltinFunction(rollupFuncName, argTypes,
+            Function newFunc = ExprUtils.getBuiltinFunction(rollupFuncName, argTypes,
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             if (newFunc == null) {
                 logMVRewrite(mvRewriteContext, "Get rollup function is null, rollupFuncName:", rollupFuncName);

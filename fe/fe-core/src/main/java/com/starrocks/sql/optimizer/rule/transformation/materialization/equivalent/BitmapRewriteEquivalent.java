@@ -18,7 +18,7 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.SessionVariable;
-import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -82,19 +82,19 @@ public class BitmapRewriteEquivalent extends IAggregateRewriteEquivalent {
 
     private CallOperator makeBitmapUnionCountFunc(ScalarOperator arg0) {
         return new CallOperator(BITMAP_UNION_COUNT, Type.BIGINT,
-                Arrays.asList(arg0), Expr.getBuiltinFunction(BITMAP_UNION_COUNT, new Type[] {Type.BITMAP},
+                Arrays.asList(arg0), ExprUtils.getBuiltinFunction(BITMAP_UNION_COUNT, new Type[] {Type.BITMAP},
                         IS_IDENTICAL));
     }
 
     private CallOperator makeBitmapUnionFunc(ScalarOperator arg0) {
         return new CallOperator(BITMAP_UNION, Type.BITMAP,
-                Arrays.asList(arg0), Expr.getBuiltinFunction(BITMAP_UNION, new Type[] {Type.BITMAP},
+                Arrays.asList(arg0), ExprUtils.getBuiltinFunction(BITMAP_UNION, new Type[] {Type.BITMAP},
                         IS_IDENTICAL));
     }
 
     private CallOperator makeBitmapCountFunc(ScalarOperator arg0) {
         return new CallOperator(FunctionSet.BITMAP_COUNT, Type.BIGINT,
-                Arrays.asList(arg0), Expr.getBuiltinFunction(FunctionSet.BITMAP_COUNT, new Type[] {Type.BITMAP},
+                Arrays.asList(arg0), ExprUtils.getBuiltinFunction(FunctionSet.BITMAP_COUNT, new Type[] {Type.BITMAP},
                         IS_IDENTICAL));
     }
 

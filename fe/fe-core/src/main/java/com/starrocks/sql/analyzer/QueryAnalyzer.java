@@ -81,6 +81,7 @@ import com.starrocks.sql.ast.expression.CaseExpr;
 import com.starrocks.sql.ast.expression.CaseWhenClause;
 import com.starrocks.sql.ast.expression.CompoundPredicate;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FieldReference;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.IntLiteral;
@@ -1405,7 +1406,7 @@ public class QueryAnalyzer {
             if (names != null && !names.isEmpty()) {
                 namesArray = names.toArray(String[]::new);
             }
-            Function fn = Expr.getBuiltinFunction(node.getFunctionName().getFunction(), argTypes, namesArray,
+            Function fn = ExprUtils.getBuiltinFunction(node.getFunctionName().getFunction(), argTypes, namesArray,
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
 
             if (fn == null) {

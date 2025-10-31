@@ -26,7 +26,6 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
@@ -66,7 +65,7 @@ public class SyncPartitionUtilsTest extends StarRocksTestBase {
     @BeforeAll
     public static void beforeClass() throws Exception {
         slotRef = new SlotRef(TABLE_NAME, "k1");
-        partitionColumn = new Column("k1", ScalarType.DATETIME);
+        partitionColumn = new Column("k1", Type.DATETIME);
     }
 
     private static Range<PartitionKey> createRangeImpl(PartitionValue lowerValue, PartitionValue upperValue)

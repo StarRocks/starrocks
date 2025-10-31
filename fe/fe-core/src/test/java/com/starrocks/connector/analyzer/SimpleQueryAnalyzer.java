@@ -52,6 +52,7 @@ import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.CompoundPredicate;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FieldReference;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
@@ -318,7 +319,7 @@ public class SimpleQueryAnalyzer {
                 AnalyzerUtils.verifyNoGroupingFunctions(args.get(i), "Table Function");
             }
 
-            Function fn = Expr.getBuiltinFunction(node.getFunctionName().getFunction(), argTypes,
+            Function fn = ExprUtils.getBuiltinFunction(node.getFunctionName().getFunction(), argTypes,
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
 
             if (fn == null) {

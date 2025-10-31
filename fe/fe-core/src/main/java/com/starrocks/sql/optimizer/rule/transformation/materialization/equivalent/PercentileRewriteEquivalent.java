@@ -18,7 +18,7 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
-import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -109,14 +109,14 @@ public class PercentileRewriteEquivalent extends IAggregateRewriteEquivalent {
     }
 
     private CallOperator makePercentileUnion(ScalarOperator replace) {
-        Function unionFn = Expr.getBuiltinFunction(FunctionSet.PERCENTILE_UNION, new Type[] { Type.PERCENTILE },
+        Function unionFn = ExprUtils.getBuiltinFunction(FunctionSet.PERCENTILE_UNION, new Type[] { Type.PERCENTILE },
                 IS_IDENTICAL);
         Preconditions.checkState(unionFn != null);
         return new CallOperator(PERCENTILE_UNION, Type.PERCENTILE, Arrays.asList(replace), unionFn);
     }
 
     private CallOperator makePercentileApproxRaw(ScalarOperator replace, ScalarOperator arg1) {
-        Function approxRawFn = Expr.getBuiltinFunction(FunctionSet.PERCENTILE_APPROX_RAW,
+        Function approxRawFn = ExprUtils.getBuiltinFunction(FunctionSet.PERCENTILE_APPROX_RAW,
                 new Type[] { Type.PERCENTILE, Type.DOUBLE }, Function.CompareMode.IS_IDENTICAL);
         Preconditions.checkState(approxRawFn != null);
         // percentile_approx_raw(percentile_union(input), arg1)
@@ -124,12 +124,12 @@ public class PercentileRewriteEquivalent extends IAggregateRewriteEquivalent {
     }
 
     private CallOperator makeRollupFunc(ScalarOperator replace, ScalarOperator arg1) {
-        Function unionFn = Expr.getBuiltinFunction(FunctionSet.PERCENTILE_UNION, new Type[] { Type.PERCENTILE },
+        Function unionFn = ExprUtils.getBuiltinFunction(FunctionSet.PERCENTILE_UNION, new Type[] { Type.PERCENTILE },
                 IS_IDENTICAL);
         Preconditions.checkState(unionFn != null);
         CallOperator rollup = new CallOperator(PERCENTILE_UNION, Type.PERCENTILE, Arrays.asList(replace), unionFn);
 
-        Function approxRawFn = Expr.getBuiltinFunction(FunctionSet.PERCENTILE_APPROX_RAW,
+        Function approxRawFn = ExprUtils.getBuiltinFunction(FunctionSet.PERCENTILE_APPROX_RAW,
                 new Type[] { Type.PERCENTILE, Type.DOUBLE }, Function.CompareMode.IS_IDENTICAL);
         Preconditions.checkState(approxRawFn != null);
         // percentile_approx_raw(percentile_union(input), arg1)

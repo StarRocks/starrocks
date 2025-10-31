@@ -22,7 +22,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.HintNode;
 import com.starrocks.sql.ast.expression.BinaryType;
-import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.JoinOperator;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -204,7 +204,7 @@ public class ScalarApply2JoinRule extends TransformationRule {
                 new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR, countRowsIsNullPredicate,
                         countRowsLEOneRowPredicate);
         Function assertTrueFn =
-                Expr.getBuiltinFunction(FunctionSet.ASSERT_TRUE, new Type[] {Type.BOOLEAN, Type.VARCHAR},
+                ExprUtils.getBuiltinFunction(FunctionSet.ASSERT_TRUE, new Type[] {Type.BOOLEAN, Type.VARCHAR},
                         Function.CompareMode.IS_IDENTICAL);
         CallOperator assertTrueCallOp = new CallOperator(FunctionSet.ASSERT_TRUE, Type.BOOLEAN,
                 Lists.newArrayList(countRowsPredicate,

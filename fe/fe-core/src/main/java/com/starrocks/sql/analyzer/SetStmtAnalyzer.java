@@ -55,6 +55,7 @@ import com.starrocks.sql.ast.UserRef;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
@@ -107,7 +108,7 @@ public class SetStmtAnalyzer {
         } else if (unResolvedExpression instanceof SlotRef) {
             resolvedExpression = new StringLiteral(((SlotRef) unResolvedExpression).getColumnName());
         } else {
-            Expr e = Expr.analyzeAndCastFold(unResolvedExpression);
+            Expr e = ExprUtils.analyzeAndCastFold(unResolvedExpression);
             if (!e.isConstant()) {
                 throw new SemanticException("Set statement only support constant expr.");
             }
@@ -549,7 +550,7 @@ public class SetStmtAnalyzer {
             userVariable.setEvaluatedExpression(NullLiteral.create(Type.STRING));
         } else {
             Expr foldedExpression;
-            foldedExpression = Expr.analyzeAndCastFold(expression);
+            foldedExpression = ExprUtils.analyzeAndCastFold(expression);
 
             if (foldedExpression.isLiteral()) {
                 userVariable.setEvaluatedExpression(foldedExpression);

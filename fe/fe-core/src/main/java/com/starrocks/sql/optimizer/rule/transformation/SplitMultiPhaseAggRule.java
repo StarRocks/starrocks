@@ -23,7 +23,7 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
-import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -344,7 +344,7 @@ public class SplitMultiPhaseAggRule extends SplitAggregateRule {
                     // This behavior is consistent with MySQL.
                     ScalarOperator newChildren = createCountDistinctAggParam(aggregation.getChildren());
                     // because of the change of children, we need to get function again.
-                    Function fn = Expr.getBuiltinFunction(FunctionSet.COUNT, new Type[] {newChildren.getType()},
+                    Function fn = ExprUtils.getBuiltinFunction(FunctionSet.COUNT, new Type[] {newChildren.getType()},
                             Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
                     aggregation = new CallOperator(aggregation.getFnName(), aggregation.getType(),
                             Lists.newArrayList(newChildren), fn);
@@ -384,7 +384,7 @@ public class SplitMultiPhaseAggRule extends SplitAggregateRule {
             ifArgs.add(elseOperator);
             Type[] argumentTypes = ifArgs.stream().map(arg -> arg.getType()).toArray(Type[]::new);
 
-            Function fn = Expr.getBuiltinFunction(FunctionSet.IF, argumentTypes,
+            Function fn = ExprUtils.getBuiltinFunction(FunctionSet.IF, argumentTypes,
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             elseOperator = new CallOperator(FunctionSet.IF, fn.getReturnType(), ifArgs, fn);
 

@@ -24,7 +24,6 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.planner.PartitionColumnFilter;
 import com.starrocks.sql.ast.expression.BinaryType;
@@ -122,15 +121,15 @@ public class DistributionPrunerRuleTest {
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
         Map<ColumnRefOperator, Column> scanColumnMap = Maps.newHashMap();
 
-        ColumnRefOperator column1 = columnRefFactory.create("dealDate", ScalarType.DATE, false);
+        ColumnRefOperator column1 = columnRefFactory.create("dealDate", Type.DATE, false);
         scanColumnMap.put(column1, new Column("dealDate", Type.DATE, false));
-        ColumnRefOperator column2 = columnRefFactory.create("main_brand_id", ScalarType.CHAR, false);
+        ColumnRefOperator column2 = columnRefFactory.create("main_brand_id", Type.CHAR, false);
         scanColumnMap.put(column2, new Column("main_brand_id", Type.CHAR, false));
-        ColumnRefOperator column3 = columnRefFactory.create("item_third_cate_id", ScalarType.CHAR, false);
+        ColumnRefOperator column3 = columnRefFactory.create("item_third_cate_id", Type.CHAR, false);
         scanColumnMap.put(column3, new Column("item_third_cate_id", Type.CHAR, false));
-        ColumnRefOperator column4 = columnRefFactory.create("channel", ScalarType.CHAR, false);
+        ColumnRefOperator column4 = columnRefFactory.create("channel", Type.CHAR, false);
         scanColumnMap.put(column4, new Column("channel", Type.CHAR, false));
-        ColumnRefOperator column5 = columnRefFactory.create("shop_type", ScalarType.CHAR, false);
+        ColumnRefOperator column5 = columnRefFactory.create("shop_type", Type.CHAR, false);
         scanColumnMap.put(column5, new Column("shop_type", Type.CHAR, false));
 
         BinaryPredicateOperator binaryPredicateOperator1 =

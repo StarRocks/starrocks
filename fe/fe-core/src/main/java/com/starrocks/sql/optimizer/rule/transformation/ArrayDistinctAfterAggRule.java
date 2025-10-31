@@ -19,7 +19,7 @@ import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
-import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -159,7 +159,7 @@ public class ArrayDistinctAfterAggRule extends TransformationRule {
             if (entry.getValue().getFnName().equals(FunctionSet.ARRAY_AGG) &&
                     checkAllUseOfArrayAggResultHasDistinct(entry.getKey(), project, aggregate)) {
                 Function oldFn = entry.getValue().getFunction();
-                Function newFn = Expr.getBuiltinFunction(FunctionSet.ARRAY_AGG_DISTINCT, oldFn.getArgs(),
+                Function newFn = ExprUtils.getBuiltinFunction(FunctionSet.ARRAY_AGG_DISTINCT, oldFn.getArgs(),
                         Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
                 if (newFn == null) {
                     // array_agg_distinct not support this args.

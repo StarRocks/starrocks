@@ -143,7 +143,7 @@ public class CastExpr extends Expr {
         }
 
         FunctionName fnName = new FunctionName(getFnName(type));
-        Function searchDesc = new Function(fnName, collectChildReturnTypes(), Type.INVALID, false);
+        Function searchDesc = new Function(fnName, ExprUtils.collectChildReturnTypes(this), Type.INVALID, false);
         if (isImplicit) {
             fn = GlobalStateMgr.getCurrentState().getFunction(
                     searchDesc, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);

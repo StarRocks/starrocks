@@ -48,6 +48,7 @@ import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.sql.ast.expression.BoolLiteral;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.IsNullPredicate;
 import com.starrocks.sql.ast.expression.StringLiteral;
@@ -225,7 +226,7 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
             partitionPredicates.add(isNullPredicate);
         }
 
-        return Expr.compoundOr(partitionPredicates);
+        return ExprUtils.compoundOr(partitionPredicates);
     }
 
     @Override
@@ -265,7 +266,7 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
             Expr isNullPredicate = new IsNullPredicate(partitionExpr, false);
             partitionPredicates.add(isNullPredicate);
         }
-        return Expr.compoundOr(partitionPredicates);
+        return ExprUtils.compoundOr(partitionPredicates);
     }
 
     @Override

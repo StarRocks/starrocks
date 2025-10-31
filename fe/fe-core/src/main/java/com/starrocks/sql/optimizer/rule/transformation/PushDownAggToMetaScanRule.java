@@ -22,7 +22,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
-import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -150,7 +150,7 @@ public class PushDownAggToMetaScanRule extends TransformationRule {
             // DictMerge meta aggregate function is special, need change their types from
             // VARCHAR to ARRAY_VARCHAR
             if (aggCall.getFnName().equals(FunctionSet.DICT_MERGE)) {
-                Function aggFunction = Expr.getBuiltinFunction(aggCall.getFnName(),
+                Function aggFunction = ExprUtils.getBuiltinFunction(aggCall.getFnName(),
                         new Type[] {Type.ARRAY_VARCHAR, Type.INT}, Function.CompareMode.IS_IDENTICAL);
 
                 newAggCalls.put(kv.getKey(),
@@ -160,7 +160,7 @@ public class PushDownAggToMetaScanRule extends TransformationRule {
                     || aggCall.getFnName().equals(FunctionSet.COLUMN_SIZE)
                     || aggCall.getFnName().equals(FunctionSet.COLUMN_COMPRESSED_SIZE)) {
                 // rewrite count to sum
-                Function aggFunction = Expr.getBuiltinFunction(FunctionSet.SUM, new Type[] {Type.BIGINT},
+                Function aggFunction = ExprUtils.getBuiltinFunction(FunctionSet.SUM, new Type[] {Type.BIGINT},
                         Function.CompareMode.IS_IDENTICAL);
                 newAggCalls.put(kv.getKey(),
                         new CallOperator(FunctionSet.SUM, Type.BIGINT, List.of(metaColumn), aggFunction));

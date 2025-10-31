@@ -22,7 +22,7 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
-import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
@@ -311,7 +311,7 @@ public class PushDownAggregateGroupingSetsRule extends TransformationRule {
         Map<ColumnRefOperator, CallOperator> aggregations = Maps.newHashMap();
         aggregate.getAggregations().forEach((k, v) -> {
             ColumnRefOperator x = factory.create(k, k.getType(), k.isNullable());
-            Function aggFunc = Expr.getBuiltinFunction(v.getFnName(), new Type[] {k.getType()},
+            Function aggFunc = ExprUtils.getBuiltinFunction(v.getFnName(), new Type[] {k.getType()},
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
 
             Preconditions.checkState(aggFunc instanceof AggregateFunction);

@@ -22,7 +22,7 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.FeConstants;
-import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -117,7 +117,7 @@ public class RewriteMultiDistinctRule extends TransformationRule {
                 Preconditions.checkState(v.getType() == Type.BIGINT);
                 IsNullPredicateOperator isNull = new IsNullPredicateOperator(true, v.getChild(0));
                 CastOperator cast = new CastOperator(Type.BIGINT, isNull);
-                Function fn = Expr.getBuiltinFunction(FunctionSet.ANY_VALUE, new Type[] {Type.BIGINT},
+                Function fn = ExprUtils.getBuiltinFunction(FunctionSet.ANY_VALUE, new Type[] {Type.BIGINT},
                         Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
                 CallOperator anyValue =
                         new CallOperator(FunctionSet.ANY_VALUE, v.getType(), Lists.newArrayList(cast), fn, false);
