@@ -355,4 +355,35 @@ void update_logging() {
     }
 }
 
+void update_verbose_logging() {
+    // Store previous verbose modules to clear them when updating
+    static std::vector<std::string> previous_verbose_modules;
+
+    // Clear previous verbose module settings
+    for (auto& module : previous_verbose_modules) {
+        google::SetVLOGLevel(module.c_str(), 0);
+        LOG(INFO) << "Clear VLOG level for module: " << module;
+    }
+    previous_verbose_modules.clear();
+
+    // Set FLAGS_v to -1 to disable verbose logging by default
+    FLAGS_v = -1;
+
+    // Apply new verbose module settings
+    std::vector<std::string> verbose_modules = config::sys_log_verbose_modules;
+    int32_t vlog_level = config::sys_log_verbose_level;
+
+    for (auto& verbose_module : verbose_modules) {
+        if (verbose_module.size() != 0) {
+            google::SetVLOGLevel(verbose_module.c_str(), vlog_level);
+            LOG(INFO) << "Update VLOG level for module: " << verbose_module << " to " << vlog_level;
+            previous_verbose_modules.push_back(verbose_module);
+        }
+    }
+
+    if (verbose_modules.empty() || (verbose_modules.size() == 1 && verbose_modules[0].empty())) {
+        LOG(INFO) << "Verbose logging disabled (empty module list)";
+    }
+}
+
 } // namespace starrocks
