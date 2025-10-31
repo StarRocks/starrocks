@@ -810,6 +810,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String PARTIAL_UPDATE_MODE = "partial_update_mode";
 
+    public static final String ENABLE_INSERT_PARTIAL_UPDATE = "enable_insert_partial_update";
+
     public static final String SCAN_OR_TO_UNION_LIMIT = "scan_or_to_union_limit";
 
     public static final String SCAN_OR_TO_UNION_THRESHOLD = "scan_or_to_union_threshold";
@@ -1880,6 +1882,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = PARTIAL_UPDATE_MODE)
     private String partialUpdateMode = "auto";
 
+    @VariableMgr.VarAttr(name = ENABLE_INSERT_PARTIAL_UPDATE)
+    private boolean enableInsertPartialUpdate = true;
+
     @VariableMgr.VarAttr(name = HDFS_BACKEND_SELECTOR_HASH_ALGORITHM, flag = VariableMgr.INVISIBLE)
     private String hdfsBackendSelectorHashAlgorithm = "consistent";
 
@@ -2119,6 +2124,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public String getPartialUpdateMode() {
         return this.partialUpdateMode;
+    }
+
+    public void setEnableInsertPartialUpdate(boolean enableInsertPartialUpdate) {
+        this.enableInsertPartialUpdate = enableInsertPartialUpdate;
+    }
+
+    public boolean isEnableInsertPartialUpdate() {
+        return this.enableInsertPartialUpdate;
     }
 
     public boolean isEnableSortAggregate() {
