@@ -937,6 +937,12 @@ The number of scan instances determines the number of other execution nodes in t
 * **Default**: auto
 * **Introduced in**: v3.1
 
+### enable_insert_partial_update
+
+* **Description**: Whether to enable partial updates for INSERT statements on Primary Key tables. When set to `true` (default), if an INSERT statement specifies only a subset of columns (fewer than all non-generated columns in the table), StarRocks performs a partial update - updating only the specified columns while preserving existing values in other columns. When set to `false`, the system uses default values for unspecified columns instead of preserving existing values. This feature is particularly useful for updating specific columns in Primary Key tables without affecting other column values.
+* **Default**: true
+* **Introduced in**: v3.3.20, v3.4.9, v3.5.8, v4.0.2
+
 ### performance_schema (global)
 
 Used for compatibility with MySQL JDBC versions 8.0.16 and above. No practical usage.

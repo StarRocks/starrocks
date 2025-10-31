@@ -944,6 +944,12 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：auto
 * 引入版本：v3.1
 
+### enable_insert_partial_update
+
+* **描述**：是否为 Primary Key 表的 INSERT 语句启用部分更新（Partial Update）。当设置为 `true`（默认）时，如果 INSERT 语句只指定了部分列（少于表中所有非生成列），StarRocks 会执行部分更新 —— 仅更新指定列，并保留其他列的现有值。当设置为 `false` 时，系统会对未指定的列使用默认值，而不是保留已有值。此功能特别适用于对 Primary Key 表的特定列进行更新，而不影响其他列的值。
+* **默认值**：true
+* **引入版本**：v3.3.20、v3.4.9、v3.5.8、v4.0.2
+
 ### performance_schema (global)
 
 用于兼容 8.0.16 及以上版本的 MySQL JDBC。无实际作用。
