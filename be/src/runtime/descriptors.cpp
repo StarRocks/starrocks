@@ -790,6 +790,7 @@ Status DescriptorTbl::create(RuntimeState* state, ObjectPool* pool, const TDescr
 
     for (const auto& tdesc : thrift_tbl.slotDescriptors) {
         SlotDescriptor* slot_d = pool->add(new SlotDescriptor(tdesc));
+        slot_d->set_label(tdesc.colName);
         (*tbl)->_slot_desc_map[tdesc.id] = slot_d;
         if (!slot_d->col_name().empty()) {
             (*tbl)->_slot_with_column_name_map[tdesc.id] = slot_d;
