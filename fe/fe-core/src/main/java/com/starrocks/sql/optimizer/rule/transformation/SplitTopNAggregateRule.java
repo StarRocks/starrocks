@@ -18,6 +18,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
+import com.starrocks.common.FeConstants;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.JoinOperator;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -93,8 +94,8 @@ public class SplitTopNAggregateRule extends TransformationRule {
         }
 
         Statistics ss = input.inputAt(0).getStatistics();
-        if (ss.getColumnStatistics().values().stream().noneMatch(ColumnStatistic::isUnknown)
-                && ss.getOutputRowCount() < (topN.getLimit() * 10)) {
+        if (!FeConstants.runningUnitTest && ss.getOutputRowCount() < (topN.getLimit() * 10)
+                && ss.getColumnStatistics().values().stream().noneMatch(ColumnStatistic::isUnknown)) {
             return false;
         }
         return true;
