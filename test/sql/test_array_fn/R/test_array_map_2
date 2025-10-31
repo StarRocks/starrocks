@@ -1,4 +1,4 @@
--- name: test_array_map_2
+-- name: test_array_map_2 @mac
 CREATE TABLE `array_map_test` (
   `id` tinyint(4) NOT NULL COMMENT "",
   `arr_str` array<string> NULL COMMENT "",
