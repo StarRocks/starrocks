@@ -37,6 +37,30 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
         connectContext.getSessionVariable().setEnableViewBasedMvRewrite(true);
         FeConstants.isReplayFromQueryDump = true;
+<<<<<<< HEAD
+=======
+        MVTestBase.disableMVRewriteConsiderDataLayout();
+    }
+
+    @Override
+    public String getPlanFragment(String fileName, TExplainLevel explainLevel) throws Exception {
+        String fileContent = getDumpInfoFromFile(fileName);
+        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(fileContent);
+        SessionVariable sessionVariable = queryDumpInfo.getSessionVariable();
+        sessionVariable.setMaterializedViewRewriteMode("force");
+        sessionVariable.setEnableForceRuleBasedMvRewrite(true);
+        sessionVariable.setEnableViewBasedMvRewrite(true);
+        sessionVariable.setOptimizerExecuteTimeout(120 * 1000);
+        sessionVariable.setOptimizerMaterializedViewTimeLimitMillis(120 * 1000);
+        sessionVariable.setEnableMaterializedViewTextMatchRewrite(false);
+        sessionVariable.setTraceLogLevel(10);
+
+        QueryDebugOptions queryDebugOptions = new QueryDebugOptions();
+        queryDebugOptions.setEnableQueryTraceLog(true);
+        sessionVariable.setQueryDebugOptions(queryDebugOptions.toString());
+        Pair<QueryDumpInfo, String> result = getPlanFragment(fileContent, sessionVariable, explainLevel);
+        return result.second;
+>>>>>>> af3b9ba70e ([UT] Fix unstable mv related cases (#64829))
     }
 
     @Test
@@ -208,5 +232,34 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
                 "  |  output columns:\n" +
                 "  |  179 <-> [209: sum, DOUBLE, true] / cast([210: sum, BIGINT, true] as DOUBLE)");
         connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
+    }
+
+    @Test
+    public void testForceRuleBasedRewrite() throws Exception {
+        String plan =
+                getPlanFragment("query_dump/force_rule_based_mv_rewrite", TExplainLevel.COSTS);
+        PlanTestBase.assertContains(plan, "partition_flat_consumptions_partition_drinks_dates");
+    }
+
+    @Test
+    public void testForceRuleBasedRewriteMonth() throws Exception {
+        String plan =
+                getPlanFragment("query_dump/force_rule_based_mv_rewrite_month", TExplainLevel.COSTS);
+        PlanTestBase.assertContains(plan, "partition_flat_consumptions_partition_drinks_roll_month");
+    }
+
+    @Test
+    public void testForceRuleBasedRewriteYear() throws Exception {
+        String plan =
+                getPlanFragment("query_dump/force_rule_based_mv_rewrite_year", TExplainLevel.COSTS);
+        PlanTestBase.assertContains(plan, "flat_consumptions_drinks_dates_roll_year");
+    }
+
+
+    @Test
+    public void testCBONestedMvRewriteDrinks() throws Exception {
+        String plan =
+                getPlanFragment("query_dump/force_rule_based_mv_rewrite_drinks", TExplainLevel.COSTS);
+        PlanTestBase.assertContains(plan, "partition_flat_consumptions_partition_drinks");
     }
 }
