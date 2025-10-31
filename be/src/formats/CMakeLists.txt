@@ -18,6 +18,7 @@ add_library(Formats STATIC
         csv/array_converter.cpp
         csv/array_reader.cpp
         csv/boolean_converter.cpp
+        csv/compressed_output_stream_file.cpp
         csv/converter.cpp
         csv/csv_reader.cpp
         csv/csv_file_writer.cpp
