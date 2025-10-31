@@ -329,7 +329,6 @@ Status BinaryPrefixPageDecoder<Type>::next_batch(const SparseRange<>& range, Col
     }
     return Status::OK();
 }
-
 template class BinaryPrefixPageDecoder<TYPE_CHAR>;
 template class BinaryPrefixPageDecoder<TYPE_VARCHAR>;
 
