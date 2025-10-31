@@ -1,0 +1,160 @@
+-- name: test_json_path_filter
+CREATE DATABASE test_json_path_filter;
+-- result:
+-- !result
+USE test_json_path_filter;
+-- result:
+-- !result
+SELECT json_query(parse_json('{"items": [{"id": 1, "price": 5}, {"id": 2, "price": 20}, {"id": 3, "price": 15}]}'), '$.items[?(@.price > 10)]') as filter_gt;
+-- result:
+[{"id": 2, "price": 20}, {"id": 3, "price": 15}]
+-- !result
+SELECT json_query(parse_json('{"items": [{"id": 1, "price": 5}, {"id": 2, "price": 20}, {"id": 3, "price": 15}]}'), '$.items[?(@.price < 20)]') as filter_lt;
+-- result:
+[{"id": 1, "price": 5}, {"id": 3, "price": 15}]
+-- !result
+SELECT json_query(parse_json('{"items": [{"id": 1, "value": 10}, {"id": 2, "value": 20}, {"id": 3, "value": 30}]}'), '$.items[?(@.value >= 20)]') as filter_gte;
+-- result:
+[{"id": 2, "value": 20}, {"id": 3, "value": 30}]
+-- !result
+SELECT json_query(parse_json('{"items": [{"id": 1, "value": 10}, {"id": 2, "value": 20}, {"id": 3, "value": 30}]}'), '$.items[?(@.value <= 20)]') as filter_lte;
+-- result:
+[{"id": 1, "value": 10}, {"id": 2, "value": 20}]
+-- !result
+SELECT json_query(parse_json('{"items": [{"id": 1, "status": 1}, {"id": 2, "status": 2}, {"id": 3, "status": 1}]}'), '$.items[?(@.status = 1)]') as filter_eq_number;
+-- result:
+[{"id": 1, "status": 1}, {"id": 3, "status": 1}]
+-- !result
+SELECT json_query(parse_json('{"items": [{"id": 1, "status": "active"}, {"id": 2, "status": "inactive"}]}'), '$.items[?(@.status != "active")]') as filter_ne;
+-- result:
+[]
+-- !result
+SELECT json_query(parse_json('{"users": [{"name": "Alice", "role": "admin"}, {"name": "Bob", "role": "user"}, {"name": "Charlie", "role": "admin"}]}'), '$.users[?(@.role = \'admin\')]') as filter_string_eq_single_quote;
+-- result:
+[{"name": "Alice", "role": "admin"}, {"name": "Charlie", "role": "admin"}]
+-- !result
+SELECT json_query(parse_json('{"users": [{"name": "Alice", "role": "admin"}, {"name": "Bob", "role": "user"}]}'), '$.users[?(@.role = "admin")]') as filter_string_eq_double_quote;
+-- result:
+[]
+-- !result
+SELECT json_query(parse_json('{"items": [{"name": "apple"}, {"name": "banana"}, {"name": "cherry"}]}'), '$.items[?(@.name > "b")]') as filter_string_gt;
+-- result:
+[]
+-- !result
+SELECT json_query(parse_json('{"items": [{"name": "apple"}, {"name": "banana"}, {"name": "cherry"}]}'), '$.items[?(@.name < "c")]') as filter_string_lt;
+-- result:
+[]
+-- !result
+SELECT json_query(parse_json('{"products": [{"name": "A", "price": 10, "stock": 5}, {"name": "B", "price": 20, "stock": 0}, {"name": "C", "price": 15, "stock": 10}]}'), '$.products[?(@.price >= 10 && @.stock > 0)]') as filter_and;
+-- result:
+[{"name": "A", "price": 10, "stock": 5}, {"name": "C", "price": 15, "stock": 10}]
+-- !result
+SELECT json_query(parse_json('{"items": [{"id": 1, "type": "A"}, {"id": 2, "type": "B"}, {"id": 3, "type": "C"}]}'), '$.items[?(@.type = "A" || @.type = "C")]') as filter_or;
+-- result:
+[]
+-- !result
+SELECT json_query(parse_json('{"data": [{"x": 1, "y": 5}, {"x": 10, "y": 2}, {"x": 8, "y": 8}]}'), '$.data[?((@.x > 5 && @.y > 5) || @.x = 1)]') as filter_complex_parens;
+-- result:
+[{"x": 1, "y": 5}, {"x": 8, "y": 8}]
+-- !result
+SELECT json_query(parse_json('{"items": [{"a": 5, "b": 10, "c": 15}, {"a": 8, "b": 12, "c": 20}, {"a": 3, "b": 8, "c": 25}]}'), '$.items[?(@.a > 4 && @.b > 9 && @.c > 18)]') as filter_multiple_and;
+-- result:
+[{"a": 8, "b": 12, "c": 20}]
+-- !result
+SELECT json_query(parse_json('{"items": [{"type": "A"}, {"type": "B"}, {"type": "C"}, {"type": "D"}]}'), '$.items[?(@.type = "A" || @.type = "C" || @.type = "D")]') as filter_multiple_or;
+-- result:
+[]
+-- !result
+SELECT json_query(parse_json('{"employees": [{"name": "Alice", "details": {"age": 30}}, {"name": "Bob", "details": {"age": 25}}]}'), '$.employees[?(@.details.age > 28)]') as filter_nested_2level;
+-- result:
+[{"details": {"age": 30}, "name": "Alice"}]
+-- !result
+SELECT json_query(parse_json('{"data": [{"level1": {"level2": {"level3": 10}}}, {"level1": {"level2": {"level3": 20}}}]}'), '$.data[?(@.level1.level2.level3 >= 15)]') as filter_nested_3level;
+-- result:
+[{"level1": {"level2": {"level3": 20}}}]
+-- !result
+SELECT json_query(parse_json('{"users": [{"name": "Alice", "address": {"city": "NYC"}}, {"name": "Bob", "address": {"city": "LA"}}]}'), '$.users[?(@.address.city = "NYC")]') as filter_nested_string;
+-- result:
+[]
+-- !result
+SELECT json_query(parse_json('[{"id": 1, "price": 5}, {"id": 2, "price": 20}, {"id": 3, "price": 15}]'), '$[?(@.price > 10)]') as filter_top_level_array;
+-- result:
+[{"id": 2, "price": 20}, {"id": 3, "price": 15}]
+-- !result
+SELECT json_query(parse_json('[{"name": "Alice", "city": "NYC"}, {"name": "Bob", "city": "LA"}, {"name": "Charlie", "city": "NYC"}]'), '$[?(@.city = "NYC")]') as filter_top_level_string;
+-- result:
+[]
+-- !result
+SELECT json_query(parse_json('[{"x": 1, "y": 10}, {"x": 5, "y": 5}, {"x": 10, "y": 1}]'), '$[?(@.x > 3 && @.y > 3)]') as filter_top_level_complex;
+-- result:
+[{"x": 5, "y": 5}]
+-- !result
+SELECT json_query(parse_json('{"items": [{"id": 1, "value": 5}, {"id": 2, "value": 10}]}'), '$.items[?(@.value > 100)]') as filter_no_match;
+-- result:
+[]
+-- !result
+SELECT json_query(parse_json('{"items": [{"id": 1, "status": "active"}, {"id": 2, "status": "active"}]}'), '$.items[?(@.status = "active")]') as filter_all_match;
+-- result:
+[]
+-- !result
+SELECT json_query(parse_json('{"items": [{"id": 1}, {"id": 2}]}'), '$.items[?(@.missing_field = 1)]') as filter_nonexistent_field;
+-- result:
+[]
+-- !result
+SELECT json_query(parse_json('{"mixed": [{"value": "text"}, {"value": 42}, {"value": "more"}]}'), '$.mixed[?(@.value > 30)]') as filter_type_mismatch;
+-- result:
+[{"value": 42}]
+-- !result
+SELECT json_query(parse_json('{"items": []}'), '$.items[?(@.value > 10)]') as filter_empty_array;
+-- result:
+[]
+-- !result
+SELECT json_query(parse_json('{"temps": [{"city": "A", "temp": -5}, {"city": "B", "temp": 10}, {"city": "C", "temp": -2}]}'), '$.temps[?(@.temp < 0)]') as filter_negative;
+-- result:
+[{"city": "A", "temp": -5}, {"city": "C", "temp": -2}]
+-- !result
+SELECT json_query(parse_json('{"items": [{"id": 1, "rate": 3.14}, {"id": 2, "rate": 2.71}, {"id": 3, "rate": 1.41}]}'), '$.items[?(@.rate > 2.5)]') as filter_float;
+-- result:
+[{"id": 1, "rate": 3.14}, {"id": 2, "rate": 2.71}]
+-- !result
+SELECT json_query(parse_json('{"items": [{"id": 1, "count": 0}, {"id": 2, "count": 5}, {"id": 3, "count": 0}]}'), '$.items[?(@.count = 0)]') as filter_zero;
+-- result:
+[{"count": 0, "id": 1}, {"count": 0, "id": 3}]
+-- !result
+CREATE TABLE json_filter_test (
+  id INT,
+  json_data JSON
+) DUPLICATE KEY(id)
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO json_filter_test VALUES
+(1, parse_json('{"books": [{"id": 1, "price": 5}, {"id": 2, "price": 20}]}')),
+(2, parse_json('{"users": [{"name": "Alice", "role": "admin"}, {"name": "Bob", "role": "user"}]}')),
+(3, parse_json('{"products": [{"name": "A", "price": 10, "stock": 5}, {"name": "B", "price": 20, "stock": 0}]}')),
+(4, parse_json('{"items": [{"x": 1, "y": 5}, {"x": 10, "y": 8}]}')),
+(5, parse_json('[{"id": 1, "value": 100}, {"id": 2, "value": 200}]'));
+-- result:
+-- !result
+SELECT id, json_query(json_data, '$.books[?(@.price > 10)]') as filtered_books FROM json_filter_test WHERE id = 1;
+-- result:
+1	[{"id": 2, "price": 20}]
+-- !result
+SELECT id, json_query(json_data, '$.users[?(@.role = "admin")]') as filtered_users FROM json_filter_test WHERE id = 2;
+-- result:
+2	[]
+-- !result
+SELECT id, json_query(json_data, '$.products[?(@.price >= 10 && @.stock > 0)]') as filtered_products FROM json_filter_test WHERE id = 3;
+-- result:
+3	[{"name": "A", "price": 10, "stock": 5}]
+-- !result
+SELECT id, json_query(json_data, '$.items[?(@.x > 5 && @.y > 5)]') as filtered_items FROM json_filter_test WHERE id = 4;
+-- result:
+4	[{"x": 10, "y": 8}]
+-- !result
+SELECT id, json_query(json_data, '$[?(@.value > 150)]') as filtered_top_level FROM json_filter_test WHERE id = 5;
+-- result:
+5	[{"id": 2, "value": 200}]
+-- !result
