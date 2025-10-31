@@ -441,7 +441,7 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
         }
 
         // filter invalid cells from input
-        PCellSortedSet mvPartitions= mv.getListPartitionItems();
+        PCellSortedSet mvPartitions = mv.getListPartitionItems();
         Set<PCellWithName> invalidCells = toRefreshPartitions.stream()
                 .filter(cell -> !mvPartitions.containsName(cell.name()))
                 .collect(Collectors.toSet());
