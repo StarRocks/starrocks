@@ -44,6 +44,17 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 import java.util.List;
 import java.util.Map;
 
+/*
+ * e.g.
+ *    select a, b, count(c) as cc, sum(d)
+ *    from t
+ *    order by cc limit 10
+ *
+ * -> select t.a, t.b, cc, sum(d)
+ *    from t join (select a, b, count(c) as cc from t group by a, b order by cc limit 10) t1 on t.a = t1.a and t.b = t1.b
+ *    group by t.a, t.b, cc
+ *    order by cc limit 10
+ */
 public class SplitTopNAggregateRule extends TransformationRule {
     public SplitTopNAggregateRule() {
         super(RuleType.TF_SPLIT_TOPN_AGGREGATE_RULE,
@@ -61,7 +72,8 @@ public class SplitTopNAggregateRule extends TransformationRule {
         LogicalAggregationOperator agg = input.inputAt(0).getOp().cast();
         LogicalOlapScanOperator scan = input.inputAt(0).inputAt(0).getOp().cast();
 
-        if (topN.getLimit() == Operator.DEFAULT_LIMIT) {
+        if (topN.getLimit() == Operator.DEFAULT_LIMIT
+                && topN.getLimit() > context.getSessionVariable().getSplitTopNAggLimit()) {
             return false;
         }
         if (scan.getProjection() != null) {
