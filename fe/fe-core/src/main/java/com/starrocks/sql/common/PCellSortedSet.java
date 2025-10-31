@@ -263,19 +263,17 @@ public class PCellSortedSet {
      * only reserve the last limit of partitions.
      * @param toReserve number of partitions to reserve
      */
-    public PCellSortedSet limit(int toReserve) {
+    public void reserveToSize(int toReserve) {
         if (toReserve <= 0 || toReserve >= partitions.size()) {
-            return this;
+            return;
         }
         Iterator<PCellWithName> iterator = iterator();
         int removeCount = partitions.size() - toReserve;
-        int count = 0;
-        while (iterator.hasNext() && count < removeCount) {
+        int i = 0;
+        while (iterator.hasNext() && i++ < removeCount) {
             iterator.next();
             iterator.remove();
-            count++;
         }
-        return this;
     }
 
     /**
@@ -294,18 +292,17 @@ public class PCellSortedSet {
 
     /**
      * Remove a number of partitions from the start.
-     * @param start number of partitions to remove
+     * @param size number of partitions to remove
      */
-    public void removeWithSize(int start) {
-        if (start <= 0 || start >= partitions.size()) {
+    public void removeFromStart(int size) {
+        if (size <= 0 || size >= partitions.size()) {
             return;
         }
         Iterator<PCellWithName> iterator = iterator();
-        int count = 0;
-        while (iterator.hasNext() && count < start) {
+        int i = 0;
+        while (iterator.hasNext() && i++ < size) {
             iterator.next();
             iterator.remove();
-            count++;
         }
     }
 

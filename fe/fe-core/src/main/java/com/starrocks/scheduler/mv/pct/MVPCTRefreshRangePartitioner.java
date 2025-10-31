@@ -326,7 +326,7 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
                 refreshPartitionLimit > 0 && mvToRefreshedPartitions.size() > refreshPartitionLimit) {
             // remove the oldest partitions
             int toRemoveNum = mvToRefreshedPartitions.size() - refreshPartitionLimit;
-            mvToRefreshedPartitions.removeWithSize(toRemoveNum);
+            mvToRefreshedPartitions.removeFromStart(toRemoveNum);
         }
     }
 
@@ -390,7 +390,9 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
         if (lastPartitionNum > partitionNum) {
             return pCells;
         }
-        return pCells.limit(lastPartitionNum);
+        // get the last N partitions
+        pCells.reserveToSize(lastPartitionNum);
+        return pCells;
     }
 
     public void filterPartitionsByTTL(PCellSortedSet toRefreshPartitions,
@@ -403,7 +405,7 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
         if (partitionTTLNumber > 0 && toRefreshPartitionNum > partitionTTLNumber) {
             // remove the oldest partitions
             int toRemoveNum = toRefreshPartitionNum - partitionTTLNumber;
-            toRefreshPartitions.removeWithSize(toRemoveNum);
+            toRefreshPartitions.removeFromStart(toRemoveNum);
         }
     }
 
@@ -418,10 +420,16 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
         }
 
         // remove invalid cells from the input to-refresh partitions
-        mvPartitionsToRefresh
+        Set<PCellWithName> invalidCells = mvPartitionsToRefresh.getPartitions()
                 .stream()
                 .filter(pCell -> !mvRangePartitionMap.contains(pCell.name()))
-                .forEach(mvPartitionsToRefresh::remove);
+                .collect(Collectors.toSet());
+        invalidCells.forEach(cell -> {
+            logger.info("partition {} is not in mv's range partition map, remove it from to-refresh partitions",
+                    cell.name());
+            mvPartitionsToRefresh.remove(cell);
+        });
+
         // dynamically get the number of partitions to be refreshed this time
         partitionRefreshNumber = getPartitionRefreshNumberAdaptive(mvPartitionsToRefresh, refreshStrategy);
         if (partitionRefreshNumber <= 0 || mvPartitionsToRefresh.size() <= partitionRefreshNumber) {

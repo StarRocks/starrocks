@@ -70,6 +70,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import static com.starrocks.connector.iceberg.IcebergPartitionUtils.getIcebergTablePartitionPredicateExpr;
 
@@ -440,9 +441,16 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
         }
 
         // filter invalid cells from input
-        toRefreshPartitions.stream()
-                .filter(cell -> !mv.getListPartitionItems().contains(cell.name()))
-                .forEach(toRefreshPartitions::remove);
+        PCellSortedSet mvPartitions= mv.getListPartitionItems();
+        Set<PCellWithName> invalidCells = toRefreshPartitions.stream()
+                .filter(cell -> !mvPartitions.contains(cell.name()))
+                .collect(Collectors.toSet());
+        invalidCells.forEach(cell -> {
+            logger.warn("Materialized view [{}] to refresh partition name {}, value {} is invalid, remove it",
+                    mv.getName(), cell.name(), cell.cell());
+            toRefreshPartitions.remove(cell);
+        });
+
         int i = 0;
         // refresh the recent partitions first
         Iterator<PCellWithName> iterator = getToRefreshPartitionsIterator(toRefreshPartitions, 
