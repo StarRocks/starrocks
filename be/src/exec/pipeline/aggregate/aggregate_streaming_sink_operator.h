@@ -34,6 +34,7 @@ public:
               _auto_state(AggrAutoState::INIT_PREAGG) {
         _aggregator->set_aggr_phase(AggrPhase1);
         _aggregator->ref();
+        _object_pool = std::make_unique<ObjectPool>();
     }
     ~AggregateStreamingSinkOperator() override = default;
 
@@ -45,6 +46,7 @@ public:
     Status set_finishing(RuntimeState* state) override;
 
     Status prepare(RuntimeState* state) override;
+    Status prepare_local_state(RuntimeState* state) override;
     void close(RuntimeState* state) override;
 
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
@@ -84,6 +86,7 @@ private:
     AggrAutoState _auto_state{};
     AggrAutoContext _auto_context;
     LimitedMemAggState _limited_mem_state;
+    std::unique_ptr<ObjectPool> _object_pool = nullptr;
 
     DECLARE_ONCE_DETECTOR(_set_finishing_once);
 };

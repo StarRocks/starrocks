@@ -14,7 +14,12 @@
 
 #include "exec/pipeline/fragment_context.h"
 
+#include <atomic>
+#include <chrono>
+#include <future>
 #include <memory>
+#include <mutex>
+#include <thread>
 
 #include "exec/data_sink.h"
 #include "exec/pipeline/group_execution/execution_group.h"
@@ -22,6 +27,7 @@
 #include "exec/pipeline/schedule/pipeline_timer.h"
 #include "exec/pipeline/schedule/timeout_tasks.h"
 #include "exec/pipeline/stream_pipeline_driver.h"
+#include "exec/workgroup/pipeline_executor_set.h"
 #include "exec/workgroup/work_group.h"
 #include "runtime/batch_write/batch_write_mgr.h"
 #include "runtime/client_cache.h"
@@ -168,7 +174,20 @@ void FragmentContext::report_exec_state_if_necessary() {
         // Fix the report interval regardless the noise.
         normalized_report_ns = last_report_ns + interval_ns;
     }
-    if (_last_report_exec_state_ns.compare_exchange_strong(last_report_ns, normalized_report_ns)) {
+
+    // only report after prepare successfully
+    bool allPrepared = true;
+    iterate_pipeline([&allPrepared](const Pipeline* pipeline) {
+        if (!allPrepared) return;
+        for (const auto& driver : pipeline->drivers()) {
+            if (!driver->local_prepare_is_done()) {
+                allPrepared = false;
+                break;
+            }
+        }
+    });
+
+    if (allPrepared && _last_report_exec_state_ns.compare_exchange_strong(last_report_ns, normalized_report_ns)) {
         iterate_pipeline([](const Pipeline* pipeline) {
             for (const auto& driver : pipeline->drivers()) {
                 driver->runtime_report_action();
@@ -420,9 +439,72 @@ Status FragmentContext::iterate_pipeline(const std::function<Status(Pipeline*)>&
 }
 
 Status FragmentContext::prepare_active_drivers() {
-    for (auto& group : _execution_groups) {
-        RETURN_IF_ERROR(group->prepare_drivers(_runtime_state.get()));
+    auto* profile = runtime_state()->runtime_profile();
+    auto* prepare_driver_timer =
+            ADD_CHILD_TIMER_THESHOLD(profile, "prepare-pipeline-driver-global", "prepare-pipeline-driver", 0_ms);
+
+    {
+        // prepare all driver's state in one thread, this phase's prepare don't need to be thread-safe
+        // But this is done in single thread so we can't put heavy task in this phase
+        SCOPED_TIMER(prepare_driver_timer);
+        for (auto& group : _execution_groups) {
+            RETURN_IF_ERROR(group->prepare_drivers(_runtime_state.get()));
+        }
     }
+
+    auto* prepare_driver_local_timer =
+            ADD_CHILD_TIMER_THESHOLD(profile, "prepare-pipeline-driver-local", "prepare-pipeline-driver", 0_ms);
+    SCOPED_TIMER(prepare_driver_local_timer);
+
+    auto pipeline_prepare_pool = runtime_state()->exec_env()->pipeline_prepare_pool();
+    if (!config::enable_pipeline_driver_parallel_prepare ||
+        pipeline_prepare_pool->get_queue_size() >= config::pipeline_prepare_thread_pool_queue_size - 10) {
+        for (auto& group : _execution_groups) {
+            RETURN_IF_ERROR(group->prepare_active_drivers_sequentially(_runtime_state.get()));
+        }
+        for (auto& group : _execution_groups) {
+            RETURN_IF_ERROR(group->post_local_prepare(_runtime_state.get()));
+        }
+        return Status::OK();
+    }
+
+    size_t total_active_driver_size = 0;
+    for (auto& group : _execution_groups) {
+        total_active_driver_size += group->total_active_driver_size();
+    }
+
+    // prepare pipeline-driver parallelly
+    // only do prepare operation that is thread safe in prepare_operators_local_state
+    // Use shared_ptr to manage the lifetime of synchronization primitives to avoid use-after-free.
+    // The main thread may destroy local variables before all lambda functions complete execution.
+    auto completion_mutex = std::make_shared<std::mutex>();
+    auto completion_cv = std::make_shared<std::condition_variable>();
+    // Use raw pointer with atomic to avoid std::atomic<std::shared_ptr<T>> compilation issue
+    auto first_error = std::make_shared<std::atomic<Status*>>(nullptr);
+    auto pending_tasks = std::make_shared<std::atomic<int>>(total_active_driver_size);
+
+    for (auto& group : _execution_groups) {
+        group->prepare_active_drivers_parallel(runtime_state(), pending_tasks, completion_mutex, completion_cv,
+                                               first_error);
+    }
+
+    // wait for all the tasks finished
+    {
+        std::unique_lock<std::mutex> lock(*completion_mutex);
+        completion_cv->wait(lock, [pending_tasks] { return pending_tasks->load() == 0; });
+    }
+
+    Status* error = first_error->load();
+    if (error != nullptr) {
+        Status result = *error;
+        delete error;
+        return result;
+    }
+
+    for (auto& group : _execution_groups) {
+        RETURN_IF_ERROR(group->post_local_prepare(_runtime_state.get()));
+    }
+
     RETURN_IF_ERROR(submit_all_timer());
     return Status::OK();
 }

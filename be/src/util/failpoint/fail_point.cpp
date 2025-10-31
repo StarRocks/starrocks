@@ -50,6 +50,11 @@ bool FailPoint::shouldFail() {
 void FailPoint::setMode(const PFailPointTriggerMode& p_trigger_mode) {
     LOG(INFO) << "failpoint change mode, name: " << _name << ", mode: " << p_trigger_mode.DebugString();
     std::lock_guard l(_mu);
+    // Reset FIU's per-thread state before applying a new trigger mode to avoid
+    // previously triggered threads from continuing to fail after the mode changes.
+#ifdef FIU_ENABLE
+    fiu_disable(_name.c_str());
+#endif
     _trigger_mode = p_trigger_mode;
     auto type = p_trigger_mode.mode();
     switch (type) {
