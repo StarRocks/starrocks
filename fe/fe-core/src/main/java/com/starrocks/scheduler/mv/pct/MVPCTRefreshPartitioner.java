@@ -100,9 +100,6 @@ public abstract class MVPCTRefreshPartitioner {
     protected final MVRefreshParams mvRefreshParams;
     private final Logger logger;
 
-    // The partitions to refresh for mv which is filtered before various filter actions.
-    protected final Set<String> mvToRefreshPotentialPartitions = Sets.newHashSet();
-
     public MVPCTRefreshPartitioner(MvTaskRunContext mvContext,
                                    TaskRunContext context,
                                    Database db,
@@ -244,8 +241,7 @@ public abstract class MVPCTRefreshPartitioner {
             SyncPartitionUtils.calcPotentialRefreshPartition(potentialMvToRefreshPartitionNames,
                     baseChangedPartitionNames,
                     mvContext.getRefBaseTableMVIntersectedPartitions(),
-                    mvContext.getMvRefBaseTableIntersectedPartitions(),
-                    mvToRefreshPotentialPartitions);
+                    mvContext.getMvRefBaseTableIntersectedPartitions());
             Set<String> newMvToRefreshPartitionNames =
                     Sets.difference(potentialMvToRefreshPartitionNames, mvToRefreshPartitionNames);
             for (String partitionName : newMvToRefreshPartitionNames) {
@@ -312,9 +308,9 @@ public abstract class MVPCTRefreshPartitioner {
 
             int partitionRefreshNumber = mv.getTableProperty().getPartitionRefreshNumber();
             logger.info("filter partitions to refresh partitionRefreshNumber={}, partitionsToRefresh:{}, " +
-                            "mvPotentialPartitionNames:{}, next start:{}, next end:{}, next list values:{}",
-                    partitionRefreshNumber, mvToRefreshedPartitions, mvToRefreshPotentialPartitions,
-                    mvContext.getNextPartitionStart(), mvContext.getNextPartitionEnd(), mvContext.getNextPartitionValues());
+                            "next start:{}, next end:{}, next list values:{}",
+                    partitionRefreshNumber, mvToRefreshedPartitions, mvContext.getNextPartitionStart(),
+                    mvContext.getNextPartitionEnd(), mvContext.getNextPartitionValues());
         } finally {
             locker.unLockTableWithIntensiveDbLock(db.getId(), mv.getId(), LockType.READ);
         }

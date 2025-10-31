@@ -355,17 +355,15 @@ public class SyncPartitionUtils {
     public static void calcPotentialRefreshPartition(Set<String> mvToRefreshPartitionNames,
                                                      Map<Table, Set<String>> baseChangedPartitionNames,
                                                      Map<Table, Map<String, Set<String>>> baseToMvNameRef,
-                                                     Map<String, Map<Table, Set<String>>> mvToBaseNameRef,
-                                                     Set<String> mvPotentialRefreshPartitionNames) {
+                                                     Map<String, Map<Table, Set<String>>> mvToBaseNameRef) {
         gatherPotentialRefreshPartitionNames(mvToRefreshPartitionNames, baseChangedPartitionNames,
-                baseToMvNameRef, mvToBaseNameRef, mvPotentialRefreshPartitionNames);
+                baseToMvNameRef, mvToBaseNameRef);
     }
 
     private static void gatherPotentialRefreshPartitionNames(Set<String> mvToRefreshPartitionNames,
                                                              Map<Table, Set<String>> baseChangedPartitionNames,
                                                              Map<Table, Map<String, Set<String>>> baseToMvNameRef,
-                                                             Map<String, Map<Table, Set<String>>> mvToBaseNameRef,
-                                                             Set<String> mvPotentialRefreshPartitionNames) {
+                                                             Map<String, Map<Table, Set<String>>> mvToBaseNameRef) {
         int curNameCount = mvToRefreshPartitionNames.size();
         Set<String> copiedNeedRefreshMvPartitionNames = Sets.newHashSet(mvToRefreshPartitionNames);
         for (String needRefreshMvPartitionName : copiedNeedRefreshMvPartitionNames) {
@@ -391,7 +389,6 @@ public class SyncPartitionUtils {
 
                 if (mvNeedRefreshPartitions.size() > 1) {
                     mvToRefreshPartitionNames.addAll(mvNeedRefreshPartitions);
-                    mvPotentialRefreshPartitionNames.add(needRefreshMvPartitionName);
                     baseChangedPartitionNames.computeIfAbsent(baseTable, x -> Sets.newHashSet())
                             .addAll(baseTablePartitions);
                 }
@@ -400,7 +397,7 @@ public class SyncPartitionUtils {
 
         if (curNameCount != mvToRefreshPartitionNames.size()) {
             gatherPotentialRefreshPartitionNames(mvToRefreshPartitionNames, baseChangedPartitionNames,
-                    baseToMvNameRef, mvToBaseNameRef, mvPotentialRefreshPartitionNames);
+                    baseToMvNameRef, mvToBaseNameRef);
         }
     }
 
