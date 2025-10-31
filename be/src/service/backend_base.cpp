@@ -195,9 +195,10 @@ void BackendServiceBase::get_next(TScanBatchResult& result_, const TScanNextBatc
         LOG(ERROR) << "getNext error: context offset [" << context->offset << " ]"
                    << " ,client offset [ " << offset << " ]";
         // invalid offset
-        t_status.status_code = TStatusCode::NOT_FOUND;
-        t_status.error_msgs.push_back(strings::Substitute("context_id=$0, send_offset=$1, context_offset=$2",
-                                                          context_id, offset, context->offset));
+        std::string error_msg = strings::Substitute("context_id=$0, send_offset=$1, context_offset=$2", context_id,
+                                                    offset, context->offset);
+        Status st = Status::NotFound(error_msg);
+        st.to_thrift(&t_status);
         result_.status = t_status;
     } else {
         // during accessing, should disabled last_access_time
