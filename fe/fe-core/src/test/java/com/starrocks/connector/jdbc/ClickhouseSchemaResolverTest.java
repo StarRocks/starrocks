@@ -66,21 +66,21 @@ public class ClickhouseSchemaResolverTest {
                         Types.BIGINT, Types.NUMERIC, Types.NUMERIC, Types.NUMERIC, Types.NUMERIC, Types.NUMERIC,
                         Types.FLOAT,
                         Types.DOUBLE, Types.BOOLEAN, Types.DATE, Types.TIMESTAMP, Types.VARCHAR, Types.VARCHAR,
-                        Types.DECIMAL, Types.DECIMAL
+                        Types.DECIMAL, Types.DECIMAL, Types.TIMESTAMP_WITH_TIMEZONE
                 ));
         columnResult.addColumn("TYPE_NAME", Arrays.asList("Int8", "UInt8", "Int16", "UInt16", "Int32", "Int64",
                 "UInt32", "UInt64", "Int128", "UInt128", "Int256", "UInt256", "Float32", "Float64", "Bool", "Date",
                 "DateTime",
-                "String", "Nullable(String)", "Decimal(9,9)", "Nullable(Decimal(9,9))"));
+                "String", "Nullable(String)", "Decimal(9,9)", "Nullable(Decimal(9,9))", "DateTime64(3, 'Asia/Shanghai')"));
         columnResult.addColumn("COLUMN_SIZE",
-                Arrays.asList(3, 3, 5, 5, 10, 19, 10, 20, 39, 39, 77, 78, 12, 22, 1, 10, 29, 0, 0, 9, 9));
+                Arrays.asList(3, 3, 5, 5, 10, 19, 10, 20, 39, 39, 77, 78, 12, 22, 1, 10, 29, 0, 0, 9, 9, 29));
         columnResult.addColumn("DECIMAL_DIGITS",
-                Arrays.asList(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, null, 0, 0, null, null, 9, 9));
+                Arrays.asList(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, null, 0, 0, null, null, 9, 9, null));
         columnResult.addColumn("COLUMN_NAME", Arrays.asList("a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l",
-                "m", "n", "o", "p", "q", "r", "s", "t", "u"));
+                "m", "n", "o", "p", "q", "r", "s", "t", "u", "v"));
         columnResult.addColumn("IS_NULLABLE",
                 Arrays.asList("NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO",
-                        "NO", "NO", "NO", "YES", "NO", "YES"));
+                        "NO", "NO", "NO", "YES", "NO", "YES", "NO"));
         properties = new HashMap<>();
         properties.put(DRIVER_CLASS, "com.clickhouse.jdbc.ClickHouseDriver");
         properties.put(JDBCResource.URI, "jdbc:clickhouse://127.0.0.1:8123");
@@ -209,6 +209,7 @@ public class ClickhouseSchemaResolverTest {
         try {
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
             Table table = jdbcMetadata.getTable(new ConnectContext(), "test", "tbl1");
+            System.out.println(table.getFullSchema());
             Assertions.assertTrue(table instanceof JDBCTable);
             Assertions.assertEquals("catalog.test.tbl1", table.getUUID());
             Assertions.assertEquals("tbl1", table.getName());
@@ -217,6 +218,7 @@ public class ClickhouseSchemaResolverTest {
             ResultSet columnSet = clickhouseSchemaResolver.getColumns(connection, "test", "tbl1");
             List<Column> fullSchema = clickhouseSchemaResolver.convertToSRTable(columnSet);
             Table table1 = clickhouseSchemaResolver.getTable(1, "tbl1", fullSchema, "test", "catalog", properties);
+            System.out.println(table1.getFullSchema());
             Assertions.assertTrue(table1 instanceof JDBCTable);
             Assertions.assertNull(properties.get(JDBCTable.JDBC_TABLENAME));
         } catch (Exception e) {
