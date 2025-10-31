@@ -43,10 +43,10 @@ TOP-N (order by [[39: sum DESC NULLS LAST]])
                                 INNER JOIN (join-predicate [9: o_orderkey = 18: l_orderkey] post-join-predicate [null])
                                     HIVE SCAN (columns{9,10,13} predicate[13: o_orderdate >= 1994-05-01 AND 13: o_orderdate < 1994-08-01])
                                     EXCHANGE BROADCAST
-                                        AGGREGATE ([GLOBAL] aggregate [{141: sum=sum(141: sum)}] group by [[84: l_orderkey]] having [null]
-                                            EXCHANGE SHUFFLE[84]
-                                                AGGREGATE ([LOCAL] aggregate [{141: sum=sum(94: sum_disc_price)}] group by [[84: l_orderkey]] having [null]
-                                                    SCAN (mv[lineitem_agg_mv1] columns[84: l_orderkey, 86: l_returnflag, 94: sum_disc_price] predicate[86: l_returnflag = R])
+                                        AGGREGATE ([GLOBAL] aggregate [{141: sum=sum(141: sum)}] group by [[53: l_orderkey]] having [null]
+                                            EXCHANGE SHUFFLE[53]
+                                                AGGREGATE ([LOCAL] aggregate [{141: sum=sum(63: sum_disc_price)}] group by [[53: l_orderkey]] having [null]
+                                                    SCAN (mv[lineitem_agg_mv1] columns[53: l_orderkey, 55: l_returnflag, 63: sum_disc_price] predicate[55: l_returnflag = R])
                         EXCHANGE BROADCAST
                             HIVE SCAN (columns{34,35} predicate[34: n_nationkey IS NOT NULL])
 [end]
