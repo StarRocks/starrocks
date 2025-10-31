@@ -47,10 +47,10 @@ TOP-N (order by [[2: s_name ASC NULLS FIRST]])
                         EXCHANGE BROADCAST
                             HIVE SCAN (columns{17,18} predicate[17: p_partkey IS NOT NULL AND 18: p_name LIKE sienna%])
                     EXCHANGE BROADCAST
-                        AGGREGATE ([GLOBAL] aggregate [{138: sum=sum(138: sum)}] group by [[49: l_partkey, 47: l_suppkey]] having [null]
-                            EXCHANGE SHUFFLE[49, 47]
-                                AGGREGATE ([LOCAL] aggregate [{138: sum=sum(50: sum_qty)}] group by [[49: l_partkey, 47: l_suppkey]] having [null]
-                                    SCAN (mv[lineitem_agg_mv2] columns[47: l_suppkey, 48: l_shipdate, 49: l_partkey, 50: sum_qty] predicate[48: l_shipdate >= 1993-01-01 AND 48: l_shipdate < 1994-01-01])
+                        AGGREGATE ([GLOBAL] aggregate [{138: sum=sum(138: sum)}] group by [[62: l_partkey, 60: l_suppkey]] having [null]
+                            EXCHANGE SHUFFLE[62, 60]
+                                AGGREGATE ([LOCAL] aggregate [{138: sum=sum(63: sum_qty)}] group by [[62: l_partkey, 60: l_suppkey]] having [null]
+                                    SCAN (mv[lineitem_agg_mv2] columns[60: l_suppkey, 61: l_shipdate, 62: l_partkey, 63: sum_qty] predicate[60: l_suppkey IS NOT NULL AND 61: l_shipdate >= 1993-01-01 AND 61: l_shipdate < 1994-01-01])
             EXCHANGE SHUFFLE[1]
                 INNER JOIN (join-predicate [4: s_nationkey = 8: n_nationkey] post-join-predicate [null])
                     HIVE SCAN (columns{1,2,3,4} predicate[4: s_nationkey IS NOT NULL])
