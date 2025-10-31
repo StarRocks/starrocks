@@ -53,6 +53,7 @@ FROM data_source
 [COLUMNS TERMINATED BY '<column_separator>'],
 [ROWS TERMINATED BY '<row_separator>'],
 [COLUMNS (<column1_name>[, <column2_name>, <column_assignment>, ... ])],
+[PRECEDING FILTER <expr>],
 [WHERE <expr>],
 [PARTITION (<partition1_name>[, <partition2_name>, ...])]
 [TEMPORARY PARTITION (<temporary_partition1_name>[, <temporary_partition2_name>, ...])]
@@ -78,6 +79,14 @@ CSV 格式数据的行分隔符。默认行分隔符是 `\n`。
 
 - `column_name`：如果源数据中的某列可以直接映射到 StarRocks 表中的某列，则只需指定列名。这些列可以称为映射列。
 - `column_assignment`：如果源数据中的某列不能直接映射到 StarRocks 表中的某列，并且该列的值必须在数据导入之前通过函数进行计算，则必须在 `expr` 中指定计算函数。这些列可以称为派生列。建议将派生列放在映射列之后，因为 StarRocks 首先解析映射列。
+
+`PRECEDING FILTER`
+
+过滤条件。只有满足过滤条件的数据才能导入到 StarRocks。例如，如果您只想导入 `col1` 值大于 `100` 且 `col2` 值等于 `1000` 的行，可以使用 `PRECEDING FILTER col1 > 100 and col2 = 1000`。
+
+:::note
+过滤条件中指定的列可以不在目标表中存在。
+:::
 
 `WHERE`
 

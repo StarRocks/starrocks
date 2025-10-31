@@ -57,7 +57,11 @@ import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.parser.SqlParser;
@@ -220,6 +224,139 @@ public class CreateRoutineLoadStmtTest {
                 return;
             }
             Assertions.assertEquals(true, false);
+        }
+
+        {
+            String sql = "CREATE ROUTINE LOAD job ON tbl " +
+                    "COLUMNS TERMINATED BY ';', " +
+                    "ROWS TERMINATED BY '\n', " +
+                    "COLUMNS(`a`, `b`, `c`=1), " +
+                    "TEMPORARY PARTITION(`p1`, `p2`), " +
+                    "WHERE a = 1," +
+                    "WHERE b = 10 " +
+                    "PROPERTIES (\"desired_concurrent_number\"=\"3\") " +
+                    "FROM KAFKA (\"kafka_topic\" = \"my_topic\")";
+            List<StatementBase> stmts = com.starrocks.sql.parser.SqlParser.parse(sql, 32);
+            CreateRoutineLoadStmt createRoutineLoadStmt = (CreateRoutineLoadStmt)stmts.get(0);
+            try {
+                CreateRoutineLoadAnalyzer.analyze(createRoutineLoadStmt, connectContext);
+            } catch (Exception e) {
+                Assertions.assertEquals(true, e.getMessage().contains("repeat setting of where predicate"));
+                return;
+            }
+            Assertions.assertEquals(true, false);
+        }
+    }
+
+    @Test
+    public void testPrecedingFilterStmt() throws Exception {
+        {
+            String sql = "CREATE ROUTINE LOAD job ON tbl " +
+                    "COLUMNS TERMINATED BY ';', " +
+                    "ROWS TERMINATED BY '\n', " +
+                    "COLUMNS(`a`, `b`, `c`=1), " +
+                    "TEMPORARY PARTITION(`p1`, `p2`), " +
+                    "PRECEDING FILTER a = 1 " +
+                    "PROPERTIES (\"desired_concurrent_number\"=\"3\") " +
+                    "FROM KAFKA\n"
+                    + "(\n"
+                    + "\"kafka_broker_list\" = \"kafkahost1:9092,kafkahost2:9092\",\n"
+                    + "\"kafka_topic\" = \"topictest\"\n"
+                    + ");";
+            List<StatementBase> stmts = com.starrocks.sql.parser.SqlParser.parse(sql, 32);
+            CreateRoutineLoadStmt createRoutineLoadStmt = (CreateRoutineLoadStmt)stmts.get(0);
+            CreateRoutineLoadAnalyzer.analyze(createRoutineLoadStmt, connectContext);
+            ImportWhereStmt precedingFilter = createRoutineLoadStmt.getRoutineLoadDesc().getPrecedingFilter();
+            Assertions.assertFalse(precedingFilter.isContainSubquery());
+        }
+
+        {
+            String sql = "CREATE ROUTINE LOAD job ON tbl " +
+                    "COLUMNS TERMINATED BY ';', " +
+                    "ROWS TERMINATED BY '\n', " +
+                    "COLUMNS(`a`, `b`, `c`=1), " +
+                    "TEMPORARY PARTITION(`p1`, `p2`), " +
+                    "PRECEDING FILTER a in (SELECT 1) " +
+                    "PROPERTIES (\"desired_concurrent_number\"=\"3\") " +
+                    "FROM KAFKA (\"kafka_topic\" = \"my_topic\")";
+            List<StatementBase> stmts = com.starrocks.sql.parser.SqlParser.parse(sql, 32);
+            CreateRoutineLoadStmt createRoutineLoadStmt = (CreateRoutineLoadStmt)stmts.get(0);
+            try {
+                CreateRoutineLoadAnalyzer.analyze(createRoutineLoadStmt, connectContext);
+            } catch (Exception e) {
+                Assertions.assertTrue(e.getMessage().contains("the preceding filter cannot contain subqueries"));
+                return;
+            }
+            Assertions.fail();
+        }
+
+        {
+            String sql = "CREATE ROUTINE LOAD job ON tbl " +
+                    "COLUMNS TERMINATED BY ';', " +
+                    "ROWS TERMINATED BY '\n', " +
+                    "COLUMNS(`a`, `b`, `c`=1), " +
+                    "TEMPORARY PARTITION(`p1`, `p2`), " +
+                    "PRECEDING FILTER a = 0," +
+                    "PRECEDING FILTER b = 10" +
+                    "PROPERTIES (\"desired_concurrent_number\"=\"3\") " +
+                    "FROM KAFKA (\"kafka_topic\" = \"my_topic\")";
+            List<StatementBase> stmts = com.starrocks.sql.parser.SqlParser.parse(sql, 32);
+            CreateRoutineLoadStmt createRoutineLoadStmt = (CreateRoutineLoadStmt)stmts.get(0);
+            try {
+                CreateRoutineLoadAnalyzer.analyze(createRoutineLoadStmt, connectContext);
+            } catch (Exception e) {
+                Assertions.assertTrue(e.getMessage().contains("repeat setting of preceding where predicate"));
+                return;
+            }
+            Assertions.fail();
+        }
+    }
+
+    @Test
+    public void testPrecedingFilterWithWhereStmt() throws Exception {
+        String sql = "CREATE ROUTINE LOAD job ON tbl " +
+                "COLUMNS TERMINATED BY ';', " +
+                "ROWS TERMINATED BY '\n', " +
+                "COLUMNS(`a`, `b`, `c`=1), " +
+                "TEMPORARY PARTITION(`p1`, `p2`), " +
+                "PRECEDING FILTER a = 1, " +
+                "WHERE b > 2 " +
+                "PROPERTIES (\"desired_concurrent_number\"=\"3\") " +
+                "FROM KAFKA\n"
+                + "(\n"
+                + "\"kafka_broker_list\" = \"kafkahost1:9092,kafkahost2:9092\",\n"
+                + "\"kafka_topic\" = \"topictest\"\n"
+                + ");";
+        List<StatementBase> stmts = com.starrocks.sql.parser.SqlParser.parse(sql, 32);
+        CreateRoutineLoadStmt createRoutineLoadStmt = (CreateRoutineLoadStmt)stmts.get(0);
+        CreateRoutineLoadAnalyzer.analyze(createRoutineLoadStmt, connectContext);
+
+        {
+            ImportWhereStmt precedingFilter = createRoutineLoadStmt.getRoutineLoadDesc().getPrecedingFilter();
+            Assertions.assertTrue(precedingFilter.isPrecedingFilter());
+            Expr expr = precedingFilter.getExpr();
+            Assertions.assertInstanceOf(BinaryPredicate.class, expr);
+            Assertions.assertEquals(BinaryType.EQ, ((BinaryPredicate) expr).getOp());
+            List<Expr> children = expr.getChildren();
+            Assertions.assertEquals(2, children.size());
+            Assertions.assertInstanceOf(SlotRef.class, children.get(0));
+            Assertions.assertEquals("a", ((SlotRef) children.get(0)).getColName());
+            Assertions.assertInstanceOf(IntLiteral.class, children.get(1));
+            Assertions.assertEquals(1, ((IntLiteral) children.get(1)).getValue());
+        }
+
+        {
+            ImportWhereStmt where = createRoutineLoadStmt.getRoutineLoadDesc().getWherePredicate();
+            Assertions.assertFalse(where.isPrecedingFilter());
+            Expr expr = where.getExpr();
+            Assertions.assertInstanceOf(BinaryPredicate.class, expr);
+            Assertions.assertEquals(BinaryType.GT, ((BinaryPredicate) expr).getOp());
+            List<Expr> children = expr.getChildren();
+            Assertions.assertEquals(2, children.size());
+            Assertions.assertInstanceOf(SlotRef.class, children.get(0));
+            Assertions.assertEquals("b", ((SlotRef) children.get(0)).getColName());
+            Assertions.assertInstanceOf(IntLiteral.class, children.get(1));
+            Assertions.assertEquals(2, ((IntLiteral) children.get(1)).getValue());
         }
     }
 
