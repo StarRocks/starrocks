@@ -217,6 +217,10 @@ vectorized_functions = [
     [10357, '__iceberg_transform_bucket', True, False, 'INT', ['DECIMAL64', 'INT'], 'MathFunctions::iceberg_bucket_decimal<TYPE_DECIMAL64>'],
     [10358, '__iceberg_transform_bucket', True, False, 'INT', ['DECIMAL128', 'INT'], 'MathFunctions::iceberg_bucket_decimal<TYPE_DECIMAL128>'],
 
+    # is_nan function for FLOAT and DOUBLE types (templated)
+    [10359, 'is_nan', True, False, 'BOOLEAN', ['FLOAT'], 'MathFunctions::is_nan<TYPE_FLOAT>'],
+    [10360, 'is_nan', True, False, 'BOOLEAN', ['DOUBLE'], 'MathFunctions::is_nan<TYPE_DOUBLE>'],
+
 
     # 20xxx: bit functions
     [20010, 'bitand', True, False, 'TINYINT', ['TINYINT', 'TINYINT'], "BitFunctions::bitAnd<TYPE_TINYINT>"],

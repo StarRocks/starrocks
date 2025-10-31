@@ -38,6 +38,7 @@ struct fmodImpl;
 struct modImpl;
 struct modDecimalv2Impl;
 struct negativeImpl;
+struct is_nanImpl;
 
 class MathFunctions {
 public:
@@ -308,6 +309,11 @@ public:
     *
     */
     DEFINE_VECTORIZED_FN(square);
+
+    template <LogicalType TYPE>
+    DEFINE_VECTORIZED_FN(is_nan) {
+        return VectorizedStrictUnaryFunction<is_nanImpl>::template evaluate<TYPE, TYPE_BOOLEAN>(VECTORIZED_FN_ARGS(0));
+    }
 
     // @todo: these functions belong to math function?
     // =====================================
@@ -589,6 +595,11 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(modDecimalv2Impl, a, b) {
 // negative
 DEFINE_UNARY_FN_WITH_IMPL(negativeImpl, v) {
     return -v;
+}
+
+// is_nan impl used by MathFunctions::is_nan<TYPE>
+DEFINE_UNARY_FN_WITH_IMPL(is_nanImpl, v) {
+    return std::isnan(v);
 }
 
 } // namespace starrocks
