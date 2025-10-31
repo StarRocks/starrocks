@@ -249,8 +249,6 @@ public class MVMaintenanceJob implements Writable, GsonPreProcessable, GsonPostP
         if (CollectionUtils.isNotEmpty(plan.getFragments()) &&
                 plan.getTopFragment().getSink() instanceof OlapTableSink) {
             ConnectContext context = queryCoordinator.getConnectContext();
-            context.getSessionVariable().setPreferComputeNode(false);
-            context.getSessionVariable().setUseComputeNodes(0);
             OlapTableSink dataSink = getMVOlapTableSink();
             // NOTE use a fake transaction id, the real one would be generated when epoch started
             long fakeTransactionId = 1;
