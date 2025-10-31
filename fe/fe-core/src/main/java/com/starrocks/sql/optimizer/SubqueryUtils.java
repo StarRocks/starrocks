@@ -26,7 +26,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.expression.BinaryType;
-import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -109,7 +109,7 @@ public class SubqueryUtils {
     }
 
     private static Function getAggregateFunction(String functionName, Type[] argTypes) {
-        Function func = Expr.getBuiltinFunction(functionName, argTypes,
+        Function func = ExprUtils.getBuiltinFunction(functionName, argTypes,
                 Function.CompareMode.IS_IDENTICAL);
         if (argTypes.length > 0 && argTypes[0].isDecimalV3()) {
             func = DecimalV3FunctionAnalyzer.rectifyAggregationFunction((AggregateFunction) func,

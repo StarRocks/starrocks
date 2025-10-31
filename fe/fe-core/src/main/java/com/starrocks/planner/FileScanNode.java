@@ -44,8 +44,8 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.CsvFormat;
@@ -66,6 +66,8 @@ import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.expression.ArithmeticExpr;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.NullLiteral;
@@ -88,8 +90,8 @@ import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
+
 import com.starrocks.warehouse.cngroup.ComputeResource;
-import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -439,7 +441,7 @@ public class FileScanNode extends LoadScanNode {
             // analyze negative
             if (isNegative && destSlotDesc.getColumn().getAggregationType() == AggregateType.SUM) {
                 expr = new ArithmeticExpr(ArithmeticExpr.Operator.MULTIPLY, expr, new IntLiteral(-1));
-                expr = Expr.analyzeAndCastFold(expr);
+                expr = ExprUtils.analyzeAndCastFold(expr);
             }
             expr = castToSlot(destSlotDesc, expr);
             context.params.putToExpr_of_dest_slot(destSlotDesc.getId().asInt(), ExprToThriftVisitor.treeToThrift(expr));
