@@ -217,15 +217,8 @@ public class LakePublishBatchTest {
         Assertions.assertTrue(waiter4.await(10, TimeUnit.SECONDS));
     }
 
-<<<<<<< HEAD
-    @Test
+    // @Test
     public void testPublishTransactionState() throws Exception {
-=======
-    //    @ParameterizedTest
-    //    @ValueSource(booleans = {true, false})
-    public void testPublishTransactionState(boolean enableAggregation) throws Exception {
-        String tableName = enableAggregation ? TABLE_AGG_ON : TABLE_AGG_OFF;
->>>>>>> 87c2824f29 ([UT] remove unstable ut (#64761))
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), TABLE);
         List<TabletCommitInfo> transTablets = Lists.newArrayList();
