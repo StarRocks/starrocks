@@ -2,7 +2,7 @@
 displayed_sidebar: docs
 ---
 
-# SHOW RUNNING QUERIES
+# `SHOW RUNNING QUERIES`
 
 ## 説明
 
@@ -10,7 +10,7 @@ displayed_sidebar: docs
 
 :::tip
 
-この操作には特権は必要ありません。
+クエリキューは設定が必要です。デフォルトでは無効になっています。詳しくは[クエリキューのドキュメント](../../../../administration/management/resource_management/query_queues.md)をご覧ください。
 
 :::
 

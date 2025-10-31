@@ -10,7 +10,7 @@ displayed_sidebar: docs
 
 :::tip
 
-该操作不需要权限。
+查询队列必须进行配置，默认情况下处于关闭状态。有关更多信息，请参阅[查询队列文档](../../../../administration/management/resource_management/query_queues.md)。
 
 :::
 
