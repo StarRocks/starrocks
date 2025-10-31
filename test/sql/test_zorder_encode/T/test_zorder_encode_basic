@@ -1,0 +1,99 @@
+-- name: test_zorder_encode_basic
+CREATE DATABASE test_zorder_encode_basic;
+USE test_zorder_encode_basic;
+
+-- Create a table with a generated Z-order key over two dimensions
+CREATE TABLE points2d (
+  id INT NOT NULL,
+  x  INT,
+  y  INT,
+  zkey VARBINARY(1024) AS (encode_zorder_key(x, y))
+) ENGINE=OLAP
+DISTRIBUTED BY HASH(id) BUCKETS 1
+ORDER BY (zkey)
+PROPERTIES ("replication_num" = "1");
+
+set enable_profile = true;
+set enable_async_profile = false;
+
+create view profile_filter_rows as
+select trim(unnest) 
+from table(unnest(split(get_query_profile(last_query_id()), '\n')))
+where unnest like '%FilterRows%'
+order by unnest;
+
+-- Insert data that demonstrates Z-order spatial locality
+-- This creates large clusters of points in different regions to show how Z-order
+-- improves query performance for spatial range queries
+
+-- Cluster 1: Large cluster around (100, 100) - 200K points
+INSERT INTO points2d (id, x, y)
+SELECT 
+  row_number() OVER (ORDER BY rand()) as id,
+  100 + (row_number() OVER (ORDER BY rand()) % 200) as x,
+  100 + (row_number() OVER (ORDER BY rand()) % 200) as y
+FROM table(generate_series(1, 200000));
+
+-- Cluster 2: Large cluster around (1000, 1000) - 200K points
+INSERT INTO points2d (id, x, y)
+SELECT 
+  200000 + row_number() OVER (ORDER BY rand()) as id,
+  1000 + (row_number() OVER (ORDER BY rand()) % 200) as x,
+  1000 + (row_number() OVER (ORDER BY rand()) % 200) as y
+FROM table(generate_series(1, 200000));
+
+-- Cluster 3: Large cluster around (5000, 5000) - 200K points
+INSERT INTO points2d (id, x, y)
+SELECT 
+  400000 + row_number() OVER (ORDER BY rand()) as id,
+  5000 + (row_number() OVER (ORDER BY rand()) % 200) as x,
+  5000 + (row_number() OVER (ORDER BY rand()) % 200) as y
+FROM table(generate_series(1, 200000));
+
+-- Cluster 4: Large cluster around (8000, 8000) - 200K points
+INSERT INTO points2d (id, x, y)
+SELECT 
+  600000 + row_number() OVER (ORDER BY rand()) as id,
+  8000 + (row_number() OVER (ORDER BY rand()) % 200) as x,
+  8000 + (row_number() OVER (ORDER BY rand()) % 200) as y
+FROM table(generate_series(1, 200000));
+
+-- Scattered points to fill the space - 200K points
+INSERT INTO points2d (id, x, y)
+SELECT 
+  800000 + row_number() OVER (ORDER BY rand()) as id,
+  100 + (row_number() OVER (ORDER BY rand()) % 9000) as x,
+  100 + (row_number() OVER (ORDER BY rand()) % 9000) as y
+FROM table(generate_series(1, 200000));
+
+SELECT count(*) FROM points2d WHERE x = 1000;
+select * from profile_filter_rows;
+SELECT count(*) FROM points2d WHERE y = 1000;
+select * from profile_filter_rows;
+SELECT count(*) FROM points2d WHERE x = 1000 and y = 1000;
+select * from profile_filter_rows;
+
+-- Additional queries to demonstrate Z-order benefits
+-- Query points in a spatial range around cluster 1
+SELECT count(*) FROM points2d WHERE x BETWEEN 95 AND 105 AND y BETWEEN 95 AND 105;
+select * from profile_filter_rows;
+
+-- Query points in a spatial range around cluster 2  
+SELECT count(*) FROM points2d WHERE x BETWEEN 995 AND 1005 AND y BETWEEN 995 AND 1005;
+select * from profile_filter_rows;
+
+-- Query points in a spatial range around cluster 3
+SELECT count(*) FROM points2d WHERE x BETWEEN 4995 AND 5005 AND y BETWEEN 4995 AND 5005;
+select * from profile_filter_rows;
+
+-- Query points in a spatial range around cluster 4
+SELECT count(*) FROM points2d WHERE x BETWEEN 7995 AND 8005 AND y BETWEEN 7995 AND 8005;
+select * from profile_filter_rows;
+
+-- Large range queries to show Z-order effectiveness
+SELECT count(*) FROM points2d WHERE x BETWEEN 90 AND 210 AND y BETWEEN 90 AND 210;
+select * from profile_filter_rows;
+
+SELECT count(*) FROM points2d WHERE x BETWEEN 990 AND 1110 AND y BETWEEN 990 AND 1110;
+select * from profile_filter_rows;
+
