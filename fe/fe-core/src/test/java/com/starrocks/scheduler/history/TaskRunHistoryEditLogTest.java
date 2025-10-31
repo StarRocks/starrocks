@@ -18,14 +18,12 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.OperationType;
+import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.persist.ArchiveTaskRunsLog;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.scheduler.history.TableKeeper;
-import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.utframe.UtFrameUtils;
-import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.AfterEach;
@@ -347,13 +345,13 @@ public class TaskRunHistoryEditLogTest {
 
         // 4. Verify only finished task runs were archived
         for (String queryId : finishedQueryIds) {
-            Assertions.assertNull(masterHistory.getTask(queryId), 
-                "Finished task run " + queryId + " should be archived");
+            Assertions.assertNull(masterHistory.getTask(queryId),
+                    "Finished task run " + queryId + " should be archived");
         }
         
         for (String queryId : unfinishedQueryIds) {
-            Assertions.assertNotNull(masterHistory.getTask(queryId), 
-                "Unfinished task run " + queryId + " should not be archived");
+            Assertions.assertNotNull(masterHistory.getTask(queryId),
+                    "Unfinished task run " + queryId + " should not be archived");
         }
         
         Assertions.assertEquals(2, masterHistory.getTaskRunCount());

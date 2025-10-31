@@ -18,7 +18,6 @@ import com.starrocks.persist.AlterTaskInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.OperationType;
 import com.starrocks.scheduler.persist.DropTasksLog;
-import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.scheduler.persist.TaskSchedule;
 import com.starrocks.server.GlobalStateMgr;
@@ -245,7 +244,7 @@ public class TaskManagerEditLogTest {
         // 4. Verify master state
         Assertions.assertNotNull(masterTaskManager.getTask(taskName));
         Assertions.assertEquals(1, masterTaskManager.filterTasks(null).size());
-		Assertions.assertNotNull(masterTaskManager.getPeriodFutureMap().get(task.getId()));
+        Assertions.assertNotNull(masterTaskManager.getPeriodFutureMap().get(task.getId()));
         
         // Verify task details
         Task createdTask = masterTaskManager.getTask(taskName);
@@ -397,7 +396,8 @@ public class TaskManagerEditLogTest {
         Assertions.assertEquals(3, followerTaskManager.filterTasks(null).size());
 
         // Replay the drop operation
-        DropTasksLog dropTasksLog = (DropTasksLog) UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_DROP_TASKS);
+        DropTasksLog dropTasksLog = (DropTasksLog) UtFrameUtils.PseudoJournalReplayer
+                .replayNextJournal(OperationType.OP_DROP_TASKS);
         followerTaskManager.replayDropTasks(dropTasksLog.getTaskIdList());
 
         // 8. Verify follower state is consistent with master
