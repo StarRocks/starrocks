@@ -3023,10 +3023,11 @@ public class Config extends ConfigBase {
     public static int profile_info_reserved_num = 500;
 
     /**
+     * Deprecated
      * Number of stream load profile infos reserved by `ProfileManager` for recently executed stream load and routine load task.
      * Default value: 500
      */
-    @ConfField(mutable = true)
+    @ConfField(mutable = true, comment = "Deprecated")
     public static int load_profile_info_reserved_num = 500;
 
     /**
