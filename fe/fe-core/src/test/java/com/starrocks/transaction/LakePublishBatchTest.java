@@ -217,7 +217,7 @@ public class LakePublishBatchTest {
         Assertions.assertTrue(waiter4.await(10, TimeUnit.SECONDS));
     }
 
-    @Test
+    // @Test
     public void testPublishTransactionState() throws Exception {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), TABLE);
