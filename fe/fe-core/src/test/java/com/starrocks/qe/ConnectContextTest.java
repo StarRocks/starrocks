@@ -34,6 +34,7 @@
 
 package com.starrocks.qe;
 
+import com.starrocks.common.Config;
 import com.starrocks.common.Status;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.mysql.MysqlCapability;
@@ -50,6 +51,7 @@ import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.warehouse.DefaultWarehouse;
+import com.starrocks.warehouse.MultipleWarehouse;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import com.starrocks.warehouse.cngroup.WarehouseComputeResource;
 import mockit.Expectations;
@@ -289,6 +291,33 @@ public class ConnectContextTest {
 
         ctx.setCurrentWarehouseId(WarehouseManager.DEFAULT_WAREHOUSE_ID);
         Assertions.assertEquals(WarehouseManager.DEFAULT_WAREHOUSE_ID, ctx.getCurrentWarehouseId());
+    }
+    @Test
+    public void testWarehouseWithRollback(@Mocked WarehouseManager warehouseManager) {
+        new Expectations() {
+            {
+                globalStateMgr.getWarehouseMgr();
+                minTimes = 0;
+                result = warehouseManager;
+
+                warehouseManager.getWarehouse(anyLong);
+                minTimes = 0;
+                result = new MultipleWarehouse(10, "wh2", 10);
+
+                warehouseManager.getWarehouseAllowNull(anyString);
+                minTimes = 0;
+                result = null;
+            }
+        };
+
+        Config.enable_rollback_default_warehouse = true;
+        ConnectContext ctx = new ConnectContext(connection);
+        ctx.setGlobalStateMgr(globalStateMgr);
+        ctx.setCurrentWarehouse("wh2");
+        Assertions.assertEquals("wh2", ctx.getCurrentWarehouseName());
+
+        ctx.setCurrentWarehouseId(10);
+        Assertions.assertEquals(10, ctx.getCurrentWarehouseId());
     }
 
     @Test

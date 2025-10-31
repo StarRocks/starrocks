@@ -12,18 +12,33 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.feature;
+package com.starrocks.warehouse;
 
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.Test;
+
+import com.google.gson.annotations.SerializedName;
 
 import java.util.List;
 
-public class ProductFeatureTest {
+public class MultipleWarehouse extends DefaultWarehouse {
 
-    @Test
-    public void testProductFeature() {
-        List<ProductFeature> features = ProductFeature.getFeatures();
-        Assertions.assertEquals(2, features.size());
+    @SerializedName(value = "workerGroupId")
+    protected long workerGroupId;
+
+    public MultipleWarehouse(long id, String name, long workerGroupId) {
+        super(id, name);
+        this.workerGroupId = workerGroupId;
+    }
+    @Override
+    public List<Long> getWorkerGroupIds() {
+        return List.of(this.workerGroupId);
+    }
+
+    @Override
+    public Long getAnyWorkerGroupId() {
+        return this.workerGroupId;
+    }
+
+    public long getWorkerGroupId() {
+        return workerGroupId;
     }
 }
