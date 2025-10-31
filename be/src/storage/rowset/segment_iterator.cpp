@@ -2512,6 +2512,9 @@ Status SegmentIterator::_apply_inverted_index() {
                 if (res.ok()) {
                     erased_preds.emplace(pred);
                     erased_pred_col_ids.emplace(cid);
+                } else {
+                    LOG(WARNING) << "Failed to seek inverted index for column " << column_name
+                                 << ", reason: " << res.detailed_message();
                 }
             }
         }

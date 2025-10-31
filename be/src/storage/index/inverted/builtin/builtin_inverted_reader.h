@@ -31,12 +31,13 @@ class FunctionContext;
 
 class BuiltinInvertedReader : public InvertedReader {
 public:
-    explicit BuiltinInvertedReader(const uint32_t index_id) : InvertedReader("", index_id), _bitmap_index(nullptr) {}
+    explicit BuiltinInvertedReader(const uint32_t index_id, int32_t gram_num)
+            : InvertedReader("", index_id), _gram_num(gram_num), _bitmap_index(nullptr) {}
 
     ~BuiltinInvertedReader() override {}
 
-    static Status create(const std::shared_ptr<TabletIndex>& tablet_index,
-                         LogicalType field_type, std::unique_ptr<InvertedReader>* res);
+    static Status create(const std::shared_ptr<TabletIndex>& tablet_index, LogicalType field_type,
+                         std::unique_ptr<InvertedReader>* res);
 
     Status new_iterator(const std::shared_ptr<TabletIndex> index_meta, InvertedIndexIterator** iterator,
                         const IndexReadOptions& index_opt) override;
@@ -59,6 +60,7 @@ public:
     InvertedIndexReaderType get_inverted_index_reader_type() override { return InvertedIndexReaderType::TEXT; }
 
 private:
+    int32_t _gram_num;
     std::unique_ptr<BitmapIndexReader> _bitmap_index;
 };
 
