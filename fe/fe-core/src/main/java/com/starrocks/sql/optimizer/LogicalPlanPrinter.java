@@ -38,6 +38,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEProduceOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalFetchOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
@@ -54,6 +55,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperat
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamAggOperator;
 import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamJoinOperator;
@@ -62,6 +64,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -757,6 +761,32 @@ public class LogicalPlanPrinter {
             PhysicalSplitConsumeOperator op = (PhysicalSplitConsumeOperator) optExpression.getOp();
             String sb = "SplitConsumer(cteid=" + op.getSplitId() + ")";
             return new OperatorStr(sb, step, Collections.emptyList());
+        }
+
+        @Override
+        public OperatorStr visitPhysicalFetch(OptExpression optExpression, Integer step) {
+            List<OperatorStr> children = new ArrayList<>();
+            for (int childIdx = 0; childIdx < optExpression.getInputs().size(); ++childIdx) {
+                OperatorStr operatorStr = visit(optExpression.inputAt(childIdx), step + 1);
+                children.add(operatorStr);
+            }
+
+            PhysicalFetchOperator op = (PhysicalFetchOperator) optExpression.getOp();
+            Map<ColumnRefOperator, Set<ColumnRefOperator>> rowidToColumns = op.getRowIdToLazyColumns();
+            StringBuilder sb = new StringBuilder("FETCH (columns");
+            sb.append(rowidToColumns.entrySet().stream().map(entry -> {
+                Set<ColumnRefOperator> columns = entry.getValue();
+                String str = columns.stream().map(ColumnRefOperator::toString).collect(Collectors.joining(",", "[", "]"));
+                return str;
+            }).collect(Collectors.joining(",", "[", "]")));
+            sb.append(")");
+
+            return new OperatorStr(sb.toString(), step, children);
+        }
+
+        @Override
+        public OperatorStr visitPhysicalLookUp(OptExpression optExpression, Integer step) {
+            return new OperatorStr("LookUp", step, Collections.emptyList());
         }
     }
 }

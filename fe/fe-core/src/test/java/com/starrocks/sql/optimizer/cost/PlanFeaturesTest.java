@@ -94,7 +94,7 @@ class PlanFeaturesTest extends PlanTestBase {
         Assertions.assertEquals(3, numTables);
         Assertions.assertEquals(3, numEnvs);
         Assertions.assertEquals(1, numVars);
-        Assertions.assertEquals(377, numOperators);
+        Assertions.assertEquals(391, numOperators);
     }
 
     @Test
