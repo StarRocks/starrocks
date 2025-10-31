@@ -162,7 +162,7 @@ public class EditLogDeserializer {
             .put(OperationType.OP_DROP_RESOURCE, DropResourceOperationLog.class)
             .put(OperationType.OP_RESOURCE_GROUP, ResourceGroupOpEntry.class)
             .put(OperationType.OP_CREATE_TASK, Task.class)
-            .put(OperationType.OP_ALTER_TASK, Task.class)
+            .put(OperationType.OP_ALTER_TASK, AlterTaskInfo.class)
             .put(OperationType.OP_DROP_TASKS, DropTasksLog.class)
             .put(OperationType.OP_CREATE_TASK_RUN, TaskRunStatus.class)
             .put(OperationType.OP_UPDATE_TASK_RUN, TaskRunStatusChange.class)

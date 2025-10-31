@@ -1081,7 +1081,7 @@ public class DDLStmtExecutor {
                         "DROP MATERIALIZED VIEW to drop task, when the materialized view is deleted, " +
                         "the related task will be deleted automatically.");
             }
-            taskManager.dropTasks(Collections.singletonList(task.getId()), false);
+            taskManager.dropTasks(Collections.singletonList(task.getId()));
             return null;
         }
 

@@ -505,7 +505,7 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
         for (OptimizeTask rewriteTask : rewriteTasks) {
             try {
-                taskManager.createTask(rewriteTask, false);
+                taskManager.createTask(rewriteTask);
                 taskManager.executeTask(rewriteTask.getName());
                 LOG.info("create rewrite task {}", rewriteTask.toString());
             } catch (DdlException e) {
