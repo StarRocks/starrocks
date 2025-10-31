@@ -1,4 +1,4 @@
--- name: test_array_sum_avg
+-- name: test_array_sum_avg @mac
 CREATE TABLE test_array_functions (
     id INT,
     array_boolean ARRAY<BOOLEAN>,
