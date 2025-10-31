@@ -249,6 +249,8 @@ private:
 
     void _add_level_paths_impl(const std::string_view& path, JsonFlatPath* root);
 
+    void _check_has_non_null_values(const JsonFlatPath* root, size_t index, bool* has_non_null_values);
+
 private:
     std::vector<std::string> _src_paths;
     bool _has_remain = false;
