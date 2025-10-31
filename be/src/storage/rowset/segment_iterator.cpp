@@ -1211,8 +1211,8 @@ struct ZoneMapFilterEvaluator {
             const ColumnPredicate* del_pred = iter != del_preds.end() ? &(iter->second) : nullptr;
 
             SparseRange<> cur_row_ranges;
-            RETURN_IF_ERROR(
-                    column_iterators[cid]->get_row_ranges_by_zone_map(col_preds, del_pred, &cur_row_ranges, Type));
+            RETURN_IF_ERROR(column_iterators[cid]->get_row_ranges_by_zone_map(col_preds, del_pred, &cur_row_ranges,
+                                                                              Type, scan_range));
             _merge_row_ranges<Type>(row_ranges, cur_row_ranges);
         }
 
@@ -1232,8 +1232,8 @@ struct ZoneMapFilterEvaluator {
                     const ColumnPredicate* del_pred = &(iter->second);
 
                     SparseRange<> cur_row_ranges;
-                    RETURN_IF_ERROR(
-                            column_iterators[cid]->get_row_ranges_by_zone_map({}, del_pred, &cur_row_ranges, Type));
+                    RETURN_IF_ERROR(column_iterators[cid]->get_row_ranges_by_zone_map({}, del_pred, &cur_row_ranges,
+                                                                                      Type, scan_range));
                     _merge_row_ranges<Type>(row_ranges, cur_row_ranges);
                 }
             }
@@ -1267,6 +1267,7 @@ struct ZoneMapFilterEvaluator {
 
     const std::map<ColumnId, ColumnOrPredicate>& del_preds;
     const std::set<ColumnId>& del_columns;
+    const SparseRange<>& scan_range;
     bool has_apply_only_del_columns = false;
 };
 
@@ -1299,9 +1300,9 @@ Status SegmentIterator::_get_row_ranges_by_zone_map() {
     // prune data pages by zone map index.
     // -------------------------------------------------------------
 
-    ASSIGN_OR_RETURN(auto hit_row_ranges,
-                     _opts.pred_tree_for_zone_map.visit(ZoneMapFilterEvaluator{
-                             _opts.pred_tree_for_zone_map, _column_iterators, _del_predicates, del_columns}));
+    ASSIGN_OR_RETURN(auto hit_row_ranges, _opts.pred_tree_for_zone_map.visit(ZoneMapFilterEvaluator{
+                                                  _opts.pred_tree_for_zone_map, _column_iterators, _del_predicates,
+                                                  del_columns, _scan_range}));
     if (hit_row_ranges.has_value()) {
         zm_range &= hit_row_ranges.value();
     }
