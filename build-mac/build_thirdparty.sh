@@ -174,6 +174,7 @@ install_homebrew_deps() {
         "zstd"
         "lz4"
         "bzip2"
+        "zlib"
 
         # Other libraries
         "icu4c"
@@ -188,6 +189,11 @@ install_homebrew_deps() {
         "apache-arrow"
         "abseil"
         "streamvbyte"
+        "ragel"
+        "opentelemetry-cpp"
+        "libpulsar"
+        "librdkafka"
+        "poco"
     )
 
     for dep in "${homebrew_deps[@]}"; do
@@ -362,7 +368,7 @@ build_gflags() {
     fi
 
     cd "gflags-$GFLAGS_VERSION"
-    mkdir -p build && cd build
+    mkdir -p cmake_build && cd cmake_build
 
     cmake .. \
         -DCMAKE_BUILD_TYPE=Release \
@@ -414,7 +420,7 @@ build_glog() {
         log_success "glog patches applied successfully"
     fi
 
-    mkdir -p build && cd build
+    mkdir -p cmake_build && cd cmake_build
 
     cmake .. \
         -DCMAKE_BUILD_TYPE=Release \
@@ -835,20 +841,45 @@ build_brpc() {
         log_success "brpc patches applied successfully"
     fi
 
-    mkdir -p build && cd build
+    mkdir -p cmake_build && cd cmake_build
 
     # Use our compiled protobuf-3.14.0 and glog-0.7.1
+    # CRITICAL: Put our bin directory first in PATH to use local protoc 3.14.0
+    # instead of Homebrew's protoc, which would generate incompatible .pb.h files
+    export PATH="$INSTALL_DIR/bin:$PATH"
     export PKG_CONFIG_PATH="$INSTALL_DIR/lib/pkgconfig:$PKG_CONFIG_PATH"
     export PROTOBUF_ROOT="$INSTALL_DIR"
+
+    # Set CPLUS_INCLUDE_PATH and C_INCLUDE_PATH to ensure local headers are found first
+    export CPLUS_INCLUDE_PATH="$INSTALL_DIR/include${CPLUS_INCLUDE_PATH:+:$CPLUS_INCLUDE_PATH}"
+    export C_INCLUDE_PATH="$INSTALL_DIR/include${C_INCLUDE_PATH:+:$C_INCLUDE_PATH}"
+
+    # Verify we're using the correct protoc
+    log_info "Using protoc: $(which protoc) - $(protoc --version | head -1)"
+
+    # Prepend our include directory to ensure local headers are used first
+    local brpc_include_flag="-isystem $INSTALL_DIR/include"
+    local CXX_FLAGS="$brpc_include_flag"
+    local C_FLAGS="$brpc_include_flag"
+    if [[ -n "${CXXFLAGS:-}" ]]; then
+        CXX_FLAGS+=" $CXXFLAGS"
+    fi
+    if [[ -n "${CFLAGS:-}" ]]; then
+        C_FLAGS+=" $CFLAGS"
+    fi
 
     cmake .. \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" \
+        -DCMAKE_PREFIX_PATH="$INSTALL_DIR" \
+        -DCMAKE_CXX_FLAGS="$CXX_FLAGS" \
+        -DCMAKE_C_FLAGS="$C_FLAGS" \
         -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
         -DBUILD_SHARED_LIBS=OFF \
         -DWITH_GLOG=ON \
         -DBRPC_WITH_GLOG=ON \
         -DWITH_THRIFT=OFF \
+        -Dgflags_DIR="$INSTALL_DIR/lib/cmake/gflags" \
         -DProtobuf_DIR="$INSTALL_DIR/lib/cmake/protobuf" \
         -Dglog_DIR="$INSTALL_DIR/lib/cmake/glog" \
         -DGLOG_INCLUDE_PATH="$INSTALL_DIR/include" \
@@ -875,6 +906,7 @@ build_rocksdb() {
 
     local src_dir="$THIRDPARTY_DIR/src"
     local build_dir="$THIRDPARTY_DIR/build/rocksdb"
+    local PATCHED_MARK="patched_mark"
 
     download_source "rocksdb" "$ROCKSDB_VERSION" \
         "https://github.com/facebook/rocksdb/archive/v$ROCKSDB_VERSION.tar.gz" \
@@ -891,23 +923,21 @@ build_rocksdb() {
 
     # Apply RocksDB metadata header patch for macOS libc++ compatibility
     local patch_file="$THIRDPARTY_DIR/patches/rocksdb-6.22.1-metadata-header.patch"
-    if [[ -f "$patch_file" ]]; then
-        # Check if patch is already applied by looking for our marker comment
-        if ! grep -q "The metadata that describes a SST file" include/rocksdb/metadata.h 2>/dev/null; then
-            log_info "Applying RocksDB metadata header patch..."
-            if patch -p1 --forward --batch < "$patch_file" >/dev/null; then
-                log_success "RocksDB metadata patch applied successfully"
-            else
-                log_warn "RocksDB metadata patch could not be applied (maybe already applied). Proceeding."
-            fi
+    if [[ ! -f "$PATCHED_MARK" && -f "$patch_file" ]]; then
+        log_info "Applying RocksDB metadata header patch..."
+        if patch -p1 --forward --batch < "$patch_file" >/dev/null 2>&1; then
+            touch "$PATCHED_MARK"
+            log_success "RocksDB metadata patch applied successfully"
         else
-            log_success "RocksDB metadata patch already applied, skipping"
+            log_warn "RocksDB metadata patch could not be applied (maybe already applied). Proceeding."
         fi
+    elif [[ -f "$PATCHED_MARK" ]]; then
+        log_success "RocksDB metadata patch already applied, skipping"
     else
         log_warn "RocksDB metadata patch not found at $patch_file"
     fi
 
-    mkdir -p build && cd build
+    mkdir -p cmake_build && cd cmake_build
 
     cmake .. \
         -DCMAKE_BUILD_TYPE=Release \
@@ -959,7 +989,7 @@ build_velocypack() {
     fi
 
     cd "velocypack-$VELOCYPACK_VERSION"
-    mkdir -p build && cd build
+    mkdir -p cmake_build && cd cmake_build
 
     cmake .. \
         -DCMAKE_BUILD_TYPE=Release \
@@ -1251,13 +1281,13 @@ build_icu() {
     sed -i '' 's/\r$//' ./configure
     sed -i '' 's/\r$//' ./mkinstalldirs
 
-    # Clear compile flags to use ICU defaults
-    unset CPPFLAGS
-    unset CXXFLAGS
-    unset CFLAGS
-
     # Use a subshell to prevent environment variable leakage
     (
+        # Clear compile flags to use ICU defaults (only affects this subshell)
+        unset CPPFLAGS
+        unset CXXFLAGS
+        unset CFLAGS
+
         export CFLAGS="-O3 -fno-omit-frame-pointer -fPIC"
         export CXXFLAGS="-O3 -fno-omit-frame-pointer -fPIC"
         ./runConfigureICU macOS --prefix="$INSTALL_DIR" --enable-static --disable-shared
@@ -1310,8 +1340,8 @@ build_vectorscan() {
     cd "vectorscan-vectorscan-$VECTORSCAN_VERSION"
 
     # Clean and rebuild
-    rm -rf build
-    mkdir -p build && cd build
+    rm -rf cmake_build
+    mkdir -p cmake_build && cd cmake_build
 
     # Dynamically detect Boost version
     local boost_version
@@ -1463,7 +1493,7 @@ build_simdutf() {
     fi
 
     cd "$SIMDUTF_SOURCE"
-    mkdir -p build && cd build
+    mkdir -p cmake_build && cd cmake_build
 
     cmake .. \
         -DCMAKE_BUILD_TYPE=Release \
@@ -1505,7 +1535,7 @@ build_fmt() {
     fi
 
     cd "$FMT_SOURCE"
-    mkdir -p build && cd build
+    mkdir -p cmake_build && cd cmake_build
 
     cmake .. \
         -DCMAKE_BUILD_TYPE=Release \
@@ -1639,7 +1669,7 @@ build_croaringbitmap() {
         fi
     fi
 
-    mkdir -p build && cd build
+    mkdir -p cmake_build && cd cmake_build
 
     # Configure AVX support for macOS ARM64
     local FORCE_AVX=FALSE

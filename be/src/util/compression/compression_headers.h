@@ -23,6 +23,8 @@
 #include <lz4.h>
 #include <lz4frame.h>
 #include <lz4hc.h>
+#include <snappy-sinksource.h>
+#include <snappy.h>
 #include <zstd.h>
 #include <zstd_errors.h>
 #else
@@ -30,6 +32,8 @@
 #include <lz4/lz4.h>
 #include <lz4/lz4frame.h>
 #include <lz4/lz4hc.h>
+#include <snappy/snappy-sinksource.h>
+#include <snappy/snappy.h>
 #include <zstd/zstd.h>
 #include <zstd/zstd_errors.h>
 #endif
