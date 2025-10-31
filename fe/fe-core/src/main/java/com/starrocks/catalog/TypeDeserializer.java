@@ -46,6 +46,64 @@ public class TypeDeserializer {
         return t.first;
     }
 
+    public static PrimitiveType fromThrift(TPrimitiveType tPrimitiveType) {
+        switch (tPrimitiveType) {
+            case NULL_TYPE:
+                return PrimitiveType.NULL_TYPE;
+            case BOOLEAN:
+                return PrimitiveType.BOOLEAN;
+            case TINYINT:
+                return PrimitiveType.TINYINT;
+            case SMALLINT:
+                return PrimitiveType.SMALLINT;
+            case INT:
+                return PrimitiveType.INT;
+            case BIGINT:
+                return PrimitiveType.BIGINT;
+            case LARGEINT:
+                return PrimitiveType.LARGEINT;
+            case FLOAT:
+                return PrimitiveType.FLOAT;
+            case DOUBLE:
+                return PrimitiveType.DOUBLE;
+            case VARCHAR:
+                return PrimitiveType.VARCHAR;
+            case CHAR:
+                return PrimitiveType.CHAR;
+            case HLL:
+                return PrimitiveType.HLL;
+            case OBJECT:
+                return PrimitiveType.BITMAP;
+            case PERCENTILE:
+                return PrimitiveType.PERCENTILE;
+            case DECIMAL32:
+                return PrimitiveType.DECIMAL32;
+            case DECIMAL64:
+                return PrimitiveType.DECIMAL64;
+            case DECIMAL128:
+                return PrimitiveType.DECIMAL128;
+            case DECIMAL256:
+                return PrimitiveType.DECIMAL256;
+            case DATE:
+                return PrimitiveType.DATE;
+            case DATETIME:
+                return PrimitiveType.DATETIME;
+            case TIME:
+                return PrimitiveType.TIME;
+            case VARBINARY:
+                return PrimitiveType.VARBINARY;
+            case JSON:
+                return PrimitiveType.JSON;
+            case FUNCTION:
+                return PrimitiveType.FUNCTION;
+            case VARIANT:
+                return PrimitiveType.VARIANT;
+            case INVALID_TYPE:
+            default:
+                return PrimitiveType.INVALID_TYPE;
+        }
+    }
+
     /**
      * Constructs a Type rooted at the TTypeNode at nodeIdx in TTypeDesc.
      * Returned pair: The resulting Type and the next nodeIdx that is not a child
@@ -124,11 +182,11 @@ public class TypeDeserializer {
                 scalarType.getType() == TPrimitiveType.DECIMAL256) {
             Preconditions.checkState(scalarType.isSetPrecision() && scalarType.isSetScale());
             return ScalarType.createDecimalV3Type(
-                    PrimitiveType.fromThrift(scalarType.getType()),
+                    TypeDeserializer.fromThrift(scalarType.getType()),
                     scalarType.getPrecision(),
                     scalarType.getScale());
         } else {
-            return ScalarType.createType(PrimitiveType.fromThrift(scalarType.getType()));
+            return ScalarType.createType(TypeDeserializer.fromThrift(scalarType.getType()));
         }
     }
 
@@ -200,9 +258,9 @@ public class TypeDeserializer {
             case DECIMAL64:
             case DECIMAL128:
             case DECIMAL256:
-                return ScalarType.createDecimalV3Type(PrimitiveType.fromThrift(tPrimitiveType), ptype.precision, ptype.scale);
+                return ScalarType.createDecimalV3Type(TypeDeserializer.fromThrift(tPrimitiveType), ptype.precision, ptype.scale);
             default:
-                return ScalarType.createType(PrimitiveType.fromThrift(tPrimitiveType));
+                return ScalarType.createType(TypeDeserializer.fromThrift(tPrimitiveType));
         }
     }
 }

@@ -337,7 +337,7 @@ public class TypeDeserializerTest {
             Type type = TypeDeserializer.fromThrift(typeDesc);
 
             Assertions.assertTrue(type.isScalarType());
-            Assertions.assertEquals(PrimitiveType.fromThrift(primitiveType),
+            Assertions.assertEquals(TypeDeserializer.fromThrift(primitiveType),
                     ((ScalarType) type).getPrimitiveType());
         }
     }
