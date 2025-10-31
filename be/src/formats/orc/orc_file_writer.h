@@ -116,6 +116,8 @@ private:
 
     Status _write_datetime(orc::ColumnVectorBatch& orc_column, ColumnPtr& column);
 
+    Status _write_map(const TypeDescriptor& type, orc::ColumnVectorBatch& orc_column, ColumnPtr& column);
+
     inline static const std::string STARROCKS_ORC_WRITER_VERSION_KEY = "starrocks.writer.version";
 
     const std::string _location;
