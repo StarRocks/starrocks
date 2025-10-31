@@ -26,6 +26,7 @@ import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.CompoundPredicate;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.InPredicate;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.LikePredicate;
@@ -263,7 +264,7 @@ public abstract class FunctionalExprProvider<U> {
             return;
         }
         throw new SemanticException(
-                String.format("`%s` is not allowed in `where` clause for column `%s`.", predicate.toSql(), leftKey));
+                String.format("`%s` is not allowed in `where` clause for column `%s`.", ExprToSql.toSql(predicate), leftKey));
     }
 
     /**

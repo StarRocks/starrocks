@@ -42,6 +42,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.expression.AnalyticWindow;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
@@ -166,7 +167,7 @@ public class AnalyticEvalNode extends PlanNode {
             if (sqlPartitionKeysBuilder.length() > 0) {
                 sqlPartitionKeysBuilder.append(", ");
             }
-            sqlPartitionKeysBuilder.append(e.toSql());
+            sqlPartitionKeysBuilder.append(ExprToSql.toSql(e));
         }
         if (sqlPartitionKeysBuilder.length() > 0) {
             msg.analytic_node.setSql_partition_keys(sqlPartitionKeysBuilder.toString());
@@ -183,7 +184,7 @@ public class AnalyticEvalNode extends PlanNode {
             if (sqlAggFuncBuilder.length() > 0) {
                 sqlAggFuncBuilder.append(", ");
             }
-            sqlAggFuncBuilder.append(e.toSql());
+            sqlAggFuncBuilder.append(ExprToSql.toSql(e));
         }
         if (sqlAggFuncBuilder.length() > 0) {
             msg.analytic_node.setSql_aggregate_functions(sqlAggFuncBuilder.toString());

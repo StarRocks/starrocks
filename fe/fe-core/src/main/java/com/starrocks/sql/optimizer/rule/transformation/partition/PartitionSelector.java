@@ -51,6 +51,7 @@ import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.TableName;
@@ -160,7 +161,7 @@ public class PartitionSelector {
             }
             Expr deinfedExpr = column.getGeneratedColumnExpr(olapTable.getIdToColumn());
             if (deinfedExpr != null) {
-                return deinfedExpr.toSqlWithoutTbl();
+                return ExprToSql.toSqlWithoutTbl(deinfedExpr);
             }
             return "`" + column.getName() + "`";
         } else {

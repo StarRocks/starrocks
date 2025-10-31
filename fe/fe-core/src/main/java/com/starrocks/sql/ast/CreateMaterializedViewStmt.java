@@ -76,6 +76,7 @@ import com.starrocks.sql.analyzer.mvpattern.MVColumnPercentileUnionPattern;
 import com.starrocks.sql.ast.expression.CaseExpr;
 import com.starrocks.sql.ast.expression.CaseWhenClause;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.FunctionParams;
@@ -439,7 +440,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
             if (!isReplay) {
                 if (slots.size() == 0) {
                     throw new UnsupportedMVException(String.format("The materialized view currently does not support " +
-                            "const expr in select " + "statement: {}", selectListItemExpr.toMySql()));
+                            "const expr in select " + "statement: {}", ExprToSql.toMySql(selectListItemExpr)));
                 }
             }
             MVColumnItem mvColumnItem;
@@ -481,12 +482,12 @@ public class CreateMaterializedViewStmt extends DdlStmt {
             } else {
                 if (meetAggregate) {
                     throw new UnsupportedMVException("Any single column should be before agg column. " +
-                            "Column %s at wrong location", selectListItemExpr.toMySql());
+                            "Column %s at wrong location", ExprToSql.toMySql(selectListItemExpr));
                 }
                 // NOTE: If `selectListItemExpr` contains aggregate function, we can not support it.
                 if (ExprUtils.containsAggregate(selectListItemExpr)) {
                     throw new UnsupportedMVException("Aggregate function with function expr is not supported yet",
-                            selectListItemExpr.toMySql());
+                            ExprToSql.toMySql(selectListItemExpr));
                 }
 
                 mvColumnItem = buildNonAggColumnItem(selectListItem, slots);
@@ -500,13 +501,13 @@ public class CreateMaterializedViewStmt extends DdlStmt {
             Set<String> fullSchemaColNames = table.getFullSchema().stream().map(Column::getName).collect(Collectors.toSet());
             if (fullSchemaColNames.contains(mvColumnItem.getName())) {
                 Expr existedDefinedExpr = table.getColumn(mvColumnItem.getName()).getDefineExpr();
-                if (existedDefinedExpr != null && !existedDefinedExpr.toSqlWithoutTbl()
-                        .equalsIgnoreCase(mvColumnItem.getDefineExpr().toSqlWithoutTbl())) {
+                if (existedDefinedExpr != null && !ExprToSql.toSqlWithoutTbl(existedDefinedExpr)
+                        .equalsIgnoreCase(ExprToSql.toSqlWithoutTbl(mvColumnItem.getDefineExpr()))) {
                     throw new UnsupportedMVException(
                             String.format("The mv column %s has already existed in the table's full " +
                                             "schema, old expr: %s, new expr: %s", selectListItem.getAlias(),
-                                    existedDefinedExpr.toSqlWithoutTbl(),
-                                    mvColumnItem.getDefineExpr().toSqlWithoutTbl()));
+                                    ExprToSql.toSqlWithoutTbl(existedDefinedExpr),
+                                    ExprToSql.toSqlWithoutTbl(mvColumnItem.getDefineExpr())));
                 }
             }
         }

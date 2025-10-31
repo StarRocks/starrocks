@@ -439,6 +439,7 @@ import com.starrocks.sql.ast.expression.DictQueryExpr;
 import com.starrocks.sql.ast.expression.DictionaryGetExpr;
 import com.starrocks.sql.ast.expression.ExistsPredicate;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.FloatLiteral;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.FunctionName;
@@ -7581,7 +7582,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                     try {
                         ((LiteralExpr) child).swapSign();
                     } catch (NotImplementedException e) {
-                        throw new ParsingException(PARSER_ERROR_MSG.unsupportedExpr(child.toSql()), child.getPos());
+                        throw new ParsingException(PARSER_ERROR_MSG.unsupportedExpr(ExprToSql.toSql(child)), child.getPos());
                     }
                     return child;
                 } else {
@@ -7679,7 +7680,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                 exprs.add(value);
             }
         } catch (Exception e) {
-            throw new IllegalArgumentException(String.format("Cast argument %s to int type failed.", value.toSql()));
+            throw new IllegalArgumentException(String.format("Cast argument %s to int type failed.", ExprToSql.toSql(value)));
         }
     }
 

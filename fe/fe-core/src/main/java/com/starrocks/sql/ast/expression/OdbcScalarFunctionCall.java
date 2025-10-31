@@ -68,7 +68,7 @@ public class OdbcScalarFunctionCall implements ParseNode {
 
     public Expr mappingFunction() {
         if (!(function instanceof FunctionCallExpr)) {
-            throw new ParsingException(PARSER_ERROR_MSG.invalidOdbcFunc(function.toSql()), function.getPos());
+            throw new ParsingException(PARSER_ERROR_MSG.invalidOdbcFunc(ExprToSql.toSql(function)), function.getPos());
         }
         FunctionCallExpr functionCallExpr = (FunctionCallExpr) function;
         String fnName = functionCallExpr.getFnName().getFunction();
@@ -83,7 +83,7 @@ public class OdbcScalarFunctionCall implements ParseNode {
             return function;
         }
 
-        throw new ParsingException(PARSER_ERROR_MSG.invalidOdbcFunc(function.toSql()), function.getPos());
+        throw new ParsingException(PARSER_ERROR_MSG.invalidOdbcFunc(ExprToSql.toSql(function)), function.getPos());
     }
 
     @Override

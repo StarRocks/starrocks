@@ -46,6 +46,7 @@ import com.starrocks.connector.BucketProperty;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.Utils;
@@ -616,7 +617,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         if (MapUtils.isNotEmpty(queryGlobalDictExprs)) {
             str.append("  Global Dict Exprs:\n");
             queryGlobalDictExprs.entrySet().stream()
-                    .map(p -> "    " + p.getKey() + ": " + p.getValue().toMySql() + "\n").forEach(str::append);
+                    .map(p -> "    " + p.getKey() + ": " + ExprToSql.toMySql(p.getValue()) + "\n").forEach(str::append);
             str.append("\n");
         }
         if (planRoot != null) {

@@ -92,6 +92,7 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.IntLiteral;
@@ -785,7 +786,7 @@ public class MaterializedViewAnalyzer {
                 SlotRef slotRef = getSlotRef(partitionByExpr);
                 if (slotRef.getTblNameWithoutAnalyzed() != null) {
                     throw new SemanticException("Materialized view partition exp: "
-                            + slotRef.toSql() + " must related to column", partitionByExpr.getPos());
+                            + ExprToSql.toSql(slotRef) + " must related to column", partitionByExpr.getPos());
                 }
                 Column mvPartitionColumn = getPartitionColumn(columns, slotRef);
                 mvPartitionColumns.add(mvPartitionColumn);
@@ -929,7 +930,7 @@ public class MaterializedViewAnalyzer {
             Table table = getPartitionByExprRefBaseTable(connectContext, aliasTableMap, slotRef);
             if (table == null) {
                 throw new SemanticException("Materialized view partition expression %s could only ref to base table",
-                        slotRef.toSql());
+                        ExprToSql.toSql(slotRef));
             }
             // TableName's catalog may be null, so normalization it
             slotRef.getTblNameWithoutAnalyzed().normalization(connectContext);
@@ -947,11 +948,11 @@ public class MaterializedViewAnalyzer {
                             PartitionFunctionChecker.FN_NAME_TO_PATTERN.get(functionName);
                     if (checkPartitionFunction == null) {
                         throw new SemanticException("Materialized view partition function " +
-                                functionName + " is not support: " + expr.toSqlWithoutTbl(), functionCallExpr.getPos());
+                                functionName + " is not support: " + ExprToSql.toSqlWithoutTbl(expr), functionCallExpr.getPos());
                     }
                     if (!checkPartitionFunction.check(functionCallExpr)) {
                         throw new SemanticException("Materialized view partition function " +
-                                functionName + " check failed: " + expr.toSqlWithoutTbl(), functionCallExpr.getPos());
+                                functionName + " check failed: " + ExprToSql.toSqlWithoutTbl(expr), functionCallExpr.getPos());
                     }
                 }
             }
@@ -976,7 +977,7 @@ public class MaterializedViewAnalyzer {
             Table table = getPartitionByExprRefBaseTable(session, tableNameTableMap, slotRef);
             if (table == null) {
                 throw new SemanticException("Materialized view partition expression %s could only ref to base table",
-                        slotRef.toSql());
+                        ExprToSql.toSql(slotRef));
             }
             if (!table.isNativeTableOrMaterializedView()) {
                 return changedPartitionByExprs;
@@ -1037,11 +1038,11 @@ public class MaterializedViewAnalyzer {
                 Table table = tableNameTableMap.get(tableName);
                 if (table == null) {
                     throw new SemanticException("Materialized view partition expression %s could only ref to base table",
-                            slotRef.toSql());
+                            ExprToSql.toSql(slotRef));
                 }
                 if (!FeConstants.isReplayFromQueryDump && isExternalTableFromResource(table)) {
                     throw new SemanticException("Materialized view partition expression %s could not ref to external table",
-                            slotRef.toSql());
+                            ExprToSql.toSql(slotRef));
                 }
                 if (table.isNativeTableOrMaterializedView()) {
                     OlapTable olapTable = (OlapTable) table;
@@ -1050,7 +1051,7 @@ public class MaterializedViewAnalyzer {
                         Expr newPartitionByExpr = changedPartitionByExprs.get(i);
                         if (!(newPartitionByExpr instanceof SlotRef)) {
                             throw new SemanticException("Materialized view partition expression %s could only ref base table's " +
-                                    "partition expression without any change", slotRef.toSql());
+                                    "partition expression without any change", ExprToSql.toSql(slotRef));
                         }
                         slotRef = (SlotRef) newPartitionByExpr;
                     }
@@ -1090,7 +1091,7 @@ public class MaterializedViewAnalyzer {
                     Table refBaseTable = tableNameTableMap.get(slotRef.getTblNameWithoutAnalyzed());
                     if (refBaseTable == null) {
                         throw new SemanticException("Materialized view partition expression %s could only ref to base table",
-                                slotRef.toSql());
+                                ExprToSql.toSql(slotRef));
                     }
                 }
                 statement.setPartitionType(PartitionType.LIST);
@@ -1103,7 +1104,7 @@ public class MaterializedViewAnalyzer {
             Table refBaseTable = tableNameTableMap.get(slotRef.getTblNameWithoutAnalyzed());
             if (refBaseTable == null) {
                 LOG.warn("Materialized view partition expression %s could only ref to base table",
-                        slotRef.toSql());
+                        ExprToSql.toSql(slotRef));
                 statement.setPartitionType(PartitionType.UNPARTITIONED);
                 return;
             }
@@ -1197,7 +1198,7 @@ public class MaterializedViewAnalyzer {
                 Table refBaseTable = tableNameTableMap.get(slotRef.getTblNameWithoutAnalyzed());
                 if (refBaseTable == null) {
                     LOG.warn("Materialized view partition expression %s could only ref to base table",
-                            slotRef.toSql());
+                            ExprToSql.toSql(slotRef));
                     continue;
                 }
                 if (refBaseTable.isNativeTableOrMaterializedView()) {
@@ -1869,7 +1870,7 @@ public class MaterializedViewAnalyzer {
         Table refBaseTable = refTableNameTableMap.get(refTableName);
         if (refBaseTable == null) {
             throw new SemanticException("Materialized view partition expression %s could only ref to base table",
-                    slotRef.toSql());
+                    ExprToSql.toSql(slotRef));
         }
         return getMVAdjustedPartitionByExpr(i, partitionByExpr, mvColumns, mvTableName, slotRef, refBaseTable,
                 changedPartitionByExprs, partitionByExprToAdjustExprMap);

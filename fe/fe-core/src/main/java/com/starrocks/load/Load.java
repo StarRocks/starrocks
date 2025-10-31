@@ -75,6 +75,7 @@ import com.starrocks.sql.ast.expression.DictQueryExpr;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
 import com.starrocks.sql.ast.expression.ExprUtils;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.sql.ast.expression.FunctionParams;
@@ -922,7 +923,7 @@ public class Load {
         if (!node.isFromLambda() && !node.isAnalyzed()) {
             // The SlotRef for non-lambda argument is analyzed manually before using Analyzer
             // TODO: delete old analyze in Load
-            String errMsg = String.format("The SlotRef not from lambda is not analyzed, %s", node.toSql());
+            String errMsg = String.format("The SlotRef not from lambda is not analyzed, %s", ExprToSql.toSql(node));
             LOG.warn(errMsg);
             throw unsupportedException(errMsg);
         }

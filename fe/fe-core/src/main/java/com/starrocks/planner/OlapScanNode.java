@@ -83,6 +83,7 @@ import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.TableSampleClause;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
@@ -862,7 +863,7 @@ public class OlapScanNode extends ScanNode {
                 output.append(prefix).append(prefix);
                 if (detailLevel == TExplainLevel.VERBOSE) {
                     output.append(kv.first).append(" <-> ")
-                            .append(kv.second.explain()).append("\n");
+                            .append(ExprToSql.explain(kv.second)).append("\n");
                 } else {
                     output.append("<slot ").
                             append(kv.first).

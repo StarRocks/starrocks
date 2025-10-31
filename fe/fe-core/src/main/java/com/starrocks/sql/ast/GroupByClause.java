@@ -41,6 +41,7 @@ import com.google.common.collect.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprUtils;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.VirtualSlotRef;
 import com.starrocks.sql.parser.NodePosition;
 import org.apache.commons.collections.CollectionUtils;
@@ -282,7 +283,7 @@ public class GroupByClause implements ParseNode {
                         rows.clear();
                         for (int j = 0; j < groupingSetList.get(i).size(); j++) {
                             Expr e = groupingExprs.get(groupingSetIndexToGroupingExprs.get(i, j));
-                            rows.add(e.toSql());
+                            rows.add(ExprToSql.toSql(e));
                         }
                         allExprs.add("(" + String.join(", ", rows) + ")");
                     }
