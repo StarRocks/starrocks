@@ -259,6 +259,9 @@ include_directories(${Poco_INCLUDE_DIRS})
 add_library(libevent STATIC IMPORTED)
 set_target_properties(libevent PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libevent.a)
 
+add_library(libevent_openssl STATIC IMPORTED)
+set_target_properties(libevent_openssl PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libevent_openssl.a)
+
 add_library(openssl STATIC IMPORTED)
 set_target_properties(openssl PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libssl.a)
 
@@ -926,6 +929,7 @@ set(STARROCKS_DEPENDENCIES
     # Otherwise, he will use the lz4 Library in librdkafka
     lz4
     libevent
+    libevent_openssl
     curl
     ${Poco_LIBRARIES}
     libz
