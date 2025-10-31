@@ -25,7 +25,6 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.AuditLog;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
@@ -33,6 +32,11 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.metric.LongCounterMetric;
 import com.starrocks.metric.MetricRepo;
+<<<<<<< HEAD
+=======
+import com.starrocks.planner.ScanNode;
+import com.starrocks.qe.AuditInternalLog;
+>>>>>>> b8ee5d4482 ([Enhancement] internal.log support JSON format (#64660))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
@@ -520,6 +524,13 @@ public class StatisticExecutor {
         if (Config.enable_print_sql) {
             LOG.info("Begin to execute sql, type: Statistics collect，query id:{}, sql:{}", context.getQueryId(), sql);
         }
+<<<<<<< HEAD
+=======
+        if (FeConstants.enableUnitStatistics) {
+            return Collections.emptyList();
+        }
+        Stopwatch watch = Stopwatch.createStarted();
+>>>>>>> b8ee5d4482 ([Enhancement] internal.log support JSON format (#64660))
         StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
         ExecPlan execPlan = StatementPlanner.plan(parsedStmt, context, TResultSinkType.STATISTIC);
         StmtExecutor executor = StmtExecutor.newInternalExecutor(context, parsedStmt);
@@ -530,8 +541,8 @@ public class StatisticExecutor {
             throw new SemanticException("Statistics query fail | Error Message [%s] | QueryId [%s] | SQL [%s]",
                     context.getState().getErrorMessage(), DebugUtil.printId(context.getQueryId()), sql);
         } else {
-            AuditLog.getStatisticAudit().info("statistic execute query | QueryId [{}] | SQL: {}",
-                    DebugUtil.printId(context.getQueryId()), sql);
+            AuditInternalLog.handleInternalLog(AuditInternalLog.InternalType.QUERY, DebugUtil.printId(context.getQueryId()),
+                    sql, watch);
             return sqlResult.first;
         }
     }
@@ -539,13 +550,14 @@ public class StatisticExecutor {
     private static boolean executeDML(ConnectContext context, String sql) {
         StatementBase parsedStmt;
         try {
+            Stopwatch watch = Stopwatch.createStarted();
             parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
             StmtExecutor executor = StmtExecutor.newInternalExecutor(context, parsedStmt);
             context.setExecutor(executor);
             context.setQueryId(UUIDUtil.genUUID());
             executor.execute();
-            AuditLog.getStatisticAudit().info("statistic execute DML | QueryId [{}] | SQL: {}",
-                    DebugUtil.printId(context.getQueryId()), sql);
+            AuditInternalLog.handleInternalLog(AuditInternalLog.InternalType.DML, DebugUtil.printId(context.getQueryId()),
+                    sql, watch);
             return true;
         } catch (Exception e) {
             LOG.warn("statistic DML fail | {} | SQL {}", DebugUtil.printId(context.getQueryId()), sql, e);

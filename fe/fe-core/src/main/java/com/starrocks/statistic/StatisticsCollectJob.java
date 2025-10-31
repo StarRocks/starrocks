@@ -14,6 +14,11 @@
 
 package com.starrocks.statistic;
 
+<<<<<<< HEAD
+=======
+import com.google.common.base.Stopwatch;
+import com.google.common.collect.HashBasedTable;
+>>>>>>> b8ee5d4482 ([Enhancement] internal.log support JSON format (#64660))
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
@@ -25,11 +30,11 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.AuditLog;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.qe.AuditInternalLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.SessionVariable;
@@ -164,6 +169,7 @@ public abstract class StatisticsCollectJob {
             if (Config.enable_print_sql) {
                 LOG.info("Begin to execute sql, type: Statistics collect，query id:{}, sql:{}", context.getQueryId(), sql);
             }
+            Stopwatch watch = Stopwatch.createStarted();
             StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
             StmtExecutor executor = StmtExecutor.newInternalExecutor(context, parsedStmt);
 
@@ -188,8 +194,8 @@ public abstract class StatisticsCollectJob {
                     throw new DdlException(context.getState().getErrorMessage());
                 }
             } else {
-                AuditLog.getStatisticAudit().info("statistic execute query | QueryId [{}] | SQL: {}",
-                        DebugUtil.printId(context.getQueryId()), sql);
+                AuditInternalLog.handleInternalLog(AuditInternalLog.InternalType.QUERY, DebugUtil.printId(context.getQueryId()),
+                        sql, watch);
                 return;
             }
         } while (count < maxRetryTimes);
