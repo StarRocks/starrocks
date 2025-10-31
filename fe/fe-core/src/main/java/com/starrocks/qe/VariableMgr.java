@@ -220,9 +220,17 @@ public class VariableMgr {
         String v = VariableVarConverters.convert(varName, raw);
         try {
             if (type == boolean.class || type == Boolean.class) {
-                return v.equalsIgnoreCase("ON")
+                if (v.equalsIgnoreCase("ON")
                         || v.equalsIgnoreCase("TRUE")
-                        || v.equals("1");
+                        || v.equals("1")) {
+                    return true;
+                } else if (v.equalsIgnoreCase("OFF")
+                        || v.equalsIgnoreCase("FALSE")
+                        || v.equalsIgnoreCase("0")) {
+                    return false;
+                } else {
+                    throw new NumberFormatException();
+                }
             }
             if (type == byte.class || type == Byte.class) {
                 return Byte.parseByte(v);
