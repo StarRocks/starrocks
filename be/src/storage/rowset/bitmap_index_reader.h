@@ -57,7 +57,7 @@ using Roaring = roaring::Roaring;
 
 class BitmapIndexReader {
 public:
-    BitmapIndexReader();
+    BitmapIndexReader(int32_t gram_num = -1);
     ~BitmapIndexReader();
 
     // Load index data into memory.
@@ -77,6 +77,16 @@ public:
     // REQUIRES: the index data has been successfully `load()`ed into memory.
     int64_t bitmap_nums() { return _bitmap_column_reader->num_values(); }
 
+    int32_t gram_num() const { return _gram_num; }
+
+    // REQUIRES: the index data has been successfully `load()`ed into memory.
+    int64_t ngram_bitmap_nums() const {
+        if (_ngram_bitmap_column_reader != nullptr) {
+            return _ngram_bitmap_column_reader->num_values();
+        }
+        return 0;
+    }
+
     const TypeInfoPtr& type_info() { return _typeinfo; }
 
     bool loaded() const { return invoked(_load_once); }
@@ -89,6 +99,12 @@ public:
         if (_bitmap_column_reader != nullptr) {
             size += _bitmap_column_reader->mem_usage();
         }
+        if (_ngram_dict_column_reader != nullptr) {
+            size += _ngram_dict_column_reader->mem_usage();
+        }
+        if (_ngram_bitmap_column_reader != nullptr) {
+            size += _ngram_bitmap_column_reader->mem_usage();
+        }
         return size;
     }
 
@@ -99,10 +115,14 @@ private:
 
     Status _do_load(const IndexReadOptions& opts, const BitmapIndexPB& meta);
 
+    int32_t _gram_num;
+
     OnceFlag _load_once;
     TypeInfoPtr _typeinfo;
     std::unique_ptr<IndexedColumnReader> _dict_column_reader;
     std::unique_ptr<IndexedColumnReader> _bitmap_column_reader;
+    std::unique_ptr<IndexedColumnReader> _ngram_dict_column_reader;
+    std::unique_ptr<IndexedColumnReader> _ngram_bitmap_column_reader;
     bool _has_null = false;
 };
 
@@ -111,14 +131,27 @@ public:
     using DictPredicate = std::function<StatusOr<ColumnPtr>(const Column&)>;
 
     BitmapIndexIterator(BitmapIndexReader* reader, std::unique_ptr<IndexedColumnIterator> dict_iter,
-                        std::unique_ptr<IndexedColumnIterator> bitmap_iter, bool has_null, rowid_t num_bitmap)
+                        std::unique_ptr<IndexedColumnIterator> bitmap_iter,
+                        std::unique_ptr<IndexedColumnIterator> ngram_dict_iter,
+                        std::unique_ptr<IndexedColumnIterator> ngram_bitmap_iter, bool has_null, rowid_t num_bitmap)
             : _reader(reader),
               _dict_column_iter(std::move(dict_iter)),
               _bitmap_column_iter(std::move(bitmap_iter)),
+              _ngram_dict_column_iter(std::move(ngram_dict_iter)),
+              _ngram_bitmap_column_iter(std::move(ngram_bitmap_iter)),
               _has_null(has_null),
               _num_bitmap(num_bitmap) {}
 
     bool has_null_bitmap() const { return _has_null; }
+
+    Status seek_dict_by_ngram(const void* value, roaring::Roaring* roaring) const;
+
+    StatusOr<Buffer<rowid_t>> filter_dict_by_predicate(const roaring::Roaring* rowids,
+                                                       const std::function<bool(const Slice*)>& predicate) const;
+
+    // used for test
+    Status next_batch_ngram(rowid_t ordinal, size_t* n, Column* column) const;
+    Status read_ngram_bitmap(rowid_t ordinal, Roaring* result) const;
 
     // Seek the dictionary to the first value that is >= the given value.
     //
@@ -130,7 +163,8 @@ public:
     // Returns other error status otherwise.
     Status seek_dictionary(const void* value, bool* exact_match);
 
-    StatusOr<Buffer<rowid_t>> seek_dictionary_by_predicate(const DictPredicate& predicate, const Slice& from_value, size_t search_size);
+    StatusOr<Buffer<rowid_t>> seek_dictionary_by_predicate(const DictPredicate& predicate, const Slice& from_value,
+                                                           size_t search_size);
 
     Status next_batch_dictionary(size_t* n, Column* column);
 
@@ -166,6 +200,8 @@ private:
     BitmapIndexReader* _reader;
     std::unique_ptr<IndexedColumnIterator> _dict_column_iter;
     std::unique_ptr<IndexedColumnIterator> _bitmap_column_iter;
+    std::unique_ptr<IndexedColumnIterator> _ngram_dict_column_iter;
+    std::unique_ptr<IndexedColumnIterator> _ngram_bitmap_column_iter;
     bool _has_null;
     rowid_t _num_bitmap;
     rowid_t _current_rowid{0};

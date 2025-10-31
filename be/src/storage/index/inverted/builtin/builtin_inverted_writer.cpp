@@ -14,14 +14,13 @@
 
 #include "storage/index/inverted/builtin/builtin_inverted_writer.h"
 
-#include <vector>
-
 #include <CLucene.h>
 #include <CLucene/analysis/LanguageBasedAnalyzer.h>
 #include <CLucene/util/Misc.h>
 #include <fmt/format.h>
 
 #include <boost/locale/encoding_utf.hpp>
+#include <vector>
 
 #include "common/status.h"
 #include "gen_cpp/segment.pb.h"
@@ -43,7 +42,7 @@ public:
             : _builtin_writer(std::move(writer)) {
         static_assert(field_type == TYPE_CHAR || field_type == TYPE_VARCHAR);
         _parser_type = get_inverted_index_parser_type_from_string(
-                       get_parser_string_from_properties(inverted_index->index_properties()));
+                get_parser_string_from_properties(inverted_index->index_properties()));
         DCHECK(_parser_type != InvertedIndexParserType::PARSER_UNKNOWN);
     }
 
@@ -90,13 +89,13 @@ void BuiltinInvertedWriterImpl<field_type>::add_values(const void* values, size_
         const char* s = val->data;
         size_t size = val->size;
         if (_parser_type == InvertedIndexParserType::PARSER_NONE) {
-            _builtin_writer->add_value_with_current_rowid((void*) val);
+            _builtin_writer->add_value_with_current_rowid((void*)val);
         } else if (_parser_type == InvertedIndexParserType::PARSER_ENGLISH) {
             std::string mutable_text(val->data, val->size);
             std::vector<SliceToken> tokens;
             _builtin_analyzer->tokenize(mutable_text.data(), mutable_text.length(), tokens);
             for (const auto& token : tokens) {
-                _builtin_writer->add_value_with_current_rowid((void*) &(token.text));
+                _builtin_writer->add_value_with_current_rowid((void*)&(token.text));
             }
         } else {
             // For all kinds of CLucene analyzers, we need to process the text as follows:
@@ -105,15 +104,16 @@ void BuiltinInvertedWriterImpl<field_type>::add_values(const void* values, size_
             // 3. Convert the tokens to string
             // 4. Add the string to the bitmap index
             std::wstring tchar = boost::locale::conv::utf_to_utf<TCHAR>(s, s + size);
-    
+
             _char_string_reader->init(tchar.c_str(), tchar.size(), false);
             auto stream = _analyzer->reusableTokenStream(L"", _char_string_reader.get());
             lucene::analysis::Token token;
             while (stream->next(&token)) {
                 if (token.termLength() != 0) {
-                    std::string str = boost::locale::conv::utf_to_utf<char>(token.termBuffer(), token.termBuffer() + token.termLength());
+                    std::string str = boost::locale::conv::utf_to_utf<char>(token.termBuffer(),
+                                                                            token.termBuffer() + token.termLength());
                     Slice s(str);
-                    _builtin_writer->add_value_with_current_rowid((void*) &s);
+                    _builtin_writer->add_value_with_current_rowid((void*)&s);
                 }
             }
         }
@@ -132,9 +132,12 @@ Status BuiltinInvertedWriterImpl<field_type>::finish(WritableFile* wfile, Column
     return _builtin_writer->finish(wfile, bitmap_index_meta);
 }
 
-Status BuiltinInvertedWriter::create(const TypeInfoPtr& typeinfo, TabletIndex* tablet_index, std::unique_ptr<InvertedWriter>* res) {
+Status BuiltinInvertedWriter::create(const TypeInfoPtr& typeinfo, TabletIndex* tablet_index,
+                                     std::unique_ptr<InvertedWriter>* res) {
+    auto gram_num = get_gram_num_from_properties(tablet_index->index_properties());
+
     std::unique_ptr<BitmapIndexWriter> writer;
-    RETURN_IF_ERROR(BitmapIndexWriter::create(typeinfo, &writer));
+    RETURN_IF_ERROR(BitmapIndexWriter::create(typeinfo, &writer, gram_num));
     writer->set_dictionary_compression(CompressionTypePB::ZSTD);
 
     LogicalType type = typeinfo->type();

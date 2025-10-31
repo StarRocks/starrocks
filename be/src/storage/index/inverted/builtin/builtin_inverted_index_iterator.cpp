@@ -64,16 +64,15 @@ Status BuiltinInvertedIndexIterator::_equal_query(const Slice* search_query, roa
 }
 
 Status BuiltinInvertedIndexIterator::_wildcard_query(const Slice* search_query, roaring::Roaring* bit_map) {
-    auto first_wildcard_pos = search_query->to_string().find('%');
-    if (first_wildcard_pos == std::string::npos) {
+    const std::string& query = search_query->to_string();
+    size_t wildcard_pos = query.find('%');
+    if (wildcard_pos == std::string::npos) {
         return Status::InternalError("invalid wildcard query for builtin inverted index");
     }
 
-    std::pair<rowid_t, std::string> lower = std::make_pair(0, Slice::min_value().to_string());
-    std::pair<rowid_t, std::string> upper = std::make_pair(_bitmap_itr->bitmap_nums(), Slice::max_value().to_string());
-
-    if (first_wildcard_pos != 0) {
-        Slice prefix_s(search_query->data, first_wildcard_pos);
+    if (wildcard_pos == search_query->size - 1) {
+        // optimize for pure prefix query
+        Slice prefix_s(search_query->data, wildcard_pos);
         std::string next_prefix = get_next_prefix(prefix_s);
         Slice next_prefix_s(next_prefix);
 
@@ -95,7 +94,10 @@ Status BuiltinInvertedIndexIterator::_wildcard_query(const Slice* search_query, 
             }
         };
 
+        std::pair<rowid_t, std::string> lower = std::make_pair(0, Slice::min_value().to_string());
         ASSIGN_OR_RETURN(lower, seek(prefix_s));
+
+        std::pair<rowid_t, std::string> upper = std::make_pair(_bitmap_itr->bitmap_nums(), Slice::max_value().to_string());
         ASSIGN_OR_RETURN(upper, seek(next_prefix_s));
 
         if (lower.first >= upper.first) {
@@ -103,54 +105,80 @@ Status BuiltinInvertedIndexIterator::_wildcard_query(const Slice* search_query, 
             return Status::OK();
         }
 
-        if (first_wildcard_pos == search_query->size - 1) {
-            // pure prefix query
-            Buffer<rowid_t> hit_rowids(upper.first - lower.first);
-            std::iota(hit_rowids.begin(), hit_rowids.end(), lower.first);
-            RETURN_IF_ERROR(_bitmap_itr->read_union_bitmap(hit_rowids, bit_map));
+        Buffer<rowid_t> hit_rowids(upper.first - lower.first);
+        std::iota(hit_rowids.begin(), hit_rowids.end(), lower.first);
+        RETURN_IF_ERROR(_bitmap_itr->read_union_bitmap(hit_rowids, bit_map));
+        return Status::OK();
+    }
+
+    bool found_at_least_one = false;
+    roaring::Roaring filtered_key_words;
+    std::vector<std::string> keywords;
+
+    // parse wildcard like '%%key%word%%' into ['key', 'word']
+    // use ngram to filter each word
+    wildcard_pos = 0;
+    size_t last_wildcard_pos = 0;
+    while (wildcard_pos < query.size()) {
+        while (wildcard_pos < query.size() && query[wildcard_pos] == '%') {
+            ++wildcard_pos;
+        }
+        if (wildcard_pos >= query.size()) {
+            break;
+        }
+        last_wildcard_pos = wildcard_pos;
+        wildcard_pos = query.find('%', last_wildcard_pos);
+
+        auto sub_query = wildcard_pos != std::string::npos
+                                 ? query.substr(last_wildcard_pos, wildcard_pos - last_wildcard_pos)
+                                 : query.substr(last_wildcard_pos);
+        keywords.emplace_back(sub_query);
+
+        const Slice sub_query_s(sub_query);
+        roaring::Roaring tmp;
+
+        RETURN_IF_ERROR(_bitmap_itr->seek_dict_by_ngram(&sub_query_s, &tmp));
+        if (tmp.cardinality() <= 0) {
+            // no words match ngram index, just return empty bitmap
+            VLOG(10) << "no words match ngram index for gram query " << sub_query;
             return Status::OK();
+        }
+
+        if (!found_at_least_one) {
+            filtered_key_words = std::move(tmp);
+            found_at_least_one = true;
+        } else {
+            filtered_key_words &= tmp;
         }
     }
 
-    RETURN_IF_ERROR(_init_like_context(*search_query));
-    auto predicate = [this](const Column& value_column) -> StatusOr<ColumnPtr> {
-        Columns cols;
-        cols.push_back(&value_column);
-        cols.push_back(this->_like_context->get_constant_column(1));
-        return LikePredicate::like(this->_like_context.get(), cols);
+    if (!found_at_least_one) {
+        VLOG(10) << "no words match ngram index for " << query;
+        // no words match ngram index, just return empty bitmap
+        return Status::OK();
+    }
+
+    auto predicate = [&keywords](const Slice* dict) -> bool {
+        // just need to make sure keywords is in order.
+        const std::string dictionary_str = dict->to_string();
+        size_t last_pos = 0;
+        for (const auto& keyword : keywords) {
+            last_pos = dictionary_str.find(keyword, last_pos);
+            if (last_pos == std::string::npos) {
+                return false;
+            }
+            last_pos += keyword.size();
+        }
+        return true;
     };
-    Slice from_value = Slice(lower.second);
-    size_t search_size = upper.first - lower.first;
-    auto res = _bitmap_itr->seek_dictionary_by_predicate(predicate, from_value, search_size);
-    Status st = res.status();
-    if (st.ok()) {
-        auto hit_rowids = std::move(res.value());
-        RETURN_IF_ERROR(_bitmap_itr->read_union_bitmap(hit_rowids, bit_map));
-    } else if (!st.ok() && !st.is_not_found()) {
-        return st;
-    }
-    return Status::OK();
-}
 
-Status BuiltinInvertedIndexIterator::_init_like_context(const Slice& s) {
-    if (_like_context) {
-        RETURN_IF_ERROR(LikePredicate::like_close(_like_context.get(), FunctionContext::FunctionStateScope::THREAD_LOCAL));
-        _like_context.reset(nullptr);
-    }
-
-    _like_context = std::make_unique<FunctionContext>();
-    auto ptr = BinaryColumn::create();
-    ptr->append_datum(Datum(s));
-    ptr->get_data();
-    Columns cols;
-    cols.push_back(nullptr);
-    cols.push_back(std::move(ConstColumn::create(std::move(ptr), 1)));
-    _like_context->set_constant_columns(cols);
-    return LikePredicate::like_prepare(_like_context.get(), FunctionContext::FunctionStateScope::THREAD_LOCAL);
+    ASSIGN_OR_RETURN(const auto hit_rowids, _bitmap_itr->filter_dict_by_predicate(&filtered_key_words, predicate));
+    return _bitmap_itr->read_union_bitmap(hit_rowids, bit_map);
 }
 
 Status BuiltinInvertedIndexIterator::read_from_inverted_index(const std::string& column_name, const void* query_value,
-                                                              InvertedIndexQueryType query_type, roaring::Roaring* bit_map) {
+                                                              InvertedIndexQueryType query_type,
+                                                              roaring::Roaring* bit_map) {
     const auto* search_query = reinterpret_cast<const Slice*>(query_value);
     switch (query_type) {
     case InvertedIndexQueryType::EQUAL_QUERY: {
