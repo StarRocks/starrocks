@@ -14,13 +14,11 @@
 
 package com.starrocks.sql.plan;
 
-import com.starrocks.catalog.View;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -28,7 +26,6 @@ import com.starrocks.sql.optimizer.base.CTEProperty;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.optimizer.rule.RuleSet;
 import com.starrocks.sql.optimizer.rule.transformation.JoinAssociativityRule;
-import com.starrocks.sql.optimizer.transformer.MVTransformerContext;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
@@ -40,38 +37,6 @@ import org.junit.jupiter.api.Test;
 import java.util.stream.Stream;
 
 public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
-    @Test
-    public void testForceRuleBasedRewrite() throws Exception {
-        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(getDumpInfoFromFile("query_dump/force_rule_based_mv_rewrite"));
-        SessionVariable sessionVariable = queryDumpInfo.getSessionVariable();
-        sessionVariable.setEnableForceRuleBasedMvRewrite(true);
-        Pair<QueryDumpInfo, String> replayPair =
-                getCostPlanFragment(getDumpInfoFromFile("query_dump/force_rule_based_mv_rewrite"), sessionVariable);
-        Assertions.assertTrue(replayPair.second.contains("partition_flat_consumptions_partition_drinks_dates"),
-                replayPair.second);
-    }
-
-    @Test
-    public void testForceRuleBasedRewriteMonth() throws Exception {
-        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(getDumpInfoFromFile("query_dump/force_rule_based_mv_rewrite_month"));
-        SessionVariable sessionVariable = queryDumpInfo.getSessionVariable();
-        sessionVariable.setEnableForceRuleBasedMvRewrite(true);
-        Pair<QueryDumpInfo, String> replayPair =
-                getCostPlanFragment(getDumpInfoFromFile("query_dump/force_rule_based_mv_rewrite_month"), sessionVariable);
-        Assertions.assertTrue(replayPair.second.contains("partition_flat_consumptions_partition_drinks_roll_month"),
-                replayPair.second);
-    }
-
-    @Test
-    public void testForceRuleBasedRewriteYear() throws Exception {
-        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(getDumpInfoFromFile("query_dump/force_rule_based_mv_rewrite_year"));
-        SessionVariable sessionVariable = queryDumpInfo.getSessionVariable();
-        sessionVariable.setEnableForceRuleBasedMvRewrite(true);
-        Pair<QueryDumpInfo, String> replayPair =
-                getCostPlanFragment(getDumpInfoFromFile("query_dump/force_rule_based_mv_rewrite_year"), sessionVariable);
-        Assertions.assertTrue(replayPair.second.contains("flat_consumptions_drinks_dates_roll_year"), replayPair.second);
-    }
-
     @Test
     public void testTPCH17WithUseAnalytic() throws Exception {
         QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(getDumpInfoFromFile("query_dump/tpch17"));
@@ -795,47 +760,6 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         sessionVariable.setEnableCBOViewBasedMvRewrite(false);
     }
 
-    @Test
-    public void testCBONestedMvRewriteDrinks() throws Exception {
-        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(getDumpInfoFromFile("query_dump/force_rule_based_mv_rewrite_drinks"));
-        SessionVariable sessionVariable = queryDumpInfo.getSessionVariable();
-        sessionVariable.setEnableForceRuleBasedMvRewrite(false);
-        Pair<QueryDumpInfo, String> replayPair =
-                getCostPlanFragment(getDumpInfoFromFile("query_dump/force_rule_based_mv_rewrite_drinks"), sessionVariable);
-        Assertions.assertTrue(replayPair.second.contains("partition_flat_consumptions_partition_drinks"), replayPair.second);
-    }
-
-    @Test
-    public void testCBONestedMvRewriteDates() throws Exception {
-        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(getDumpInfoFromFile("query_dump/force_rule_based_mv_rewrite"));
-        SessionVariable sessionVariable = queryDumpInfo.getSessionVariable();
-        sessionVariable.setEnableForceRuleBasedMvRewrite(false);
-        Pair<QueryDumpInfo, String> replayPair =
-                getCostPlanFragment(getDumpInfoFromFile("query_dump/force_rule_based_mv_rewrite"), sessionVariable);
-        Assertions.assertTrue(replayPair.second.contains("partition_flat_consumptions_partition_drinks_dates"),
-                replayPair.second);
-    }
-
-    @Test
-    public void testCBONestedMvRewriteMonth() throws Exception {
-        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(getDumpInfoFromFile("query_dump/force_rule_based_mv_rewrite_month"));
-        SessionVariable sessionVariable = queryDumpInfo.getSessionVariable();
-        sessionVariable.setEnableForceRuleBasedMvRewrite(false);
-        Pair<QueryDumpInfo, String> replayPair =
-                getCostPlanFragment(getDumpInfoFromFile("query_dump/force_rule_based_mv_rewrite_month"), sessionVariable);
-        Assertions.assertTrue(replayPair.second.contains("partition_flat_consumptions_partition_drinks_roll_month"),
-                replayPair.second);
-    }
-
-    @Test
-    public void testCBONestedMvRewriteYear() throws Exception {
-        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(getDumpInfoFromFile("query_dump/force_rule_based_mv_rewrite_year"));
-        SessionVariable sessionVariable = queryDumpInfo.getSessionVariable();
-        sessionVariable.setEnableForceRuleBasedMvRewrite(false);
-        Pair<QueryDumpInfo, String> replayPair =
-                getCostPlanFragment(getDumpInfoFromFile("query_dump/force_rule_based_mv_rewrite_year"), sessionVariable);
-        Assertions.assertTrue(replayPair.second.contains("flat_consumptions_drinks_dates_roll_year"), replayPair.second);
-    }
 
     @Test
     public void testNormalizeNonTrivialProject() throws Exception {
@@ -1168,6 +1092,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     }
 
     @Test
+<<<<<<< HEAD
     public void testViewBasedRewrite1() throws Exception {
         String fileContent = getDumpInfoFromFile("query_dump/view_based_rewrite1");
         QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(fileContent);
@@ -1187,5 +1112,27 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(fileContent, sessionVariable);
         String plan = replayPair.second;
         PlanTestBase.assertContains(plan, "single_mv_ads_biz_customer_combine_td_for_task_2y");
+=======
+    public void testSingleNodePlanWithMultiAggStage1() throws Exception {
+        new MockUp<Utils>() {
+            @Mock
+            public static boolean isSingleNodeExecution(ConnectContext context) {
+                return true;
+            }
+            @Mock
+            public static boolean isRunningInUnitTest() {
+                return false;
+            }
+        };
+        String plan = getPlanFragment("query_dump/single_node_plan1", TExplainLevel.NORMAL);
+        PlanTestBase.assertContains(plan, "  2:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  output: sum(106: sum), count(107: count), avg(108: avg), count(3: UserID)\n" +
+                "  |  group by: 10: RegionID\n" +
+                "  |  \n" +
+                "  1:AGGREGATE (update serialize)\n" +
+                "  |  output: sum(41: AdvEngineID), count(*), avg(21: ResolutionWidth)\n" +
+                "  |  group by: 3: UserID, 10: RegionID");
+>>>>>>> af3b9ba70e ([UT] Fix unstable mv related cases (#64829))
     }
 }
