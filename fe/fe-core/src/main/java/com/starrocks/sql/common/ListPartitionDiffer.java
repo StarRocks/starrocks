@@ -91,7 +91,7 @@ public final class ListPartitionDiffer extends PartitionDiffer {
         for (PCellWithName srcPCell : srcPCells.getPartitions()) {
             String pName = srcPCell.name();
             PListCell srcItem = (PListCell) srcPCell.cell();
-            if (dstPCells.contains(srcPCell)) {
+            if (dstPCells.containsPCellWithName(srcPCell)) {
                 continue;
             }
             // Get sorted source atoms for merge-join filtering

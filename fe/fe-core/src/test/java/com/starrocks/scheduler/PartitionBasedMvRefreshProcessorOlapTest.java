@@ -955,7 +955,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
         if (!mv.isUnPartitioned()) {
             PCellSortedSet mvPCellSortedSet = mv.getPartitionCells(Optional.empty());
             for (String pname : partitionNames) {
-                Assertions.assertTrue(mvPCellSortedSet.contains(pname),
+                Assertions.assertTrue(mvPCellSortedSet.containsName(pname),
                         String.format("%s is not in %s", pname, mvPCellSortedSet));
             }
             List<PCellWithName> mvToRefreshPartitionNames = partitionNames

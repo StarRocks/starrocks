@@ -520,7 +520,7 @@ public class PartitionUtil {
                 lowerBound = PartitionKey.createInfinityPartitionKeyWithType(
                         ImmutableList.of(partitionColPrimType), false);
             }
-            Preconditions.checkState(!mvPartitionRangeMap.contains(partitionKeyName));
+            Preconditions.checkState(!mvPartitionRangeMap.containsName(partitionKeyName));
             PartitionKey upperBound = nextPartitionKey(lowerBound, partitionDateTimeInterval, partitionColPrimType);
             mvPartitionRangeMap.add(partitionKeyName, PRangeCell.of(Range.closedOpen(lowerBound, upperBound)));
         }
@@ -604,7 +604,7 @@ public class PartitionUtil {
                                                                   String partitionName,
                                                                   PartitionKey lastPartitionKey,
                                                                   PartitionKey upperBound) {
-        Preconditions.checkState(!mvPartitionRangeMap.contains(partitionName));
+        Preconditions.checkState(!mvPartitionRangeMap.containsName(partitionName));
         mvPartitionRangeMap.add(partitionName, PRangeCell.of(Range.openClosed(lastPartitionKey, upperBound)));
     }
     /**

@@ -458,7 +458,7 @@ public final class RangePartitionDiffer extends PartitionDiffer {
             return result;
         }
 
-        List<PCellWithName> mvRanges = new ArrayList<>(mvPartitionMap.getPartitions());
+        List<PCellWithName> mvRanges = mvPartitionMap.getPartitions().stream().toList();
         for (Map.Entry<Table, PCellSortedSet> entry : basePartitionMaps.entrySet()) {
             Table baseTable = entry.getKey();
             PCellSortedSet refreshedPartitions = entry.getValue();

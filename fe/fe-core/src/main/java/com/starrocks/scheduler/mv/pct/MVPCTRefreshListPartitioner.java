@@ -443,7 +443,7 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
         // filter invalid cells from input
         PCellSortedSet mvPartitions= mv.getListPartitionItems();
         Set<PCellWithName> invalidCells = toRefreshPartitions.stream()
-                .filter(cell -> !mvPartitions.contains(cell.name()))
+                .filter(cell -> !mvPartitions.containsName(cell.name()))
                 .collect(Collectors.toSet());
         invalidCells.forEach(cell -> {
             logger.warn("Materialized view [{}] to refresh partition name {}, value {} is invalid, remove it",

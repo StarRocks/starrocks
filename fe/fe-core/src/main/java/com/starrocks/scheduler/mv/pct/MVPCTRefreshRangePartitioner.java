@@ -250,7 +250,7 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
         List<Range<PartitionKey>> mvPartitionRange = Lists.newArrayList();
         PCellSortedSet mvToCellMap = mvContext.getMVToCellMap();
         for (String partitionName : mvPartitionNames) {
-            Preconditions.checkArgument(mvToCellMap.contains(partitionName));
+            Preconditions.checkArgument(mvToCellMap.containsName(partitionName));
             PRangeCell rangeCell = (PRangeCell) mvToCellMap.getPCell(partitionName);
             mvPartitionRange.add(rangeCell.getRange());
         }
@@ -422,7 +422,7 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
         // remove invalid cells from the input to-refresh partitions
         Set<PCellWithName> invalidCells = mvPartitionsToRefresh.getPartitions()
                 .stream()
-                .filter(pCell -> !mvRangePartitionMap.contains(pCell.name()))
+                .filter(pCell -> !mvRangePartitionMap.containsName(pCell.name()))
                 .collect(Collectors.toSet());
         invalidCells.forEach(cell -> {
             logger.info("partition {} is not in mv's range partition map, remove it from to-refresh partitions",

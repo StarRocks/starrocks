@@ -804,7 +804,7 @@ public abstract class MVTestBase extends StarRocksTestBase {
         for (String val : values) {
             PListCell pListCell = new PListCell(val);
             String pName = AnalyzerUtils.getFormatPartitionValue(val);
-            if (partitions.contains(pName)) {
+            if (partitions.containsName(pName)) {
                 try {
                     pName = AnalyzerUtils.calculateUniquePartitionName(pName, pListCell, partitions);
                 } catch (Exception e) {

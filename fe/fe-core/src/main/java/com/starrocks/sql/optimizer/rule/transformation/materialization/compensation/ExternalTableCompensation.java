@@ -339,7 +339,7 @@ public final class ExternalTableCompensation extends TableCompensation {
         List<Column> partitionColumns = refBaseTablePartitionColumns.get(refBaseTable);
         try {
             for (String partitionName : toRefreshPartitionNames) {
-                if (!nameToPartitionKeys.contains(partitionName)) {
+                if (!nameToPartitionKeys.containsName(partitionName)) {
                     return null;
                 }
                 PCell pCell = nameToPartitionKeys.getPCell(partitionName);

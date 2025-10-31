@@ -1501,7 +1501,7 @@ public class AnalyzerUtils {
         String orignialPartitionName = partitionName;
         int i = 0;
         // If the partition name already exists and their partition values are different, change the partition name.
-        while (tablePartitions.contains(partitionName) && !tablePartitions.getPCell(partitionName).equals(cell)) {
+        while (tablePartitions.containsName(partitionName) && !tablePartitions.getPCell(partitionName).equals(cell)) {
             // ensure partition name is unique with case-insensitive
             int diff = orignialPartitionName.hashCode();
             partitionName = orignialPartitionName + "_" + Integer.toHexString(diff + i);

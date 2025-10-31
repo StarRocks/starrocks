@@ -535,7 +535,7 @@ public abstract class MVPCTRefreshPartitioner {
             }
             for (String toReservePartitionName : ans) {
                 // only add the mv partition name if it exists in the synced partition info
-                if (toRefreshPartitions.contains(toReservePartitionName)) {
+                if (toRefreshPartitions.containsName(toReservePartitionName)) {
                     result.add(toRefreshPartitions.getPCellWithName(toReservePartitionName));
                 } else {
                     logger.warn("Cannot find the mv partition {} in the synced partition info: {}",

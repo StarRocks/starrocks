@@ -291,7 +291,7 @@ public class PartitionUtilTest {
         PCellSortedSet partitionMap =
                 PartitionUtil.getPartitionKeyRange(table, partitionColumn, null);
         Assertions.assertEquals(partitionMap.size(), partitionNames.size());
-        Assertions.assertTrue(partitionMap.contains("p20221202"));
+        Assertions.assertTrue(partitionMap.containsName("p20221202"));
         PartitionKey upperBound = new PartitionKey();
         upperBound.pushColumn(new DateLiteral(2022, 12, 03), PrimitiveType.DATE);
 

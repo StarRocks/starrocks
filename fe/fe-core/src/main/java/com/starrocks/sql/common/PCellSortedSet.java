@@ -31,22 +31,25 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
- * A sorted set of PCellWithName with name-based access, you can use this:
+ * A sorted set of PCellWithName with name-based access which is used to unify Range and List partitions.
+ * <p>
+ * PCellSortedSet can be used to:
  * - get/remove partition by name
  * - get sorted partitions by pCell's natural order
- *
+ * <p>
  * NOTE:
- * - Partitions are sorted by PCellWithName's compareTo method.
+ * - Partitions are sorted by PCellWithName's compareTo method which is sorted by
+ *      PCell(range or list partition value) first, then sorted by name.
  * - Name-based access is case-insensitive.
  */
 public class PCellSortedSet {
     // partitions are sorted by PCellWithName's compareTo method
-    private final NavigableSet<PCellWithName> partitions;
+    private final NavigableSet<PCellWithName> pCellWithNames;
     // cache for name to partition mapping which is used to get by name
     private final Map<String, PCellWithName> nameToPCell = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
 
     public PCellSortedSet(NavigableSet<PCellWithName> partitions) {
-        this.partitions = partitions;
+        this.pCellWithNames = partitions;
         for (PCellWithName partition : partitions) {
             // ensure no duplicate names
             if (nameToPCell.containsKey(partition.name())) {
@@ -57,7 +60,7 @@ public class PCellSortedSet {
     }
 
     public static PCellSortedSet of(PCellSortedSet other) {
-        return new PCellSortedSet(new TreeSet<>(other.partitions));
+        return new PCellSortedSet(new TreeSet<>(other.pCellWithNames));
     }
 
     public static PCellSortedSet of() {
@@ -102,10 +105,10 @@ public class PCellSortedSet {
                 return;
             }
             // If partition exists but is different, remove the old one first
-            partitions.remove(existing);
+            pCellWithNames.remove(existing);
         }
         nameToPCell.put(name, partition);
-        partitions.add(partition);
+        pCellWithNames.add(partition);
     }
 
     /**
@@ -113,7 +116,7 @@ public class PCellSortedSet {
      * @return true if the set is empty, false otherwise
      */
     public boolean isEmpty() {
-        return partitions.isEmpty();
+        return pCellWithNames.isEmpty();
     }
 
     /**
@@ -121,7 +124,7 @@ public class PCellSortedSet {
      * @return the number of partitions
      */
     public int size() {
-        return partitions.size();
+        return pCellWithNames.size();
     }
 
     /**
@@ -129,8 +132,8 @@ public class PCellSortedSet {
      * @param partition the partition to check
      * @return true if the partition exists, false otherwise
      */
-    public boolean contains(PCellWithName partition) {
-        return partitions.contains(partition);
+    public boolean containsPCellWithName(PCellWithName partition) {
+        return pCellWithNames.contains(partition);
     }
 
     /**
@@ -138,7 +141,7 @@ public class PCellSortedSet {
      * @param partitionName the name of the partition
      * @return true if the partition exists, false otherwise
      */
-    public boolean contains(String partitionName) {
+    public boolean containsName(String partitionName) {
         return nameToPCell.containsKey(partitionName);
     }
 
@@ -169,7 +172,7 @@ public class PCellSortedSet {
     public boolean removeByName(String partitionName) {
         PCellWithName partition = nameToPCell.remove(partitionName);
         if (partition != null) {
-            partitions.remove(partition);
+            pCellWithNames.remove(partition);
             return true;
         }
         return false;
@@ -182,7 +185,7 @@ public class PCellSortedSet {
      */
     public boolean remove(PCellWithName partition) {
         PCellWithName removed = nameToPCell.remove(partition.name());
-        boolean removedFromSet = partitions.remove(partition);
+        boolean removedFromSet = pCellWithNames.remove(partition);
         return removed != null || removedFromSet;
     }
 
@@ -190,14 +193,14 @@ public class PCellSortedSet {
      * Get the navigable set of partitions.
      */
     public NavigableSet<PCellWithName> getPartitions() {
-        return partitions;
+        return pCellWithNames;
     }
 
     /**
      * Get a stream of the partitions.
      */
     public Stream<PCellWithName> stream() {
-        return partitions.stream();
+        return pCellWithNames.stream();
     }
 
     /**
@@ -205,21 +208,21 @@ public class PCellSortedSet {
      * @param action the action to be performed for each partition
      */
     public void forEach(Consumer<? super PCellWithName> action) {
-        partitions.forEach(action);
+        pCellWithNames.forEach(action);
     }
 
     /**
      * Get a descending iterator over the partitions.
      */
     public Iterator<PCellWithName> descendingIterator() {
-        return new ConsistentIterator(partitions.descendingIterator());
+        return new ConsistentIterator(pCellWithNames.descendingIterator());
     }
 
     /**
      * Get an iterator over the partitions.
      */
     public Iterator<PCellWithName> iterator() {
-        return new ConsistentIterator(partitions.iterator());
+        return new ConsistentIterator(pCellWithNames.iterator());
     }
 
     /**
@@ -264,11 +267,11 @@ public class PCellSortedSet {
      * @param toReserve number of partitions to reserve
      */
     public void reserveToSize(int toReserve) {
-        if (toReserve <= 0 || toReserve >= partitions.size()) {
+        if (toReserve <= 0 || toReserve >= pCellWithNames.size()) {
             return;
         }
         Iterator<PCellWithName> iterator = iterator();
-        int removeCount = partitions.size() - toReserve;
+        int removeCount = pCellWithNames.size() - toReserve;
         int i = 0;
         while (iterator.hasNext() && i++ < removeCount) {
             iterator.next();
@@ -295,7 +298,7 @@ public class PCellSortedSet {
      * @param size number of partitions to remove
      */
     public void removeFromStart(int size) {
-        if (size <= 0 || size >= partitions.size()) {
+        if (size <= 0 || size >= pCellWithNames.size()) {
             return;
         }
         Iterator<PCellWithName> iterator = iterator();
@@ -320,27 +323,27 @@ public class PCellSortedSet {
         if (other == null || other.isEmpty()) {
             return;
         }
-        for (PCellWithName partition : other.partitions) {
+        for (PCellWithName partition : other.pCellWithNames) {
             add(partition);
         }
     }
 
     @Override
     public String toString() {
-        if (partitions == null || partitions.isEmpty()) {
+        if (pCellWithNames == null || pCellWithNames.isEmpty()) {
             return "";
         }
         int maxLen = Config.max_mv_task_run_meta_message_values_length;
-        int size = partitions.size();
+        int size = pCellWithNames.size();
 
         if (size <= maxLen) {
             // Join all names if under limit - use sorted order from partitions
-            return partitions.stream()
+            return pCellWithNames.stream()
                     .map(PCellWithName::name)
                     .collect(Collectors.joining(","));
         } else {
             int half = maxLen / 2;
-            List<String> names = partitions.stream()
+            List<String> names = pCellWithNames.stream()
                     .map(PCellWithName::name)
                     .collect(Collectors.toList());
 
@@ -357,7 +360,7 @@ public class PCellSortedSet {
 
     @Override
     public int hashCode() {
-        return Objects.hashCode(partitions);
+        return Objects.hashCode(pCellWithNames);
     }
 
     @Override
@@ -369,6 +372,6 @@ public class PCellSortedSet {
             return false;
         }
         PCellSortedSet that = (PCellSortedSet) o;
-        return partitions.equals(that.partitions);
+        return pCellWithNames.equals(that.pCellWithNames);
     }
 }

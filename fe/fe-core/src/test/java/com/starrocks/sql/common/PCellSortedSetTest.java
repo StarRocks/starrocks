@@ -54,8 +54,8 @@ public class PCellSortedSetTest extends MVTestBase  {
         set.add(p1);
         set.add(p2);
 
-        Assertions.assertTrue(set.contains(p1));
-        Assertions.assertTrue(set.contains(p2));
+        Assertions.assertTrue(set.containsPCellWithName(p1));
+        Assertions.assertTrue(set.containsPCellWithName(p2));
         Assertions.assertEquals(2, set.size());
     }
 
@@ -70,13 +70,13 @@ public class PCellSortedSetTest extends MVTestBase  {
         set.add(p1);
         set.add(p2);
 
-        Assertions.assertTrue(set.contains(p1));
-        Assertions.assertTrue(set.contains(p2));
+        Assertions.assertTrue(set.containsPCellWithName(p1));
+        Assertions.assertTrue(set.containsPCellWithName(p2));
         Assertions.assertEquals(2, set.size());
 
         set.remove(p1);
-        Assertions.assertFalse(set.contains(p1));
-        Assertions.assertTrue(set.contains(p2));
+        Assertions.assertFalse(set.containsPCellWithName(p1));
+        Assertions.assertTrue(set.containsPCellWithName(p2));
         Assertions.assertEquals(1, set.size());
     }
 
