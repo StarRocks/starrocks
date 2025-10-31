@@ -529,28 +529,6 @@ Status UpdateManager::_write_segment_for_upsert(const TxnLogPB_OpWrite& op_write
     return Status::OK();
 }
 
-Status UpdateManager::_handle_upsert_index_conflicts(const TabletMetadataPtr& metadata, LakePrimaryIndex& index,
-                                                     MetaFileBuilder* builder, const Schema& pkey_schema,
-                                                     uint32_t rowset_id, const TxnLogPB_OpWrite& new_rows_op,
-                                                     const ChunkPtr& full_chunk,
-                                                     std::map<uint32_t, size_t>* segment_id_to_add_dels_new_acc) {
-    PrimaryIndex::DeletesMap new_deletes;
-    MutableColumnPtr pk_column;
-    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
-    PrimaryKeyEncoder::encode(pkey_schema, *full_chunk, 0, full_chunk->num_rows(), pk_column.get());
-    RETURN_IF_ERROR(
-            index.upsert(rowset_id + (uint32_t)new_rows_op.rowset().segments_size() - 1, 0, *pk_column, &new_deletes));
-    for (auto& [rssid, del_ids] : new_deletes) {
-        if (del_ids.empty()) continue;
-        DelVectorPtr dv = std::make_shared<DelVector>();
-        dv->init(metadata->version(), del_ids.data(), del_ids.size());
-        builder->append_delvec(dv, rssid);
-        (*segment_id_to_add_dels_new_acc)[rssid] += del_ids.size();
-    }
-
-    return Status::OK();
-}
-
 Status UpdateManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
                                                  const TabletMetadataPtr& metadata, Tablet* tablet,
                                                  LakePrimaryIndex& index, MetaFileBuilder* builder,
@@ -568,11 +546,13 @@ Status UpdateManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_writ
             .tablet = tablet,
             .container = rssid_fileinfo_container,
     };
-    RowsetUpdateState state;
+    // Create state entry for memory tracking
+    auto state_entry = _update_state_cache.get_or_create(cache_key(tablet->id(), txn_id));
+    state_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
+    DeferOp remove_state_entry([&] { _update_state_cache.remove(state_entry); });
+
+    RowsetUpdateState& state = state_entry->value();
     state.init(params);
-    for (uint32_t segment_id = 0; segment_id < op_write.rowset().segments_size(); segment_id++) {
-        RETURN_IF_ERROR(state.load_segment(segment_id, params, base_version, false /*resolve*/, false));
-    }
 
     auto tschema = params.tablet_schema;
     std::vector<uint32_t> pk_cids;
@@ -598,7 +578,11 @@ Status UpdateManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_writ
     TxnLogPB_OpWrite new_rows_op;
     uint64_t total_rows = 0;
     std::map<uint32_t, size_t> segment_id_to_add_dels_new_acc;
+
     for (uint32_t seg = 0; seg < op_write.rowset().segments_size(); ++seg) {
+        RETURN_IF_ERROR(state.load_segment(seg, params, base_version, false /*resolve*/, false));
+        _update_state_cache.update_object_size(state_entry, state.memory_usage());
+
         const auto& cps = state.parital_update_states(seg);
         // use src_rss_rowids == UINT64_MAX to detect insert_rowids
         std::vector<uint32_t> insert_rowids;
@@ -606,15 +590,59 @@ Status UpdateManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_writ
         for (uint32_t i = 0; i < cps.src_rss_rowids.size(); ++i) {
             if (cps.src_rss_rowids[i] == UINT64_MAX) insert_rowids.push_back(i);
         }
-        if (insert_rowids.empty()) continue;
 
-        ChunkPtr full_chunk;
-        RETURN_IF_ERROR(_write_segment_for_upsert(op_write, tschema, tablet, fs, txn_id, seg, insert_rowids,
-                                                  update_cids, &new_rows_op, &total_rows, &full_chunk));
+        if (!insert_rowids.empty()) {
+            // Process insert rowids in batches to avoid memory overflow
+            const size_t batch_size = std::max<size_t>(1, config::column_mode_partial_update_batch_size);
+            uint32_t seg_idx_before = new_rows_op.rowset().segments_size();
 
-        RETURN_IF_ERROR(_handle_upsert_index_conflicts(metadata, index, builder, pkey_schema, rowset_id, new_rows_op,
-                                                       full_chunk, &segment_id_to_add_dels_new_acc));
+            MutableColumnPtr pk_column;
+            RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
+
+            for (size_t batch_start = 0; batch_start < insert_rowids.size(); batch_start += batch_size) {
+                size_t batch_end = std::min(batch_start + batch_size, insert_rowids.size());
+                std::vector<uint32_t> batch_insert_rowids(insert_rowids.begin() + batch_start,
+                                                          insert_rowids.begin() + batch_end);
+
+                ChunkPtr full_chunk;
+                RETURN_IF_ERROR(_write_segment_for_upsert(op_write, tschema, tablet, fs, txn_id, seg,
+                                                          batch_insert_rowids, update_cids, &new_rows_op, &total_rows,
+                                                          &full_chunk));
+
+                // Extract primary keys from the chunk
+                PrimaryKeyEncoder::encode(pkey_schema, *full_chunk, 0, full_chunk->num_rows(), pk_column.get());
+            }
+
+            // Handle index conflicts for newly written segments
+            uint32_t seg_idx_after = new_rows_op.rowset().segments_size();
+            if (seg_idx_after > seg_idx_before) {
+                for (uint32_t seg_idx = seg_idx_before; seg_idx < seg_idx_after; ++seg_idx) {
+                    size_t rows_per_segment = batch_size;
+                    if (seg_idx == seg_idx_after - 1) {
+                        rows_per_segment = insert_rowids.size() - (seg_idx - seg_idx_before) * batch_size;
+                    }
+
+                    size_t pk_offset = (seg_idx - seg_idx_before) * batch_size;
+
+                    PrimaryIndex::DeletesMap segment_deletes;
+                    RETURN_IF_ERROR(index.upsert(rowset_id + seg_idx, 0, *pk_column, pk_offset,
+                                                 pk_offset + rows_per_segment, &segment_deletes));
+
+                    for (auto& [rssid, del_ids] : segment_deletes) {
+                        if (del_ids.empty()) continue;
+                        DelVectorPtr dv = std::make_shared<DelVector>();
+                        dv->init(metadata->version(), del_ids.data(), del_ids.size());
+                        builder->append_delvec(dv, rssid);
+                        segment_id_to_add_dels_new_acc[rssid] += del_ids.size();
+                    }
+                }
+            }
+        }
+
+        state.release_segment(seg);
+        _update_state_cache.update_object_size(state_entry, state.memory_usage());
     }
+
     new_rows_op.mutable_rowset()->set_num_rows(total_rows);
     new_rows_op.mutable_rowset()->set_data_size(0);
     new_rows_op.mutable_rowset()->set_overlapped(new_rows_op.rowset().segments_size() > 1);
@@ -689,8 +717,10 @@ Status UpdateManager::publish_column_mode_partial_update(const TxnLogPB_OpWrite&
             .container = rssid_fileinfo_container,
     };
 
-    ColumnModePartialUpdateHandler handler(base_version, txn_id, _update_mem_tracker);
-    RETURN_IF_ERROR(handler.execute(params, builder));
+    {
+        ColumnModePartialUpdateHandler handler(base_version, txn_id, _update_mem_tracker);
+        RETURN_IF_ERROR(handler.execute(params, builder));
+    }
 
     const uint32_t rowset_id = metadata->next_rowset_id();
     const uint32_t del_rebuild_rssid = rowset_id + std::max(op_write.rowset().segments_size(), 1) - 1;
