@@ -64,4 +64,14 @@ public class SessionVariableTest {
                     e.getMessage().contains("Legal values of choose_execute_instances_mode are"));
         }
     }
+
+    @Test
+    public void testSetEnableInsertPartialUpdate() {
+        SessionVariable sessionVariable = new SessionVariable();
+        sessionVariable.setEnableInsertPartialUpdate(true);
+        Assertions.assertTrue(sessionVariable.isEnableInsertPartialUpdate());
+
+        sessionVariable.setEnableInsertPartialUpdate(false);
+        Assertions.assertFalse(sessionVariable.isEnableInsertPartialUpdate());
+    }
 }
