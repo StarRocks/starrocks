@@ -23,6 +23,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.statistic.StatisticUtils;
+import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.collections4.MapUtils;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -451,7 +453,7 @@ public class BinaryPredicateStatisticCalculator {
                 estimateBucketToBucket(leftHistogram, leftColumnDistinctCount, leftColumnType, rightHistogram,
                         rightColumnDistinctCount, rightColumnType);
 
-        if (estimatedMcv.isEmpty() && estimatedBuckets.isEmpty()) {
+        if (MapUtils.isEmpty(estimatedMcv) && CollectionUtils.isEmpty(estimatedBuckets)) {
             return Optional.empty();
         }
 
