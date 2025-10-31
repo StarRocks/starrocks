@@ -915,7 +915,7 @@ public class StmtExecutor {
             String sql = originStmt != null ? originStmt.originStmt : "";
             String truncatedSql = sql.length() > 200 ? sql.substring(0, 200) + "..." : sql;
             LOG.error("LargeInPredicate optimization failed, sql: {}, error: {}. Will retry with" +
-                            " enable_large_in_predicate=false.", truncatedSql, e.getMessage());
+                    " enable_large_in_predicate=false.", truncatedSql, e.getMessage());
             throw e;
         } catch (StarRocksException e) {
             String sql = originStmt != null ? originStmt.originStmt : "";
@@ -1517,7 +1517,12 @@ public class StmtExecutor {
         }
 
         if (context instanceof ArrowFlightSqlConnectContext) {
-            coord.join(0);
+            coord.join(context.getSessionVariable().getQueryTimeoutS());
+            if (!isOutfileQuery) {
+                context.getState().setEof();
+            }
+            // TODO(liuzihe): process query statistics for Arrow Flight SQL. For now query statistics is passed by the final
+            //  batch, so we need to change the implementation to support Arrow Flight SQL.
         }
 
         processQueryStatisticsFromResult(batch, execPlan, isOutfileQuery);

@@ -462,18 +462,20 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
 
                     ctx.setDeploymentFinished(null);
                     processorFinished.complete(null);
-                } catch (Exception e) {
-                    processorFinished.completeExceptionally(e);
                 } catch (Throwable t) {
                     processorFinished.completeExceptionally(t);
                 }
             });
 
-            processorFinished.get();
+            // Wait util deployment finished or ArrowFlightSqlConnectProcessor finished.
+            SessionVariable sv = ctx.getSessionVariable();
+            Coordinator coordinator = ctx.waitForDeploymentFinished(sv.getQueryTimeoutS() * 1000L);
+
             // ------------------------------------------------------------------------------------
             // FE task will return FE as endpoint.
             // ------------------------------------------------------------------------------------
-            if (ctx.returnFromFE() || ctx.isFromFECoordinator()) {
+            if (ctx.returnFromFE()) {
+                processorFinished.get();
                 if (ctx.getState().isError()) {
                     throw new RuntimeException(String.format("failed to process query [queryID=%s] [error=%s]",
                             DebugUtil.printId(ctx.getExecutionId()),
@@ -493,8 +495,6 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
             // ------------------------------------------------------------------------------------
             // Query task will wait until deployment to BE is finished and return BE as endpoint.
             // ------------------------------------------------------------------------------------
-            SessionVariable sv = ctx.getSessionVariable();
-            Coordinator coordinator = ctx.waitForDeploymentFinished(sv.getQueryTimeoutS() * 1000L);
             if (coordinator == null || ctx.getState().isError()) {
                 throw new RuntimeException(String.format("failed to process query [queryID=%s] [error=%s]",
                         DebugUtil.printId(ctx.getExecutionId()),
