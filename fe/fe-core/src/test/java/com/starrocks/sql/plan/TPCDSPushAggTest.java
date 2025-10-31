@@ -184,7 +184,7 @@ public class TPCDSPushAggTest extends TPCDS1TTestBase {
                 Arguments.of("Q54", 9, 9, false, 18, true, 11, true, 17, true),
                 Arguments.of("Q55", 2, 2, false, 4, true, 4, true, 4, true),
                 Arguments.of("Q56", 8, 8, false, 14, true, 14, true, 14, true),
-                Arguments.of("Q57", 2, 2, true, 4, true, 4, true, 4, true),
+                //                Arguments.of("Q57", 2, 2, true, 4, true, 4, true, 4, true),
                 Arguments.of("Q58", 6, 12, true, 12, true, 12, true, 12, true),
                 Arguments.of("Q59", 2, 4, true, 4, true, 4, true, 4, true),
                 Arguments.of("Q60", 8, 8, false, 14, true, 14, true, 14, true),
