@@ -85,13 +85,16 @@ public class IVMAnalyzer {
     );
 
     private final ConnectContext connectContext;
+    private final CreateMaterializedViewStatement statement;
     private final QueryStatement queryStatement;
 
     private boolean isNeedRetractableSink = false;
 
     public IVMAnalyzer(ConnectContext connectContext,
+                       CreateMaterializedViewStatement statement,
                        QueryStatement queryStatement) {
         this.connectContext = connectContext;
+        this.statement = statement;
         this.queryStatement = queryStatement;
     }
 
@@ -313,7 +316,11 @@ public class IVMAnalyzer {
         selectRelation.setAggregate(newAggFuncs);
 
         // Build the row ID function expression
-        FunctionCallExpr rowIdFuncExpr = TvrOpUtils.buildRowIdFuncExpr(groupByExprs);
+        int encodeRowIdVersion = TvrOpUtils.deduceEncodeRowIdVersion(groupByExprs);
+        if (statement != null) {
+            statement.setEncodeRowIdVersion(encodeRowIdVersion);
+        }
+        FunctionCallExpr rowIdFuncExpr = TvrOpUtils.buildRowIdFuncExpr(encodeRowIdVersion, groupByExprs);
         SelectList selectList = selectRelation.getSelectList();
         List<SelectListItem> newItems = Lists.newArrayList();
         // add row_id func expr
