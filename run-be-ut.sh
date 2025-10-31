@@ -143,7 +143,7 @@ while true; do
     esac
 done
 
-if [[ "${BUILD_TYPE}" == "ASAN" && "${WITH_GCOV}" == "ON" ]]; then
+if [[ "${BUILD_TYPE}" == "ASAN" && ("${WITH_GCOV}" == "ON") ]]; then
     echo "Error: ASAN and gcov cannot be enabled at the same time. Please disable one of them."
     exit 1
 fi
@@ -151,6 +151,14 @@ fi
 if [ ${HELP} -eq 1 ]; then
     usage
     exit 0
+fi
+
+# Handle incremental gcov: detect changed files
+GCOV_INCREMENTAL_FILES=""
+if [[ "${WITH_GCOV}" == "ON" ]]; then
+    # Source the common incremental file detection script
+    source ${STARROCKS_HOME}/build-support/detect_incremental_files.sh
+    detect_incremental_files "unit-test"
 fi
 
 CMAKE_BUILD_TYPE=${BUILD_TYPE:-ASAN}
@@ -214,6 +222,7 @@ ${CMAKE_CMD}  -G "${CMAKE_GENERATOR}" \
             -DUSE_STAROS=${USE_STAROS} \
             -DSTARLET_INSTALL_DIR=${STARLET_INSTALL_DIR}          \
             -DWITH_GCOV=${WITH_GCOV} \
+            -DGCOV_INCREMENTAL_FILES="${GCOV_INCREMENTAL_FILES}" \
             -DWITH_STARCACHE=${WITH_STARCACHE} \
             -DWITH_BRPC_KEEPALIVE=${WITH_BRPC_KEEPALIVE} \
             -DSTARROCKS_JIT_ENABLE=ON \
