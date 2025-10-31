@@ -778,7 +778,20 @@ public class StmtExecutor {
             // the exception happens when interact with client
             // this exception shows the connection is gone
             context.getState().setError(e.getMessage());
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (LargeInPredicateException e) {
+            // Re-throw LargeInPredicateException to trigger a full retry from parser stage
+            // The query will be re-parsed and re-executed with enable_large_in_predicate=false
+            // to use the traditional expression-based approach instead of raw constant optimization
+            String sql = originStmt != null ? originStmt.originStmt : "";
+            String truncatedSql = sql.length() > 200 ? sql.substring(0, 200) + "..." : sql;
+            LOG.error("LargeInPredicate optimization failed, sql: {}, error: {}. Will retry with" +
+                    " enable_large_in_predicate=false.", truncatedSql, e.getMessage());
+            throw e;
+        } catch (StarRocksException e) {
+>>>>>>> 49eb8b6ef1 ([BugFix] Fix bugs for Arrow Flight SQL (#64736))
             String sql = originStmt != null ? originStmt.originStmt : "";
             // analysis exception only print message, not print the stack
             LOG.info("execute Exception, sql: {}, error: {}", sql, e.getMessage());
@@ -1337,6 +1350,18 @@ public class StmtExecutor {
             }
         }
 
+<<<<<<< HEAD
+=======
+        if (context instanceof ArrowFlightSqlConnectContext) {
+            coord.join(context.getSessionVariable().getQueryTimeoutS());
+            if (!isOutfileQuery) {
+                context.getState().setEof();
+            }
+            // TODO(liuzihe): process query statistics for Arrow Flight SQL. For now query statistics is passed by the final
+            //  batch, so we need to change the implementation to support Arrow Flight SQL.
+        }
+
+>>>>>>> 49eb8b6ef1 ([BugFix] Fix bugs for Arrow Flight SQL (#64736))
         processQueryStatisticsFromResult(batch, execPlan, isOutfileQuery);
     }
 
