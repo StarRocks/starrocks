@@ -140,7 +140,7 @@ mysql> explain verbose select col1 from hudi_table;
 +-----------------------------------------+
 ```
 
-如上示例中，因查询扫描表的全部分区，dataCacheOptions={populate: false} 表明该查询不会触发 Data Cache 填充。
+如上示例中，因查询扫描表的全部分区，`dataCacheOptions={populate: false}` 表明该查询不会触发 Data Cache 填充。
 
 您还可以通过 Session Variable [populate_datacache_mode](../sql-reference/System_variable.md#populate_datacache_mode) 对缓存填充规则进行更灵活的自定义配置。
 
