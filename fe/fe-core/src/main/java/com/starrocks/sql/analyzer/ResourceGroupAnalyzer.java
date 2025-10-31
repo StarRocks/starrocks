@@ -206,6 +206,11 @@ public class ResourceGroupAnalyzer {
                     continue;
                 }
 
+                if (key.equalsIgnoreCase(ResourceGroup.MEM_POOL)) {
+                    resourceGroup.setMemPool(value);
+                    continue;
+                }
+
                 if (key.equalsIgnoreCase(ResourceGroup.BIG_QUERY_MEM_LIMIT)) {
                     long bigQueryMemLimit = Long.parseLong(value);
                     if (bigQueryMemLimit < 0) {
