@@ -239,6 +239,7 @@ public class MergeCommitTask implements Runnable {
             loadPlanner.setBatchWrite(batchWriteIntervalMs,
                     ImmutableMap.<String, String>builder()
                             .putAll(loadParameters.toMap()).build(), coordinatorBackendIds);
+            loadPlanner.setMergeConditionStr(streamLoadInfo.getMergeConditionStr());
             loadPlanner.plan();
             timeTrace.deployPlanTimeMs = System.currentTimeMillis();
             coordinator = coordinatorFactory.createStreamLoadScheduler(loadPlanner);
