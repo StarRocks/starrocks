@@ -83,6 +83,8 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     private List<BaseTableInfo> baseTableInfos;
     // the refresh mode of the mv determined by analyzer
     private MaterializedView.RefreshMode currentRefreshMode = MaterializedView.RefreshMode.PCT;
+    // the encode row id version deduced by analyzer
+    private int encodeRowIdVersion = 0;
 
     // Maintenance information
     ExecPlan maintenancePlan;
@@ -375,6 +377,14 @@ public class CreateMaterializedViewStatement extends DdlStmt {
 
     public MaterializedView.RefreshMode getCurrentRefreshMode() {
         return currentRefreshMode;
+    }
+
+    public void setEncodeRowIdVersion(int encodeRowIdVersion) {
+        this.encodeRowIdVersion = encodeRowIdVersion;
+    }
+
+    public int getEncodeRowIdVersion() {
+        return encodeRowIdVersion;
     }
 
     @Override

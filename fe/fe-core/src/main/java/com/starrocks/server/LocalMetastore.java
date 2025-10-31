@@ -3065,6 +3065,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         materializedView.setOriginalDBName(stmt.getOriginalDBName());
         // current refresh mode
         materializedView.setCurrentRefreshMode(stmt.getCurrentRefreshMode());
+        // set encode row id version
+        materializedView.setEncodeRowIdVersion(stmt.getEncodeRowIdVersion());
         // set partitionRefTableExprs
         if (stmt.getPartitionRefTableExpr() != null) {
             //avoid to get a list of null inside
