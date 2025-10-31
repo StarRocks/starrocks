@@ -17,7 +17,6 @@ package com.starrocks.sql.common;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.common.collect.RangeSet;
 import com.google.common.collect.Sets;
@@ -49,8 +48,7 @@ import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.mv.MVRangePartitionMapper;
-import org.apache.commons.collections.CollectionUtils;
-import org.apache.commons.collections.MapUtils;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -69,7 +67,6 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.FunctionSet.WEEK;
-import static com.starrocks.sql.common.PRangeCellPlus.toPRangeCellPlus;
 import static com.starrocks.sql.common.TimeUnitUtils.DAY;
 import static com.starrocks.sql.common.TimeUnitUtils.HOUR;
 import static com.starrocks.sql.common.TimeUnitUtils.MINUTE;
@@ -90,38 +87,39 @@ public class SyncPartitionUtils {
 
     private static final String DEFAULT_PREFIX = "p";
 
-    public static PartitionDiff getRangePartitionDiffOfSlotRef(Map<String, Range<PartitionKey>> baseRangeMap,
-                                                               Map<String, Range<PartitionKey>> mvRangeMap,
+    public static PartitionDiff getRangePartitionDiffOfSlotRef(PCellSortedSet baseRangeMap,
+                                                               PCellSortedSet mvRangeMap,
                                                                RangePartitionDiffer differ) {
         // This synchronization method has a one-to-one correspondence
         // between the base table and the partition of the mv.
         RangeSet<PartitionKey> ranges = TreeRangeSet.create();
-        Map<String, Range<PartitionKey>> unique = Maps.newHashMap();
-        for (Map.Entry<String, Range<PartitionKey>> entry : baseRangeMap.entrySet()) {
-            if (!ranges.encloses(entry.getValue())) {
-                ranges.add(entry.getValue());
-                unique.put(entry.getKey(), entry.getValue());
+        PCellSortedSet unique = PCellSortedSet.of();
+        for (PCellWithName entry : baseRangeMap.getPartitions()) {
+            PRangeCell rangeCell = entry.cell().cast();
+            if (!ranges.encloses(rangeCell.getRange())) {
+                ranges.add(rangeCell.getRange());
+                unique.add(entry);
             }
         }
         return differ != null ? differ.diff(unique, mvRangeMap) :
                 RangePartitionDiffer.simpleDiff(unique, mvRangeMap);
     }
 
-    public static boolean hasRangePartitionChanged(Map<String, Range<PartitionKey>> baseRangeMap,
-                                                   Map<String, Range<PartitionKey>> mvRangeMap) {
+    public static boolean hasRangePartitionChanged(PCellSortedSet baseRangeMap,
+                                                   PCellSortedSet mvRangeMap) {
         PartitionDiff diff = RangePartitionDiffer.simpleDiff(baseRangeMap, mvRangeMap);
-        if (MapUtils.isNotEmpty(diff.getAdds()) || MapUtils.isNotEmpty(diff.getDeletes())) {
+        if (!diff.getAdds().isEmpty() || !diff.getDeletes().isEmpty()) {
             return true;
         }
         return false;
     }
 
-    public static PartitionDiff getRangePartitionDiffOfExpr(Map<String, Range<PartitionKey>> baseRangeMap,
-                                                            Map<String, Range<PartitionKey>> mvRangeMap,
+    public static PartitionDiff getRangePartitionDiffOfExpr(PCellSortedSet baseRangeMap,
+                                                            PCellSortedSet mvRangeMap,
                                                             FunctionCallExpr functionCallExpr,
                                                             RangePartitionDiffer differ) {
         PrimitiveType partitionColumnType = functionCallExpr.getType().getPrimitiveType();
-        Map<String, Range<PartitionKey>> rollupRange = Maps.newHashMap();
+        PCellSortedSet rollupRange = PCellSortedSet.of();
         if (functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.DATE_TRUNC)) {
             String granularity = ((StringLiteral) functionCallExpr.getChild(0)).getValue().toLowerCase();
             rollupRange = toMappingRanges(baseRangeMap, granularity, partitionColumnType);
@@ -131,31 +129,30 @@ public class SyncPartitionUtils {
         return getRangePartitionDiff(mvRangeMap, rollupRange, differ);
     }
 
-    public static Map<String, Range<PartitionKey>> toMappingRanges(Map<String, Range<PartitionKey>> baseRangeMap,
-                                                                   String granularity,
-                                                                   PrimitiveType partitionType) {
+    public static PCellSortedSet toMappingRanges(PCellSortedSet baseRangeMap,
+                                                 String granularity,
+                                                 PrimitiveType partitionType) {
         MVRangePartitionMapper mapper = MVRangePartitionMapper.getInstance(granularity);
         return mapper.toMappingRanges(baseRangeMap, granularity, partitionType);
     }
 
-    private static Map<String, Range<PartitionKey>> mappingRangeListForDate(
-            Map<String, Range<PartitionKey>> baseRangeMap) {
-        Map<String, Range<PartitionKey>> result = Maps.newHashMap();
-        for (Map.Entry<String, Range<PartitionKey>> rangeEntry : baseRangeMap.entrySet()) {
-            Range<PartitionKey> dateRange = convertToDatePartitionRange(rangeEntry.getValue());
+    private static PCellSortedSet mappingRangeListForDate(PCellSortedSet baseRangeMap) {
+        PCellSortedSet result = PCellSortedSet.of();
+        for (PCellWithName rangeEntry : baseRangeMap.getPartitions()) {
+            PRangeCell rangeCell = rangeEntry.cell().cast();
+            Range<PartitionKey> dateRange = convertToDatePartitionRange(rangeCell.getRange());
             DateLiteral lowerDate = (DateLiteral) dateRange.lowerEndpoint().getKeys().get(0);
             DateLiteral upperDate = (DateLiteral) dateRange.upperEndpoint().getKeys().get(0);
             String mvPartitionName = getMVPartitionName(lowerDate.toLocalDateTime(), upperDate.toLocalDateTime());
-
-            result.put(mvPartitionName, dateRange);
+            result.add(mvPartitionName, new PRangeCell(dateRange));
         }
 
         return result;
     }
 
     @NotNull
-    private static PartitionDiff getRangePartitionDiff(Map<String, Range<PartitionKey>> mvRangeMap,
-                                                       Map<String, Range<PartitionKey>> rollupRange,
+    private static PartitionDiff getRangePartitionDiff(PCellSortedSet mvRangeMap,
+                                                       PCellSortedSet rollupRange,
                                                        RangePartitionDiffer differ) {
         // TODO: Callers may use `List<PartitionRange>` directly.
         PartitionDiff diff = differ != null ? differ.diff(rollupRange, mvRangeMap) :
@@ -272,15 +269,18 @@ public class SyncPartitionUtils {
      * return all src partition name to intersected dst partition names which the src partition
      * is intersected with dst partitions.
      */
-    public static Map<String, Set<String>> getIntersectedPartitions(Map<String, Range<PartitionKey>> srcRangeMap,
-                                                                    Map<String, Range<PartitionKey>> dstRangeMap) {
+    public static Map<String, Set<String>> getIntersectedPartitions(PCellSortedSet srcRangeMap,
+                                                                    PCellSortedSet dstRangeMap) {
         if (dstRangeMap.isEmpty()) {
-            return srcRangeMap.keySet().stream().collect(Collectors.toMap(Function.identity(), Sets::newHashSet));
+            return srcRangeMap
+                    .stream()
+                    .map(PCellWithName::name)
+                    .collect(Collectors.toMap(Function.identity(), Sets::newHashSet));
         }
 
         // TODO: Callers may use `List<PartitionRange>` directly.
-        List<PRangeCellPlus> srcRanges = toPRangeCellPlus(srcRangeMap, true);
-        List<PRangeCellPlus> dstRanges = toPRangeCellPlus(dstRangeMap, true);
+        List<PCellWithName> srcRanges = srcRangeMap.getPartitions().stream().toList();
+        List<PCellWithName> dstRanges = dstRangeMap.getPartitions().stream().toList();
         return getIntersectedPartitions(srcRanges, dstRanges);
     }
 
@@ -306,11 +306,11 @@ public class SyncPartitionUtils {
      * @return : return all src partition name to intersected dst partition names which the src partition
      * is intersected with dst ranges.
      */
-    public static Map<String, Set<String>> getIntersectedPartitions(List<PRangeCellPlus> srcRanges,
-                                                                    List<PRangeCellPlus> dstRanges) {
+    public static Map<String, Set<String>> getIntersectedPartitions(List<PCellWithName> srcRanges,
+                                                                    List<PCellWithName> dstRanges) {
         if (!srcRanges.isEmpty() && !dstRanges.isEmpty()) {
-            PRangeCell srcRangeCell0 = srcRanges.get(0).getCell();
-            PRangeCell dstRangeCell0 = dstRanges.get(0).getCell();
+            PRangeCell srcRangeCell0 = srcRanges.get(0).cell().cast();
+            PRangeCell dstRangeCell0 = dstRanges.get(0).cell().cast();
             List<PrimitiveType> srcTypes = srcRangeCell0.getRange().lowerEndpoint().getTypes();
             List<PrimitiveType> dstTypes = dstRangeCell0.getRange().lowerEndpoint().getTypes();
             int len = Math.min(srcTypes.size(), dstTypes.size());
@@ -323,17 +323,17 @@ public class SyncPartitionUtils {
         }
 
         Map<String, Set<String>> result = srcRanges.stream().collect(
-                Collectors.toMap(PRangeCellPlus::getPartitionName, x -> Sets.newHashSet()));
+                Collectors.toMap(PCellWithName::name, x -> Sets.newHashSet()));
 
-        Collections.sort(srcRanges, PRangeCellPlus::compareTo);
-        Collections.sort(dstRanges, PRangeCellPlus::compareTo);
-        List<PartitionKey> lowerPoints = dstRanges.stream().map(
-                dstRange -> dstRange.getCell().getRange().lowerEndpoint()).toList();
+        List<PartitionKey> lowerPoints = dstRanges.stream()
+                .map(pCell -> (PRangeCell) pCell.cell())
+                .map(dstRange -> dstRange.getRange().lowerEndpoint())
+                .toList();
         List<PartitionKey> upperPoints = dstRanges.stream().map(
-                dstRange -> dstRange.getCell().getRange().upperEndpoint()).toList();
-        for (PRangeCellPlus srcRange : srcRanges) {
-            PartitionKey lower = srcRange.getCell().getRange().lowerEndpoint();
-            PartitionKey upper = srcRange.getCell().getRange().upperEndpoint();
+                dstRange -> ((PRangeCell) dstRange.cell()).getRange().upperEndpoint()).toList();
+        for (PCellWithName srcRange : srcRanges) {
+            PartitionKey lower = ((PRangeCell) srcRange.cell()).getRange().lowerEndpoint();
+            PartitionKey upper = ((PRangeCell) srcRange.cell()).getRange().upperEndpoint();
 
             // For an interval [l, r], if there exists another interval [li, ri] that intersects with it, this interval
             // must satisfy l ≤ ri and r ≥ li. Therefore, if there exists a pos_a such that for all k < pos_a,
@@ -342,10 +342,10 @@ public class SyncPartitionUtils {
             int posA = PartitionKey.findLastLessEqualInOrderedList(lower, upperPoints);
             int posB = PartitionKey.findLastLessEqualInOrderedList(upper, lowerPoints);
 
-            Set<String> addedSet = result.get(srcRange.getPartitionName());
+            Set<String> addedSet = result.get(srcRange.name());
             for (int i = posA; i <= posB; ++i) {
-                if (dstRanges.get(i).isIntersected(srcRange)) {
-                    addedSet.add(dstRanges.get(i).getPartitionName());
+                if (dstRanges.get(i).cell().isIntersected(srcRange.cell())) {
+                    addedSet.add(dstRanges.get(i).name());
                 }
             }
         }
@@ -751,9 +751,11 @@ public class SyncPartitionUtils {
             Map<String, MaterializedView.BasePartitionInfo> mvTableVersionMap = versionMap.get(tableId);
             if (mvTableVersionMap != null && mvPartitionRange != null && baseTable instanceof OlapTable) {
                 // use range derive connect base partition
-                Map<String, Range<PartitionKey>> basePartitionMap = ((OlapTable) baseTable).getRangePartitionMap();
+                PCellSortedSet basePartitionMap = ((OlapTable) baseTable).getRangePartitionMap();
+                PCellSortedSet mvPartitionRangeMap = PCellSortedSet.of();
+                mvPartitionRangeMap.add(mvPartitionName, new PRangeCell(mvPartitionRange));
                 Map<String, Set<String>> mvToBaseMapping = getIntersectedPartitions(
-                        Collections.singletonMap(mvPartitionName, mvPartitionRange), basePartitionMap);
+                        mvPartitionRangeMap, basePartitionMap);
                 mvToBaseMapping.values().forEach(parts -> parts.forEach(mvTableVersionMap::remove));
             }
         } else {
@@ -871,11 +873,12 @@ public class SyncPartitionUtils {
      */
     public static boolean isCalcPotentialRefreshPartition(Map<Table, PCellSortedSet> baseChangedPartitionNames,
                                                           PCellSortedSet mvPartitions) {
-        List<PRangeCell> mvSortedPartitionRanges = mvPartitions.partitions().stream()
+        List<PRangeCell> mvSortedPartitionRanges = mvPartitions.getPartitions()
+                .stream()
                 .map(p -> (PRangeCell) p.cell())
                 .collect(Collectors.toList());
         for (PCellSortedSet baseTableSortedSet : baseChangedPartitionNames.values()) {
-            for (PCellWithName basePartitionRange : baseTableSortedSet.partitions()) {
+            for (PCellWithName basePartitionRange : baseTableSortedSet.getPartitions()) {
                 PRangeCell pRangeCell = (PRangeCell) basePartitionRange.cell();
                 if (isManyToManyPartitionRangeMapping(pRangeCell, mvSortedPartitionRanges)) {
                     return true;

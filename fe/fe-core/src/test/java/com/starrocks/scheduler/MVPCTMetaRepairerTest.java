@@ -18,6 +18,7 @@ package com.starrocks.scheduler;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.scheduler.mv.pct.MVPCTMetaRepairer;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
@@ -155,6 +156,7 @@ public class MVPCTMetaRepairerTest extends MVTestBase {
 
     @Test
     public void testPCTRepairerWithHive() throws Exception {
+        Config.enable_materialized_view_external_table_precise_refresh = true;
         // hive catalog
         ConnectorPlanTestBase.mockHiveCatalog(connectContext);
 
@@ -194,7 +196,7 @@ public class MVPCTMetaRepairerTest extends MVTestBase {
             try {
                 refreshMaterializedView("test", "hive_mv1");
             } catch (Exception e) {
-                Assertions.fail();
+                Assertions.fail(e.getMessage());
             }
             assertThat(mv.isActive()).isTrue();
         }
@@ -211,5 +213,6 @@ public class MVPCTMetaRepairerTest extends MVTestBase {
         }
 
         ConnectorPlanTestBase.dropCatalog("hive0");
+        Config.enable_materialized_view_external_table_precise_refresh = false;
     }
 }

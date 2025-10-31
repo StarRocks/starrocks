@@ -55,6 +55,8 @@ import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.PCell;
+import com.starrocks.sql.common.PCellSortedSet;
+import com.starrocks.sql.common.PCellWithName;
 import com.starrocks.sql.common.PListCell;
 import com.starrocks.sql.common.PRangeCell;
 import com.starrocks.sql.optimizer.Utils;
@@ -393,7 +395,7 @@ public class PartitionSelector {
     private static List<Long> getPartitionsByRetentionCondition(Database db,
                                                                 OlapTable olapTable,
                                                                 String ttlCondition,
-                                                                Map<String, PCell> inputCells,
+                                                                PCellSortedSet inputCells,
                                                                 Map<Long, String> inputCellIdToNameMap,
                                                                 boolean isMockPartitionIds) {
         TableName tableName = new TableName(db.getFullName(), olapTable.getName());
@@ -418,19 +420,19 @@ public class PartitionSelector {
         //  rather than by ids.
         Map<Long, PCell> inputCellsMap = null;
         long initialPartitionId = 0;
-        if (!CollectionUtils.sizeIsEmpty(inputCells)) {
+        if (inputCells != null && !inputCells.isEmpty()) {
             inputCellsMap = Maps.newHashMap();
             if (isMockPartitionIds) {
-                for (Map.Entry<String, PCell> e : inputCells.entrySet()) {
-                    inputCellsMap.put(initialPartitionId, e.getValue());
-                    inputCellIdToNameMap.put(initialPartitionId, e.getKey());
+                for (PCellWithName e : inputCells.getPartitions()) {
+                    inputCellsMap.put(initialPartitionId, e.cell());
+                    inputCellIdToNameMap.put(initialPartitionId, e.name());
                     initialPartitionId--;
                 }
             } else {
-                for (Map.Entry<String, PCell> e : inputCells.entrySet()) {
-                    Partition partition = olapTable.getPartition(e.getKey());
-                    inputCellsMap.put(partition.getId(), e.getValue());
-                    inputCellIdToNameMap.put(partition.getId(), e.getKey());
+                for (PCellWithName e : inputCells.getPartitions()) {
+                    Partition partition = olapTable.getPartition(e.name());
+                    inputCellsMap.put(partition.getId(), e.cell());
+                    inputCellIdToNameMap.put(partition.getId(), e.name());
                 }
             }
         }
@@ -441,7 +443,7 @@ public class PartitionSelector {
     private static List<String> getPartitionsByRetentionCondition(Database db,
                                                                   OlapTable olapTable,
                                                                   String ttlCondition,
-                                                                  Map<String, PCell> inputCells,
+                                                                  PCellSortedSet inputCells,
                                                                   boolean isMockPartitionIds,
                                                                   Predicate<Pair<Set<Long>, Long>> pred) {
 
@@ -457,22 +459,13 @@ public class PartitionSelector {
                 .map(Partition::getName)
                 .collect(Collectors.toList());
         // if input cells are not empty, filter out the partitions which are expired too.
-        if (!CollectionUtils.sizeIsEmpty(inputCells)) {
+        if (inputCells != null && !inputCells.isEmpty()) {
             Preconditions.checkArgument(inputCellIdToNameMap != null);
             inputCellIdToNameMap.entrySet().stream()
                     .filter(e -> pred.apply(Pair.create(retentionPartitionSet, e.getKey())))
                     .forEach(e -> result.add(e.getValue()));
         }
         return result;
-    }
-
-    public static List<String> getReservedPartitionsByRetentionCondition(Database db,
-                                                                         OlapTable olapTable,
-                                                                         String ttlCondition,
-                                                                         Map<String, PCell> inputCells,
-                                                                         boolean isMockPartitionIds) {
-        return getPartitionsByRetentionCondition(db, olapTable, ttlCondition, inputCells, isMockPartitionIds,
-                (pair) -> pair.first.contains(pair.second));
     }
 
     /**
@@ -492,7 +485,7 @@ public class PartitionSelector {
     public static List<String> getExpiredPartitionsByRetentionCondition(Database db,
                                                                         OlapTable olapTable,
                                                                         String ttlCondition,
-                                                                        Map<String, PCell> inputCells,
+                                                                        PCellSortedSet inputCells,
                                                                         boolean isMockPartitionIds) {
         return getPartitionsByRetentionCondition(db, olapTable, ttlCondition, inputCells, isMockPartitionIds,
                 (pair) -> !pair.first.contains(pair.second));
@@ -537,7 +530,7 @@ public class PartitionSelector {
                                                          Map<Long, PCell> inputCells) {
         // clone it to avoid changing the original map
         Map<Long, Range<PartitionKey>> keyRangeById = Maps.newHashMap(rangePartitionInfo.getIdToRange(false));
-        if (!CollectionUtils.sizeIsEmpty(inputCells)) {
+        if (inputCells != null && !inputCells.isEmpty()) {
             // mock partition ids since input cells has not been added into olapTable yet.
             inputCells.entrySet().stream()
                     .forEach(e -> {
@@ -771,7 +764,7 @@ public class PartitionSelector {
                 selectedPartitionIds.add(e.getKey());
             }
         }
-        if (!CollectionUtils.sizeIsEmpty(inputCells)) {
+        if (inputCells != null && !inputCells.isEmpty()) {
             for (Map.Entry<Long, PCell> e : inputCells.entrySet()) {
                 PListCell pListCell = (PListCell) e.getValue();
                 for (List<String> values : pListCell.getPartitionItems()) {

@@ -329,7 +329,7 @@ public class PartitionBasedMvRefreshTest extends MVTestBase {
         MaterializedView mv = starRocksAssert.getMv("test", "join_mv1");
         Assertions.assertEquals(3, mv.getPartitionNames().size());
         Set<Range<PartitionKey>> ranges =
-                mv.getRangePartitionMap().values().stream().collect(Collectors.toSet());
+                toRangeMap(mv.getRangePartitionMap()).values().stream().collect(Collectors.toSet());
         Assertions.assertEquals(3, ranges.size());
         PartitionKey p0 = new PartitionKey(ImmutableList.of(new DateLiteral(0, 1, 1)),
                 ImmutableList.of(PrimitiveType.DATE));

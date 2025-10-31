@@ -17,7 +17,6 @@ package com.starrocks.connector.partitiontraits;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
@@ -29,7 +28,7 @@ import com.starrocks.common.ThrowingSupplier;
 import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.common.PCell;
+import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
 
 import java.util.List;
@@ -149,16 +148,16 @@ public class CachedPartitionTraits extends DefaultTraits {
     }
 
     @Override
-    public Map<String, Range<PartitionKey>> getPartitionKeyRange(Column partitionColumn, Expr partitionExpr)
+    public PCellSortedSet getPartitionKeyRange(Column partitionColumn, Expr partitionExpr)
             throws AnalysisException {
         return getCacheWithException("getPartitionKeyRange",
-                () -> delegate.getPartitionKeyRange(partitionColumn, partitionExpr), () -> Maps.newHashMap());
+                () -> delegate.getPartitionKeyRange(partitionColumn, partitionExpr), () -> null);
     }
 
     @Override
-    public Map<String, PCell> getPartitionCells(List<Column> partitionColumns) throws AnalysisException {
+    public PCellSortedSet getPartitionCells(List<Column> partitionColumns) throws AnalysisException {
         return getCacheWithException("getPartitionList",
-                () -> delegate.getPartitionCells(partitionColumns), () -> Maps.newHashMap());
+                () -> delegate.getPartitionCells(partitionColumns), () -> null);
     }
 
     @Override

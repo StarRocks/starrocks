@@ -51,8 +51,10 @@ import com.starrocks.sql.ast.expression.MaxLiteral;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.DmlException;
-import com.starrocks.sql.common.PCell;
+import com.starrocks.sql.common.PCellSortedSet;
+import com.starrocks.sql.common.PCellWithName;
 import com.starrocks.sql.common.PListCell;
+import com.starrocks.sql.common.PRangeCell;
 import com.starrocks.sql.common.PartitionDiff;
 import com.starrocks.sql.common.RangePartitionDiffer;
 import com.starrocks.sql.common.SyncPartitionUtils;
@@ -295,7 +297,7 @@ public class PartitionUtil {
      * @param table           : the ref base table of materialized view
      * @param partitionColumn : the ref base table's partition column which mv's partition derives
      */
-    public static Map<String, Range<PartitionKey>> getPartitionKeyRange(Table table, Column partitionColumn, Expr partitionExpr)
+    public static PCellSortedSet getPartitionKeyRange(Table table, Column partitionColumn, Expr partitionExpr)
             throws StarRocksException {
         return ConnectorPartitionTraits.build(table).getPartitionKeyRange(partitionColumn, partitionExpr);
     }
@@ -303,7 +305,7 @@ public class PartitionUtil {
     /**
      * NOTE: Ensure result list cell's order is the same with partitionColumns.
      */
-    public static Map<String, PCell> getPartitionCells(Table table, List<Column> partitionColumns)
+    public static PCellSortedSet getPartitionCells(Table table, List<Column> partitionColumns)
             throws StarRocksException {
         return ConnectorPartitionTraits.build(table).getPartitionCells(partitionColumns);
     }
@@ -364,23 +366,29 @@ public class PartitionUtil {
                                                  Expr partitionExpr) throws AnalysisException {
 
         if (isListPartition) {
-            Map<String, PCell> partitionNameWithList = getMVPartitionToCells(table, ImmutableList.of(partitionColumn),
+            PCellSortedSet partitionNameWithList = getMVPartitionToCells(table, ImmutableList.of(partitionColumn),
                     partitionNames);
-            return Sets.newHashSet(partitionNameWithList.keySet());
+            return partitionNameWithList.getPartitionNames();
         } else {
-            Map<String, Range<PartitionKey>> partitionNameWithRange = getMVPartitionNameWithRange(table, partitionColumn,
+            PCellSortedSet partitionNameWithRange = getMVPartitionNameWithRange(table, partitionColumn,
                     partitionNames, partitionExpr);
-            return Sets.newHashSet(partitionNameWithRange.keySet());
+            return partitionNameWithRange.getPartitionNames();
         }
     }
 
-    public static Map<String, Range<PartitionKey>> getMVPartitionNameWithRange(Table table, Column partitionColumn,
-                                                                               List<String> partitionNames,
-                                                                               Expr partitionExpr) throws AnalysisException {
+    public static PCellSortedSet getMVPartitionNameWithRange(Table table, Column partitionColumn,
+                                                             List<String> partitionNames,
+                                                             Expr partitionExpr) throws AnalysisException {
         if (table.isHiveTable() || table.isHudiTable() || table.isIcebergTable() || table.isPaimonTable()) {
-            return getRangePartitionMapOfExternalTable(table, partitionColumn, partitionNames, partitionExpr);
+            PCellSortedSet rangeMap =
+                    getRangePartitionMapOfExternalTable(
+                            table, partitionColumn, partitionNames, partitionExpr);
+            return rangeMap;
         } else if (table.isJDBCTable()) {
-            return PartitionUtil.getRangePartitionMapOfJDBCTable(table, partitionColumn, partitionNames, partitionExpr);
+            PCellSortedSet rangeMap =
+                    PartitionUtil.getRangePartitionMapOfJDBCTable(
+                            table, partitionColumn, partitionNames, partitionExpr);
+            return rangeMap;
         } else {
             throw new DmlException("Can not get partition range from table with type : %s", table.getType());
         }
@@ -473,10 +481,10 @@ public class PartitionUtil {
      * partitionName1 : par_col=0/par_date=2020-01-01 => p20200101
      * partitionName2 : par_col=1/par_date=2020-01-01 => p20200101
      */
-    public static Map<String, Range<PartitionKey>> getRangePartitionMapOfExternalTable(Table table,
-                                                                                       Column partitionColumn,
-                                                                                       List<String> partitionNames,
-                                                                                       Expr partitionExpr)
+    public static PCellSortedSet getRangePartitionMapOfExternalTable(Table table,
+                                                                     Column partitionColumn,
+                                                                     List<String> partitionNames,
+                                                                     Expr partitionExpr)
             throws AnalysisException {
         List<Column> partitionColumns = getPartitionColumns(table);
 
@@ -496,7 +504,7 @@ public class PartitionUtil {
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (e1, e2) -> e1, LinkedHashMap::new));
 
         boolean isConvertToDate = isConvertToDate(partitionExpr, partitionColumn);
-        Map<String, Range<PartitionKey>> mvPartitionRangeMap = new LinkedHashMap<>();
+        PCellSortedSet mvPartitionRangeMap = PCellSortedSet.of();
 
         PrimitiveType partitionColPrimType = isConvertToDate ? PrimitiveType.DATE : partitionColumn.getPrimitiveType();
         DateTimeInterval partitionDateTimeInterval = getDateTimeInterval(table, partitionColumn);
@@ -512,9 +520,9 @@ public class PartitionUtil {
                 lowerBound = PartitionKey.createInfinityPartitionKeyWithType(
                         ImmutableList.of(partitionColPrimType), false);
             }
-            Preconditions.checkState(!mvPartitionRangeMap.containsKey(partitionKeyName));
+            Preconditions.checkState(!mvPartitionRangeMap.containsName(partitionKeyName));
             PartitionKey upperBound = nextPartitionKey(lowerBound, partitionDateTimeInterval, partitionColPrimType);
-            mvPartitionRangeMap.put(partitionKeyName, Range.closedOpen(lowerBound, upperBound));
+            mvPartitionRangeMap.add(partitionKeyName, PRangeCell.of(Range.closedOpen(lowerBound, upperBound)));
         }
         return mvPartitionRangeMap;
     }
@@ -541,10 +549,10 @@ public class PartitionUtil {
      * partitionName1 : par_col=0/par_date=2020-01-01 => p20200101
      * partitionName2 : par_col=1/par_date=2020-01-01 => p20200101
      */
-    public static Map<String, Range<PartitionKey>> getRangePartitionMapOfJDBCTable(Table table,
-                                                                                   Column partitionColumn,
-                                                                                   List<String> partitionNames,
-                                                                                   Expr partitionExpr)
+    public static PCellSortedSet getRangePartitionMapOfJDBCTable(Table table,
+                                                                 Column partitionColumn,
+                                                                 List<String> partitionNames,
+                                                                 Expr partitionExpr)
             throws AnalysisException {
 
         // Determine if it is the str2date function
@@ -562,7 +570,7 @@ public class PartitionUtil {
         PartitionKey lastPartitionKey = null;
         String partitionName = null;
 
-        Map<String, Range<PartitionKey>> mvPartitionRangeMap = new LinkedHashMap<>();
+        PCellSortedSet mvPartitionRangeMap = PCellSortedSet.of();
         PrimitiveType partitionColPrimType = isConvertToDate ? PrimitiveType.DATE : partitionColumn.getPrimitiveType();
         for (Map.Entry<String, PartitionKey> entry : sortedPartitionLinkMap.entrySet()) {
             // Adapt to the range partitioning method of JDBC Table, the partitionName adopts the name of upperBound
@@ -592,12 +600,12 @@ public class PartitionUtil {
         return mvPartitionRangeMap;
     }
 
-    private static void putRangeToMvPartitionRangeMapForJDBCTable(Map<String, Range<PartitionKey>> mvPartitionRangeMap,
+    private static void putRangeToMvPartitionRangeMapForJDBCTable(PCellSortedSet mvPartitionRangeMap,
                                                                   String partitionName,
                                                                   PartitionKey lastPartitionKey,
                                                                   PartitionKey upperBound) {
-        Preconditions.checkState(!mvPartitionRangeMap.containsKey(partitionName));
-        mvPartitionRangeMap.put(partitionName, Range.openClosed(lastPartitionKey, upperBound));
+        Preconditions.checkState(!mvPartitionRangeMap.containsName(partitionName));
+        mvPartitionRangeMap.add(partitionName, PRangeCell.of(Range.openClosed(lastPartitionKey, upperBound)));
     }
     /**
      * If base table column type is string but partition type is date, we need to convert the string to date
@@ -702,11 +710,11 @@ public class PartitionUtil {
     /**
      * NOTE: Ensure output plist cell's order is the same with partitionColumns.
      */
-    public static Map<String, PCell> getMVPartitionToCells(Table table,
-                                                           List<Column> refPartitionColumns,
-                                                           List<String> partitionNames)
+    public static PCellSortedSet getMVPartitionToCells(Table table,
+                                                       List<Column> refPartitionColumns,
+                                                       List<String> partitionNames)
             throws AnalysisException {
-        Map<String, PCell> partitionListMap = new LinkedHashMap<>();
+        PCellSortedSet partitionListMap = PCellSortedSet.of();
         List<Column> partitionColumns = getPartitionColumns(table);
 
         // Get the index of partitionColumn when table has multi partition columns.
@@ -725,7 +733,7 @@ public class PartitionUtil {
             partitionKeys.add(partitionKey);
             String mvPartitionName = generateMVPartitionName(partitionKey);
             List<List<String>> partitionKeyList = generateMVPartitionList(partitionKey);
-            partitionListMap.put(mvPartitionName, new PListCell(partitionKeyList));
+            partitionListMap.add(PCellWithName.of(mvPartitionName, new PListCell(partitionKeyList)));
         }
         return partitionListMap;
     }
@@ -900,8 +908,8 @@ public class PartitionUtil {
     }
 
     public static PartitionDiff getPartitionDiff(Expr partitionExpr,
-                                                 Map<String, Range<PartitionKey>> basePartitionMap,
-                                                 Map<String, Range<PartitionKey>> mvPartitionMap,
+                                                 PCellSortedSet basePartitionMap,
+                                                 PCellSortedSet mvPartitionMap,
                                                  RangePartitionDiffer differ) {
         if (partitionExpr instanceof SlotRef) {
             return SyncPartitionUtils.getRangePartitionDiffOfSlotRef(basePartitionMap, mvPartitionMap, differ);

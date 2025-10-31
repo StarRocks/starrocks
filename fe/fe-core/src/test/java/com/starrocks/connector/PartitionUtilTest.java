@@ -17,7 +17,6 @@ package com.starrocks.connector;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.google.common.collect.Range;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.HiveTable;
@@ -37,6 +36,8 @@ import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.expression.BoolLiteral;
 import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.common.PCellSortedSet;
+import com.starrocks.sql.common.PRangeCell;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -287,13 +288,15 @@ public class PartitionUtilTest {
             }
         };
 
-        Map<String, Range<PartitionKey>> partitionMap =
+        PCellSortedSet partitionMap =
                 PartitionUtil.getPartitionKeyRange(table, partitionColumn, null);
         Assertions.assertEquals(partitionMap.size(), partitionNames.size());
-        Assertions.assertTrue(partitionMap.containsKey("p20221202"));
+        Assertions.assertTrue(partitionMap.containsName("p20221202"));
         PartitionKey upperBound = new PartitionKey();
         upperBound.pushColumn(new DateLiteral(2022, 12, 03), PrimitiveType.DATE);
-        Assertions.assertTrue(partitionMap.get("p20221202").upperEndpoint().equals(upperBound));
+
+        PRangeCell rangeCell = partitionMap.getPCell("p20221202").cast();
+        Assertions.assertTrue(rangeCell.getRange().upperEndpoint().equals(upperBound));
     }
 
     @Test

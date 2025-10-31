@@ -1336,6 +1336,8 @@ public class UtFrameUtils {
         // Enable mv rewrite in mv refresh by default
         Config.enable_mv_refresh_query_rewrite = true;
 
+        Config.enable_materialized_view_external_table_precise_refresh = false;
+
         FeConstants.enablePruneEmptyOutputScan = false;
         FeConstants.runningUnitTest = true;
         Config.mv_refresh_default_planner_optimize_timeout = 300 * 1000; // 5min
