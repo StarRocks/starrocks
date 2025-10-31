@@ -50,7 +50,6 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -178,10 +177,7 @@ public class DistributionPrunerRuleTest {
                 partition.getDistributionInfo();
                 result = distributionInfo;
 
-                index.getVirtualBuckets();
-                result = Stream.concat(tabletIds.stream(), tabletIds.stream()).collect(Collectors.toList());
-
-                index.getTabletIds();
+                index.getTabletIdsInOrder();
                 result = tabletIds;
 
                 distributionInfo.getDistributionColumns();
