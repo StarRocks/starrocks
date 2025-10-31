@@ -34,6 +34,8 @@ TEST(UrlParserTest, normal) {
     TEST_URL_PARSE(url, "QUERY", "name=networking");
     TEST_URL_PARSE(url, "REF", "DOWNLOADING");
     TEST_URL_PARSE(url, "USERINFO", "user:pass");
+
+    TEST_URL_PARSE("http://example.com/index.html?1111%22:xxx", "HOST", "example.com");
 }
 TEST(UrlParserTest, reletive) {
     const char* url = "/docs/books/tutorial/index.html?name=networking#DOWNLOADING";
