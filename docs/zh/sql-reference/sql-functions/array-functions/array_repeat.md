@@ -79,7 +79,7 @@ mysql> select  array_repeat(null,3) as res;
 
 ```Plain
 mysql> CREATE TABLE IF NOT EXISTS test (COLA INT, COLB INT) PROPERTIES ("replication_num"="1");
-mysql> INTO test (COLA, COLB) VALUES (1, 3), (NULL, 3), (2, NULL);
+mysql> INSERT INTO test (COLA, COLB) VALUES (1, 3), (NULL, 3), (2, NULL);
 mysql> select array_repeat(COLA,COLB) from test;
 +--------------------------+
 | array_repeat(COLA, COLB) |
