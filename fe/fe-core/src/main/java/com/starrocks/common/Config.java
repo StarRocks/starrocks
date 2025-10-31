@@ -211,7 +211,7 @@ public class Config extends ConfigBase {
     public static String internal_log_roll_interval = "DAY";
     @ConfField
     public static String internal_log_delete_age = "7d";
-    @ConfField
+    @ConfField(mutable = true)
     public static boolean internal_log_json_format = false;
 
     /**
