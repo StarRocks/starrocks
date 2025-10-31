@@ -366,6 +366,11 @@ public enum ErrorCode {
     ERR_MULTI_PARTITION_STEP_LQ_ZERO(5703, new byte[] {'4', '2', '0', '0', '0'},
             "The interval of the Multi-Range Partition must be greater than 0"),
 
+    ERR_TOO_MANY_PARTITIONS_IN_QUERY(5704, new byte[] {'4', '2', '0', '0', '0'},
+            "Query partitions exceed limit: table: '%s' current partitions queried: '%d', maximum allowed partitions: '%d'"),
+    ERR_TOO_MANY_TOTAL_PARTITIONS_IN_QUERY(5705, new byte[] {'4', '2', '0', '0', '0'},
+            "The total number of partitions in the query '%d' exceeds the limit '%d' set by the resource group"),
+
     /**
      * 5800 - 5899: Pipe
      */
