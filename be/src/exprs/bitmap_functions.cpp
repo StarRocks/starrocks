@@ -160,11 +160,21 @@ StatusOr<ColumnPtr> BitmapFunctions::bitmap_or(FunctionContext* context, const s
     size_t size = columns[0]->size();
     ColumnBuilder<TYPE_OBJECT> builder(size);
     for (int row = 0; row < size; ++row) {
-        if (lhs.is_null(row) || rhs.is_null(row)) {
+        if (lhs.is_null(row) && rhs.is_null(row)) {
+            // Both are NULL, result is NULL
             builder.append_null();
+            continue;
+        } else if (lhs.is_null(row)) {
+            // lhs is NULL, return rhs (OR semantics: NULL | value = value)
+            builder.append(rhs.value(row));
+            continue;
+        } else if (rhs.is_null(row)) {
+            // rhs is NULL, return lhs (OR semantics: value | NULL = value)
+            builder.append(lhs.value(row));
             continue;
         }
 
+        // Both are non-NULL, perform normal OR operation
         BitmapValue bitmap;
         bitmap |= (*lhs.value(row));
         bitmap |= (*rhs.value(row));
@@ -275,11 +285,21 @@ StatusOr<ColumnPtr> BitmapFunctions::bitmap_andnot(FunctionContext* context, con
     size_t size = columns[0]->size();
     ColumnBuilder<TYPE_OBJECT> builder(size);
     for (int row = 0; row < size; ++row) {
-        if (lhs.is_null(row) || rhs.is_null(row)) {
+        if (lhs.is_null(row) && rhs.is_null(row)) {
+            // Both are NULL, result is NULL
             builder.append_null();
+            continue;
+        } else if (lhs.is_null(row)) {
+            // lhs is NULL, result is NULL (cannot subtract from unknown set)
+            builder.append_null();
+            continue;
+        } else if (rhs.is_null(row)) {
+            // rhs is NULL, return lhs (subtracting empty set: lhs - ∅ = lhs)
+            builder.append(lhs.value(row));
             continue;
         }
 
+        // Both are non-NULL, perform normal ANDNOT operation
         BitmapValue bitmap;
         bitmap |= (*lhs.value(row));
         bitmap -= (*rhs.value(row));
@@ -299,11 +319,21 @@ StatusOr<ColumnPtr> BitmapFunctions::bitmap_xor(FunctionContext* context, const 
     size_t size = columns[0]->size();
     ColumnBuilder<TYPE_OBJECT> builder(size);
     for (int row = 0; row < size; ++row) {
-        if (lhs.is_null(row) || rhs.is_null(row)) {
+        if (lhs.is_null(row) && rhs.is_null(row)) {
+            // Both are NULL, result is NULL
             builder.append_null();
+            continue;
+        } else if (lhs.is_null(row)) {
+            // lhs is NULL, return rhs (symmetric difference with empty set: ∅ △ rhs = rhs)
+            builder.append(rhs.value(row));
+            continue;
+        } else if (rhs.is_null(row)) {
+            // rhs is NULL, return lhs (symmetric difference with empty set: lhs △ ∅ = lhs)
+            builder.append(lhs.value(row));
             continue;
         }
 
+        // Both are non-NULL, perform normal XOR operation
         BitmapValue bitmap;
         bitmap |= (*lhs.value(row));
         bitmap ^= (*rhs.value(row));
