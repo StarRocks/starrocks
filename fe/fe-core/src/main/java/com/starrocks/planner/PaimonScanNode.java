@@ -231,7 +231,7 @@ public class PaimonScanNode extends ScanNode {
                         }
                         InternalRowPartitionComputer partitionComputer
                                 = FileStorePathFactory.getPartitionComputer(
-                                RowType.of(partitionColumnTypes.toArray(new DataType[0])), null, true);
+                                RowType.of(partitionColumnTypes.toArray(new DataType[0])), null, false);
                         String partitionPath = PartitionPathUtils.generatePartitionPath(
                                 partitionComputer.generatePartValues(partitionValue));
                         List<String> partitionValues = Arrays.stream(partitionPath.split("/"))
