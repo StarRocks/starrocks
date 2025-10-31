@@ -1,3 +1,4 @@
+-- name: test_array_map_2 @mac
 
 -- name: test_array_map_2
 CREATE TABLE `array_map_test` (
