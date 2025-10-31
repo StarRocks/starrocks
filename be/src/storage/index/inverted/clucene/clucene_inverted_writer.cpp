@@ -51,11 +51,7 @@ public:
         _field_name = std::wstring(field_name.begin(), field_name.end());
     }
 
-    uint64_t size() const override { return _index_writer->numRamDocs(); }
-
-    uint64_t estimate_buffer_size() const override { return _index_writer->ramSizeInBytes(); }
-
-    uint64_t total_mem_footprint() const override { return _index_writer->ramSizeInBytes(); }
+    uint64_t size() const override { return _index_writer->ramSizeInBytes(); }
 
     Status init() override {
         try {
@@ -190,7 +186,7 @@ public:
         }
     }
 
-    Status finish() override {
+    Status finish(WritableFile* wfile, ColumnMetaPB* meta) override {
         lucene::store::Directory* dir = nullptr;
         lucene::store::IndexOutput* null_bitmap_out = nullptr;
         lucene::store::IndexOutput* data_out = nullptr;
