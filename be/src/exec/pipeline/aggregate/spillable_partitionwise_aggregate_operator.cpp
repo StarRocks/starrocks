@@ -108,6 +108,11 @@ Status SpillablePartitionWiseAggregateSinkOperator::prepare(RuntimeState* state)
     return Status::OK();
 }
 
+Status SpillablePartitionWiseAggregateSinkOperator::prepare_local_state(RuntimeState* state) {
+    RETURN_IF_ERROR(Operator::prepare_local_state(state));
+    return _agg_op->prepare(state);
+}
+
 Status SpillablePartitionWiseAggregateSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     if (chunk == nullptr || chunk->is_empty()) {
         return Status::OK();
@@ -369,6 +374,13 @@ Status SpillablePartitionWiseAggregateSourceOperator::prepare(RuntimeState* stat
     RETURN_IF_ERROR(SourceOperator::prepare(state));
     RETURN_IF_ERROR(_non_pw_agg->prepare(state));
     RETURN_IF_ERROR(_pw_agg->prepare(state));
+    return Status::OK();
+}
+
+Status SpillablePartitionWiseAggregateSourceOperator::prepare_local_state(RuntimeState* state) {
+    RETURN_IF_ERROR(Operator::prepare_local_state(state));
+    RETURN_IF_ERROR(_non_pw_agg->prepare_local_state(state));
+    RETURN_IF_ERROR(_pw_agg->prepare_local_state(state));
     return Status::OK();
 }
 

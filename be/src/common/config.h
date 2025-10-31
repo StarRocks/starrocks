@@ -1781,4 +1781,7 @@ CONF_Int32(llm_max_queue_size, "4096");
 CONF_Int32(llm_max_concurrent_queries, "8");
 
 CONF_Int32(llm_cache_size, "131072");
+
+CONF_mBool(enable_pipeline_driver_parallel_prepare, "true");
+
 } // namespace starrocks::config

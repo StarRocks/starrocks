@@ -58,6 +58,7 @@ public:
 
     ~MultilaneOperator() override = default;
     Status prepare(RuntimeState* state) override;
+    Status prepare_local_state(RuntimeState* state) override;
     void close(RuntimeState* state) override;
 
     Status set_finishing(RuntimeState* state) override;

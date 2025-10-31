@@ -24,6 +24,9 @@ import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.proto.PExecBatchPlanFragmentsResult;
+import com.starrocks.proto.PExecPlanFragmentResult;
+import com.starrocks.proto.StatusPB;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ExecuteExceptionHandler;
 import com.starrocks.qe.scheduler.dag.ExecutionDAG;
@@ -32,14 +35,19 @@ import com.starrocks.qe.scheduler.dag.FragmentInstance;
 import com.starrocks.qe.scheduler.dag.FragmentInstanceExecState;
 import com.starrocks.qe.scheduler.dag.JobSpec;
 import com.starrocks.qe.scheduler.slot.DeployState;
+import com.starrocks.rpc.AttachmentRequest;
+import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.thrift.TDescriptorTable;
+import com.starrocks.thrift.TExecBatchPlanFragmentsParams;
 import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TStatusCode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.thrift.TException;
+import org.apache.thrift.TSerializer;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -312,6 +320,161 @@ public class Deployer {
 
     public TExecPlanFragmentParams createIncrementalScanRangesRequest(FragmentInstance instance) {
         return tFragmentInstanceFactory.createIncrementalScanRanges(instance);
+    }
+
+    public void deployFragmentsForSingleNode(List<FragmentInstanceExecState> fragmentInstanceExecStates)
+            throws RpcException, StarRocksException {
+        if (!needDeploy) {
+            return;
+        }
+
+        Future<PExecBatchPlanFragmentsResult> batchFuture = null;
+        try (Timer ignored = Tracers.watchScope(Tracers.Module.SCHEDULER, "DeployStageByStageTime")) {
+            batchFuture = execRemoteBatchFragmentsAsync(fragmentInstanceExecStates);
+        } catch (Exception e) {
+            LOG.warn("deployFragmentsForSingleNode failed", e);
+        }
+
+        // every fragment instance share the same future
+        // if any problem occurs, the first call on this future will throw exception
+        FakeDeployFuture sharedFakeFuture = new FakeDeployFuture(batchFuture);
+        fragmentInstanceExecStates.forEach(
+                fragmentInstanceExecState -> {
+                    fragmentInstanceExecState.changeStateIntoDeploying();
+                    fragmentInstanceExecState.setDeployFuture(sharedFakeFuture);
+                });
+
+        try (Timer ignored = Tracers.watchScope(Tracers.Module.SCHEDULER, "DeployWaitTime")) {
+            waitForDeploymentCompletion(fragmentInstanceExecStates);
+        }
+    }
+
+    private static class FakeDeployFuture implements Future<PExecPlanFragmentResult> {
+        private final Future<PExecBatchPlanFragmentsResult> batchFuture;
+        private PExecPlanFragmentResult cachedResult = null;
+
+        public FakeDeployFuture(Future<PExecBatchPlanFragmentsResult> batchFuture) {
+            this.batchFuture = batchFuture;
+        }
+
+        @Override
+        public boolean cancel(boolean mayInterruptIfRunning) {
+            return batchFuture.cancel(mayInterruptIfRunning);
+        }
+
+        @Override
+        public boolean isCancelled() {
+            return batchFuture.isCancelled();
+        }
+
+        @Override
+        public boolean isDone() {
+            return batchFuture.isDone();
+        }
+
+        @Override
+        public PExecPlanFragmentResult get() throws InterruptedException, ExecutionException {
+            if (cachedResult != null) {
+                return cachedResult;
+            }
+
+            PExecBatchPlanFragmentsResult batchResult = batchFuture.get();
+
+            PExecPlanFragmentResult singleResult = new PExecPlanFragmentResult();
+            singleResult.status = batchResult.status;
+
+            cachedResult = singleResult;
+
+            return cachedResult;
+        }
+
+        @Override
+        public PExecPlanFragmentResult get(long timeout, TimeUnit unit)
+                throws InterruptedException, ExecutionException, TimeoutException {
+            if (cachedResult != null) {
+                return cachedResult;
+            }
+
+            PExecBatchPlanFragmentsResult batchResult = batchFuture.get(timeout, unit);
+
+            PExecPlanFragmentResult singleResult = new PExecPlanFragmentResult();
+            singleResult.status = batchResult.status;
+
+            cachedResult = singleResult;
+
+            return cachedResult;
+        }
+    }
+
+    private Future<PExecBatchPlanFragmentsResult> execRemoteBatchFragmentsAsync(
+            List<FragmentInstanceExecState> fragmentInstanceExecStateList) throws TException {
+
+        // 0.collect every instance's params as unique param per instance
+        List<TExecPlanFragmentParams> requestsToDeploy = new ArrayList<>();
+        fragmentInstanceExecStateList.forEach(
+                fragmentInstanceExecState -> requestsToDeploy.add(fragmentInstanceExecState.getRequestToDeploy()));
+
+        TNetworkAddress brpcAddress = fragmentInstanceExecStateList.get(0).getWorker().getBrpcAddress();
+        TExecBatchPlanFragmentsParams tRequest = new TExecBatchPlanFragmentsParams();
+        tRequest.setUnique_param_per_instance(requestsToDeploy);
+
+        // 1. create a common param with desc table, it will prepare first to create query context and desc table
+        TExecPlanFragmentParams commonParam = requestsToDeploy.get(0).deepCopy();
+        commonParam.setDesc_tbl(jobSpec.getDescTable());
+        tRequest.setCommon_param(commonParam);
+
+        // 2. clear unique param's desc table, so fragment instances can prepare parallelly
+        tRequest.getUnique_param_per_instance().forEach(instance -> instance.setDesc_tbl(emptyDescTable));
+
+        // Todo: consider parallel serialize if this become bottleneck
+        TSerializer serializer = AttachmentRequest.getSerializer(jobSpec.getPlanProtocol());
+        byte[] serializedRequest = serializer.serialize(tRequest);
+
+        try {
+            return BackendServiceClient.getInstance()
+                    .execBatchPlanFragmentsAsync(brpcAddress, serializedRequest, jobSpec.getPlanProtocol());
+        } catch (Exception e) {
+            LOG.warn("execBatchPlanFragmentsAsync failed", e);
+            // DO NOT throw exception here, return a complete future with error code,
+            // so that the following logic will cancel the fragment.
+            return new Future<PExecBatchPlanFragmentsResult>() {
+                @Override
+                public boolean cancel(boolean mayInterruptIfRunning) {
+                    return false;
+                }
+
+                @Override
+                public boolean isCancelled() {
+                    return false;
+                }
+
+                @Override
+                public boolean isDone() {
+                    return true;
+                }
+
+                @Override
+                public PExecBatchPlanFragmentsResult get() {
+                    PExecBatchPlanFragmentsResult result = new PExecBatchPlanFragmentsResult();
+                    StatusPB pStatus = new StatusPB();
+                    pStatus.errorMsgs = new ArrayList<>();
+                    pStatus.errorMsgs.add(e.getMessage());
+                    if (e instanceof RpcException) {
+                        // use THRIFT_RPC_ERROR so that this BE will be added to the blacklist later.
+                        pStatus.statusCode = TStatusCode.THRIFT_RPC_ERROR.getValue();
+                    } else {
+                        pStatus.statusCode = TStatusCode.INTERNAL_ERROR.getValue();
+                    }
+                    result.status = pStatus;
+                    return result;
+                }
+
+                @Override
+                public PExecBatchPlanFragmentsResult get(long timeout, TimeUnit unit) {
+                    return get();
+                }
+            };
+        }
     }
 }
 
