@@ -26,7 +26,7 @@ Block Cache is a disk-based cache whose primary function is to cache data files�
 
 ### Background and Value of the Feature
 
-In data lake analytics or internal table scenarios with compute-storage separation, StarRocks—acting as an OLAP query engine—needs to scan data files stored in HDFS or object storage (hereinafter collectively referred to as the "external storage system"). This process faces two major performance bottlenecks:
+In data lake analytics or internal table scenarios with shared-data mode, StarRocks—acting as an OLAP query engine—needs to scan data files stored in HDFS or object storage (hereinafter collectively referred to as the "external storage system"). This process faces two major performance bottlenecks:
 
 * The more files a query needs to read, the greater the remote I/O overhead.
 * In ad-hoc query scenarios, frequent access to the same data leads to redundant remote I/O consumption.
@@ -36,7 +36,7 @@ To address these issues, StarRocks has introduced the Block Cache feature since 
 ### Applicable Scenarios
 
 - When querying data from external storage systems using external tables (excluding JDBC external tables).
-- When querying StarRocks native tables in the compute-storage separation mode.
+- When querying StarRocks native tables in the shared-data mode.
 
 ### Core Working Mechanism
 
@@ -45,6 +45,7 @@ To address these issues, StarRocks has introduced the Block Cache feature since 
 When StarRocks caches remote files, it splits the original files into blocks of equal size according to the configured strategy (a block is the minimum cache unit, and its size is customizable).
 
 - Example: If the block size is configured as 1 MB, when querying a 128 MB Parquet file on Amazon S3, the file will be split into 128 consecutive blocks (e.g., [0, 1 MB), [1 MB, 2 MB), ..., [127 MB, 128 MB)).
+
 Each block is assigned a globally unique cache identifier (cache key), which consists of the following three parts:
 
 ```Plain
