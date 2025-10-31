@@ -594,4 +594,26 @@ public class LakeTableAlterMetaJobTest {
         }
         Assertions.assertEquals(table2.getCompactionStrategy(), TCompactionStrategy.DEFAULT);
     }
+
+    @Test
+    public void testGetInfo() throws Exception {
+        LakeTable table = createTable(connectContext,
+                "CREATE TABLE info(c0 INT) PRIMARY KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 " +
+                        "PROPERTIES('enable_persistent_index'='true')");
+
+        String alterStmtStr = "alter table test.info set ('enable_persistent_index'='false')";
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr, connectContext);
+        DDLStmtExecutor.execute(alterTableStmt, connectContext);
+        Map<String, String> properties = new HashMap<>();
+        properties.put("enable_persistent_index", "false");
+        ModifyTablePropertiesClause modify = new ModifyTablePropertiesClause(properties);
+        SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
+
+        AlterJobV2 job = schemaChangeHandler.createAlterMetaJob(modify, db, table);
+        job.runPendingJob();
+        List<List<Comparable>> infos = new ArrayList<>();
+        job.getInfo(infos);
+
+        Assertions.assertEquals(infos.size(), 1);
+    }
 }
