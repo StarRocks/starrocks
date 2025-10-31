@@ -201,6 +201,9 @@ select * from ngram_index_case_in_sensitive order by ngram_search_case_insensiti
 2023-01-01 00:00:00	AaBAa	3
 2023-01-01 00:00:00	aAbac	3
 -- !result
+select * from ngram_index_case_in_sensitive order by ngram_search_case_insensitive(Username,"ddddd",4) desc;
+-- result:
+-- !result
 -- name: test_ngram_bloom_filter_char
 create database ngram_bloom_filter_db_3;
 -- result:
