@@ -71,7 +71,7 @@ private:
     Status build_scan_range(RuntimeState* state);
     void init_counter(RuntimeState* state);
     void update_realtime_counter(Chunk* chunk);
-    void update_counter();
+    void update_counter(RuntimeState* state);
 
     Status _extend_schema_by_access_paths();
     Status init_column_access_paths(Schema* schema);

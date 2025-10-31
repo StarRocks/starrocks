@@ -327,4 +327,11 @@ TEST(QueryContextManagerTest, testSetWorkgroup) {
     ASSERT_EQ(0, wg->num_running_queries());
 }
 
+TEST(QueryContextManagerTest, testReadStats) {
+    QueryContext ctx;
+    ctx.incr_read_stats(100, 200);
+    ASSERT_EQ(100, ctx.get_read_local_cnt());
+    ASSERT_EQ(200, ctx.get_read_remote_cnt());
+}
+
 } // namespace starrocks::pipeline
