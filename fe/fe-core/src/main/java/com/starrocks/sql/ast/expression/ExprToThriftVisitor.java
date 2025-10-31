@@ -15,7 +15,11 @@
 package com.starrocks.sql.ast.expression;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
+import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.TypeSerializer;
 import com.starrocks.planner.SlotDescriptor;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -26,9 +30,12 @@ import com.starrocks.thrift.TCaseExpr;
 import com.starrocks.thrift.TDateLiteral;
 import com.starrocks.thrift.TDecimalLiteral;
 import com.starrocks.thrift.TDictionaryGetExpr;
+import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
+import com.starrocks.thrift.TExprOpcode;
 import com.starrocks.thrift.TFloatLiteral;
+import com.starrocks.thrift.TFunction;
 import com.starrocks.thrift.TInPredicate;
 import com.starrocks.thrift.TInfoFunc;
 import com.starrocks.thrift.TIntLiteral;
@@ -38,6 +45,8 @@ import com.starrocks.thrift.TSlotRef;
 import com.starrocks.thrift.TStringLiteral;
 
 import java.nio.ByteBuffer;
+import java.util.List;
+import java.util.function.BiConsumer;
 
 /**
  * Convert {@link Expr} nodes into their Thrift representation via {@link AstVisitorExtendInterface}.
@@ -46,7 +55,58 @@ public class ExprToThriftVisitor implements AstVisitorExtendInterface<Void, TExp
 
     public static final ExprToThriftVisitor INSTANCE = new ExprToThriftVisitor();
 
-    private ExprToThriftVisitor() {
+    protected ExprToThriftVisitor() {
+    }
+
+    // Convert this expr, including all children, to its Thrift representation.
+    public static TExpr treeToThrift(Expr expr) {
+        TExpr result = new TExpr();
+        ExprToThriftVisitor.treeToThriftHelper(expr, result, ExprToThriftVisitor.INSTANCE::visit);
+        return result;
+    }
+
+    public static List<TExpr> treesToThrift(List<? extends Expr> exprs) {
+        List<TExpr> result = Lists.newArrayList();
+        for (Expr expr : exprs) {
+            result.add(ExprToThriftVisitor.treeToThrift(expr));
+        }
+        return result;
+    }
+
+    public static void treeToThriftHelper(Expr expr, TExpr container, BiConsumer<Expr, TExprNode> consumer) {
+        if (expr.getType().isNull()) {
+            Preconditions.checkState(expr instanceof NullLiteral || expr instanceof SlotRef);
+            treeToThriftHelper(NullLiteral.create(ScalarType.BOOLEAN), container, consumer);
+            return;
+        }
+
+        TExprNode msg = new TExprNode();
+
+        Preconditions.checkState(java.util.Objects.equals(expr.type,
+                AnalyzerUtils.replaceNullType2Boolean(expr.type)),
+                "NULL_TYPE is illegal in thrift stage");
+
+        msg.type = TypeSerializer.toThrift(expr.type);
+        List<Expr> children = expr.getChildren();
+        msg.num_children = children.size();
+        msg.setHas_nullable_child(expr.hasNullableChild());
+        msg.setIs_nullable(expr.isNullable());
+        if (expr.fn != null) {
+            TFunction tfn = expr.fn.toThrift();
+            tfn.setIgnore_nulls(expr.getIgnoreNulls());
+            msg.setFn(tfn);
+            if (expr.fn.hasVarArgs()) {
+                msg.setVararg_start_idx(expr.fn.getNumArgs() - 1);
+            }
+        }
+        msg.output_scale = expr.getOutputScale();
+        msg.setIs_monotonic(expr.isMonotonic());
+        msg.setIs_index_only_filter(expr.isIndexOnlyFilter());
+        consumer.accept(expr, msg);
+        container.addToNodes(msg);
+        for (Expr child : children) {
+            treeToThriftHelper(child, container, consumer);
+        }
     }
 
     @Override
@@ -92,7 +152,7 @@ public class ExprToThriftVisitor implements AstVisitorExtendInterface<Void, TExp
     @Override
     public Void visitArithmeticExpr(ArithmeticExpr node, TExprNode msg) {
         msg.node_type = TExprNodeType.ARITHMETIC_EXPR;
-        msg.setOpcode(node.getOp().getOpcode());
+        msg.setOpcode(ExprOpcodeRegistry.getArithmeticOpcode(node.getOp()));
         msg.setOutput_column(node.getOutputColumn());
         return null;
     }
@@ -164,7 +224,7 @@ public class ExprToThriftVisitor implements AstVisitorExtendInterface<Void, TExp
     public Void visitCaseWhenExpr(CaseExpr node, TExprNode msg) {
         msg.node_type = TExprNodeType.CASE_EXPR;
         msg.case_expr = new TCaseExpr(node.hasCaseExpr(), node.hasElseExpr());
-        msg.setChild_type(node.getChild(0).getType().getPrimitiveType().toThrift());
+        msg.setChild_type(TypeSerializer.toThrift(node.getChild(0).getType().getPrimitiveType()));
         return null;
     }
 
@@ -209,7 +269,7 @@ public class ExprToThriftVisitor implements AstVisitorExtendInterface<Void, TExp
     @Override
     public Void visitMatchExpr(MatchExpr node, TExprNode msg) {
         msg.node_type = TExprNodeType.MATCH_EXPR;
-        msg.setOpcode(node.getMatchOperator().getOpcode());
+        msg.setOpcode(ExprOpcodeRegistry.getMatchOpcode(node.getMatchOperator()));
         return null;
     }
 
@@ -237,12 +297,12 @@ public class ExprToThriftVisitor implements AstVisitorExtendInterface<Void, TExp
     @Override
     public Void visitCastExpr(CastExpr node, TExprNode msg) {
         msg.node_type = TExprNodeType.CAST_EXPR;
-        msg.setOpcode(node.getOpcode());
+        msg.setOpcode(ExprOpcodeRegistry.getCastOpcode());
         msg.setOutput_column(node.getOutputColumn());
         if (node.getChild(0).getType().isComplexType()) {
-            msg.setChild_type_desc(node.getChild(0).getType().toThrift());
+            msg.setChild_type_desc(TypeSerializer.toThrift(node.getChild(0).getType()));
         } else {
-            msg.setChild_type(node.getChild(0).getType().getPrimitiveType().toThrift());
+            msg.setChild_type(TypeSerializer.toThrift(node.getChild(0).getType().getPrimitiveType()));
         }
         return null;
     }
@@ -276,12 +336,12 @@ public class ExprToThriftVisitor implements AstVisitorExtendInterface<Void, TExp
     @Override
     public Void visitBinaryPredicate(BinaryPredicate node, TExprNode msg) {
         msg.node_type = TExprNodeType.BINARY_PRED;
-        msg.setOpcode(node.getOpcode());
-        msg.setVector_opcode(node.getVectorOpcode());
+        msg.setOpcode(ExprOpcodeRegistry.getBinaryOpcode(node.getOp()));
+        msg.setVector_opcode(TExprOpcode.INVALID_OPCODE);
         if (node.getChild(0).getType().isComplexType()) {
-            msg.setChild_type_desc(node.getChild(0).getType().toThrift());
+            msg.setChild_type_desc(TypeSerializer.toThrift(node.getChild(0).getType()));
         } else {
-            msg.setChild_type(node.getChild(0).getType().getPrimitiveType().toThrift());
+            msg.setChild_type(TypeSerializer.toThrift(node.getChild(0).getType().getPrimitiveType()));
         }
         return null;
     }
@@ -311,12 +371,12 @@ public class ExprToThriftVisitor implements AstVisitorExtendInterface<Void, TExp
         Preconditions.checkState(!node.contains(Subquery.class));
         msg.in_predicate = new TInPredicate(node.isNotIn());
         msg.node_type = TExprNodeType.IN_PRED;
-        msg.setOpcode(node.getOpcode());
-        msg.setVector_opcode(node.getVectorOpcode());
+        msg.setOpcode(ExprOpcodeRegistry.getInPredicateOpcode(node.isNotIn()));
+        msg.setVector_opcode(TExprOpcode.INVALID_OPCODE);
         if (node.getChild(0).getType().isComplexType()) {
-            msg.setChild_type_desc(node.getChild(0).getType().toThrift());
+            msg.setChild_type_desc(TypeSerializer.toThrift(node.getChild(0).getType()));
         } else {
-            msg.setChild_type(node.getChild(0).getType().getPrimitiveType().toThrift());
+            msg.setChild_type(TypeSerializer.toThrift(node.getChild(0).getType().getPrimitiveType()));
         }
         return null;
     }
@@ -334,7 +394,7 @@ public class ExprToThriftVisitor implements AstVisitorExtendInterface<Void, TExp
     @Override
     public Void visitTimestampArithmeticExpr(TimestampArithmeticExpr node, TExprNode msg) {
         msg.node_type = TExprNodeType.COMPUTE_FUNCTION_CALL;
-        msg.setOpcode(node.getOpcode());
+        msg.setOpcode(ExprOpcodeRegistry.getExprOpcode(node));
         return null;
     }
 

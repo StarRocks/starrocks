@@ -96,7 +96,8 @@ public class ExpressionAnalyzerTest extends PlanTestBase {
         }
 
         Assertions.assertEquals(TExprNodeType.MAP_ELEMENT_EXPR,
-                collectionElementExpr3.treeToThrift().getNodes().get(0).getNode_type());
+                com.starrocks.sql.ast.expression.ExprToThriftVisitor
+                        .treeToThrift(collectionElementExpr3).getNodes().get(0).getNode_type());
     }
 
     @Test
@@ -130,7 +131,8 @@ public class ExpressionAnalyzerTest extends PlanTestBase {
                         new Scope(RelationId.anonymous(), new RelationFields())));
 
         Assertions.assertEquals(TExprNodeType.ARRAY_ELEMENT_EXPR,
-                collectionElementExpr2.treeToThrift().getNodes().get(0).getNode_type());
+                com.starrocks.sql.ast.expression.ExprToThriftVisitor
+                        .treeToThrift(collectionElementExpr2).getNodes().get(0).getNode_type());
     }
 
     @Test

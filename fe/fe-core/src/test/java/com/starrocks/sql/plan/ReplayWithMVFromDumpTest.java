@@ -15,6 +15,10 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
+import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.common.QueryDebugOptions;
+import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.UtFrameUtils;
@@ -35,10 +39,27 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
         // set default config for timeliness mvs
         UtFrameUtils.mockTimelinessForAsyncMVTest(connectContext);
-        connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
-        connectContext.getSessionVariable().setEnableViewBasedMvRewrite(true);
         FeConstants.isReplayFromQueryDump = true;
         MVTestBase.disableMVRewriteConsiderDataLayout();
+    }
+
+    @Override
+    public String getPlanFragment(String fileName, TExplainLevel explainLevel) throws Exception {
+        String fileContent = getDumpInfoFromFile(fileName);
+        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(fileContent);
+        SessionVariable sessionVariable = queryDumpInfo.getSessionVariable();
+        sessionVariable.setMaterializedViewRewriteMode("force");
+        sessionVariable.setEnableViewBasedMvRewrite(true);
+        sessionVariable.setOptimizerExecuteTimeout(120 * 1000);
+        sessionVariable.setOptimizerMaterializedViewTimeLimitMillis(120 * 1000);
+        sessionVariable.setEnableMaterializedViewTextMatchRewrite(false);
+        sessionVariable.setTraceLogLevel(10);
+
+        QueryDebugOptions queryDebugOptions = new QueryDebugOptions();
+        queryDebugOptions.setEnableQueryTraceLog(true);
+        sessionVariable.setQueryDebugOptions(queryDebugOptions.toString());
+        Pair<QueryDumpInfo, String> result = getPlanFragment(fileContent, sessionVariable, explainLevel);
+        return result.second;
     }
 
     @Test
@@ -91,10 +112,7 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
 
     @Test
     public void testMVOnMV2() throws Exception {
-        // TODO: How to remove the join reorder noise?
-        connectContext.getSessionVariable().disableJoinReorder();
         String plan = getPlanFragment("query_dump/materialized-view/mv_on_mv2", TExplainLevel.NORMAL);
-        connectContext.getSessionVariable().enableJoinReorder();
         assertContains(plan, "test_mv2");
     }
 

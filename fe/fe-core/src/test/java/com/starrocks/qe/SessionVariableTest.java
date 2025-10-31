@@ -83,4 +83,14 @@ public class SessionVariableTest {
                     e.getMessage());
         }
     }
+
+    @Test
+    public void testSetEnableInsertPartialUpdate() {
+        SessionVariable sessionVariable = new SessionVariable();
+        sessionVariable.setEnableInsertPartialUpdate(true);
+        Assertions.assertTrue(sessionVariable.isEnableInsertPartialUpdate());
+
+        sessionVariable.setEnableInsertPartialUpdate(false);
+        Assertions.assertFalse(sessionVariable.isEnableInsertPartialUpdate());
+    }
 }

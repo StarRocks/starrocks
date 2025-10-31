@@ -37,17 +37,9 @@ package com.starrocks.catalog;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
-import com.starrocks.proto.PScalarType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariableConstants;
-import com.starrocks.thrift.TColumnType;
-import com.starrocks.thrift.TPrimitiveType;
-import com.starrocks.thrift.TScalarType;
-import com.starrocks.thrift.TTypeDesc;
-import com.starrocks.thrift.TTypeNode;
-import com.starrocks.thrift.TTypeNodeType;
 
 import java.util.Objects;
 
@@ -131,28 +123,6 @@ public class ScalarType extends Type implements Cloneable {
         return res;
     }
 
-    public static ScalarType createType(PScalarType ptype) {
-        TPrimitiveType tPrimitiveType = TPrimitiveType.findByValue(ptype.type);
-
-        switch (tPrimitiveType) {
-            case CHAR:
-                return createCharType(ptype.len);
-            case VARCHAR:
-                return createVarcharType(ptype.len);
-            case VARBINARY:
-                return createVarbinary(ptype.len);
-            case DECIMALV2:
-                return createDecimalV2Type(ptype.precision, ptype.precision);
-            case DECIMAL32:
-            case DECIMAL64:
-            case DECIMAL128:
-            case DECIMAL256:
-                return createDecimalV3Type(PrimitiveType.fromThrift(tPrimitiveType), ptype.precision, ptype.scale);
-            default:
-                return createType(PrimitiveType.fromThrift(tPrimitiveType));
-        }
-    }
-
     public static ScalarType createCharType(int len) {
         ScalarType type = new ScalarType(PrimitiveType.CHAR);
         type.len = len;
@@ -161,15 +131,6 @@ public class ScalarType extends Type implements Cloneable {
 
     private static boolean isDecimalV3Enabled() {
         return Config.enable_decimal_v3;
-    }
-
-    public static void checkEnableDecimalV3() throws AnalysisException {
-        if (!isDecimalV3Enabled()) {
-            throw new AnalysisException("Config field enable_decimal_v3 is false now, " +
-                    "turn it on before decimal32/64/128/256 are used, " +
-                    "execute cmd 'admin set frontend config (\"enable_decimal_v3\" = \"true\")' " +
-                    "on every FE server");
-        }
     }
 
     /**
@@ -638,45 +599,6 @@ public class ScalarType extends Type implements Cloneable {
     }
 
     @Override
-    public void toThrift(TTypeDesc container) {
-        TTypeNode node = new TTypeNode();
-        container.types.add(node);
-        switch (type) {
-            case CHAR:
-            case VARCHAR:
-            case VARBINARY:
-            case HLL: {
-                node.setType(TTypeNodeType.SCALAR);
-                TScalarType scalarType = new TScalarType();
-                scalarType.setType(type.toThrift());
-                scalarType.setLen(len);
-                node.setScalar_type(scalarType);
-                break;
-            }
-            case DECIMALV2:
-            case DECIMAL32:
-            case DECIMAL64:
-            case DECIMAL128:
-            case DECIMAL256: {
-                node.setType(TTypeNodeType.SCALAR);
-                TScalarType scalarType = new TScalarType();
-                scalarType.setType(type.toThrift());
-                scalarType.setScale(scale);
-                scalarType.setPrecision(precision);
-                node.setScalar_type(scalarType);
-                break;
-            }
-            default: {
-                node.setType(TTypeNodeType.SCALAR);
-                TScalarType scalarType = new TScalarType();
-                scalarType.setType(type.toThrift());
-                node.setScalar_type(scalarType);
-                break;
-            }
-        }
-    }
-
-    @Override
     public boolean isFullyCompatible(Type other) {
         if (!other.isScalarType()) {
             return false;
@@ -820,20 +742,6 @@ public class ScalarType extends Type implements Cloneable {
             return precision == other.precision && scale == other.scale;
         }
         return true;
-    }
-
-    @Override
-    public TColumnType toColumnTypeThrift() {
-        TColumnType thrift = new TColumnType();
-        thrift.type = type.toThrift();
-        if (type.isVariableLengthType()) {
-            thrift.setLen(len);
-        }
-        if (type.isDecimalV2Type() || type.isDecimalV3Type()) {
-            thrift.setPrecision(precision);
-            thrift.setScale(scale);
-        }
-        return thrift;
     }
 
     @Override

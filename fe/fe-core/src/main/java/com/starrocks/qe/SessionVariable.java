@@ -239,6 +239,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String EVENT_SCHEDULER = "event_scheduler";
     public static final String STORAGE_ENGINE = "storage_engine";
     public static final String DIV_PRECISION_INCREMENT = "div_precision_increment";
+    public static final String DECIMAL_OVERFLOW_TO_DOUBLE = "decimal_overflow_to_double";
 
     // see comment of `starrocks_max_scan_key_num` and `max_pushdown_conditions_per_column` in BE config
     public static final String MAX_SCAN_KEY_NUM = "max_scan_key_num";
@@ -809,6 +810,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String PARTIAL_UPDATE_MODE = "partial_update_mode";
 
+    public static final String ENABLE_INSERT_PARTIAL_UPDATE = "enable_insert_partial_update";
+
     public static final String SCAN_OR_TO_UNION_LIMIT = "scan_or_to_union_limit";
 
     public static final String SCAN_OR_TO_UNION_THRESHOLD = "scan_or_to_union_threshold";
@@ -983,6 +986,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_FULL_SORT_USE_GERMAN_STRING = "enable_full_sort_use_german_string";
 
     public static final String ENABLE_INSERT_SELECT_EXTERNAL_AUTO_REFRESH = "enable_insert_select_external_auto_refresh";
+
+    public static final String PUSH_DOWN_HEAVY_EXPRS = "push_down_heavy_exprs";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -1502,6 +1507,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = DIV_PRECISION_INCREMENT)
     private int divPrecisionIncrement = 4;
 
+    @VariableMgr.VarAttr(name = DECIMAL_OVERFLOW_TO_DOUBLE)
+    private boolean decimalOverflowToDouble = false;
+
     // -1 means unset, BE will use its config value
     @VariableMgr.VarAttr(name = MAX_SCAN_KEY_NUM)
     private int maxScanKeyNum = -1;
@@ -1876,6 +1884,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = PARTIAL_UPDATE_MODE)
     private String partialUpdateMode = "auto";
 
+    @VariableMgr.VarAttr(name = ENABLE_INSERT_PARTIAL_UPDATE)
+    private boolean enableInsertPartialUpdate = true;
+
     @VariableMgr.VarAttr(name = HDFS_BACKEND_SELECTOR_HASH_ALGORITHM, flag = VariableMgr.INVISIBLE)
     private String hdfsBackendSelectorHashAlgorithm = "consistent";
 
@@ -2026,6 +2037,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_INSERT_SELECT_EXTERNAL_AUTO_REFRESH)
     private boolean enableInsertSelectExternalAutoRefresh = true;
 
+    @VarAttr(name = PUSH_DOWN_HEAVY_EXPRS)
+    private boolean pushDownHeavyExprs = true;
+
     public int getCboPruneJsonSubfieldDepth() {
         return cboPruneJsonSubfieldDepth;
     }
@@ -2115,6 +2129,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public String getPartialUpdateMode() {
         return this.partialUpdateMode;
+    }
+
+    public void setEnableInsertPartialUpdate(boolean enableInsertPartialUpdate) {
+        this.enableInsertPartialUpdate = enableInsertPartialUpdate;
+    }
+
+    public boolean isEnableInsertPartialUpdate() {
+        return this.enableInsertPartialUpdate;
     }
 
     public boolean isEnableSortAggregate() {
@@ -2797,6 +2819,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isCboDecimalCastStringStrict() {
         return cboDecimalCastStringStrict;
+    }
+
+    public boolean isDecimalOverflowToDouble() {
+        return decimalOverflowToDouble;
+    }
+
+    public void setDecimalOverflowToDouble(boolean decimalOverflowToDouble) {
+        this.decimalOverflowToDouble = decimalOverflowToDouble;
     }
 
     @VarAttr(name = ENABLE_ARRAY_DISTINCT_AFTER_AGG_OPT)
@@ -5466,6 +5496,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableInsertSelectExternalAutoRefresh(boolean enableInsertSelectExternalAutoRefresh) {
         this.enableInsertSelectExternalAutoRefresh = enableInsertSelectExternalAutoRefresh;
+    }
+
+    public void setPushDownHeavyExprs(boolean flag) {
+        this.pushDownHeavyExprs = flag;
+    }
+
+    public boolean isPushDownHeavyExprs() {
+        return this.pushDownHeavyExprs;
     }
 
     // Serialize to thrift object

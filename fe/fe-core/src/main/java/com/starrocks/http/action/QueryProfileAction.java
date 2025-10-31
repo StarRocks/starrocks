@@ -161,62 +161,27 @@ public class QueryProfileAction extends WebBaseAction {
     }
 
     private void appendButtons(StringBuilder buffer) {
-        // Add external CSS and JavaScript files for collapsible profile viewer
+        // Add external CSS and JavaScript files
         buffer.append("<link rel=\"stylesheet\" href=\"/static?res=collapsible-profile.css\">");
         buffer.append("<script type=\"text/javascript\" src=\"/static?res=collapsible-profile.js\"></script>");
+        buffer.append("<script type=\"text/javascript\" src=\"/static?res=profile-buttons.js\"></script>");
 
-        // Original button functions
+        // Define global variable for original content
         buffer.append("<script type=\"text/javascript\">\n" +
-                "function viewProfile() {\n" +
-                "  const params = new URLSearchParams(window.location.search);\n" +
-                "  const query_id = params.get('query_id');\n" +
-                "  window.location.href = '/query_profile?query_id=' + query_id + '&content_type=profile';\n" +
-                "}" + "</script>");
-        buffer.append("<script type=\"text/javascript\">\n" +
-                "function formattedSql() {\n" +
-                "  const params = new URLSearchParams(window.location.search);\n" +
-                "  const query_id = params.get('query_id');\n" +
-                "  window.location.href = '/query_profile?query_id=' + query_id + '&content_type=sql';\n" +
-                "}" + "</script>");
-        buffer.append("<script type=\"text/javascript\">\n" +
-                "function analyzeProfile() {\n" +
-                "  const params = new URLSearchParams(window.location.search);\n" +
-                "  const query_id = params.get('query_id');\n" +
-                "  window.location.href = '/query_profile?query_id=' + query_id + '&content_type=analyze';\n" +
-                "}" + "</script>");
-        buffer.append("<script type=\"text/javascript\">\n" +
-                "function copy(){\n" +
-                "  v = $('#profile').html()\n" +
-                "  const t = document.createElement('textarea')\n" +
-                "  t.style.cssText = 'position: absolute;top:0;left:0;opacity:0'\n" +
-                "  document.body.appendChild(t)\n" +
-                "  t.value = v\n" +
-                "  t.select()\n" +
-                "  document.execCommand('copy')\n" +
-                "  document.body.removeChild(t)\n" +
-                "}\n" +
+                "// Global variable to store original profile content\n" +
+                "var originalProfileContent = '';\n" +
                 "</script>");
-        buffer.append("<script type=\"text/javascript\">\n" +
-                "function download() {\n" +
-                "  content = $('#profile').html()\n" +
-                "  const file = new Blob([content], { type: \"text/plain\" });\n" +
-                "  const params = new URLSearchParams(window.location.search);\n" +
-                "  const query_id = params.get('query_id');\n" +
-                "  const a = document.createElement('a');\n" +
-                "  a.href = URL.createObjectURL(file);\n" +
-                "  a.download = query_id + \"profile.txt\";\n" +
-                "  a.click();\n" +
-                "\n" +
-                "  URL.revokeObjectURL(a.href);\n" +
-                "}" + "</script>");
         
-        // Add new buttons for collapsible functionality
-        buffer.append("<input type=\"button\" onclick=\"viewProfile();\" value=\"View Profile\"></input>");
-        buffer.append("<input type=\"button\" onclick=\"formattedSql();\" value=\"Formatted SQL\"></input>");
-        buffer.append("<input type=\"button\" onclick=\"analyzeProfile();\" value=\"Analyze Profile\"></input>");
-        buffer.append("<input type=\"button\" onclick=\"expandAll();\" value=\"Expand All\"></input>");
-        buffer.append("<input type=\"button\" onclick=\"collapseAll();\" value=\"Collapse All\"></input>");
-        buffer.append("<input type=\"button\" onclick=\"copy();\" value=\"Copy\"></input>");
-        buffer.append("<input type=\"button\" onclick=\"download();\" value=\"Download\"></input>");
+        // Load button HTML template
+        buffer.append("<div id=\"profile-buttons-container\"></div>");
+        buffer.append("<script type=\"text/javascript\">\n" +
+                "// Load button HTML template\n" +
+                "fetch('/static?res=profile-buttons.html')\n" +
+                "  .then(response => response.text())\n" +
+                "  .then(html => {\n" +
+                "    document.getElementById('profile-buttons-container').innerHTML = html;\n" +
+                "  })\n" +
+                "  .catch(error => console.error('Error loading buttons:', error));\n" +
+                "</script>");
     }
 }

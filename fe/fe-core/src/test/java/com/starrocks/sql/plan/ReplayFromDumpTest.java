@@ -18,12 +18,14 @@ import com.starrocks.catalog.View;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.CTEProperty;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.optimizer.rule.RuleSet;
@@ -1205,5 +1207,28 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(fileContent, sessionVariable);
         String plan = replayPair.second;
         PlanTestBase.assertContains(plan, "single_mv_ads_biz_customer_combine_td_for_task_2y");
+    }
+
+    @Test
+    public void testSingleNodePlanWithMultiAggStage1() throws Exception {
+        new MockUp<Utils>() {
+            @Mock
+            public static boolean isSingleNodeExecution(ConnectContext context) {
+                return true;
+            }
+            @Mock
+            public static boolean isRunningInUnitTest() {
+                return false;
+            }
+        };
+        String plan = getPlanFragment("query_dump/single_node_plan1", TExplainLevel.NORMAL);
+        PlanTestBase.assertContains(plan, "  2:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  output: sum(106: sum), count(107: count), avg(108: avg), count(3: UserID)\n" +
+                "  |  group by: 10: RegionID\n" +
+                "  |  \n" +
+                "  1:AGGREGATE (update serialize)\n" +
+                "  |  output: sum(41: AdvEngineID), count(*), avg(21: ResolutionWidth)\n" +
+                "  |  group by: 3: UserID, 10: RegionID");
     }
 }

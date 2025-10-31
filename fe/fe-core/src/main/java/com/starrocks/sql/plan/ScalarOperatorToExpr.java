@@ -94,7 +94,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
 import com.starrocks.sql.spm.SPMFunctions;
-import com.starrocks.thrift.TExprOpcode;
 import com.starrocks.thrift.TFunctionBinaryType;
 
 import java.time.LocalDateTime;
@@ -338,8 +337,6 @@ public class ScalarOperatorToExpr {
             // @FIXME: support subquery
             InPredicate expr =
                     new InPredicate(buildExpr.build(predicate.getChild(0), context), args, predicate.isNotIn());
-
-            expr.setOpcode(expr.isNotIn() ? TExprOpcode.FILTER_NOT_IN : TExprOpcode.FILTER_IN);
 
             expr.setType(Type.BOOLEAN);
             return expr;

@@ -1422,6 +1422,9 @@ vectorized_functions = [
 
     [150340, 'array_repeat', True, False, 'ANY_ARRAY', ['ANY_ELEMENT', 'INT'], 'ArrayFunctions::repeat'],
 
+    # array_top_n
+    [150341, 'array_top_n', True, False, 'ANY_ARRAY', ['ANY_ARRAY', 'INT'], 'ArrayFunctions::array_top_n'],
+
     [150345, 'array_flatten', True, False, 'ANY_ELEMENT', ['ANY_ARRAY'], 'ArrayFunctions::array_flatten'],
 
     # high-order functions related to lambda functions.

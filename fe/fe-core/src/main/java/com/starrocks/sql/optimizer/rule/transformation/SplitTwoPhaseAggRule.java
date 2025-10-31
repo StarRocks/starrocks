@@ -78,7 +78,7 @@ public class SplitTwoPhaseAggRule extends SplitAggregateRule {
                     "each can't have multi columns.", ErrorType.USER_ERROR);
         }
 
-        if (!isSuitableForTwoStageDistinct(input, aggOp, distinctCols.get())) {
+        if (!isSuitableForTwoStageDistinct(context.getConnectContext(), input, aggOp, distinctCols.get())) {
             return List.of();
         }
 

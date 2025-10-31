@@ -213,8 +213,8 @@ public class RestoreJobTest {
         new MockUp<OlapTable>() {
             @Mock
             public Status createTabletsForRestore(int tabletNum, MaterializedIndex index, GlobalStateMgr globalStateMgr,
-                    int replicationNum, long version, int schemaHash,
-                    long partitionId, Database db) {
+                                                  int replicationNum, long version, int schemaHash,
+                                                  long partitionId, Database db) {
                 return Status.OK;
             }
         };
@@ -798,19 +798,22 @@ public class RestoreJobTest {
         OlapTable tbl = (OlapTable) db.getTable(CatalogMocker.TEST_TBL_NAME);
         List<String> partNames = Lists.newArrayList(tbl.getPartitionNames());
         System.out.println(partNames);
-        System.out.println("tbl signature: " + tbl.getSignature(BackupHandler.SIGNATURE_VERSION, partNames, true));
+        System.out.println("tbl signature: " + RestoreJob.getSignature(tbl, BackupHandler.SIGNATURE_VERSION, partNames, true));
         tbl.setName("newName");
         partNames = Lists.newArrayList(tbl.getPartitionNames());
-        System.out.println("tbl signature: " + tbl.getSignature(BackupHandler.SIGNATURE_VERSION, partNames, true));
+        System.out.println("tbl signature: " + RestoreJob.getSignature(tbl, BackupHandler.SIGNATURE_VERSION, partNames, true));
     }
 
     @Test
     public void testColocateRestore() {
         Config.enable_colocate_restore = true;
 
+        RestoreJob restoreJob = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(),
+                new BackupJobInfo(), false, 3, 100000,
+                globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
         expectedRestoreTbl = (OlapTable) db.getTable(CatalogMocker.TEST_TBL4_ID);
 
-        expectedRestoreTbl.resetIdsForRestore(globalStateMgr, db, 3, null);
+        restoreJob.resetIdsForRestore(globalStateMgr, expectedRestoreTbl, db, 3, null);
 
         new Expectations(globalStateMgr) {
             {
@@ -823,8 +826,8 @@ public class RestoreJobTest {
             }
         };
         expectedRestoreTbl.setColocateGroup("test_group");
-        expectedRestoreTbl.resetIdsForRestore(globalStateMgr, db, 3, null);
-        expectedRestoreTbl.resetIdsForRestore(globalStateMgr, db, 3, null);
+        restoreJob.resetIdsForRestore(globalStateMgr, expectedRestoreTbl, db, 3, null);
+        restoreJob.resetIdsForRestore(globalStateMgr, expectedRestoreTbl, db, 3, null);
 
         Config.enable_colocate_restore = false;
     }
@@ -1007,7 +1010,7 @@ public class RestoreJobTest {
     public void testRestoreAddFunction() {
         backupMeta = new BackupMeta(Lists.newArrayList());
         Function f1 = new Function(new FunctionName(db.getFullName(), "test_function"),
-                new Type[] { Type.INT }, new String[] { "argName" }, Type.INT, false);
+                new Type[] {Type.INT}, new String[] {"argName"}, Type.INT, false);
 
         backupMeta.setFunctions(Lists.newArrayList(f1));
         job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(),

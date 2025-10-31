@@ -31,27 +31,34 @@ INSERT INTO t1 VALUES
     (null,'2020-10-26 12:12:12',null,null,null,null,null,null,null,null,1,1.12,2.889),
     (null,'2020-10-27 12:12:12','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889);
 
+drop stats t1;
 analyze sample table t1;
 select column_name, row_count from _statistics_.column_statistics where table_name = 'test_analyze_column.t1' order by column_name ;
 
+drop stats t1;
 analyze full table t1(k1,k2);
 select column_name, row_count from _statistics_.column_statistics where table_name = 'test_analyze_column.t1' order by column_name ;
 
+drop stats t1;
 analyze full table t1(k3,k4);
 select column_name, row_count from _statistics_.column_statistics where table_name = 'test_analyze_column.t1' order by column_name ;
 
+drop stats t1;
 analyze sample table t1(k3,k4);
 select column_name, row_count from _statistics_.column_statistics where table_name = 'test_analyze_column.t1' order by column_name ;
 
+drop stats t1;
 analyze sample table t1;
 select column_name, row_count from _statistics_.column_statistics where table_name = 'test_analyze_column.t1' order by column_name ;
 
+drop stats t1;
 analyze full table t1;
 select column_name, row_count from _statistics_.column_statistics where table_name = 'test_analyze_column.t1' order by column_name ;
 
 drop stats t1;
 select column_name, row_count from _statistics_.column_statistics where table_name = 'test_analyze_column.t1' order by column_name ;
 
+drop stats t1;
 analyze sample table t1;
 select column_name, row_count from _statistics_.column_statistics where table_name = 'test_analyze_column.t1' order by column_name ;
 

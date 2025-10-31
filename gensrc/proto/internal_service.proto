@@ -139,6 +139,7 @@ message PTransmitRuntimeFilterParams {
 
 message PTransmitRuntimeFilterResult {
     optional StatusPB status = 1;
+    optional int32 filter_id = 2;
 };
 
 message PTabletWithPartition {

@@ -372,9 +372,9 @@ public class AggregateFunction extends Function {
         TAggregateFunction aggFn = new TAggregateFunction();
         aggFn.setIs_analytic_only_fn(isAnalyticFn && !isAggregateFn);
         if (intermediateType != null) {
-            aggFn.setIntermediate_type(intermediateType.toThrift());
+            aggFn.setIntermediate_type(TypeSerializer.toThrift(intermediateType));
         } else {
-            aggFn.setIntermediate_type(getReturnType().toThrift());
+            aggFn.setIntermediate_type(TypeSerializer.toThrift(getReturnType()));
         }
         if (isAscOrder != null && !isAscOrder.isEmpty()) {
             aggFn.setIs_asc_order(isAscOrder);

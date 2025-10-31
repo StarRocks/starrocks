@@ -456,7 +456,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         TColumn tColumn = new TColumn();
         tColumn.setColumn_name(this.columnId.getId());
         tColumn.setIndex_len(this.getOlapColumnIndexSize());
-        tColumn.setType_desc(this.type.toThrift());
+        tColumn.setType_desc(TypeSerializer.toThrift(this.type));
         if (null != this.aggregationType) {
             tColumn.setAggregation_type(toThrift(aggregationType));
         }
@@ -474,7 +474,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
 
         // scalar type or nested type
         // If this field is set, column_type will be ignored.
-        tColumn.setType_desc(type.toThrift());
+        tColumn.setType_desc(TypeSerializer.toThrift(type));
         tColumn.setCol_unique_id(uniqueId);
 
         return tColumn;
