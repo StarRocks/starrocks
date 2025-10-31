@@ -88,6 +88,8 @@ import java.util.PriorityQueue;
 import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -805,59 +807,62 @@ public class MvRewritePreprocessor {
         logMVPrepare(connectContext, "Processing {} MVs with individual timeout of {} ms each", mvInfos.size(),
                 individualTimeoutMs);
         
+        // Use thread-safe collections for tracking results from async operations
         List<CompletableFuture<Void>> futures = Lists.newArrayListWithExpectedSize(mvInfos.size());
-        List<String> timeoutMvNames = Lists.newArrayList();
-        List<String> failedMvNames = Lists.newArrayList();
+        Set<String> timeoutMvNames = ConcurrentHashMap.newKeySet();
+        Set<String> failedMvNames = ConcurrentHashMap.newKeySet();
         
-        // Create futures for each MV
+        // Create futures for each MV - don't handle exceptions here, handle them after get()
         for (Pair<MaterializedViewWrapper, MvUpdateInfo> mvInfo : mvInfos) {
-            MaterializedView mv = mvInfo.first.getMV();
             CompletableFuture<Void> future = CompletableFuture.supplyAsync(
                     () -> {
                         prepareMV(tracers, queryTables, mvInfo.first, mvInfo.second);
                         return null;
-                    }, exec)
-                    .thenAccept(result -> {
-                        // Success case - result is already handled in prepareMV
-                    })
-                    .exceptionally(e -> {
-                        logMVPrepare(connectContext, "MV {} prepare failed: {}", mv.getName(), DebugUtil.getStackTrace(e));
-                        LOG.warn("Failed to prepare MV {}: {}", mv.getName(), e);
-                        failedMvNames.add(mv.getName());
-                        return null;
-                    });
+                    }, exec);
             
             futures.add(future);
         }
         
-        // Process each future with individual timeout
+        // Wait for each future with individual timeout and handle results
         for (int i = 0; i < futures.size(); i++) {
             CompletableFuture<Void> future = futures.get(i);
             MaterializedView mv = mvInfos.get(i).first.getMV();
+            String mvName = mv.getName();
             
             try {
                 future.get(individualTimeoutMs, TimeUnit.MILLISECONDS);
+                // Success - no action needed
             } catch (TimeoutException e) {
-                LOG.warn("MV {} preparation timeout after {} ms", mv.getName(), individualTimeoutMs);
-                timeoutMvNames.add(mv.getName());
-                logMVPrepare("MV {} preparation timed out after {} ms", mv.getName(), individualTimeoutMs);
-                // Don't throw exception, continue with other MVs
+                LOG.warn("MV {} preparation timeout after {} ms", mvName, individualTimeoutMs);
+                timeoutMvNames.add(mvName);
+                logMVPrepare(connectContext, "MV {} preparation timed out after {} ms", mvName, individualTimeoutMs);
+                // Cancel the future to stop processing
+                future.cancel(true);
             } catch (InterruptedException e) {
-                LOG.warn("MV {} preparation interrupted", mv.getName());
+                LOG.warn("MV {} preparation interrupted", mvName);
                 Thread.currentThread().interrupt();
                 throw new RuntimeException("MV preparation interrupted", e);
+            } catch (ExecutionException e) {
+                // Unwrap the actual cause from ExecutionException
+                Throwable cause = e.getCause() != null ? e.getCause() : e;
+                LOG.warn("MV {} preparation failed with exception", mvName, cause);
+                logMVPrepare(connectContext, "MV {} preparation failed: {}", mvName, DebugUtil.getStackTrace(cause));
+                failedMvNames.add(mvName);
             } catch (Exception e) {
-                LOG.warn("MV {} preparation failed with execution exception:{}", mv.getName(), e);
-                logMVPrepare(connectContext, "MV {} preparation failed: {}", mv.getName(), DebugUtil.getStackTrace(e));
-                failedMvNames.add(mv.getName());
-                // Don't throw exception, continue with other MVs
+                // Catch any other unexpected exceptions
+                LOG.warn("MV {} preparation failed with unexpected exception", mvName, e);
+                logMVPrepare(connectContext, "MV {} preparation failed: {}", mvName, DebugUtil.getStackTrace(e));
+                failedMvNames.add(mvName);
             }
         }
         
         // Log summary
         int successCount = mvInfos.size() - timeoutMvNames.size() - failedMvNames.size();
-        logMVPrepare(connectContext, "MV preparation summary: {} successful, {} timeout, {} failed out of {} total: {}",
-                successCount, timeoutMvNames.size(), failedMvNames.size(), mvInfos.size(), failedMvNames);
+        logMVPrepare(connectContext, "MV preparation summary: {} successful, {} timeout, {} failed out of {} total. " +
+                        "Timeout MVs: {}, Failed MVs: {}",
+                successCount, timeoutMvNames.size(), failedMvNames.size(), mvInfos.size(), 
+                timeoutMvNames.isEmpty() ? "none" : timeoutMvNames,
+                failedMvNames.isEmpty() ? "none" : failedMvNames);
     }
 
     /**
