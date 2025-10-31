@@ -339,7 +339,7 @@ public class RoutineLoadJobTest {
             ((Map<String, String>) Deencapsulation.getField(routineLoadJob, "jobProperties"))
                     .put("pause_on_fatal_parse_error", "false");
 
-            routineLoadJob.updateState(RoutineLoadJob.JobState.RUNNING, null, false);
+            routineLoadJob.updateState(RoutineLoadJob.JobState.RUNNING, null);
             // The job is set unstable due to the progress is too slow.
             routineLoadJob.updateSubstate();
             Assertions.assertTrue(routineLoadJob.isUnstable());
@@ -567,8 +567,8 @@ public class RoutineLoadJobTest {
             System.out.println("Key: " + key);
             System.out.println("Value: " + stmt.getAnalyzedJobProperties().get(key));
         }
-        routineLoadJob.modifyJob(stmt.getRoutineLoadDesc(), stmt.getAnalyzedJobProperties(),
-                stmt.getDataSourceProperties(), new OriginStatementInfo(originStmt, 0), true);
+        routineLoadJob.replayModifyJob(stmt.getRoutineLoadDesc(), stmt.getAnalyzedJobProperties(),
+                stmt.getDataSourceProperties());
         Assertions.assertEquals(Integer.parseInt(desiredConcurrentNumber),
                 (int) Deencapsulation.getField(routineLoadJob, "desireTaskConcurrentNum"));
         Assertions.assertEquals(Long.parseLong(maxBatchInterval),
@@ -607,8 +607,8 @@ public class RoutineLoadJobTest {
                 ")";
         routineLoadJob.setOrigStmt(new OriginStatementInfo(originStmt, 0));
         AlterRoutineLoadStmt stmt = (AlterRoutineLoadStmt) UtFrameUtils.parseStmtWithNewParser(originStmt, connectContext);
-        routineLoadJob.modifyJob(stmt.getRoutineLoadDesc(), stmt.getAnalyzedJobProperties(),
-                stmt.getDataSourceProperties(), new OriginStatementInfo(originStmt, 0), true);
+        routineLoadJob.replayModifyJob(stmt.getRoutineLoadDesc(), stmt.getAnalyzedJobProperties(),
+                stmt.getDataSourceProperties());
         routineLoadJob.convertCustomProperties(true);
         Map<String, String> properties = routineLoadJob.getConvertedCustomProperties();
         Assertions.assertEquals(groupId, properties.get("group.id"));
@@ -630,8 +630,8 @@ public class RoutineLoadJobTest {
                 "ROWS TERMINATED BY \"A\"";
         routineLoadJob.setOrigStmt(new OriginStatementInfo(originStmt, 0));
         AlterRoutineLoadStmt stmt = (AlterRoutineLoadStmt) UtFrameUtils.parseStmtWithNewParser(originStmt, connectContext);
-        routineLoadJob.modifyJob(stmt.getRoutineLoadDesc(), stmt.getAnalyzedJobProperties(),
-                stmt.getDataSourceProperties(), new OriginStatementInfo(originStmt, 0), true);
+        routineLoadJob.replayModifyJob(stmt.getRoutineLoadDesc(), stmt.getAnalyzedJobProperties(),
+                stmt.getDataSourceProperties());
         Assertions.assertEquals("a,b,c,d=a", Joiner.on(",").join(routineLoadJob.getColumnDescs()));
         Assertions.assertEquals("`a` = 1", ExprToSql.toSql(routineLoadJob.getWhereExpr()));
         Assertions.assertEquals("','", routineLoadJob.getColumnSeparator().toString());
@@ -651,8 +651,8 @@ public class RoutineLoadJobTest {
 
         try {
             AlterRoutineLoadStmt stmt = (AlterRoutineLoadStmt) UtFrameUtils.parseStmtWithNewParser(validStmt, connectContext);
-            routineLoadJob.modifyJob(stmt.getRoutineLoadDesc(), stmt.getAnalyzedJobProperties(),
-                    stmt.getDataSourceProperties(), new OriginStatementInfo(validStmt, 0), true);
+            routineLoadJob.replayModifyJob(stmt.getRoutineLoadDesc(), stmt.getAnalyzedJobProperties(),
+                    stmt.getDataSourceProperties());
 
             // Verify broker list was updated successfully
             Assertions.assertEquals("192.168.1.2:9092,192.168.1.3:9092", routineLoadJob.getBrokerList());
@@ -674,7 +674,7 @@ public class RoutineLoadJobTest {
         try {
             AlterRoutineLoadStmt stmt = (AlterRoutineLoadStmt) UtFrameUtils.parseStmtWithNewParser(invalidStmt, connectContext);
             routineLoadJob.modifyJob(stmt.getRoutineLoadDesc(), stmt.getAnalyzedJobProperties(),
-                    stmt.getDataSourceProperties(), new OriginStatementInfo(invalidStmt, 0), false);
+                    stmt.getDataSourceProperties(), new OriginStatementInfo(invalidStmt, 0));
             Assertions.fail("Invalid broker list should throw DdlException");
         } catch (Exception e) {
             // This should trigger the catch block on line 841-842

@@ -986,7 +986,7 @@ public class RoutineLoadManagerTest {
         discardJob.setOrigStmt(new OriginStatementInfo(createSQL, 0));
         leaderLoadManager.addRoutineLoadJob(discardJob, db);
         discardJob.updateState(RoutineLoadJob.JobState.CANCELLED,
-                new ErrorReason(InternalErrorCode.CREATE_TASKS_ERR, "fake"), false);
+                new ErrorReason(InternalErrorCode.CREATE_TASKS_ERR, "fake"));
         discardJob.endTimestamp = now - Config.label_keep_max_second * 2 * 1000L;
 
         // 2. create a new job that will keep for a while
@@ -996,7 +996,7 @@ public class RoutineLoadManagerTest {
         goodJob.setOrigStmt(new OriginStatementInfo(createSQL, 0));
         leaderLoadManager.addRoutineLoadJob(goodJob, db);
         goodJob.updateState(RoutineLoadJob.JobState.CANCELLED,
-                new ErrorReason(InternalErrorCode.CREATE_TASKS_ERR, "fake"), false);
+                new ErrorReason(InternalErrorCode.CREATE_TASKS_ERR, "fake"));
         Assertions.assertNotNull(leaderLoadManager.getJob(discardJobId));
         Assertions.assertNotNull(leaderLoadManager.getJob(goodJobId));
 

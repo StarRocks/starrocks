@@ -124,7 +124,6 @@ public class StreamLoadMgr implements MemoryTrackable {
             readUnlock();
         }
 
-        boolean createTask = false;
         writeLock();
         try {
             task = idToStreamLoadTask.get(label);
@@ -133,18 +132,15 @@ public class StreamLoadMgr implements MemoryTrackable {
                 return;
             }
             task = createMultiStatementLoadTask(db, label, user, clientIp, timeoutMillis, computeResource);
-            addLoadTask(task);
-            LOG.info("create multi statment task {}", task);
+            GlobalStateMgr.getCurrentState().getEditLog().logCreateMultiStmtStreamLoadJob(
+                    (StreamLoadMultiStmtTask) task, wal -> addLoadTask((StreamLoadMultiStmtTask) wal));
+            LOG.info("create multi statement task {}", task);
             task.beginTxnFromFrontend(resp);
-            createTask = true;
         } finally {
             writeUnlock();
         }
 
-        if (createTask) {
-            GlobalStateMgr.getCurrentState().getEditLog().logCreateMultiStmtStreamLoadJob((StreamLoadMultiStmtTask) task);
-            LOG.info("create multi statement task success");
-        }
+        LOG.info("create multi statement task success");
     }
 
     public void prepareMultiStatementLoadTask(String label, String tableName, HttpHeaders headers, TransactionResult resp)
@@ -177,8 +173,6 @@ public class StreamLoadMgr implements MemoryTrackable {
         }
         Table table = checkMeta(db, tableName);
 
-        boolean createTask = true;
-
         writeLock();
         try {
             // double check here
@@ -191,14 +185,11 @@ public class StreamLoadMgr implements MemoryTrackable {
                     computeResource);
             LOG.info(new LogBuilder(LogKey.STREAM_LOAD_TASK, task.getId())
                     .add("msg", "create load task").build());
-            addLoadTask(task);
+            GlobalStateMgr.getCurrentState().getEditLog().logCreateStreamLoadJob(
+                    (StreamLoadTask) task, wal -> addLoadTask((StreamLoadTask) wal));
             task.beginTxnFromFrontend(channelId, channelNum, resp);
-            createTask = true;
         } finally {
             writeUnlock();
-        }
-        if (createTask) {
-            GlobalStateMgr.getCurrentState().getEditLog().logCreateStreamLoadJob((StreamLoadTask) task);
         }
     }
 
