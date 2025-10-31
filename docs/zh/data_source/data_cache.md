@@ -167,7 +167,7 @@ Block Cache 当前默认会持久化磁盘缓存数据，BE 进程重启后，�
 - `DataCacheWriteBytes`：从外部存储系统加载到内存和磁盘的数据量。
 - `BytesRead`：总共读取的数据量，包括从内存、磁盘以及外部存储读取的数据量。
 
-示例一：StarRocks 从外部存储系统中读取了大量的数据 (7.65 GB)，从内存和磁盘中读取的数据量 (518.73 MB) 较少，即代表 Block Cache 命中较少。
+示例一：StarRocks 从外部存储系统中读取了大量的数据 (7.65 GB)，从磁盘中读取的数据量 (518.73 MB) 较少，即代表 Block Cache 命中较少。
 
 ```Plain
  - Table: lineorder

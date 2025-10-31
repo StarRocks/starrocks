@@ -161,7 +161,7 @@ You can check whether a query hits data cache by analyzing the following metrics
 - `DataCacheWriteBytes`: the size of data loaded from an external storage system to StarRocks' memory and disks.
 - `BytesRead`: the total amount of data that is read, including data that StarRocks reads from an external storage system, and its memory and disks.
 
-Example 1: In this example, StarRocks reads a large amount of data (7.65 GB) from the external storage system and only a few data (518.73 MB) from the memory and disks. This means that few block caches were hit.
+Example 1: In this example, StarRocks reads a large amount of data (7.65 GB) from the external storage system and only a few data (518.73 MB) from the disks. This means that few block caches were hit.
 
 ```Plain
  - Table: lineorder
