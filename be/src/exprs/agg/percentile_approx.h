@@ -97,8 +97,6 @@ public:
 // PercentileApproxAggregateFunction: percentile_approx(expr, DOUBLE p[, DOUBLE compression])
 class PercentileApproxAggregateFunction final : public PercentileApproxAggregateFunctionBase {
 public:
-    void create(FunctionContext* ctx, AggDataPtr __restrict ptr) const override { new (ptr) PercentileApproxState(); }
-
     double get_compression_factor(FunctionContext* ctx) const override {
         double compression = DEFAULT_COMPRESSION_FACTOR;
         if (ctx->get_num_args() > 2) {
@@ -169,8 +167,6 @@ public:
 // PercentileApproxWeightedAggregateFunction: percentile_approx_weighted(expr, weight, DOUBLE p[, DOUBLE compression])
 class PercentileApproxWeightedAggregateFunction final : public PercentileApproxAggregateFunctionBase {
 public:
-    void create(FunctionContext* ctx, AggDataPtr __restrict ptr) const override { new (ptr) PercentileApproxState(); }
-
     double get_compression_factor(FunctionContext* ctx) const override {
         double compression = DEFAULT_COMPRESSION_FACTOR;
         if (ctx->get_num_args() > 3) {
