@@ -20,8 +20,8 @@
 
 #include "column/array_column.h"
 #include "column/column_helper.h"
-#include "column/type_traits.h"
 #include "column/nullable_column.h"
+#include "column/type_traits.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/aggregate_traits.h"
 #include "runtime/mem_pool.h"
@@ -68,7 +68,7 @@ struct MinMaxNAggregateState {
             // Heap not full, add directly
             auto copied_value = _copy<IsDeepCopy>(mem_pool, value);
             heap.push(copied_value);
-        } else if (_should_replace(value, heap.top())) {
+        } else if (Comparator()(value, heap.top())) {
             // Heap full, replace if new value is better
             heap.pop();
             auto copied_value = _copy<IsDeepCopy>(mem_pool, value);
@@ -82,18 +82,18 @@ struct MinMaxNAggregateState {
         }
     }
 
-    // Generate sorted result values from heap (thread-safe, no mutable cache)
+    // Generate sorted result values from heap
     void get_sorted_values(std::vector<CppType>& values) const {
         values.clear();
         values.reserve(heap.size());
-        
+
         // Extract all values from heap
         auto temp_heap = heap;
         while (!temp_heap.empty()) {
             values.push_back(temp_heap.top());
             temp_heap.pop();
         }
-        
+
         // Sort: both min_n and max_n in ascending order
         std::sort(values.begin(), values.end(), [](const CppType& a, const CppType& b) {
             if constexpr (IsSlice<CppType>) {
@@ -131,16 +131,6 @@ private:
             return value;
         }
     }
-
-    bool _should_replace(const CppType& new_value, const CppType& heap_top) const {
-        if constexpr (IsSlice<CppType>) {
-            // For min_n: replace if new_value < heap_top (heap_top is the largest among n smallest)
-            // For max_n: replace if new_value > heap_top (heap_top is the smallest among n largest)
-            return IsMin ? (new_value.compare(heap_top) < 0) : (new_value.compare(heap_top) > 0);
-        } else {
-            return IsMin ? (new_value < heap_top) : (new_value > heap_top);
-        }
-    }
 };
 
 // Convenience aliases
@@ -166,35 +156,35 @@ public:
         if (ctx->get_num_args() > 1) {
             const Column* const_col = ctx->get_constant_column(1);
             if (const_col != nullptr) {
-            // Get the actual data column from ConstColumn
-            const auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(const_col);
-            const Column* data_column = const_column->data_column().get();
-            
-            // Read the value directly from raw data based on type size
-            const uint8_t* raw_data = data_column->raw_data();
-            size_t type_size = data_column->type_size();
-                
+                // Get the actual data column from ConstColumn
+                const auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(const_col);
+                const Column* data_column = const_column->data_column().get();
+
+                // Read the value directly from raw data based on type size
+                const uint8_t* raw_data = data_column->raw_data();
+                size_t type_size = data_column->type_size();
+
                 switch (type_size) {
-                    case 1: {
-                        n = static_cast<int32_t>(*reinterpret_cast<const int8_t*>(raw_data));
-                        break;
-                    }
-                    case 2: {
-                        n = static_cast<int32_t>(*reinterpret_cast<const int16_t*>(raw_data));
-                        break;
-                    }
-                    case 4: {
-                        n = *reinterpret_cast<const int32_t*>(raw_data);
-                        break;
-                    }
-                    case 8: {
-                        n = static_cast<int32_t>(*reinterpret_cast<const int64_t*>(raw_data));
-                        break;
-                    }
-                    default: {
-                        n = ColumnHelper::get_const_value<TYPE_INT>(const_col);
-                        break;
-                    }
+                case 1: {
+                    n = static_cast<int32_t>(*reinterpret_cast<const int8_t*>(raw_data));
+                    break;
+                }
+                case 2: {
+                    n = static_cast<int32_t>(*reinterpret_cast<const int16_t*>(raw_data));
+                    break;
+                }
+                case 4: {
+                    n = *reinterpret_cast<const int32_t*>(raw_data);
+                    break;
+                }
+                case 8: {
+                    n = static_cast<int32_t>(*reinterpret_cast<const int64_t*>(raw_data));
+                    break;
+                }
+                default: {
+                    n = ColumnHelper::get_const_value<TYPE_INT>(const_col);
+                    break;
+                }
                 }
             }
         }
@@ -228,61 +218,96 @@ public:
         const Column* data_col = ColumnHelper::get_data_column(columns[0]);
         const auto* column = down_cast<const InputColumnType*>(data_col);
         const auto& value = AggDataTypeTraits<LT>::get_row_ref(*column, row_num);
-        
+
         this->data(state).template process<true>(ctx->mem_pool(), value);
     }
 
-    void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, 
-                                              const Column** columns, int64_t peer_group_start, 
-                                              int64_t peer_group_end, int64_t frame_start, 
+    void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
+                                              int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                               int64_t frame_end) const override {
-        for (size_t i = frame_start; i < frame_end; ++i) {
-            update(ctx, columns, state, i);
+        init_state_if_necessary(ctx, state);
+
+        const Column* input_col = columns[0];
+
+        // Fast path: no nulls
+        if (!input_col->has_null()) {
+            const Column* data_col = ColumnHelper::get_data_column(input_col);
+            const auto* column = down_cast<const InputColumnType*>(data_col);
+
+            for (size_t i = frame_start; i < frame_end; ++i) {
+                const auto& value = AggDataTypeTraits<LT>::get_row_ref(*column, i);
+                this->data(state).template process<true>(ctx->mem_pool(), value);
+            }
+            return;
+        }
+
+        // Handle nullable column
+        if (input_col->is_nullable()) {
+            const auto* nullable_column = down_cast<const NullableColumn*>(input_col);
+            const Column* data_col = &nullable_column->data_column_ref();
+            const auto* column = down_cast<const InputColumnType*>(data_col);
+            const uint8_t* null_data = nullable_column->null_column()->raw_data();
+
+            for (size_t i = frame_start; i < frame_end; ++i) {
+                if (null_data[i] == 0) {
+                    const auto& value = AggDataTypeTraits<LT>::get_row_ref(*column, i);
+                    this->data(state).template process<true>(ctx->mem_pool(), value);
+                }
+            }
+        } else {
+            // Const column or other non-nullable type
+            const Column* data_col = ColumnHelper::get_data_column(input_col);
+            const auto* column = down_cast<const InputColumnType*>(data_col);
+
+            for (size_t i = frame_start; i < frame_end; ++i) {
+                const auto& value = AggDataTypeTraits<LT>::get_row_ref(*column, i);
+                this->data(state).template process<true>(ctx->mem_pool(), value);
+            }
         }
     }
 
-    void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, 
-               size_t row_num) const override {
+    void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         DCHECK(column->is_binary());
         Slice bytes = column->get(row_num).get_slice();
-        
+
         size_t start = 0;
         int32_t n_encoded;
         uint32_t count;
-        
+
         // Read n value
         std::memcpy(&n_encoded, bytes.data + start, sizeof(int32_t));
         start += sizeof(int32_t);
-        
+
         // Read element count
         std::memcpy(&count, bytes.data + start, sizeof(uint32_t));
         start += sizeof(uint32_t);
 
         init_state_if_necessary(ctx, state);
-        
+
         std::vector<CppType> values;
         values.reserve(count);
-        
-        for (uint32_t i = 0; i < count; ++i) {
-            CppType value;
-            if constexpr (IsSlice<CppType>) {
+
+        if constexpr (IsSlice<CppType>) {
+            // Variable-length type (Slice): deserialize one by one
+            for (uint32_t i = 0; i < count; ++i) {
                 int64_t len;
                 std::memcpy(&len, bytes.data + start, sizeof(int64_t));
                 start += sizeof(int64_t);
-                
+
                 uint8_t* slice_data = ctx->mem_pool()->allocate(len);
                 if (len > 0) {
                     std::memcpy(slice_data, bytes.data + start, len);
                 }
                 start += len;
-                value = Slice{slice_data, static_cast<size_t>(len)};
-            } else {
-                std::memcpy(&value, bytes.data + start, sizeof(CppType));
-                start += sizeof(CppType);
+                values.emplace_back(slice_data, static_cast<size_t>(len));
             }
-            values.push_back(value);
+        } else {
+            // Fixed-length type: bulk copy for better performance
+            values.resize(count);
+            std::memcpy(values.data(), bytes.data + start, count * sizeof(CppType));
+            start += count * sizeof(CppType);
         }
-        
+
         this->data(state).merge(ctx->mem_pool(), values);
     }
 
@@ -327,12 +352,12 @@ public:
     void serialize_state(const MinMaxNAggregateState<LT, IsMin>& state, BinaryColumn* dst) const {
         Bytes& bytes = dst->get_bytes();
         const size_t old_size = bytes.size();
-        
+
         // Get sorted values (no mutable cache)
         std::vector<CppType> values;
         state.get_sorted_values(values);
         size_t count = values.size();
-        
+
         // Calculate total size needed
         size_t total_size = sizeof(int32_t) + sizeof(uint32_t); // n + count
         for (const auto& value : values) {
@@ -342,22 +367,23 @@ public:
                 total_size += sizeof(CppType);
             }
         }
-        
+
         bytes.resize(old_size + total_size);
         size_t start = old_size;
-        
+
         // Write n value
         std::memcpy(bytes.data() + start, &state.n, sizeof(int32_t));
         start += sizeof(int32_t);
-        
+
         // Write element count
         uint32_t count_u32 = static_cast<uint32_t>(count);
         std::memcpy(bytes.data() + start, &count_u32, sizeof(uint32_t));
         start += sizeof(uint32_t);
-        
+
         // Write elements
-        for (const auto& value : values) {
-            if constexpr (IsSlice<CppType>) {
+        if constexpr (IsSlice<CppType>) {
+            // Variable-length type (Slice): serialize one by one
+            for (const auto& value : values) {
                 int64_t len = static_cast<int64_t>(value.size);
                 std::memcpy(bytes.data() + start, &len, sizeof(int64_t));
                 start += sizeof(int64_t);
@@ -365,17 +391,21 @@ public:
                     std::memcpy(bytes.data() + start, value.data, len);
                     start += len;
                 }
-            } else {
-                std::memcpy(bytes.data() + start, &value, sizeof(CppType));
-                start += sizeof(CppType);
+            }
+        } else {
+            // Fixed-length type: bulk copy for better performance
+            // std::vector memory is contiguous, copy all elements at once
+            if (count > 0) {
+                std::memcpy(bytes.data() + start, values.data(), count * sizeof(CppType));
+                start += count * sizeof(CppType);
             }
         }
-        
+
         dst->get_offset().emplace_back(old_size + total_size);
     }
 
     void batch_serialize(FunctionContext* ctx, size_t chunk_size, const Buffer<AggDataPtr>& agg_states,
-                        size_t state_offset, Column* to) const override {
+                         size_t state_offset, Column* to) const override {
         auto* column = down_cast<BinaryColumn*>(to);
         for (size_t i = 0; i < chunk_size; i++) {
             serialize_state(this->data(agg_states[i] + state_offset), column);
@@ -383,7 +413,7 @@ public:
     }
 
     void batch_finalize(FunctionContext* ctx, size_t chunk_size, const Buffer<AggDataPtr>& agg_states,
-                       size_t state_offset, Column* to) const override {
+                        size_t state_offset, Column* to) const override {
         for (size_t i = 0; i < chunk_size; i++) {
             finalize_to_column(ctx, agg_states[i] + state_offset, to);
         }
@@ -393,23 +423,23 @@ public:
         // Like approx_top_k: finalize_to_column outputs to ArrayColumn (final result)
         DCHECK(to->is_array());
         auto& state_impl = this->data(const_cast<AggDataPtr>(state));
-        
+
         if (UNLIKELY(state_impl.check_overflow(ctx))) {
             return;
         }
-        
+
         auto* array_column = down_cast<ArrayColumn*>(to);
-        
+
         // Get sorted values from heap
         std::vector<CppType> values;
         state_impl.get_sorted_values(values);
-        
+
         // Handle empty result
         if (values.empty()) {
             array_column->append_default();
             return;
         }
-        
+
         // Create a temporary column to hold the array elements
         auto temp_column = InputColumnType::create();
         for (const auto& value : values) {
@@ -419,7 +449,7 @@ public:
                 AggDataTypeTraits<LT>::append_value(temp_column.get(), value);
             }
         }
-        
+
         // Use the safe append_array_element method
         array_column->append_array_element(*temp_column, 0);
 
@@ -428,19 +458,19 @@ public:
         }
     }
 
-    void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, 
-                    size_t start, size_t end) const override {
+    void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
+                    size_t end) const override {
         DCHECK_GT(end, start);
         auto& state_impl = this->data(const_cast<AggDataPtr>(state));
-        
+
         // NullableAggregateFunctionBase will handle unwrapping if needed
         DCHECK(dst->is_array());
         auto* array_column = down_cast<ArrayColumn*>(dst);
-        
+
         // Get sorted values (only once for all rows)
         std::vector<CppType> values;
         state_impl.get_sorted_values(values);
-        
+
         for (size_t i = start; i < end; ++i) {
             if (UNLIKELY(state_impl.check_overflow(ctx))) {
                 return;
@@ -459,7 +489,7 @@ public:
                         AggDataTypeTraits<LT>::append_value(temp_column.get(), value);
                     }
                 }
-                
+
                 // Use the safe append_array_element method
                 array_column->append_array_element(*temp_column, 0);
             }
@@ -470,9 +500,7 @@ public:
         }
     }
 
-    std::string get_name() const override { 
-        return FUNC_NAME; 
-    }
+    std::string get_name() const override { return FUNC_NAME; }
 };
 
 // Convenience aliases for min_n and max_n
@@ -483,4 +511,3 @@ template <LogicalType LT>
 using MaxNAggregateFunction = MinMaxNAggregateFunction<LT, false>;
 
 } // namespace starrocks
-
