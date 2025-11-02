@@ -30,6 +30,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.type.ArrayType;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.DateType;
 import com.starrocks.type.FloatType;
@@ -231,5 +232,35 @@ public class ImplicitCastRuleTest {
         assertTrue(result.getChild(1).getType().isVarchar());
 
         assertTrue(result.getChild(1).getChild(0).getType().isInt());
+    }
+
+    @Test
+    public void testMinNMaxNNoCast() {
+        // Test that MIN_N and MAX_N don't require implicit casting
+        Function minNFn = new Function(new FunctionName("min_n"),
+                new Type[] {IntegerType.INT, IntegerType.INT}, ArrayType.ARRAY_INT, true);
+        Function maxNFn = new Function(new FunctionName("max_n"),
+                new Type[] {IntegerType.INT, IntegerType.INT}, ArrayType.ARRAY_INT, true);
+
+        CallOperator minNOp = new CallOperator("min_n", ArrayType.ARRAY_INT,
+                Lists.newArrayList(
+                        ConstantOperator.createInt(1),
+                        ConstantOperator.createInt(3)
+                ), minNFn);
+        CallOperator maxNOp = new CallOperator("max_n", ArrayType.ARRAY_INT,
+                Lists.newArrayList(
+                        ConstantOperator.createInt(1),
+                        ConstantOperator.createInt(3)
+                ), maxNFn);
+
+        ImplicitCastRule rule = new ImplicitCastRule();
+        ScalarOperator minNResult = rule.apply(minNOp, null);
+        ScalarOperator maxNResult = rule.apply(maxNOp, null);
+
+        // MIN_N and MAX_N should return the call operator directly without casting
+        assertEquals(OperatorType.CALL, minNResult.getOpType());
+        assertEquals(OperatorType.CALL, maxNResult.getOpType());
+        assertEquals(minNOp, minNResult);
+        assertEquals(maxNOp, maxNResult);
     }
 }

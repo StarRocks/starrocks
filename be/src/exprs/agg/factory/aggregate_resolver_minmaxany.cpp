@@ -82,8 +82,8 @@ struct MinNDispatcher {
             auto func = AggregateFactory::MakeMinNAggregateFunction<lt>();
             using MinNState = MinMaxNAggregateState<lt, true>;
             // Use add_aggregate_mapping with IgnoreNull=false to support nullable array elements
-            resolver->add_aggregate_mapping<lt, TYPE_ARRAY, MinNState, AggregateFunctionPtr, false>(
-                    "min_n", false, func);
+            resolver->add_aggregate_mapping<lt, TYPE_ARRAY, MinNState, AggregateFunctionPtr, false>("min_n", false,
+                                                                                                    func);
         }
     }
 };
@@ -97,13 +97,11 @@ struct MaxNDispatcher {
             auto func = AggregateFactory::MakeMaxNAggregateFunction<lt>();
             using MaxNState = MinMaxNAggregateState<lt, false>;
             // Use add_aggregate_mapping with IgnoreNull=false to support nullable array elements
-            resolver->add_aggregate_mapping<lt, TYPE_ARRAY, MaxNState, AggregateFunctionPtr, false>(
-                    "max_n", false, func);
+            resolver->add_aggregate_mapping<lt, TYPE_ARRAY, MaxNState, AggregateFunctionPtr, false>("max_n", false,
+                                                                                                    func);
         }
     }
 };
-
-
 
 template <LogicalType ret_type, bool is_max_by>
 struct MaxMinByDispatcherInner {
