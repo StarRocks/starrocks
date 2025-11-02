@@ -148,5 +148,11 @@ SHOW USERS;
 以下示例显示用户 `jack` 的属性：
 
 ```SQL
-SHOW PROPERTY FOR jack@'172.10.1.10';
+SHOW PROPERTY FOR 'jack';
+```
+
+或者查看特定属性：
+
+```SQL
+SHOW PROPERTY FOR 'jack' LIKE 'max_user_connections';
 ```

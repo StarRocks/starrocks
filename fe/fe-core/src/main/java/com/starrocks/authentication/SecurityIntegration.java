@@ -25,6 +25,7 @@ import java.util.Map;
  * Authentication for this integration is provided by corresponding `getAuthenticationProvider()`.
  */
 public abstract class SecurityIntegration {
+    public static final String AUTHENTICATION_CHAIN_MECHANISM_NATIVE = "native";
     public static final String SECURITY_INTEGRATION_PROPERTY_TYPE_KEY = "type";
     public static final String SECURITY_INTEGRATION_PROPERTY_GROUP_PROVIDER = "group_provider";
     public static final String SECURITY_INTEGRATION_GROUP_ALLOWED_LOGIN = "permitted_groups";

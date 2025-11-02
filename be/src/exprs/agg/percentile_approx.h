@@ -109,7 +109,7 @@ public:
         if (UNLIKELY(data(state).targetQuantile == std::numeric_limits<double>::infinity())) {
             data(state).targetQuantile = columns[1]->get(0).get_double();
         }
-        double column_value = data_column->get_data()[row_num];
+        double column_value = data_column->immutable_data()[row_num];
         int64_t prev_memory = data(state).percentile->mem_usage();
         data(state).percentile->add(implicit_cast<float>(column_value));
         ctx->add_mem_usage(data(state).percentile->mem_usage() - prev_memory);
@@ -133,7 +133,7 @@ public:
         size_t old_size = bytes.size();
         for (size_t i = 0; i < chunk_size; ++i) {
             PercentileValue percentile;
-            percentile.add(data_column->get_data()[i]);
+            percentile.add(data_column->immutable_data()[i]);
 
             size_t new_size = old_size + sizeof(double) + percentile.serialize_size();
             bytes.resize(new_size);
@@ -181,7 +181,7 @@ public:
             data(state).targetQuantile = columns[2]->get(0).get_double();
         }
 
-        double column_value = data_column->get_data()[row_num];
+        double column_value = data_column->immutable_data()[row_num];
         int64_t prev_memory = data(state).percentile->mem_usage();
         // add value with weight
         if (LIKELY(weight != 0)) {
@@ -211,7 +211,7 @@ public:
             if (LIKELY(weight != 0)) {
                 for (size_t i = 0; i < chunk_size; ++i) {
                     PercentileValue percentile;
-                    double value = data_column->get_data()[i];
+                    double value = data_column->immutable_data()[i];
                     percentile.add(value, weight);
                     size_t new_size = old_size + sizeof(double) + percentile.serialize_size();
                     bytes.resize(new_size);
@@ -236,9 +236,9 @@ public:
         } else {
             const auto* weight_column = down_cast<const Int64Column*>(src[1].get());
             for (size_t i = 0; i < chunk_size; ++i) {
-                int64_t weight = weight_column->get_data()[i];
+                int64_t weight = weight_column->immutable_data()[i];
                 PercentileValue percentile;
-                double value = data_column->get_data()[i];
+                double value = data_column->immutable_data()[i];
                 if (LIKELY(weight != 0)) {
                     percentile.add(value, weight);
                 }

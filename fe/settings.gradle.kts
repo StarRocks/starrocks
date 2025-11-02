@@ -21,6 +21,7 @@ include(
     "fe-utils",
     "fe-testing",
     "plugin:spark-dpp",
+    "plugin:hive-udf",
     "fe-core",
-    "plugin:hive-udf"
+    "fe-server"
 )

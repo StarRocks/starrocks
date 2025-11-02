@@ -41,7 +41,7 @@ https://github.com/checkstyle/checkstyle/blob/master/src/main/resources/google_c
     <property name="fileExtensions" value="java"/>
 
     <module name="RegexpHeader">
-        <property name="headerFile" value="checkstyle-header.txt"/>
+        <property name="header" value="(^// Licensed to the Apache Software Foundation \(ASF\) under one$)|(^// Copyright 2021-present StarRocks, Inc\. All rights reserved\.$)"/>
         <property name="fileExtensions" value="java"/>
     </module>
 

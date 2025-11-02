@@ -16,8 +16,6 @@ package com.starrocks.catalog.mv;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvUpdateInfo;
@@ -25,10 +23,13 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
-import com.starrocks.scheduler.TableWithPartitions;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.common.PCell;
+import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.PartitionDiff;
 import com.starrocks.sql.common.RangePartitionDiffer;
 import com.starrocks.sql.common.SyncPartitionUtils;
@@ -89,7 +90,7 @@ public final class MVTimelinessRangePartitionArbiter extends MVTimelinessArbiter
         Preconditions.checkArgument(partitionExprOpt.isPresent(),
                 "Materialized view %s has no partition expr.", mv.getName());
         Expr partitionExpr = partitionExprOpt.get();
-        Map<Table, Map<String, PCell>> basePartitionNameToRangeMap;
+        Map<Table, PCellSortedSet> basePartitionNameToRangeMap;
 
         try (Timer ignored = Tracers.watchScope("SyncBaseTablePartitions")) {
             basePartitionNameToRangeMap = syncBaseTablePartitions(mv);
@@ -117,16 +118,15 @@ public final class MVTimelinessRangePartitionArbiter extends MVTimelinessArbiter
 
         // no needs to refresh the deleted partitions, because the deleted partitions are not in the mv's partition map.
         Set<String> mvToRefreshPartitionNames = Sets.newHashSet();
-        Map<String, PCell> mvPartitionToCells = mv.getPartitionCells(Optional.empty());
+        PCellSortedSet mvPartitionToCells = mv.getPartitionCells(Optional.empty());
 
         // remove ref base table's deleted partitions from `mvPartitionMap`
-        mvToRefreshPartitionNames.addAll(diff.getDeletes().keySet());
-        mvToRefreshPartitionNames.addAll(diff.getAdds().keySet());
+        mvToRefreshPartitionNames.addAll(diff.getDeletes().getPartitionNames());
+        mvToRefreshPartitionNames.addAll(diff.getAdds().getPartitionNames());
 
-        diff.getDeletes().keySet().stream().forEach(mvPartitionToCells::remove);
+        diff.getDeletes().forEach(mvPartitionToCells::remove);
         // add all ref base table's added partitions to `mvPartitionMap`
-        diff.getAdds().entrySet().stream()
-                        .forEach(e -> mvPartitionToCells.put(e.getKey(), e.getValue()));
+        mvPartitionToCells.addAll(diff.getAdds());
         // add mv partition name to range map into timeline info to be used if it's a sub mv of nested mv
         mvTimelinessInfo.addMVPartitionNameToCellMap(mvPartitionToCells);
 
@@ -145,11 +145,17 @@ public final class MVTimelinessRangePartitionArbiter extends MVTimelinessArbiter
 
         // handle mv's partition expr is function call expr
         if (partitionExpr instanceof FunctionCallExpr) {
-            List<TableWithPartitions> baseTableWithPartitions = baseChangedPartitionNames.entrySet().stream()
-                    .map(e -> new TableWithPartitions(e.getKey(), e.getValue()))
-                    .collect(Collectors.toList());
-            if (mv.isCalcPotentialRefreshPartition(baseTableWithPartitions,
-                    basePartitionNameToRangeMap, mvToRefreshPartitionNames, mvPartitionToCells)) {
+            Map<Table, PCellSortedSet> baseTableWithPartitions = baseChangedPartitionNames.entrySet().stream()
+                    .map(entry -> {
+                        PCellSortedSet tableNameToCell = basePartitionNameToRangeMap.get(entry.getKey());
+                        Map<String, PCell> changedCells = entry.getValue().stream()
+                                .map(name -> Pair.create(name, tableNameToCell.getPCell(name)))
+                                .collect(Collectors.toMap(x -> x.first, x -> x.second));
+                        return Pair.create(entry.getKey(), PCellSortedSet.of(changedCells));
+                    })
+                    .collect(Collectors.toMap(x -> x.first, x -> x.second));
+            if (SyncPartitionUtils.isCalcPotentialRefreshPartition(baseTableWithPartitions,
+                    mvPartitionToCells)) {
                 // because the relation of partitions between materialized view and base partition table is n: m,
                 // should calculate the candidate partitions recursively.
                 SyncPartitionUtils.calcPotentialRefreshPartition(mvToRefreshPartitionNames, baseChangedPartitionNames,

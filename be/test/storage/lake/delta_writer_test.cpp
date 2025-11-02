@@ -162,6 +162,90 @@ TEST_F(LakeDeltaWriterTest, test_open) {
     }
 }
 
+TEST_F(LakeDeltaWriterTest, test_write_with_load_id) {
+    // Prepare data for writing
+    static const int kChunkSize = 128;
+    auto chunk0 = generate_data(kChunkSize);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    // Create and open DeltaWriter
+    auto txn_id = next_id();
+    auto tablet_id = _tablet_metadata->id();
+    PUniqueId load_id;
+    load_id.set_hi(0);
+    load_id.set_lo(0);
+    ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(_tablet_schema->id())
+                                               .set_immutable_tablet_size(1)
+                                               .set_profile(&_dummy_runtime_profile)
+                                               .set_load_id(load_id)
+                                               .set_is_multi_statements_txn(true) // Enable multi-statements transaction
+                                               .build());
+    ASSERT_OK(delta_writer->open());
+
+    // Write and flush
+    ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+    ASSERT_OK(delta_writer->flush_async());
+    // Write
+    ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+    // finish
+    ASSERT_OK(delta_writer->finish_with_txnlog());
+    // close
+    delta_writer->close();
+
+    // Check TxnLog
+    ASSIGN_OR_ABORT(auto txnlog, _tablet_mgr->get_txn_log(tablet_id, txn_id, load_id));
+    ASSERT_EQ(tablet_id, txnlog->tablet_id());
+    ASSERT_EQ(txn_id, txnlog->txn_id());
+    ASSERT_EQ(load_id.hi(), txnlog->load_id().hi());
+    ASSERT_EQ(load_id.lo(), txnlog->load_id().lo());
+    ASSERT_TRUE(txnlog->has_op_write());
+    ASSERT_FALSE(txnlog->has_op_compaction());
+    ASSERT_FALSE(txnlog->has_op_schema_change());
+    ASSERT_TRUE(txnlog->op_write().has_rowset());
+    ASSERT_EQ(1, txnlog->op_write().rowset().segments_size());
+    ASSERT_FALSE(txnlog->op_write().rowset().overlapped());
+    ASSERT_EQ(2 * kChunkSize, txnlog->op_write().rowset().num_rows());
+    ASSERT_GT(txnlog->op_write().rowset().data_size(), 0);
+
+    // Check segment file
+    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestDirectory));
+    auto path0 = _tablet_mgr->segment_location(tablet_id, txnlog->op_write().rowset().segments(0));
+
+    ASSIGN_OR_ABORT(auto seg0, Segment::open(fs, FileInfo{path0}, 0, _tablet_schema));
+
+    OlapReaderStatistics statistics;
+    SegmentReadOptions opts;
+    opts.fs = fs;
+    opts.tablet_id = tablet_id;
+    opts.stats = &statistics;
+    opts.chunk_size = 1024;
+
+    auto check_segment = [&](const SegmentSharedPtr& segment) {
+        ASSIGN_OR_ABORT(auto seg_iter, segment->new_iterator(*_schema, opts));
+        auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, 1024);
+        ASSERT_OK(seg_iter->get_next(read_chunk_ptr.get()));
+        ASSERT_EQ(kChunkSize * 2, read_chunk_ptr->num_rows());
+        for (int i = 0; i < kChunkSize * 2; i += 2) {
+            EXPECT_EQ(i / 2, read_chunk_ptr->get(i)[0].get_int32());
+            EXPECT_EQ((i / 2) * 3, read_chunk_ptr->get(i)[1].get_int32());
+        }
+        read_chunk_ptr->reset();
+        ASSERT_TRUE(seg_iter->get_next(read_chunk_ptr.get()).is_end_of_file());
+        seg_iter->close();
+    };
+
+    check_segment(seg0);
+}
+
 TEST_F(LakeDeltaWriterTest, test_write) {
     // Prepare data for writing
     static const int kChunkSize = 128;

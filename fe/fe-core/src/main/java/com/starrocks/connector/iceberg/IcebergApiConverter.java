@@ -17,11 +17,6 @@ package com.starrocks.connector.iceberg;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.IntLiteral;
-import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
@@ -32,6 +27,7 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.connector.ConnectorViewDefinition;
@@ -41,11 +37,17 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ListPartitionDesc;
+import com.starrocks.sql.ast.OrderByElement;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.thrift.TIcebergColumnStats;
 import com.starrocks.thrift.TIcebergDataFile;
 import com.starrocks.thrift.TIcebergSchema;
 import com.starrocks.thrift.TIcebergSchemaField;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.ManifestFile;
 import org.apache.iceberg.Metrics;
@@ -75,11 +77,13 @@ import org.apache.logging.log4j.Logger;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -88,13 +92,13 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import static com.google.common.collect.ImmutableList.toImmutableList;
-import static com.starrocks.analysis.OutFileClause.PARQUET_COMPRESSION_TYPE_MAP;
 import static com.starrocks.connector.ColumnTypeConverter.fromIcebergType;
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
 import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ICEBERG_CATALOG_TYPE;
 import static com.starrocks.connector.iceberg.IcebergMetadata.COMPRESSION_CODEC;
 import static com.starrocks.connector.iceberg.IcebergMetadata.FILE_FORMAT;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.toResourceName;
+import static com.starrocks.sql.ast.OutFileClause.PARQUET_COMPRESSION_TYPE_MAP;
 import static java.lang.String.format;
 import static org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap.copyOf;
 import static org.apache.iceberg.view.ViewProperties.COMMENT;
@@ -117,7 +121,7 @@ public class IcebergApiConverter {
                 .setCatalogTableName(remoteTableName)
                 .setComment(nativeTbl.properties().getOrDefault("common", ""))
                 .setNativeTable(nativeTbl)
-                .setFullSchema(toFullSchemas(nativeTbl.schema()))
+                .setFullSchema(toFullSchemas(nativeTbl.schema(), nativeTbl))
                 .setIcebergProperties(toIcebergProps(
                         nativeTbl.properties() != null ? Optional.of(copyOf(nativeTbl.properties())) : Optional.empty(),
                         nativeCatalogType));
@@ -146,11 +150,12 @@ public class IcebergApiConverter {
         return new Schema(icebergSchema.asStructType().fields());
     }
 
-    public static SortOrder toIcebergSortOrder(Schema schema, List<OrderByElement> orderByElements) {
+    public static SortOrder toIcebergSortOrder(Schema schema, List<OrderByElement> orderByElements) throws DdlException {
         if (orderByElements == null) {
             return null;
         }
 
+        Set<String> addedSortKey = new HashSet<>();
         SortOrder.Builder builder = SortOrder.builderFor(schema);
         for (OrderByElement orderByElement : orderByElements) {
             String columnName = orderByElement.castAsSlotRef();
@@ -160,6 +165,9 @@ public class IcebergApiConverter {
                 builder.asc(columnName, nullOrder);
             } else {
                 builder.desc(columnName, nullOrder);
+            }
+            if (!addedSortKey.add(columnName)) {
+                throw new DdlException("Duplicate sort key column " + columnName + " is not allowed.");
             }
         }
 
@@ -258,6 +266,8 @@ public class IcebergApiConverter {
                     return Types.DecimalType.of(scalarType.getScalarPrecision(), scalarType.getScalarScale());
                 case TIME:
                     return Types.TimeType.get();
+                case VARIANT:
+                    return Types.VariantType.get();
                 default:
                     throw new StarRocksConnectorException("Unsupported primitive column type %s", primitiveType);
             }
@@ -289,6 +299,21 @@ public class IcebergApiConverter {
         }
 
         throw new StarRocksConnectorException("Unsupported complex column type %s", type);
+    }
+
+    public static List<Column> toFullSchemas(Schema schema, Table table) {
+        List<Column> fullSchema = toFullSchemas(schema);
+        if (table instanceof BaseTable) {
+            if (((BaseTable) table).operations().current().formatVersion() >= 3) {
+                boolean hasRowId = fullSchema.stream().anyMatch(column -> column.getName().equals(IcebergTable.ROW_ID));
+                if (!hasRowId) {
+                    Column column = new Column(IcebergTable.ROW_ID, Type.BIGINT, true);
+                    column.setIsHidden(true);
+                    fullSchema.add(column);
+                }
+            }
+        }
+        return fullSchema;
     }
 
     public static List<Column> toFullSchemas(Schema schema) {
@@ -559,28 +584,29 @@ public class IcebergApiConverter {
 
     public static String toPartitionField(PartitionSpec spec, PartitionField field, Boolean withTransfomPrefix) {
         String name = spec.schema().findColumnName(field.sourceId());
+        String escapedName =  "`" + name + "`";
         String transform = field.transform().toString();
         String prefix = withTransfomPrefix ? FeConstants.ICEBERG_TRANSFORM_EXPRESSION_PREFIX : "";
 
         switch (transform) {
             case "identity":
-                return name;
+                return escapedName;
             case "year":
             case "month":
             case "day":
             case "hour":
             case "void":
-                return prefix + format("%s(%s)", transform, name);
+                return prefix + format("%s(%s)", transform, escapedName);
         }
 
         Matcher matcher = ICEBERG_BUCKET_PATTERN.matcher(transform);
         if (matcher.matches()) {
-            return prefix + format("bucket(%s, %s)", name, matcher.group(1));
+            return prefix + format("bucket(%s, %s)", escapedName, matcher.group(1));
         }
 
         matcher = ICEBERG_TRUNCATE_PATTERN.matcher(transform);
         if (matcher.matches()) {
-            return prefix + format("truncate(%s, %s)", name, matcher.group(1));
+            return prefix + format("truncate(%s, %s)", escapedName, matcher.group(1));
         }
 
         throw new StarRocksConnectorException("Unsupported partition transform: " + field);

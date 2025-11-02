@@ -1,0 +1,392 @@
+-- name: test_ivm_with_iceberg_join @slow
+create external catalog mv_iceberg_${uuid0}
+properties
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+-- result:
+-- !result
+set catalog mv_iceberg_${uuid0};
+-- result:
+-- !result
+create database mv_ice_db_${uuid0};
+-- result:
+-- !result
+use mv_ice_db_${uuid0};
+-- result:
+-- !result
+create table t1 (
+  col1 string,
+  col2 int,
+  dt date
+) partition by(dt);
+-- result:
+-- !result
+create table t2 (
+  col1 string,
+  col2 int,
+  dt date
+) partition by(dt);
+-- result:
+-- !result
+create table t3 (
+  col1 string,
+  col2 int,
+  dt date
+) partition by(dt);
+-- result:
+-- !result
+create table t4 (
+  col1 string,
+  col2 int,
+  dt date
+) partition by(dt);
+-- result:
+-- !result
+create table t5 (
+  col1 string,
+  col2 int,
+  dt date
+) partition by(dt);
+-- result:
+-- !result
+insert into t1 values 
+  ('a', 1, '2023-12-01'),
+  ('a', 2, '2023-12-01'),
+  ('b', 3, '2023-12-02'),
+  ('', 4, '2023-12-02'),
+  (NULL, 5, '2023-12-03'),
+  (NULL, 6, '2023-12-03'),
+  (NULL, NULL, '2023-12-04'),
+  (NULL, NULL, NULL);
+-- result:
+-- !result
+insert into t2 values 
+  ('a', 1, '2023-12-01'),
+  ('b', 3, '2023-12-02'),
+  ('', 4, '2023-12-02'),
+  (NULL, 5, '2023-12-03'),
+  (NULL, NULL, NULL);
+-- result:
+-- !result
+insert into t3 values 
+  ('a', 1, '2023-12-01'),
+  ('b', 3, '2023-12-02'),
+  ('', 4, '2023-12-02'),
+  (NULL, 5, '2023-12-03'),
+  (NULL, NULL, NULL);
+-- result:
+-- !result
+insert into t4 values 
+  ('a', 1, '2023-12-01'),
+  ('b', 3, '2023-12-02'),
+  ('', 4, '2023-12-02'),
+  (NULL, 5, '2023-12-03'),
+  (NULL, NULL, NULL);
+-- result:
+-- !result
+insert into t5 values 
+  ('a', 1, '2023-12-01'),
+  ('b', 3, '2023-12-02'),
+  ('', 4, '2023-12-02'),
+  (NULL, 5, '2023-12-03'),
+  (NULL, NULL, NULL);
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_mv1 PARTITION BY dt 
+REFRESH DEFERRED MANUAL 
+properties
+(
+    "refresh_mode" = "incremental"
+)
+AS SELECT t1.dt, t1.col1 as col11, t2.col1 as col21, t1.col2 as col12, t2.col2 as col22
+FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2
+ON t1.dt = t2.dt;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+function: print_hit_materialized_view("SELECT t1.dt, t1.col1 as col11, t2.col1 as col21, t1.col2 as col12, t2.col2 as col22 FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 ON t1.dt = t2.dt;", "test_mv1")
+-- result:
+True
+-- !result
+SELECT COUNT(*) FROM test_mv1;
+-- result:
+8
+-- !result
+SELECT t1.dt, t1.col1 as col11, t2.col1 as col21, t1.col2 as col12, t2.col2 as col22 FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 ON t1.dt = t2.dt ORDER BY t1.dt, t1.col1, t2.col1, t1.col2, t2.col2 limit 5;
+-- result:
+2023-12-01	a	a	1	1
+2023-12-01	a	a	2	1
+2023-12-02			4	4
+2023-12-02		b	4	3
+2023-12-02	b		3	4
+-- !result
+SELECT * FROM test_mv1 ORDER BY dt, col11, col21, col12, col22 limit 5;
+-- result:
+2023-12-01	a	a	1	1
+2023-12-01	a	a	2	1
+2023-12-02			4	4
+2023-12-02		b	4	3
+2023-12-02	b		3	4
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values 
+  ('1d8cf2a2c0e14fa89d8117792be6eb6f', 2000, '2023-12-01');
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+function: print_hit_materialized_view("SELECT t1.dt, t1.col1 as col11, t2.col1 as col21, t1.col2 as col12, t2.col2 as col22 FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 ON t1.dt = t2.dt;", "test_mv1")
+-- result:
+True
+-- !result
+SELECT COUNT(*) FROM test_mv1;
+-- result:
+9
+-- !result
+SELECT t1.dt, t1.col1 as col11, t2.col1 as col21, t1.col2 as col12, t2.col2 as col22 FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 ON t1.dt = t2.dt ORDER BY t1.dt, t1.col1, t2.col1, t1.col2, t2.col2 limit 5;
+-- result:
+2023-12-01	1d8cf2a2c0e14fa89d8117792be6eb6f	a	2000	1
+2023-12-01	a	a	1	1
+2023-12-01	a	a	2	1
+2023-12-02			4	4
+2023-12-02		b	4	3
+-- !result
+SELECT * FROM test_mv1 ORDER BY dt, col11, col21, col12, col22 limit 5;
+-- result:
+2023-12-01	1d8cf2a2c0e14fa89d8117792be6eb6f	a	2000	1
+2023-12-01	a	a	1	1
+2023-12-01	a	a	2	1
+2023-12-02			4	4
+2023-12-02		b	4	3
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 values 
+  ('1d8cf2a2c0e14fa89d8117792be6eb6f', 2000, '2023-12-01');
+-- result:
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values 
+  ('1d8cf2a2c0e14fa89d8117792be6eb6f', 2000, '2023-12-01');
+-- result:
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 values 
+  ('1d8cf2a2c0e14fa89d8117792be6eb6f', 2000, '2023-12-01');
+-- result:
+-- !result
+function: print_hit_materialized_view("SELECT t1.dt, t1.col1 as col11, t2.col1 as col21, t1.col2 as col12, t2.col2 as col22 FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 ON t1.dt = t2.dt;", "test_mv1")
+-- result:
+True
+-- !result
+SELECT COUNT(*) FROM test_mv1;
+-- result:
+9
+-- !result
+SELECT t1.dt, t1.col1 as col11, t2.col1 as col21, t1.col2 as col12, t2.col2 as col22 FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 ON t1.dt = t2.dt ORDER BY t1.dt, t1.col1, t2.col1 limit 5;
+-- result:
+2023-12-01	1d8cf2a2c0e14fa89d8117792be6eb6f	1d8cf2a2c0e14fa89d8117792be6eb6f	2000	2000
+2023-12-01	1d8cf2a2c0e14fa89d8117792be6eb6f	1d8cf2a2c0e14fa89d8117792be6eb6f	2000	2000
+2023-12-01	1d8cf2a2c0e14fa89d8117792be6eb6f	1d8cf2a2c0e14fa89d8117792be6eb6f	2000	2000
+2023-12-01	1d8cf2a2c0e14fa89d8117792be6eb6f	1d8cf2a2c0e14fa89d8117792be6eb6f	2000	2000
+2023-12-01	1d8cf2a2c0e14fa89d8117792be6eb6f	a	2000	1
+-- !result
+SELECT * FROM test_mv1 ORDER BY dt, col11, col21, col12, col22 limit 5;
+-- result:
+2023-12-01	1d8cf2a2c0e14fa89d8117792be6eb6f	a	2000	1
+2023-12-01	a	a	1	1
+2023-12-01	a	a	2	1
+2023-12-02			4	4
+2023-12-02		b	4	3
+-- !result
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+function: print_hit_materialized_view("SELECT t1.dt, t1.col1 as col11, t2.col1 as col21, t1.col2 as col12, t2.col2 as col22 FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 ON t1.dt = t2.dt;", "test_mv1")
+-- result:
+True
+-- !result
+SELECT COUNT(*) FROM test_mv1;
+-- result:
+18
+-- !result
+SELECT t1.dt, t1.col1 as col11, t2.col1 as col21, t1.col2 as col12, t2.col2 as col22 FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 ON t1.dt = t2.dt ORDER BY t1.dt, t1.col1, t2.col1, t1.col2, t2.col2 limit 5;
+-- result:
+2023-12-01	1d8cf2a2c0e14fa89d8117792be6eb6f	1d8cf2a2c0e14fa89d8117792be6eb6f	2000	2000
+2023-12-01	1d8cf2a2c0e14fa89d8117792be6eb6f	1d8cf2a2c0e14fa89d8117792be6eb6f	2000	2000
+2023-12-01	1d8cf2a2c0e14fa89d8117792be6eb6f	1d8cf2a2c0e14fa89d8117792be6eb6f	2000	2000
+2023-12-01	1d8cf2a2c0e14fa89d8117792be6eb6f	1d8cf2a2c0e14fa89d8117792be6eb6f	2000	2000
+2023-12-01	1d8cf2a2c0e14fa89d8117792be6eb6f	a	2000	1
+-- !result
+SELECT * FROM test_mv1 ORDER BY dt, col11, col21 limit 5;
+-- result:
+2023-12-01	1d8cf2a2c0e14fa89d8117792be6eb6f	1d8cf2a2c0e14fa89d8117792be6eb6f	2000	2000
+2023-12-01	1d8cf2a2c0e14fa89d8117792be6eb6f	1d8cf2a2c0e14fa89d8117792be6eb6f	2000	2000
+2023-12-01	1d8cf2a2c0e14fa89d8117792be6eb6f	1d8cf2a2c0e14fa89d8117792be6eb6f	2000	2000
+2023-12-01	1d8cf2a2c0e14fa89d8117792be6eb6f	1d8cf2a2c0e14fa89d8117792be6eb6f	2000	2000
+2023-12-01	1d8cf2a2c0e14fa89d8117792be6eb6f	a	2000	1
+-- !result
+DROP MATERIALIZED VIEW test_mv1;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_mv1 PARTITION BY dt 
+REFRESH DEFERRED MANUAL 
+properties
+(
+    "refresh_mode" = "incremental"
+)
+AS SELECT 
+  t1.dt, t1.col1 as col11, t2.col1 as col21, t3.col1 as col31, t1.col2 as col12, t2.col2 as col22, t3.col2 as col32
+FROM 
+  mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 
+  JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 ON t1.dt = t2.dt
+  JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t3 ON t1.dt = t3.dt
+  JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t4 ON t1.dt = t4.dt
+  JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t5 ON t1.dt = t5.dt 
+  WHERE t1.col2 > 1 AND t2.col2 > 1 AND t3.col2 > 1 AND t4.col2 > 1 AND t5.col2 > 2;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+function: print_hit_materialized_view("SELECT t1.dt, t1.col1 as col11, t2.col1 as col21, t3.col1 as col31, t1.col2 as col12, t2.col2 as col22, t3.col2 as col32 FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t3 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t4 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t5 ON t1.dt = t2.dt AND t1.dt = t3.dt AND t1.dt = t4.dt AND t1.dt = t5.dt WHERE t1.col2 > 1 AND t2.col2 > 1 AND t3.col2 > 1 AND t4.col2 > 1 AND t5.col2 > 2;", "test_mv1")
+-- result:
+True
+-- !result
+SELECT COUNT(*) FROM test_mv1;
+-- result:
+34
+-- !result
+SELECT t1.dt, t1.col1 as col11, t2.col1 as col21, t3.col1 as col31, t1.col2 as col12, t2.col2 as col22, t3.col2 as col32 FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t3 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t4 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t5 ON t1.dt = t2.dt AND t1.dt = t3.dt AND t1.dt = t4.dt AND t1.dt = t5.dt WHERE t1.col2 > 1 AND t2.col2 > 1 AND t3.col2 > 1 AND t4.col2 > 1 AND t5.col2 > 2 ORDER BY t1.dt,  t1.col1 , t2.col1, t3.col1, t1.col2, t2.col2, t3.col2 limit 5;
+-- result:
+2023-12-02				4	4	4
+2023-12-02				4	4	4
+2023-12-02				4	4	4
+2023-12-02				4	4	4
+2023-12-02			b	4	4	3
+-- !result
+SELECT * FROM test_mv1 ORDER BY dt, col11, col21, col31, col12, col22, col32 limit 5;
+-- result:
+2023-12-02				4	4	4
+2023-12-02				4	4	4
+2023-12-02				4	4	4
+2023-12-02				4	4	4
+2023-12-02			b	4	4	3
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values 
+  ('1d8cf2a2c0e14fa89d8117792be6eb6f', 2000, '2023-12-01');
+-- result:
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 values 
+  ('1d8cf2a2c0e14fa89d8117792be6eb6f', 2000, '2023-12-01');
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+function: print_hit_materialized_view("SELECT t1.dt, t1.col1 as col11, t2.col1 as col21, t3.col1 as col31, t1.col2 as col12, t2.col2 as col22, t3.col2 as col32 FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t3 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t4 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t5 ON t1.dt = t2.dt AND t1.dt = t3.dt AND t1.dt = t4.dt AND t1.dt = t5.dt WHERE t1.col2 > 1 AND t2.col2 > 1 AND t3.col2 > 1 AND t4.col2 > 1 AND t5.col2 > 2;", "test_mv1")
+-- result:
+True
+-- !result
+SELECT COUNT(*) FROM test_mv1;
+-- result:
+34
+-- !result
+SELECT t1.dt, t1.col1 as col11, t2.col1 as col21, t3.col1 as col31, t1.col2 as col12, t2.col2 as col22, t3.col2 as col32 FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t3 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t4 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t5 ON t1.dt = t2.dt AND t1.dt = t3.dt AND t1.dt = t4.dt AND t1.dt = t5.dt WHERE t1.col2 > 1 AND t2.col2 > 1 AND t3.col2 > 1 AND t4.col2 > 1 AND t5.col2 > 2 ORDER BY t1.dt,  t1.col1 , t2.col1, t3.col1, t1.col2, t2.col2, t3.col2 limit 5;
+-- result:
+2023-12-02				4	4	4
+2023-12-02				4	4	4
+2023-12-02				4	4	4
+2023-12-02				4	4	4
+2023-12-02			b	4	4	3
+-- !result
+SELECT * FROM test_mv1 ORDER BY dt, col11, col21, col31, col12, col22, col32 limit 5;
+-- result:
+2023-12-02				4	4	4
+2023-12-02				4	4	4
+2023-12-02				4	4	4
+2023-12-02				4	4	4
+2023-12-02			b	4	4	3
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values 
+  ('1d8cf2a2c0e14fa89d8117792be6eb6f', 2000, '2023-12-01');
+-- result:
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 values 
+  ('1d8cf2a2c0e14fa89d8117792be6eb6f', 2000, '2023-12-01');
+-- result:
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t3 values 
+  ('1d8cf2a2c0e14fa89d8117792be6eb6f', 2000, '2023-12-01');
+-- result:
+-- !result
+function: print_hit_materialized_view("SELECT t1.dt, t1.col1 as col11, t2.col1 as col21, t3.col1 as col31, t1.col2 as col12, t2.col2 as col22, t3.col2 as col32 FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t3 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t4 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t5 ON t1.dt = t2.dt AND t1.dt = t3.dt AND t1.dt = t4.dt AND t1.dt = t5.dt WHERE t1.col2 > 1 AND t2.col2 > 1 AND t3.col2 > 1 AND t4.col2 > 1 AND t5.col2 > 2;", "test_mv1")
+-- result:
+False
+-- !result
+SELECT COUNT(*) FROM test_mv1;
+-- result:
+34
+-- !result
+SELECT t1.dt, t1.col1 as col11, t2.col1 as col21, t3.col1 as col31, t1.col2 as col12, t2.col2 as col22, t3.col2 as col32 FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t3 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t4 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t5 ON t1.dt = t2.dt AND t1.dt = t3.dt AND t1.dt = t4.dt AND t1.dt = t5.dt WHERE t1.col2 > 1 AND t2.col2 > 1 AND t3.col2 > 1 AND t4.col2 > 1 AND t5.col2 > 2 ORDER BY t1.dt,  t1.col1 , t2.col1, t3.col1, t1.col2, t2.col2, t3.col2 limit 5;
+-- result:
+2023-12-02				4	4	4
+2023-12-02				4	4	4
+2023-12-02				4	4	4
+2023-12-02				4	4	4
+2023-12-02			b	4	4	3
+-- !result
+SELECT * FROM test_mv1 ORDER BY dt, col11, col21, col31, col12, col22, col32 limit 5;
+-- result:
+2023-12-02				4	4	4
+2023-12-02				4	4	4
+2023-12-02				4	4	4
+2023-12-02				4	4	4
+2023-12-02			b	4	4	3
+-- !result
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+function: print_hit_materialized_view("SELECT t1.dt, t1.col1 as col11, t2.col1 as col21, t3.col1 as col31, t1.col2 as col12, t2.col2 as col22, t3.col2 as col32 FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t3 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t4 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t5 ON t1.dt = t2.dt AND t1.dt = t3.dt AND t1.dt = t4.dt AND t1.dt = t5.dt WHERE t1.col2 > 1 AND t2.col2 > 1 AND t3.col2 > 1 AND t4.col2 > 1 AND t5.col2 > 2;", "test_mv1")
+-- result:
+True
+-- !result
+SELECT COUNT(*) FROM test_mv1;
+-- result:
+34
+-- !result
+SELECT t1.dt, t1.col1 as col11, t2.col1 as col21, t3.col1 as col31, t1.col2 as col12, t2.col2 as col22, t3.col2 as col32 FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t3 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t4 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t5 ON t1.dt = t2.dt AND t1.dt = t3.dt AND t1.dt = t4.dt AND t1.dt = t5.dt WHERE t1.col2 > 1 AND t2.col2 > 1 AND t3.col2 > 1 AND t4.col2 > 1 AND t5.col2 > 2 ORDER BY t1.dt,  t1.col1 , t2.col1, t3.col1, t1.col2, t2.col2, t3.col2 limit 5;
+-- result:
+2023-12-02				4	4	4
+2023-12-02				4	4	4
+2023-12-02				4	4	4
+2023-12-02				4	4	4
+2023-12-02			b	4	4	3
+-- !result
+SELECT * FROM test_mv1 ORDER BY dt, col11, col21, col31, col12, col22, col32 limit 5;
+-- result:
+2023-12-02				4	4	4
+2023-12-02				4	4	4
+2023-12-02				4	4	4
+2023-12-02				4	4	4
+2023-12-02			b	4	4	3
+-- !result
+DROP MATERIALIZED VIEW test_mv1;
+-- result:
+-- !result
+drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 force;
+-- result:
+-- !result
+drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 force;
+-- result:
+-- !result
+drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t3 force;
+-- result:
+-- !result
+drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t4 force;
+-- result:
+-- !result
+drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t5 force;
+-- result:
+-- !result
+drop database mv_iceberg_${uuid0}.mv_ice_db_${uuid0} force;
+-- result:
+-- !result

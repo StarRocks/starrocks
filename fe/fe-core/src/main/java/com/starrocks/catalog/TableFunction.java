@@ -18,12 +18,12 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionName;
-import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.ast.CreateFunctionStmt;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FunctionName;
+import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.thrift.TFunction;
 import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.thrift.TTableFunction;
@@ -149,6 +149,9 @@ public class TableFunction extends Function {
         this.isLeftJoin = isLeftJoin;
     }
 
+    public boolean isLeftJoin() {
+        return this.isLeftJoin;
+    }
 
 
 
@@ -157,7 +160,7 @@ public class TableFunction extends Function {
         TFunction fn = super.toThrift();
         TTableFunction tableFn = new TTableFunction();
         tableFn.setSymbol(symbolName);
-        tableFn.setRet_types(tableFnReturnTypes.stream().map(Type::toThrift).collect(Collectors.toList()));
+        tableFn.setRet_types(tableFnReturnTypes.stream().map(TypeSerializer::toThrift).collect(Collectors.toList()));
         tableFn.setIs_left_join(isLeftJoin);
         fn.setTable_fn(tableFn);
         return fn;

@@ -30,8 +30,8 @@ PROPERTIES (
 );
 INSERT INTO t1 
 SELECT 
-    date_add('2020-06-01', INTERVAL (series_id * 2) DAY) as k1,
-    date_add('2020-06-01 12:12:12', INTERVAL (series_id * 2) DAY) as k2,
+    date_add('2020-06-01', INTERVAL (series_id) DAY) as k1,
+    date_add('2020-06-01 12:12:12', INTERVAL (series_id) DAY) as k2,
     'k3' as k3,
     'k4' as k4,
     (series_id % 2 = 0) as k5,
@@ -44,7 +44,7 @@ SELECT
     1.12 as k12,
     2.889 as k13
 FROM TABLE(generate_series(0, 37)) t(series_id)
-WHERE date_add('2020-06-01', INTERVAL (series_id * 2) DAY) <= '2020-08-15';
+WHERE date_add('2020-06-01', INTERVAL (series_id) DAY) <= '2020-08-31';
 
 
 CREATE MATERIALIZED VIEW test_mv1

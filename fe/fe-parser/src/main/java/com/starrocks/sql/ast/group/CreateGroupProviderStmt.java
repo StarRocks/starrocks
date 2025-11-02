@@ -23,11 +23,17 @@ import java.util.Map;
 public class CreateGroupProviderStmt extends DdlStmt {
     private final String name;
     private final Map<String, String> propertyMap;
+    private final boolean ifNotExists;
 
     public CreateGroupProviderStmt(String name, Map<String, String> propertyMap, NodePosition pos) {
+        this(name, propertyMap, false, pos);
+    }
+
+    public CreateGroupProviderStmt(String name, Map<String, String> propertyMap, boolean ifNotExists, NodePosition pos) {
         super(pos);
         this.name = name;
         this.propertyMap = propertyMap;
+        this.ifNotExists = ifNotExists;
     }
 
     public String getName() {
@@ -36,6 +42,10 @@ public class CreateGroupProviderStmt extends DdlStmt {
 
     public Map<String, String> getPropertyMap() {
         return propertyMap;
+    }
+
+    public boolean isIfNotExists() {
+        return ifNotExists;
     }
 
     @Override

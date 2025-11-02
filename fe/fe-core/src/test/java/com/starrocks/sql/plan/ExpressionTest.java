@@ -16,18 +16,18 @@ package com.starrocks.sql.plan;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.BinaryType;
-import com.starrocks.analysis.CastExpr;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.IntLiteral;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.TupleId;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Type;
+import com.starrocks.planner.TupleId;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.LambdaFunctionExpr;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.CastExpr;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.LambdaFunctionExpr;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
@@ -1651,30 +1651,30 @@ public class ExpressionTest extends PlanTestBase {
     @Test
     public void testStructRow() throws Exception {
         String sql = "select row('a', 1, 'a', 2).col1";
-        String plan = getVerboseExplain(sql);
+        String plan = getFragmentPlan(sql);
         assertCContains(plan, "row('a', 1, 'a', 2).col1");
     }
 
     @Test
     public void testStructCollection() throws Exception {
         String sql = "select row('a', 1, 'a', 2)[1]";
-        String plan = getVerboseExplain(sql);
+        String plan = getFragmentPlan(sql);
         assertCContains(plan, "row('a', 1, 'a', 2).col1");
 
         sql = "select row('a', 1, 'a', 2)[4]";
-        plan = getVerboseExplain(sql);
+        plan = getFragmentPlan(sql);
         assertCContains(plan, "row('a', 1, 'a', 2).col4");
 
         sql = "select row('a', 1, 'a', 2)[4]";
-        plan = getVerboseExplain(sql);
+        plan = getFragmentPlan(sql);
         assertCContains(plan, "row('a', 1, 'a', 2).col4");
 
         sql = "select row('a', 1, 'a', 2)[-1]";
-        plan = getVerboseExplain(sql);
+        plan = getFragmentPlan(sql);
         assertCContains(plan, "row('a', 1, 'a', 2).col4");
 
         sql = "select row('a', 1, 'a', 2)[-4]";
-        plan = getVerboseExplain(sql);
+        plan = getFragmentPlan(sql);
         assertCContains(plan, "row('a', 1, 'a', 2).col1");
     }
 
@@ -1682,7 +1682,9 @@ public class ExpressionTest extends PlanTestBase {
     public void testJsonArray() throws Exception {
         String sql = "select array_distinct([PARSE_JSON('{1: 2}')])";
         String plan = getVerboseExplain(sql);
-        assertCContains(plan, "array_distinct[([parse_json('{1: 2}')]); args: INVALID_TYPE; result: ARRAY<JSON>;");
+        assertCContains(plan, "array_distinct[([parse_json[('{1: 2}'); "
+                + "args: VARCHAR; result: JSON; args nullable: false; result nullable: true]]); "
+                + "args: INVALID_TYPE; result: ARRAY<JSON>;");
 
         sql = "select array_distinct([NULL])";
         plan = getVerboseExplain(sql);

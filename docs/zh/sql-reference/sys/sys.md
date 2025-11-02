@@ -56,10 +56,12 @@ OBJECT_DATABASE: NULL
 
 | **视图名**               | **描述**                                                       |
 | ----------------------- | ------------------------------------------------------------- |
-| [grants_to_roles](../sys/grants_to_roles.md)     | 记录了授予用户自定义角色的权限信息。       |
-| [grants_to_users](../sys/grants_to_users.md)     | 记录了授予用户的权限信息。               |
-| [role_edges](../sys/role_edges.md)          | 记录了角色的授予关系。                        |
-| [object_dependencies](../sys/object_dependencies.md) | 记录了异步物化视图的依赖关系。        |
+| [grants_to_roles](./grants_to_roles.md)     | 记录了授予用户自定义角色的权限信息。            |
+| [grants_to_users](./grants_to_users.md)     | 记录了授予用户的权限信息。                     |
+| [role_edges](./role_edges.md)          | 记录了角色的授予关系。                             |
+| [object_dependencies](./object_dependencies.md) | 记录了异步物化视图的依赖关系。             |
+| [policy_references](./policy_references.md)     | 记录了行访问策略和列屏蔽策略引用的对象。     |
+| [fe_locks](./fe_locks.md)                       | 记录了 StarRocks FE 中元数据锁的信息。    |
 
 :::note
 

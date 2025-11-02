@@ -1,0 +1,97 @@
+-- name: test_flat_json_consistency
+
+-- Test case for FlatJSON consistency issue where non-existent fields
+-- were being created as empty objects during reconstruction
+
+CREATE TABLE `test_json_cast_map` (
+  `c1` bigint(20) NULL COMMENT "",
+  `c2` json NULL COMMENT ""
+) DISTRIBUTED BY HASH(c1) BUCKETS 1;
+
+-- Test 1: Inconsistent nested structure - should be rejected
+-- Some rows have level1.level2.level3.level4.5, others have level1.level2.level3.level4 but no 5
+insert into test_json_cast_map values
+(1, '{"level1": {"level2": {"level3": {"level4": {"5":"abc"}}}}}'),
+(2, '{"level1": {"level2": {"level3": {"level4": {}}}}}'),
+(9, '{"100": {"200": {"300": "abc"}}}');
+
+select * from test_json_cast_map order by c1;
+select flat_json_meta(c2) from test_json_cast_map [_META_];
+
+-- Test 2: Same inconsistent nested structure - should be rejected
+truncate table test_json_cast_map;
+
+insert into test_json_cast_map values
+(1, '{"level1": {"level2": {"level3": {"level4": {"5":"abc"}}}}}'),
+(2, '{"level1": {"level2": {"level3": {"level4": {}}}}}');
+
+select * from test_json_cast_map order by c1;
+select flat_json_meta(c2) from test_json_cast_map [_META_];
+
+-- Test 3: Different paths but consistent structure - should be flattenable
+truncate table test_json_cast_map;
+
+insert into test_json_cast_map values
+(1, '{"level1": {"level2": {"level3": {"level4": {"5":"abc"}}}}}'),
+(9, '{"100": {"200": {"300": "abc"}}}');
+
+select * from test_json_cast_map order by c1;
+select flat_json_meta(c2) from test_json_cast_map [_META_];
+
+-- Test 4: Same path with different values - should be flattenable
+truncate table test_json_cast_map;
+
+insert into test_json_cast_map values
+(1, '{"level1": {"level2": {"level3": {"level4": {"5":"abc"}}}}}'),
+(2, '{"level1": {"level2": {"level3": {"level4": {"5":"def"}}}}}'),
+(3, '{"level1": {"level2": {"level3": {"level4": {"6":"ghi"}}}}}');
+
+select * from test_json_cast_map order by c1;
+select flat_json_meta(c2) from test_json_cast_map [_META_];
+
+-- Test 5: Same path with different values - should be flattenable
+truncate table test_json_cast_map;
+
+insert into test_json_cast_map values
+(2, '{"level1": {"level2": {"level3": {"level4": {}}}}}'),
+(9, '{"100": {"200": {"300": "abc"}}}');
+
+select * from test_json_cast_map order by c1;
+select flat_json_meta(c2) from test_json_cast_map [_META_];
+
+-- Test 6: Same path with different values - should be flattenable
+truncate table test_json_cast_map;
+
+insert into test_json_cast_map values
+(1, '{"level1": {"level2": {"level3": {"level4": {"5":"abc"}}}}}'),
+(2, '{"level1": {"level2": {"level3": {"level4": {}}}}}'),
+(3, '{"level1": {"level2": {"level3": {}}}}'),
+(4, '{"level1": {"level2": {}}}'),
+(5, '{"level1": {}}');
+
+select * from test_json_cast_map order by c1;
+select flat_json_meta(c2) from test_json_cast_map [_META_];
+
+-- Test 7: Different paths but consistent structure - should be flattenable
+truncate table test_json_cast_map;
+
+insert into test_json_cast_map values
+(1, '{"level1": {"level2": {"level3": {"level4": {"5":"abc"}}}}}'),
+(5, '{"level1": {}}');
+
+select * from test_json_cast_map order by c1;
+select flat_json_meta(c2) from test_json_cast_map [_META_];
+
+
+-- Test 8: empty root object
+truncate table test_json_cast_map;
+
+insert into test_json_cast_map values
+(1, '{"100": {}}'),
+(9, '{"100": {"200": {"300": "abc"}}}');
+
+select * from test_json_cast_map order by c1;
+select flat_json_meta(c2) from test_json_cast_map [_META_];
+
+
+drop table test_json_cast_map;

@@ -48,10 +48,10 @@ public:
 
     Status merge(const sstable::Iterator* iter_ptr);
 
-    void finish() { flush(); }
+    Status finish() { return flush(); }
 
 private:
-    void flush();
+    Status flush();
 
 private:
     std::string _key;
@@ -73,7 +73,7 @@ public:
 
     DISALLOW_COPY(LakePersistentIndex);
 
-    Status init(const PersistentIndexSstableMetaPB& sstable_meta);
+    Status init(const TabletMetadataPtr& metadata);
 
     // batch get
     // |n|: size of key/value array
@@ -137,7 +137,10 @@ public:
 
     Status minor_compact();
 
-    static Status major_compact(TabletManager* tablet_mgr, const TabletMetadata& metadata, TxnLogPB* txn_log);
+    Status ingest_sst(const FileMetaPB& sst_meta, uint32_t rssid, int64_t version, const DelvecPagePB& delvec_page,
+                      DelVectorPtr delvec);
+
+    static Status major_compact(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, TxnLogPB* txn_log);
 
     Status apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction);
 
@@ -180,7 +183,8 @@ private:
     static void set_difference(KeyIndexSet* key_indexes, const KeyIndexSet& found_key_indexes);
 
     // get sstable's iterator that need to compact and modify txn_log
-    static Status prepare_merging_iterator(TabletManager* tablet_mgr, const TabletMetadata& metadata, TxnLogPB* txn_log,
+    static Status prepare_merging_iterator(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata,
+                                           TxnLogPB* txn_log,
                                            std::vector<std::shared_ptr<PersistentIndexSstable>>* merging_sstables,
                                            std::unique_ptr<sstable::Iterator>* merging_iter_ptr,
                                            bool* merge_base_level);

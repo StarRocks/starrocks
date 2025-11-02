@@ -210,4 +210,12 @@ public class NonDeterministicVisitor extends OptExpressionVisitor<Boolean, Void>
         }
         return false;
     }
+
+    @Override
+    public Boolean visitLogicalRawValues(OptExpression optExpression, Void context) {
+        if (checkCommon(optExpression)) {
+            return true;
+        }
+        return false;
+    }
 }

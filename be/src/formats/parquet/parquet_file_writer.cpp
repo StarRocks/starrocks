@@ -28,6 +28,7 @@
 #include <ostream>
 #include <utility>
 
+#include "column/column_helper.h"
 #include "formats/file_writer.h"
 #include "formats/parquet/arrow_memory_pool.h"
 #include "formats/parquet/chunk_writer.h"
@@ -42,6 +43,7 @@
 
 namespace starrocks {
 class Chunk;
+class ColumnHelper;
 } // namespace starrocks
 
 namespace starrocks::formats {
@@ -264,7 +266,8 @@ StatusOr<::parquet::Compression::type> ParquetFileWriter::_convert_compression_t
 
     // Check if arrow supports indicated compression type
     if (!::parquet::IsCodecSupported(converted_type)) {
-        return Status::NotSupported(fmt::format("not supported compression codec {}", converted_type));
+        return Status::NotSupported(
+                fmt::format("not supported compression codec {}", static_cast<int>(converted_type)));
     }
 
     return converted_type;
@@ -453,13 +456,12 @@ Status ParquetFileWriter::init() {
 
 ParquetFileWriter::~ParquetFileWriter() = default;
 
-ParquetFileWriterFactory::ParquetFileWriterFactory(std::shared_ptr<FileSystem> fs,
-                                                   TCompressionType::type compression_type,
-                                                   std::map<std::string, std::string> options,
-                                                   std::vector<std::string> column_names,
-                                                   std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
-                                                   std::optional<std::vector<formats::FileColumnId>> field_ids,
-                                                   PriorityThreadPool* executors, RuntimeState* runtime_state)
+ParquetFileWriterFactory::ParquetFileWriterFactory(
+        std::shared_ptr<FileSystem> fs, TCompressionType::type compression_type,
+        std::map<std::string, std::string> options, std::vector<std::string> column_names,
+        std::shared_ptr<std::vector<std::unique_ptr<ColumnEvaluator>>> column_evaluators,
+        std::optional<std::vector<formats::FileColumnId>> field_ids, PriorityThreadPool* executors,
+        RuntimeState* runtime_state)
         : _fs(std::move(fs)),
           _compression_type(compression_type),
           _field_ids(std::move(field_ids)),
@@ -470,7 +472,7 @@ ParquetFileWriterFactory::ParquetFileWriterFactory(std::shared_ptr<FileSystem> f
           _runtime_state(runtime_state) {}
 
 Status ParquetFileWriterFactory::init() {
-    RETURN_IF_ERROR(ColumnEvaluator::init(_column_evaluators));
+    RETURN_IF_ERROR(ColumnEvaluator::init(*_column_evaluators));
     _parsed_options = std::make_shared<ParquetWriterOptions>();
     _parsed_options->column_ids = _field_ids;
     if (_options.contains(ParquetWriterOptions::USE_LEGACY_DECIMAL_ENCODING)) {
@@ -504,8 +506,8 @@ StatusOr<WriterAndStream> ParquetFileWriterFactory::create(const std::string& pa
     auto rollback_action = [fs = _fs, path = path]() {
         WARN_IF_ERROR(ignore_not_found(fs->delete_file(path)), "fail to delete file");
     };
-    auto column_evaluators = ColumnEvaluator::clone(_column_evaluators);
-    auto types = ColumnEvaluator::types(_column_evaluators);
+    auto column_evaluators = ColumnEvaluator::clone(*_column_evaluators);
+    auto types = ColumnEvaluator::types(*_column_evaluators);
     auto async_output_stream =
             std::make_unique<io::AsyncFlushOutputStream>(std::move(file), _executors, _runtime_state);
     auto parquet_output_stream = std::make_shared<parquet::AsyncParquetOutputStream>(async_output_stream.get());

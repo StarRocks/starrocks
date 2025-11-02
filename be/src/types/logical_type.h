@@ -72,10 +72,11 @@ enum LogicalType {
     TYPE_PERCENTILE = 53,
 
     TYPE_JSON = 54,
+    TYPE_VARIANT = 55,
 
     // max value of LogicalType, newly-added type should not exceed this value.
     // used to create a fixed-size hash map.
-    TYPE_MAX_VALUE = 55
+    TYPE_MAX_VALUE = 56
 };
 
 // TODO(lism): support varbinary for zone map.
@@ -168,6 +169,7 @@ inline bool is_semi_type(LogicalType type) {
     case TYPE_ARRAY:
     case TYPE_MAP:
     case TYPE_JSON:
+    case TYPE_VARIANT:
         return true;
     default:
         return false;
@@ -244,6 +246,7 @@ constexpr bool is_scalar_logical_type(LogicalType ltype) {
     case TYPE_DECIMAL128: /* 26 */
     case TYPE_DECIMAL256: /* 27 */
     case TYPE_JSON:
+    case TYPE_VARIANT:
         return true;
     default:
         return false;
@@ -322,8 +325,10 @@ VALUE_GUARD(LogicalType, ObjectLTGuard, lt_is_object, TYPE_OBJECT)
 VALUE_GUARD(LogicalType, StringLTGuard, lt_is_string, TYPE_CHAR, TYPE_VARCHAR)
 VALUE_GUARD(LogicalType, BinaryLTGuard, lt_is_binary, TYPE_BINARY, TYPE_VARBINARY)
 VALUE_GUARD(LogicalType, JsonGuard, lt_is_json, TYPE_JSON)
+VALUE_GUARD(LogicalType, VariantGuard, lt_is_variant, TYPE_VARIANT)
 VALUE_GUARD(LogicalType, FunctionGuard, lt_is_function, TYPE_FUNCTION)
-VALUE_GUARD(LogicalType, ObjectFamilyLTGuard, lt_is_object_family, TYPE_JSON, TYPE_HLL, TYPE_OBJECT, TYPE_PERCENTILE)
+VALUE_GUARD(LogicalType, ObjectFamilyLTGuard, lt_is_object_family, TYPE_JSON, TYPE_HLL, TYPE_OBJECT, TYPE_PERCENTILE,
+            TYPE_VARIANT)
 VALUE_GUARD(LogicalType, ArrayGuard, lt_is_array, TYPE_ARRAY)
 VALUE_GUARD(LogicalType, MapGuard, lt_is_map, TYPE_MAP)
 VALUE_GUARD(LogicalType, StructGurad, lt_is_struct, TYPE_STRUCT)

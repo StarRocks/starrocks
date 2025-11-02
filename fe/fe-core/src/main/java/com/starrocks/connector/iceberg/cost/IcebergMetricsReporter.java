@@ -42,7 +42,7 @@ public class IcebergMetricsReporter implements MetricsReporter {
     }
 
     public Optional<ScanReport> getReporter(String catalogName, String dbName, String tableName,
-                                                              long snapshotId, Expression icebergPredicate, Table table) {
+                                            long snapshotId, Expression icebergPredicate, Table table) {
         if (reports.isEmpty()) {
             return Optional.empty();
         }

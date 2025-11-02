@@ -14,7 +14,11 @@
 
 #pragma once
 
+#ifdef __APPLE__
+#include <sys/mount.h>
+#else
 #include <sys/statfs.h>
+#endif
 
 #include <atomic>
 #include <memory>
@@ -101,7 +105,11 @@ private:
         struct statfs stat1, stat2;
         statfs(path1.c_str(), &stat1);
         statfs(path2.c_str(), &stat2);
+#ifdef __APPLE__
+        return stat1.f_fsid.val[0] == stat2.f_fsid.val[0] && stat1.f_fsid.val[1] == stat2.f_fsid.val[1];
+#else
         return stat1.f_fsid.__val[0] == stat2.f_fsid.__val[0] && stat1.f_fsid.__val[1] == stat2.f_fsid.__val[1];
+#endif
     }
 
     std::vector<DirPtr> _dirs;

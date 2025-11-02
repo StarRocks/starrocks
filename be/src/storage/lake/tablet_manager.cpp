@@ -107,6 +107,10 @@ std::string TabletManager::txn_log_location(int64_t tablet_id, int64_t txn_id) c
     return _location_provider->txn_log_location(tablet_id, txn_id);
 }
 
+std::string TabletManager::txn_log_location(int64_t tablet_id, int64_t txn_id, const PUniqueId& load_id) const {
+    return _location_provider->txn_log_location(tablet_id, txn_id, load_id);
+}
+
 std::string TabletManager::combined_txn_log_location(int64_t tablet_id, int64_t txn_id) const {
     return _location_provider->combined_txn_log_location(tablet_id, txn_id);
 }
@@ -374,6 +378,22 @@ Status TabletManager::put_bundle_tablet_metadata(std::map<int64_t, TabletMetadat
     return Status::OK();
 }
 
+Status TabletManager::corrupted_tablet_meta_handler(const Status& s, const std::string& metadata_location) {
+    if (s.is_corruption() && config::lake_clear_corrupted_cache_meta) {
+        auto drop_status = drop_local_cache(metadata_location);
+        TEST_SYNC_POINT_CALLBACK("TabletManager::corrupted_tablet_meta_handler", &drop_status);
+        if (!drop_status.ok()) {
+            LOG(WARNING) << "clear corrupted cache for " << metadata_location << " failed, "
+                         << "error: " << drop_status;
+            return s; // return error so load tablet meta can be retried
+        }
+        LOG(INFO) << "clear corrupted cache for " << metadata_location;
+        return Status::OK();
+    } else {
+        return s;
+    }
+}
+
 StatusOr<TabletMetadataPtr> TabletManager::load_tablet_metadata(const string& metadata_location, bool fill_cache,
                                                                 int64_t expected_gtid,
                                                                 const std::shared_ptr<FileSystem>& fs) {
@@ -383,21 +403,11 @@ StatusOr<TabletMetadataPtr> TabletManager::load_tablet_metadata(const string& me
     ProtobufFile file(metadata_location, fs);
     auto s = file.load(metadata.get(), fill_cache);
     if (!s.ok()) {
-        if (s.is_corruption() && config::lake_clear_corrupted_cache) {
-            auto drop_status = drop_local_cache(metadata_location);
-            if (!drop_status.ok()) {
-                LOG(WARNING) << "clear corrupted cache for " << metadata_location << " failed, "
-                             << "error: " << drop_status;
-                return s; // return error so load tablet meta can be retried
-            }
-            LOG(INFO) << "clear corrupted cache for " << metadata_location;
-            // reset metadata
-            metadata = std::make_shared<TabletMetadataPB>();
-            // read again
-            RETURN_IF_ERROR(file.load(metadata.get(), fill_cache));
-        } else {
-            return s;
-        }
+        RETURN_IF_ERROR(corrupted_tablet_meta_handler(s, metadata_location));
+        // reset metadata
+        metadata = std::make_shared<TabletMetadataPB>();
+        // read again
+        RETURN_IF_ERROR(file.load(metadata.get(), fill_cache));
     }
 
     if (expected_gtid > 0 && metadata->gtid() > 0 && expected_gtid != metadata->gtid()) {
@@ -498,7 +508,13 @@ StatusOr<BundleTabletMetadataPtr> TabletManager::parse_bundle_tablet_metadata(co
             std::string_view(serialized_string.data() + file_size - footer_size - bundle_metadata_size);
     RETURN_IF(!bundle_metadata->ParseFromArray(bundle_metadata_str.data(), bundle_metadata_size),
               Status::Corruption(strings::Substitute("deserialized shared metadata failed")));
-
+#ifdef BE_TEST
+    bool inject_error = false;
+    TEST_SYNC_POINT_CALLBACK("TabletManager::parse_bundle_tablet_metadata::corruption", &inject_error);
+    if (inject_error) {
+        return Status::Corruption("injected error");
+    }
+#endif
     return bundle_metadata;
 }
 
@@ -577,7 +593,18 @@ StatusOr<TabletMetadataPtr> TabletManager::get_single_tablet_metadata(int64_t ta
     g_read_bundle_tablet_meta_latency << (butil::gettimeofday_us() - t0);
 
     auto file_size = serialized_string.size();
-    ASSIGN_OR_RETURN(auto bundle_metadata, parse_bundle_tablet_metadata(path, serialized_string));
+    BundleTabletMetadataPtr bundle_metadata;
+    auto bundle_metadata_status = parse_bundle_tablet_metadata(path, serialized_string);
+    if (!bundle_metadata_status.ok()) {
+        RETURN_IF_ERROR(corrupted_tablet_meta_handler(bundle_metadata_status.status(), path));
+        // read bundle metadata again
+        ASSIGN_OR_RETURN(auto input_file, file_system->new_random_access_file(opts, path));
+        ASSIGN_OR_RETURN(serialized_string, input_file->read_all());
+        file_size = serialized_string.size();
+        ASSIGN_OR_RETURN(bundle_metadata, parse_bundle_tablet_metadata(path, serialized_string));
+    } else {
+        bundle_metadata = bundle_metadata_status.value();
+    }
 
     auto meta_it = bundle_metadata->tablet_meta_pages().find(tablet_id);
     size_t offset = 0;
@@ -738,6 +765,10 @@ StatusOr<TxnLogPtr> TabletManager::get_txn_log(int64_t tablet_id, int64_t txn_id
     return get_txn_log(txn_log_location(tablet_id, txn_id));
 }
 
+StatusOr<TxnLogPtr> TabletManager::get_txn_log(int64_t tablet_id, int64_t txn_id, const PUniqueId& load_id) {
+    return get_txn_log(txn_log_location(tablet_id, txn_id, load_id));
+}
+
 StatusOr<TxnLogPtr> TabletManager::get_txn_slog(int64_t tablet_id, int64_t txn_id) {
     return get_txn_log(txn_slog_location(tablet_id, txn_id));
 }
@@ -760,13 +791,19 @@ Status TabletManager::put_txn_log(const TxnLogPtr& log, const std::string& path)
 
     _metacache->cache_txn_log(path, log);
 
+    VLOG(2) << "put log path " << path << " log " << log->DebugString();
+
     auto t1 = butil::gettimeofday_us();
     g_put_txn_log_latency << (t1 - t0);
     return Status::OK();
 }
 
 Status TabletManager::put_txn_log(const TxnLogPtr& log) {
-    return put_txn_log(log, txn_log_location(log->tablet_id(), log->txn_id()));
+    if (log->has_load_id()) {
+        return put_txn_log(log, txn_log_location(log->tablet_id(), log->txn_id(), log->load_id()));
+    } else {
+        return put_txn_log(log, txn_log_location(log->tablet_id(), log->txn_id()));
+    }
 }
 
 Status TabletManager::put_txn_log(const TxnLog& log) {

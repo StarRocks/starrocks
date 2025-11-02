@@ -676,7 +676,7 @@ public:
             return _min = TimestampValue::MIN_TIMESTAMP_VALUE && _max == TimestampValue::MAX_TIMESTAMP_VALUE;
         } else if constexpr (IsDecimal<CppType>) {
             return _min == DecimalV2Value::get_min_decimal() && _max == DecimalV2Value::get_max_decimal();
-        } else if constexpr (Type != TYPE_JSON) {
+        } else if constexpr (Type != TYPE_JSON && Type != TYPE_VARIANT) {
             return _min == RunTimeTypeLimits<Type>::min_value() && _max == RunTimeTypeLimits<Type>::max_value();
         } else {
             return false;
@@ -769,14 +769,14 @@ public:
                     selection[0] = _has_null;
                 }
             } else {
-                const auto& input_data = GetContainer<Type>::get_data(const_column->data_column());
+                const auto input_data = GetContainer<Type>::get_data(const_column->data_column().get());
                 evaluate_min_max(input_data, selection, 1);
             }
             uint8_t sel = selection[0];
             memset(selection, sel, size);
         } else if (input_column->is_nullable()) {
             const auto* nullable_column = down_cast<const NullableColumn*>(input_column);
-            const auto& input_data = GetContainer<Type>::get_data(nullable_column->data_column());
+            const auto input_data = GetContainer<Type>::get_data(nullable_column->data_column().get());
             evaluate_min_max(input_data, selection, size);
             if (nullable_column->has_null() && evaluate_null) {
                 const uint8_t* null_data = nullable_column->immutable_null_column_data().data();
@@ -787,7 +787,7 @@ public:
                 }
             }
         } else {
-            const auto& input_data = GetContainer<Type>::get_data(input_column);
+            const auto input_data = GetContainer<Type>::get_data(input_column);
             evaluate_min_max(input_data, selection, size);
         }
     }
@@ -799,7 +799,7 @@ public:
         uint16_t new_size = 0;
         if (column->is_nullable()) {
             const auto* nullable_column = down_cast<const NullableColumn*>(column);
-            const auto& data = GetContainer<Type>::get_data(nullable_column->data_column());
+            const auto data = GetContainer<Type>::get_data(nullable_column->data_column());
             if (nullable_column->has_null()) {
                 const uint8_t* null_data = nullable_column->immutable_null_column_data().data();
                 for (int i = 0; i < sel_size; i++) {
@@ -815,7 +815,7 @@ public:
                 new_size = evaluate_min_max(data, sel, sel_size, dst_sel);
             }
         } else {
-            const auto& data = GetContainer<Type>::get_data(column);
+            const auto data = GetContainer<Type>::get_data(column);
             new_size = evaluate_min_max(data, sel, sel_size, dst_sel);
         }
         return new_size;
@@ -827,7 +827,7 @@ public:
 
         if (column->is_nullable()) {
             const auto* nullable_column = down_cast<const NullableColumn*>(column);
-            const auto& data = GetContainer<Type>::get_data(nullable_column->data_column());
+            const auto data = GetContainer<Type>::get_data(nullable_column->data_column());
             evaluate_min_max(data, selection, from, to);
             if (nullable_column->has_null()) {
                 const uint8_t* null_data = nullable_column->immutable_null_column_data().data();
@@ -838,34 +838,37 @@ public:
                 }
             }
         } else {
-            const auto& data = GetContainer<Type>::get_data(column);
+            const auto data = GetContainer<Type>::get_data(column);
             evaluate_min_max(data, selection, from, to);
         }
     }
-
+#define RF_EVAL_MINMAX(LEFT_OP, RIGHT_OP)                                       \
+    for (size_t i = 0; i < size; i++) {                                         \
+        if constexpr (std::is_arithmetic_v<CppType>) {                          \
+            selection[i] = ((data[i] LEFT_OP _min) & (data[i] RIGHT_OP _max));  \
+        } else {                                                                \
+            selection[i] = ((data[i] LEFT_OP _min) && (data[i] RIGHT_OP _max)); \
+        }                                                                       \
+    }
     void evaluate_min_max(const ContainerType& values, uint8_t* selection, size_t size) const {
         DCHECK(_has_min_max);
         if constexpr (!IsSlice<CppType>) {
-            const auto* data = values.data();
+            const auto& data = values;
             if (_left_close_interval) {
                 if (_right_close_interval) {
-                    for (size_t i = 0; i < size; i++) {
-                        selection[i] = (data[i] >= _min && data[i] <= _max);
+                    if constexpr (std::is_arithmetic_v<CppType>) {
+                        RF_EVAL_MINMAX(>=, <=)
+                    } else {
+                        RF_EVAL_MINMAX(>=, <=)
                     }
                 } else {
-                    for (size_t i = 0; i < size; i++) {
-                        selection[i] = (data[i] >= _min && data[i] < _max);
-                    }
+                    RF_EVAL_MINMAX(>=, <)
                 }
             } else {
                 if (_right_close_interval) {
-                    for (size_t i = 0; i < size; i++) {
-                        selection[i] = (data[i] > _min && data[i] <= _max);
-                    }
+                    RF_EVAL_MINMAX(>, <=)
                 } else {
-                    for (size_t i = 0; i < size; i++) {
-                        selection[i] = (data[i] > _min && data[i] < _max);
-                    }
+                    RF_EVAL_MINMAX(>, <)
                 }
             }
         } else {
@@ -884,7 +887,7 @@ public:
 
     uint16_t evaluate_min_max(const ContainerType& values, uint16_t* sel, uint16_t sel_size, uint16_t* dst_sel) const {
         if constexpr (!IsSlice<CppType>) {
-            const auto* data = values.data();
+            const auto& data = values;
             uint16_t new_size = 0;
             for (int i = 0; i < sel_size; i++) {
                 uint16_t idx = sel[i];
@@ -902,10 +905,9 @@ public:
 
     void evaluate_min_max(const ContainerType& values, uint8_t* selection, uint16_t from, uint16_t to) const {
         if constexpr (!IsSlice<CppType>) {
-            const auto* data = values.data();
             for (uint16_t i = from; i < to; i++) {
                 if (selection[i]) {
-                    selection[i] = evaluate_min_max(data[i]);
+                    selection[i] = evaluate_min_max(values[i]);
                 }
             }
         }
@@ -955,22 +957,21 @@ public:
     std::string debug_string() const override {
         std::stringstream ss;
         ss << "RuntimeMinMax(";
-        ss << "type = " << Type << " ";
-        ss << "has_null = " << _has_null << " ";
+        ss << "type=" << Type << ", ";
+        ss << "has_null=" << _has_null << ", ";
         if constexpr (std::is_integral_v<CppType> || std::is_floating_point_v<CppType>) {
             if constexpr (!std::is_same_v<CppType, __int128>) {
-                ss << "_min = " << _min << ", _max = " << _max;
+                ss << "_min=" << _min << ", _max=" << _max;
             } else {
-                ss << "_min/_max = int128";
+                ss << "_min/_max=int128";
             }
         } else if constexpr (IsSlice<CppType>) {
-            ss << "_min/_max = slice";
+            ss << "_min/_max=slice";
         } else if constexpr (IsDate<CppType> || IsTimestamp<CppType> || IsDecimal<CppType>) {
-            ss << "_min = " << _min.to_string() << ", _max = " << _max.to_string();
+            ss << "_min=" << _min.to_string() << ", _max=" << _max.to_string();
         }
-        ss << " left_close_interval = " << _left_close_interval << ", right_close_interval = " << _right_close_interval
-           << " ";
-        ss << ")";
+        ss << ", left_close_interval=" << _left_close_interval << ", right_close_interval=" << _right_close_interval
+           << ")";
         return ss.str();
     }
 
@@ -1078,7 +1079,7 @@ private:
         } else if constexpr (IsDecimal<CppType>) {
             _min = DecimalV2Value::get_max_decimal();
             _max = DecimalV2Value::get_min_decimal();
-        } else if constexpr (Type != TYPE_JSON) {
+        } else if constexpr (Type != TYPE_JSON && Type != TYPE_VARIANT) {
             // for json vaue, cpp type is JsonValue*
             // but min/max value type is JsonValue
             // and JsonValue needs special serialization handling.
@@ -1105,7 +1106,7 @@ private:
         } else if constexpr (IsDecimal<CppType>) {
             _max = DecimalV2Value::get_max_decimal();
             _min = DecimalV2Value::get_min_decimal();
-        } else if constexpr (Type != TYPE_JSON) {
+        } else if constexpr (Type != TYPE_JSON && Type != TYPE_VARIANT) {
             // for json vaue, cpp type is JsonValue*
             // but min/max value type is JsonValue
             // and JsonValue needs special serialization handling.
@@ -1314,9 +1315,8 @@ public:
     std::string debug_string() const override {
         LogicalType ltype = Type;
         std::stringstream ss;
-        ss << "RuntimeBF(type = " << ltype << ", size = " << _size << ", has_null = " << _has_null
-           << ", can_use_bf = " << can_use_bf();
-        ss << ")";
+        ss << "RuntimeBF(type=" << ltype << ", size=" << _size << ", has_null=" << _has_null
+           << ", can_use_bf=" << can_use_bf() << ")";
         return ss.str();
     }
 
@@ -1452,7 +1452,7 @@ private:
             if (const_column->only_null()) {
                 selection[0] = _has_null;
             } else {
-                const auto& input_data = GetContainer<Type>::get_data(const_column->data_column());
+                const auto input_data = GetContainer<Type>::get_data(const_column->data_column());
                 if constexpr (can_use_bf) {
                     _rf_test_data<multi_partition>(selection, input_data, hash_values, 0);
                 }
@@ -1461,7 +1461,7 @@ private:
             memset(selection, sel, size);
         } else if (input_column->is_nullable()) {
             const auto* nullable_column = down_cast<const NullableColumn*>(input_column);
-            const auto& input_data = GetContainer<Type>::get_data(nullable_column->data_column());
+            const auto input_data = GetContainer<Type>::get_data(nullable_column->data_column());
             if (nullable_column->has_null()) {
                 const uint8_t* null_data = nullable_column->immutable_null_column_data().data();
                 for (int i = 0; i < size; i++) {
@@ -1481,7 +1481,7 @@ private:
                 }
             }
         } else {
-            const auto& input_data = GetContainer<Type>::get_data(input_column);
+            const auto input_data = GetContainer<Type>::get_data(input_column);
             if constexpr (can_use_bf) {
                 for (int i = 0; i < size; ++i) {
                     _rf_test_data<multi_partition>(selection, input_data, hash_values, i);
@@ -1502,7 +1502,7 @@ private:
         uint16_t new_size = 0;
         if (column->is_nullable()) {
             const auto* nullable_column = down_cast<const NullableColumn*>(column);
-            const auto& data = GetContainer<Type>::get_data(nullable_column->data_column());
+            const auto data = GetContainer<Type>::get_data(nullable_column->data_column());
             if (nullable_column->has_null()) {
                 const uint8_t* null_data = nullable_column->immutable_null_column_data().data();
                 for (int i = 0; i < sel_size; i++) {
@@ -1534,7 +1534,7 @@ private:
                 }
             }
         } else {
-            const auto& data = GetContainer<Type>::get_data(column);
+            const auto data = GetContainer<Type>::get_data(column);
             if constexpr (can_use_bf) {
                 for (int i = 0; i < sel_size; ++i) {
                     uint16_t idx = sel[i];
@@ -1561,7 +1561,7 @@ private:
         CHECK(!column->is_constant()) << "not support constant column";
         if (column->is_nullable()) {
             const auto* nullable_column = down_cast<const NullableColumn*>(column);
-            const auto& data = GetContainer<Type>::get_data(nullable_column->data_column());
+            const auto data = GetContainer<Type>::get_data(nullable_column->data_column());
             if (nullable_column->has_null()) {
                 const uint8_t* null_data = nullable_column->immutable_null_column_data().data();
                 for (uint16_t i = from; i < to; i++) {
@@ -1585,7 +1585,7 @@ private:
                 }
             }
         } else {
-            const auto& data = GetContainer<Type>::get_data(column);
+            const auto data = GetContainer<Type>::get_data(column);
             if constexpr (can_use_bf) {
                 for (uint16_t i = from; i < to; i++) {
                     if (selection[i]) {

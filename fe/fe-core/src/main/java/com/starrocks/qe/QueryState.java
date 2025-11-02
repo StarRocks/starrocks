@@ -131,6 +131,12 @@ public class QueryState {
         isFinished = true;
     }
 
+    public void resetError() {
+        this.stateType = MysqlStateType.OK;
+        this.errorCode = null;
+        this.errorMessage = null;
+    }
+
     public boolean isError() {
         return stateType == MysqlStateType.ERR;
     }

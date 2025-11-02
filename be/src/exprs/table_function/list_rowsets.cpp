@@ -80,6 +80,7 @@ static void fill_rowset_row(Columns& columns, const RowsetMetadataPB& rowset) {
 
 std::pair<Columns, UInt32Column::Ptr> ListRowsets::process(RuntimeState* runtime_state,
                                                            TableFunctionState* base_state) const {
+#ifndef __APPLE__
     auto state = down_cast<MyState*>(base_state);
 
     if (UNLIKELY(state->get_columns().size() != 2)) {
@@ -160,6 +161,11 @@ std::pair<Columns, UInt32Column::Ptr> ListRowsets::process(RuntimeState* runtime
     offsets->append_datum(Datum((uint32_t)result[0]->size()));
 
     return std::make_pair(std::move(result), std::move(offsets));
+#else
+    // Lake storage is disabled on macOS
+    base_state->set_status(Status::RuntimeError("Lake storage is disabled on macOS"));
+    return {};
+#endif
 }
 
 } // namespace starrocks

@@ -14,7 +14,7 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.JoinOperator;
+import com.starrocks.sql.ast.expression.JoinOperator;
 
 /**
  * {@link NormalizedTableFunctionRelation} is a special {@link JoinRelation} converted from TABLE(table_function(...)).

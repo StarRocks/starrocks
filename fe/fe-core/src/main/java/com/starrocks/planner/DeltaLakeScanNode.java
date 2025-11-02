@@ -16,8 +16,6 @@ package com.starrocks.planner;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
-import com.starrocks.analysis.SlotDescriptor;
-import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.StarRocksException;
@@ -109,7 +107,9 @@ public class DeltaLakeScanNode extends ScanNode {
         reachLimit = true;
     }
 
-    public void setupScanRangeSource(ScalarOperator predicate, List<String> fieldNames, boolean enableIncrementalScanRanges)
+    public void setupScanRangeSource(ScalarOperator predicate, List<String> fieldNames,
+                                     PartitionIdGenerator partitionIdGenerator,
+                                     boolean enableIncrementalScanRanges)
             throws StarRocksException {
         SnapshotImpl snapshot = (SnapshotImpl) deltaLakeTable.getDeltaSnapshot();
         DeltaUtils.checkProtocolAndMetadata(snapshot.getProtocol(), snapshot.getMetadata());
@@ -126,7 +126,7 @@ public class DeltaLakeScanNode extends ScanNode {
             remoteFileInfoSource = new RemoteFileInfoDefaultSource(
                     GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFiles(deltaLakeTable, params));
         }
-        scanRangeSource = new DeltaConnectorScanRangeSource(deltaLakeTable, remoteFileInfoSource);
+        scanRangeSource = new DeltaConnectorScanRangeSource(deltaLakeTable, remoteFileInfoSource, partitionIdGenerator);
     }
 
     @Override
@@ -140,19 +140,19 @@ public class DeltaLakeScanNode extends ScanNode {
         }
         if (!scanNodePredicates.getPartitionConjuncts().isEmpty()) {
             output.append(prefix).append("PARTITION PREDICATES: ").append(
-                    getExplainString(scanNodePredicates.getPartitionConjuncts())).append("\n");
+                    explainExpr(scanNodePredicates.getPartitionConjuncts())).append("\n");
         }
         if (!scanNodePredicates.getNonPartitionConjuncts().isEmpty()) {
             output.append(prefix).append("NON-PARTITION PREDICATES: ").append(
-                    getExplainString(scanNodePredicates.getNonPartitionConjuncts())).append("\n");
+                    explainExpr(scanNodePredicates.getNonPartitionConjuncts())).append("\n");
         }
         if (!scanNodePredicates.getNoEvalPartitionConjuncts().isEmpty()) {
             output.append(prefix).append("NO EVAL-PARTITION PREDICATES: ").append(
-                    getExplainString(scanNodePredicates.getNoEvalPartitionConjuncts())).append("\n");
+                    explainExpr(scanNodePredicates.getNoEvalPartitionConjuncts())).append("\n");
         }
         if (!scanNodePredicates.getMinMaxConjuncts().isEmpty()) {
             output.append(prefix).append("MIN/MAX PREDICATES: ").append(
-                    getExplainString(scanNodePredicates.getMinMaxConjuncts())).append("\n");
+                    explainExpr(scanNodePredicates.getMinMaxConjuncts())).append("\n");
         }
 
         output.append(prefix).append(String.format("cardinality=%s", cardinality));

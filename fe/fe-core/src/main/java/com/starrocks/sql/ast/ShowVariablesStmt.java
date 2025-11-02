@@ -14,15 +14,15 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.ExprSubstitutionMap;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 // Show variables statement.
-public class ShowVariablesStmt extends ShowStmt {
+public class ShowVariablesStmt extends EnhancedShowStmt {
     private static final String NAME_COL = "Variable_name";
     private static final String VALUE_COL = "Value";
     private static final String DEFAULT_VALUE = "Default_value";

@@ -40,6 +40,9 @@
 #include <vector>
 
 #include "exec/pipeline/pipeline_metrics.h"
+#ifndef __APPLE__
+#include "util/jvm_metrics.h"
+#endif
 #include "util/metrics.h"
 #include "util/system_metrics.h"
 #include "util/table_metrics.h"
@@ -68,15 +71,6 @@ private:
     StarRocksMetrics::instance()->metrics()->register_metric(#name, &StarRocksMetrics::instance()->name); \
     StarRocksMetrics::instance()->metrics()->register_hook(                                               \
             #name, [&]() { StarRocksMetrics::instance()->name.set_value(func()); });
-
-#define METRICS_DEFINE_THREAD_POOL(threadpool_name)                                             \
-    METRIC_DEFINE_UINT_GAUGE(threadpool_name##_threadpool_size, MetricUnit::NOUNIT);            \
-    METRIC_DEFINE_UINT_GAUGE(threadpool_name##_executed_tasks_total, MetricUnit::NOUNIT);       \
-    METRIC_DEFINE_UINT_GAUGE(threadpool_name##_pending_time_ns_total, MetricUnit::NANOSECONDS); \
-    METRIC_DEFINE_UINT_GAUGE(threadpool_name##_execute_time_ns_total, MetricUnit::NANOSECONDS); \
-    METRIC_DEFINE_UINT_GAUGE(threadpool_name##_queue_count, MetricUnit::NOUNIT);                \
-    METRIC_DEFINE_UINT_GAUGE(threadpool_name##_running_threads, MetricUnit::NOUNIT);            \
-    METRIC_DEFINE_UINT_GAUGE(threadpool_name##_active_threads, MetricUnit::NOUNIT)
 
 #define REGISTER_THREAD_POOL_METRICS(name, threadpool)                                                            \
     do {                                                                                                          \
@@ -150,6 +144,12 @@ public:
 
     METRIC_DEFINE_INT_COUNTER(finish_task_requests_total, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_COUNTER(finish_task_requests_failed, MetricUnit::REQUESTS);
+
+    // clone
+    METRIC_DEFINE_INT_COUNTER(clone_task_inter_node_copy_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_COUNTER(clone_task_intra_node_copy_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_COUNTER(clone_task_inter_node_copy_duration_ms, MetricUnit::MILLISECONDS);
+    METRIC_DEFINE_INT_COUNTER(clone_task_intra_node_copy_duration_ms, MetricUnit::MILLISECONDS);
 
     // Compaction Task Metric
     // compaction task num, including all finished tasks and failed tasks
@@ -369,6 +369,8 @@ public:
     METRICS_DEFINE_THREAD_POOL(compact_pool);
     METRICS_DEFINE_THREAD_POOL(pindex_load);
     METRICS_DEFINE_THREAD_POOL(put_aggregate_metadata);
+    METRICS_DEFINE_THREAD_POOL(exec_state_report);
+    METRICS_DEFINE_THREAD_POOL(priority_exec_state_report);
 
     METRIC_DEFINE_UINT_GAUGE(load_rpc_threadpool_size, MetricUnit::NOUNIT);
 
@@ -393,6 +395,8 @@ public:
     METRICS_DEFINE_THREAD_POOL(remote_snapshot);
     METRICS_DEFINE_THREAD_POOL(replicate_snapshot);
 
+    METRIC_DEFINE_INT_COUNTER(exec_runtime_memory_size, MetricUnit::BYTES);
+
     // short circuit executor
     METRIC_DEFINE_INT_COUNTER(short_circuit_request_total, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_COUNTER(short_circuit_request_duration_us, MetricUnit::MICROSECONDS);
@@ -404,7 +408,7 @@ public:
 
     // not thread-safe, call before calling metrics
     void initialize(const std::vector<std::string>& paths = std::vector<std::string>(),
-                    bool init_system_metrics = false,
+                    bool init_system_metrics = false, bool init_jvm_metrics = false,
                     const std::set<std::string>& disk_devices = std::set<std::string>(),
                     const std::vector<std::string>& network_interfaces = std::vector<std::string>());
 
@@ -428,6 +432,9 @@ private:
 
     MetricRegistry _metrics;
     SystemMetrics _system_metrics;
+#ifndef __APPLE__
+    JVMMetrics _jvm_metrics;
+#endif
     TableMetricsManager _table_metrics_mgr;
 };
 

@@ -27,6 +27,7 @@ set(EXPR_FILES
   agg/factory/aggregate_resolver_minmaxany.cpp
   agg/factory/aggregate_resolver_others.cpp
   agg/factory/aggregate_resolver_sumcount.cpp
+  agg/factory/aggregate_resolver_distinct.cpp
   agg/factory/aggregate_resolver_stream.cpp
   agg/factory/aggregate_resolver_utility.cpp
   agg/factory/aggregate_resolver_variance.cpp
@@ -109,6 +110,7 @@ set(EXPR_FILES
   bit_functions.cpp
   hash_functions.cpp
   gin_functions.cpp
+  ai_functions.cpp
 )
 
 if(STARROCKS_JIT_ENABLE)

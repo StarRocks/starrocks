@@ -19,6 +19,7 @@ import com.github.benmanes.caffeine.cache.Caffeine;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.qe.feedback.guide.TuningGuide;
+import org.apache.commons.lang3.StringUtils;
 
 import java.util.List;
 import java.util.Map;
@@ -136,17 +137,17 @@ public class OperatorTuningGuides {
     public String getTuneGuidesInfo(boolean isFull) {
         StringBuilder sb = new StringBuilder();
         for (Map.Entry<Integer, OperatorGuideInfo> entry : operatorIdToTuningGuideInfo.entrySet()) {
-            sb.append("PlanNode ").append(entry.getValue().nodeId).append(":").append("\n");
+            sb.append("[PlanNode ").append(entry.getValue().nodeId).append("] ");
             for (TuningGuide guide : entry.getValue().tuningGuides) {
-                sb.append(guide.getClass().getSimpleName()).append("\n");
+                sb.append("(").append(guide.getClass().getSimpleName()).append(") ");
                 if (isFull) {
-                    sb.append(guide.getDescription()).append("\n");
-                    sb.append(guide.getAdvice()).append("\n");
+                    sb.append("(").append(guide.getDescription()).append(") ");
+                    sb.append("(").append(guide.getAdvice()).append(") ");
                 }
             }
-            sb.append("\n");
+            sb.append(" ");
         }
-        return sb.toString();
+        return StringUtils.trim(sb.toString());
     }
 
     @Override

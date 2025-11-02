@@ -39,7 +39,7 @@ Status CompactionTask::execute_index_major_compaction(TxnLogPB* txn_log) {
         auto metadata = _tablet.metadata();
         if (metadata->enable_persistent_index() &&
             metadata->persistent_index_type() == PersistentIndexTypePB::CLOUD_NATIVE) {
-            RETURN_IF_ERROR(_tablet.tablet_manager()->update_mgr()->execute_index_major_compaction(*metadata, txn_log));
+            RETURN_IF_ERROR(_tablet.tablet_manager()->update_mgr()->execute_index_major_compaction(metadata, txn_log));
             if (txn_log->has_op_compaction() && !txn_log->op_compaction().input_sstables().empty()) {
                 size_t total_input_sstable_file_size = 0;
                 for (const auto& input_sstable : txn_log->op_compaction().input_sstables()) {
@@ -80,8 +80,31 @@ Status CompactionTask::fill_compaction_segment_info(TxnLogPB_OpCompaction* op_co
         op_compaction->mutable_output_rowset()->set_data_size(writer->data_size());
         op_compaction->mutable_output_rowset()->set_overlapped(false);
         op_compaction->mutable_output_rowset()->set_next_compaction_offset(0);
+        for (auto& sst : writer->ssts()) {
+            auto* file_meta = op_compaction->add_ssts();
+            file_meta->set_name(sst.path);
+            file_meta->set_size(sst.size.value());
+            file_meta->set_encryption_meta(sst.encryption_meta);
+        }
     }
     return Status::OK();
+}
+
+bool CompactionTask::should_enable_pk_parallel_execution(int64_t input_bytes) {
+    if (_tablet.get_schema()->keys_type() != KeysType::PRIMARY_KEYS) {
+        return false;
+    }
+    // pk parallel execution is only work when all conditions are met:
+    // 1. whether use cloud native index
+    // 2. whether use light compaction publish
+    // 3. whether input_bytes is large enough
+    auto metadata = _tablet.metadata();
+    bool use_cloud_native_index = metadata->enable_persistent_index() &&
+                                  metadata->persistent_index_type() == PersistentIndexTypePB::CLOUD_NATIVE;
+    bool use_light_compaction_publish = config::enable_light_pk_compaction_publish &&
+                                        StorageEngine::instance()->get_persistent_index_store(_tablet.id()) != nullptr;
+    return use_cloud_native_index && use_light_compaction_publish &&
+           input_bytes >= config::pk_parallel_execution_threshold_bytes;
 }
 
 } // namespace starrocks::lake

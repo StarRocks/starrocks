@@ -84,6 +84,7 @@ set(EXEC_FILES
     spillable_chunks_sorter_full_sort.cpp
     cross_join_node.cpp
     union_node.cpp
+    raw_values_node.cpp
     except_hash_set.cpp
     except_node.cpp
     arrow_to_starrocks_converter.cpp
@@ -158,6 +159,7 @@ set(EXEC_FILES
     schema_scanner/schema_be_cloud_native_compactions_scanner.cpp
     schema_scanner/schema_pipe_files.cpp
     schema_scanner/schema_pipes.cpp
+    schema_scanner/schema_recyclebin_catalogs.cpp
     schema_scanner/starrocks_role_edges_scanner.cpp
     schema_scanner/starrocks_grants_to_scanner.cpp
     schema_scanner/schema_helper.cpp
@@ -272,6 +274,7 @@ set(EXEC_FILES
     pipeline/assert_num_rows_operator.cpp
     pipeline/set/union_passthrough_operator.cpp
     pipeline/set/union_const_source_operator.cpp
+    pipeline/set/raw_values_source_operator.cpp
     pipeline/hashjoin/hash_join_build_operator.cpp
     pipeline/hashjoin/hash_join_probe_operator.cpp
     pipeline/hashjoin/hash_joiner_factory.cpp

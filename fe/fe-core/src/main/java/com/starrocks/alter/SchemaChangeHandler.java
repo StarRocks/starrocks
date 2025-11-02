@@ -43,9 +43,6 @@ import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.BloomFilterIndexUtil;
-import com.starrocks.analysis.ColumnPosition;
-import com.starrocks.analysis.SlotRef;
 import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.ArrayType;
@@ -64,6 +61,7 @@ import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
+import com.starrocks.catalog.SchemaChangeTypeCompatibility;
 import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
@@ -101,6 +99,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.FeNameFormat;
+import com.starrocks.sql.analyzer.IndexAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AddColumnsClause;
@@ -109,6 +108,7 @@ import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterTableColumnClause;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
 import com.starrocks.sql.ast.CancelStmt;
+import com.starrocks.sql.ast.ColumnPosition;
 import com.starrocks.sql.ast.CreateIndexClause;
 import com.starrocks.sql.ast.DropColumnClause;
 import com.starrocks.sql.ast.DropFieldClause;
@@ -121,6 +121,7 @@ import com.starrocks.sql.ast.ModifyColumnCommentClause;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.sql.ast.OptimizeClause;
 import com.starrocks.sql.ast.ReorderColumnsClause;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -912,6 +913,26 @@ public class SchemaChangeHandler extends AlterHandler {
             }
         }
 
+        if (!SchemaChangeTypeCompatibility.canReuseZonemapIndex(oriColumn.getType(), modColumn.getType())) {
+            return false;
+        }
+
+        // Check whether manually created indexes support fast schema evolution. The rules are as follows:
+        // 1. The index can be reused after type conversion, and BE has made necessary changes,
+        //    such as casting new type values to old type values before querying the index.
+        // 2. The index cannot be reused, and BE has made changes to skip it during queries.
+        // Currently, BLOOMFILTER and NGRAMBF indexes use rule 2 to support fast schema evolution. BE-side changes
+        // for other indexes are not yet ready, so fast schema change is temporarily disabled for them. This feature
+        // will be gradually enabled for these indexes once BE support is in place.
+        List<Index> existedIndexes = olapTable.getIndexes();
+        for (Index index : existedIndexes) {
+            if (index.getColumns().contains(oriColumn.getColumnId())) {
+                if (index.getIndexType() != IndexDef.IndexType.NGRAMBF) {
+                    return false;
+                }
+            }
+        }
+
         return fastSchemaEvolution;
     }
 
@@ -1486,7 +1507,7 @@ public class SchemaChangeHandler extends AlterHandler {
             }
         }
 
-        BloomFilterIndexUtil.analyseBfWithNgramBf(olapTable, newSet, bfColumnIds);
+        IndexAnalyzer.analyseBfWithNgramBf(olapTable, newSet, bfColumnIds);
 
         // property 3: timeout
         long timeoutSecond = PropertyAnalyzer.analyzeTimeout(propertyMap, Config.alter_table_timeout_second);
@@ -2720,22 +2741,15 @@ public class SchemaChangeHandler extends AlterHandler {
 
     public void updateTableConstraint(Database db, String tableName, Map<String, String> properties)
             throws DdlException {
-        Locker locker = new Locker();
-        if (!locker.lockDatabaseAndCheckExist(db, LockType.READ)) {
+        if (db == null || !db.isExist()) {
             throw new DdlException(String.format("db:%s does not exists.", db.getFullName()));
         }
-        TableProperty tableProperty;
-        OlapTable olapTable;
-        try {
-            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
-            if (table == null) {
-                throw new DdlException(String.format("table:%s does not exist", tableName));
-            }
-            olapTable = (OlapTable) table;
-            tableProperty = olapTable.getTableProperty();
-        } finally {
-            locker.unLockDatabase(db.getId(), LockType.READ);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+        if (table == null) {
+            throw new DdlException(String.format("table:%s does not exist", tableName));
         }
+        OlapTable olapTable = (OlapTable) table;
+        TableProperty tableProperty = olapTable.getTableProperty();
 
         boolean hasChanged = false;
         if (tableProperty != null) {
@@ -2784,6 +2798,8 @@ public class SchemaChangeHandler extends AlterHandler {
         if (!hasChanged) {
             return;
         }
+
+        Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.WRITE);
         try {
             GlobalStateMgr.getCurrentState().getLocalMetastore().modifyTableConstraint(db, tableName, properties);
@@ -2850,9 +2866,20 @@ public class SchemaChangeHandler extends AlterHandler {
 
     private void processAddIndex(CreateIndexClause alterClause, OlapTable olapTable, List<Index> newIndexes)
             throws StarRocksException {
-        Index newIndex = alterClause.getIndex();
-        if (newIndex == null) {
-            return;
+        // Create Index object directly from IndexDef
+        IndexDef indexDef = alterClause.getIndexDef();
+        Index newIndex;
+        // Only assign meaningful indexId for OlapTable
+        if (olapTable.isOlapTableOrMaterializedView()) {
+            long indexId = IndexDef.IndexType.isCompatibleIndex(indexDef.getIndexType()) ? 
+                    olapTable.incAndGetMaxIndexId() : -1;
+            newIndex = new Index(indexId, indexDef.getIndexName(),
+                    MetaUtils.getColumnIdsByColumnNames(olapTable, indexDef.getColumns()),
+                    indexDef.getIndexType(), indexDef.getComment(), indexDef.getProperties());
+        } else {
+            newIndex = new Index(indexDef.getIndexName(),
+                    MetaUtils.getColumnIdsByColumnNames(olapTable, indexDef.getColumns()),
+                    indexDef.getIndexType(), indexDef.getComment(), indexDef.getProperties());
         }
 
         if (newIndex.getIndexType() == IndexType.GIN) {
@@ -2874,7 +2901,6 @@ public class SchemaChangeHandler extends AlterHandler {
         }
 
         List<Index> existedIndexes = olapTable.getIndexes();
-        IndexDef indexDef = alterClause.getIndexDef();
         Set<String> newColset = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         newColset.addAll(indexDef.getColumns());
         for (Index existedIdx : existedIndexes) {
@@ -2903,7 +2929,7 @@ public class SchemaChangeHandler extends AlterHandler {
             if (column != null) {
                 // only throw DdlException
                 try {
-                    indexDef.checkColumn(column, olapTable.getKeysType());
+                    IndexAnalyzer.checkColumn(column, indexDef.getIndexType(), indexDef.getProperties(), olapTable.getKeysType());
                 } catch (Exception e) {
                     throw new DdlException(e.getMessage());
                 }

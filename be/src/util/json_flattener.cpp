@@ -19,6 +19,7 @@
 
 #include <storage/flat_json_config.h>
 #include <sys/types.h>
+#include <velocypack/StringRef.h>
 
 #include <algorithm>
 #include <cstddef>
@@ -45,7 +46,6 @@
 #include "exprs/column_ref.h"
 #include "exprs/expr_context.h"
 #include "gutil/casts.h"
-#include "gutil/strings/split.h"
 #include "runtime/types.h"
 #include "storage/rowset/column_reader.h"
 #include "types/logical_type.h"
@@ -60,36 +60,46 @@ namespace starrocks {
 namespace flat_json {
 template <LogicalType TYPE>
 void extract_number(const vpack::Slice* json, NullableColumn* result) {
+    // NOTE: this function catch all vpack exceptions, so it must be exception-safe, instead of modifying the result into
+    // an inconsistence state where null_column and data_column have different sizes.
+    using CppType = RunTimeCppType<TYPE>;
+    Datum datum;
     try {
         if (LIKELY(json->isNumber() || json->isString())) {
             auto st = get_number_from_vpjson<TYPE>(*json);
             if (st.ok()) {
-                result->null_column()->append(0);
-                down_cast<RunTimeColumnType<TYPE>*>(result->data_column().get())->append(st.value());
-            } else {
-                result->append_nulls(1);
+                datum.set<CppType>(st.value());
             }
         } else if (json->isNone() || json->isNull()) {
-            result->append_nulls(1);
+            datum.set_null();
         } else if (json->isBool()) {
-            result->null_column()->append(0);
-            down_cast<RunTimeColumnType<TYPE>*>(result->data_column().get())->append(json->getBool());
+            datum.set<CppType>(static_cast<CppType>(json->getBool()));
         } else {
-            result->append_nulls(1);
+            datum.set_null();
         }
     } catch (const vpack::Exception& e) {
+        LOG(INFO) << "vpack::Exception in extract_number: " << e.what();
+        datum.set_null();
+    }
+
+    if (datum.is_null()) {
         result->append_nulls(1);
+    } else {
+        result->append_datum(datum);
     }
 }
 
 void extract_bool(const vpack::Slice* json, NullableColumn* result) {
+    // NOTE: this function catch all vpack exceptions, so it must be exception-safe, instead of modifying the result into
+    // an inconsistence state where null_column and data_column have different sizes.
+    using CppType = RunTimeCppType<TYPE_BOOLEAN>;
+    Datum datum;
     try {
         if (json->isNone() || json->isNull()) {
-            result->append_nulls(1);
+            datum.set_null();
         } else if (json->isBool()) {
-            result->null_column()->append(0);
             auto res = json->getBool();
-            down_cast<RunTimeColumnType<TYPE_BOOLEAN>*>(result->data_column().get())->append(res);
+            datum.set<CppType>(res);
         } else if (json->isString()) {
             vpack::ValueLength len;
             const char* str = json->getStringUnchecked(len);
@@ -98,43 +108,50 @@ void extract_bool(const vpack::Slice* json, NullableColumn* result) {
             if (parseResult != StringParser::PARSE_SUCCESS || std::isnan(r) || std::isinf(r)) {
                 bool b = StringParser::string_to_bool(str, len, &parseResult);
                 if (parseResult != StringParser::PARSE_SUCCESS) {
-                    result->append_nulls(1);
+                    datum.set_null();
                 } else {
-                    down_cast<RunTimeColumnType<TYPE_BOOLEAN>*>(result->data_column().get())->append(b);
+                    datum.set<CppType>(b);
                 }
             } else {
-                down_cast<RunTimeColumnType<TYPE_BOOLEAN>*>(result->data_column().get())->append(r != 0);
+                datum.set<CppType>(r != 0);
             }
         } else if (json->isNumber()) {
-            result->null_column()->append(0);
             auto res = json->getNumber<double>();
-            down_cast<RunTimeColumnType<TYPE_BOOLEAN>*>(result->data_column().get())->append(res != 0);
+            datum.set<CppType>(res != 0);
         } else {
-            result->append_nulls(1);
+            datum.set_null();
         }
     } catch (const vpack::Exception& e) {
+        LOG(INFO) << "vpack::Exception in extract_bool: " << e.what();
+        datum.set_null();
+    }
+
+    if (datum.is_null()) {
         result->append_nulls(1);
+    } else {
+        result->append_datum(datum);
     }
 }
 
 void extract_string(const vpack::Slice* json, NullableColumn* result) {
+    // NOTE: this function catch all vpack exceptions, so it must be exception-safe, instead of modifying the result into
+    // an inconsistence state where null_column and data_column have different sizes.
     try {
         if (json->isNone() || json->isNull()) {
             result->append_nulls(1);
         } else if (json->isString()) {
-            result->null_column()->append(0);
             vpack::ValueLength len;
             const char* str = json->getStringUnchecked(len);
-            down_cast<BinaryColumn*>(result->data_column().get())->append(Slice(str, len));
+            result->append_datum(Datum(Slice(str, len)));
         } else {
-            result->null_column()->append(0);
             vpack::Options options = vpack::Options::Defaults;
             options.singleLinePrettyPrint = true;
             options.dumpAttributesInIndexOrder = false;
             std::string str = json->toJson(&options);
-            down_cast<BinaryColumn*>(result->data_column().get())->append(Slice(str));
+            result->append_datum(Datum(Slice(str)));
         }
     } catch (const vpack::Exception& e) {
+        LOG(INFO) << "vpack::Exception in extract_string: " << e.what();
         result->append_nulls(1);
     }
 }
@@ -143,8 +160,8 @@ void extract_json(const vpack::Slice* json, NullableColumn* result) {
     if (json->isNone()) {
         result->append_nulls(1);
     } else {
-        result->null_column()->append(0);
         down_cast<JsonColumn*>(result->data_column().get())->append(JsonValue(*json));
+        result->null_column()->append(0);
     }
 }
 
@@ -153,12 +170,13 @@ void merge_number(vpack::Builder* builder, const std::string_view& name, const C
     DCHECK(src->is_nullable());
     auto* nullable_column = down_cast<const NullableColumn*>(src);
     auto* col = down_cast<const RunTimeColumnType<TYPE>*>(nullable_column->data_column().get());
+    const auto data = col->immutable_data().data();
 
     if constexpr (TYPE == LogicalType::TYPE_LARGEINT) {
         // the value is from json, must be uint64_t
-        builder->addUnchecked(name.data(), name.size(), vpack::Value((uint64_t)col->get_data()[idx]));
+        builder->addUnchecked(name.data(), name.size(), vpack::Value((uint64_t)data[idx]));
     } else {
-        builder->addUnchecked(name.data(), name.size(), vpack::Value(col->get_data()[idx]));
+        builder->addUnchecked(name.data(), name.size(), vpack::Value(data[idx]));
     }
 }
 
@@ -594,7 +612,8 @@ void JsonPathDeriver::_visit_json_paths(const vpack::Slice& value, JsonFlatPath*
         desc->last_row = mark_row;
 
         if (v.isObject()) {
-            child->remain = v.isEmptyObject();
+            // Accumulate remain status: if node is ever empty in any row, mark as remain
+            child->remain |= v.isEmptyObject();
             desc->type = flat_json::JSON_BASE_TYPE_BITS;
             _visit_json_paths(v, child, mark_row);
         } else {
@@ -644,7 +663,14 @@ uint32_t JsonPathDeriver::_dfs_finalize(JsonFlatPath* node, const std::string& a
             return 0;
         }
     } else {
-        node->remain |= (flat_count != node->children.size());
+        // For intermediate nodes: mark as remain if not all children are flattened,
+        // or if the node itself was ever empty in any row (to preserve structures like {"100": {}})
+        if (flat_count != node->children.size()) {
+            node->remain = true;
+        } else if (!absolute_path.empty() && node->remain) {
+            // Node was marked as remain because it was empty in some row(s)
+            // Keep it as remain even if all children are flattened
+        }
         return 1;
     }
 }
@@ -793,6 +819,11 @@ void JsonFlattener::flatten(const Column* json_column) {
 
     for (auto& col : _flat_columns) {
         DCHECK_EQ(col->size(), json_column->size());
+    }
+
+    // IMPORTANT: Check column integrity to prevent NullableColumn inconsistency
+    for (auto& col : _flat_columns) {
+        col->check_or_die();
     }
 }
 
@@ -1004,9 +1035,14 @@ ColumnPtr JsonMerger::merge(const Columns& columns) {
     _src_columns.clear();
     if (_output_nullable) {
         down_cast<NullableColumn*>(_result.get())->update_has_null();
+        // IMPORTANT: Check column integrity to prevent NullableColumn inconsistency
+        _result->check_or_die();
         return _result;
     } else {
-        return down_cast<NullableColumn*>(_result.get())->data_column();
+        auto data_column = down_cast<NullableColumn*>(_result.get())->data_column();
+        // IMPORTANT: Check column integrity to prevent NullableColumn inconsistency
+        data_column->check_or_die();
+        return data_column;
     }
 }
 
@@ -1058,9 +1094,6 @@ void JsonMerger::_merge_impl(size_t rows) {
 template <bool IN_TREE>
 void JsonMerger::_merge_json_with_remain(const JsonFlatPath* root, const vpack::Slice* remain, vpack::Builder* builder,
                                          size_t index) {
-    // #ifndef NDEBUG
-    //     std::string json = remain->toJson();
-    // #endif
     vpack::ObjectIterator it(*remain, false);
     for (; it.valid(); it.next()) {
         auto k = it.key().stringView();
@@ -1085,9 +1118,31 @@ void JsonMerger::_merge_json_with_remain(const JsonFlatPath* root, const vpack::
                 _merge_json_with_remain<true>(child, &v, builder, index);
             } else {
                 DCHECK(child->op == JsonFlatPath::OP_INCLUDE || child->op == JsonFlatPath::OP_NEW_LEVEL);
-                builder->addUnchecked(k.data(), k.size(), vpack::Value(vpack::ValueType::Object));
-                _merge_json_with_remain<true>(child, &v, builder, index);
-                builder->close();
+                bool has_value = false;
+                _check_has_non_null_values(child, index, &has_value);
+                // When IN_TREE=false, skip empty remain objects that have no flat column values
+                if constexpr (!IN_TREE) {
+                    if (v.isEmptyObject() && !has_value) {
+                        continue;
+                    }
+                }
+                vpack::Builder temp_builder;
+                temp_builder.add(vpack::Value(vpack::ValueType::Object));
+                // Use IN_TREE=false for empty remain to build from flat columns only,
+                // IN_TREE=true otherwise to merge remain and flat columns
+                if (v.isEmptyObject()) {
+                    _merge_json_with_remain<false>(child, &v, &temp_builder, index);
+                } else {
+                    _merge_json_with_remain<true>(child, &v, &temp_builder, index);
+                }
+                temp_builder.close();
+                auto temp_slice = temp_builder.slice();
+                // When IN_TREE=true, preserve remain keys even if empty to maintain original structure
+                if constexpr (IN_TREE) {
+                    builder->addUnchecked(k.data(), k.size(), temp_slice);
+                } else if (!temp_slice.isEmptyObject()) {
+                    builder->addUnchecked(k.data(), k.size(), temp_slice);
+                }
             }
             continue;
         }
@@ -1100,6 +1155,27 @@ void JsonMerger::_merge_json_with_remain(const JsonFlatPath* root, const vpack::
         if (child->op == JsonFlatPath::OP_EXCLUDE) {
             continue;
         }
+
+        // Skip keys already processed from remain in the first loop when IN_TREE=true
+        bool key_processed_from_remain = remain->hasKey(vpack::StringRef(child_name.data(), child_name.size()));
+        if (key_processed_from_remain) {
+            if constexpr (IN_TREE) {
+                continue;
+            } else {
+                // For IN_TREE=false, only process if remain is empty but flat columns have values
+                auto remain_value = remain->get(vpack::StringRef(child_name.data(), child_name.size()));
+                bool has_value = false;
+                if (!child->children.empty()) {
+                    _check_has_non_null_values(child.get(), index, &has_value);
+                } else {
+                    has_value = !_src_columns[child->index]->is_null(index);
+                }
+                if (!(remain_value.isObject() && remain_value.isEmptyObject() && has_value)) {
+                    continue;
+                }
+            }
+        }
+
         // e.g. flat path: b.b2.b3}
         // json: {"b": {}}
         // we can't output: {"b": {}} to {"b": {"b2": {}}}
@@ -1113,6 +1189,15 @@ void JsonMerger::_merge_json_with_remain(const JsonFlatPath* root, const vpack::
                 func(builder, child_name, col, index);
             }
             continue;
+        }
+
+        // For intermediate nodes not in remain, only create if we have flat values for descendants
+        bool has_value = false;
+        _check_has_non_null_values(child.get(), index, &has_value);
+        if (has_value) {
+            builder->addUnchecked(child_name.data(), child_name.size(), vpack::Value(vpack::ValueType::Object));
+            _merge_json(child.get(), builder, index);
+            builder->close();
         }
     }
 }
@@ -1140,9 +1225,39 @@ void JsonMerger::_merge_json(const JsonFlatPath* root, vpack::Builder* builder, 
         } else if (child->op == JsonFlatPath::OP_ROOT) {
             _merge_json(child.get(), builder, index);
         } else {
-            builder->addUnchecked(child_name.data(), child_name.size(), vpack::Value(vpack::ValueType::Object));
-            _merge_json(child.get(), builder, index);
-            builder->close();
+            // Check if any leaf descendant has value in this row
+            // If yes, create the object structure; if no, skip to avoid creating empty objects
+            bool has_value = false;
+            _check_has_non_null_values(child.get(), index, &has_value);
+
+            if (has_value) {
+                builder->addUnchecked(child_name.data(), child_name.size(), vpack::Value(vpack::ValueType::Object));
+                _merge_json(child.get(), builder, index);
+                builder->close();
+            }
+        }
+    }
+}
+
+void JsonMerger::_check_has_non_null_values(const JsonFlatPath* root, size_t index, bool* has_non_null_values) {
+    for (auto& [child_name, child] : root->children) {
+        if (child->op == JsonFlatPath::OP_EXCLUDE) {
+            continue;
+        }
+
+        if (child->children.empty() && child->op != JsonFlatPath::OP_NEW_LEVEL) {
+            // Leaf node - check if the value is not null
+            auto col = _src_columns[child->index];
+            if (!col->is_null(index)) {
+                *has_non_null_values = true;
+                return;
+            }
+        } else {
+            // Non-leaf node - recursively check children
+            _check_has_non_null_values(child.get(), index, has_non_null_values);
+            if (*has_non_null_values) {
+                return;
+            }
         }
     }
 }
@@ -1427,6 +1542,12 @@ Status HyperJsonTransformer::trans(const Columns& columns) {
             DCHECK_EQ(rows, _dst_columns[i]->size());
         }
     }
+
+    // IMPORTANT: Check column integrity to prevent NullableColumn inconsistency
+    for (auto& col : _dst_columns) {
+        col->check_or_die();
+    }
+
     return Status::OK();
 }
 

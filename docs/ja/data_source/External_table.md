@@ -682,7 +682,7 @@ select count(*) from profile_wos_p7;
 
 ### キャッシュされたHiveテーブルメタデータの更新
 
-* Hiveのパーティション情報と関連するファイル情報はStarRocksにキャッシュされます。キャッシュは `hive_meta_cache_refresh_interval_s` で指定された間隔で更新されます。デフォルト値は7200です。`hive_meta_cache_ttl_s` はキャッシュのタイムアウト期間を指定し、デフォルト値は86400です。
+* Hiveのパーティション情報と関連するファイル情報はStarRocksにキャッシュされます。キャッシュは `hive_meta_cache_refresh_interval_s` で指定された間隔で更新されます。デフォルト値は7200です。
   * キャッシュされたデータは手動で更新することもできます。
     1. Hiveでテーブルにパーティションが追加または削除された場合、`REFRESH EXTERNAL TABLE hive_t` コマンドを実行して、StarRocksにキャッシュされたテーブルメタデータを更新する必要があります。`hive_t` はStarRocks内のHive外部テーブルの名前です。
     2. Hiveの一部のパーティション内のデータが更新された場合、`REFRESH EXTERNAL TABLE hive_t PARTITION ('k1=01/k2=02', 'k1=03/k2=04')` コマンドを実行して、StarRocksにキャッシュされたデータを更新する必要があります。`hive_t` はStarRocks内のHive外部テーブルの名前です。`'k1=01/k2=02'` と `'k1=03/k2=04'` はデータが更新されたHiveパーティションの名前です。

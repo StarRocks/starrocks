@@ -69,6 +69,7 @@ import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.catalog.TypeSerializer;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
@@ -983,7 +984,7 @@ public class LeaderImpl {
                 for (Column column : rangePartitionInfo.getPartitionColumns(olapTable.getIdToColumn())) {
                     TColumnMeta columnMeta = new TColumnMeta();
                     columnMeta.setColumnName(column.getName());
-                    columnMeta.setColumnType(column.getType().toThrift());
+                    columnMeta.setColumnType(TypeSerializer.toThrift(column.getType()));
                     columnMeta.setKey(column.isKey());
                     if (column.getAggregationType() != null) {
                         columnMeta.setAggregationType(column.getAggregationType().name());
@@ -1055,7 +1056,7 @@ public class LeaderImpl {
                     for (Column column : materializedIndexMeta.getSchema()) {
                         TColumnMeta columnMeta = new TColumnMeta();
                         columnMeta.setColumnName(column.getName());
-                        columnMeta.setColumnType(column.getType().toThrift());
+                        columnMeta.setColumnType(TypeSerializer.toThrift(column.getType()));
                         columnMeta.setKey(column.isKey());
                         columnMeta.setAllowNull(column.isAllowNull());
                         if (column.getAggregationType() != null) {

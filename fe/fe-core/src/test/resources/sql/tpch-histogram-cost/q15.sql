@@ -116,7 +116,7 @@ OutPut Exchange Id: 18
 5:AGGREGATE (merge finalize)
 |  aggregate: sum[([27: sum, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]
 |  group by: [11: L_SUPPKEY, INT, false]
-|  having: 27: sum IS NOT NULL
+|  having: [27: sum, DOUBLE, true] IS NOT NULL
 |  cardinality: 1000000
 |  probe runtime filters:
 |  - filter_id = 0, probe_expr = (27: sum)
@@ -137,7 +137,7 @@ OutPut Exchange Id: 15
 
 14:AGGREGATE (merge finalize)
 |  aggregate: max[([47: max, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]
-|  having: 47: max IS NOT NULL
+|  having: [47: max, DOUBLE, true] IS NOT NULL
 |  cardinality: 1
 |  column statistics:
 |  * max-->[810.9, 112561.22791531752, 0.0, 8.0, 1.0] ESTIMATE

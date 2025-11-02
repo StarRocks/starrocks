@@ -17,7 +17,6 @@ package com.starrocks.load.pipe;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.fs.HdfsUtil;
@@ -26,6 +25,7 @@ import com.starrocks.load.pipe.filelist.FileListTableRepo;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
+import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.OriginStatement;
@@ -87,7 +87,7 @@ public class FilePipeSource implements GsonPostProcessable {
         if (CollectionUtils.isEmpty(fileListRepo.listFilesByState(FileListRepo.PipeFileState.UNLOADED, 1))) {
             BrokerDesc brokerDesc = new BrokerDesc(tableProperties);
             try {
-                List<FileStatus> files = HdfsUtil.listFileMeta(path, brokerDesc, true);
+                List<FileStatus> files = HdfsUtil.listFileMeta(path, brokerDesc.getProperties(), true);
                 List<PipeFileRecord> records =
                         ListUtils.emptyIfNull(files).stream()
                                 .map(PipeFileRecord::fromHdfsFile)

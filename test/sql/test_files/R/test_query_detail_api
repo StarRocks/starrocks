@@ -1,0 +1,28 @@
+-- name: test_query_detail_api
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+admin set frontend config ("enable_collect_query_detail_info" = "true");
+-- result:
+-- !result
+create table test_table (
+    id int,
+    name varchar(100),
+    value double
+) distributed by hash(id) properties("replication_num" = "1");
+-- result:
+-- !result
+insert into test_table values (1, 'test1', 10.5), (2, 'test2', 20.5), (3, 'test3', 30.5);
+-- result:
+-- !result
+function: query_detail_check("select * from test_table", 3, 3)
+-- result:
+{'success': True}
+-- !result
+function: query_detail_check("insert into test_table select * from test_table", 3, 0)
+-- result:
+{'success': True}
+-- !result

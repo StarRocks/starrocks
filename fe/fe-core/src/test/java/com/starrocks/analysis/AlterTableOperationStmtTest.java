@@ -16,7 +16,6 @@ package com.starrocks.analysis;
 
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
@@ -37,6 +36,8 @@ import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.ast.AlterTableOperationClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -66,8 +67,7 @@ public class AlterTableOperationStmtTest {
 
     @BeforeEach
     public void setUp(@Mocked MetadataMgr metadataMgr,
-                      @Mocked CatalogMgr catalogMgr,
-                      @Mocked Database database) throws Exception {
+                      @Mocked CatalogMgr catalogMgr) throws Exception {
         Table icebergTable = new IcebergTable(1, "test_table", "iceberg_catalog", "iceberg_catalog",
                 "iceberg_db", "test_table", "",
                 List.of(new Column("k1", Type.INT, true), new Column("partition_date", Type.DATE, true)),
@@ -81,10 +81,6 @@ public class AlterTableOperationStmtTest {
 
                 GlobalStateMgr.getCurrentState().getCatalogMgr();
                 result = catalogMgr;
-                minTimes = 0;
-
-                metadataMgr.getDb(anyLong);
-                result = database;
                 minTimes = 0;
 
                 metadataMgr.getTemporaryTable((UUID)any, anyString, anyLong, anyString);
@@ -220,6 +216,10 @@ public class AlterTableOperationStmtTest {
 
         new Expectations() {
             {
+                icebergTable.getTableProcedure(anyString);
+                result = RewriteDataFilesProcedure.getInstance();
+                minTimes = 0;
+
                 icebergTable.getPartitionColumnsIncludeTransformed();
                 result = List.of(new Column("k1", Type.INT, true),
                         new Column("partition_date", Type.DATE, true));
@@ -347,7 +347,7 @@ public class AlterTableOperationStmtTest {
 
         RewriteDataFilesProcedure rewriteProc = RewriteDataFilesProcedure.getInstance();
         Assertions.assertEquals("rewrite_data_files", rewriteProc.getProcedureName());
-        Assertions.assertEquals(3, rewriteProc.getArguments().size());
+        Assertions.assertEquals(4, rewriteProc.getArguments().size());
 
         RollbackToSnapshotProcedure rollbackProc = RollbackToSnapshotProcedure.getInstance();
         Assertions.assertEquals("rollback_to_snapshot", rollbackProc.getProcedureName());

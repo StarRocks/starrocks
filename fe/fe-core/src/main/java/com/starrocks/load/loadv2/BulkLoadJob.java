@@ -39,7 +39,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
@@ -53,6 +52,7 @@ import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.BrokerFileGroupAggInfo;
 import com.starrocks.load.FailMsg;
 import com.starrocks.load.routineload.TxnStatusChangeReason;
+import com.starrocks.persist.BrokerPropertiesPersistInfo;
 import com.starrocks.persist.OriginStatementInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
@@ -81,7 +81,7 @@ public abstract class BulkLoadJob extends LoadJob {
 
     // input params
     @SerializedName("bds")
-    protected BrokerDesc brokerDesc;
+    protected BrokerPropertiesPersistInfo brokerPersistInfo;
     // this param is used to persist the expr of columns
     // the origin stmt is persisted instead of columns expr
     // the expr of columns will be reanalyze when the log is replayed

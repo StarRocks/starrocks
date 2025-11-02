@@ -14,7 +14,7 @@
 
 package com.starrocks.http.rest;
 
-import com.starrocks.StarRocksFE;
+import com.starrocks.StarRocksFEServer;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.http.ActionController;
@@ -42,10 +42,10 @@ public class StopFeAction extends RestBaseAction {
         response.setContentType("application/json");
         RestResult result = new RestResult();
 
-        if (StarRocksFE.stopped) {
+        if (StarRocksFEServer.stopped) {
             result.addResultEntry("Message", "FE is shutting down");
         } else {
-            StarRocksFE.stopped = true;
+            StarRocksFEServer.stopped = true;
             result.addResultEntry("Message", "Stop success");
         }
 

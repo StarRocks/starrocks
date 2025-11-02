@@ -21,48 +21,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.re2j.Pattern;
 import com.google.re2j.PatternSyntaxException;
-import com.starrocks.analysis.AnalyticExpr;
-import com.starrocks.analysis.ArithmeticExpr;
-import com.starrocks.analysis.ArraySliceExpr;
-import com.starrocks.analysis.ArrowExpr;
-import com.starrocks.analysis.BetweenPredicate;
-import com.starrocks.analysis.BinaryPredicate;
-import com.starrocks.analysis.BoolLiteral;
-import com.starrocks.analysis.CaseExpr;
-import com.starrocks.analysis.CastExpr;
-import com.starrocks.analysis.CloneExpr;
-import com.starrocks.analysis.CollectionElementExpr;
-import com.starrocks.analysis.CompoundPredicate;
-import com.starrocks.analysis.DictQueryExpr;
-import com.starrocks.analysis.ExistsPredicate;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.ExprId;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.FunctionName;
-import com.starrocks.analysis.GroupingFunctionCallExpr;
-import com.starrocks.analysis.InPredicate;
-import com.starrocks.analysis.InformationFunction;
-import com.starrocks.analysis.IntLiteral;
-import com.starrocks.analysis.IsNullPredicate;
-import com.starrocks.analysis.LargeIntLiteral;
-import com.starrocks.analysis.LikePredicate;
-import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.MatchExpr;
-import com.starrocks.analysis.MultiInPredicate;
-import com.starrocks.analysis.NamedArgument;
-import com.starrocks.analysis.NullLiteral;
-import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.Parameter;
-import com.starrocks.analysis.PlaceHolderExpr;
-import com.starrocks.analysis.Predicate;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.SubfieldExpr;
-import com.starrocks.analysis.Subquery;
-import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.TimestampArithmeticExpr;
-import com.starrocks.analysis.UserVariableExpr;
-import com.starrocks.analysis.VariableExpr;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.authorization.PrivilegeException;
 import com.starrocks.authorization.RolePrivilegeCollectionV2;
@@ -92,15 +50,59 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
-import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
-import com.starrocks.sql.ast.DefaultValueExpr;
-import com.starrocks.sql.ast.DictionaryGetExpr;
-import com.starrocks.sql.ast.FieldReference;
-import com.starrocks.sql.ast.LambdaArgument;
-import com.starrocks.sql.ast.LambdaFunctionExpr;
-import com.starrocks.sql.ast.MapExpr;
+import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.UserVariable;
+import com.starrocks.sql.ast.expression.AnalyticExpr;
+import com.starrocks.sql.ast.expression.ArithmeticExpr;
+import com.starrocks.sql.ast.expression.ArrayExpr;
+import com.starrocks.sql.ast.expression.ArraySliceExpr;
+import com.starrocks.sql.ast.expression.ArrowExpr;
+import com.starrocks.sql.ast.expression.BetweenPredicate;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.BoolLiteral;
+import com.starrocks.sql.ast.expression.CaseExpr;
+import com.starrocks.sql.ast.expression.CastExpr;
+import com.starrocks.sql.ast.expression.CloneExpr;
+import com.starrocks.sql.ast.expression.CollectionElementExpr;
+import com.starrocks.sql.ast.expression.CompoundPredicate;
+import com.starrocks.sql.ast.expression.DefaultValueExpr;
+import com.starrocks.sql.ast.expression.DictQueryExpr;
+import com.starrocks.sql.ast.expression.DictionaryGetExpr;
+import com.starrocks.sql.ast.expression.ExistsPredicate;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprId;
+import com.starrocks.sql.ast.expression.FieldReference;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.FunctionName;
+import com.starrocks.sql.ast.expression.GroupingFunctionCallExpr;
+import com.starrocks.sql.ast.expression.InPredicate;
+import com.starrocks.sql.ast.expression.InformationFunction;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.IsNullPredicate;
+import com.starrocks.sql.ast.expression.LambdaArgument;
+import com.starrocks.sql.ast.expression.LambdaFunctionExpr;
+import com.starrocks.sql.ast.expression.LargeInPredicate;
+import com.starrocks.sql.ast.expression.LargeIntLiteral;
+import com.starrocks.sql.ast.expression.LikePredicate;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.MapExpr;
+import com.starrocks.sql.ast.expression.MatchExpr;
+import com.starrocks.sql.ast.expression.MultiInPredicate;
+import com.starrocks.sql.ast.expression.NamedArgument;
+import com.starrocks.sql.ast.expression.NullLiteral;
+import com.starrocks.sql.ast.expression.Parameter;
+import com.starrocks.sql.ast.expression.PlaceHolderExpr;
+import com.starrocks.sql.ast.expression.Predicate;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.ast.expression.SubfieldExpr;
+import com.starrocks.sql.ast.expression.Subquery;
+import com.starrocks.sql.ast.expression.TableName;
+import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
+import com.starrocks.sql.ast.expression.UserVariableExpr;
+import com.starrocks.sql.ast.expression.VariableExpr;
+import com.starrocks.sql.common.LargeInPredicateException;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.thrift.TDictQueryExpr;
 import com.starrocks.thrift.TFunctionBinaryType;
@@ -871,6 +873,47 @@ public class ExpressionAnalyzer {
         }
 
         @Override
+        public Void visitLargeInPredicate(LargeInPredicate node, Scope scope) {
+            predicateBaseAndCheck(node);
+            // check compatible type
+            List<Type> list = node.getChildren().stream().map(Expr::getType).collect(Collectors.toList());
+            Type compatibleType = TypeManager.getCompatibleTypeForBetweenAndIn(list, false);
+
+            if (compatibleType == Type.INVALID) {
+                throw new SemanticException("The input types (" + list.stream().map(Type::toSql).collect(
+                        Collectors.joining(",")) + ") of in predict are not compatible", node.getPos());
+            }
+
+            for (Expr child : node.getChildren()) {
+                Type type = child.getType();
+                if (!Type.canCastTo(type, compatibleType)) {
+                    throw new SemanticException(
+                            "in predicate type " + type.toSql() + " with type " + compatibleType.toSql()
+                                    + " is invalid", child.getPos());
+                }
+            }
+
+            Type columnType = node.getChildren().get(0).getType();
+            Type constantType = node.getChildren().get(1).getType();
+
+            // Only support: (1) columnType is IntegerType and constantType is bigint
+            //               (2) both column and value are string types
+            boolean isIntegerTypeBigint = columnType.isIntegerType() && constantType.isBigint();
+            boolean isBothString = columnType.isStringType() && constantType.isStringType();
+
+            if (!isIntegerTypeBigint && !isBothString) {
+                throw new LargeInPredicateException(
+                        "LargeInPredicate only supports: (1) compare type is IntegerType and constant type is BIGINT, " +
+                        "(2) both compare and constant are STRING types. Current types: compareType=%s, constantValueType=%s",
+                        columnType.toSql(), constantType.toSql());
+            }
+
+            node.setConstantType(constantType);
+
+            return null;
+        }
+
+        @Override
         public Void visitMultiInPredicate(MultiInPredicate node, Scope scope) {
             predicateBaseAndCheck(node);
             List<Type> leftTypes =
@@ -1013,8 +1056,12 @@ public class ExpressionAnalyzer {
                 ExprId exprId = analyzeState.getNextNondeterministicId();
                 node.setNondeterministicId(exprId);
             }
-            Type[] argumentTypes = node.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
             String fnName = node.getFnName().getFunction();
+
+            // Handle backward compatibility parameter conversion
+            handleBackwardCompatibleParameterConversion(fnName, node);
+
+            Type[] argumentTypes = node.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
             // check fn & throw exception direct if analyze failed
             checkFunction(fnName, node, argumentTypes);
             // get function by function expression and argument types
@@ -1032,8 +1079,64 @@ public class ExpressionAnalyzer {
             return null;
         }
 
+        /**
+         * Handle backward compatible parameter conversion for functions.
+         * This method converts old-style function calls to new-style calls to maintain backward compatibility.
+         *
+         * @param fnName the function name
+         * @param node the function call expression node
+         */
+        private void handleBackwardCompatibleParameterConversion(String fnName, FunctionCallExpr node) {
+            // AES encryption/decryption functions: convert 2/3 parameter calls to 4 parameter calls
+            if (FunctionSet.AES_ENCRYPT.equalsIgnoreCase(fnName) ||
+                    FunctionSet.AES_DECRYPT.equalsIgnoreCase(fnName)) {
+                convertAesEncryptionParameters(node);
+            }
+        }
+
+        /**
+         * Convert AES encryption/decryption function parameters for backward compatibility.
+         * - 2 params: (data, key) -> (data, key, NULL, 'AES_128_ECB')
+         * - 3 params: (data, key, iv) -> (data, key, iv, 'AES_128_ECB')
+         * - 4 or 5 params: no conversion needed
+         *
+         * @param node the function call expression node
+         */
+        private void convertAesEncryptionParameters(FunctionCallExpr node) {
+            int paramCount = node.getChildren().size();
+            if (paramCount == 2) {
+                // 2 params: (data, key) -> (data, key, NULL, 'AES_128_ECB')
+                node.addChild(new NullLiteral());
+                node.addChild(new StringLiteral("AES_128_ECB"));
+            } else if (paramCount == 3) {
+                // 3 params: (data, key, iv) -> (data, key, iv, 'AES_128_ECB')
+                node.addChild(new StringLiteral("AES_128_ECB"));
+            }
+            // 4 or 5 params: no conversion needed, validation will be done in checkFunction
+        }
+
         private void checkFunction(String fnName, FunctionCallExpr node, Type[] argumentTypes) {
             switch (fnName) {
+                case FunctionSet.AES_ENCRYPT:
+                case FunctionSet.AES_DECRYPT:
+                    // Validate 5-parameter version: (data, key, iv, mode, aad)
+                    // Only GCM mode supports AAD parameter
+                    if (node.getChildren().size() == 5) {
+                        Expr modeExpr = node.getChild(3);
+                        if (modeExpr instanceof StringLiteral) {
+                            String mode = ((StringLiteral) modeExpr).getValue().toUpperCase();
+                            if (!mode.contains("GCM")) {
+                                throw new SemanticException(
+                                        fnName + " with 5 parameters requires GCM mode to use AAD parameter, " +
+                                                "but got mode: " + mode + ". " +
+                                                "Only GCM modes (AES_128_GCM, AES_192_GCM, AES_256_GCM) support AAD parameter.",
+                                        node.getPos());
+                            }
+                        }
+                        // If mode is not a constant, we cannot validate at analysis time
+                        // The validation will be done at runtime
+                    }
+                    break;
                 case FunctionSet.TIME_SLICE:
                 case FunctionSet.DATE_SLICE:
                     if (!(node.getChild(1) instanceof IntLiteral)) {

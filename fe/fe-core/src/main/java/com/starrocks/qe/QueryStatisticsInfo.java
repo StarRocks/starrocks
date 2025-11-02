@@ -44,8 +44,6 @@ import com.starrocks.common.Config;
 import com.starrocks.common.proc.CurrentQueryInfoProvider;
 import com.starrocks.common.util.QueryStatisticsFormatter;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.qe.scheduler.slot.SlotManager;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.thrift.TQueryStatisticsInfo;
 import org.apache.http.HttpStatus;
@@ -387,7 +385,6 @@ public class QueryStatisticsInfo {
                         .sorted(Comparator.comparingLong(QueryStatisticsItem::getQueryStartTime))
                         .collect(Collectors.toList());
         final HttpClient httpClient = HttpClient.newHttpClient();
-        final SlotManager slotManager = (SlotManager) GlobalStateMgr.getCurrentState().getSlotManager();
         for (QueryStatisticsItem item : sorted) {
             final CurrentQueryInfoProvider.QueryStatistics statistics = statisticsMap.get(item.getQueryId());
 

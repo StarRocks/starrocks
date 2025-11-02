@@ -475,3 +475,28 @@ CONCURRENCY {
 
 } END CONCURRENCY
 ```
+
+### 10. CLEANUP
+
+Custom cleanup statements that run in tearDown for each case, regardless of pass/fail. This is useful for deleting objects (tables/databases/catalogs) or removing external side-effects.
+
+* Usage:
+
+```sql
+-- name: ${case name}
+...
+
+CLEANUP {
+  -- SQL statements must end with ';'
+  DROP TABLE IF EXISTS t1;
+  DROP DATABASE IF EXISTS db_${uuid0};
+
+  -- You can also run shell or function statements
+  shell: echo "cleanup ${uuid0}"
+  function: your_python_helper("arg1")
+} END CLEANUP
+```
+
+* Notes:
+* The framework's built-in cleanup (dropping parsed DATABASE/RESOURCE) still runs; CLEANUP is an addition for fine-grained or external cleanup.
+* Results in CLEANUP are not validated; failures will be logged but do not block other cleanup steps.

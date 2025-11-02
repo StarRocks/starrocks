@@ -149,6 +149,10 @@ public:
     operator int32_t() const { return static_cast<int32_t>(operator int64_t()); }
 
     operator size_t() const { return static_cast<size_t>(operator int64_t()); }
+#if defined(__APPLE__)
+    // Disambiguate C-style casts to uint64_t on libc++
+    operator uint64_t() const { return static_cast<uint64_t>(operator int64_t()); }
+#endif
 
     operator float() const { return (float)operator double(); }
 

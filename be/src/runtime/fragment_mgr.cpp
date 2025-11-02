@@ -76,8 +76,10 @@ std::string to_load_error_http_path(const std::string& file_name) {
     if (file_name.empty()) {
         return "";
     }
+    std::string resolved_ip = BackendOptions::get_resolved_ip();
+
     std::stringstream url;
-    url << "http://" << get_host_port(BackendOptions::get_localhost(), config::be_http_port) << "/api/_load_error_log?"
+    url << "http://" << get_host_port(resolved_ip, config::be_http_port) << "/api/_load_error_log?"
         << "file=" << file_name;
     return url.str();
 }
@@ -317,6 +319,12 @@ void FragmentExecState::coordinator_callback(const Status& status, RuntimeProfil
             _coord_addr.hostname, _coord_addr.port,
             [&res, &params](FrontendServiceConnection& client) { client->reportExecStatus(res, params); },
             config::thrift_rpc_timeout_ms);
+
+    VLOG(1) << "report exec status, fragment_instance_id: " << print_id(_runtime_state->fragment_instance_id())
+            << ", has_profile: " << params.__isset.profile
+            << ", has_load_channel_profile: " << params.__isset.load_channel_profile
+            << ", rpc_status: " << rpc_status.to_string()
+            << ", result: " << apache::thrift::ThriftDebugString(res).c_str();
 
     if (rpc_status.ok()) {
         rpc_status = Status(res.status);

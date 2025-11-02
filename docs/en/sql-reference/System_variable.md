@@ -474,6 +474,12 @@ Default value: `true`.
 * **Default**: false, which means this feature is disabled.
 * **Introduced in**: v2.5
 
+### enable_group_by_compressed_key
+
+* **Description**: Whether to use accurate statistical information to compress the GROUP BY Key column. Valid values: `true` and `false`.
+* **Default**: true
+* **Introduced in**: v4.0
+
 ### enable_gin_filter
 
 * **Description**: Whether to utilize the [fulltext inverted index](../table_design/indexes/inverted_index.md) during queries.
@@ -985,10 +991,14 @@ Used for compatibility with MySQL JDBC versions 8.0.16 and above. No practical u
 
 ### pipeline_dop
 
-* **Description**: The parallelism of a pipeline instance, which is used to adjust the query concurrency. Default value: 0, indicating the system automatically adjusts the parallelism of each pipeline instance. You can also set this variable to a value greater than 0. Generally, set the value to half the number of physical CPU cores.
+* **Description**: The parallelism of a pipeline instance, which is used to adjust the query concurrency. Default value: 0, indicating the system automatically adjusts the parallelism of each pipeline instance. This variable also controls the parallelism of loading jobs on OLAP tables. You can also set this variable to a value greater than 0. Generally, set the value to half the number of physical CPU cores. From v3.0 onwards, StarRocks adaptively adjusts this variable based on query parallelism.
 
-  From v3.0 onwards, StarRocks adaptively adjusts this variable based on query parallelism.
+* **Default**: 0
+* **Data type**: Int
 
+### pipeline_sink_dop
+
+* **Description**: The parallelism of sink for loading data into Iceberg tables and Hive tables, and unloading data using INSERT INTO FILES(). It is used to adjust the concurrency of these loading jobs. Default value: 0, indicating the system automatically adjusts the parallelism. You can also set this variable to a value greater than 0.
 * **Default**: 0
 * **Data type**: Int
 

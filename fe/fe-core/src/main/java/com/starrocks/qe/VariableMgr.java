@@ -39,7 +39,6 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.VariableExpr;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
@@ -56,6 +55,7 @@ import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.SystemVariable;
+import com.starrocks.sql.ast.expression.VariableExpr;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.text.similarity.JaroWinklerDistance;
 import org.apache.logging.log4j.LogManager;
@@ -278,13 +278,14 @@ public class VariableMgr {
     public void checkSystemVariableExist(SystemVariable setVar) throws DdlException {
         VarContext ctx = getVarContext(setVar.getVariable());
         if (ctx == null) {
+            // NOTE: findSimilarVarNames uses fuzzy search, which is slow
             ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_SYSTEM_VARIABLE, setVar.getVariable(),
                     findSimilarVarNames(setVar.getVariable()));
         }
     }
 
     public boolean containsVariable(String name) {
-        return ctxByVarName.containsKey(name);
+        return ctxByVarName.containsKey(name) || aliases.containsKey(name);
     }
 
     // Entry of handling SetVarStmt

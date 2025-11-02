@@ -8,6 +8,9 @@ set enable_query_trigger_analyze = false;
 set enable_iceberg_column_statistics = true;
 -- result:
 -- !result
+set new_planner_optimize_timeout = 30000;
+-- result:
+-- !result
 select * from iceberg_sql_test_${uuid0}.iceberg_oss_db.eq_del_tbl;
 -- result:
 0	0	0

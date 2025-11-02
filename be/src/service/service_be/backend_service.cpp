@@ -37,6 +37,7 @@
 
 #include "agent/agent_server.h"
 #include "agent/task_worker_pool.h"
+#include "runtime/exec_env.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 

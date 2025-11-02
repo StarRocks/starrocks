@@ -210,6 +210,14 @@ static inline int64_t i32_x_i32_produce_i64(int32_t a, int32_t b) {
 }
 
 static inline int multi3(const int128_t& x, const int128_t& y, int128_t& res) {
+    // This algorithm mistakenly treats `INT128_MIN * 1` as an overflow, because `abs(INT128_MIN)` remains `INT128_MIN`,
+    // which causes `asm_add` to detect `SF=1`. Therefore, we add a special case here to bypass this issue.
+    if (UNLIKELY((x == std::numeric_limits<int128_t>::min() && y == 1) ||
+                 (y == std::numeric_limits<int128_t>::min() && x == 1))) {
+        res = std::numeric_limits<int128_t>::min();
+        return 0;
+    }
+
     // sgn(x)
     auto sx = x >> 127;
     // sgn(y)

@@ -41,14 +41,9 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.SlotDescriptor;
-import com.starrocks.analysis.SlotId;
-import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.TupleDescriptor;
-import com.starrocks.analysis.TupleId;
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationHandler;
+import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.CatalogUtils;
@@ -70,6 +65,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.catalog.TypeSerializer;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.catalog.system.information.AnalyzeStatusSystemTable;
 import com.starrocks.catalog.system.information.ColumnStatsUsageSystemTable;
@@ -140,7 +136,11 @@ import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.AutoIncrementInfo;
 import com.starrocks.planner.OlapTableSink;
+import com.starrocks.planner.SlotDescriptor;
+import com.starrocks.planner.SlotId;
 import com.starrocks.planner.StreamLoadPlanner;
+import com.starrocks.planner.TupleDescriptor;
+import com.starrocks.planner.TupleId;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
 import com.starrocks.qe.DefaultCoordinator;
@@ -167,6 +167,8 @@ import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.ShowAlterStmt;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.staros.StarMgrServer;
 import com.starrocks.statistic.StatsConstants;
@@ -284,6 +286,9 @@ import com.starrocks.thrift.TListPipeFilesResult;
 import com.starrocks.thrift.TListPipesInfo;
 import com.starrocks.thrift.TListPipesParams;
 import com.starrocks.thrift.TListPipesResult;
+import com.starrocks.thrift.TListRecycleBinCatalogsInfo;
+import com.starrocks.thrift.TListRecycleBinCatalogsParams;
+import com.starrocks.thrift.TListRecycleBinCatalogsResult;
 import com.starrocks.thrift.TListSessionsOptions;
 import com.starrocks.thrift.TListSessionsRequest;
 import com.starrocks.thrift.TListSessionsResponse;
@@ -436,7 +441,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         UserIdentity currentUser;
         if (params.isSetCurrent_user_ident()) {
-            currentUser = UserIdentity.fromThrift(params.current_user_ident);
+            currentUser = UserIdentityUtils.fromThrift(params.current_user_ident);
         } else {
             currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
         }
@@ -492,7 +497,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         UserIdentity currentUser = null;
         if (params.isSetCurrent_user_ident()) {
-            currentUser = UserIdentity.fromThrift(params.current_user_ident);
+            currentUser = UserIdentityUtils.fromThrift(params.current_user_ident);
         } else {
             currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
         }
@@ -553,7 +558,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             throw new TException("missed user_identity");
         }
         // TODO: check privilege
-        UserIdentity userIdentity = UserIdentity.fromThrift(params.getUser_ident());
+        UserIdentity userIdentity = UserIdentityUtils.fromThrift(params.getUser_ident());
 
         PipeManager pm = GlobalStateMgr.getCurrentState().getPipeManager();
         Map<PipeId, Pipe> pipes = pm.getPipesUnlock();
@@ -591,7 +596,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         LOG.info("listPipeFiles params={}", params);
         // TODO: check privilege
-        UserIdentity userIdentity = UserIdentity.fromThrift(params.getUser_ident());
+        UserIdentity userIdentity = UserIdentityUtils.fromThrift(params.getUser_ident());
         TListPipeFilesResult result = new TListPipeFilesResult();
         PipeManager pm = GlobalStateMgr.getCurrentState().getPipeManager();
         Map<PipeId, Pipe> pipes = pm.getPipesUnlock();
@@ -650,19 +655,16 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
     @Override
     public TColumnStatsUsageRes getColumnStatsUsage(TColumnStatsUsageReq request) throws TException {
-        UserIdentity currentUser = UserIdentity.fromThrift(request.getAuth_info().getCurrent_user_ident());
+        ConnectContext context = new ConnectContext();
+        UserIdentityUtils.setAuthInfoFromThrift(context, request.getAuth_info());
 
         TColumnStatsUsageRes result = ColumnStatsUsageSystemTable.query(request);
         result.getItems().removeIf(item -> {
             try {
-                ConnectContext context = new ConnectContext();
-                context.setCurrentUserIdentity(currentUser);
-                context.setCurrentRoleIds(currentUser);
                 if (item.getTable_database() == null || item.getTable_name() == null) {
                     return true;
                 }
-                Authorizer.checkTableAction(context, item.getTable_database(), item.getTable_name(),
-                        PrivilegeType.SELECT);
+                Authorizer.checkTableAction(context, item.getTable_database(), item.getTable_name(), PrivilegeType.SELECT);
                 return false;
             } catch (AccessDeniedException e) {
                 return true;
@@ -675,12 +677,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TAnalyzeStatusRes getAnalyzeStatus(TAnalyzeStatusReq request) throws TException {
         TAnalyzeStatusRes res = AnalyzeStatusSystemTable.query(request);
-        UserIdentity currentUser = UserIdentity.fromThrift(request.getAuth_info().getCurrent_user_ident());
+        ConnectContext context = new ConnectContext();
+        UserIdentityUtils.setAuthInfoFromThrift(context, request.getAuth_info());
+
         res.getItems().removeIf(item -> {
             try {
-                ConnectContext context = new ConnectContext();
-                context.setCurrentUserIdentity(currentUser);
-                context.setCurrentRoleIds(currentUser);
                 Authorizer.checkTableAction(context, item.getDatabase_name(), item.getTable_name(),
                         PrivilegeType.SELECT);
                 return false;
@@ -785,7 +786,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         // database privs should be checked in analysis phrase
         UserIdentity currentUser = null;
         if (params.isSetCurrent_user_ident()) {
-            currentUser = UserIdentity.fromThrift(params.current_user_ident);
+            currentUser = UserIdentityUtils.fromThrift(params.current_user_ident);
         } else {
             currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
         }
@@ -888,7 +889,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         for (Column column : table.getBaseSchema()) {
             final TColumnDesc desc =
-                    new TColumnDesc(column.getName(), column.getPrimitiveType().toThrift());
+                    new TColumnDesc(column.getName(), TypeSerializer.toThrift(column.getPrimitiveType()));
             final Integer precision = column.getType().getPrecision();
             if (precision != null) {
                 desc.setColumnPrecision(precision);
@@ -1996,14 +1997,16 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             if (range.hasLowerBound() && !range.lowerEndpoint().isMinValue()) {
                 for (int i = 0; i < partColNum; i++) {
                     tPartition.addToStart_keys(
-                            range.lowerEndpoint().getKeys().get(i).treeToThrift().getNodes().get(0));
+                            com.starrocks.sql.ast.expression.ExprToThriftVisitor
+                                    .treeToThrift(range.lowerEndpoint().getKeys().get(i)).getNodes().get(0));
                 }
             }
             // set end keys
             if (range.hasUpperBound() && !range.upperEndpoint().isMaxValue()) {
                 for (int i = 0; i < partColNum; i++) {
                     tPartition.addToEnd_keys(
-                            range.upperEndpoint().getKeys().get(i).treeToThrift().getNodes().get(0));
+                            com.starrocks.sql.ast.expression.ExprToThriftVisitor
+                                    .treeToThrift(range.upperEndpoint().getKeys().get(i)).getNodes().get(0));
                 }
             }
         } else if (partitionInfo instanceof ListPartitionInfo) {
@@ -2015,7 +2018,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             if (multiValues != null && !multiValues.isEmpty()) {
                 inKeysExprNodes = multiValues.stream()
                         .map(values -> values.stream()
-                                .map(value -> value.treeToThrift().getNodes().get(0))
+                                .map(value -> com.starrocks.sql.ast.expression.ExprToThriftVisitor
+                                        .treeToThrift(value).getNodes().get(0))
                                 .collect(Collectors.toList()))
                         .collect(Collectors.toList());
                 tPartition.setIn_keys(inKeysExprNodes);
@@ -2025,7 +2029,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             if (values != null && !values.isEmpty()) {
                 inKeysExprNodes = values.stream()
                         .map(value -> Lists.newArrayList(value).stream()
-                                .map(value1 -> value1.treeToThrift().getNodes().get(0))
+                                .map(value1 -> com.starrocks.sql.ast.expression.ExprToThriftVisitor
+                                        .treeToThrift(value1).getNodes().get(0))
                                 .collect(Collectors.toList()))
                         .collect(Collectors.toList());
             }
@@ -2402,7 +2407,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
     private static List<TExprNode> literalExprsToTExprNodes(List<LiteralExpr> values) {
         return values.stream()
-                .map(value -> value.treeToThrift().getNodes().get(0))
+                .map(value -> com.starrocks.sql.ast.expression.ExprToThriftVisitor
+                        .treeToThrift(value).getNodes().get(0))
                 .collect(Collectors.toList());
     }
 
@@ -2417,14 +2423,16 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             if (range.hasLowerBound() && !range.lowerEndpoint().isMinValue()) {
                 for (int i = 0; i < partColNum; i++) {
                     tPartition.addToStart_keys(
-                            range.lowerEndpoint().getKeys().get(i).treeToThrift().getNodes().get(0));
+                            com.starrocks.sql.ast.expression.ExprToThriftVisitor
+                                    .treeToThrift(range.lowerEndpoint().getKeys().get(i)).getNodes().get(0));
                 }
             }
             // set end keys
             if (range.hasUpperBound() && !range.upperEndpoint().isMaxValue()) {
                 for (int i = 0; i < partColNum; i++) {
                     tPartition.addToEnd_keys(
-                            range.upperEndpoint().getKeys().get(i).treeToThrift().getNodes().get(0));
+                            com.starrocks.sql.ast.expression.ExprToThriftVisitor
+                                    .treeToThrift(range.upperEndpoint().getKeys().get(i)).getNodes().get(0));
                 }
             }
         } else if (partitionInfo instanceof ListPartitionInfo) {
@@ -2435,7 +2443,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             if (multiValues != null && !multiValues.isEmpty()) {
                 inKeysExprNodes = multiValues.stream()
                         .map(values -> values.stream()
-                                .map(value -> value.treeToThrift().getNodes().get(0))
+                                .map(value -> com.starrocks.sql.ast.expression.ExprToThriftVisitor
+                                        .treeToThrift(value).getNodes().get(0))
                                 .collect(Collectors.toList()))
                         .collect(Collectors.toList());
                 tPartition.setIn_keys(inKeysExprNodes);
@@ -2445,7 +2454,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             if (values != null && !values.isEmpty()) {
                 inKeysExprNodes = values.stream()
                         .map(value -> Lists.newArrayList(value).stream()
-                                .map(value1 -> value1.treeToThrift().getNodes().get(0))
+                                .map(value1 -> com.starrocks.sql.ast.expression.ExprToThriftVisitor
+                                        .treeToThrift(value1).getNodes().get(0))
                                 .collect(Collectors.toList()))
                         .collect(Collectors.toList());
             }
@@ -2959,6 +2969,39 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
     }
 
+    public TListRecycleBinCatalogsResult listRecycleBinCatalogs(TListRecycleBinCatalogsParams params) throws TException {
+        if (!params.isSetUser_ident()) {
+            throw new TException("missed user_identity");
+        }
+        LOG.info("listRecycleBinCatalogs params={}", params);
+        UserIdentity userIdentity = UserIdentityUtils.fromThrift(params.getUser_ident());
+        if (!userIdentity.equals(UserIdentity.ROOT)) {
+            throw new TException("operation can be executed only by root user");
+        }
+        TListRecycleBinCatalogsResult result = new TListRecycleBinCatalogsResult();
+        List<List<String>> rowSet = GlobalStateMgr.getCurrentState().getRecycleBin().getCatalogRecycleBinInfo();
+
+        for (List<String> record : rowSet) {
+            TListRecycleBinCatalogsInfo info = new TListRecycleBinCatalogsInfo();
+            info.setType(record.get(0));
+            info.setName(record.get(1));
+            if (!record.get(2).isEmpty()) {
+                info.setDbid(Long.parseLong(record.get(2)));
+            }
+            if (!record.get(3).isEmpty()) {
+                info.setTableid(Long.parseLong(record.get(3)));
+            }
+            if (!record.get(4).isEmpty()) {
+                info.setPartitionid(Long.parseLong(record.get(4)));
+            }
+            info.setDroptime(Long.parseLong(record.get(5)));
+
+            result.addToRecyclebin_catalogs(info);
+        }
+
+        return result;
+    }
+
     @Override
     public TPartitionMetaResponse getPartitionMeta(TPartitionMetaRequest request) throws TException {
         TPartitionMetaResponse response = new TPartitionMetaResponse();
@@ -3098,7 +3141,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         TListConnectionResponse response = new TListConnectionResponse();
 
         ConnectContext context = new ConnectContext();
-        context.setAuthInfoFromThrift(request.getAuth_info());
+        UserIdentityUtils.setAuthInfoFromThrift(context, request.getAuth_info());
+
         String forUser = request.getFor_user();
         boolean showFull = request.isSetShow_full();
 

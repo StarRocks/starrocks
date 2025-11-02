@@ -37,7 +37,6 @@ package com.starrocks.sql.optimizer.rewrite;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
-import com.starrocks.analysis.DecimalLiteral;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
@@ -48,6 +47,7 @@ import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.expression.DecimalLiteral;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import net.openhft.hashing.LongHashFunction;
 import org.apache.commons.lang.StringUtils;
@@ -695,6 +695,11 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createDatetime(newDateTime);
     }
 
+    @ConstantFunction(name = "current_timezone", argTypes = {}, returnType = VARCHAR)
+    public static ConstantOperator current_timezone() {
+        return ConstantOperator.createVarchar(TimeUtils.getTimeZone().getID());
+    }
+
     @ConstantFunction(name = "unix_timestamp", argTypes = {}, returnType = BIGINT)
     public static ConstantOperator unixTimestampNow() {
         return unixTimestamp(now());
@@ -1061,6 +1066,11 @@ public class ScalarOperatorFunctions {
     /**
      * Arithmetic function
      */
+
+    @ConstantFunction(name = "add", argTypes = {TINYINT, TINYINT}, returnType = TINYINT, isMonotonic = true)
+    public static ConstantOperator addTinyInt(ConstantOperator first, ConstantOperator second) {
+        return ConstantOperator.createTinyInt((byte) Math.addExact(first.getTinyInt(), second.getTinyInt()));
+    }
     @ConstantFunction(name = "add", argTypes = {SMALLINT, SMALLINT}, returnType = SMALLINT, isMonotonic = true)
     public static ConstantOperator addSmallInt(ConstantOperator first, ConstantOperator second) {
         return ConstantOperator.createSmallInt((short) Math.addExact(first.getSmallint(), second.getSmallint()));

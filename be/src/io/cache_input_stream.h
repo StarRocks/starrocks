@@ -17,8 +17,8 @@
 #include <memory>
 #include <string>
 
-#include "cache/block_cache/block_cache.h"
-#include "cache/block_cache/io_buffer.h"
+#include "cache/disk_cache/block_cache.h"
+#include "cache/disk_cache/io_buffer.h"
 #include "io/shared_buffered_input_stream.h"
 
 namespace starrocks::io {
@@ -76,8 +76,6 @@ public:
 
     void set_enable_cache_io_adaptor(bool v) { _enable_cache_io_adaptor = v; }
 
-    void set_datacache_evict_probability(int32_t v) { _datacache_evict_probability = v; }
-
     void set_priority(const int8_t priority) { _priority = priority; }
 
     void set_frequency(const int8_t frequency) { _frequency = frequency; }
@@ -108,9 +106,9 @@ protected:
     virtual Status _read_blocks_from_remote(const int64_t offset, const int64_t size, char* out);
     Status _read_from_cache(const int64_t offset, const int64_t size, const int64_t block_offset,
                             const int64_t block_size, char* out);
-    Status _read_peer_cache(off_t offset, size_t size, IOBuffer* iobuf, ReadCacheOptions* options);
+    Status _read_peer_cache(off_t offset, size_t size, IOBuffer* iobuf, DiskCacheReadOptions* options);
     void _populate_to_cache(const char* src, int64_t offset, int64_t count, const SharedBufferPtr& sb);
-    void _write_cache(int64_t offset, const IOBuffer& iobuf, WriteCacheOptions* options);
+    void _write_cache(int64_t offset, const IOBuffer& iobuf, DiskCacheWriteOptions* options);
 
     void _deduplicate_shared_buffer(const SharedBufferPtr& sb);
     bool _can_ignore_populate_error(const Status& status) const;
@@ -128,7 +126,6 @@ protected:
     bool _enable_async_populate_mode = false;
     bool _enable_block_buffer = false;
     bool _enable_cache_io_adaptor = false;
-    int32_t _datacache_evict_probability = 100;
 
     std::string _peer_host;
     int32_t _peer_port = 0;

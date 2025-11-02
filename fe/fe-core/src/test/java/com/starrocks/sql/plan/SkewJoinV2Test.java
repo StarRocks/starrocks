@@ -38,6 +38,7 @@ public class SkewJoinV2Test extends PlanTestBase {
         String sqlPlan = getVerboseExplain(sql);
         assertCContains(sqlPlan, "Input Partition: HYBRID_HASH_PARTITIONED\n" +
                 "  RESULT SINK");
+        
         // this is a normal union, which means its local exchanger is PASS_THROUGH
         assertCContains(sqlPlan, "10:UNION\n" +
                 "  |  child exprs:\n" +
@@ -72,37 +73,37 @@ public class SkewJoinV2Test extends PlanTestBase {
         // split data sink will split data with split expr
         // if v1 NOT IN (1, 2), use HASH_PARTITIONED
         // else use RANDOM
-        assertCContains(sqlPlan, "PLAN FRAGMENT 2(F00)\n" +
-                "\n" +
-                "  Input Partition: RANDOM\n" +
-                "  SplitCastDataSink:\n" +
-                "  OutPut Partition: HASH_PARTITIONED: 1: v1\n" +
-                "  OutPut Exchange Id: 02\n" +
-                "  Split expr: (1: v1 NOT IN (1, 2)) OR (1: v1 IS NULL)\n" +
-                "  OutPut Partition: RANDOM\n" +
-                "  OutPut Exchange Id: 06\n" +
-                "  Split expr: 1: v1 IN (1, 2)\n" +
-                "\n" +
-                "  0:OlapScanNode\n" +
-                "     table: t0, rollup: t0");
+        assertCContains(sqlPlan, "PLAN FRAGMENT 2(F00)\n"
+                + "\n"
+                + "  Input Partition: RANDOM\n"
+                + "  SplitCastDataSink:\n"
+                + "  OutPut Partition: HASH_PARTITIONED: 1: v1\n"
+                + "  OutPut Exchange Id: 02\n"
+                + "  Split expr: ([1: v1, BIGINT, true] NOT IN (1, 2)) OR ([1: v1, BIGINT, true] IS NULL)\n"
+                + "  OutPut Partition: RANDOM\n"
+                + "  OutPut Exchange Id: 06\n"
+                + "  Split expr: [1: v1, BIGINT, true] IN (1, 2)\n"
+                + "\n"
+                + "  0:OlapScanNode\n"
+                + "     table: t0, rollup: t0");
 
         // right table's scan node has its own fragment with split data sink
         // split data sink will split data with split expr
         // if v4 NOT IN (1, 2), use HASH_PARTITIONED
         // else use UNPARTITIONED
-        assertCContains(sqlPlan, "PLAN FRAGMENT 1(F01)\n" +
-                "\n" +
-                "  Input Partition: RANDOM\n" +
-                "  SplitCastDataSink:\n" +
-                "  OutPut Partition: HASH_PARTITIONED: 4: v4\n" +
-                "  OutPut Exchange Id: 03\n" +
-                "  Split expr: (4: v4 NOT IN (1, 2)) OR (4: v4 IS NULL)\n" +
-                "  OutPut Partition: UNPARTITIONED\n" +
-                "  OutPut Exchange Id: 07\n" +
-                "  Split expr: 4: v4 IN (1, 2)\n" +
-                "\n" +
-                "  1:OlapScanNode\n" +
-                "     table: t1, rollup: t1");
+        assertCContains(sqlPlan, "PLAN FRAGMENT 1(F01)\n"
+                + "\n"
+                + "  Input Partition: RANDOM\n"
+                + "  SplitCastDataSink:\n"
+                + "  OutPut Partition: HASH_PARTITIONED: 4: v4\n"
+                + "  OutPut Exchange Id: 03\n"
+                + "  Split expr: ([4: v4, BIGINT, true] NOT IN (1, 2)) OR ([4: v4, BIGINT, true] IS NULL)\n"
+                + "  OutPut Partition: UNPARTITIONED\n"
+                + "  OutPut Exchange Id: 07\n"
+                + "  Split expr: [4: v4, BIGINT, true] IN (1, 2)\n"
+                + "\n"
+                + "  1:OlapScanNode\n"
+                + "     table: t1, rollup: t1");
     }
 
     @Test
@@ -110,23 +111,23 @@ public class SkewJoinV2Test extends PlanTestBase {
         String sql = "select v2, v5 from t0 join[skew|t0.v1(1,2)] t1 on abs(v1) = abs(v4) ";
         String sqlPlan = getVerboseExplain(sql);
         // if on predicate's input is not column from table, then split expr should use Project's output column like "7: abs"
-        assertCContains(sqlPlan, "SplitCastDataSink:\n" +
-                "  OutPut Partition: HASH_PARTITIONED: 7: abs\n" +
-                "  OutPut Exchange Id: 04\n" +
-                "  Split expr: (7: abs NOT IN (1, 2)) OR (7: abs IS NULL)\n" +
-                "  OutPut Partition: RANDOM\n" +
-                "  OutPut Exchange Id: 08\n" +
-                "  Split expr: 7: abs IN (1, 2)\n" +
-                "\n" +
-                "  1:Project\n" +
-                "  |  output columns:\n" +
-                "  |  2 <-> [2: v2, BIGINT, true]\n" +
-                "  |  7 <-> abs[([1: v1, BIGINT, true]); " +
-                "args: BIGINT; result: LARGEINT; args nullable: true; result nullable: true]\n" +
-                "  |  cardinality: 1\n" +
-                "  |  \n" +
-                "  0:OlapScanNode\n" +
-                "     table: t0, rollup: t0");
+        assertCContains(sqlPlan, "SplitCastDataSink:\n"
+                + "  OutPut Partition: HASH_PARTITIONED: 7: abs\n"
+                + "  OutPut Exchange Id: 04\n"
+                + "  Split expr: ([7: abs, LARGEINT, true] NOT IN (1, 2)) OR ([7: abs, LARGEINT, true] IS NULL)\n"
+                + "  OutPut Partition: RANDOM\n"
+                + "  OutPut Exchange Id: 08\n"
+                + "  Split expr: [7: abs, LARGEINT, true] IN (1, 2)\n"
+                + "\n"
+                + "  1:Project\n"
+                + "  |  output columns:\n"
+                + "  |  2 <-> [2: v2, BIGINT, true]\n"
+                + "  |  7 <-> abs[([1: v1, BIGINT, true]); args: BIGINT; result: LARGEINT; args nullable: true; result "
+                + "nullable: true]\n"
+                + "  |  cardinality: 1\n"
+                + "  |  \n"
+                + "  0:OlapScanNode\n"
+                + "     table: t0, rollup: t0");
     }
 
     @Test
@@ -218,5 +219,65 @@ public class SkewJoinV2Test extends PlanTestBase {
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  4:HASH JOIN");
+    }
+
+    @Test
+    public void testSkewJoinV2WithAsofInnerJoin() throws Exception {
+        String sql = "select v2, v5 from t0 asof join[skew|t0.v1(1,2)] t1 on v1 = v4 and v2 <= v5";
+        String sqlPlan = getVerboseExplain(sql);
+
+        assertCContains(sqlPlan, "4:HASH JOIN\n" +
+                "  |  join op: ASOF INNER JOIN (PARTITIONED)\n" +
+                "  |  equal join conjunct: [1: v1, BIGINT, true] = [4: v4, BIGINT, true]\n" +
+                "  |  asof join conjunct: [2: v2, BIGINT, true] <= [5: v5, BIGINT, true]");
+        
+        assertCContains(sqlPlan, "8:HASH JOIN\n" +
+                "  |    |  join op: ASOF INNER JOIN (BROADCAST)\n" +
+                "  |    |  equal join conjunct: [1: v1, BIGINT, true] = [4: v4, BIGINT, true]\n" +
+                "  |    |  asof join conjunct: [2: v2, BIGINT, true] <= [5: v5, BIGINT, true]");
+
+        // Verify UNION structure is maintained
+        assertCContains(sqlPlan, "10:UNION\n" +
+                "  |  child exprs:\n" +
+                "  |      [2: v2, BIGINT, true] | [5: v5, BIGINT, true]\n" +
+                "  |      [2: v2, BIGINT, true] | [5: v5, BIGINT, true]\n" +
+                "  |  pass-through-operands: all");
+
+        // Verify split data sink for left table (t0)
+        assertCContains(sqlPlan, "PLAN FRAGMENT 2(F00)\n" +
+                "\n" +
+                "  Input Partition: RANDOM\n" +
+                "  SplitCastDataSink:\n" +
+                "  OutPut Partition: HASH_PARTITIONED: 1: v1\n" +
+                "  OutPut Exchange Id: 02\n" +
+                "  Split expr: ([1: v1, BIGINT, true] NOT IN (1, 2)) OR ([1: v1, BIGINT, true] IS NULL)\n" +
+                "  OutPut Partition: RANDOM\n" +
+                "  OutPut Exchange Id: 06\n" +
+                "  Split expr: [1: v1, BIGINT, true] IN (1, 2)\n" +
+                "\n" +
+                "  0:OlapScanNode\n" +
+                "     table: t0, rollup: t0");
+        
+        // Verify split data sink for right table (t1)
+        assertCContains(sqlPlan, "PLAN FRAGMENT 1(F01)\n" +
+                "\n" +
+                "  Input Partition: RANDOM\n" +
+                "  SplitCastDataSink:\n" +
+                "  OutPut Partition: HASH_PARTITIONED: 4: v4\n" +
+                "  OutPut Exchange Id: 03\n" +
+                "  Split expr: ([4: v4, BIGINT, true] NOT IN (1, 2)) OR ([4: v4, BIGINT, true] IS NULL)\n" +
+                "  OutPut Partition: UNPARTITIONED\n" +
+                "  OutPut Exchange Id: 07\n" +
+                "  Split expr: [4: v4, BIGINT, true] IN (1, 2)\n" +
+                "\n" +
+                "  1:OlapScanNode\n" +
+                "     table: t1, rollup: t1");
+    }
+
+    @Test
+    public void testSkewJoinV2WithAsofLeftJoin() throws Exception {
+        String sql = "select v2, v5 from t0 asof left join[skew|t0.v1(1,2)] t1 on v1 = v4 and v2 >= v5";
+        String sqlPlan = getVerboseExplain(sql);
+        assertCContains(sqlPlan, "join op: ASOF LEFT OUTER JOIN (PARTITIONED)");
     }
 }

@@ -22,6 +22,7 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.SetType;
+import com.starrocks.sql.ast.expression.VariableExpr;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;

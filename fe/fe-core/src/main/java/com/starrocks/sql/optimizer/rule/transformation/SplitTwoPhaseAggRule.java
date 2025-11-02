@@ -16,11 +16,11 @@ package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -78,7 +78,7 @@ public class SplitTwoPhaseAggRule extends SplitAggregateRule {
                     "each can't have multi columns.", ErrorType.USER_ERROR);
         }
 
-        if (!isSuitableForTwoStageDistinct(input, aggOp, distinctCols.get())) {
+        if (!isSuitableForTwoStageDistinct(context.getConnectContext(), input, aggOp, distinctCols.get())) {
             return List.of();
         }
 

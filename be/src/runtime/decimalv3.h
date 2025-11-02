@@ -44,6 +44,13 @@ template <>
 struct unsigned_type<int128_t> {
     using type = uint128_t;
 };
+// On macOS with libc++, std::make_unsigned cannot be specialized for user types.
+// Provide an explicit mapping for int256_t to itself, which is sufficient for
+// decimal operations that only require absolute value and arithmetic.
+template <>
+struct unsigned_type<int256_t> {
+    using type = int256_t;
+};
 
 template <typename T, bool check_overflow>
 class DecimalV3Arithmetics {
@@ -295,7 +302,8 @@ public:
 
         if constexpr (rule == ROUND_HALF_UP || rule == ROUND_HALF_EVEN) {
             //TODO(by satanson): ROUND_HALF_UP is different from ROUND_HALF_EVEN
-            need_round = std::abs(remainder) >= (divisor >> 1);
+            auto abs_remainder = (remainder >= 0) ? remainder : -remainder;
+            need_round = abs_remainder >= (divisor >> 1);
         } else if constexpr (rule == ROUND_FLOOR) {
             need_round = remainder > 0 && quotient > 0;
         } else if constexpr (rule == ROUND_CEILING) {

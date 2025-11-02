@@ -14,8 +14,8 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.Expr;
 import com.starrocks.sql.analyzer.FieldId;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;

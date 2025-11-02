@@ -16,11 +16,10 @@
 package com.starrocks.planner;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.SlotDescriptor;
-import com.starrocks.analysis.SlotId;
-import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.Type;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.utframe.StarRocksTestBase;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -28,7 +27,7 @@ import org.junit.jupiter.api.Test;
 import java.util.Arrays;
 import java.util.List;
 
-public class PlanNodeTest {
+public class PlanNodeTest extends StarRocksTestBase {
 
     @BeforeAll
     public static void beforeClass() throws Exception {
@@ -66,8 +65,8 @@ public class PlanNodeTest {
 
     boolean slotRefsEqualTo(List<Expr> slotRefs, List<Integer> expect) {
         List<Integer> slotRefsToInt = slotRefsToInt(slotRefs);
-        System.out.println("slotRefs:" + slotRefsToInt(slotRefs));
-        System.out.println("expect:" + expect);
+        logSysInfo("slotRefs:" + slotRefsToInt(slotRefs));
+        logSysInfo("expect:" + expect);
         if (slotRefsToInt.size() != expect.size()) {
             return false;
         }
@@ -83,12 +82,12 @@ public class PlanNodeTest {
     public void testPermutaionsOfPartitionByExprs1() throws Exception {
         List<List<Expr>> slotRefs = createSlotRefArray(2, 3);
         for (List<Expr> refs: slotRefs) {
-            System.out.println(slotRefsToInt(refs));
+            logSysInfo(slotRefsToInt(refs));
         }
         List<List<Expr>> newSlotRefs = PlanNode.candidateOfPartitionByExprs(slotRefs);
         Assertions.assertTrue(newSlotRefs.size() == 8);
         for (List<Expr> candidates: newSlotRefs) {
-            System.out.println(slotRefsToInt(candidates));
+            logSysInfo(slotRefsToInt(candidates));
         }
         int k = 0;
         for (int i = 0; i < 3; i++) {
@@ -103,12 +102,12 @@ public class PlanNodeTest {
     public void testPermutaionsOfPartitionByExprs2() throws Exception {
         List<List<Expr>> slotRefs = createSlotRefArray(1, 3);
         for (List<Expr> refs: slotRefs) {
-            System.out.println(slotRefsToInt(refs));
+            logSysInfo(slotRefsToInt(refs));
         }
         List<List<Expr>> newSlotRefs = PlanNode.candidateOfPartitionByExprs(slotRefs);
         Assertions.assertTrue(newSlotRefs.size() == 3);
         for (List<Expr> candidates: newSlotRefs) {
-            System.out.println(slotRefsToInt(candidates));
+            logSysInfo(slotRefsToInt(candidates));
         }
 
         Assertions.assertTrue(slotRefsEqualTo(newSlotRefs.get(0), Arrays.asList(0)));
@@ -120,12 +119,12 @@ public class PlanNodeTest {
     public void testPermutaionsOfPartitionByExprs3() throws Exception {
         List<List<Expr>> slotRefs = createSlotRefArray(4, 5);
         for (List<Expr> refs: slotRefs) {
-            System.out.println(slotRefsToInt(refs));
+            logSysInfo(slotRefsToInt(refs));
         }
         List<List<Expr>> newSlotRefs = PlanNode.candidateOfPartitionByExprs(slotRefs);
         Assertions.assertTrue (newSlotRefs.size() == 8);
         for (List<Expr> candidates: newSlotRefs) {
-            System.out.println(slotRefsToInt(candidates));
+            logSysInfo(slotRefsToInt(candidates));
         }
         Assertions.assertTrue(slotRefsEqualTo(newSlotRefs.get(0), Arrays.asList(0, 5, 10, 15)));
         Assertions.assertTrue(slotRefsEqualTo(newSlotRefs.get(1), Arrays.asList(0, 5, 10, 16)));

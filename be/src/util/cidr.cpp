@@ -110,7 +110,7 @@ bool CIDR::ip_to_int(const std::string& ip_str, uint32_t* value) {
             *value = ntohl(*(reinterpret_cast<uint32_t*>(&addr_v6.s6_addr[12])));
             return true;
         }
-        *value = static_cast<uint32_t>(addr_v6.s6_addr32[3]);
+        *value = ntohl(*(reinterpret_cast<uint32_t*>(&addr_v6.s6_addr[12])));
         return true;
     }
     return false;

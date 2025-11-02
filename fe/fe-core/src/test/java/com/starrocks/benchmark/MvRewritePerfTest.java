@@ -76,7 +76,7 @@ public class MvRewritePerfTest extends MVTestBase {
     }
 
     @BeforeEach
-    public void before() {
+    public void before() throws Exception {
         super.before();
         starRocksAssert.getCtx().getSessionVariable().setEnableQueryDump(false);
         starRocksAssert.getCtx().getSessionVariable().setCboMaterializedViewRewriteRuleOutputLimit(

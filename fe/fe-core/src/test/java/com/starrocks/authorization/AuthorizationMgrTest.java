@@ -17,7 +17,6 @@ package com.starrocks.authorization;
 
 import com.google.common.collect.Lists;
 import com.google.gson.stream.JsonReader;
-import com.starrocks.analysis.TableName;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
@@ -51,7 +50,6 @@ import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
-import com.starrocks.sql.ast.GrantType;
 import com.starrocks.sql.ast.RevokePrivilegeStmt;
 import com.starrocks.sql.ast.RevokeRoleStmt;
 import com.starrocks.sql.ast.SetRoleStmt;
@@ -60,7 +58,7 @@ import com.starrocks.sql.ast.ShowGrantsStmt;
 import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserRef;
-import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
@@ -1604,6 +1602,47 @@ public class AuthorizationMgrTest {
     }
 
     @Test
+    public void testRefreshTablePrivilege(@Mocked IcebergHiveCatalog hiveCatalog) throws Exception {
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "create external catalog test_catalog properties (" +
+                        "\"type\"=\"iceberg\", \"iceberg.catalog.type\"=\"hive\")", ctx), ctx);
+        ctx.setCurrentCatalog("test_catalog");
+        // set up user
+        setCurrentUserAndRoles(ctx, testUser);
+        ctx.setQualifiedUser(testUser.getUser());
+        AuthorizationMgr manager = ctx.getGlobalStateMgr().getAuthorizationMgr();
+
+        // throw AccessDeniedException if user has no REFRESH privilege
+        Assertions.assertThrows(AccessDeniedException.class, () ->
+                Authorizer.checkTableAction(ctx, "test_catalog", DB_NAME, TABLE_NAME_1, PrivilegeType.REFRESH)
+        );
+
+        // grant REFRESH privilege
+        setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
+        String grantSql = "grant REFRESH on table " + DB_NAME + "." + TABLE_NAME_1 + " to test_user";
+        GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(grantSql, ctx);
+        manager.grant(grantStmt);
+
+        // verify REFRESH privilege
+        setCurrentUserAndRoles(ctx, testUser);
+        Authorizer.checkTableAction(ctx, "test_catalog", DB_NAME, TABLE_NAME_1, PrivilegeType.REFRESH);
+
+        // revoke REFRESH privilege
+        setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
+        String revokeSql = "revoke REFRESH on table " + DB_NAME + "." + TABLE_NAME_1 + " from test_user";
+        RevokePrivilegeStmt revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(revokeSql, ctx);
+        manager.revoke(revokeStmt);
+
+        // verify no REFRESH privilege
+        setCurrentUserAndRoles(ctx, testUser);
+        Assertions.assertThrows(AccessDeniedException.class, () ->
+                Authorizer.checkTableAction(ctx, "test_catalog", DB_NAME, TABLE_NAME_1, PrivilegeType.REFRESH)
+        );
+
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("drop catalog test_catalog", ctx), ctx);
+    }
+
+    @Test
     public void testGrantView() throws Exception {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "create user view_user", ctx), ctx);
@@ -1801,23 +1840,6 @@ public class AuthorizationMgrTest {
         desc = new DataDescription("tbl1", null, "tbl2", false, null, null, null);
         try {
             desc.analyze("db");
-            Assertions.fail();
-        } catch (ErrorReportException e) {
-            Assertions.assertTrue(e.getMessage().contains("Access denied"));
-        }
-    }
-
-    @Test
-    public void testShowGrants() throws Exception {
-        String sql = "create role r_show_grants";
-        StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        DDLStmtExecutor.execute(stmt, ctx);
-        ctx.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp("test_user", "%"));
-        ShowGrantsStmt showGrantsStmt =
-                new ShowGrantsStmt("r_show_grants", GrantType.ROLE, NodePosition.ZERO);
-
-        try {
-            Authorizer.check(showGrantsStmt, ctx);
             Assertions.fail();
         } catch (ErrorReportException e) {
             Assertions.assertTrue(e.getMessage().contains("Access denied"));

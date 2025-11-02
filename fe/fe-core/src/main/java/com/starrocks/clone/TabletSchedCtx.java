@@ -569,12 +569,11 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                 tabletHealthStatus == TabletHealthStatus.NEED_FURTHER_REPAIR;
     }
 
-    public List<Replica> getHealthyReplicas() {
+    public List<Replica> getHealthyReplicas(boolean includeDecommissioned) {
         List<Replica> candidates = Lists.newArrayList();
         for (Replica replica : tablet.getImmutableReplicas()) {
-            if (replica.isBad()
-                    || replica.getState() == ReplicaState.DECOMMISSION
-                    || replica.getState() == ReplicaState.RECOVER) {
+            if (replica.isBad() || replica.getState() == ReplicaState.RECOVER ||
+                    (!includeDecommissioned && replica.getState() == ReplicaState.DECOMMISSION)) {
                 continue;
             }
 
@@ -609,10 +608,13 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
          * 1. source replica should be healthy.
          * 2. slot of this source replica is available.
          */
-        List<Replica> candidates = getHealthyReplicas();
+        List<Replica> candidates = getHealthyReplicas(false);
         if (candidates.isEmpty()) {
-            throw new SchedException(Status.UNRECOVERABLE,
-                    "unable to find source replica. replicas: " + tablet.getReplicaInfos());
+            candidates = getHealthyReplicas(true);
+            if (candidates.isEmpty()) {
+                throw new SchedException(Status.UNRECOVERABLE,
+                        "unable to find source replica. replicas: " + tablet.getReplicaInfos());
+            }    
         }
 
         // Shuffle the candidate list first so that we won't always choose the same replica with

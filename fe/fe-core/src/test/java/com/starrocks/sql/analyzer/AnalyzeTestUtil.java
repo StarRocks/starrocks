@@ -30,8 +30,8 @@ import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 
 public class AnalyzeTestUtil {
-    protected static ConnectContext connectContext;
-    protected static StarRocksAssert starRocksAssert;
+    public static ConnectContext connectContext;
+    public static StarRocksAssert starRocksAssert;
     protected static String DB_NAME = "test";
 
     public static void initWithoutTableAndDb(RunMode runMode) throws Exception {
@@ -349,6 +349,14 @@ public class AnalyzeTestUtil {
                 " DUPLICATE KEY(id) PROPERTIES ( \n" +
                 "\"replication_num\" = \"1\"\n" +
                 ");");
+
+        starRocksAssert.withTable("CREATE TABLE test_auto_increment (" +
+                "id BIGINT NOT NULL AUTO_INCREMENT," +
+                "name VARCHAR(100)" +
+                ") " +
+                "PRIMARY KEY (`id`) " +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 1 " +
+                "PROPERTIES(\"replication_num\" = \"1\");");
     }
 
     public static String getDbName() {

@@ -38,7 +38,6 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.catalog.FsBroker;
@@ -62,6 +61,7 @@ import com.starrocks.connector.exception.RemoteFileNotFoundException;
 import com.starrocks.datacache.DataCacheSelectMetrics;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.MysqlCommand;
+import com.starrocks.planner.DescriptorTable;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.ResultSink;
@@ -308,7 +308,7 @@ public class DefaultCoordinator extends Coordinator {
         shortCircuitExecutor =
                 ShortCircuitExecutor.create(context, fragments, scanNodes, descTable, isBinaryRow,
                         jobSpec.isNeedReport(),
-                        jobSpec.getPlanProtocol(), coordinatorPreprocessor.getWorkerProvider());
+                        jobSpec.getPlanProtocol(), coordinatorPreprocessor.getLazyWorkerProvider());
 
         if (null != shortCircuitExecutor) {
             isShortCircuit = true;
@@ -1060,6 +1060,10 @@ public class DefaultCoordinator extends Coordinator {
             // count down to zero to notify all objects waiting for this
             if (!connectContext.isProfileEnabled()) {
                 queryProfile.finishAllInstances(Status.OK);
+                List<String> unFinishedInstanceIds = queryProfile.getUnfinishedInstanceIds();
+                if (!unFinishedInstanceIds.isEmpty()) {
+                    LOG.info("query: {} has unfinished instances: {}", connectContext.queryId, unFinishedInstanceIds);
+                }
             }
         }
     }

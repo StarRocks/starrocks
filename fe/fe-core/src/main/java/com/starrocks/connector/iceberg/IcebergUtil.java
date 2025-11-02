@@ -16,7 +16,7 @@ package com.starrocks.connector.iceberg;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
-import com.starrocks.analysis.SlotDescriptor;
+import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.thrift.TExprMinMaxValue;
 import com.starrocks.thrift.TExprNodeType;
 import org.apache.iceberg.Schema;

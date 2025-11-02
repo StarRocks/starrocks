@@ -162,6 +162,9 @@ public class AuditEvent {
     @AuditField(value = "TransmittedBytes")
     public long transmittedBytes = -1;
 
+    @AuditField(value = "QuerySource")
+    public String querySource = "";
+
     public static class AuditEventBuilder {
 
         private AuditEvent auditEvent = new AuditEvent();
@@ -421,6 +424,11 @@ public class AuditEvent {
             } else {
                 auditEvent.transmittedBytes += transmittedBytes;
             }
+            return this;
+        }
+
+        public AuditEventBuilder setQuerySource(String querySource) {
+            auditEvent.querySource = querySource;
             return this;
         }
 

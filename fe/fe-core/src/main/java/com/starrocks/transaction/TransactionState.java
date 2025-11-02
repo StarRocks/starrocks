@@ -51,6 +51,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.TraceManager;
 import com.starrocks.common.io.Writable;
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.server.GlobalStateMgr;
@@ -261,6 +262,9 @@ public class TransactionState implements Writable, GsonPreProcessable {
 
     @SerializedName("ctl")
     private boolean useCombinedTxnLog;
+
+    @SerializedName("loadIds")
+    private List<TUniqueId> loadIds;
 
     private final CountDownLatch latch;
 
@@ -561,6 +565,10 @@ public class TransactionState implements Writable, GsonPreProcessable {
 
     public long getPublishVersionTime() {
         return this.publishVersionTime;
+    }
+
+    public long getPublishVersionFinishTime() {
+        return this.publishVersionFinishTime;
     }
 
     public boolean hasSendTask() {
@@ -892,6 +900,8 @@ public class TransactionState implements Writable, GsonPreProcessable {
         sb.append(", label: ").append(label);
         sb.append(", db id: ").append(dbId);
         sb.append(", table id list: ").append(StringUtils.join(tableIdList, ","));
+        sb.append(", load id list: ").append(loadIds != null ?
+                loadIds.stream().map(DebugUtil::printId).collect(java.util.stream.Collectors.joining(",")) : "null");
         sb.append(", callback id: ").append(getCallbackId());
         sb.append(", coordinator: ").append(txnCoordinator.toString());
         sb.append(", transaction status: ").append(transactionStatus);
@@ -1223,8 +1233,16 @@ public class TransactionState implements Writable, GsonPreProcessable {
         return this.isCreatePartitionFailed.get();
     }
 
+    public void addLoadId(TUniqueId loadId) {
+        if (this.loadIds == null) {
+            this.loadIds = new ArrayList<>();
+        }
+        this.loadIds.add(loadId);
+    }
 
-
+    public List<TUniqueId> getLoadIds() {
+        return loadIds;
+    }
 
     @Override
     public void gsonPreProcess() throws IOException {

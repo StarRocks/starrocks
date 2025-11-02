@@ -41,7 +41,6 @@ import java.util.List;
 import java.util.Map;
 
 public class OnlineOptimizeJobV2Test extends DDLTestBase {
-    private static final String TEST_FILE_NAME = OnlineOptimizeJobV2Test.class.getCanonicalName();
     private AlterTableStmt alterTableStmt;
 
     private static final Logger LOG = LogManager.getLogger(OnlineOptimizeJobV2Test.class);
@@ -55,7 +54,7 @@ public class OnlineOptimizeJobV2Test extends DDLTestBase {
     }
 
     @AfterEach
-    public void clear() {
+    public void clear() throws Exception {
         GlobalStateMgr.getCurrentState().getSchemaChangeHandler().clearJobs();
         Config.enable_online_optimize_table = false;
     }

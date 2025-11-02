@@ -17,7 +17,6 @@ package com.starrocks.qe;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.alter.SystemHandler;
-import com.starrocks.analysis.FunctionName;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.catalog.Database;
@@ -142,6 +141,7 @@ import com.starrocks.sql.ast.SyncStmt;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.UninstallPluginStmt;
 import com.starrocks.sql.ast.UserRef;
+import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.sql.ast.group.CreateGroupProviderStmt;
 import com.starrocks.sql.ast.group.DropGroupProviderStmt;
 import com.starrocks.sql.ast.integration.AlterSecurityIntegrationStatement;
@@ -581,11 +581,9 @@ public class DDLStmtExecutor {
                                                                 ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 if (stmt instanceof GrantPrivilegeStmt) {
-
-                    context.getGlobalStateMgr().getAuthorizationMgr().grant((GrantPrivilegeStmt) stmt);
-
+                    GlobalStateMgr.getCurrentState().getAuthorizationMgr().grant((GrantPrivilegeStmt) stmt);
                 } else {
-                    context.getGlobalStateMgr().getAuthorizationMgr().revoke((RevokePrivilegeStmt) stmt);
+                    GlobalStateMgr.getCurrentState().getAuthorizationMgr().revoke((RevokePrivilegeStmt) stmt);
                 }
             });
             return null;
@@ -659,8 +657,10 @@ public class DDLStmtExecutor {
 
         @Override
         public ShowResultSet visitDropGroupProviderStatement(DropGroupProviderStmt statement, ConnectContext context) {
-            AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
-            authenticationMgr.dropGroupProviderStatement(statement, context);
+            ErrorReport.wrapWithRuntimeException(() -> {
+                AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+                authenticationMgr.dropGroupProviderStatement(statement, context);
+            });
             return null;
         }
 
@@ -743,7 +743,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitBackupStatement(BackupStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getBackupHandler().process(stmt);
+                context.getGlobalStateMgr().getBackupHandler().process(context, stmt);
             });
             return null;
         }
@@ -751,7 +751,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitRestoreStatement(RestoreStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getBackupHandler().process(stmt);
+                context.getGlobalStateMgr().getBackupHandler().process(context, stmt);
             });
             return null;
         }
@@ -798,16 +798,15 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitAdminRepairTableStatement(AdminRepairTableStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getTabletChecker().repairTable(stmt);
+                GlobalStateMgr.getCurrentState().getTabletChecker().repairTable(context, stmt);
             });
             return null;
         }
 
         @Override
-        public ShowResultSet visitAdminCancelRepairTableStatement(AdminCancelRepairTableStmt stmt,
-                                                                  ConnectContext context) {
+        public ShowResultSet visitAdminCancelRepairTableStatement(AdminCancelRepairTableStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getTabletChecker().cancelRepairTable(stmt);
+                GlobalStateMgr.getCurrentState().getTabletChecker().cancelRepairTable(context, stmt);
             });
             return null;
         }

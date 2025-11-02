@@ -17,10 +17,7 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.ExpressionRangePartitionInfoV2;
@@ -30,7 +27,10 @@ import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.catalog.MvRefreshArbiter;
 import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.View;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.UUIDUtil;
@@ -38,26 +38,33 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
+import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.ExecuteOption;
 import com.starrocks.scheduler.MVTaskRunProcessor;
 import com.starrocks.scheduler.MvTaskRunContext;
+import com.starrocks.scheduler.SubmitResult;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.TaskRun;
 import com.starrocks.scheduler.TaskRunBuilder;
+import com.starrocks.scheduler.TaskRunManager;
 import com.starrocks.scheduler.TaskRunProcessor;
 import com.starrocks.scheduler.mv.BaseTableSnapshotInfo;
-import com.starrocks.scheduler.mv.MVPCTBasedRefreshProcessor;
+import com.starrocks.scheduler.mv.pct.MVPCTBasedRefreshProcessor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SystemVariable;
-import com.starrocks.sql.common.PCell;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.ast.expression.TableName;
+import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.PListCell;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.MaterializedViewOptimizer;
@@ -91,12 +98,14 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.File;
+import java.io.IOException;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -129,6 +138,8 @@ public abstract class MVTestBase extends StarRocksTestBase {
 
     @BeforeAll
     public static void beforeClass() throws Exception {
+        FeConstants.runningUnitTest = true;
+
         CachingMvPlanContextBuilder.getInstance().rebuildCache();
         PseudoCluster.getOrCreateWithRandomPort(true, 1);
         GlobalStateMgr.getCurrentState().getTabletChecker().setInterval(100);
@@ -153,9 +164,7 @@ public abstract class MVTestBase extends StarRocksTestBase {
     }
 
     public String getFragmentPlan(String sql) throws Exception {
-        String s = UtFrameUtils.getPlanAndFragment(connectContext, sql).second.
-                getExplainString(TExplainLevel.NORMAL);
-        return s;
+        return getFragmentPlan(sql, "MV");
     }
 
     public String getFragmentPlan(String sql, String traceModule) throws Exception {
@@ -170,10 +179,6 @@ public abstract class MVTestBase extends StarRocksTestBase {
         Pair<String, Pair<ExecPlan, String>> result =
                 UtFrameUtils.getFragmentPlanWithTrace(connectContext, sql, traceModule);
         Pair<ExecPlan, String> execPlanWithQuery = result.second;
-        String traceLog = execPlanWithQuery.second;
-        if (!Strings.isNullOrEmpty(traceLog)) {
-            System.out.println(traceLog);
-        }
         return execPlanWithQuery.first.getExplainString(level);
     }
 
@@ -255,7 +260,7 @@ public abstract class MVTestBase extends StarRocksTestBase {
     }
 
     public static OptExpression getOptimizedPlan(String sql, ConnectContext connectContext) {
-        return getOptimizedPlan(sql, connectContext, OptimizerOptions.defaultOpt());
+        return getOptimizedPlan(sql, connectContext, new OptimizerOptions());
     }
 
     public static StatementBase getAnalyzedPlan(String sql, ConnectContext connectContext) {
@@ -377,7 +382,15 @@ public abstract class MVTestBase extends StarRocksTestBase {
     }
 
     protected TaskRun withMVRefreshTaskRun(String dbName, MaterializedView mv) throws Exception {
-        Task task = TaskBuilder.buildMvTask(mv, dbName);
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+
+        // create a task if not exist
+        Task task = taskManager.getTask(mv);
+        if (task == null) {
+            task = TaskBuilder.buildMvTask(mv, dbName);
+            taskManager.createTask(task, false);
+        }
+
         Map<String, String> testProperties = task.getProperties();
         testProperties.put(TaskRun.IS_TEST, "true");
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
@@ -388,6 +401,13 @@ public abstract class MVTestBase extends StarRocksTestBase {
 
     protected MVTaskRunProcessor getMVTaskRunProcessor(String dbName, MaterializedView mv) throws Exception {
         TaskRun taskRun = withMVRefreshTaskRun(dbName, mv);
+        return getMVTaskRunProcessor(taskRun);
+    }
+
+    protected MVTaskRunProcessor getMVTaskRunProcessor(MaterializedView mv) throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mv.getDbId());
+        Assertions.assertNotNull(db);
+        TaskRun taskRun = withMVRefreshTaskRun(db.getFullName(), mv);
         return getMVTaskRunProcessor(taskRun);
     }
 
@@ -435,12 +455,31 @@ public abstract class MVTestBase extends StarRocksTestBase {
     }
 
     protected static ExecPlan getMVRefreshExecPlan(TaskRun taskRun) throws Exception {
+        return getMVRefreshExecPlan(taskRun, false);
+    }
+
+    protected static ExecPlan getMVRefreshExecPlan(TaskRun taskRun, boolean isForce) throws Exception {
+        if (isForce) {
+            taskRun.getProperties().put(TaskRun.FORCE, "true");
+        }
         initAndExecuteTaskRun(taskRun);
         TaskRunProcessor processor = taskRun.getProcessor();
         Assertions.assertTrue(processor instanceof MVTaskRunProcessor);
         MVTaskRunProcessor mvTaskRunProcessor = (MVTaskRunProcessor) processor;
         MvTaskRunContext mvTaskRunContext = mvTaskRunProcessor.getMvTaskRunContext();
-        return mvTaskRunContext.getExecPlan();
+        ExecPlan result = mvTaskRunContext.getExecPlan();
+        return result;
+    }
+
+    protected static void executeTaskRun(TaskRun taskRun) throws Exception {
+        // ensure taskRun is initialized
+        taskRun.setStatus(null);
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        TaskRunManager taskRunManager = taskManager.getTaskRunManager();
+        SubmitResult result = taskRunManager.submitTaskRun(taskRun);
+        Assertions.assertTrue(result.getStatus().equals(SubmitResult.SubmitStatus.SUBMITTED));
+        Constants.TaskRunState state = result.getFuture().get(300000, TimeUnit.MILLISECONDS);
+        Assertions.assertTrue(state.isFinishState());
     }
 
     protected static void initAndExecuteTaskRun(TaskRun taskRun) throws Exception {
@@ -473,7 +512,7 @@ public abstract class MVTestBase extends StarRocksTestBase {
         try {
             String addPartitionSql = String.format("ALTER TABLE %s ADD " +
                     "PARTITION %s VALUES [(%s),(%s))", tbl, pName, toPartitionVal(pVal1), toPartitionVal(pVal2));
-            System.out.println(addPartitionSql);
+            logSysInfo(addPartitionSql);
             starRocksAssert.alterTable(addPartitionSql);
 
             // insert values
@@ -587,8 +626,6 @@ public abstract class MVTestBase extends StarRocksTestBase {
         }
     }
 
-
-
     protected void doTest(List<TestListener> listeners, ExceptionRunnable testCase) {
         for (TestListener listener : listeners) {
             listener.onBeforeCase(connectContext);
@@ -666,8 +703,32 @@ public abstract class MVTestBase extends StarRocksTestBase {
         Assertions.assertTrue(task != null, "Task for MV " + mv.getName() + " not found:" + explainQuery);
         StatementBase stmt = getAnalyzedPlan(explainQuery, connectContext);
         Assertions.assertTrue(stmt != null, "Expected a valid StatementBase but got null:" + explainQuery);
-        ExecuteOption executeOption = new ExecuteOption(70, false, new HashMap<>());
+        ExecuteOption executeOption = buildExecuteOption(stmt);
         return taskManager.getMVRefreshExplain(task, executeOption, stmt);
+    }
+
+    protected String explainMVRefreshExecPlan(MaterializedView mv, ExecuteOption executeOption, String explainQuery) {
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        Task task = taskManager.getTask(TaskBuilder.getMvTaskName(mv.getId()));
+        Assertions.assertTrue(task != null, "Task for MV " + mv.getName() + " not found:" + explainQuery);
+        StatementBase stmt = getAnalyzedPlan(explainQuery, connectContext);
+        Assertions.assertTrue(stmt != null, "Expected a valid StatementBase but got null:" + explainQuery);
+        return taskManager.getMVRefreshExplain(task, executeOption, stmt);
+    }
+
+    protected ExecuteOption buildExecuteOption(StatementBase stmt) {
+        Map<String, String> props = new HashMap<>();
+        boolean force = false;
+        if (stmt instanceof RefreshMaterializedViewStatement) {
+            RefreshMaterializedViewStatement refreshMaterializedViewStatement = (RefreshMaterializedViewStatement) stmt;
+            if (refreshMaterializedViewStatement.isForceRefresh()) {
+                force = true;
+            }
+        }
+        if (force) {
+            props.put(TaskRun.FORCE, "true");
+        }
+        return new ExecuteOption(70, false, props);
     }
 
     /**
@@ -679,7 +740,7 @@ public abstract class MVTestBase extends StarRocksTestBase {
         Assertions.assertTrue(task != null, "Task for MV " + mv.getName() + " not found:" + explainQuery);
         StatementBase stmt = getAnalyzedPlan(explainQuery, connectContext);
         Assertions.assertTrue(stmt != null, "Expected a valid StatementBase but got null:" + explainQuery);
-        ExecuteOption executeOption = new ExecuteOption(70, false, new HashMap<>());
+        ExecuteOption executeOption = buildExecuteOption(stmt);
         TaskRun taskRun = taskManager.buildTaskRun(task, executeOption);
         return taskManager.getMVRefreshExecPlan(taskRun, task, executeOption, stmt);
     }
@@ -737,19 +798,70 @@ public abstract class MVTestBase extends StarRocksTestBase {
     }
 
     protected void addListPartition(String tbl, List<String> values) {
-        Map<String, PCell> partitions = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+        PCellSortedSet partitions = PCellSortedSet.of();
         for (String val : values) {
             PListCell pListCell = new PListCell(val);
             String pName = AnalyzerUtils.getFormatPartitionValue(val);
-            if (partitions.containsKey(pName)) {
+            if (partitions.containsName(pName)) {
                 try {
                     pName = AnalyzerUtils.calculateUniquePartitionName(pName, pListCell, partitions);
                 } catch (Exception e) {
                     Assertions.fail("add partition failed:" + e);
                 }
             }
-            partitions.put(pName, pListCell);
+            partitions.add(pName, pListCell);
             addListPartition(tbl, pName, val);
         }
+    }
+
+    public View getView(String viewName) {
+        Table table = getTable(DB_NAME, viewName);
+        Assertions.assertTrue(table instanceof View);
+        return (View) table;
+    }
+
+    public static void disableMVRewriteConsiderDataLayout() {
+        Config.mv_rewrite_consider_data_layout_mode = "disable";
+    }
+
+    public static void enableMVRewriteConsiderDataLayout() {
+        Config.mv_rewrite_consider_data_layout_mode = "enable";
+    }
+
+    public static File newFolder(File root, String... subDirs) throws IOException {
+        String subFolder = String.join("/", subDirs);
+        File result = new File(root, subFolder);
+        if (!result.mkdirs()) {
+            throw new IOException("Couldn't create folders " + root);
+        }
+        return result;
+    }
+
+    protected static void alterMaterializedView(String sql, boolean expectedException) throws Exception {
+        AlterMaterializedViewStmt alterMaterializedViewStmt =
+                (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        try {
+            GlobalStateMgr.getCurrentState().getLocalMetastore().alterMaterializedView(alterMaterializedViewStmt);
+            if (expectedException) {
+                Assertions.fail();
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            if (!expectedException) {
+                Assertions.fail();
+            }
+        }
+    }
+
+    protected MaterializedView createMaterializedViewWithRefreshMode(String query,
+                                                                     String refreshMode) throws Exception {
+        String ddl = String.format("CREATE MATERIALIZED VIEW `test_mv1` " +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"refresh_mode\" = \"%s\"" +
+                ")\n" +
+                "AS %s;", refreshMode, query);
+        starRocksAssert.withMaterializedView(ddl);
+        return getMv("test_mv1");
     }
 }

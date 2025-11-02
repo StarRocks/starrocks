@@ -14,8 +14,8 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.StringLiteral;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
@@ -323,4 +323,15 @@ public class AnalyzeFunctionTest {
         analyzeFail("select array_generate(1, 5, 'a')");
         analyzeFail("select array_generate(1, 2, 3, 4)");
     }
+
+    @Test
+    public void testSecToTime() throws Exception {
+        analyzeFail("select sec_to_time()");
+        analyzeSuccess("select sec_to_time(0)");
+        analyzeSuccess("select sec_to_time(1)");
+        analyzeSuccess("select sec_to_time(-1)");
+        analyzeSuccess("select sec_to_time(3024000)");
+        analyzeSuccess("select sec_to_time(-3024000)");
+    }
+
 }

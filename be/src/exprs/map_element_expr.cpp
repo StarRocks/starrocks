@@ -68,7 +68,11 @@ public:
 
         const auto& map_keys = down_cast<const MapColumn*>(map_column)->keys_column();
         const auto& map_values = down_cast<const MapColumn*>(map_column)->values_column();
-        const auto& offsets = down_cast<const MapColumn*>(map_column)->offsets().get_data();
+        const auto offsets = down_cast<const MapColumn*>(map_column)->offsets().immutable_data();
+        std::span<const uint8_t> map_nulls_view =
+                map_nulls != nullptr ? map_nulls->immutable_data() : std::span<uint8_t>{};
+        std::span<const uint8_t> key_nulls_view =
+                key_nulls != nullptr ? key_nulls->immutable_data() : std::span<uint8_t>{};
 
         size_t actual_rows = map_is_const && key_is_const ? 1 : num_rows;
         auto res = map_values->clone_empty(); // must be nullable
@@ -81,13 +85,13 @@ public:
             bool has_null = false;
             // For trino, null row's any element is still null
             // We only check has_null when set _check_is_out_of_bounds = true
-            if (_check_is_out_of_bounds && map_nulls != nullptr && map_nulls->get_data()[map_idx]) {
+            if (_check_is_out_of_bounds && !map_nulls_view.empty() && map_nulls_view[map_idx]) {
                 has_null = true;
             }
 
             // map is not null and not empty
-            if ((map_nulls == nullptr || !map_nulls->get_data()[map_idx]) && offsets[map_idx + 1] > offsets[map_idx]) {
-                if (key_nulls == nullptr || !key_nulls->get_data()[key_idx]) {
+            if ((map_nulls_view.empty() || !map_nulls_view[map_idx]) && offsets[map_idx + 1] > offsets[map_idx]) {
+                if (key_nulls_view.empty() || !key_nulls_view[key_idx]) {
                     // target not null
                     for (ssize_t j = offsets[map_idx + 1] - 1; j >= offsets[map_idx]; j--) { // last win
                         if (map_keys->equals(j, *key_column, key_idx)) {

@@ -69,7 +69,7 @@ import static com.starrocks.catalog.Table.TableType.JDBC;
  */
 public class AstToStringBuilder {
     public static String toString(ParseNode expr) {
-        return AST2StringVisitor.withOptions(FormatOptions.allEnable()).visit(expr);
+        return AST2StringVisitor.withOptions(FormatOptions.allEnable().setEnableDigest(false)).visit(expr);
     }
 
     public static String getAliasName(ParseNode expr, boolean addFunctionDbName, boolean withBackquote) {
@@ -405,7 +405,7 @@ public class AstToStringBuilder {
                 .append(" (\n");
 
         // Columns
-        List<String> columns = table.getFullSchema().stream().map(AstToStringBuilder::toMysqlDDL).
+        List<String> columns = table.getFullVisibleSchema().stream().map(AstToStringBuilder::toMysqlDDL).
                 collect(Collectors.toList());
         createTableSql.append(String.join(",\n", columns))
                 .append("\n)");

@@ -20,20 +20,6 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.BinaryPredicate;
-import com.starrocks.analysis.BinaryType;
-import com.starrocks.analysis.BoolLiteral;
-import com.starrocks.analysis.CaseExpr;
-import com.starrocks.analysis.CaseWhenClause;
-import com.starrocks.analysis.CompoundPredicate;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.IntLiteral;
-import com.starrocks.analysis.JoinOperator;
-import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.TableName;
 import com.starrocks.authorization.SecurityPolicyRewriteRule;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ConnectorView;
@@ -63,12 +49,12 @@ import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.ExceptRelation;
-import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.HintNode;
 import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
+import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.PivotAggregation;
@@ -88,9 +74,24 @@ import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UnionRelation;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.ViewRelation;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.BoolLiteral;
+import com.starrocks.sql.ast.expression.CaseExpr;
+import com.starrocks.sql.ast.expression.CaseWhenClause;
+import com.starrocks.sql.ast.expression.CompoundPredicate;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FieldReference;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.JoinOperator;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.dump.HiveMetaStoreTableDumpInfo;
+import org.apache.commons.collections.CollectionUtils;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -123,6 +124,15 @@ public class QueryAnalyzer {
 
     public void analyze(StatementBase node) {
         new Visitor().process(node, new Scope(RelationId.anonymous(), new RelationFields()));
+    }
+
+    /**
+     * Analyze only files() table functions without touching normal table metadata.
+     * This is used to infer files() schema (RPC to BE) without holding PlannerMetaLock,
+     * while deferring normal table analysis to the locked phase.
+     */
+    public void analyzeFilesOnly(StatementBase node) {
+        new FilesOnlyVisitor().process(node, new Scope(RelationId.anonymous(), new RelationFields()));
     }
 
     public void analyze(StatementBase node, Scope parent) {
@@ -495,6 +505,20 @@ public class QueryAnalyzer {
                 return pivotRelation;
             } else if (relation instanceof FileTableFunctionRelation) {
                 FileTableFunctionRelation tableFunctionRelation = (FileTableFunctionRelation) relation;
+                // If files() was pre-resolved in an unlock phase, reuse it to avoid RPC under lock
+                if (tableFunctionRelation.getTable() instanceof TableFunctionTable) {
+                    TableFunctionTable preResolved = (TableFunctionTable) tableFunctionRelation.getTable();
+                    Consumer<TableFunctionTable> pushDown = tableFunctionRelation.getPushDownSchemaFunc();
+                    if (pushDown != null && !preResolved.isListFilesOnly()) {
+                        pushDown.accept(preResolved);
+                        tableFunctionRelation.setTable(preResolved);
+                    }
+                    if (preResolved.isListFilesOnly()) {
+                        return convertFileTableFunctionRelation(preResolved);
+                    }
+                    return relation;
+                }
+
                 Table table = resolveTableFunctionTable(
                         tableFunctionRelation.getProperties(), tableFunctionRelation.getPushDownSchemaFunc());
                 TableFunctionTable tableFunctionTable = (TableFunctionTable) table;
@@ -695,7 +719,8 @@ public class QueryAnalyzer {
                         // reduce unnecessary columns init, but must init key columns/bucket columns/partition columns
                         continue;
                     }
-                    boolean visible = baseSchema.contains(column);
+                    // only output visible columns
+                    boolean visible = column.isVisible() && baseSchema.contains(column);
                     SlotRef slot = new SlotRef(tableName, column.getName(), column.getName());
                     Field field = new Field(column.getName(), column.getType(), tableName, slot, visible,
                             column.isAllowNull());
@@ -802,6 +827,9 @@ public class QueryAnalyzer {
             Scope leftScope = process(join.getLeft(), parentScope);
             Scope rightScope;
             if (join.getRight() instanceof TableFunctionRelation || join.isLateral()) {
+                if (join.getJoinOp().isAsofJoin()) {
+                    throw new SemanticException("ASOF join is not supported with lateral join");
+                }
                 if (!(join.getRight() instanceof TableFunctionRelation)) {
                     throw new SemanticException("Only support lateral join with UDTF");
                 } else if (!join.getJoinOp().isInnerJoin() && !join.getJoinOp().isCrossJoin() &&
@@ -860,6 +888,12 @@ public class QueryAnalyzer {
                     throw new SemanticException("WHERE clause must evaluate to a boolean: actual type %s",
                             joinEqual.getType());
                 }
+
+                // Validate ASOF JOIN conditions
+                if (join.getJoinOp().isAsofJoin()) {
+                    validateAsofJoinConditions(joinEqual);
+                }
+
                 // check the join on predicate, example:
                 // we have col_json, we can't join on table_a.col_json = table_b.col_json,
                 // but we can join on cast(table_a.col_json->"a" as int) = cast(table_b.col_json->"a" as int)
@@ -867,7 +901,7 @@ public class QueryAnalyzer {
                 // and table_a.col_struct.a = table_b.col_struct.a
                 checkJoinEqual(joinEqual);
             } else {
-                if (join.getJoinOp().isOuterJoin() || join.getJoinOp().isSemiAntiJoin()) {
+                if (join.getJoinOp().isOuterJoin() || join.getJoinOp().isSemiAntiJoin() || join.getJoinOp().isAsofJoin()) {
                     throw new SemanticException(join.getJoinOp() + " requires an ON or USING clause.");
                 }
             }
@@ -880,22 +914,22 @@ public class QueryAnalyzer {
                 scope = new Scope(RelationId.of(join), leftScope.getRelationFields());
             } else if (join.getJoinOp().isRightSemiAntiJoin()) {
                 scope = new Scope(RelationId.of(join), rightScope.getRelationFields());
-            } else if (join.getJoinOp().isLeftOuterJoin()) {
+            } else if (join.getJoinOp().isAnyLeftOuterJoin()) {
                 List<Field> rightFields = getFieldsWithNullable(rightScope);
-                scope = new Scope(RelationId.of(join),
-                        leftScope.getRelationFields().joinWith(new RelationFields(rightFields)));
+                RelationFields joinedFields = leftScope.getRelationFields().joinWith(new RelationFields(rightFields));
+                scope = new Scope(RelationId.of(join), createJoinRelationFields(joinedFields, join));
             } else if (join.getJoinOp().isRightOuterJoin()) {
                 List<Field> leftFields = getFieldsWithNullable(leftScope);
-                scope = new Scope(RelationId.of(join),
-                        new RelationFields(leftFields).joinWith(rightScope.getRelationFields()));
+                RelationFields joinedFields = new RelationFields(leftFields).joinWith(rightScope.getRelationFields());
+                scope = new Scope(RelationId.of(join), createJoinRelationFields(joinedFields, join));
             } else if (join.getJoinOp().isFullOuterJoin()) {
                 List<Field> rightFields = getFieldsWithNullable(rightScope);
                 List<Field> leftFields = getFieldsWithNullable(leftScope);
-                scope = new Scope(RelationId.of(join),
-                        new RelationFields(leftFields).joinWith(new RelationFields(rightFields)));
+                RelationFields joinedFields = new RelationFields(leftFields).joinWith(new RelationFields(rightFields));
+                scope = new Scope(RelationId.of(join), createJoinRelationFields(joinedFields, join));
             } else {
-                scope = new Scope(RelationId.of(join),
-                        leftScope.getRelationFields().joinWith(rightScope.getRelationFields()));
+                RelationFields joinedFields = leftScope.getRelationFields().joinWith(rightScope.getRelationFields());
+                scope = new Scope(RelationId.of(join), createJoinRelationFields(joinedFields, join));
             }
             join.setScope(scope);
 
@@ -913,6 +947,15 @@ public class QueryAnalyzer {
                 newFields.add(newField);
             }
             return newFields;
+        }
+
+        private void validateAsofJoinConditions(Expr joinPredicate) {
+            if (joinPredicate == null) {
+                throw new SemanticException("ASOF JOIN requires ON clause with join conditions");
+            }
+
+            AsofJoinConditionValidator validator = new AsofJoinConditionValidator();
+            validator.validate(joinPredicate);
         }
 
         private Expr analyzeJoinUsing(List<String> usingColNames, Scope left, Scope right) {
@@ -934,6 +977,15 @@ public class QueryAnalyzer {
                 }
             }
             return joinEqual;
+        }
+
+        private RelationFields createJoinRelationFields(RelationFields joinedFields, JoinRelation join) {
+            if (CollectionUtils.isNotEmpty(join.getUsingColNames()) && !join.getJoinOp().isFullOuterJoin()) {
+                return new CoalescedJoinFields(joinedFields.getAllFields(), join.getUsingColNames(), join.getJoinOp());
+            } else {
+                // TODO: Support FULL OUTER JOIN USING with proper COALESCE semantics
+                return joinedFields;
+            }
         }
 
         private void analyzeJoinHints(JoinRelation join) {
@@ -1436,6 +1488,113 @@ public class QueryAnalyzer {
 
     }
 
+    /**
+     * A lightweight visitor that only resolves FileTableFunctionRelation so that
+     * files() schema can be inferred without acquiring DB/table locks. Normal tables/views are skipped.
+     */
+    private class FilesOnlyVisitor implements AstVisitorExtendInterface<Scope, Scope> {
+        public FilesOnlyVisitor() {}
+
+        public Scope process(ParseNode node, Scope scope) {
+            return node.accept(this, scope);
+        }
+
+        @Override
+        public Scope visitQueryStatement(QueryStatement node, Scope parent) {
+            QueryRelation queryRelation = node.getQueryRelation();
+            if (queryRelation != null && !queryRelation.getCteRelations().isEmpty()) {
+                for (CTERelation cteRelation : queryRelation.getCteRelations()) {
+                    process(cteRelation.getCteQueryStatement(), parent);
+                }
+            }
+            return process(queryRelation, parent);
+        }
+
+        @Override
+        public Scope visitQueryRelation(QueryRelation node, Scope parent) {
+            return process(node, parent);
+        }
+
+        @Override
+        public Scope visitSelect(SelectRelation selectRelation, Scope scope) {
+            Relation r = selectRelation.getRelation();
+            // Only touch files(); keep others intact
+            if (r instanceof FileTableFunctionRelation) {
+                FileTableFunctionRelation f = (FileTableFunctionRelation) r;
+                initializeFileTableIfAbsent(f);
+            } else if (r instanceof JoinRelation) {
+                visitJoin((JoinRelation) r, scope);
+            } else if (r instanceof SubqueryRelation) {
+                visitSubqueryRelation((SubqueryRelation) r, scope);
+            } else if (r instanceof SetOperationRelation) {
+                visitSetOp((SetOperationRelation) r, scope);
+            } else if (r instanceof PivotRelation) {
+                PivotRelation p = (PivotRelation) r;
+                process(p.getQuery(), scope);
+            }
+            return scope;
+        }
+
+        public Scope visitJoin(JoinRelation join, Scope scope) {
+            Relation l = join.getLeft();
+            Relation r = join.getRight();
+            // SubqueryRelation/SetOperationRelation/PivotRelation are intentionally skipped here, because
+            // pre-analyzing them would still require table metadata and locks; the full analyzer pass will
+            // revisit them after files() has been resolved where necessary.
+            if (l instanceof FileTableFunctionRelation) {
+                FileTableFunctionRelation f = (FileTableFunctionRelation) l;
+                initializeFileTableIfAbsent(f);
+            } else if (l instanceof JoinRelation) {
+                visitJoin((JoinRelation) l, scope);
+            } else if (l instanceof SelectRelation) {
+                visitSelect((SelectRelation) l, scope);
+            } else if (l instanceof SubqueryRelation) {
+                visitSubqueryRelation((SubqueryRelation) l, scope);
+            } else if (l instanceof SetOperationRelation) {
+                visitSetOp((SetOperationRelation) l, scope);
+            }
+
+            // Same as the left side. We continue to recurse into joins, subqueries and set operations to locate
+            // nested files() invocations, while still avoiding any metadata access for normal table relations.
+            if (r instanceof FileTableFunctionRelation) {
+                FileTableFunctionRelation f = (FileTableFunctionRelation) r;
+                initializeFileTableIfAbsent(f);
+                // Do NOT mark lateral here: the relation remains a FileTableFunctionRelation, and the main analyzer
+                // will decide whether lateral semantics are required once it has the final relation type.
+            } else if (r instanceof JoinRelation) {
+                visitJoin((JoinRelation) r, scope);
+            } else if (r instanceof SelectRelation) {
+                visitSelect((SelectRelation) r, scope);
+            } else if (r instanceof SubqueryRelation) {
+                visitSubqueryRelation((SubqueryRelation) r, scope);
+            } else if (r instanceof SetOperationRelation) {
+                visitSetOp((SetOperationRelation) r, scope);
+            }
+            return scope;
+        }
+
+        private void initializeFileTableIfAbsent(FileTableFunctionRelation relation) {
+            if (relation.getTable() instanceof TableFunctionTable) {
+                return;
+            }
+
+            Table table = resolveTableFunctionTable(relation.getProperties(), relation.getPushDownSchemaFunc());
+            relation.setTable(table);
+        }
+
+        public Scope visitSubqueryRelation(SubqueryRelation subquery, Scope scope) {
+            process(subquery.getQueryStatement(), scope);
+            return scope;
+        }
+
+        public Scope visitSetOp(SetOperationRelation set, Scope scope) {
+            for (QueryRelation qr : set.getRelations()) {
+                process(qr, scope);
+            }
+            return scope;
+        }
+    }
+
     public Table resolveTable(TableRelation tableRelation) {
         TableName tableName = tableRelation.getName();
         try {
@@ -1664,6 +1823,69 @@ public class QueryAnalyzer {
                 resolvingAlias.removeLast();
             }
             return null;
+        }
+    }
+
+    private static class AsofJoinConditionValidator {
+        private int equalityPredicateCount = 0;
+        private int inequalityPredicateCount = 0;
+        private boolean containsOrOperator = false;
+
+        public void validate(Expr joinPredicate) {
+            visit(joinPredicate);
+
+            if (equalityPredicateCount == 0) {
+                throw new SemanticException("ASOF JOIN requires at least one equality condition in join ON clause");
+            }
+
+            if (inequalityPredicateCount == 0) {
+                throw new SemanticException("ASOF JOIN requires exactly one temporal inequality condition in join ON clause");
+            }
+
+            if (inequalityPredicateCount > 1) {
+                throw new SemanticException("ASOF JOIN supports only one inequality condition in join ON clause, found: " +
+                        inequalityPredicateCount);
+            }
+        }
+
+        private void visit(Expr expr) {
+            if (expr instanceof CompoundPredicate compound) {
+                if (compound.getOp() == CompoundPredicate.Operator.OR) {
+                    containsOrOperator = true;
+                }
+                visit(compound.getChild(0));
+                visit(compound.getChild(1));
+            } else if (expr instanceof BinaryPredicate binary) {
+                if (binary.getOp() == BinaryType.EQ) {
+                    equalityPredicateCount++;
+                } else if (binary.getOp().isRange()) {
+                    inequalityPredicateCount++;
+                    validateTemporalConditionTypes(binary);
+                } else {
+                    throw new SemanticException("ASOF JOIN does not support '" + binary.getOp() + "' operator " +
+                            "in join ON clause");
+                }
+            }
+
+            if (containsOrOperator) {
+                throw new SemanticException("ASOF JOIN conditions do not support OR operators in join ON clause");
+            }
+        }
+
+        private void validateTemporalConditionTypes(BinaryPredicate predicate) {
+            Type leftType = predicate.getChild(0).getType();
+            Type rightType = predicate.getChild(1).getType();
+
+            if (!isTemporalOrderingType(leftType) || !isTemporalOrderingType(rightType)) {
+                throw new SemanticException(
+                        "ASOF JOIN temporal condition supports only BIGINT, DATE, or DATETIME types in join ON clause, found: " +
+                                leftType.toSql() + " and " + rightType.toSql() + ". predicate: " + predicate.toMySql()
+                );
+            }
+        }
+
+        private boolean isTemporalOrderingType(Type type) {
+            return type.isBigint() || type.isDate() || type.isDatetime();
         }
     }
 }

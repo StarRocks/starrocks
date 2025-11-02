@@ -15,10 +15,10 @@
 package com.starrocks.sql.plan;
 
 import com.google.common.collect.ImmutableList;
-import com.starrocks.analysis.DescriptorTable;
-import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.common.FeConstants;
+import com.starrocks.planner.DescriptorTable;
 import com.starrocks.planner.OlapScanNode;
+import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.scheduler.dag.ExecutionFragment;
 import com.starrocks.server.WarehouseManager;

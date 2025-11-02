@@ -374,8 +374,9 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state) {
         _params.plan_node_id = _morsel->get_plan_node_id();
         _params.scan_range = _morsel->get_scan_range();
     }
-    ASSIGN_OR_RETURN(_reader, _tablet.new_reader(std::move(child_schema), need_split,
-                                                 _provider->could_split_physically(), _morsel->rowsets()));
+    ASSIGN_OR_RETURN(_reader,
+                     _tablet.new_reader(std::move(child_schema), need_split, _provider->could_split_physically(),
+                                        _morsel->rowsets(), _tablet_schema));
     if (reader_columns.size() == scanner_columns.size()) {
         _prj_iter = _reader;
     } else {
@@ -470,6 +471,28 @@ Status LakeDataSource::init_column_access_paths(Schema* schema) {
             }
         } else {
             LOG(WARNING) << "failed to find column in schema: " << root;
+        }
+    }
+    // Preserve access paths referenced by extended columns even if not selected by pushdown
+    {
+        std::unordered_set<const ColumnAccessPath*> kept;
+        kept.reserve(new_one.size());
+        for (const auto& p : new_one) kept.insert(p.get());
+
+        for (size_t i = 0; i < _tablet_schema->num_columns(); ++i) {
+            const auto& col = _tablet_schema->column(i);
+            if (!col.is_extended() || col.extended_info() == nullptr || col.extended_info()->access_path == nullptr) {
+                continue;
+            }
+            const ColumnAccessPath* needed = col.extended_info()->access_path;
+            if (kept.find(needed) != kept.end()) continue;
+            for (auto& owned : _column_access_paths) {
+                if (owned.get() == needed) {
+                    new_one.emplace_back(std::move(owned));
+                    kept.insert(needed);
+                    break;
+                }
+            }
         }
     }
     _column_access_paths = std::move(new_one);
@@ -602,7 +625,7 @@ void LakeDataSource::init_counter(RuntimeState* state) {
             ADD_CHILD_COUNTER(_runtime_profile, "ShortKeyRangeNumber", TUnit::UNIT, segment_init_name);
     _column_iterator_init_timer = ADD_CHILD_TIMER(_runtime_profile, "ColumnIteratorInit", segment_init_name);
     _bitmap_index_iterator_init_timer = ADD_CHILD_TIMER(_runtime_profile, "BitmapIndexIteratorInit", segment_init_name);
-    _zone_map_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "ZoneMapIndexFiter", segment_init_name);
+    _zone_map_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "ZoneMapIndexFilter", segment_init_name);
     _rows_key_range_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "ShortKeyFilter", segment_init_name);
     _bf_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "BloomFilterFilter", segment_init_name);
 

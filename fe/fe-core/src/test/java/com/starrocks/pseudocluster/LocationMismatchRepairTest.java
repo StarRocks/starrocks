@@ -22,6 +22,7 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.clone.TabletScheduler;
 import com.starrocks.clone.TabletSchedulerStat;
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.server.GlobalStateMgr;
@@ -44,6 +45,7 @@ import java.util.Set;
 public class LocationMismatchRepairTest {
     @BeforeAll
     public static void setUp() throws Exception {
+        FeConstants.runningUnitTest = true;
         Config.tablet_sched_checker_interval_seconds = 1;
         Config.tablet_sched_repair_delay_factor_second = 1;
         Config.tablet_checker_partition_batch_num = 1;

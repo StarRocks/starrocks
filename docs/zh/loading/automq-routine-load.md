@@ -1,6 +1,6 @@
 # 从 AutoMQ Kafka 持续导入
 
-import Replicanum from '../_assets/commonMarkdown/replicanum.md'
+import Replicanum from '../_assets/commonMarkdown/replicanum.mdx'
 
 [AutoMQ for Kafka](https://www.automq.com/docs) AutoMQ Kafka ) 是一款基于云重新设计的云原生 Kafka。
 AutoMQ Kafka [内核开源](https://github.com/AutoMQ/automq-for-kafka)并且100% 兼容 Kafka 协议，可以充分兑现云的红利。

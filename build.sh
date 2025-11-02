@@ -33,6 +33,15 @@
 # compiled and installed correctly.
 ##############################################################
 startTime=$(date +%s)
+
+format_time() {
+    local epoch="$1"
+    if [[ "$OSTYPE" == darwin* ]]; then
+        date -r "${epoch}" '+%Y-%m-%d %H:%M:%S'
+    else
+        date -d "@${epoch}" '+%Y-%m-%d %H:%M:%S'
+    fi
+}
 ROOT=`dirname "$0"`
 ROOT=`cd "$ROOT"; pwd`
 MACHINE_TYPE=$(uname -m)
@@ -127,7 +136,24 @@ Usage: $0 <options>
   exit 1
 }
 
-OPTS=$(getopt \
+GETOPT_BIN="getopt"
+if [[ "$OSTYPE" == darwin* ]]; then
+    # Try to detect gnu-getopt path dynamically
+    if command -v brew &> /dev/null; then
+        GNU_GETOPT_PREFIX=$(brew --prefix gnu-getopt 2>/dev/null)
+        if [[ -n "${GNU_GETOPT_PREFIX}" ]] && [[ -x "${GNU_GETOPT_PREFIX}/bin/getopt" ]]; then
+            GETOPT_BIN="${GNU_GETOPT_PREFIX}/bin/getopt"
+        else
+            echo "gnu-getopt is required on macOS. Please install it with 'brew install gnu-getopt'."
+            exit 1
+        fi
+    else
+        echo "Homebrew is required on macOS to install gnu-getopt. Please install Homebrew first."
+        exit 1
+    fi
+fi
+
+OPTS=$(${GETOPT_BIN} \
   -n $0 \
   -o 'hj:' \
   -l 'be' \
@@ -386,7 +412,6 @@ cd ${STARROCKS_HOME}
 
 if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
     export LIBRARY_PATH=${JAVA_HOME}/jre/lib/aarch64/server/
-    WITH_TENANN=OFF
 else
     export LIBRARY_PATH=${JAVA_HOME}/jre/lib/amd64/server/
 fi
@@ -511,7 +536,7 @@ if [ ${BUILD_FE} -eq 1 ] || [ ${BUILD_SPARK_DPP} -eq 1 ] || [ ${BUILD_HIVE_UDF} 
         FE_MODULES="fe-testing,plugin/hive-udf"
     fi
     if [ ${BUILD_FE} -eq 1 ]; then
-        FE_MODULES="plugin/hive-udf,fe-testing,plugin/spark-dpp,fe-core"
+        FE_MODULES="plugin/hive-udf,fe-testing,plugin/spark-dpp,fe-server"
     fi
 fi
 
@@ -552,19 +577,18 @@ if [ ${BUILD_FE} -eq 1 -o ${BUILD_SPARK_DPP} -eq 1 ]; then
         cp -r -p ${STARROCKS_HOME}/conf/cluster_snapshot.yaml ${STARROCKS_OUTPUT}/fe/conf/
 
         rm -rf ${STARROCKS_OUTPUT}/fe/lib/*
-        cp -r -p ${STARROCKS_HOME}/fe/fe-core/target/lib/* ${STARROCKS_OUTPUT}/fe/lib/
-        cp -r -p ${STARROCKS_HOME}/fe/fe-core/target/starrocks-fe.jar ${STARROCKS_OUTPUT}/fe/lib/
+        cp -r -p ${STARROCKS_HOME}/fe/fe-server/target/lib/* ${STARROCKS_OUTPUT}/fe/lib/
+        cp -r -p ${STARROCKS_HOME}/fe/fe-server/target/starrocks-fe.jar ${STARROCKS_OUTPUT}/fe/lib/
         cp -r -p ${STARROCKS_HOME}/java-extensions/hadoop-ext/target/starrocks-hadoop-ext.jar ${STARROCKS_OUTPUT}/fe/lib/
         cp -r -p ${STARROCKS_HOME}/webroot/* ${STARROCKS_OUTPUT}/fe/webroot/
         cp -r -p ${STARROCKS_HOME}/fe/plugin/spark-dpp/target/spark-dpp-*-jar-with-dependencies.jar ${STARROCKS_OUTPUT}/fe/spark-dpp/
-        cp -r -p ${STARROCKS_HOME}/fe/plugin/hive-udf/target/hive-udf-1.0.0.jar ${STARROCKS_OUTPUT}/fe/hive-udf/
-        cp -r -p ${STARROCKS_THIRDPARTY}/installed/async-profiler ${STARROCKS_OUTPUT}/fe/bin/
+        cp -r -p ${STARROCKS_HOME}/fe/plugin/hive-udf/target/hive-udf-*.jar ${STARROCKS_OUTPUT}/fe/hive-udf/
         MSG="${MSG} √ ${MSG_FE}"
     elif [ ${BUILD_SPARK_DPP} -eq 1 ]; then
         install -d ${STARROCKS_OUTPUT}/fe/spark-dpp/
         rm -rf ${STARROCKS_OUTPUT}/fe/spark-dpp/*
         cp -r -p ${STARROCKS_HOME}/fe/plugin/spark-dpp/target/spark-dpp-*-jar-with-dependencies.jar ${STARROCKS_OUTPUT}/fe/spark-dpp/
-        cp -r -p ${STARROCKS_HOME}/fe/plugin/hive-udf/target/hive-udf-1.0.0.jar ${STARROCKS_HOME}/fe/hive-udf/
+        cp -r -p ${STARROCKS_HOME}/fe/plugin/hive-udf/target/hive-udf-*.jar ${STARROCKS_OUTPUT}/fe/hive-udf/
         MSG="${MSG} √ ${MSG_DPP}"
     fi
 fi
@@ -618,6 +642,12 @@ if [ ${BUILD_BE} -eq 1 ]; then
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/jemalloc/lib-shared/libjemalloc.so.2 ${STARROCKS_OUTPUT}/be/lib/libjemalloc.so.2
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/jemalloc-debug/lib/libjemalloc.so.2 ${STARROCKS_OUTPUT}/be/lib/libjemalloc-dbg.so.2
     ln -s ./libjemalloc.so.2 ${STARROCKS_OUTPUT}/be/lib/libjemalloc.so
+
+    # Copy pprof and FlameGraph tools
+    if [ -d "${STARROCKS_THIRDPARTY}/installed/flamegraph" ]; then
+        mkdir -p ${STARROCKS_OUTPUT}/be/bin/flamegraph/
+        cp -r -p ${STARROCKS_THIRDPARTY}/installed/flamegraph/* ${STARROCKS_OUTPUT}/be/bin/flamegraph/
+    fi
 
     # format $BUILD_TYPE to lower case
     ibuildtype=`echo ${BUILD_TYPE} | tr 'A-Z' 'a-z'`
@@ -680,7 +710,7 @@ endTime=$(date +%s)
 totalTime=$((endTime - startTime))
 
 echo "***************************************"
-echo "Successfully build StarRocks ${MSG} ; StartTime:$(date -d @$startTime '+%Y-%m-%d %H:%M:%S'), EndTime:$(date -d @$endTime '+%Y-%m-%d %H:%M:%S'), TotalTime:${totalTime}s"
+echo "Successfully build StarRocks ${MSG} ; StartTime:$(format_time "${startTime}"), EndTime:$(format_time "${endTime}"), TotalTime:${totalTime}s"
 echo "***************************************"
 
 if [[ ! -z ${STARROCKS_POST_BUILD_HOOK} ]]; then

@@ -15,22 +15,12 @@
 package com.starrocks.sql.formatter;
 
 import com.google.common.base.Joiner;
-import com.starrocks.analysis.CompoundPredicate;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.InPredicate;
-import com.starrocks.analysis.LimitElement;
-import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Field;
-import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.CTERelation;
-import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.JoinRelation;
-import com.starrocks.sql.ast.MapExpr;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
 import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.SelectList;
@@ -42,6 +32,18 @@ import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.TableSampleClause;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.ViewRelation;
+import com.starrocks.sql.ast.expression.ArrayExpr;
+import com.starrocks.sql.ast.expression.CaseExpr;
+import com.starrocks.sql.ast.expression.CompoundPredicate;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FieldReference;
+import com.starrocks.sql.ast.expression.InPredicate;
+import com.starrocks.sql.ast.expression.LargeInPredicate;
+import com.starrocks.sql.ast.expression.LimitElement;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.MapExpr;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.TableName;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 
@@ -147,7 +149,29 @@ public class AST2SQLVisitor extends AST2StringVisitor {
             sqlBuilder.append("DISTINCT ");
         }
 
-        sqlBuilder.append(Joiner.on(", ").join(visitSelectItemList(stmt)));
+        if (options.isEnablePrettyFormat()) {
+            // Pretty format: each column on a new line with proper indentation
+            // Increase indent BEFORE visiting items so nested expressions get correct indent
+            options.increaseIndent();
+            try {
+                List<String> selectItems = visitSelectItemList(stmt);
+                if (!selectItems.isEmpty()) {
+                    for (int i = 0; i < selectItems.size(); i++) {
+                        if (i > 0) {
+                            sqlBuilder.append(",");
+                        }
+                        sqlBuilder.append(options.indent());
+                        sqlBuilder.append(selectItems.get(i));
+                    }
+                }
+            } finally {
+                options.decreaseIndent();
+            }
+        } else {
+            // Default format: comma-separated on same line
+            List<String> selectItems = visitSelectItemList(stmt);
+            sqlBuilder.append(Joiner.on(", ").join(selectItems));
+        }
 
         String fromClause = visit(stmt.getRelation());
         if (fromClause != null) {
@@ -262,7 +286,70 @@ public class AST2SQLVisitor extends AST2StringVisitor {
                             relation.getColumnOutputNames().stream().map(c -> "`" + c + "`").collect(toList())))
                     .append(")");
         }
-        sqlBuilder.append(" AS (").append(visit(relation.getCteQueryStatement())).append(") ");
+        
+        sqlBuilder.append(" AS (");
+        
+        if (options.isEnablePrettyFormat()) {
+            // Pretty format: CTE definition with proper indentation
+            options.increaseIndent();
+            try {
+                sqlBuilder.append(options.indent());
+                sqlBuilder.append(visit(relation.getCteQueryStatement()));
+            } finally {
+                options.decreaseIndent();
+            }
+            sqlBuilder.append(options.indent()).append(")");
+        } else {
+            // Default format: inline
+            sqlBuilder.append(visit(relation.getCteQueryStatement()));
+            sqlBuilder.append(") ");
+        }
+        
+        return sqlBuilder.toString();
+    }
+
+    @Override
+    public String visitQueryStatement(com.starrocks.sql.ast.QueryStatement stmt, Void context) {
+        // Only override if pretty format is enabled
+        if (!options.isEnablePrettyFormat()) {
+            return super.visitQueryStatement(stmt, context);
+        }
+        
+        // Pretty format implementation
+        StringBuilder sqlBuilder = new StringBuilder();
+        com.starrocks.sql.ast.QueryRelation queryRelation = stmt.getQueryRelation();
+
+        // Format WITH clause with proper line breaks
+        if (queryRelation.hasWithClause()) {
+            sqlBuilder.append("WITH ");
+            java.util.List<CTERelation> cteRelations = queryRelation.getCteRelations();
+            
+            for (int i = 0; i < cteRelations.size(); i++) {
+                if (i > 0) {
+                    sqlBuilder.append(",");
+                    sqlBuilder.append(options.newLine());
+                }
+                sqlBuilder.append(visit(cteRelations.get(i)));
+            }
+            sqlBuilder.append(options.newLine());
+        }
+
+        // Main query
+        sqlBuilder.append(visit(queryRelation));
+
+        // ORDER BY clause
+        if (queryRelation.hasOrderByClause()) {
+            java.util.List<com.starrocks.sql.ast.OrderByElement> sortClause = queryRelation.getOrderBy();
+            String orderByStr = Joiner.on(", ").join(
+                    sortClause.stream().map(this::visit).collect(java.util.stream.Collectors.toList()));
+            sqlBuilder.append(" ORDER BY ").append(orderByStr).append(" ");
+        }
+
+        // LIMIT clause
+        if (queryRelation.getLimit() != null) {
+            sqlBuilder.append(visit(queryRelation.getLimit()));
+        }
+        
         return sqlBuilder.toString();
     }
 
@@ -451,6 +538,25 @@ public class AST2SQLVisitor extends AST2StringVisitor {
     }
 
     @Override
+    public String visitLargeInPredicate(LargeInPredicate node, Void context) {
+        if (!options.isEnableDigest()) {
+            return super.visitLargeInPredicate(node, context);
+        }
+
+        StringBuilder strBuilder = new StringBuilder();
+        String notStr = (node.isNotIn()) ? "NOT " : "";
+        strBuilder.append(printWithParentheses(node.getCompareExpr())).append(" ").append(notStr).append("IN ");
+        if (options.isEnableMassiveExpr()) {
+            strBuilder.append("(?)");
+        } else {
+            strBuilder.append("(");
+            strBuilder.append(StringUtils.repeat("?", ", ", node.getConstantCount()));
+            strBuilder.append(")");
+        }
+        return strBuilder.toString();
+    }
+
+    @Override
     public String visitCompoundPredicate(CompoundPredicate node, Void context) {
         if (!options.isEnableDigest()) {
             return super.visitCompoundPredicate(node, context);
@@ -461,7 +567,7 @@ public class AST2SQLVisitor extends AST2StringVisitor {
             List<SlotRef> exprs = node.collectAllSlotRefs(true);
             String sortedSlots = exprs.stream()
                     .filter(SlotRef::isColumnRef)
-                    .map(SlotRef::toSqlImpl)
+                    .map(SlotRef::toSql)
                     .sorted()
                     .collect(Collectors.joining(","));
             return "$massive_compounds[" + sortedSlots + "]$";
@@ -527,5 +633,44 @@ public class AST2SQLVisitor extends AST2StringVisitor {
         }
         sb.append(" ? ");
         return sb.toString();
+    }
+
+
+    @Override
+    public String visitCaseWhenExpr(CaseExpr node, Void context) {
+        // Only override if pretty format is enabled  
+        if (!options.isEnablePrettyFormat()) {
+            return super.visitCaseWhenExpr(node, context);
+        }
+        
+        // Pretty format implementation
+        boolean hasCaseExpr = node.hasCaseExpr();
+        boolean hasElseExpr = node.hasElseExpr();
+        StringBuilder output = new StringBuilder("CASE");
+        
+        int childIdx = 0;
+        if (hasCaseExpr) {
+            output.append(" ").append(printWithParentheses(node.getChild(childIdx++)));
+        }
+        
+        options.increaseIndent();
+        try {
+            while (childIdx + 2 <= node.getChildren().size()) {
+                output.append(options.indent()).append("WHEN ");
+                output.append(printWithParentheses(node.getChild(childIdx++)));
+                output.append(" THEN ");
+                output.append(printWithParentheses(node.getChild(childIdx++)));
+            }
+            
+            if (hasElseExpr) {
+                output.append(options.indent()).append("ELSE ");
+                output.append(printWithParentheses(node.getChild(node.getChildren().size() - 1)));
+            }
+        } finally {
+            options.decreaseIndent();
+        }
+        output.append(options.indent()).append("END");
+        
+        return output.toString();
     }
 }

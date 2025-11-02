@@ -344,4 +344,37 @@ public class TabletSchedCtxTest {
         Assertions.assertEquals(0L, res.getFailed_schedule_count());
         Assertions.assertEquals(0L, res.getFailed_running_count());
     }
+
+    @Test
+    public void testChooseSrcReplica() {
+        Replica replicaNormalIncomplete = new Replica(70001L, be1.getId(), 0, Replica.ReplicaState.NORMAL);
+        replicaNormalIncomplete.setPathHash(2001L);
+        replicaNormalIncomplete.updateVersionInfo(90L, 90L, 0L);
+
+        Replica replicaDecommissionHealthy = new Replica(70002L, be2.getId(), 0, Replica.ReplicaState.DECOMMISSION);
+        replicaDecommissionHealthy.setPathHash(2002L);
+        replicaDecommissionHealthy.updateVersionInfo(100L, 100L, 0L);
+
+        LocalTablet tablet = new LocalTablet(30001L, Lists.newArrayList(replicaNormalIncomplete, replicaDecommissionHealthy));
+
+        TabletSchedCtx ctx = new TabletSchedCtx(Type.REPAIR, DB_ID, TB_ID, PART_ID, INDEX_ID,
+                30001L, System.currentTimeMillis(),
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
+        ctx.setTablet(tablet);
+        ctx.setStorageMedium(TStorageMedium.HDD);
+        ctx.setVersionInfo(100L, 100L, 0L, 0L);
+
+        Map<Long, PathSlot> backendsWorkingSlots = Maps.newConcurrentMap();
+        backendsWorkingSlots.put(be1.getId(), new PathSlot(Lists.newArrayList(2001L), 1));
+        backendsWorkingSlots.put(be2.getId(), new PathSlot(Lists.newArrayList(2002L), 1));
+
+        try {
+            ctx.chooseSrcReplica(backendsWorkingSlots);
+        } catch (Exception e) {
+            Assertions.fail(e);
+        }
+
+        Assertions.assertEquals(be2.getId(), ctx.getSrcBackendId());
+        Assertions.assertEquals(2002L, ctx.getSrcPathHash());
+    }
 }

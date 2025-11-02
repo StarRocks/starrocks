@@ -1054,7 +1054,6 @@ public class SubqueryTest extends PlanTestBase {
                     "t0.v1 = (exists (select v7 from t2 where t2.v8 = t1.v5)) " +
                     "and t0.v2 = (not exists(select v11 from t3 where t3.v10 = t0.v1))";
             String plan = getFragmentPlan(sql);
-            System.out.println(plan);
             assertContains(plan, "HASH JOIN\n" +
                     "  |  join op: INNER JOIN (BROADCAST)\n" +
                     "  |  colocate: false, reason: \n" +

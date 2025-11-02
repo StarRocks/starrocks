@@ -44,7 +44,7 @@ namespace starrocks {
                                                       \
     virtual Expr* clone(ObjectPool* pool) const override { return pool->add(new CLASS_NAME(*this)); }
 
-static std::optional<LogicalType> eliminate_trivial_cast_for_decimal_mul(const Expr* e) {
+[[maybe_unused]] static std::optional<LogicalType> eliminate_trivial_cast_for_decimal_mul(const Expr* e) {
     DIAGNOSTIC_PUSH
 #if defined(__GNUC__) && !defined(__clang__)
     DIAGNOSTIC_IGNORE("-Wmaybe-uninitialized")

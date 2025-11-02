@@ -670,7 +670,7 @@ void JoinHashMapTest::prepare_probe_state(HashTableProbeState* probe_state, uint
 void JoinHashMapTest::check_int32_column(const Column& column, uint32_t row_count, uint32_t start_value) {
     ASSERT_EQ(column.size(), row_count);
     const auto& int_32_column = reinterpret_cast<const Int32Column&>(column);
-    const auto& data = int_32_column.get_data();
+    const auto data = int_32_column.immutable_data();
 
     for (uint32_t i = 0; i < row_count; i++) {
         ASSERT_EQ(data[i], start_value + i);
@@ -724,9 +724,9 @@ void JoinHashMapTest::check_null_column(const ColumnPtr& column, uint32_t row_co
 void JoinHashMapTest::check_int32_nullable_column(const Column& column, uint32_t row_count, uint32_t start_value) {
     const auto& nullable_column = reinterpret_cast<const NullableColumn&>(column);
     const auto& data_column = nullable_column.data_column();
-    const auto& data = reinterpret_cast<const Int32Column&>(*data_column).get_data();
+    const auto data = reinterpret_cast<const Int32Column&>(*data_column).immutable_data();
     const auto& null_column = nullable_column.null_column();
-    auto& null_data = null_column->get_data();
+    const auto null_data = null_column->immutable_data();
 
     uint32_t index = 0;
     for (uint32_t i = 0; i < row_count; i++) {
@@ -1050,7 +1050,9 @@ TEST_F(JoinHashMapTest, CompileFixedSizeKeyColumn) {
     auto c2 = JoinHashMapTest::create_int32_column(2, 2);
     Columns columns{c1, c2};
 
-    JoinHashMapHelper::serialize_fixed_size_key_column<LogicalType::TYPE_BIGINT>(columns, data_column.get(), 0, 2);
+    std::vector<uint32_t> serialized_fixed_size_key_bytes{4, 4};
+    JoinHashMapHelper::serialize_fixed_size_key_column<LogicalType::TYPE_BIGINT>(columns, data_column.get(),
+                                                                                 serialized_fixed_size_key_bytes, 0, 2);
 
     auto* c3 = ColumnHelper::as_raw_column<Int64Column>(data_column);
     ASSERT_EQ(c3->get_data()[0], 8589934592l);
@@ -1368,6 +1370,8 @@ TEST_F(JoinHashMapTest, FixedSizeJoinBuildProbeFunc) {
     probe_state.next.resize(config::vector_chunk_size, 0);
     Columns probe_columns{probe_column1, probe_column2};
     probe_state.key_columns = &probe_columns;
+    table_items.serialized_fixed_size_key_bytes.emplace_back(4);
+    table_items.serialized_fixed_size_key_bytes.emplace_back(4);
 
     using BuildKeyConstructor = BuildKeyConstructorForSerializedFixedSize<LogicalType::TYPE_BIGINT>;
     using ProbeKeyConstructor = ProbeKeyConstructorForSerializedFixedSize<LogicalType::TYPE_BIGINT>;
@@ -1428,6 +1432,8 @@ TEST_F(JoinHashMapTest, FixedSizeJoinBuildProbeFuncNullable) {
     probe_state.next.resize(config::vector_chunk_size, 0);
     Columns probe_columns{probe_column1, probe_column2};
     probe_state.key_columns = &probe_columns;
+    table_items.serialized_fixed_size_key_bytes.emplace_back(4);
+    table_items.serialized_fixed_size_key_bytes.emplace_back(4);
 
     using BuildKeyConstructor = BuildKeyConstructorForSerializedFixedSize<LogicalType::TYPE_BIGINT>;
     using ProbeKeyConstructor = ProbeKeyConstructorForSerializedFixedSize<LogicalType::TYPE_BIGINT>;
@@ -2244,6 +2250,8 @@ TEST_F(JoinHashMapTest, BuildKeyConstructorForSerializedFixedSizeForNotNullableC
     column_1->append(*create_column(TYPE_INT, 0, build_row_count));
     table_items.key_columns.emplace_back(std::move(column_1));
     table_items.join_keys.emplace_back(JoinKeyDesc{&_int_type, false, nullptr});
+    table_items.serialized_fixed_size_key_bytes.emplace_back(4);
+    table_items.serialized_fixed_size_key_bytes.emplace_back(4);
 
     // Add int column
     auto column_2 = create_column(TYPE_INT);
@@ -2284,6 +2292,8 @@ TEST_F(JoinHashMapTest, BuildKeyConstructorForSerializedFixedSizeForNullableColu
     column_1->append(*create_nullable_column(TYPE_INT, nulls_1, 0, build_row_count));
     table_items.key_columns.emplace_back(std::move(column_1));
     table_items.join_keys.emplace_back(JoinKeyDesc{&_int_type, false, nullptr});
+    table_items.serialized_fixed_size_key_bytes.emplace_back(4);
+    table_items.serialized_fixed_size_key_bytes.emplace_back(4);
 
     // Add int column
     auto nulls_2 = create_bools(build_row_count, 0);
@@ -2325,6 +2335,8 @@ TEST_F(JoinHashMapTest, BuildKeyConstructorForSerializedFixedSizeForPartialNulla
     column_1->append(*create_nullable_column(TYPE_INT, nulls_1, 0, build_row_count));
     table_items.key_columns.emplace_back(std::move(column_1));
     table_items.join_keys.emplace_back(JoinKeyDesc{&_int_type, false, nullptr});
+    table_items.serialized_fixed_size_key_bytes.emplace_back(4);
+    table_items.serialized_fixed_size_key_bytes.emplace_back(4);
 
     // Add int column
     auto nulls_2 = create_bools(build_row_count, 2);
@@ -2864,7 +2876,7 @@ TEST_F(JoinHashMapTest, NullAwareAntiJoinTest) {
 
     auto probe_col_nulls = create_bools(build_row_count, 3);
 
-    probe_state.null_array = &probe_col_nulls;
+    probe_state.null_array = probe_col_nulls;
     prepare_probe_state(&probe_state, probe_row_count);
     for (size_t i = 0; i < probe_row_count; i++) {
         probe_state.next[i] = 0;
@@ -3046,14 +3058,13 @@ TEST_F(JoinHashMapTest, TestBuildKeyConstructorForOneKeyNonNullable) {
     BuildKeyBuilder::prepare(nullptr, &table_items);
     BuildKeyBuilder::build_key(nullptr, &table_items);
 
-    const auto& keys = BuildKeyBuilder::get_key_data(table_items);
+    const auto keys = BuildKeyBuilder::get_key_data(table_items);
     ASSERT_EQ(keys.size(), 11);
     for (uint32_t i = 0; i < 10; ++i) {
         ASSERT_EQ(keys[1 + i], i);
     }
 
-    const auto* is_nulls = BuildKeyBuilder::get_is_nulls(table_items);
-    ASSERT_EQ(is_nulls, nullptr);
+    ASSERT_TRUE(!BuildKeyBuilder::get_is_nulls(table_items).has_value());
 }
 
 TEST_F(JoinHashMapTest, TestBuildKeyConstructorForOneKeyNullable) {
@@ -3075,14 +3086,13 @@ TEST_F(JoinHashMapTest, TestBuildKeyConstructorForOneKeyNullable) {
         table_items.row_count = 10;
         BuildKeyBuilder::build_key(nullptr, &table_items);
 
-        const auto& keys = BuildKeyBuilder::get_key_data(table_items);
+        const auto keys = BuildKeyBuilder::get_key_data(table_items);
         ASSERT_EQ(keys.size(), 11);
         for (uint32_t i = 0; i < 10; ++i) {
             ASSERT_EQ(keys[1 + i], i);
         }
 
-        const auto* is_nulls = BuildKeyBuilder::get_is_nulls(table_items);
-        ASSERT_EQ(is_nulls, nullptr);
+        ASSERT_TRUE(!BuildKeyBuilder::get_is_nulls(table_items).has_value());
     }
 
     {
@@ -3090,13 +3100,13 @@ TEST_F(JoinHashMapTest, TestBuildKeyConstructorForOneKeyNullable) {
         table_items.row_count = 13;
         BuildKeyBuilder::build_key(nullptr, &table_items);
 
-        const auto& keys = BuildKeyBuilder::get_key_data(table_items);
+        const auto keys = BuildKeyBuilder::get_key_data(table_items);
         ASSERT_EQ(keys.size(), 14);
         for (uint32_t i = 0; i < 10; ++i) {
             ASSERT_EQ(keys[1 + i], i);
         }
 
-        const auto* is_nulls = BuildKeyBuilder::get_is_nulls(table_items);
+        const auto is_nulls = BuildKeyBuilder::get_is_nulls(table_items);
         for (uint32_t i = 0; i < 13; ++i) {
             ASSERT_EQ((*is_nulls)[1 + i] != 0, i >= 10);
         }
@@ -3121,19 +3131,20 @@ TEST_F(JoinHashMapTest, TestBuildKeyConstructorForSerializedFixedSizeNonNullable
     build_column2->append_datum(Datum(0));
     build_column2->append(*JoinHashMapTest::create_int32_column(10, 100), 0, 10);
     table_items.key_columns.emplace_back(build_column2);
+    table_items.serialized_fixed_size_key_bytes.emplace_back(4);
+    table_items.serialized_fixed_size_key_bytes.emplace_back(4);
 
     BuildKeyBuilder::prepare(nullptr, &table_items);
     BuildKeyBuilder::build_key(nullptr, &table_items);
 
-    const auto& keys = BuildKeyBuilder::get_key_data(table_items);
+    const auto keys = BuildKeyBuilder::get_key_data(table_items);
     ASSERT_EQ(keys.size(), 11);
     for (uint64_t i = 0; i < 10; ++i) {
         const uint64_t expected_value = ((100 + i) << 32) | i;
         ASSERT_EQ(keys[1 + i], expected_value);
     }
 
-    const auto* is_nulls = BuildKeyBuilder::get_is_nulls(table_items);
-    ASSERT_EQ(is_nulls, nullptr);
+    ASSERT_TRUE(!BuildKeyBuilder::get_is_nulls(table_items));
 }
 
 TEST_F(JoinHashMapTest, TestBuildKeyConstructorForSerializedFixedSizeNullable) {
@@ -3153,21 +3164,22 @@ TEST_F(JoinHashMapTest, TestBuildKeyConstructorForSerializedFixedSizeNullable) {
     build_column2->append_datum(Datum(0));
     build_column2->append(*JoinHashMapTest::create_int32_column(10, 100), 0, 10);
     table_items.key_columns.emplace_back(build_column2);
+    table_items.serialized_fixed_size_key_bytes.emplace_back(4);
+    table_items.serialized_fixed_size_key_bytes.emplace_back(4);
 
     {
         table_items.row_count = 10;
         BuildKeyBuilder::prepare(nullptr, &table_items);
         BuildKeyBuilder::build_key(nullptr, &table_items);
 
-        const auto& keys = BuildKeyBuilder::get_key_data(table_items);
+        const auto keys = BuildKeyBuilder::get_key_data(table_items);
         ASSERT_EQ(keys.size(), 11);
         for (uint64_t i = 0; i < 10; ++i) {
             const uint64_t expected_value = ((100 + i) << 32) | i;
             ASSERT_EQ(keys[1 + i], expected_value);
         }
 
-        const auto* is_nulls = BuildKeyBuilder::get_is_nulls(table_items);
-        ASSERT_EQ(is_nulls, nullptr);
+        ASSERT_TRUE(!BuildKeyBuilder::get_is_nulls(table_items).has_value());
     }
 
     {
@@ -3178,14 +3190,14 @@ TEST_F(JoinHashMapTest, TestBuildKeyConstructorForSerializedFixedSizeNullable) {
         BuildKeyBuilder::prepare(nullptr, &table_items);
         BuildKeyBuilder::build_key(nullptr, &table_items);
 
-        const auto& keys = BuildKeyBuilder::get_key_data(table_items);
+        const auto keys = BuildKeyBuilder::get_key_data(table_items);
         ASSERT_EQ(keys.size(), 14);
         for (uint64_t i = 0; i < 10; ++i) {
             const uint64_t expected_value = ((100 + i) << 32) | i;
             ASSERT_EQ(keys[1 + i], expected_value);
         }
 
-        const auto* is_nulls = BuildKeyBuilder::get_is_nulls(table_items);
+        const auto is_nulls = BuildKeyBuilder::get_is_nulls(table_items);
         for (uint32_t i = 0; i < 13; ++i) {
             ASSERT_EQ((*is_nulls)[1 + i] != 0, i >= 10);
         }
@@ -3199,6 +3211,8 @@ TEST_F(JoinHashMapTest, TestProbeKeyConstructorForSerializedFixedSizeNullable) {
     JoinHashTableItems table_items;
     table_items.join_keys.emplace_back(JoinKeyDesc{&int_type, false, nullptr});
     table_items.join_keys.emplace_back(JoinKeyDesc{&int_type, false, nullptr});
+    table_items.serialized_fixed_size_key_bytes.emplace_back(4);
+    table_items.serialized_fixed_size_key_bytes.emplace_back(4);
 
     HashTableProbeState probe_state;
 
@@ -3216,14 +3230,13 @@ TEST_F(JoinHashMapTest, TestProbeKeyConstructorForSerializedFixedSizeNullable) {
         probe_state.probe_row_count = 10;
         ProbeKeyBuilder::build_key(table_items, &probe_state);
 
-        const auto& keys = ProbeKeyBuilder::get_key_data(probe_state);
+        const auto keys = ProbeKeyBuilder::get_key_data(probe_state);
         for (uint64_t i = 0; i < 10; ++i) {
             const uint64_t expected_value = ((100 + i) << 32) | i;
             ASSERT_EQ(keys[i], expected_value);
         }
 
-        const auto* is_nulls = probe_state.null_array;
-        ASSERT_EQ(is_nulls, nullptr);
+        ASSERT_TRUE(!probe_state.null_array.has_value());
     }
 
     {
@@ -3233,13 +3246,13 @@ TEST_F(JoinHashMapTest, TestProbeKeyConstructorForSerializedFixedSizeNullable) {
         probe_state.probe_row_count = 13;
         ProbeKeyBuilder::build_key(table_items, &probe_state);
 
-        const auto& keys = ProbeKeyBuilder::get_key_data(probe_state);
+        const auto keys = ProbeKeyBuilder::get_key_data(probe_state);
         for (uint64_t i = 0; i < 10; ++i) {
             const uint64_t expected_value = ((100 + i) << 32) | i;
             ASSERT_EQ(keys[i], expected_value);
         }
 
-        const auto* is_nulls = probe_state.null_array;
+        const auto is_nulls = probe_state.null_array;
         for (uint32_t i = 0; i < 13; ++i) {
             ASSERT_EQ((*is_nulls)[i] != 0, i >= 10);
         }
@@ -3269,7 +3282,7 @@ TEST_F(JoinHashMapTest, TestBuildKeyConstructorForSerializedNullable) {
         BuildKeyBuilder::prepare(_runtime_state.get(), &table_items);
         BuildKeyBuilder::build_key(_runtime_state.get(), &table_items);
 
-        const auto& keys = BuildKeyBuilder::get_key_data(table_items);
+        const auto keys = BuildKeyBuilder::get_key_data(table_items);
         ASSERT_EQ(keys.size(), 11);
         for (uint64_t i = 0; i < 10; ++i) {
             const uint64_t expected_value = ((100 + i) << 32) | i;
@@ -3277,8 +3290,7 @@ TEST_F(JoinHashMapTest, TestBuildKeyConstructorForSerializedNullable) {
             ASSERT_EQ(keys[1 + i], expected_slice);
         }
 
-        const auto* is_nulls = BuildKeyBuilder::get_is_nulls(table_items);
-        ASSERT_EQ(is_nulls, nullptr);
+        ASSERT_TRUE(!BuildKeyBuilder::get_is_nulls(table_items));
     }
 
     {
@@ -3297,7 +3309,7 @@ TEST_F(JoinHashMapTest, TestBuildKeyConstructorForSerializedNullable) {
             ASSERT_EQ(keys[1 + i], expected_slice);
         }
 
-        const auto* is_nulls = BuildKeyBuilder::get_is_nulls(table_items);
+        const auto is_nulls = BuildKeyBuilder::get_is_nulls(table_items);
         for (uint32_t i = 0; i < 13; ++i) {
             ASSERT_EQ((*is_nulls)[1 + i] != 0, i >= 10);
         }
@@ -3335,8 +3347,7 @@ TEST_F(JoinHashMapTest, TestProbeKeyConstructorForSerializedNullable) {
             ASSERT_EQ(keys[i], expected_slice);
         }
 
-        const auto* is_nulls = probe_state.null_array;
-        ASSERT_EQ(is_nulls, nullptr);
+        ASSERT_TRUE(!probe_state.null_array.has_value());
     }
 
     {
@@ -3353,9 +3364,9 @@ TEST_F(JoinHashMapTest, TestProbeKeyConstructorForSerializedNullable) {
             ASSERT_EQ(keys[i], expected_slice);
         }
 
-        const auto* is_nulls = probe_state.null_array;
+        const auto* is_nulls = probe_state.null_array->data();
         for (uint32_t i = 0; i < 13; ++i) {
-            ASSERT_EQ((*is_nulls)[i] != 0, i >= 10);
+            ASSERT_EQ(is_nulls[i] != 0, i >= 10);
         }
     }
 }

@@ -127,6 +127,9 @@ public class ClickhouseSchemaResolver extends JDBCSchemaResolver {
                 break;
             case Types.DECIMAL:
                 // Decimal(9,9), first 9 is precision, second 9 is scale
+                if (typeName.startsWith("Nullable")) {
+                    typeName = typeName.replace("Nullable", "");
+                }
                 String[] precisionAndScale =
                         typeName.replace("Decimal", "").replace("(", "")
                                 .replace(")", "").replace(" ", "")

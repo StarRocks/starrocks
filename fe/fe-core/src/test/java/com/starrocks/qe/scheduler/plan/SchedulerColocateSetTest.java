@@ -175,7 +175,6 @@ public class SchedulerColocateSetTest extends SchedulerTestBase {
                 "select L_ORDERKEY, sum(L_QUANTITY)\n" +
                 "from cte\n" +
                 "group by L_ORDERKEY;\n";
-        System.out.println(sql);
         runFileUnitTestHelper(sql, "scheduler/colocate_set/except_q2");
     }
 

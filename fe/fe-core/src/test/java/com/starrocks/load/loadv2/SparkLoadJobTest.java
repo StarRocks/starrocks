@@ -36,7 +36,6 @@ package com.starrocks.load.loadv2;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
@@ -65,6 +64,7 @@ import com.starrocks.load.EtlStatus;
 import com.starrocks.load.loadv2.etl.EtlJobConfig;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.LabelName;
 import com.starrocks.sql.ast.LoadStmt;
@@ -214,9 +214,9 @@ public class SparkLoadJobTest {
             Assertions.assertEquals(-1L, sparkLoadJob.getEtlStartTimestamp());
 
             // check update spark resource properties
-            Assertions.assertEquals(broker, bulkLoadJob.brokerDesc.getName());
-            Assertions.assertEquals("user0", bulkLoadJob.brokerDesc.getProperties().get("username"));
-            Assertions.assertEquals("password0", bulkLoadJob.brokerDesc.getProperties().get("password"));
+            Assertions.assertEquals(broker, bulkLoadJob.brokerPersistInfo.getName());
+            Assertions.assertEquals("user0", bulkLoadJob.brokerPersistInfo.getProperties().get("username"));
+            Assertions.assertEquals("password0", bulkLoadJob.brokerPersistInfo.getProperties().get("password"));
             SparkResource sparkResource = Deencapsulation.getField(sparkLoadJob, "sparkResource");
             Assertions.assertTrue(sparkResource.getSparkConfigs().containsKey("spark.executor.memory"));
             Assertions.assertEquals("1g", sparkResource.getSparkConfigs().get("spark.executor.memory"));
@@ -287,7 +287,8 @@ public class SparkLoadJobTest {
         Deencapsulation.setField(job, "etlOutputPath", etlOutputPath);
         Deencapsulation.setField(job, "sparkResource", resource);
         BrokerDesc brokerDesc = new BrokerDesc(broker, Maps.newHashMap());
-        job.brokerDesc = brokerDesc;
+        job.brokerPersistInfo =
+                new com.starrocks.persist.BrokerPropertiesPersistInfo(brokerDesc.getName(), brokerDesc.getProperties());
         return job;
     }
 

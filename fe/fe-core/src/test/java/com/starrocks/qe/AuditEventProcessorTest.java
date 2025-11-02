@@ -40,6 +40,7 @@ import com.starrocks.plugin.AuditEvent;
 import com.starrocks.plugin.AuditEvent.EventType;
 import com.starrocks.plugin.PluginInfo;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.utframe.StarRocksTestBase;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -47,7 +48,7 @@ import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 
-public class AuditEventProcessorTest {
+public class AuditEventProcessorTest extends StarRocksTestBase {
 
     @BeforeAll
     public static void beforeClass() throws Exception {
@@ -157,7 +158,7 @@ public class AuditEventProcessorTest {
                 }
             }
             long total = System.currentTimeMillis() - start;
-            System.out.println("total(ms): " + total + ", avg: " + total / 10000.0);
+            logSysInfo("total(ms): " + total + ", avg: " + total / 10000.0);
         }
     }
 
@@ -182,6 +183,6 @@ public class AuditEventProcessorTest {
             processor.handleAuditEvent(event);
         }
         long total = System.currentTimeMillis() - start;
-        System.out.println("total(ms): " + total + ", avg: " + total / 10000.0);
+        logSysInfo("total(ms): " + total + ", avg: " + total / 10000.0);
     }
 }

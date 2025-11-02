@@ -84,6 +84,9 @@ public:
 
     ~MemTable();
 
+    // prepare the memtable for writing which must be called before writing any data
+    Status prepare();
+
     int64_t tablet_id() const { return _tablet_id; }
 
     // the total memory used (contain tmp chunk and aggregator chunk)
@@ -121,7 +124,6 @@ private:
     Status _sort_column_inc(bool by_sort_key = false);
     void _append_to_sorted_chunk(Chunk* src, Chunk* dest, bool is_final);
 
-    void _init_aggregator_if_needed();
     void _aggregate(bool is_final);
 
     Status _split_upserts_deletes(ChunkPtr& src, ChunkPtr* upserts, MutableColumnPtr* deletes);

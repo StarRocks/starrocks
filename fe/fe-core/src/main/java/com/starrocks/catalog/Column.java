@@ -38,11 +38,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.alter.SchemaChangeHandler;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.NullLiteral;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.combinator.AggStateDesc;
 import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.DdlException;
@@ -56,6 +51,11 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.IndexDef;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.NullLiteral;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.thrift.TAggStateDesc;
 import com.starrocks.thrift.TAggregationType;
 import com.starrocks.thrift.TColumn;
@@ -146,6 +146,9 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     @SerializedName(value = "materializedColumnExpr")
     private ExpressionSerializedObject generatedColumnExprSerialized;
     private ColumnIdExpr generatedColumnExpr;
+    // Whether this column is a hidden column, hidden columns are used to store some internal data(eg: _ROW_ID).
+    @SerializedName(value = "isHidden")
+    private boolean isHidden = false;
 
     // Only for persist
     public Column() {
@@ -260,6 +263,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
                 this.type.getPrimitiveType() != PrimitiveType.INVALID_TYPE);
         this.uniqueId = column.getUniqueId();
         this.generatedColumnExpr = column.generatedColumnExpr;
+        this.isHidden = column.isHidden;
     }
 
     public Column deepCopy() {
@@ -423,6 +427,18 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         return generatedColumnExpr != null;
     }
 
+    public boolean isVisible() {
+        return !isHidden;
+    }
+
+    public boolean isHidden() {
+        return isHidden;
+    }
+
+    public void setIsHidden(boolean hidden) {
+        isHidden = hidden;
+    }
+
     public boolean isShadowColumn() {
         return this.name.startsWith(SchemaChangeHandler.SHADOW_NAME_PREFIX);
     }
@@ -440,7 +456,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         TColumn tColumn = new TColumn();
         tColumn.setColumn_name(this.columnId.getId());
         tColumn.setIndex_len(this.getOlapColumnIndexSize());
-        tColumn.setType_desc(this.type.toThrift());
+        tColumn.setType_desc(TypeSerializer.toThrift(this.type));
         if (null != this.aggregationType) {
             tColumn.setAggregation_type(toThrift(aggregationType));
         }
@@ -458,7 +474,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
 
         // scalar type or nested type
         // If this field is set, column_type will be ignored.
-        tColumn.setType_desc(type.toThrift());
+        tColumn.setType_desc(TypeSerializer.toThrift(type));
         tColumn.setCol_unique_id(uniqueId);
 
         return tColumn;
@@ -500,7 +516,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
             throw new DdlException("Dest column name is empty");
         }
 
-        if (!ColumnType.isSchemaChangeAllowed(type, other.type)) {
+        if (!SchemaChangeTypeCompatibility.isSchemaChangeAllowed(type, other.type)) {
             throw new DdlException("Can not change " + getType() + " to " + other.getType());
         }
 
@@ -860,6 +876,9 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
                 !this.generatedColumnExpr.equals(other.generatedColumnExpr)) {
             return false;
         }
+        if (this.isHidden != other.isHidden()) {
+            return false;
+        }
 
         return comment == null ? other.comment == null : comment.equals(other.getComment());
     }
@@ -961,26 +980,4 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         return this.aggStateDesc;
     }
 
-    public static Column fromColumnDef(Table table, ColumnDef columnDef) {
-        Column col = new Column(columnDef.getName(),
-                columnDef.getTypeDef().getType(),
-                columnDef.isKey(),
-                columnDef.getAggregateType(),
-                columnDef.getAggStateDesc(),
-                columnDef.isAllowNull(),
-                columnDef.getDefaultValueDef(),
-                columnDef.getComment(),
-                Column.COLUMN_UNIQUE_ID_INIT_VALUE);
-        col.setIsAutoIncrement(columnDef.isAutoIncrement());
-
-        Expr generatedColumnExpr = columnDef.getGeneratedColumnExpr();
-        if (generatedColumnExpr != null) {
-            if (table != null) {
-                col.setGeneratedColumnExpr(ColumnIdExpr.create(table.getNameToColumn(), generatedColumnExpr));
-            } else {
-                col.setGeneratedColumnExpr(ColumnIdExpr.create(generatedColumnExpr));
-            }
-        }
-        return col;
-    }
 }

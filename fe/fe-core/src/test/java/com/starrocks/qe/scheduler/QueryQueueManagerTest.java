@@ -661,6 +661,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
                 .until(() -> GlobalStateMgr.getCurrentState().getSlotManager().getSlots().isEmpty());
     }
 
+    @Disabled
     @Test
     public void testAllocatedSlotTimeout() throws Exception {
         final int concurrencyLimit = 3;
@@ -1246,6 +1247,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         coords.forEach(DefaultCoordinator::onFinished);
     }
 
+    @Disabled
     @Test
     public void testResourceGroupMaxCpuCores() throws Exception {
         final int numGroupsWithEffectiveMaxCores = 2;

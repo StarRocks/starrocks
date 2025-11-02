@@ -15,8 +15,8 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.Type;
+import com.starrocks.sql.ast.expression.TypeDef;
 
 import java.util.List;
 

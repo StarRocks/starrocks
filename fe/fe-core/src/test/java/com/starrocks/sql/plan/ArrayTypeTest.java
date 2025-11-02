@@ -15,8 +15,8 @@
 package com.starrocks.sql.plan;
 
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.expression.AnalyticExpr;
 import com.starrocks.utframe.StarRocksAssert;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -46,6 +46,21 @@ public class ArrayTypeTest extends PlanTestBase {
                 "d_4 Array<DECIMAL32(8, 5)> NULL ,\n" +
                 "d_5 Array<DECIMAL(16, 3)> NULL ,\n" +
                 "d_6 Array<DECIMAL128(18, 6)> NOT NULL \n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`v1`)\n" +
+                "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\"\n" +
+                ");");
+
+        starRocksAssert.withTable("CREATE TABLE adec256 ( \n" +
+                "v1 bigint not null ,\n" +
+                "i_1 Array<INT> NOT NULL ,\n" +
+                "s_1 Array<String> NULL ,\n" +
+                "d_1 Array<DECIMAL(50, 15)> NOT NULL ,\n" +
+                "d_2 Array<DECIMAL(76, 20)> NULL ,\n" +
+                "d_3 Array<DECIMAL(76, 0)> NOT NULL \n" +
                 ") ENGINE=OLAP\n" +
                 "DUPLICATE KEY(`v1`)\n" +
                 "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
@@ -99,7 +114,7 @@ public class ArrayTypeTest extends PlanTestBase {
         sql = "select concat(v1, [1,2,3], s_1) from adec";
         plan = getFragmentPlan(sql);
         assertContains(plan, "array_concat(CAST([1: v1] AS ARRAY<VARCHAR>), " +
-                "CAST([1,2,3] AS ARRAY<VARCHAR>), 3: s_1)");
+                "['1','2','3'], 3: s_1)");
 
         sql = "select concat(1,2, [1,2])";
         plan = getFragmentPlan(sql);
@@ -107,13 +122,11 @@ public class ArrayTypeTest extends PlanTestBase {
 
         sql = "select concat(1,2, [1,2], 'a', 'b')";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "array_concat(CAST([1] AS ARRAY<VARCHAR>), CAST([2] AS ARRAY<VARCHAR>), " +
-                "CAST([1,2] AS ARRAY<VARCHAR>), ['a'], ['b'])");
+        assertContains(plan, "array_concat(['1'], ['2'], ['1','2'], ['a'], ['b'])");
 
         sql = "select concat(1,2, [1,2], 'a', 'b', 1.1)";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "array_concat(CAST([1] AS ARRAY<VARCHAR>), CAST([2] AS ARRAY<VARCHAR>), " +
-                "CAST([1,2] AS ARRAY<VARCHAR>), ['a'], ['b'], CAST([1.1] AS ARRAY<VARCHAR>)");
+        assertContains(plan, " array_concat(['1'], ['2'], ['1','2'], ['a'], ['b'], ['1.1'])");
 
         sql = "with t0 as (\n" +
                 "    select c1 from (values([])) as t(c1)\n" +
@@ -301,13 +314,10 @@ public class ArrayTypeTest extends PlanTestBase {
     }
 
     @Test
-    public void testArrayWindowFunction() {
+    public void testArrayWindowFunction() throws Exception {
         for (String fnName : Sets.newHashSet(AnalyticExpr.LASTVALUE, AnalyticExpr.FIRSTVALUE)) {
             String sql = String.format("select %s(v3) over() from tarray", fnName.toLowerCase());
-            Throwable exception = assertThrows(SemanticException.class, () ->
-                    getFragmentPlan(sql));
-            assertThat(exception.getMessage(), containsString(
-                    String.format("No matching function with signature: %s(array<bigint(20)>)", fnName.toLowerCase())));
+            getFragmentPlan(sql);
         }
     }
 
@@ -345,7 +355,7 @@ public class ArrayTypeTest extends PlanTestBase {
             String sql = "select array_append([[1,2,3]], [null])";
             String plan = getFragmentPlan(sql);
             assertContains(plan,
-                    "<slot 2> : array_append([[1,2,3]], CAST([NULL] AS ARRAY<TINYINT>))");
+                    "<slot 2> : array_append([[1,2,3]], [NULL])");
         }
         {
             starRocksAssert.withTable("create table test_literal_array_insert_t0(" +
@@ -715,11 +725,10 @@ public class ArrayTypeTest extends PlanTestBase {
 
         sql = "select array_contains([null], null), array_position([null], null)";
         plan = getVerboseExplain(sql);
-        assertContains(plan, "  |  output columns:\n" +
-                "  |  2 <-> array_contains[([NULL], NULL); " +
-                "args: INVALID_TYPE,BOOLEAN; result: BOOLEAN; args nullable: true; result nullable: true]\n" +
-                "  |  3 <-> array_position[([NULL], NULL); " +
-                "args: INVALID_TYPE,BOOLEAN; result: INT; args nullable: true; result nullable: true]");
+        assertContains(plan, "  1:Project\n" +
+                "  |  output columns:\n" +
+                "  |  2 <-> TRUE\n" +
+                "  |  3 <-> 1");
     }
 
     @Test
@@ -768,5 +777,82 @@ public class ArrayTypeTest extends PlanTestBase {
                         " array_length(d_1) AS col_double_length FROM adec;";
         plan = getCostExplain(sql);
         assertNotContains(plan, "ColumnAccessPath: [/d_1/OFFSET]");
+    }
+
+    @Test
+    public void testDecimal256ArrayFunctionsRestriction() {
+        Throwable exception = assertThrows(SemanticException.class, () ->
+                getFragmentPlan("select array_sum(d_1) from adec256"));
+        assertThat(exception.getMessage(), containsString("Array function 'array_sum' is not supported for DECIMAL256 type"));
+
+        exception = assertThrows(SemanticException.class, () ->
+                getFragmentPlan("select array_avg(d_2) from adec256"));
+        assertThat(exception.getMessage(), containsString("Array function 'array_avg' is not supported for DECIMAL256 type"));
+
+        exception = assertThrows(SemanticException.class, () ->
+                getFragmentPlan("select array_max(d_3) from adec256"));
+        assertThat(exception.getMessage(), containsString("Array function 'array_max' is not supported for DECIMAL256 type"));
+
+        exception = assertThrows(SemanticException.class, () ->
+                getFragmentPlan("select array_min(d_1) from adec256"));
+        assertThat(exception.getMessage(), containsString("Array function 'array_min' is not supported for DECIMAL256 type"));
+
+        exception = assertThrows(SemanticException.class, () ->
+                getFragmentPlan("select array_distinct(d_2) from adec256"));
+        assertThat(exception.getMessage(), containsString("Array function 'array_distinct' is not supported " +
+                "for DECIMAL256 type"));
+
+        exception = assertThrows(SemanticException.class, () ->
+                getFragmentPlan("select array_sort(d_3) from adec256"));
+        assertThat(exception.getMessage(), containsString("Array function 'array_sort' is not supported for DECIMAL256 type"));
+
+        exception = assertThrows(SemanticException.class, () ->
+                getFragmentPlan("select array_concat(d_1, d_2) from adec256"));
+        assertThat(exception.getMessage(), containsString("Array function 'array_concat' is not supported for DECIMAL256 type"));
+
+        exception = assertThrows(SemanticException.class, () ->
+                getFragmentPlan("select array_slice(d_1, 1, 2) from adec256"));
+        assertThat(exception.getMessage(), containsString("Array function 'array_slice' is not supported for DECIMAL256 type"));
+
+        exception = assertThrows(SemanticException.class, () ->
+                getFragmentPlan("select array_contains(d_2, cast(1.0 as decimal(76,20))) from adec256"));
+        assertThat(exception.getMessage(), containsString("Array function 'array_contains' is not supported " +
+                "for DECIMAL256 type"));
+
+        exception = assertThrows(SemanticException.class, () ->
+                getFragmentPlan("select array_position(d_3, cast(0 as decimal(76,0))) from adec256"));
+        assertThat(exception.getMessage(), containsString("Array function 'array_position' is not supported for " +
+                "DECIMAL256 type"));
+
+        exception = assertThrows(SemanticException.class, () ->
+                getFragmentPlan("select array_intersect(d_1, d_2) from adec256"));
+        assertThat(exception.getMessage(), containsString("Array function 'array_intersect' is not supported for " +
+                "DECIMAL256 type"));
+
+        exception = assertThrows(SemanticException.class, () ->
+                getFragmentPlan("select array_difference(d_1) from adec256"));
+        assertThat(exception.getMessage(), containsString("Array function 'array_difference' is not supported for" +
+                " DECIMAL256 type"));
+
+        exception = assertThrows(SemanticException.class, () ->
+                getFragmentPlan("select array_agg(d_2) from adec256"));
+        assertThat(exception.getMessage(), containsString("Array function 'array_agg' is not supported " +
+                "for DECIMAL256 type"));
+
+        exception = assertThrows(SemanticException.class, () ->
+                getFragmentPlan("select reverse(d_3) from adec256"));
+        assertThat(exception.getMessage(), containsString("Array function 'reverse' is not supported for" +
+                " DECIMAL256 type"));
+    }
+
+    @Test
+    public void testArrayNull() throws Exception {
+        String sql = "with test_cte as (\n"
+                + "    select array<varchar>[] as some_array\n"
+                + ")\n"
+                + "select array_agg(some_array)\n"
+                + "from test_cte;";
+        String plan = getThriftPlan(sql);
+        assertContains(plan, "function_name:array_agg");
     }
 }

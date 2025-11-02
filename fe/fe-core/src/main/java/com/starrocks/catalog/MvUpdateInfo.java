@@ -17,7 +17,7 @@ package com.starrocks.catalog;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.common.Config;
-import com.starrocks.sql.common.PCell;
+import com.starrocks.sql.common.PCellSortedSet;
 import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.Map;
@@ -44,7 +44,7 @@ public class MvUpdateInfo {
     private final TableProperty.QueryRewriteConsistencyMode queryRewriteConsistencyMode;
 
     // If the base table is a mv, needs to record the mapping of mv partition name to partition range
-    private final Map<String, PCell> mvPartitionNameToCellMap = Maps.newHashMap();
+    private final PCellSortedSet mvPartitionNameToCellMap = PCellSortedSet.of();
 
     /**
      * Marks the type of mv refresh later.
@@ -122,11 +122,11 @@ public class MvUpdateInfo {
         return queryRewriteConsistencyMode;
     }
 
-    public void addMVPartitionNameToCellMap(Map<String, PCell> m) {
-        mvPartitionNameToCellMap.putAll(m);
+    public void addMVPartitionNameToCellMap(PCellSortedSet m) {
+        mvPartitionNameToCellMap.addAll(m);
     }
 
-    public Map<String, PCell> getMvPartitionNameToCellMap() {
+    public PCellSortedSet getMvPartitionNameToCellMap() {
         return mvPartitionNameToCellMap;
     }
 

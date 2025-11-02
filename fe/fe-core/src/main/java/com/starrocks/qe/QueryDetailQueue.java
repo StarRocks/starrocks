@@ -82,6 +82,16 @@ public class QueryDetailQueue {
         return results;
     }
 
+    public static List<QueryDetail> getQueryDetailsAfterTime(long eventTime, String user) {
+        List<QueryDetail> results = Lists.newArrayList();
+        for (QueryDetail queryDetail : TOTAL_QUERIES) {
+            if (queryDetail.getEventTime() > eventTime && queryDetail.getUser().equalsIgnoreCase(user)) {
+                results.add(queryDetail);
+            }
+        }
+        return results;
+    }
+
     public static long getTotalQueriesCount() {
         return TOTAL_QUERIES.size();
     }

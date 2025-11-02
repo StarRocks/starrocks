@@ -17,12 +17,12 @@ package com.starrocks.sql.ast;
 
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.RoutineLoadDataSourceProperties;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.load.RoutineLoadDesc;
+import com.starrocks.sql.ast.expression.RoutineLoadDataSourceProperties;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;

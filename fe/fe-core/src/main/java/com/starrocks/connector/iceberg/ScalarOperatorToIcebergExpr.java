@@ -18,11 +18,12 @@ package com.starrocks.connector.iceberg;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.BoolLiteral;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.sql.ast.expression.BoolLiteral;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -30,6 +31,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LargeInPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
@@ -146,6 +148,9 @@ public class ScalarOperatorToIcebergExpr {
                     type = type.asStructType().fieldType(path);
                 }
             }
+            if (qualifiedName.equals(IcebergTable.ROW_ID)) {
+                type = new Types.LongType();
+            }
             return type;
         }
 
@@ -217,6 +222,11 @@ public class ScalarOperatorToIcebergExpr {
                 default:
                     return null;
             }
+        }
+
+        @Override
+        public Expression visitLargeInPredicate(LargeInPredicateOperator operator, IcebergContext context) {
+            throw new UnsupportedOperationException("not support large in predicate in the ScalarOperatorToIcebergExpr");
         }
 
         @Override

@@ -95,7 +95,16 @@ public class SetExecutor {
         }
         try {
             for (SetListItem var : stmt.getSetListItems()) {
-                setVariablesOfAllType(var);
+                if (var instanceof SystemVariable) {
+                    SystemVariable systemVariable = (SystemVariable) var;
+                    if (SessionVariable.WAREHOUSE_NAME.equalsIgnoreCase(systemVariable.getVariable())) {
+                        handleSetWarehouse(systemVariable);
+                    } else {
+                        setVariablesOfAllType(var);
+                    }
+                } else {
+                    setVariablesOfAllType(var);
+                }
             }
         } catch (Throwable e) {
             if (hasUserVar) {
@@ -111,6 +120,18 @@ public class SetExecutor {
                     ctx.modifyUserVariables(clonedUserVars);
                 }
             }
+        }
+    }
+
+    private void handleSetWarehouse(SystemVariable var) throws DdlException {
+        String originalWarehouseName = ctx.getCurrentWarehouseName();
+        setVariablesOfAllType(var);
+        String newWarehouseName = ctx.getCurrentWarehouseName();
+        // after set warehouse, need to reset compute resource
+        if (newWarehouseName != null && newWarehouseName.equalsIgnoreCase(originalWarehouseName)) {
+            ctx.ensureCurrentComputeResourceAvailable();
+        } else {
+            ctx.resetComputeResource();
         }
     }
 }

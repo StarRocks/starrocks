@@ -68,4 +68,10 @@ public class HealthAction extends RestBaseAction {
             sendResult(request, response, result);
         }
     }
+
+    @Override
+    public boolean supportAsyncHandler() {
+        // Health Action need to be handled synchronously
+        return false;
+    }
 }

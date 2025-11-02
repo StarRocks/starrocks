@@ -72,7 +72,6 @@ static std::vector<std::pair<MemTrackerType, std::string>> s_mem_types = {
         {MemTrackerType::UPDATE, "update"},
         {MemTrackerType::CLONE, "clone"},
         {MemTrackerType::DATACACHE, "datacache"},
-        {MemTrackerType::POCO_CONNECTION_POOL, "poco_connection_pool"},
         {MemTrackerType::REPLICATION, "replication"},
         {MemTrackerType::ROWSET_UPDATE_STATE, "rowset_update_state"},
         {MemTrackerType::INDEX_CACHE, "index_cache"},
@@ -199,6 +198,9 @@ MemTracker::~MemTracker() {
     if (parent()) {
         unregister_from_parent();
     }
+    // When the mem_tracker is destroyed, manually setting _consumption to null can easily
+    // trigger a use-after-free bug in MemTracker.
+    _consumption = nullptr;
 }
 
 Status MemTracker::check_mem_limit(const std::string& msg) const {

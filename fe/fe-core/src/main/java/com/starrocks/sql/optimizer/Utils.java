@@ -18,7 +18,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
@@ -27,10 +26,12 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.expression.JoinOperator;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.LogicalProperty;
 import com.starrocks.sql.optimizer.operator.Operator;
@@ -838,16 +839,23 @@ public class Utils {
     }
 
     public static boolean hasNonDeterministicFunc(ScalarOperator operator) {
-        for (ScalarOperator child : operator.getChildren()) {
-            if (child instanceof CallOperator) {
-                CallOperator call = (CallOperator) child;
-                String fnName = call.getFnName();
-                if (FunctionSet.nonDeterministicFunctions.contains(fnName)) {
-                    return true;
-                }
-            }
+        if (hasNonDeterministicFuncImpl(operator)) {
+            return true;
+        }
 
+        for (ScalarOperator child : operator.getChildren()) {
             if (hasNonDeterministicFunc(child)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean hasNonDeterministicFuncImpl(ScalarOperator operator) {
+        if (operator instanceof CallOperator) {
+            CallOperator call = (CallOperator) operator;
+            String fnName = call.getFnName();
+            if (FunctionSet.nonDeterministicFunctions.contains(fnName)) {
                 return true;
             }
         }
@@ -888,20 +896,43 @@ public class Utils {
         if (newProjectionMap == null || newProjectionMap.isEmpty()) {
             return input;
         }
-        Operator newOp = input.getOp();
-        if (newOp.getProjection() == null || newOp.getProjection().getColumnRefMap().isEmpty()) {
-            newOp.setProjection(new Projection(newProjectionMap));
-        } else {
-            // merge two projections
-            ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(newOp.getProjection().getColumnRefMap());
-            Map<ColumnRefOperator, ScalarOperator> resultMap = Maps.newHashMap();
-            for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : newProjectionMap.entrySet()) {
-                ScalarOperator result = rewriter.rewrite(entry.getValue());
-                resultMap.put(entry.getKey(), result);
-            }
-            newOp.setProjection(new Projection(resultMap));
-        }
+        Operator inputOp = input.getOp();
+        // merge two projections
+        Projection newProjection = new Projection(mergeWithProject(newProjectionMap, inputOp.getProjection()));
+        inputOp.setProjection(newProjection);
         return input;
+    }
+
+    /**
+     * Merge projection1 -> projection2, use projection1's output as the final output.
+     */
+    public static Projection mergeWithProject(Projection projection1,
+                                              Projection projection2) {
+
+        if (projection1 == null || projection1.getColumnRefMap() == null) {
+            return projection1;
+        }
+        return new Projection(mergeWithProject(projection1.getColumnRefMap(), projection2));
+    }
+
+    /**
+     * Merge input mapping with projection's mapping, return a new mapping based on the existed projection.
+     */
+    public static Map<ColumnRefOperator, ScalarOperator> mergeWithProject(Map<ColumnRefOperator, ScalarOperator> input,
+                                                                          Projection projection) {
+        if (input == null || input.isEmpty()) {
+            return input;
+        }
+        if (projection == null || projection.getColumnRefMap() == null) {
+            return input;
+        }
+        ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(projection.getColumnRefMap());
+        Map<ColumnRefOperator, ScalarOperator> resultMap = Maps.newHashMap();
+        for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : input.entrySet()) {
+            ScalarOperator result = rewriter.rewrite(entry.getValue());
+            resultMap.put(entry.getKey(), result);
+        }
+        return resultMap;
     }
 
     /**
@@ -1050,5 +1081,19 @@ public class Utils {
         }
 
         return new Pair<>(columnConstMap, otherPredicates);
+    }
+
+    /**
+     * If there's only one BE node, splitting into multi-phase has no benefit but only overhead
+     */
+    public static boolean isSingleNodeExecution(ConnectContext context) {
+        return context.getAliveExecutionNodesNumber() == 1;
+    }
+
+    /**
+     * Check whether the FE is running in unit test mode
+     */
+    public static boolean isRunningInUnitTest() {
+        return FeConstants.runningUnitTest;
     }
 }

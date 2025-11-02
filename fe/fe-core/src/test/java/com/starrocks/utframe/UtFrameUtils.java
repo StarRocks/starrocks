@@ -42,10 +42,6 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.gson.stream.JsonReader;
 import com.staros.starlet.StarletAgentFactory;
-import com.starrocks.analysis.SetVarHint;
-import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.UserVariableHint;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.catalog.Database;
@@ -116,6 +112,10 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UserVariable;
+import com.starrocks.sql.ast.expression.SetVarHint;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.ast.expression.TableName;
+import com.starrocks.sql.ast.expression.UserVariableHint;
 import com.starrocks.sql.optimizer.LogicalPlanPrinter;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
@@ -310,6 +310,14 @@ public class UtFrameUtils {
         if (CREATED_MIN_CLUSTER.get()) {
             return;
         }
+
+        // set some parameters to speedup test
+        FeConstants.runningUnitTest = true;
+        Config.tablet_sched_checker_interval_seconds = 1;
+        Config.tablet_sched_repair_delay_factor_second = 1;
+        Config.enable_new_publish_mechanism = true;
+        Config.alter_scheduler_interval_millisecond = 100;
+
         try {
             ThriftConnectionPool.beHeartbeatPool = new MockGenericPool.HeatBeatPool("heartbeat");
             ThriftConnectionPool.backendPool = new MockGenericPool.BackendThriftPool("backend");
@@ -586,11 +594,13 @@ public class UtFrameUtils {
             } catch (Exception e) {
                 throw e;
             } finally {
-                String pr = Tracers.printLogs();
-                if (!Strings.isNullOrEmpty(pr)) {
-                    System.out.println(pr);
+                // only output trace log in specific case
+                if (StarRocksTestBase.isOutputTraceLog) {
+                    String pr = Tracers.printLogs();
+                    if (!Strings.isNullOrEmpty(pr)) {
+                        StarRocksTestBase.logSysInfo(pr);
+                    }
                 }
-                Tracers.close();
             }
         }
     }
@@ -967,6 +977,8 @@ public class UtFrameUtils {
         String replaySql = initMockEnv(connectContext, replayDumpInfo);
         replaySql = LogUtil.removeLineSeparator(replaySql);
         Map<String, Database> dbs = null;
+
+        StarRocksTestBase.registerTrace(connectContext);
         try {
             StatementBase statementBase;
             try (Timer st = Tracers.watchScope("Parse")) {
@@ -989,12 +1001,13 @@ public class UtFrameUtils {
             } else if (statementBase instanceof InsertStmt) {
                 return getInsertExecPlan((InsertStmt) statementBase, connectContext);
             } else {
-                Preconditions.checkState(false, "Do not support the statement");
+                Preconditions.checkState(false, "Do not support the statement:" + statementBase);
                 return null;
             }
         } finally {
             unLock(dbs);
             tearMockEnv();
+            StarRocksTestBase.unRegisterTrace(connectContext);
         }
     }
 
@@ -1208,6 +1221,8 @@ public class UtFrameUtils {
                 }
                 fakeJournalWriter = null;
             }
+            masterJournalQueue.clear();
+            followerJournalQueue.clear();
         }
     }
 
@@ -1321,15 +1336,15 @@ public class UtFrameUtils {
         // Enable mv rewrite in mv refresh by default
         Config.enable_mv_refresh_query_rewrite = true;
 
+        Config.enable_materialized_view_external_table_precise_refresh = false;
+
         FeConstants.enablePruneEmptyOutputScan = false;
         FeConstants.runningUnitTest = true;
         Config.mv_refresh_default_planner_optimize_timeout = 300 * 1000; // 5min
 
         if (connectContext != null) {
-            // 300s: 5min
-            connectContext.getSessionVariable().setOptimizerExecuteTimeout(300 * 1000);
-            // 300s: 5min
-            connectContext.getSessionVariable().setOptimizerMaterializedViewTimeLimitMillis(300 * 1000);
+            connectContext.getSessionVariable().setOptimizerExecuteTimeout(120 * 1000);
+            connectContext.getSessionVariable().setOptimizerMaterializedViewTimeLimitMillis(120 * 1000);
 
             connectContext.getSessionVariable().setEnableShortCircuit(false);
             connectContext.getSessionVariable().setEnableQueryCache(false);
@@ -1341,6 +1356,7 @@ public class UtFrameUtils {
             connectContext.getSessionVariable().setEnableMaterializedViewTextMatchRewrite(false);
             // disable mv analyze stats in FE UTs
             connectContext.getSessionVariable().setAnalyzeForMv("");
+            connectContext.getSessionVariable().setTraceLogLevel(10);
         }
 
         new MockUp<PlanTestBase>() {

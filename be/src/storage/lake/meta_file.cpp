@@ -423,6 +423,16 @@ Status MetaFileBuilder::update_num_del_stat(const std::map<uint32_t, size_t>& se
             segment_id_to_rowset[mutable_rowset->id() + j] = mutable_rowset;
         }
     }
+    // If there are pending rowsets that have not been finalized (batch_apply scenario),
+    // we need to supplement their segment mapping here.
+    // Their rowset id will be set to the current next_rowset_id when set_final_rowset() is called,
+    // so we use next_rowset_id to predict it here.
+    if (_pending_rowset_data.rowset_pb.segments_size() > 0) {
+        uint32_t pending_rowset_id = _tablet_meta->next_rowset_id();
+        for (int j = 0; j < _pending_rowset_data.rowset_pb.segments_size(); j++) {
+            segment_id_to_rowset[pending_rowset_id + j] = &_pending_rowset_data.rowset_pb;
+        }
+    }
     // For test purpose, we can set recover flag to test recover mode.
     Status test_status = Status::OK();
     TEST_SYNC_POINT_CALLBACK("update_num_del_stat", &test_status);
@@ -498,6 +508,12 @@ Status MetaFileBuilder::_finalize_delvec(int64_t version, int64_t txn_id) {
     std::set<int64_t> refered_versions;
     for (const auto& item : _tablet_meta->delvec_meta().delvecs()) {
         refered_versions.insert(item.second.version());
+    }
+    // collect version from sstable delvecs
+    for (const auto& sst : _tablet_meta->sstable_meta().sstables()) {
+        if (sst.has_delvec() && sst.delvec().size() > 0) {
+            refered_versions.insert(sst.delvec().version());
+        }
     }
 
     auto itr = _tablet_meta->mutable_delvec_meta()->mutable_version_to_file()->begin();
@@ -589,51 +605,56 @@ void MetaFileBuilder::finalize_sstable_meta(const PersistentIndexSstableMetaPB& 
     _tablet_meta->mutable_sstable_meta()->CopyFrom(sstable_meta);
 }
 
+// get delvec by DelvecPagePB
+Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, const DelvecPagePB& delvec_page,
+                   bool fill_cache, const LakeIOOptions& lake_io_opts, DelVector* delvec) {
+    VLOG(2) << fmt::format("get_del_vec {} tabletid {}", delvec_page.ShortDebugString(), metadata.id());
+    std::string buf;
+    raw::stl_string_resize_uninitialized(&buf, delvec_page.size());
+    // find in cache
+    std::string cache_key = delvec_cache_key(metadata.id(), delvec_page);
+    auto cached_delvec = tablet_mgr->metacache()->lookup_delvec(cache_key);
+    if (cached_delvec != nullptr) {
+        delvec->copy_from(*cached_delvec);
+        return Status::OK();
+    }
+
+    // lookup delvec file name and then read it
+    auto iter = metadata.delvec_meta().version_to_file().find(delvec_page.version());
+    if (iter == metadata.delvec_meta().version_to_file().end()) {
+        LOG(ERROR) << "Can't find delvec file name for tablet: " << metadata.id()
+                   << ", version: " << delvec_page.version();
+        return Status::InternalError("Can't find delvec file name");
+    }
+    const auto& delvec_name = iter->second.name();
+    RandomAccessFileOptions opts{.skip_fill_local_cache = !lake_io_opts.fill_data_cache};
+    std::unique_ptr<RandomAccessFile> rf;
+    if (lake_io_opts.fs && lake_io_opts.location_provider) {
+        ASSIGN_OR_RETURN(rf,
+                         lake_io_opts.fs->new_random_access_file(
+                                 opts, lake_io_opts.location_provider->delvec_location(metadata.id(), delvec_name)));
+    } else {
+        ASSIGN_OR_RETURN(rf, fs::new_random_access_file(opts, tablet_mgr->delvec_location(metadata.id(), delvec_name)));
+    }
+    RETURN_IF_ERROR(rf->read_at_fully(delvec_page.offset(), buf.data(), delvec_page.size()));
+    // parse delvec
+    RETURN_IF_ERROR(delvec->load(delvec_page.version(), buf.data(), delvec_page.size()));
+    // put in cache
+    if (fill_cache) {
+        auto delvec_cache_ptr = std::make_shared<DelVector>();
+        delvec_cache_ptr->copy_from(*delvec);
+        tablet_mgr->metacache()->cache_delvec(cache_key, delvec_cache_ptr);
+    }
+    TRACE("end load delvec");
+    return Status::OK();
+}
+
 Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, uint32_t segment_id, bool fill_cache,
                    const LakeIOOptions& lake_io_opts, DelVector* delvec) {
     // find delvec by segment id
     auto iter = metadata.delvec_meta().delvecs().find(segment_id);
     if (iter != metadata.delvec_meta().delvecs().end()) {
-        VLOG(2) << fmt::format("get_del_vec {} segid {}", metadata.delvec_meta().ShortDebugString(), segment_id);
-        std::string buf;
-        raw::stl_string_resize_uninitialized(&buf, iter->second.size());
-        // find in cache
-        std::string cache_key = delvec_cache_key(metadata.id(), iter->second);
-        auto cached_delvec = tablet_mgr->metacache()->lookup_delvec(cache_key);
-        if (cached_delvec != nullptr) {
-            delvec->copy_from(*cached_delvec);
-            return Status::OK();
-        }
-
-        // lookup delvec file name and then read it
-        auto iter2 = metadata.delvec_meta().version_to_file().find(iter->second.version());
-        if (iter2 == metadata.delvec_meta().version_to_file().end()) {
-            LOG(ERROR) << "Can't find delvec file name for tablet: " << metadata.id()
-                       << ", version: " << iter->second.version();
-            return Status::InternalError("Can't find delvec file name");
-        }
-        const auto& delvec_name = iter2->second.name();
-        RandomAccessFileOptions opts{.skip_fill_local_cache = !lake_io_opts.fill_data_cache};
-        std::unique_ptr<RandomAccessFile> rf;
-        if (lake_io_opts.fs && lake_io_opts.location_provider) {
-            ASSIGN_OR_RETURN(
-                    rf, lake_io_opts.fs->new_random_access_file(
-                                opts, lake_io_opts.location_provider->delvec_location(metadata.id(), delvec_name)));
-        } else {
-            ASSIGN_OR_RETURN(rf,
-                             fs::new_random_access_file(opts, tablet_mgr->delvec_location(metadata.id(), delvec_name)));
-        }
-        RETURN_IF_ERROR(rf->read_at_fully(iter->second.offset(), buf.data(), iter->second.size()));
-        // parse delvec
-        RETURN_IF_ERROR(delvec->load(iter->second.version(), buf.data(), iter->second.size()));
-        // put in cache
-        if (fill_cache) {
-            auto delvec_cache_ptr = std::make_shared<DelVector>();
-            delvec_cache_ptr->copy_from(*delvec);
-            tablet_mgr->metacache()->cache_delvec(cache_key, delvec_cache_ptr);
-        }
-        TRACE("end load delvec");
-        return Status::OK();
+        return get_del_vec(tablet_mgr, metadata, iter->second, fill_cache, lake_io_opts, delvec);
     }
     VLOG(2) << fmt::format("get_del_vec not found, segmentid {} tablet_meta {}", segment_id,
                            metadata.delvec_meta().ShortDebugString());
@@ -646,6 +667,137 @@ bool is_primary_key(TabletMetadata* metadata) {
 
 bool is_primary_key(const TabletMetadata& metadata) {
     return metadata.schema().keys_type() == KeysType::PRIMARY_KEYS;
+}
+
+void MetaFileBuilder::add_rowset(const RowsetMetadataPB& rowset_pb, const std::map<int, FileInfo>& replace_segments,
+                                 const std::vector<FileMetaPB>& orphan_files, const std::vector<std::string>& dels,
+                                 const std::vector<std::string>& del_encryption_metas) {
+    // If this is the first call, copy rowset_pb directly
+    if (_pending_rowset_data.rowset_pb.segments_size() == 0) {
+        _pending_rowset_data.rowset_pb.CopyFrom(rowset_pb);
+    } else {
+        // Merge segments
+        for (int i = 0; i < rowset_pb.segments_size(); i++) {
+            _pending_rowset_data.rowset_pb.add_segments(rowset_pb.segments(i));
+        }
+        // Merge segment_size
+        for (int i = 0; i < rowset_pb.segment_size_size(); i++) {
+            _pending_rowset_data.rowset_pb.add_segment_size(rowset_pb.segment_size(i));
+        }
+        // Merge segment_encryption_metas
+        for (int i = 0; i < rowset_pb.segment_encryption_metas_size(); i++) {
+            _pending_rowset_data.rowset_pb.add_segment_encryption_metas(rowset_pb.segment_encryption_metas(i));
+        }
+        // Merge shared_segments
+        for (int i = 0; i < rowset_pb.shared_segments_size(); i++) {
+            _pending_rowset_data.rowset_pb.add_shared_segments(rowset_pb.shared_segments(i));
+        }
+    }
+
+    // Merge replace_segments
+    for (const auto& replace_seg : replace_segments) {
+        _pending_rowset_data.replace_segments[replace_seg.first] = replace_seg.second;
+    }
+
+    // Merge orphan_files
+    _pending_rowset_data.orphan_files.insert(_pending_rowset_data.orphan_files.end(), orphan_files.begin(),
+                                             orphan_files.end());
+
+    // Merge delete files
+    _pending_rowset_data.dels.insert(_pending_rowset_data.dels.end(), dels.begin(), dels.end());
+    _pending_rowset_data.del_encryption_metas.insert(_pending_rowset_data.del_encryption_metas.end(),
+                                                     del_encryption_metas.begin(), del_encryption_metas.end());
+
+    // Track cumulative number of segments already added when batch applying multiple opwrites.
+    _pending_rowset_data.assigned_segment_id += rowset_pb.segments_size();
+}
+
+void MetaFileBuilder::set_final_rowset() {
+    if (_pending_rowset_data.rowset_pb.segments_size() == 0 && _pending_rowset_data.dels.empty()) {
+        return; // Nothing to do
+    }
+
+    auto rowset = _tablet_meta->add_rowsets();
+    rowset->CopyFrom(_pending_rowset_data.rowset_pb);
+
+    auto segment_size_size = rowset->segment_size_size();
+    auto segment_file_size = rowset->segments_size();
+    LOG_IF(ERROR, segment_size_size > 0 && segment_size_size != segment_file_size)
+            << "segment_size size != segment file size, tablet: " << _tablet.id() << ", rowset: " << rowset->id()
+            << ", segment file size: " << segment_file_size << ", segment_size size: " << segment_size_size;
+
+    // Apply replace_segments
+    for (const auto& replace_seg : _pending_rowset_data.replace_segments) {
+        rowset->set_segments(replace_seg.first, replace_seg.second.path);
+        rowset->set_segment_size(replace_seg.first, replace_seg.second.size.value());
+        if (replace_seg.first < rowset->segment_encryption_metas_size()) {
+            rowset->set_segment_encryption_metas(replace_seg.first, replace_seg.second.encryption_meta);
+        }
+        rowset->clear_bundle_file_offsets(); // clear shared file offsets, since we rewrite segments.
+    }
+
+    rowset->set_id(_tablet_meta->next_rowset_id());
+    rowset->set_version(_tablet_meta->version());
+
+    // Handle delete files (same logic as apply_opwrite)
+    for (int i = 0; i < _pending_rowset_data.dels.size(); i++) {
+        DelfileWithRowsetId del_file_with_rid;
+        del_file_with_rid.set_name(_pending_rowset_data.dels[i]);
+        del_file_with_rid.set_origin_rowset_id(rowset->id());
+        // For now, op_offset is always max segment's id
+        del_file_with_rid.set_op_offset(std::max(rowset->segments_size(), 1) - 1);
+        if (i < _pending_rowset_data.del_encryption_metas.size()) {
+            del_file_with_rid.set_encryption_meta(_pending_rowset_data.del_encryption_metas[i]);
+        }
+        rowset->add_del_files()->CopyFrom(del_file_with_rid);
+    }
+
+    // If rowset doesn't contain segment files, still increment next_rowset_id
+    _tablet_meta->set_next_rowset_id(_tablet_meta->next_rowset_id() + std::max(1, rowset->segments_size()));
+
+    // Collect orphan files
+    for (const auto& orphan_file : _pending_rowset_data.orphan_files) {
+        DCHECK(is_segment(orphan_file.name()));
+        _tablet_meta->mutable_orphan_files()->Add()->CopyFrom(orphan_file);
+    }
+
+    // Handle schema mapping (same logic as apply_opwrite)
+    if (!_tablet_meta->rowset_to_schema().empty()) {
+        auto schema_id = _tablet_meta->schema().id();
+        (*_tablet_meta->mutable_rowset_to_schema())[rowset->id()] = schema_id;
+        if (_tablet_meta->historical_schemas().count(schema_id) <= 0) {
+            auto& item = (*_tablet_meta->mutable_historical_schemas())[schema_id];
+            item.CopyFrom(_tablet_meta->schema());
+        }
+    }
+
+    // Clear pending cache
+    _pending_rowset_data = PendingRowsetData{};
+}
+
+void MetaFileBuilder::batch_apply_opwrite(const TxnLogPB_OpWrite& op_write,
+                                          const std::map<int, FileInfo>& replace_segments,
+                                          const std::vector<FileMetaPB>& orphan_files) {
+    // Extract del files and encryption metas similar to apply_opwrite
+    std::vector<std::string> dels;
+    std::vector<std::string> del_encryption_metas;
+
+    // Collect del files
+    for (int i = 0; i < op_write.dels_size(); i++) {
+        dels.push_back(op_write.dels(i));
+    }
+
+    if (op_write.del_encryption_metas_size() > 0) {
+        CHECK(op_write.del_encryption_metas_size() == op_write.dels_size())
+                << fmt::format("del_encryption_metas_size:{} != dels_size:{}", op_write.del_encryption_metas_size(),
+                               op_write.dels_size());
+        for (int i = 0; i < op_write.del_encryption_metas_size(); i++) {
+            del_encryption_metas.push_back(op_write.del_encryption_metas(i));
+        }
+    }
+
+    // Accumulate into pending rowset
+    add_rowset(op_write.rowset(), replace_segments, orphan_files, dels, del_encryption_metas);
 }
 
 } // namespace starrocks::lake

@@ -40,13 +40,6 @@ import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Range;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.ExprSubstitutionMap;
-import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.SlotDescriptor;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
@@ -92,6 +85,12 @@ import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SelectAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.IndexDef.IndexType;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
+import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TDataSink;
@@ -151,6 +150,7 @@ public class OlapTableSink extends DataSink {
     private long automaticBucketSize = 0;
     private boolean enableDynamicOverwrite = false;
     private boolean isFromOverwrite = false;
+    private boolean isMultiStatementTxn = false;
 
     public OlapTableSink(OlapTable dstTable, TupleDescriptor tupleDescriptor, List<Long> partitionIds,
                          TWriteQuorumType writeQuorum, boolean enableReplicatedStorage,
@@ -233,6 +233,10 @@ public class OlapTableSink extends DataSink {
         this.missAutoIncrementColumn = true;
     }
 
+    public TPartialUpdateMode getPartialUpdateMode() {
+        return partialUpdateMode;
+    }
+
     public void updateLoadId(TUniqueId newLoadId) {
         tDataSink.getOlap_table_sink().setLoad_id(newLoadId);
     }
@@ -247,6 +251,10 @@ public class OlapTableSink extends DataSink {
 
     public void setIsFromOverwrite(boolean isFromOverwrite) {
         this.isFromOverwrite = isFromOverwrite;
+    }
+
+    public void setIsMultiStatementsTxn(boolean isMultiStatementTxn) {
+        this.isMultiStatementTxn = isMultiStatementTxn;
     }
 
     public void complete(String mergeCondition) throws StarRocksException {
@@ -290,6 +298,7 @@ public class OlapTableSink extends DataSink {
         tSink.setTable_id(dstTable.getId());
         tSink.setTable_name(dstTable.getName());
         tSink.setTuple_id(tupleDescriptor.getId().asInt());
+        tSink.setIs_multi_statements_txn(isMultiStatementTxn);
         int numReplicas = 1;
         Optional<Partition> optionalPartition = dstTable.getPartitions().stream().findFirst();
         if (optionalPartition.isPresent()) {
@@ -476,7 +485,7 @@ public class OlapTableSink extends DataSink {
                 whereClause = whereClause.accept(visitor, null);
                 whereClause = Expr.analyzeAndCastFold(whereClause);
 
-                indexSchema.setWhere_clause(whereClause.treeToThrift());
+                indexSchema.setWhere_clause(ExprToThriftVisitor.treeToThrift(whereClause));
                 if (LOG.isDebugEnabled()) {
                     LOG.debug("OlapTableSink Where clause: {}", whereClause.explain());
                 }
@@ -581,8 +590,8 @@ public class OlapTableSink extends DataSink {
                             break;
                         }
                     }
-                    partitionParam.setPartition_exprs(Expr.treesToThrift(exprPartitionInfo
-                            .getPartitionExprs(table.getIdToColumn())));
+                    partitionParam.setPartition_exprs(ExprToThriftVisitor.treesToThrift(
+                            exprPartitionInfo.getPartitionExprs(table.getIdToColumn())));
                 } else if (rangePartitionInfo instanceof ExpressionRangePartitionInfoV2) {
                     ExpressionRangePartitionInfoV2 expressionRangePartitionInfoV2 = (ExpressionRangePartitionInfoV2) rangePartitionInfo;
                     List<Expr> partitionExprs = expressionRangePartitionInfoV2.getPartitionExprs(table.getIdToColumn());
@@ -602,8 +611,8 @@ public class OlapTableSink extends DataSink {
                             break;
                         }
                     }
-                    partitionParam.setPartition_exprs(Expr
-                            .treesToThrift(expressionRangePartitionInfoV2.getPartitionExprs(table.getIdToColumn())));
+                    partitionParam.setPartition_exprs(ExprToThriftVisitor.treesToThrift(
+                            expressionRangePartitionInfoV2.getPartitionExprs(table.getIdToColumn())));
                 }
                 break;
             }
@@ -688,7 +697,7 @@ public class OlapTableSink extends DataSink {
 
     private static List<TExprNode> literalExprsToTExprNodes(List<LiteralExpr> values) {
         return values.stream()
-                .map(value -> value.treeToThrift().getNodes().get(0))
+                .map(value -> ExprToThriftVisitor.treeToThrift(value).getNodes().get(0))
                 .collect(Collectors.toList());
     }
 
@@ -729,14 +738,14 @@ public class OlapTableSink extends DataSink {
         if (range.hasLowerBound() && !range.lowerEndpoint().isMinValue()) {
             for (int i = 0; i < partColNum; i++) {
                 tPartition.addToStart_keys(
-                        range.lowerEndpoint().getKeys().get(i).treeToThrift().getNodes().get(0));
+                        ExprToThriftVisitor.treeToThrift(range.lowerEndpoint().getKeys().get(i)).getNodes().get(0));
             }
         }
         // set end keys
         if (range.hasUpperBound() && !range.upperEndpoint().isMaxValue()) {
             for (int i = 0; i < partColNum; i++) {
                 tPartition.addToEnd_keys(
-                        range.upperEndpoint().getKeys().get(i).treeToThrift().getNodes().get(0));
+                        ExprToThriftVisitor.treeToThrift(range.upperEndpoint().getKeys().get(i)).getNodes().get(0));
             }
         }
 

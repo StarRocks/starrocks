@@ -95,11 +95,13 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
 
+import static com.starrocks.common.ErrorCode.ERR_LOCK_ERROR;
 import static com.starrocks.common.ErrorCode.ERR_NO_PARTITIONS_HAVE_DATA_LOAD;
 
 /**
@@ -185,7 +187,8 @@ public class DatabaseTransactionMgr {
 
         long tid = globalStateMgr.getGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
         boolean combinedTxnLog = LakeTableHelper.supportCombinedTxnLog(sourceType);
-        boolean fileBundling = LakeTableHelper.fileBundling(dbId, tableIdList);
+        boolean fileBundling = LakeTableHelper.fileBundling(dbId, tableIdList)
+                && LakeTableHelper.isTransactionSupportCombinedTxnLog(sourceType);
         LOG.info("begin transaction: txn_id: {} with label {} from coordinator {}, listner id: {}",
                 tid, label, coordinator, callbackId);
         TransactionState transactionState = new TransactionState(dbId, tableIdList, tid, label, requestId, sourceType,
@@ -947,6 +950,13 @@ public class DatabaseTransactionMgr {
                         states = states.subList(0, Math.max(i, 1));
                         break;
                     }
+                    // Handle replication transaction separately
+                    // e.g. assume there are 4 txns in `states`: <txn_normal_0, txn_rep_0, txn_normal_1, txn_normal_2>
+                    // 3 txn batch will be generated as: <txn_normal_0>, <txn_rep>, <txn_normal_1, txn_normal_2>
+                    if (state.getTransactionType() == TransactionType.TXN_REPLICATION) {
+                        states = states.subList(0, Math.max(i, 1));
+                        break;
+                    }
                     Map<Long, PartitionCommitInfo> partitionInfoMap = tableInfo.getIdToPartitionCommitInfo();
                     for (Map.Entry<Long, PartitionCommitInfo> item : partitionInfoMap.entrySet()) {
                         PartitionCommitInfo currTxnInfo = item.getValue();
@@ -1075,7 +1085,8 @@ public class DatabaseTransactionMgr {
         return true;
     }
 
-    public void finishTransaction(long transactionId, Set<Long> errorReplicaIds) throws StarRocksException {
+    public void finishTransaction(long transactionId, Set<Long> errorReplicaIds, long lockTimeoutMs)
+            throws StarRocksException {
         TransactionState transactionState = getTransactionState(transactionId);
         // add all commit errors and publish errors to a single set
         if (errorReplicaIds == null) {
@@ -1110,7 +1121,17 @@ public class DatabaseTransactionMgr {
 
         List<Long> tableIdList = transactionState.getTableIdList();
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.WRITE);
+        if (lockTimeoutMs > 0) {
+            if (!locker.tryLockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.WRITE, lockTimeoutMs,
+                    TimeUnit.MILLISECONDS)) {
+                finishSpan.end();
+                throw new StarRocksException(ERR_LOCK_ERROR,
+                        "Failed to acquire lock on database " + db.getId() + ", tables: " + tableIdList + " within " +
+                                lockTimeoutMs + " ms");
+            }
+        } else {
+            locker.lockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.WRITE);
+        }
         try {
             transactionState.writeLock();
             try {
@@ -1938,7 +1959,10 @@ public class DatabaseTransactionMgr {
             LOG.debug("replay a transaction state batch{}", transactionStateBatch);
             transactionStateBatch.replaySetTransactionStatus();
             Database db = globalStateMgr.getLocalMetastore().getDb(transactionStateBatch.getDbId());
-            updateCatalogAfterVisibleBatch(transactionStateBatch, db);
+            // db may be dropped when doing finishTransactionBatch
+            if (db != null) {
+                updateCatalogAfterVisibleBatch(transactionStateBatch, db);
+            }
 
             unprotectSetTransactionStateBatch(transactionStateBatch);
         } finally {
@@ -2186,6 +2210,7 @@ public class DatabaseTransactionMgr {
     }
 
     private void updateTransactionMetrics(TransactionState txnState) {
+        updateTransactionPublishMetrics(txnState);
         if (txnState.getTableIdList().isEmpty()) {
             return;
         }
@@ -2206,6 +2231,27 @@ public class DatabaseTransactionMgr {
             entity.counterStreamLoadFinishedTotal.increase(1L);
             entity.counterStreamLoadRowsTotal.increase(streamAttachment.getLoadedRows());
             entity.counterStreamLoadBytesTotal.increase(streamAttachment.getLoadedBytes());
+        }
+    }
+
+    private void updateTransactionPublishMetrics(TransactionState txnState) {
+        if (txnState.getTransactionStatus() != TransactionStatus.VISIBLE) {
+            return;
+        }
+        long commitTime = txnState.getCommitTime();
+        long publishVersionTime = txnState.getPublishVersionTime();
+        long publishVersionFinishTime = txnState.getPublishVersionFinishTime();
+        long finishTime = txnState.getFinishTime();
+        if (commitTime > 0) {
+            if (publishVersionTime >= commitTime) {
+                MetricRepo.HISTO_TXN_WAIT_FOR_PUBLISH_LATENCY.update(publishVersionTime - commitTime);
+            }
+            if (finishTime >= commitTime) {
+                MetricRepo.HISTO_TXN_PUBLISH_TOTAL_LATENCY.update(finishTime - commitTime);
+            }
+        }
+        if (publishVersionFinishTime > 0 && finishTime >= publishVersionFinishTime) {
+            MetricRepo.HISTO_TXN_FINISH_PUBLISH_LATENCY.update(finishTime - publishVersionFinishTime);
         }
     }
 

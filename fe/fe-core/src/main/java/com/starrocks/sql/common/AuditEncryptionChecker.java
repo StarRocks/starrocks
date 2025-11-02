@@ -14,11 +14,11 @@
 package com.starrocks.sql.common;
 
 import com.google.common.base.Strings;
-import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.sql.ast.AlterStorageVolumeStmt;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
+import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
@@ -40,6 +40,7 @@ import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.SetPassVar;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.integration.ShowCreateSecurityIntegrationStatement;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
@@ -82,6 +83,11 @@ public class AuditEncryptionChecker implements AstVisitorExtendInterface<Boolean
     public Boolean visitQueryStatement(QueryStatement statement, Void context) {
         QueryRelation queryRelation = statement.getQueryRelation();
         return visit(queryRelation);
+    }
+
+    @Override
+    public Boolean visitSubmitTaskStatement(SubmitTaskStmt statement, Void context) {
+        return true;
     }
 
     @Override

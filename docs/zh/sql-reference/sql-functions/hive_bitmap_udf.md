@@ -69,18 +69,18 @@ UDF 定义的 Bitmap 格式与 StarRocks 里格式一致，可直接用于导入
    ./build.sh --hive-udf
    ```
 
-   会在 `fe/hive-udf/` 目录下生成一个 JAR 包 `hive-udf-1.0.0.jar`。
+   会在 `fe/hive-udf/` 目录下生成一个 JAR 包 `hive-udf-*.jar`。
 
 2. 将 JAR 包上传到 HDFS。
 
    ```bash
-   hadoop  fs -put -f ./hive-udf-1.0.0.jar hdfs://<hdfs_ip>:<hdfs_port>/hive-udf-1.0.0.jar
+   hadoop  fs -put -f ./hive-udf-*.jar hdfs://<hdfs_ip>:<hdfs_port>/hive-udf-*.jar
    ```
 
 3. Hive 里加载 JAR 包。
 
    ```bash
-   hive> add jar hdfs://<hdfs_ip>:<hdfs_port>/hive-udf-1.0.0.jar;
+   hive> add jar hdfs://<hdfs_ip>:<hdfs_port>/hive-udf-*.jar;
    ```
 
 4. 加载 UDF 函数。

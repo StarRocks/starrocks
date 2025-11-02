@@ -20,7 +20,7 @@
 #include <string>
 #include <vector>
 
-#include "cache/block_cache/block_cache.h"
+#include "cache/disk_cache/block_cache.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "common/statusor.h"

@@ -29,6 +29,8 @@ public class UserRef implements ParseNode {
     private final String user;
     private final String host;
     private final boolean isDomain;
+    private final boolean isExternal;
+
     private final NodePosition pos;
 
     public UserRef(String user, String host) {
@@ -40,9 +42,14 @@ public class UserRef implements ParseNode {
     }
 
     public UserRef(String user, String host, boolean isDomain, NodePosition pos) {
+        this(user, host, isDomain, false, pos);
+    }
+
+    public UserRef(String user, String host, boolean isDomain, boolean isExternal, NodePosition pos) {
         this.user = user;
         this.host = Strings.emptyToNull(host);
         this.isDomain = isDomain;
+        this.isExternal = isExternal;
         this.pos = pos;
     }
 
@@ -56,6 +63,10 @@ public class UserRef implements ParseNode {
 
     public boolean isDomain() {
         return isDomain;
+    }
+
+    public boolean isExternal() {
+        return isExternal;
     }
 
     @Override
@@ -89,11 +100,12 @@ public class UserRef implements ParseNode {
             return false;
         }
         UserRef user1 = (UserRef) object;
-        return isDomain == user1.isDomain && Objects.equals(user, user1.user) && Objects.equals(host, user1.host);
+        return isDomain == user1.isDomain && isExternal == user1.isExternal &&
+                Objects.equals(user, user1.user) && Objects.equals(host, user1.host);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(user, host, isDomain);
+        return Objects.hash(user, host, isDomain, isExternal);
     }
 }

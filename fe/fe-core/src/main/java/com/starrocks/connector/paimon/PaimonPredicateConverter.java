@@ -15,9 +15,9 @@
 
 package com.starrocks.connector.paimon;
 
-import com.starrocks.analysis.BoolLiteral;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.sql.ast.expression.BoolLiteral;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -25,6 +25,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LargeInPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
@@ -154,6 +155,11 @@ public class PaimonPredicateConverter extends ScalarOperatorVisitor<Predicate, V
             default:
                 return null;
         }
+    }
+
+    @Override
+    public Predicate visitLargeInPredicate(LargeInPredicateOperator operator, Void context) {
+        throw new UnsupportedOperationException("not support large in predicate in the PaimonPredicateConverter");
     }
 
     @Override

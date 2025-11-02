@@ -20,6 +20,7 @@ import java.util.concurrent.TimeUnit;
 
 public class Partition implements PartitionInfo {
     private final long modifiedTime;
+    private int specId;
 
     @Override
     public long getModifiedTime() {
@@ -31,7 +32,17 @@ public class Partition implements PartitionInfo {
         return TimeUnit.MICROSECONDS;
     }
 
+    public int getSpecId() {
+        return specId;
+    }
+
     public Partition(long modifiedTime) {
         this.modifiedTime = modifiedTime;
+        this.specId = -1;
+    }
+
+    public Partition(long modifiedTime, int specId) {
+        this.modifiedTime = modifiedTime;
+        this.specId = specId;
     }
 }

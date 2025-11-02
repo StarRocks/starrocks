@@ -15,7 +15,6 @@
 package com.starrocks.connector.hive;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HivePartitionKey;
@@ -28,6 +27,7 @@ import com.starrocks.connector.DatabaseTableName;
 import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.sql.ast.expression.StringLiteral;
 import mockit.Expectations;
 import org.apache.hadoop.hive.metastore.api.NoSuchObjectException;
 import org.junit.jupiter.api.AfterEach;

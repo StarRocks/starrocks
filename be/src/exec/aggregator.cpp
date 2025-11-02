@@ -106,7 +106,7 @@ bool AggFunctionTypes::is_result_nullable() const {
     if constexpr (UseIntermediateAsOutput) {
         // If using intermediate results as output, no output will be generated and only the input will be serialized.
         // Therefore, only judge whether the input is nullable to decide whether to serialize null data.
-        return has_nullable_child;
+        return has_nullable_child || serialize_always_nullable;
     } else {
         // `is_nullable` means whether the output MAY be nullable. It will be false only when the output is always non-nullable.
         // Therefore, we need to decide whether the output is really nullable case by case:
@@ -232,6 +232,7 @@ void AggregatorParams::init() {
                     ALWAYS_NULLABLE_RESULT_AGG_FUNCS.contains(fn.name.function_name);
             if (fn.__isset.agg_state_desc && AggStateUtils::is_agg_state_if(fn.name.function_name)) {
                 agg_fn_types[i].is_always_nullable_result = true;
+                agg_fn_types[i].serialize_always_nullable = true;
             }
             if (fn.name.function_name == "array_agg" || fn.name.function_name == "group_concat") {
                 // set order by info
@@ -292,6 +293,7 @@ Status Aggregator::open(RuntimeState* state) {
     // init function context
     _has_udaf = std::any_of(_fns.begin(), _fns.end(),
                             [](const auto& ctx) { return ctx.binary_type == TFunctionBinaryType::SRJAR; });
+#ifndef __APPLE__
     if (_has_udaf) {
         auto promise_st = call_function_in_pthread(state, [this]() {
             for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
@@ -306,6 +308,7 @@ Status Aggregator::open(RuntimeState* state) {
         });
         RETURN_IF_ERROR(promise_st->get_future().get());
     }
+#endif
 
     // For SQL: select distinct id from table or select id from from table group by id;
     // we don't need to allocate memory for agg states.
@@ -374,12 +377,16 @@ Status Aggregator::open(RuntimeState* state) {
 
             return Status::OK();
         };
+#ifdef __APPLE__
+        RETURN_IF_ERROR(call_agg_create());
+#else
         if (_has_udaf) {
             auto promise_st = call_function_in_pthread(state, call_agg_create);
             RETURN_IF_ERROR(promise_st->get_future().get());
         } else {
             RETURN_IF_ERROR(call_agg_create());
         }
+#endif
 
         if (_agg_expr_ctxs.empty()) {
             return Status::InternalError("Invalid agg query plan");
@@ -757,12 +764,16 @@ void Aggregator::close(RuntimeState* state) {
         Expr::close(_conjunct_ctxs, state);
         return Status::OK();
     };
+#ifdef __APPLE__
+    (void)agg_close();
+#else
     if (_has_udaf) {
         auto promise_st = call_function_in_pthread(state, agg_close);
         (void)promise_st->get_future().get();
     } else {
         (void)agg_close();
     }
+#endif
 }
 
 bool Aggregator::is_chunk_buffer_empty() {

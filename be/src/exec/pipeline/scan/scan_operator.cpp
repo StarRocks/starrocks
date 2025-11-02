@@ -32,6 +32,7 @@
 #include "util/failpoint/fail_point.h"
 #include "util/race_detect.h"
 #include "util/runtime_profile.h"
+#include "util/time_guard.h"
 
 namespace starrocks::pipeline {
 
@@ -70,6 +71,8 @@ Status ScanOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(SourceOperator::prepare(state));
 
     _unique_metrics->add_info_string("MorselQueueType", _morsel_queue->name());
+    auto num_heavy_exprs = down_cast<ScanOperatorFactory*>(_factory)->scan_node()->get_heavy_expr_ctxs().size();
+    _unique_metrics->add_info_string("NumHeavyExprs", std::to_string(num_heavy_exprs));
     _peak_buffer_size_counter = _unique_metrics->AddHighWaterMarkCounter(
             "PeakChunkBufferSize", TUnit::UNIT,
             RuntimeProfile::Counter::create_strategy(TUnit::UNIT, TCounterMergeType::SKIP_ALL),
@@ -448,6 +451,7 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
             // driver_id will be used in some Expr such as regex_replace
             SCOPED_SET_TRACE_INFO(driver_id, state->query_id(), state->fragment_instance_id());
             SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
+            DUMP_TRACE_IF_TIMEOUT(config::pipeline_scan_timeout_guard_ms);
 
             auto& chunk_source = _chunk_sources[chunk_source_index];
             SCOPED_SET_CUSTOM_COREDUMP_MSG(chunk_source->get_custom_coredump_msg());
@@ -660,6 +664,8 @@ Status ScanOperatorFactory::prepare(RuntimeState* state) {
     TEST_SUCC_POINT("ScanOperatorFactory::prepare");
 
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
+    RETURN_IF_ERROR(Expr::prepare(_scan_node->get_heavy_expr_ctxs(), state));
+    RETURN_IF_ERROR(Expr::open(_scan_node->get_heavy_expr_ctxs(), state));
     RETURN_IF_ERROR(do_prepare(state));
 
     return Status::OK();
@@ -671,7 +677,9 @@ OperatorPtr ScanOperatorFactory::create(int32_t degree_of_parallelism, int32_t d
 
 void ScanOperatorFactory::close(RuntimeState* state) {
     do_close(state);
-
+    // Do not call Expr::close, since async io task would access heavy exprs after
+    // they are closed; exprs in scan operators are auto-closed by ExprContext.
+    // Expr::close(_scan_node->get_heavy_expr_ctxs(), state);
     OperatorFactory::close(state);
 }
 

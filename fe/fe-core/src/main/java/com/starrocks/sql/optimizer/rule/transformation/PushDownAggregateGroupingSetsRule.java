@@ -17,12 +17,12 @@ package com.starrocks.sql.optimizer.rule.transformation;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
@@ -247,7 +247,7 @@ public class PushDownAggregateGroupingSetsRule extends TransformationRule {
     /*
      * select a, b, c, d, null, sum(x) x from t group by rollup(a, b, c, d)
      */
-    private OptExpression buildSubRepeatConsume(ColumnRefFactory factory,
+    public OptExpression buildSubRepeatConsume(ColumnRefFactory factory,
                                                 Map<ColumnRefOperator, ColumnRefOperator> outputs,
                                                 LogicalAggregationOperator aggregate, LogicalRepeatOperator repeat,
                                                 int cteId) {

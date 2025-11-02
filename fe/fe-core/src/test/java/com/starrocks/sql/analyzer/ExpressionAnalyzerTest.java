@@ -14,13 +14,6 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.CollectionElementExpr;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.IntLiteral;
-import com.starrocks.analysis.LikePredicate;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.UserVariableExpr;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.MapType;
@@ -28,6 +21,13 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.expression.CollectionElementExpr;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.LikePredicate;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.ast.expression.UserVariableExpr;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
@@ -96,7 +96,8 @@ public class ExpressionAnalyzerTest extends PlanTestBase {
         }
 
         Assertions.assertEquals(TExprNodeType.MAP_ELEMENT_EXPR,
-                collectionElementExpr3.treeToThrift().getNodes().get(0).getNode_type());
+                com.starrocks.sql.ast.expression.ExprToThriftVisitor
+                        .treeToThrift(collectionElementExpr3).getNodes().get(0).getNode_type());
     }
 
     @Test
@@ -130,7 +131,8 @@ public class ExpressionAnalyzerTest extends PlanTestBase {
                         new Scope(RelationId.anonymous(), new RelationFields())));
 
         Assertions.assertEquals(TExprNodeType.ARRAY_ELEMENT_EXPR,
-                collectionElementExpr2.treeToThrift().getNodes().get(0).getNode_type());
+                com.starrocks.sql.ast.expression.ExprToThriftVisitor
+                        .treeToThrift(collectionElementExpr2).getNodes().get(0).getNode_type());
     }
 
     @Test

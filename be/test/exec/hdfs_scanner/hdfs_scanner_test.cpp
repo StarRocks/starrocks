@@ -18,10 +18,10 @@
 
 #include <memory>
 
-#include "cache/block_cache/block_cache.h"
-#include "cache/block_cache/test_cache_utils.h"
 #include "cache/datacache.h"
-#include "cache/starcache_engine.h"
+#include "cache/disk_cache/block_cache.h"
+#include "cache/disk_cache/starcache_engine.h"
+#include "cache/disk_cache/test_cache_utils.h"
 #include "column/column_helper.h"
 #include "exec/hdfs_scanner/hdfs_scanner_orc.h"
 #include "exec/hdfs_scanner/hdfs_scanner_parquet.h"

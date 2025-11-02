@@ -114,9 +114,9 @@ public class SPMTPCDSBindTest extends TPCDSPlanTestBase {
         String bindSQL = generator.getBindSql();
         String planSQL = generator.getPlanStmtSQL();
 
-        System.out.println(bindSQL);
-        System.out.println("\n\n====================================\n\n");
-        System.out.println(planSQL);
+        logSysInfo(bindSQL);
+        logSysInfo("\n\n====================================\n\n");
+        logSysInfo(planSQL);
     }
 
     public static List<Arguments> testCases() {

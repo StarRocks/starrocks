@@ -2,13 +2,13 @@
 displayed_sidebar: docs
 ---
 
-import FEConfigMethod from '../../_assets/commonMarkdown/FE_config_method.md'
+import FEConfigMethod from '../../_assets/commonMarkdown/FE_config_method.mdx'
 
-import AdminSetFrontendNote from '../../_assets/commonMarkdown/FE_config_note.md'
+import AdminSetFrontendNote from '../../_assets/commonMarkdown/FE_config_note.mdx'
 
-import StaticFEConfigNote from '../../_assets/commonMarkdown/StaticFE_config_note.md'
+import StaticFEConfigNote from '../../_assets/commonMarkdown/StaticFE_config_note.mdx'
 
-import EditionSpecificFEItem from '../../_assets/commonMarkdown/Edition_Specific_FE_Item.md'
+import EditionSpecificFEItem from '../../_assets/commonMarkdown/Edition_Specific_FE_Item.mdx'
 
 # FE 設定
 
@@ -2604,7 +2604,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### lake_enable_balance_tablets_between_workers
 
-- デフォルト: false
+- デフォルト: true
 - タイプ: Boolean
 - 単位: -
 - 変更可能: はい
@@ -2955,6 +2955,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: Hive 外部テーブルのキャッシュされたメタデータが更新される時間間隔。
 - 導入バージョン: -
 
+<!--
 ##### hive_meta_cache_ttl_s
 
 - デフォルト: 3600 * 24
@@ -2963,6 +2964,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能: いいえ
 - 説明: Hive 外部テーブルのキャッシュされたメタデータが期限切れになるまでの時間。
 - 導入バージョン: -
+-->
 
 ##### hive_meta_store_timeout_s
 
@@ -3288,5 +3290,13 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能: はい
 - 説明: システムがヒストリカルノードをトレースすることを許可するかどうか。この項目を `true` に設定することで、キャッシュ共有機能を有効にし、エラスティックなスケーリング時にシステムが適切なキャッシュノードを選択できるようにすることができる。
 - 導入バージョン: v3.5.1
+
+##### transform_type_prefer_string_for_varchar
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: マテリアライズドビューの作成とCTAS操作において、固定長のVARCHAR列に対してSTRING型を優先するかどうか。
+- 導入バージョン: v4.0.0
 
 <EditionSpecificFEItem />

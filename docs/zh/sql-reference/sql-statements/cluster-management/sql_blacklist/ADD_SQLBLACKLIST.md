@@ -13,7 +13,7 @@ displayed_sidebar: docs
 :::tip
 
 - 该操作需要 SYSTEM 级的 BLACKLIST 权限。请参考 [GRANT](../../account-management/GRANT.md) 为用户赋权。
-- 当前 StarRocks 支持将 SELECT 语句加入 SQL 黑名单。
+- 黑名单仅适用于 SELECT 语句、INSERT 语句（v3.1 及以上版本）以及 CTAS 语句（v3.4 及以上版本）。
 :::
 
 ## 语法
@@ -60,4 +60,22 @@ mysql> ADD SQLBLACKLIST
         from test_all_type_nullable2 
     except select id_int, id_tinyint, id_varchar 
         from test_basic_nullable";
+```
+
+示例五：禁止所有 INSERT INTO 语句：
+
+```sql
+ADD SQLBLACKLIST "(?i)^insert\\s+into\\s+.*";
+```
+
+示例六：禁止所有 INSERT INTO ... VALUES 语句：
+
+```sql
+ADD SQLBLACKLIST "(?i)^insert\\s+into\\s+.*values\\s*\\(";
+```
+
+示例七：禁止所有 INSERT INTO ... VALUES 语句，但针对系统定义视图 `_statistics_.column_statistics` 的操作除外：
+
+```sql
+ADD SQLBLACKLIST "(?i)^insert\\s+into\\s+(?!column_statistics\\b).*values\\s*\\(";
 ```

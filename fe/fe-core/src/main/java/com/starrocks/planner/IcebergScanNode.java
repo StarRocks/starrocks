@@ -16,8 +16,6 @@ package com.starrocks.planner;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
-import com.starrocks.analysis.SlotDescriptor;
-import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.StarRocksException;
@@ -75,13 +73,16 @@ public class IcebergScanNode extends ScanNode {
     private volatile boolean reachLimit = false;
     private int selectedPartitionCount = -1;
     private Optional<List<BucketProperty>> bucketProperties = Optional.empty();
+    private PartitionIdGenerator partitionIdGenerator = null;
 
     public IcebergScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName,
-                           IcebergTableMORParams tableFullMORParams, IcebergMORParams morParams) {
+                           IcebergTableMORParams tableFullMORParams, IcebergMORParams morParams,
+                           PartitionIdGenerator partitionIdGenerator) {
         super(id, desc, planNodeName);
         this.icebergTable = (IcebergTable) desc.getTable();
         this.tableFullMORParams = tableFullMORParams;
         this.morParams = morParams;
+        this.partitionIdGenerator = partitionIdGenerator;
         setupCloudCredential();
     }
 
@@ -142,7 +143,7 @@ public class IcebergScanNode extends ScanNode {
         }
 
         scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable,
-                remoteFileInfoSource, morParams, desc, bucketProperties, true);
+                remoteFileInfoSource, morParams, desc, bucketProperties, partitionIdGenerator, true);
     }
 
     public void setupScanRangeLocations(boolean enableIncrementalScanRanges) throws StarRocksException {
@@ -182,7 +183,7 @@ public class IcebergScanNode extends ScanNode {
         }
 
         scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable,
-                remoteFileInfoSource, morParams, desc, bucketProperties);
+                remoteFileInfoSource, morParams, desc, bucketProperties, partitionIdGenerator);
     }
 
     private void setupCloudCredential() {
@@ -297,11 +298,11 @@ public class IcebergScanNode extends ScanNode {
         }
         if (!conjuncts.isEmpty()) {
             output.append(prefix).append("PREDICATES: ").append(
-                    getExplainString(conjuncts)).append("\n");
+                    explainExpr(conjuncts)).append("\n");
         }
         if (!scanNodePredicates.getMinMaxConjuncts().isEmpty()) {
             output.append(prefix).append("MIN/MAX PREDICATES: ").append(
-                    getExplainString(scanNodePredicates.getMinMaxConjuncts())).append("\n");
+                    explainExpr(scanNodePredicates.getMinMaxConjuncts())).append("\n");
         }
         if (tvrVersionRange != null) {
             output.append(prefix).append("TABLE VERSION: ").append(

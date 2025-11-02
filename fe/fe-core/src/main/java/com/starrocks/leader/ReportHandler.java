@@ -869,7 +869,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
             return;
         }
 
-        backend.updateDisks(backendDisks);
+        backend.updateDisks(backendDisks,  GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
         long cost = System.currentTimeMillis() - start;
         if (cost > MAX_REPORT_HANDLING_TIME_LOGGING_THRESHOLD_MS) {
             LOG.info("finished to handle disk report from backend {}, cost: {} ms",
@@ -1175,7 +1175,8 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                     }
 
                     ReplicaState state = replica.getState();
-                    if (state == ReplicaState.NORMAL || state == ReplicaState.SCHEMA_CHANGE) {
+                    if (state == ReplicaState.NORMAL || state == ReplicaState.SCHEMA_CHANGE
+                            || state == ReplicaState.DECOMMISSION) {
                         // if state is PENDING / ROLLUP / CLONE
                         // it's normal that the replica is not created in BE but exists in meta.
                         // so we do not delete it.

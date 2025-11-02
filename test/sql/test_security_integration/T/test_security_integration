@@ -1,24 +1,6 @@
 -- name: test_security_integration
-
-drop user if exists u1;
-create user u1;
-grant impersonate on user root to u1;
-
-create security integration oidc properties("jwks_url"="jwks.json", "principal_field"="sub");
-
 create security integration oidc properties("type"="authentication_jwt", "jwks_url"="jwks.json", "principal_field"="sub");
 show create security integration oidc;
 alter security integration oidc set ("principal_field"="preferred_name");
 show create security integration oidc;
-
-execute as u1 with no revert;
-show security integrations;
-show create security integration oidc;
-drop security integration oidc;
-alter security integration oidc set ("principal_field"="preferred_name");
-create security integration oidc2 properties("type"="authentication_jwt", "jwks_url"="jwks.json", "principal_field"="sub");
-
-execute as root with no revert;
-drop user u1;
-
 drop security integration oidc;

@@ -84,6 +84,29 @@ SELECT count(*), max(k11), min(k11), count(k11) FROM duplicate_table_with_null_p
 SELECT count(*), max(k12), min(k12), count(k12) FROM duplicate_table_with_null_partition PARTITION (p202008);
 SELECT count(*), max(k13), min(k13), count(k13) FROM duplicate_table_with_null_partition PARTITION (p202008);
 
+-- name: test_meta_column_size_functions
+CREATE TABLE meta_nested_types (
+    k1 int,
+    j  json,
+    a  array<int>,
+    m  map<int, varchar(20)>,
+    s  struct<c0 int, c1 varchar(20)>
+)
+DUPLICATE KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 1
+PROPERTIES ("replication_num" = "1", "compression"="lz4");
+
+INSERT INTO meta_nested_types VALUES
+(1, json_object('k','v'), [1,2,3], map{1:'a',2:'b'}, row(1,'x')),
+(2, json_object('k','w'), [],           map{3:'c'},     row(2,'y')),
+(3, NULL,                  [4],          map{},         row(NULL,NULL));
+
+-- aggregated sizes across segments
+SELECT column_size(j) > 0, column_compressed_size(j) > 0 FROM meta_nested_types [_META_];
+SELECT column_size(a) > 0, column_compressed_size(a) > 0 FROM meta_nested_types [_META_];
+SELECT column_size(m) > 0, column_compressed_size(m) > 0 FROM meta_nested_types [_META_];
+SELECT column_size(s) > 0, column_compressed_size(s) > 0 FROM meta_nested_types [_META_];
+
 -- name: test_update_table_on_meta_scan
 CREATE TABLE `update_table_with_null_partition` (
     `k1` date,

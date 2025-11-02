@@ -22,10 +22,10 @@ java {
 }
 
 group = "com.starrocks"
-version = "1.0.0"
 
 dependencies {
     implementation("com.google.guava:guava")
+    implementation("com.google.code.gson:gson")
 }
 
 tasks.withType<Test> {

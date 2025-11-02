@@ -15,8 +15,6 @@ package com.starrocks.connector.partitiontraits;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.NullLiteral;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergPartitionKey;
 import com.starrocks.catalog.IcebergTable;
@@ -29,6 +27,8 @@ import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.iceberg.IcebergPartitionUtils;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.NullLiteral;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.Snapshot;
 
@@ -143,7 +143,22 @@ public class IcebergPartitionTraits extends DefaultTraits {
 
     @Override
     public PartitionKey createPartitionKeyWithType(List<String> values, List<Type> types) throws AnalysisException {
-        PartitionKey partitionKey = super.createPartitionKeyWithType(values, types);
+        Preconditions.checkState(values.size() == types.size(),
+                "columns size is %s, but values size is %s", types.size(), values.size());
+
+        PartitionKey partitionKey = createEmptyKey();
+        for (int i = 0; i < values.size(); i++) {
+            String rawValue = values.get(i);
+            Type type = types.get(i);
+            LiteralExpr exprValue;
+            if (rawValue == null) {
+                exprValue = NullLiteral.create(type);
+            } else {
+                exprValue = LiteralExpr.create(rawValue, type);
+            }
+            partitionKey.pushColumn(exprValue, type.getPrimitiveType());
+        }
+
         for (int i = 0; i < types.size(); i++) {
             LiteralExpr exprValue = partitionKey.getKeys().get(i);
             if (exprValue.getType().isDecimalV3()) {

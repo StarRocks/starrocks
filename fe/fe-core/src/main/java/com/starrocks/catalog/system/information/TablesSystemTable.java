@@ -15,6 +15,7 @@ package com.starrocks.catalog.system.information;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.PrimitiveType;
@@ -148,7 +149,7 @@ public class TablesSystemTable extends SystemTable {
     public List<List<ScalarOperator>> evaluate(ScalarOperator predicate) {
         final List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
         ConnectContext context = Preconditions.checkNotNull(ConnectContext.get(), "not a valid connection");
-        TUserIdentity userIdentity = context.getCurrentUserIdentity().toThrift();
+        TUserIdentity userIdentity = UserIdentityUtils.toThrift(context.getCurrentUserIdentity());
         TGetTablesInfoRequest params = new TGetTablesInfoRequest();
         TAuthInfo authInfo = new TAuthInfo();
         authInfo.setCurrent_user_ident(userIdentity);

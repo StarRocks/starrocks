@@ -18,7 +18,6 @@ import com.google.api.client.util.Lists;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.TableName;
 import com.starrocks.backup.Status;
 import com.starrocks.backup.mv.MVRestoreUpdater;
 import com.starrocks.catalog.MaterializedView;
@@ -27,6 +26,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
@@ -38,6 +38,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 
+import static com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase.disableMVRewriteConsiderDataLayout;
+
 public class MaterializedViewTest extends MaterializedViewTestBase {
     private static final List<String> outerJoinTypes = ImmutableList.of("left", "right");
 
@@ -45,6 +47,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     public static void beforeClass() throws Exception {
         MaterializedViewTestBase.beforeClass();
 
+        disableMVRewriteConsiderDataLayout();
         starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
 
         starRocksAssert.useTable("depts");

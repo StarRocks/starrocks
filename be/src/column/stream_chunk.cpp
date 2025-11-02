@@ -101,17 +101,17 @@ const Int8Column* StreamChunkConverter::ops_col(const StreamChunk* stream_chunk_
 
 const StreamRowOp* StreamChunkConverter::ops(const StreamChunk& stream_chunk) {
     auto* op_col = ops_col(stream_chunk);
-    return (StreamRowOp*)(op_col->get_data().data());
+    return (StreamRowOp*)(op_col->immutable_data().data());
 }
 
 const StreamRowOp* StreamChunkConverter::ops(const StreamChunk* stream_chunk) {
     auto* op_col = ops_col(stream_chunk);
-    return (StreamRowOp*)(op_col->get_data().data());
+    return (StreamRowOp*)(op_col->immutable_data().data());
 }
 
 const StreamRowOp* StreamChunkConverter::ops(const StreamChunkPtr& stream_chunk) {
     auto* op_col = ops_col(stream_chunk);
-    return (StreamRowOp*)(op_col->get_data().data());
+    return (StreamRowOp*)(op_col->immutable_data().data());
 }
 
 ChunkPtr StreamChunkConverter::to_chunk(const StreamChunkPtr& stream_chunk) {

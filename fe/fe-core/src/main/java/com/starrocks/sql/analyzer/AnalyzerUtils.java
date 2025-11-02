@@ -27,22 +27,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.AnalyticExpr;
-import com.starrocks.analysis.CastExpr;
-import com.starrocks.analysis.CompoundPredicate;
-import com.starrocks.analysis.DateLiteral;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.FunctionName;
-import com.starrocks.analysis.GroupingFunctionCallExpr;
-import com.starrocks.analysis.IntLiteral;
-import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.MaxLiteral;
-import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.Subquery;
-import com.starrocks.analysis.TableName;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.ObjectType;
 import com.starrocks.authorization.PrivilegeType;
@@ -89,13 +73,13 @@ import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
-import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
+import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionKeyDesc;
@@ -114,8 +98,25 @@ import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.ViewRelation;
+import com.starrocks.sql.ast.expression.AnalyticExpr;
+import com.starrocks.sql.ast.expression.CastExpr;
+import com.starrocks.sql.ast.expression.CompoundPredicate;
+import com.starrocks.sql.ast.expression.DateLiteral;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FieldReference;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.FunctionName;
+import com.starrocks.sql.ast.expression.GroupingFunctionCallExpr;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.MaxLiteral;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.ast.expression.Subquery;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.PCell;
+import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.PListCell;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -143,7 +144,6 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Queue;
 import java.util.Set;
-import java.util.TreeMap;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
@@ -839,6 +839,10 @@ public class AnalyzerUtils {
         new AnalyzerUtils.OlapTableCollector(olapTables).visit(statementBase);
     }
 
+    public static void collectSourceTables(StatementBase statementBase, List<Table> sourceTables) {
+        new SourceTablesCollector(sourceTables).visit(statementBase);
+    }
+
     public static void collectSpecifyExternalTables(StatementBase statementBase, List<Table> tables,
                                                     Predicate<Table> filter) {
         new ExternalTableCollector(tables, filter).visit(statementBase);
@@ -1023,6 +1027,22 @@ public class AnalyzerUtils {
             olapTables.add(table);
             idMap.put(tableIndexId, copied);
             return copied;
+        }
+    }
+
+    private static class SourceTablesCollector extends TableCollector {
+        private List<Table> sourceTables;
+
+        public SourceTablesCollector(List<Table> sourceTables) {
+            super();
+            this.sourceTables = sourceTables;
+        }
+
+        @Override
+        public Void visitTable(TableRelation node, Void context) {
+            super.visitTable(node, context);
+            sourceTables.add(node.getTable());
+            return null;
         }
     }
 
@@ -1428,9 +1448,8 @@ public class AnalyzerUtils {
                     ImmutableMap.of("replication_num", String.valueOf(replicationNum));
 
             // table partitions for check
-            TreeMap<String, PCell> tablePartitions = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
-            tablePartitions.putAll(olapTable.getListPartitionItems());
-            List<String> partitionColNames = Lists.newArrayList();
+            PCellSortedSet tablePartitions = olapTable.getListPartitionItems();
+            Set<String> partitionColNameSet = Sets.newHashSet();
             List<PartitionDesc> partitionDescs = Lists.newArrayList();
             for (List<String> partitionValue : partitionValues) {
                 List<String> formattedPartitionValue = Lists.newArrayList();
@@ -1450,7 +1469,7 @@ public class AnalyzerUtils {
                     }
                     partitionName = partitionNamePrefix + PARTITION_NAME_PREFIX_SPLIT + partitionName;
                 }
-                if (!partitionColNames.contains(partitionName)) {
+                if (!partitionColNameSet.contains(partitionName)) {
                     List<List<String>> partitionItems = Collections.singletonList(partitionValue);
                     PListCell cell = new PListCell(partitionItems);
                     partitionName = calculateUniquePartitionName(partitionName, cell, tablePartitions);
@@ -1458,12 +1477,13 @@ public class AnalyzerUtils {
                             partitionName, partitionItems, partitionProperties);
                     multiItemListPartitionDesc.setSystem(true);
                     partitionDescs.add(multiItemListPartitionDesc);
-                    partitionColNames.add(partitionName);
+                    partitionColNameSet.add(partitionName);
 
                     // update table partition
-                    tablePartitions.put(partitionName, cell);
+                    tablePartitions.add(partitionName, cell);
                 }
             }
+            List<String> partitionColNames = Lists.newArrayList(partitionColNameSet);
             ListPartitionDesc listPartitionDesc = new ListPartitionDesc(partitionColNames, partitionDescs);
             listPartitionDesc.setSystem(true);
             return new AddPartitionClause(listPartitionDesc, distributionDesc,
@@ -1477,11 +1497,11 @@ public class AnalyzerUtils {
      * Calculate the unique partition name for list partition.
      */
     public static String calculateUniquePartitionName(String partitionName, PCell cell,
-                                                      Map<String, PCell> tablePartitions) throws AnalysisException {
+                                                      PCellSortedSet tablePartitions) throws AnalysisException {
         String orignialPartitionName = partitionName;
         int i = 0;
         // If the partition name already exists and their partition values are different, change the partition name.
-        while (tablePartitions.containsKey(partitionName) && !tablePartitions.get(partitionName).equals(cell)) {
+        while (tablePartitions.containsName(partitionName) && !tablePartitions.getPCell(partitionName).equals(cell)) {
             // ensure partition name is unique with case-insensitive
             int diff = orignialPartitionName.hashCode();
             partitionName = orignialPartitionName + "_" + Integer.toHexString(diff + i);

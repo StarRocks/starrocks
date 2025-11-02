@@ -45,7 +45,7 @@ public abstract class PartitionDiffer {
      * Collect the ref base table's partition range map.
      * @return the ref base table's partition range map: <ref base table, <partition name, partition range>>
      */
-    public abstract Map<Table, Map<String, PCell>> syncBaseTablePartitionInfos();
+    public abstract Map<Table, PCellSortedSet> syncBaseTablePartitionInfos();
 
     /**
      * Compute the partition difference between materialized view and all ref base tables.
@@ -56,24 +56,24 @@ public abstract class PartitionDiffer {
     public abstract PartitionDiffResult computePartitionDiff(Range<PartitionKey> rangeToInclude);
 
     public abstract PartitionDiffResult computePartitionDiff(Range<PartitionKey> rangeToInclude,
-                                                             Map<Table, Map<String, PCell>> rBTPartitionMap);
+                                                             Map<Table, PCellSortedSet> refBaseTablePartitionMap);
     /**
      * Generate the reference map between the base table and the mv.
-     * @param baseRangeMap src partition list map of the base table
-     * @param mvRangeMap mv partition name to its list partition cell
+     * @param basePartitionMaps src partition sorted set of the base table
+     * @param mvPartitionMap mv partition sorted set
      * @return base table -> <partition name, mv partition names> mapping
      */
-    public abstract Map<Table, Map<String, Set<String>>> generateBaseRefMap(Map<Table, Map<String, PCell>> baseRangeMap,
-                                                                            Map<String, PCell> mvRangeMap);
+    public abstract Map<Table, Map<String, Set<String>>> generateBaseRefMap(Map<Table, PCellSortedSet> basePartitionMaps,
+                                                                            PCellSortedSet mvPartitionMap);
 
     /**
      * Generate the mapping from materialized view partition to base table partition.
-     * @param mvRangeMap : materialized view partition range map: <partitionName, partitionRange>
-     * @param baseRangeMap: base table partition range map, <baseTable, <partitionName, partitionRange>>
+     * @param mvPCells : materialized view partition sorted set
+     * @param baseTablePCells: base table partition sorted set map
      * @return mv partition name -> <base table, base partition names> mapping
      */
-    public abstract Map<String, Map<Table, Set<String>>> generateMvRefMap(Map<String, PCell> mvRangeMap,
-                                                                          Map<Table, Map<String, PCell>> baseRangeMap);
+    public abstract Map<String, Map<Table, Set<String>>> generateMvRefMap(PCellSortedSet mvPCells,
+                                                                          Map<Table, PCellSortedSet> baseTablePCells);
     /**
      * To solve multi partition columns' problem of external table, record the mv partition name to all the same
      * partition names map here.

@@ -43,6 +43,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
+import com.starrocks.common.ErrorCode;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.util.FrontendDaemon;
@@ -333,8 +334,21 @@ public class PublishVersionDaemon extends FrontendDaemon {
             }
 
             if (shouldFinishTxn) {
-                globalTransactionMgr.finishTransaction(transactionState.getDbId(), transactionState.getTransactionId(),
-                        publishErrorReplicaIds);
+                try {
+                    // Attempt to finish the transaction with a lock timeout. If it fails, it will be retried in the next cycle.
+                    // This approach prevents blocking subsequent transactions due to the current one.
+                    globalTransactionMgr.finishTransaction(transactionState.getDbId(),
+                            transactionState.getTransactionId(), publishErrorReplicaIds,
+                            Config.finish_transaction_default_lock_timeout_ms);
+                } catch (StarRocksException exception) {
+                    if (exception.getErrorCode() == ErrorCode.ERR_LOCK_ERROR) {
+                        LOG.warn("Fail to get lock to finish transaction {}, error: {}. Will retry later",
+                                transactionState.getTransactionId(), exception.getMessage());
+                        continue;
+                    } else {
+                        throw exception;
+                    }
+                }
                 if (transactionState.getTransactionStatus() != TransactionStatus.VISIBLE) {
                     transactionState.updateSendTaskTime();
                     LOG.debug("publish version for transaction {} failed, has {} error replicas during publish",
@@ -616,6 +630,11 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 stateBatch.putBeTablets(partitionId, nodeToTablets);
             }
         } catch (Exception e) {
+            for (int i = 0; i < transactionStates.size(); i++) {
+                TransactionState txnState = transactionStates.get(i);
+                // Avoid holding txn write lock here; setting errMsg is best-effort for diagnostics
+                txnState.setErrorMsg("Fail to publish partition " + partitionId + " error " + e.getMessage());
+            }
             LOG.error("Fail to publish partition {} of txnIds {}:", partitionId,
                     txnInfos.stream().map(i -> i.txnId).collect(Collectors.toList()), e);
             return false;
@@ -895,6 +914,9 @@ public class PublishVersionDaemon extends FrontendDaemon {
             }
             return true;
         } catch (Throwable e) {
+            // Avoid holding txn write lock here; setting errMsg is best-effort for diagnostics
+            txnState.setErrorMsg("Fail to publish partition " + partitionCommitInfo.getPhysicalPartitionId()
+                    + " error " + e.getMessage());
             // prevent excessive logging
             if (partitionCommitInfo.getVersionTime() < 0 &&
                     Math.abs(partitionCommitInfo.getVersionTime()) + 10000 < System.currentTimeMillis()) {

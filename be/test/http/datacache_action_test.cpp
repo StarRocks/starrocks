@@ -19,9 +19,9 @@
 #include <gtest/gtest.h>
 #include <rapidjson/document.h>
 
-#include "cache/block_cache/block_cache_hit_rate_counter.hpp"
-#include "cache/block_cache/test_cache_utils.h"
-#include "cache/starcache_engine.h"
+#include "cache/disk_cache/block_cache_hit_rate_counter.hpp"
+#include "cache/disk_cache/starcache_engine.h"
+#include "cache/disk_cache/test_cache_utils.h"
 #include "gen_cpp/HeartbeatService_types.h"
 #include "http/http_channel.h"
 #include "http/http_request.h"
@@ -52,7 +52,7 @@ public:
 
         auto options = TestCacheUtils::create_simple_options(256 * KB, 20 * MB);
         _cache = std::make_shared<StarCacheEngine>();
-        ASSERT_OK(_cache->init(options));
+        ASSERT_OK(reinterpret_cast<StarCacheEngine*>(_cache.get())->init(options));
     }
     void TearDown() override {
         if (_evhttp_req != nullptr) {
@@ -62,11 +62,11 @@ public:
 
 protected:
     evhttp_request* _evhttp_req = nullptr;
-    std::shared_ptr<LocalCacheEngine> _cache;
+    std::shared_ptr<LocalDiskCacheEngine> _cache;
 };
 
 TEST_F(DataCacheActionTest, stat_success) {
-    DataCacheAction action(_cache.get());
+    DataCacheAction action(_cache.get(), nullptr);
 
     HttpRequest request(_evhttp_req);
     request._method = HttpMethod::GET;
@@ -84,7 +84,7 @@ TEST_F(DataCacheActionTest, app_stat_success) {
     BlockCacheHitRateCounter* counter = BlockCacheHitRateCounter::instance();
     counter->reset();
 
-    DataCacheAction action(_cache.get());
+    DataCacheAction action(_cache.get(), nullptr);
 
     {
         HttpRequest request(_evhttp_req);
@@ -124,7 +124,7 @@ TEST_F(DataCacheActionTest, app_stat_success) {
 
 TEST_F(DataCacheActionTest, stat_with_uninitialized_cache) {
     auto cache = std::make_shared<StarCacheEngine>();
-    DataCacheAction action(cache.get());
+    DataCacheAction action(cache.get(), nullptr);
 
     HttpRequest request(_evhttp_req);
     request._method = HttpMethod::GET;

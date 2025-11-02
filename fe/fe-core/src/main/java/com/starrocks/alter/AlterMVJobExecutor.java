@@ -17,11 +17,6 @@ package com.starrocks.alter;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.IntLiteral;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
@@ -58,18 +53,27 @@ import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.SetStmtAnalyzer;
+import com.starrocks.sql.analyzer.mv.IVMAnalyzer;
 import com.starrocks.sql.ast.AlterMaterializedViewStatusClause;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
-import com.starrocks.sql.ast.IntervalLiteral;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
+import com.starrocks.sql.ast.ParseNode;
+import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RefreshSchemeClause;
 import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableRenameClause;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.IntervalLiteral;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.MvPlanContextBuilder;
@@ -83,7 +87,9 @@ import org.threeten.extra.PeriodDuration;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
@@ -149,6 +155,44 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         String partitionRefreshStrategy = null;
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_STRATEGY)) {
             partitionRefreshStrategy = PropertyAnalyzer.analyzePartitionRefreshStrategy(properties);
+        }
+        String mvRefreshMode = null;
+        MaterializedView.RefreshMode currentRefreshMode = MaterializedView.RefreshMode.PCT;
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_MV_REFRESH_MODE)) {
+            mvRefreshMode = PropertyAnalyzer.analyzeRefreshMode(properties);
+
+            // cannot alter original pct based mv to incremental or auto, only support original ivm/pct based mv
+            currentRefreshMode = MaterializedView.RefreshMode.valueOf(mvRefreshMode.toUpperCase(Locale.ROOT));
+            if (currentRefreshMode.isIncrementalOrAuto()) {
+                ParseNode mvDefinedQueryParseNode = materializedView.getDefineQueryParseNode();
+                if (mvDefinedQueryParseNode != null && (mvDefinedQueryParseNode instanceof QueryStatement)) {
+                    QueryStatement queryStatement = (QueryStatement) mvDefinedQueryParseNode;
+                    IVMAnalyzer ivmAnalyzer = new IVMAnalyzer(context, queryStatement);
+
+                    Optional<IVMAnalyzer.IVMAnalyzeResult> result = Optional.empty();
+                    try {
+                        result = ivmAnalyzer.rewrite(
+                                MaterializedView.RefreshMode.valueOf(mvRefreshMode.toUpperCase(Locale.ROOT)));
+                    } catch (SemanticException e) {
+                        throw new SemanticException("Cannot alter materialized view refresh mode to %s: %s",
+                                mvRefreshMode, e.getMessage());
+                    }
+                    if (result.isEmpty()) {
+                        throw new SemanticException("Cannot alter materialized view refresh mode to %s," +
+                                " because the materialized view is not eligible for %s refresh mode",
+                                mvRefreshMode, mvRefreshMode);
+                    }
+                    // if materialized's original refresh mode is not auto or ivm, throw exception
+                    if (!materializedView.getCurrentRefreshMode().isIncrementalOrAuto()) {
+                        throw new SemanticException("Cannot alter materialized view refresh mode to %s," +
+                                " only support alter original incremental/auto based materialized view",
+                                mvRefreshMode);
+                    }
+                    currentRefreshMode = result.get().currentRefreshMode();
+                } else {
+                    throw new SemanticException("Cannot alter materialized view refresh mode to %s", mvRefreshMode);
+                }
+            }
         }
         String resourceGroup = null;
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_RESOURCE_GROUP)) {
@@ -275,11 +319,22 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             properties.remove(PropertyAnalyzer.PROPERTIES_BF_COLUMNS);
         }
 
-        if (!properties.isEmpty()) {
-            if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH)) {
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH)) {
+            // TODO: when support shared-nothing mode, must check PROPERTIES_LABELS_LOCATION
+            if (RunMode.isSharedNothingMode()) {
                 throw new SemanticException("Modify failed because unsupported properties: " +
-                        "colocate group is not supported for materialized view");
+                        "colocate_with is not supported for materialized view in shared-nothing cluster.");
             }
+            try {
+                String colocateGroup = PropertyAnalyzer.analyzeColocate(properties);
+                GlobalStateMgr.getCurrentState().getColocateTableIndex()
+                        .modifyTableColocate(db, materializedView, colocateGroup, false, null);
+            } catch (DdlException e) {
+                throw new AlterJobException(e.getMessage(), e);
+            }
+        }
+
+        if (!properties.isEmpty()) {
             // analyze properties
             List<SetListItem> setListItems = Lists.newArrayList();
             for (Map.Entry<String, String> entry : properties.entrySet()) {
@@ -342,6 +397,12 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             curProp.put(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_STRATEGY, String.valueOf(partitionRefreshStrategy));
             materializedView.getTableProperty().setPartitionRefreshStrategy(partitionRefreshStrategy);
             isChanged = true;
+        } else if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_MV_REFRESH_MODE) &&
+                !materializedView.getTableProperty().getMvRefreshMode().equals(mvRefreshMode)) {
+            curProp.put(PropertyAnalyzer.PROPERTIES_MV_REFRESH_MODE, String.valueOf(mvRefreshMode));
+            materializedView.getTableProperty().setMvRefreshMode(mvRefreshMode);
+            isChanged = true;
+            materializedView.setCurrentRefreshMode(currentRefreshMode);
         } else if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT) &&
                 materializedView.getTableProperty().getAutoRefreshPartitionsLimit() != autoRefreshPartitionsLimit) {
             curProp.put(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT, String.valueOf(autoRefreshPartitionsLimit));
@@ -472,7 +533,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
 
             final MaterializedView.MvRefreshScheme refreshScheme = materializedView.getRefreshScheme();
             Locker locker = new Locker();
-            if (!locker.lockDatabaseAndCheckExist(db, LockType.WRITE)) {
+            if (!locker.lockTableAndCheckDbExist(db, materializedView.getId(), LockType.WRITE)) {
                 throw new DmlException("update meta failed. database:" + db.getFullName() + " not exist");
             }
             try {
@@ -508,7 +569,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 final ChangeMaterializedViewRefreshSchemeLog log = new ChangeMaterializedViewRefreshSchemeLog(materializedView);
                 GlobalStateMgr.getCurrentState().getEditLog().logMvChangeRefreshScheme(log);
             } finally {
-                locker.unLockDatabase(db.getId(), LockType.WRITE);
+                locker.unLockTableWithIntensiveDbLock(db.getId(), materializedView.getId(), LockType.WRITE);
             }
             LOG.info("change materialized view refresh type {} to {}, id: {}", oldRefreshType,
                     newRefreshType, materializedView.getId());
@@ -767,4 +828,19 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         }
     }
 
+    /**
+     * Inactive the materialized view because of its task is failed for consecutive times and write the edit log.
+     */
+    public static void inactiveForConsecutiveFailures(MaterializedView mv) {
+        if (mv == null) {
+            return;
+        }
+        final String inactiveReason = MaterializedViewExceptions.inactiveReasonForConsecutiveFailures(mv.getName());
+        // inactive related mv
+        mv.setInactiveAndReason(inactiveReason);
+        // write edit log
+        AlterMaterializedViewStatusLog log = new AlterMaterializedViewStatusLog(mv.getDbId(),
+                mv.getId(), AlterMaterializedViewStatusClause.INACTIVE, inactiveReason);
+        GlobalStateMgr.getCurrentState().getEditLog().logAlterMvStatus(log);
+    }
 }

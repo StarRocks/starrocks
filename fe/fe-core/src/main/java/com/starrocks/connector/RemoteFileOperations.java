@@ -94,6 +94,11 @@ public class RemoteFileOperations {
     }
 
     public List<RemoteFileInfo> getRemoteFiles(Table table, List<Partition> partitions, GetRemoteFilesParams params) {
+        boolean isRecursive = this.isRecursive;
+        if (params.getIsRecursive().isPresent()) {
+            // override the default recursive option
+            isRecursive = params.getIsRecursive().get();
+        }
         RemoteFileScanContext scanContext = new RemoteFileScanContext(table);
         Map<RemotePathKey, Partition> pathKeyToPartition = Maps.newHashMap();
         for (Partition partition : partitions) {

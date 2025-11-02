@@ -96,7 +96,7 @@ public class QueryRuntimeProfile {
      * if the time costs of stream load is less than {@link Config#stream_load_profile_collect_threshold_second},
      * the profile will not be reported to FE to reduce the overhead of profile under high-frequency import
      */
-    private boolean profileAlreadyReported = false;
+    private volatile boolean profileAlreadyReported = false;
 
     private RuntimeProfile queryProfile;
     private List<RuntimeProfile> fragmentProfiles;
@@ -684,7 +684,11 @@ public class QueryRuntimeProfile {
         return matcher.matches() ? Optional.of(matcher.group(1)) : Optional.empty();
     }
 
-    private List<String> getUnfinishedInstanceIds() {
+    public List<String> getUnfinishedInstanceIds() {
+        if (profileDoneSignal == null) {
+            return Lists.newArrayList();
+        }
+
         return profileDoneSignal.getLeftMarks().stream()
                 .map(Map.Entry::getKey)
                 .map(DebugUtil::printId)

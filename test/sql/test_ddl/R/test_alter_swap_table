@@ -104,7 +104,7 @@ s2	CREATE TABLE `s2` (
 DUPLICATE KEY(`k1`, `k2`)
 DISTRIBUTED BY RANDOM
 PROPERTIES (
-"bucket_size" = "4294967296",
+"bucket_size" = "1073741824",
 "compression" = "LZ4",
 "fast_schema_evolution" = "true",
 "foreign_key_constraints" = "(k1) REFERENCES default_catalog.db_test_alter_swap_table.s1(k1)",
@@ -122,7 +122,7 @@ s3	CREATE TABLE `s3` (
 DUPLICATE KEY(`k1`, `k2`)
 DISTRIBUTED BY RANDOM
 PROPERTIES (
-"bucket_size" = "4294967296",
+"bucket_size" = "1073741824",
 "compression" = "LZ4",
 "fast_schema_evolution" = "true",
 "foreign_key_constraints" = "(k1) REFERENCES default_catalog.db_test_alter_swap_table.s1(k1)",
@@ -185,7 +185,7 @@ s1	CREATE TABLE `s1` (
 DUPLICATE KEY(`k1`, `k2`)
 DISTRIBUTED BY RANDOM
 PROPERTIES (
-"bucket_size" = "4294967296",
+"bucket_size" = "1073741824",
 "compression" = "LZ4",
 "fast_schema_evolution" = "true",
 "replicated_storage" = "true",
@@ -203,7 +203,7 @@ s1_new	CREATE TABLE `s1_new` (
 DUPLICATE KEY(`k1`, `k2`)
 DISTRIBUTED BY RANDOM
 PROPERTIES (
-"bucket_size" = "4294967296",
+"bucket_size" = "1073741824",
 "compression" = "LZ4",
 "fast_schema_evolution" = "true",
 "replicated_storage" = "true",
@@ -221,7 +221,7 @@ s2	CREATE TABLE `s2` (
 DUPLICATE KEY(`k1`, `k2`)
 DISTRIBUTED BY RANDOM
 PROPERTIES (
-"bucket_size" = "4294967296",
+"bucket_size" = "1073741824",
 "compression" = "LZ4",
 "fast_schema_evolution" = "true",
 "foreign_key_constraints" = "(k1) REFERENCES default_catalog.db_test_alter_swap_table.s1(k1)",
@@ -239,7 +239,7 @@ s3	CREATE TABLE `s3` (
 DUPLICATE KEY(`k1`, `k2`)
 DISTRIBUTED BY RANDOM
 PROPERTIES (
-"bucket_size" = "4294967296",
+"bucket_size" = "1073741824",
 "compression" = "LZ4",
 "fast_schema_evolution" = "true",
 "foreign_key_constraints" = "(k1) REFERENCES default_catalog.db_test_alter_swap_table.s1(k1)",
@@ -287,7 +287,7 @@ s2	CREATE TABLE `s2` (
 DUPLICATE KEY(`k1`, `k2`)
 DISTRIBUTED BY RANDOM
 PROPERTIES (
-"bucket_size" = "4294967296",
+"bucket_size" = "1073741824",
 "compression" = "LZ4",
 "fast_schema_evolution" = "true",
 "replicated_storage" = "true",
@@ -304,7 +304,7 @@ s3	CREATE TABLE `s3` (
 DUPLICATE KEY(`k1`, `k2`)
 DISTRIBUTED BY RANDOM
 PROPERTIES (
-"bucket_size" = "4294967296",
+"bucket_size" = "1073741824",
 "compression" = "LZ4",
 "fast_schema_evolution" = "true",
 "replicated_storage" = "true",

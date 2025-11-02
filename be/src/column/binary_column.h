@@ -17,6 +17,7 @@
 #include "column/bytes.h"
 #include "column/column.h"
 #include "column/datum.h"
+#include "column/german_string.h"
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "gutil/strings/fastmem.h"
@@ -48,7 +49,9 @@ public:
     };
 
     using Container = Buffer<Slice>;
+    using GermanStringContainer = Buffer<GermanString>;
     using ProxyContainer = BinaryDataProxyContainer;
+    using ImmContainer = BinaryDataProxyContainer;
 
     // TODO(kks): when we create our own vector, we could let vector[-1] = 0,
     // and then we don't need explicitly emplace_back zero value
@@ -239,6 +242,12 @@ public:
         return sizeof(uint32_t) + binary_size;
     }
 
+    size_t serialize_batch_at_interval(uint8_t* dst, size_t byte_offset, size_t byte_interval, uint32_t max_row_size,
+                                       size_t start, size_t count) const override;
+    size_t serialize_batch_at_interval_with_null_masks(uint8_t* dst, size_t byte_offset, size_t byte_interval,
+                                                       uint32_t max_row_size, size_t start, size_t count,
+                                                       const uint8_t* null_masks) const override;
+
     uint32_t serialize_default(uint8_t* pos) const override;
 
     void serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
@@ -303,6 +312,20 @@ public:
         return _slices;
     }
 
+    GermanStringContainer& get_german_strings() {
+        if (!_german_strings_cache) {
+            _build_german_strings();
+        }
+        return _german_strings;
+    }
+
+    const GermanStringContainer& get_german_strings() const {
+        if (!_german_strings_cache) {
+            _build_german_strings();
+        }
+        return _german_strings;
+    }
+
     const BinaryDataProxyContainer& get_proxy_data() const { return _immuable_container; }
 
     Bytes& get_bytes() { return _bytes; }
@@ -341,7 +364,10 @@ public:
         _slices_cache = false;
     }
 
-    void invalidate_slice_cache() { _slices_cache = false; }
+    void invalidate_slice_cache() {
+        _slices_cache = false;
+        _german_strings_cache = false;
+    }
 
     std::string debug_item(size_t idx) const override;
 
@@ -365,12 +391,16 @@ public:
 
 private:
     void _build_slices() const;
+    void _build_german_strings() const;
 
     Bytes _bytes;
     Offsets _offsets;
 
     mutable Container _slices;
     mutable bool _slices_cache = false;
+    mutable GermanStringContainer _german_strings;
+    mutable bool _german_strings_cache = false;
+
     BinaryDataProxyContainer _immuable_container = BinaryDataProxyContainer(*this);
 };
 

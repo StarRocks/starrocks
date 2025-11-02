@@ -1,4 +1,4 @@
--- name: test_resource_group_lt_query_mem_limit @no_asan
+-- test_resource_group_lt_query_mem_limit @no_asan
 create table t1 (
     k1 int
 )

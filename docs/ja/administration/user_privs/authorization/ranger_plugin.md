@@ -73,9 +73,16 @@ Ranger クラスターを操作する権限がない場合や、この機能が�
 
 3. Ranger Admin を再起動します。
 
-   ```SQL
-   ranger-admin restart
-   ```
+   -  Ranger 0.5.x:
+
+      ```SQL
+      ranger-admin restart
+      ```
+   - Ranger 2.x and above:
+   
+      ```SQL
+      ./ews/ranger-admin-services.sh restart
+      ```
 
 ### Ranger Admin で StarRocks Service を設定する
 
@@ -86,7 +93,7 @@ Ranger クラスターを操作する権限がない場合や、この機能が�
 1. [ranger-servicedef-starrocks.json](https://github.com/StarRocks/starrocks/blob/main/conf/ranger/ranger-servicedef-starrocks.json) を StarRocks FE マシンまたは Ranger マシンの任意のディレクトリにコピーします。
 
    ```SQL
-   wget https://github.com/StarRocks/starrocks/blob/main/conf/ranger/ranger-servicedef-starrocks.json
+   wget https://raw.githubusercontent.com/StarRocks/starrocks/main/conf/ranger/ranger-servicedef-starrocks.json
    ```
 
    :::note

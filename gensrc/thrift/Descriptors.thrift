@@ -189,6 +189,7 @@ enum TSchemaTableType {
     SCH_WAREHOUSE_QUERIES,
 
     SCH_DYNAMIC_TABLET_JOBS,
+    SCH_RECYCLEBIN_CATALOGS,
 }
 
 enum THdfsCompression {

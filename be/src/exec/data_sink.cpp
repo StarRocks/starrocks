@@ -43,7 +43,9 @@
 #include "connector/file_chunk_sink.h"
 #include "connector/file_connector.h"
 #include "connector/hive_chunk_sink.h"
+#ifndef __APPLE__
 #include "connector/iceberg_chunk_sink.h"
+#endif
 #include "exec/exec_node.h"
 #include "exec/file_builder.h"
 #include "exec/hdfs_scanner/hdfs_scanner_text.h"
@@ -75,7 +77,9 @@
 #include "runtime/dictionary_cache_sink.h"
 #include "runtime/export_sink.h"
 #include "runtime/hive_table_sink.h"
+#ifndef __APPLE__
 #include "runtime/iceberg_table_sink.h"
+#endif
 #include "runtime/memory_scratch_sink.h"
 #include "runtime/multi_cast_data_stream_sink.h"
 #include "runtime/mysql_table_sink.h"
@@ -196,6 +200,7 @@ Status DataSink::create_data_sink(RuntimeState* state, const TDataSink& thrift_s
         *sink = std::make_unique<SchemaTableSink>(state->obj_pool(), row_desc, output_exprs);
         break;
     }
+#ifndef __APPLE__
     case TDataSinkType::ICEBERG_TABLE_SINK: {
         if (!thrift_sink.__isset.iceberg_table_sink) {
             return Status::InternalError("Missing iceberg table sink");
@@ -203,6 +208,11 @@ Status DataSink::create_data_sink(RuntimeState* state, const TDataSink& thrift_s
         *sink = std::make_unique<IcebergTableSink>(state->obj_pool(), output_exprs);
         break;
     }
+#else
+    case TDataSinkType::ICEBERG_TABLE_SINK: {
+        return Status::NotSupported("Iceberg table sink is disabled on macOS");
+    }
+#endif
     case TDataSinkType::HIVE_TABLE_SINK: {
         if (!thrift_sink.__isset.hive_table_sink) {
             return Status::InternalError("Missing hive table sink");
@@ -477,9 +487,11 @@ Status DataSink::decompose_data_sink_to_pipeline(pipeline::PipelineBuilderContex
 
         prev_operators.emplace_back(op);
         context->add_pipeline(std::move(prev_operators));
+#ifndef __APPLE__
     } else if (typeid(*this) == typeid(starrocks::IcebergTableSink)) {
         auto* iceberg_table_sink = down_cast<starrocks::IcebergTableSink*>(this);
         RETURN_IF_ERROR(iceberg_table_sink->decompose_to_pipeline(prev_operators, thrift_sink, context));
+#endif
     } else if (typeid(*this) == typeid(starrocks::HiveTableSink)) {
         auto* hive_table_sink = down_cast<starrocks::HiveTableSink*>(this);
         RETURN_IF_ERROR(hive_table_sink->decompose_to_pipeline(prev_operators, thrift_sink, context));

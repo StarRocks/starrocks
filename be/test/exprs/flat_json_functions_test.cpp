@@ -45,7 +45,10 @@ namespace starrocks {
 class FlatJsonQueryTestFixture2
         : public ::testing::TestWithParam<std::tuple<std::string, std::vector<std::string>, std::vector<LogicalType>,
                                                      std::string, std::string>> {
-    void SetUp() override { config::enable_json_flat_complex_type = true; }
+    void SetUp() override {
+        config::enable_json_flat_complex_type = true;
+        config::json_flat_sparsity_factor = 0.9;
+    }
     void TearDown() override { config::enable_json_flat_complex_type = false; }
 };
 
@@ -599,7 +602,10 @@ class FlatJsonDeriverPaths
         : public ::testing::TestWithParam<
                   std::tuple<std::string, std::string, std::vector<std::string>, std::vector<LogicalType>>> {
 public:
-    void SetUp() override { config::enable_json_flat_complex_type = true; }
+    void SetUp() override {
+        config::enable_json_flat_complex_type = true;
+        config::json_flat_sparsity_factor = 0.9;
+    }
     void TearDown() override { config::enable_json_flat_complex_type = false; }
 };
 

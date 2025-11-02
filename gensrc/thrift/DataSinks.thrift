@@ -233,6 +233,7 @@ struct TOlapTableSink {
     31: optional binary encryption_meta;
     32: optional bool dynamic_overwrite
     33: optional bool enable_data_file_bundling
+    34: optional bool is_multi_statements_txn
 }
 
 struct TSchemaTableSink {
@@ -248,7 +249,7 @@ struct TIcebergTableSink {
     5: optional bool is_static_partition_sink
     6: optional CloudConfiguration.TCloudConfiguration cloud_configuration
     7: optional i64 target_max_file_size
-    8: required i32 tuple_id
+    8: optional i32 tuple_id
 }
 
 struct THiveTableSink {

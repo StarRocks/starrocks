@@ -35,8 +35,8 @@
 package com.starrocks.persist;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.RoutineLoadDataSourceProperties;
 import com.starrocks.common.io.Writable;
+import com.starrocks.sql.ast.expression.RoutineLoadDataSourceProperties;
 
 import java.util.Map;
 

@@ -16,9 +16,9 @@
 
 #include <gtest/gtest.h>
 
-#include "cache/block_cache/test_cache_utils.h"
 #include "cache/datacache.h"
-#include "cache/starcache_engine.h"
+#include "cache/disk_cache/starcache_engine.h"
+#include "cache/disk_cache/test_cache_utils.h"
 #include "fs/fs_util.h"
 #include "runtime/exec_env.h"
 #include "testutil/assert.h"
@@ -53,16 +53,12 @@ private:
 
 class CacheInputStreamTest : public ::testing::Test {
 public:
-    static CacheOptions cache_options() {
-        CacheOptions options;
-        options.mem_space_size = 100 * 1024 * 1024;
-#ifdef WITH_STARCACHE
-        options.engine = "starcache";
-#endif
+    static DiskCacheOptions cache_options() {
+        DiskCacheOptions options;
+        options.mem_space_size = 100 * MB;
         options.enable_checksum = false;
         options.max_concurrent_inserts = 1500000;
         options.max_flying_memory_mb = 100;
-        options.enable_tiered_cache = true;
         options.block_size = block_size;
         options.skip_read_factor = 1.0;
         return options;
@@ -79,7 +75,7 @@ public:
         _saved_enable_auto_adjust = config::enable_datacache_disk_auto_adjust;
         config::enable_datacache_disk_auto_adjust = false;
 
-        CacheOptions options = cache_options();
+        DiskCacheOptions options = cache_options();
         auto block_cache = TestCacheUtils::create_cache(options);
         DataCache::GetInstance()->set_block_cache(block_cache);
     }
@@ -318,10 +314,9 @@ TEST_F(CacheInputStreamTest, test_read_with_adaptor) {
     const std::string cache_dir = "./cache_input_stream_cache_dir";
     fs::create_directories(cache_dir);
 
-    CacheOptions options = cache_options();
+    DiskCacheOptions options = cache_options();
     // Because the cache adaptor only work for disk cache.
     options.dir_spaces.push_back({.path = cache_dir, .size = 300 * 1024 * 1024});
-    options.enable_tiered_cache = false;
     auto block_cache = TestCacheUtils::create_cache(options);
     DataCache::GetInstance()->set_block_cache(block_cache);
 

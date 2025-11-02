@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.iceberg.cost;
 
 import com.google.common.collect.Lists;
@@ -22,6 +21,7 @@ import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
+import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.iceberg.TableTestBase;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -71,7 +71,10 @@ public class IcebergStatisticProviderTest extends TableTestBase {
 
         TvrVersionRange version = TvrTableSnapshot.of(Optional.of(
                 mockedNativeTableA.currentSnapshot().snapshotId()));
-        Statistics statistics = statisticProvider.getTableStatistics(icebergTable, colRefToColumnMetaMap, null, null, version);
+        GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder()
+                .setTableVersionRange(version)
+                .build();
+        Statistics statistics = statisticProvider.getTableStatistics(icebergTable, colRefToColumnMetaMap, null, params);
         Assertions.assertEquals(1.0, statistics.getOutputRowCount(), 0.001);
     }
 
@@ -110,8 +113,11 @@ public class IcebergStatisticProviderTest extends TableTestBase {
         ColumnRefOperator columnRefOperator2 = new ColumnRefOperator(4, Type.STRING, "data", true);
         colRefToColumnMetaMap.put(columnRefOperator1, new Column("id", Type.INT));
         colRefToColumnMetaMap.put(columnRefOperator2, new Column("data", Type.STRING));
+
+        GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder().
+                setTableVersionRange(TvrTableSnapshot.empty()).build();
         Statistics statistics = statisticProvider.getTableStatistics(icebergTable, colRefToColumnMetaMap,
-                null, null, TvrTableSnapshot.empty());
+                null, params);
         Assertions.assertEquals(1.0, statistics.getOutputRowCount(), 0.001);
     }
 

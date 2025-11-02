@@ -61,6 +61,11 @@ public class SelectList {
         items.add(item);
     }
 
+    public void setItems(List<SelectListItem> items) {
+        this.items.clear();
+        this.items.addAll(items);
+    }
+
     public boolean isDistinct() {
         return isDistinct;
     }

@@ -35,25 +35,22 @@
 package com.starrocks.alter;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Lists;
 import com.starrocks.catalog.BrokerMgr;
+import com.starrocks.catalog.CatalogRecycleBin;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.PartitionInfo;
-import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Replica;
+import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.catalog.TabletInvertedIndex;
+import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
-import com.starrocks.common.util.NetUtils;
-import com.starrocks.common.util.concurrent.lock.LockType;
-import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AddBackendClause;
 import com.starrocks.sql.ast.AddComputeNodeClause;
@@ -70,6 +67,7 @@ import com.starrocks.sql.ast.DropBackendClause;
 import com.starrocks.sql.ast.DropComputeNodeClause;
 import com.starrocks.sql.ast.DropFollowerClause;
 import com.starrocks.sql.ast.DropObserverClause;
+import com.starrocks.sql.ast.HostPort;
 import com.starrocks.sql.ast.ModifyBackendClause;
 import com.starrocks.sql.ast.ModifyBrokerClause;
 import com.starrocks.sql.ast.ModifyFrontendAddressClause;
@@ -80,8 +78,9 @@ import org.apache.commons.lang.NotImplementedException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.HashSet;
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -93,6 +92,8 @@ import java.util.stream.Collectors;
  */
 public class SystemHandler extends AlterHandler {
     private static final Logger LOG = LogManager.getLogger(SystemHandler.class);
+    private static final long RECYCLE_BIN_CHECK_INTERVAL = 10 * 60 * 1000L; // 10 min
+    private long lastRecycleBinCheckTime = 0L;
 
     public SystemHandler() {
         super("cluster");
@@ -187,98 +188,7 @@ public class SystemHandler extends AlterHandler {
         @Override
         public Void visitDecommissionBackendClause(DecommissionBackendClause clause, Void context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                /*
-                 * check if the specified backends can be decommissioned
-                 * 1. backend should exist.
-                 * 2. after decommission, the remaining backend num should meet the replication num.
-                 * 3. after decommission, The remaining space capacity can store data on decommissioned backends.
-                 */
-
-                SystemInfoService infoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-                List<Backend> decommissionBackends = Lists.newArrayList();
-                Set<Long> decommissionIds = new HashSet<>();
-
-                long needCapacity = 0L;
-                long releaseCapacity = 0L;
-                // check if exist
-                for (Pair<String, Integer> pair : clause.getHostPortPairs()) {
-                    Backend backend = infoService.getBackendWithHeartbeatPort(pair.first, pair.second);
-                    if (backend == null) {
-                        throw new DdlException("Backend does not exist[" +
-                                NetUtils.getHostPortInAccessibleFormat(pair.first, pair.second) + "]");
-                    }
-                    if (backend.isDecommissioned()) {
-                        // already under decommission, ignore it
-                        LOG.info(backend.getAddress() + " has already been decommissioned and will be ignored.");
-                        continue;
-                    }
-                    needCapacity += backend.getDataUsedCapacityB();
-                    releaseCapacity += backend.getAvailableCapacityB();
-                    decommissionBackends.add(backend);
-                    decommissionIds.add(backend.getId());
-                }
-
-                if (decommissionBackends.isEmpty()) {
-                    LOG.info("No backends will be decommissioned.");
-                } else {
-                    // when decommission backends in shared_data mode, unnecessary to check clusterCapacity or table replica
-                    if (RunMode.isSharedNothingMode()) {
-                        if (infoService.getClusterAvailableCapacityB() - releaseCapacity < needCapacity) {
-                            decommissionBackends.clear();
-                            throw new DdlException("It will cause insufficient disk space if these BEs are decommissioned.");
-                        }
-
-                        long availableBackendCnt = infoService.getAvailableBackendIds()
-                                .stream()
-                                .filter(beId -> !decommissionIds.contains(beId))
-                                .count();
-                        short maxReplicationNum = 0;
-                        LocalMetastore localMetastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
-                        for (long dbId : localMetastore.getDbIds()) {
-                            Database db = localMetastore.getDb(dbId);
-                            if (db == null || db.isStatisticsDatabase()) {
-                                // system database can handle the decommission by themselves
-                                continue;
-                            }
-                            Locker locker = new Locker();
-                            locker.lockDatabase(db.getId(), LockType.READ);
-                            try {
-                                for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
-                                    if (table instanceof OlapTable) {
-                                        OlapTable olapTable = (OlapTable) table;
-                                        PartitionInfo partitionInfo = olapTable.getPartitionInfo();
-                                        for (long partitionId : olapTable.getAllPartitionIds()) {
-                                            short replicationNum = partitionInfo.getReplicationNum(partitionId);
-                                            if (replicationNum > maxReplicationNum) {
-                                                maxReplicationNum = replicationNum;
-                                                if (availableBackendCnt < maxReplicationNum) {
-                                                    decommissionBackends.clear();
-                                                    throw new DdlException(
-                                                            "It will cause insufficient BE number if these BEs " +
-                                                                    "are decommissioned because the table " +
-                                                                    db.getFullName() + "." + olapTable.getName() +
-                                                                    " requires " + maxReplicationNum + " replicas.");
-
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            } finally {
-                                locker.unLockDatabase(db.getId(), LockType.READ);
-                            }
-                        }
-                    }
-
-                    // set backend's state as 'decommissioned'
-                    // for decommission operation, here is no decommission job. the system handler will check
-                    // all backend in decommission state
-                    for (Backend backend : decommissionBackends) {
-                        backend.setDecommissioned(true);
-                        GlobalStateMgr.getCurrentState().getEditLog().logBackendStateChange(backend);
-                        LOG.info("set backend {} to decommission", backend.getId());
-                    }
-                }
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().decommissionBackend(clause);
             });
             return null;
         }
@@ -289,10 +199,10 @@ public class SystemHandler extends AlterHandler {
                 BrokerMgr brokerMgr = GlobalStateMgr.getCurrentState().getBrokerMgr();
                 switch (clause.getOp()) {
                     case OP_ADD:
-                        brokerMgr.addBrokers(clause.getBrokerName(), clause.getHostPortPairs());
+                        brokerMgr.addBrokers(clause.getBrokerName(), convertHostPortsToPairs(clause.getHostPortPairs()));
                         break;
                     case OP_DROP:
-                        brokerMgr.dropBrokers(clause.getBrokerName(), clause.getHostPortPairs());
+                        brokerMgr.dropBrokers(clause.getBrokerName(), convertHostPortsToPairs(clause.getHostPortPairs()));
                         break;
                     case OP_DROP_ALL:
                         brokerMgr.dropAllBroker(clause.getBrokerName());
@@ -355,11 +265,15 @@ public class SystemHandler extends AlterHandler {
             }
 
             List<Long> backendTabletIds = invertedIndex.getTabletIdsByBackendId(beId);
-            if (backendTabletIds.isEmpty()) {
+            if (canDropBackend(backendTabletIds)) {
                 if (Config.drop_backend_after_decommission) {
                     try {
                         systemInfoService.dropBackend(beId);
-                        LOG.info("no tablet on decommission backend {}, drop it", beId);
+                        if (backendTabletIds.isEmpty()) {
+                            LOG.info("no tablet on decommission backend {}, drop it", beId);
+                        } else {
+                            LOG.info("force drop decommission backend {}, the tablets on it are all in recycle bin", beId);
+                        }
                     } catch (DdlException e) {
                         // does not matter, maybe backend not exists
                         LOG.info("backend {} drop failed after decommission {}", beId, e.getMessage());
@@ -373,42 +287,90 @@ public class SystemHandler extends AlterHandler {
         }
     }
 
-    @Override
-    public synchronized void cancel(CancelStmt stmt) throws DdlException {
-        CancelAlterSystemStmt cancelAlterSystemStmt = (CancelAlterSystemStmt) stmt;
+    /**
+     * If the following conditions are met, it can be forced to drop the backend
+     * 1. All the tablets are in recycle bin.
+     * 2. All the replication number of tablets is bigger than the retained backend number
+     *    (which means there is no backend to migrate, so decommission is blocked),
+     *    and at least one healthy replica on retained backend.
+     * 3. There are at least 1 available backend.
+     */
+    protected boolean canDropBackend(List<Long> backendTabletIds) {
+        if (backendTabletIds.isEmpty()) {
+            return true;
+        }
 
-        SystemInfoService infoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-        // check if backends is under decommission
-        List<Backend> backends = Lists.newArrayList();
-        List<Pair<String, Integer>> hostPortPairs = cancelAlterSystemStmt.getHostPortPairs();
-        for (Pair<String, Integer> pair : hostPortPairs) {
-            // check if exist
-            Backend backend = infoService.getBackendWithHeartbeatPort(pair.first, pair.second);
-            if (backend == null) {
-                throw new DdlException("Backend does not exist[" +
-                        NetUtils.getHostPortInAccessibleFormat(pair.first, pair.second) + "]");
-            }
+        // There is only on replica for shared data mode, so tablets can be migrated to other backends.
+        if (RunMode.isSharedDataMode()) {
+            return false;
+        }
 
-            if (!backend.isDecommissioned()) {
-                // it's ok. just log
-                LOG.info("backend is not decommissioned[{}]", pair.first);
+        if (lastRecycleBinCheckTime + RECYCLE_BIN_CHECK_INTERVAL > System.currentTimeMillis()) {
+            return false;
+        }
+        lastRecycleBinCheckTime = System.currentTimeMillis();
+
+        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        int availableBECnt =  systemInfoService.getAvailableBackends().size();
+        if (availableBECnt < 1) {
+            return false;
+        }
+
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+        CatalogRecycleBin recycleBin = GlobalStateMgr.getCurrentState().getRecycleBin();
+        List<Backend> retainedBackends = systemInfoService.getRetainedBackends();
+        int retainedHostCnt = (int) retainedBackends.stream().map(Backend::getHost).distinct().count();
+        Set<Long> retainedBackendIds = retainedBackends.stream().map(Backend::getId).collect(Collectors.toSet());
+        for (Long tabletId : backendTabletIds) {
+            TabletMeta tabletMeta = invertedIndex.getTabletMeta(tabletId);
+            if (tabletMeta == null) {
                 continue;
             }
 
-            backends.add(backend);
-        }
+            if (!recycleBin.isTabletInRecycleBin(tabletMeta)) {
+                return false;
+            }
 
-        for (Backend backend : backends) {
-            if (backend.setDecommissioned(false)) {
-                GlobalStateMgr.getCurrentState().getEditLog().logBackendStateChange(backend);
-            } else {
-                LOG.info("backend is not decommissioned[{}]", backend.getHost());
+            Map<Long, Replica> replicas = invertedIndex.getReplicas(tabletId);
+            if (replicas == null) {
+                continue;
+            }
+            // It means the replica can be migrated to retained backends.
+            if (replicas.size() <= retainedHostCnt) {
+                return false;
+            }
+
+            // Make sure there is at least one normal replica on retained backends.
+            boolean hasNormalReplica = false;
+            for (Replica replica : replicas.values()) {
+                if (replica.getState() == ReplicaState.NORMAL && retainedBackendIds.contains(replica.getBackendId())) {
+                    hasNormalReplica = true;
+                    break;
+                }
+            }
+            if (!hasNormalReplica) {
+                return false;
             }
         }
+
+        return true;
+    }
+
+    @Override
+    public synchronized void cancel(CancelStmt stmt) throws DdlException {
+        CancelAlterSystemStmt cancelAlterSystemStmt = (CancelAlterSystemStmt) stmt;
+        ErrorReport.wrapWithRuntimeException(() -> GlobalStateMgr.getCurrentState().getNodeMgr()
+                .getClusterInfo().cancelDecommissionBackend(cancelAlterSystemStmt));
     }
 
     @Override
     public List<List<Comparable>> getAlterJobInfosByDb(Database db) {
         throw new NotImplementedException();
+    }
+
+    private static Collection<Pair<String, Integer>> convertHostPortsToPairs(Collection<HostPort> hostPorts) {
+        return hostPorts.stream()
+                .map(hostPort -> new Pair<>(hostPort.getHost(), hostPort.getPort()))
+                .collect(java.util.stream.Collectors.toList());
     }
 }

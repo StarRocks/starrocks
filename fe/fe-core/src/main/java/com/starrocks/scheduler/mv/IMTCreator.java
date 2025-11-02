@@ -17,8 +17,6 @@ package com.starrocks.scheduler.mv;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DistributionInfo;
@@ -36,6 +34,8 @@ import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.KeysDesc;
 import com.starrocks.sql.ast.PartitionDesc;
+import com.starrocks.sql.ast.expression.TableName;
+import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.sql.common.EngineType;
 import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -201,9 +201,13 @@ class IMTCreator {
                 }
 
                 TypeDef typeDef = TypeDef.create(refOp.getType().getPrimitiveType());
-                ColumnDef columnDef = new ColumnDef(refOp.getName(), typeDef);
-                columnDef.setIsKey(isKey);
-                columnDef.setAllowNull(!isKey);
+                ColumnDef columnDef = new ColumnDef(refOp.getName(), typeDef,
+                        /* isKey */ isKey,
+                        /* aggregateType */ null,
+                        /* aggStateDesc */ null,
+                        /* isAllowNull */ !isKey,
+                        /* defaultValueDef */ ColumnDef.DefaultValueDef.NOT_SET,
+                        /* comment */ "");
                 columnDefs.add(columnDef);
             }
 
