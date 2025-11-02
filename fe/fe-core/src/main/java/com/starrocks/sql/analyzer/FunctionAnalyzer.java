@@ -550,11 +550,11 @@ public class FunctionAnalyzer {
                 if (!n.isPresent() || n.get() <= 0) {
                     throw new SemanticException(
                             "The second parameter of " + fnName.getFunction() + " must be a constant positive integer: " +
-                                    functionCallExpr.toSql(), nExpr.getPos());
+                                    ExprToSql.toSql(functionCallExpr), nExpr.getPos());
                 }
                 if (n.get() > 10000) {
                     throw new SemanticException("The second parameter of " + fnName.getFunction() + 
-                            " cannot exceed 10000: " + functionCallExpr.toSql(), nExpr.getPos());
+                            " cannot exceed 10000: " + ExprToSql.toSql(functionCallExpr), nExpr.getPos());
                 }
             }
         }
@@ -1294,11 +1294,11 @@ public class FunctionAnalyzer {
             // min_n/max_n(value, n) returns array<value_type>
             // Normalize second argument to INT (handles TINYINT/SMALLINT from literals like '3')
             if (argumentTypes.length > 1) {
-                argumentTypes[1] = Type.INT;
+                argumentTypes[1] = IntegerType.INT;
             }
 
             // use IS_IDENTICAL to preserve exact value type (especially FLOAT to avoid promotion to DOUBLE)
-            fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_IDENTICAL);
+            fn = ExprUtils.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_IDENTICAL);
             if (fn != null) {
                 fn = fn.copy();
                 // Explicitly set return type to preserve element type (e.g. array<date> not array<int>)

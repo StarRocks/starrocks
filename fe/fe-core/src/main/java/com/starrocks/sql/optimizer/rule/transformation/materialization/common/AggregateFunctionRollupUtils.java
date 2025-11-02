@@ -63,6 +63,7 @@ public class AggregateFunctionRollupUtils {
             .put(FunctionSet.SUM, FunctionSet.SUM)
             .put(FunctionSet.MAX, FunctionSet.MAX)
             .put(FunctionSet.MIN, FunctionSet.MIN)
+            // NOTE: MIN_N/MAX_N are not included - cannot merge ARRAY results correctly during rollup
             .put(FunctionSet.BITMAP_UNION, FunctionSet.BITMAP_UNION)
             .put(FunctionSet.HLL_UNION, FunctionSet.HLL_UNION)
             .put(FunctionSet.PERCENTILE_UNION, FunctionSet.PERCENTILE_UNION)
@@ -199,10 +200,17 @@ public class AggregateFunctionRollupUtils {
             // 1. Change fn's type  as 1th child has change, otherwise physical plan
             // will still use old arg input's type.
             // 2. the rollup function is the same as origin, but use the new column as argument
-            Function newFunc = aggCall.getFunction()
-                    .updateArgType(new Type[] { targetColumn.getType() });
-            return new CallOperator(aggCall.getFnName(), aggCall.getType(), Lists.newArrayList(targetColumn),
-                    newFunc);
+            // 3. For functions with multiple arguments (e.g., min_n, max_n), preserve all arguments
+            //    except the first one which is replaced by targetColumn
+            List<ScalarOperator> newArgs = Lists.newArrayList();
+            newArgs.add(targetColumn);
+            // Preserve remaining arguments (e.g., n parameter for min_n/max_n)
+            for (int i = 1; i < aggCall.getChildren().size(); i++) {
+                newArgs.add(aggCall.getChildren().get(i));
+            }
+            Type[] argTypes = newArgs.stream().map(ScalarOperator::getType).toArray(Type[]::new);
+            Function newFunc = aggCall.getFunction().updateArgType(argTypes);
+            return new CallOperator(aggCall.getFnName(), aggCall.getType(), newArgs, newFunc);
         }
     }
 

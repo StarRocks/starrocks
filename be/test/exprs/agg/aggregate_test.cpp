@@ -19,6 +19,7 @@
 #include <memory>
 
 #include "exprs/agg/base_aggregate_test.h"
+#include "runtime/mem_pool.h"
 
 namespace starrocks {
 // adaptor to TypeDescriptor
@@ -2674,6 +2675,924 @@ TEST_F(AggregateTest, test_ds_theta_count_distinct) {
 
     func->finalize_to_column(local_ctx.get(), state3->state(), result_column.get());
     ASSERT_EQ(5, result_column->get_data()[0]);
+}
+
+TEST_F(AggregateTest, test_min_n) {
+    // Test MIN_N with INT type
+    const AggregateFunction* func = get_aggregate_function("min_n", TYPE_INT, TYPE_ARRAY, false);
+    ASSERT_TRUE(func != nullptr);
+
+    auto data_column = Int32Column::create();
+    data_column->append(85);
+    data_column->append(92);
+    data_column->append(78);
+    data_column->append(95);
+    data_column->append(88);
+    data_column->append(82);
+    data_column->append(90);
+    data_column->append(87);
+    data_column->append(93);
+    data_column->append(89);
+
+    auto n_column = ColumnHelper::create_const_column<TYPE_INT>(3, data_column->size());
+
+    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_INT),
+                                             TypeDescriptor::from_logical_type(TYPE_INT)};
+    auto return_type = TypeDescriptor::from_logical_type(TYPE_ARRAY);
+    std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
+
+    Columns const_columns;
+    const_columns.emplace_back(data_column);
+    const_columns.emplace_back(n_column);
+    local_ctx->set_constant_columns(const_columns);
+
+    auto state = ManagedAggrState::create(local_ctx.get(), func);
+    const Column* columns[] = {data_column.get(), n_column.get()};
+    func->update_batch_single_state(local_ctx.get(), data_column->size(), columns, state->state());
+
+    auto result_column = ArrayColumn::create(Int32Column::create(), UInt32Column::create());
+    func->finalize_to_column(local_ctx.get(), state->state(), result_column.get());
+
+    ASSERT_EQ(result_column->size(), 1);
+    auto& array_col = down_cast<ArrayColumn&>(*result_column);
+    auto& elements = down_cast<Int32Column&>(array_col.elements());
+    ASSERT_EQ(elements.size(), 3);
+    EXPECT_EQ(elements.get_data()[0], 78);
+    EXPECT_EQ(elements.get_data()[1], 82);
+    EXPECT_EQ(elements.get_data()[2], 85);
+}
+
+TEST_F(AggregateTest, test_max_n) {
+    // Test MAX_N with INT type
+    const AggregateFunction* func = get_aggregate_function("max_n", TYPE_INT, TYPE_ARRAY, false);
+    ASSERT_TRUE(func != nullptr);
+
+    auto data_column = Int32Column::create();
+    data_column->append(85);
+    data_column->append(92);
+    data_column->append(78);
+    data_column->append(95);
+    data_column->append(88);
+    data_column->append(82);
+    data_column->append(90);
+    data_column->append(87);
+    data_column->append(93);
+    data_column->append(89);
+
+    auto n_column = ColumnHelper::create_const_column<TYPE_INT>(3, data_column->size());
+
+    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_INT),
+                                             TypeDescriptor::from_logical_type(TYPE_INT)};
+    auto return_type = TypeDescriptor::from_logical_type(TYPE_ARRAY);
+    std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
+
+    Columns const_columns;
+    const_columns.emplace_back(data_column);
+    const_columns.emplace_back(n_column);
+    local_ctx->set_constant_columns(const_columns);
+
+    auto state = ManagedAggrState::create(local_ctx.get(), func);
+    const Column* columns[] = {data_column.get(), n_column.get()};
+    func->update_batch_single_state(local_ctx.get(), data_column->size(), columns, state->state());
+
+    auto result_column = ArrayColumn::create(Int32Column::create(), UInt32Column::create());
+    func->finalize_to_column(local_ctx.get(), state->state(), result_column.get());
+
+    ASSERT_EQ(result_column->size(), 1);
+    auto& array_col = down_cast<ArrayColumn&>(*result_column);
+    auto& elements = down_cast<Int32Column&>(array_col.elements());
+    ASSERT_EQ(elements.size(), 3);
+    EXPECT_EQ(elements.get_data()[0], 92);
+    EXPECT_EQ(elements.get_data()[1], 93);
+    EXPECT_EQ(elements.get_data()[2], 95);
+}
+
+TEST_F(AggregateTest, test_min_n_with_nullable) {
+    // Test MIN_N with nullable column
+    const AggregateFunction* func = get_aggregate_function("min_n", TYPE_INT, TYPE_ARRAY, true);
+    ASSERT_TRUE(func != nullptr);
+
+    // Create test data with NULLs: [85, NULL, 78, 95, NULL, 82]
+    auto data_column = Int32Column::create();
+    auto null_column = NullColumn::create();
+    data_column->append(85);
+    null_column->append(0);
+    data_column->append(0); // placeholder
+    null_column->append(1); // NULL
+    data_column->append(78);
+    null_column->append(0);
+    data_column->append(95);
+    null_column->append(0);
+    data_column->append(0); // placeholder
+    null_column->append(1); // NULL
+    data_column->append(82);
+    null_column->append(0);
+
+    auto nullable_column = NullableColumn::create(data_column, null_column);
+
+    // Create n parameter column (n=3)
+    auto n_column = ColumnHelper::create_const_column<TYPE_INT>(3, nullable_column->size());
+
+    // Create FunctionContext with constant columns
+    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_INT),
+                                             TypeDescriptor::from_logical_type(TYPE_INT)};
+    auto return_type = TypeDescriptor::from_logical_type(TYPE_ARRAY);
+    std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
+
+    Columns const_columns;
+    const_columns.emplace_back(nullable_column);
+    const_columns.emplace_back(n_column);
+    local_ctx->set_constant_columns(const_columns);
+
+    // Create state and execute aggregation
+    auto state = ManagedAggrState::create(local_ctx.get(), func);
+    const Column* columns[] = {nullable_column.get(), n_column.get()};
+    func->update_batch_single_state(local_ctx.get(), nullable_column->size(), columns, state->state());
+
+    // Get result
+    auto result_column = NullableColumn::create(ArrayColumn::create(Int32Column::create(), UInt32Column::create()),
+                                                NullColumn::create());
+    func->finalize_to_column(local_ctx.get(), state->state(), result_column.get());
+
+    // Verify result: should return [78, 82, 85] (NULLs ignored)
+    ASSERT_EQ(result_column->size(), 1);
+    ASSERT_FALSE(result_column->is_null(0));
+    auto& array_col = down_cast<ArrayColumn&>(result_column->data_column_ref());
+    auto& elements = down_cast<Int32Column&>(array_col.elements());
+    ASSERT_EQ(elements.size(), 3);
+    EXPECT_EQ(elements.get_data()[0], 78);
+    EXPECT_EQ(elements.get_data()[1], 82);
+    EXPECT_EQ(elements.get_data()[2], 85);
+}
+
+TEST_F(AggregateTest, test_max_n_edge_case) {
+    // Test MAX_N when n > number of values
+    const AggregateFunction* func = get_aggregate_function("max_n", TYPE_INT, TYPE_ARRAY, false);
+    ASSERT_TRUE(func != nullptr);
+
+    // Create test data with only 3 values
+    auto data_column = Int32Column::create();
+    data_column->append(10);
+    data_column->append(20);
+    data_column->append(30);
+
+    // Request n=10, but only 3 values available
+    auto n_column = ColumnHelper::create_const_column<TYPE_INT>(10, data_column->size());
+
+    // Create FunctionContext with constant columns
+    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_INT),
+                                             TypeDescriptor::from_logical_type(TYPE_INT)};
+    auto return_type = TypeDescriptor::from_logical_type(TYPE_ARRAY);
+    std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
+
+    Columns const_columns;
+    const_columns.emplace_back(data_column);
+    const_columns.emplace_back(n_column);
+    local_ctx->set_constant_columns(const_columns);
+
+    auto state = ManagedAggrState::create(local_ctx.get(), func);
+    const Column* columns[] = {data_column.get(), n_column.get()};
+    func->update_batch_single_state(local_ctx.get(), data_column->size(), columns, state->state());
+
+    auto result_column = ArrayColumn::create(Int32Column::create(), UInt32Column::create());
+    func->finalize_to_column(local_ctx.get(), state->state(), result_column.get());
+
+    // Verify result: should return all 3 values [10, 20, 30]
+    auto& array_col = down_cast<ArrayColumn&>(*result_column);
+    auto& elements = down_cast<Int32Column&>(array_col.elements());
+    ASSERT_EQ(elements.size(), 3);
+    EXPECT_EQ(elements.get_data()[0], 10);
+    EXPECT_EQ(elements.get_data()[1], 20);
+    EXPECT_EQ(elements.get_data()[2], 30);
+}
+
+TEST_F(AggregateTest, test_min_n_merge) {
+    // Test MIN_N merge function
+    const AggregateFunction* func = get_aggregate_function("min_n", TYPE_INT, TYPE_ARRAY, false);
+    ASSERT_TRUE(func != nullptr);
+
+    // Create first batch of data: [85, 92, 78, 95, 88]
+    auto data_column1 = Int32Column::create();
+    data_column1->append(85);
+    data_column1->append(92);
+    data_column1->append(78);
+    data_column1->append(95);
+    data_column1->append(88);
+
+    // Create second batch of data: [82, 90, 87, 93, 89]
+    auto data_column2 = Int32Column::create();
+    data_column2->append(82);
+    data_column2->append(90);
+    data_column2->append(87);
+    data_column2->append(93);
+    data_column2->append(89);
+
+    auto n_column = ColumnHelper::create_const_column<TYPE_INT>(3, 1);
+
+    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_INT),
+                                             TypeDescriptor::from_logical_type(TYPE_INT)};
+    auto return_type = TypeDescriptor::from_logical_type(TYPE_ARRAY);
+    std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
+
+    Columns const_columns;
+    const_columns.emplace_back(data_column1);
+    const_columns.emplace_back(n_column);
+    local_ctx->set_constant_columns(const_columns);
+
+    // Process first batch
+    auto state1 = ManagedAggrState::create(local_ctx.get(), func);
+    const Column* columns1[] = {data_column1.get(), n_column.get()};
+    func->update_batch_single_state(local_ctx.get(), data_column1->size(), columns1, state1->state());
+
+    // Process second batch
+    Columns const_columns2;
+    const_columns2.emplace_back(data_column2);
+    const_columns2.emplace_back(n_column);
+    local_ctx->set_constant_columns(const_columns2);
+    auto state2 = ManagedAggrState::create(local_ctx.get(), func);
+    const Column* columns2[] = {data_column2.get(), n_column.get()};
+    func->update_batch_single_state(local_ctx.get(), data_column2->size(), columns2, state2->state());
+
+    // Serialize states
+    ColumnPtr serde_column1 = BinaryColumn::create();
+    func->serialize_to_column(local_ctx.get(), state1->state(), serde_column1.get());
+    ColumnPtr serde_column2 = BinaryColumn::create();
+    func->serialize_to_column(local_ctx.get(), state2->state(), serde_column2.get());
+
+    // Merge states
+    auto state3 = ManagedAggrState::create(local_ctx.get(), func);
+    func->merge(local_ctx.get(), serde_column1.get(), state3->state(), 0);
+    func->merge(local_ctx.get(), serde_column2.get(), state3->state(), 0);
+
+    // Finalize and verify
+    auto result_column = ArrayColumn::create(Int32Column::create(), UInt32Column::create());
+    func->finalize_to_column(local_ctx.get(), state3->state(), result_column.get());
+
+    ASSERT_EQ(result_column->size(), 1);
+    auto& array_col = down_cast<ArrayColumn&>(*result_column);
+    auto& elements = down_cast<Int32Column&>(array_col.elements());
+    ASSERT_EQ(elements.size(), 3);
+    // After merging, min 3 values from all data should be [78, 82, 85]
+    EXPECT_EQ(elements.get_data()[0], 78);
+    EXPECT_EQ(elements.get_data()[1], 82);
+    EXPECT_EQ(elements.get_data()[2], 85);
+}
+
+TEST_F(AggregateTest, test_max_n_merge) {
+    // Test MAX_N merge function
+    const AggregateFunction* func = get_aggregate_function("max_n", TYPE_INT, TYPE_ARRAY, false);
+    ASSERT_TRUE(func != nullptr);
+
+    // Create first batch of data: [85, 92, 78, 95, 88]
+    auto data_column1 = Int32Column::create();
+    data_column1->append(85);
+    data_column1->append(92);
+    data_column1->append(78);
+    data_column1->append(95);
+    data_column1->append(88);
+
+    // Create second batch of data: [82, 90, 87, 93, 89]
+    auto data_column2 = Int32Column::create();
+    data_column2->append(82);
+    data_column2->append(90);
+    data_column2->append(87);
+    data_column2->append(93);
+    data_column2->append(89);
+
+    auto n_column = ColumnHelper::create_const_column<TYPE_INT>(3, 1);
+
+    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_INT),
+                                             TypeDescriptor::from_logical_type(TYPE_INT)};
+    auto return_type = TypeDescriptor::from_logical_type(TYPE_ARRAY);
+    std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
+
+    Columns const_columns;
+    const_columns.emplace_back(data_column1);
+    const_columns.emplace_back(n_column);
+    local_ctx->set_constant_columns(const_columns);
+
+    // Process first batch
+    auto state1 = ManagedAggrState::create(local_ctx.get(), func);
+    const Column* columns1[] = {data_column1.get(), n_column.get()};
+    func->update_batch_single_state(local_ctx.get(), data_column1->size(), columns1, state1->state());
+
+    // Process second batch
+    Columns const_columns2;
+    const_columns2.emplace_back(data_column2);
+    const_columns2.emplace_back(n_column);
+    local_ctx->set_constant_columns(const_columns2);
+    auto state2 = ManagedAggrState::create(local_ctx.get(), func);
+    const Column* columns2[] = {data_column2.get(), n_column.get()};
+    func->update_batch_single_state(local_ctx.get(), data_column2->size(), columns2, state2->state());
+
+    // Serialize states
+    ColumnPtr serde_column1 = BinaryColumn::create();
+    func->serialize_to_column(local_ctx.get(), state1->state(), serde_column1.get());
+    ColumnPtr serde_column2 = BinaryColumn::create();
+    func->serialize_to_column(local_ctx.get(), state2->state(), serde_column2.get());
+
+    // Merge states
+    auto state3 = ManagedAggrState::create(local_ctx.get(), func);
+    func->merge(local_ctx.get(), serde_column1.get(), state3->state(), 0);
+    func->merge(local_ctx.get(), serde_column2.get(), state3->state(), 0);
+
+    // Finalize and verify
+    auto result_column = ArrayColumn::create(Int32Column::create(), UInt32Column::create());
+    func->finalize_to_column(local_ctx.get(), state3->state(), result_column.get());
+
+    ASSERT_EQ(result_column->size(), 1);
+    auto& array_col = down_cast<ArrayColumn&>(*result_column);
+    auto& elements = down_cast<Int32Column&>(array_col.elements());
+    ASSERT_EQ(elements.size(), 3);
+    // After merging, max 3 values from all data should be [92, 93, 95]
+    EXPECT_EQ(elements.get_data()[0], 92);
+    EXPECT_EQ(elements.get_data()[1], 93);
+    EXPECT_EQ(elements.get_data()[2], 95);
+}
+
+TEST_F(AggregateTest, test_min_n_string) {
+    // Test MIN_N with VARCHAR type to cover IsSlice branch
+    const AggregateFunction* func = get_aggregate_function("min_n", TYPE_VARCHAR, TYPE_ARRAY, false);
+    ASSERT_TRUE(func != nullptr);
+
+    auto data_column = BinaryColumn::create();
+    data_column->append("zebra");
+    data_column->append("apple");
+    data_column->append("banana");
+    data_column->append("cherry");
+    data_column->append("date");
+
+    auto n_column = ColumnHelper::create_const_column<TYPE_INT>(3, data_column->size());
+    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_VARCHAR),
+                                             TypeDescriptor::from_logical_type(TYPE_INT)};
+    auto return_type = TypeDescriptor::from_logical_type(TYPE_ARRAY);
+    MemPool pool;
+    std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_context(nullptr, &pool, return_type, arg_types));
+
+    Columns const_columns;
+    const_columns.emplace_back(data_column);
+    const_columns.emplace_back(n_column);
+    local_ctx->set_constant_columns(const_columns);
+
+    auto state = ManagedAggrState::create(local_ctx.get(), func);
+    const Column* columns[] = {data_column.get(), n_column.get()};
+    func->update_batch_single_state(local_ctx.get(), data_column->size(), columns, state->state());
+
+    auto result_column = ArrayColumn::create(BinaryColumn::create(), UInt32Column::create());
+    func->finalize_to_column(local_ctx.get(), state->state(), result_column.get());
+
+    ASSERT_EQ(result_column->size(), 1);
+    auto& array_col = down_cast<ArrayColumn&>(*result_column);
+    auto& elements = down_cast<BinaryColumn&>(array_col.elements());
+    ASSERT_EQ(elements.size(), 3);
+    // min_n returns values in ascending order
+    EXPECT_EQ(elements.get_slice(0).to_string(), "apple");
+    EXPECT_EQ(elements.get_slice(1).to_string(), "banana");
+    EXPECT_EQ(elements.get_slice(2).to_string(), "cherry");
+}
+
+TEST_F(AggregateTest, test_min_n_merge_string) {
+    // Test MIN_N merge with VARCHAR type to cover IsSlice branch in merge
+    const AggregateFunction* func = get_aggregate_function("min_n", TYPE_VARCHAR, TYPE_ARRAY, false);
+    ASSERT_TRUE(func != nullptr);
+
+    auto data_column1 = BinaryColumn::create();
+    data_column1->append("zebra");
+    data_column1->append("apple");
+    data_column1->append("banana");
+
+    auto data_column2 = BinaryColumn::create();
+    data_column2->append("cherry");
+    data_column2->append("date");
+
+    auto n_column = ColumnHelper::create_const_column<TYPE_INT>(3, 1);
+    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_VARCHAR),
+                                             TypeDescriptor::from_logical_type(TYPE_INT)};
+    auto return_type = TypeDescriptor::from_logical_type(TYPE_ARRAY);
+    MemPool pool;
+    std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_context(nullptr, &pool, return_type, arg_types));
+
+    Columns const_columns;
+    const_columns.emplace_back(data_column1);
+    const_columns.emplace_back(n_column);
+    local_ctx->set_constant_columns(const_columns);
+
+    auto state1 = ManagedAggrState::create(local_ctx.get(), func);
+    const Column* columns1[] = {data_column1.get(), n_column.get()};
+    func->update_batch_single_state(local_ctx.get(), data_column1->size(), columns1, state1->state());
+
+    Columns const_columns2;
+    const_columns2.emplace_back(data_column2);
+    const_columns2.emplace_back(n_column);
+    local_ctx->set_constant_columns(const_columns2);
+    auto state2 = ManagedAggrState::create(local_ctx.get(), func);
+    const Column* columns2[] = {data_column2.get(), n_column.get()};
+    func->update_batch_single_state(local_ctx.get(), data_column2->size(), columns2, state2->state());
+
+    ColumnPtr serde_column1 = BinaryColumn::create();
+    func->serialize_to_column(local_ctx.get(), state1->state(), serde_column1.get());
+    ColumnPtr serde_column2 = BinaryColumn::create();
+    func->serialize_to_column(local_ctx.get(), state2->state(), serde_column2.get());
+
+    auto state3 = ManagedAggrState::create(local_ctx.get(), func);
+    func->merge(local_ctx.get(), serde_column1.get(), state3->state(), 0);
+    func->merge(local_ctx.get(), serde_column2.get(), state3->state(), 0);
+
+    auto result_column = ArrayColumn::create(BinaryColumn::create(), UInt32Column::create());
+    func->finalize_to_column(local_ctx.get(), state3->state(), result_column.get());
+
+    ASSERT_EQ(result_column->size(), 1);
+    auto& array_col = down_cast<ArrayColumn&>(*result_column);
+    auto& elements = down_cast<BinaryColumn&>(array_col.elements());
+    ASSERT_EQ(elements.size(), 3);
+    // min_n returns values in ascending order
+    EXPECT_EQ(elements.get_slice(0).to_string(), "apple");
+    EXPECT_EQ(elements.get_slice(1).to_string(), "banana");
+    EXPECT_EQ(elements.get_slice(2).to_string(), "cherry");
+}
+
+TEST_F(AggregateTest, test_min_n_get_n_value_types) {
+    // Test get_n_value with different integer types (int8, int16, int64)
+    const AggregateFunction* func = get_aggregate_function("min_n", TYPE_INT, TYPE_ARRAY, false);
+    ASSERT_TRUE(func != nullptr);
+
+    auto data_column = Int32Column::create();
+    data_column->append(10);
+    data_column->append(20);
+    data_column->append(30);
+
+    // Test with int8 (TINYINT), int16 (SMALLINT), int64 (BIGINT) n values
+    std::vector<std::pair<LogicalType, ColumnPtr>> n_columns = {
+            {TYPE_TINYINT, ColumnHelper::create_const_column<TYPE_TINYINT>(2, data_column->size())},
+            {TYPE_SMALLINT, ColumnHelper::create_const_column<TYPE_SMALLINT>(2, data_column->size())},
+            {TYPE_BIGINT, ColumnHelper::create_const_column<TYPE_BIGINT>(2, data_column->size())}};
+
+    for (auto& [n_type, n_column] : n_columns) {
+        std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_INT),
+                                                 TypeDescriptor::from_logical_type(n_type)};
+        auto return_type = TypeDescriptor::from_logical_type(TYPE_ARRAY);
+        std::unique_ptr<FunctionContext> local_ctx(
+                FunctionContext::create_test_context(std::move(arg_types), return_type));
+
+        Columns const_columns;
+        const_columns.emplace_back(data_column);
+        const_columns.emplace_back(n_column);
+        local_ctx->set_constant_columns(const_columns);
+
+        auto state = ManagedAggrState::create(local_ctx.get(), func);
+        const Column* columns[] = {data_column.get(), n_column.get()};
+        func->update_batch_single_state(local_ctx.get(), data_column->size(), columns, state->state());
+
+        auto result_column = ArrayColumn::create(Int32Column::create(), UInt32Column::create());
+        func->finalize_to_column(local_ctx.get(), state->state(), result_column.get());
+
+        auto& array_col = down_cast<ArrayColumn&>(*result_column);
+        auto& elements = down_cast<Int32Column&>(array_col.elements());
+        ASSERT_EQ(elements.size(), 2);
+        EXPECT_EQ(elements.get_data()[0], 10);
+        EXPECT_EQ(elements.get_data()[1], 20);
+    }
+}
+
+TEST_F(AggregateTest, test_min_n_reset) {
+    // Test reset() function
+    const AggregateFunction* func = get_aggregate_function("min_n", TYPE_INT, TYPE_ARRAY, false);
+    ASSERT_TRUE(func != nullptr);
+
+    auto data_column = Int32Column::create();
+    data_column->append(85);
+    data_column->append(92);
+    data_column->append(78);
+
+    auto n_column = ColumnHelper::create_const_column<TYPE_INT>(3, data_column->size());
+
+    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_INT),
+                                             TypeDescriptor::from_logical_type(TYPE_INT)};
+    auto return_type = TypeDescriptor::from_logical_type(TYPE_ARRAY);
+    std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
+
+    Columns const_columns;
+    const_columns.emplace_back(data_column);
+    const_columns.emplace_back(n_column);
+    local_ctx->set_constant_columns(const_columns);
+
+    auto state = ManagedAggrState::create(local_ctx.get(), func);
+    const Column* columns[] = {data_column.get(), n_column.get()};
+    func->update_batch_single_state(local_ctx.get(), data_column->size(), columns, state->state());
+
+    // Reset with new n value
+    auto n_column2 = ColumnHelper::create_const_column<TYPE_INT>(2, 1);
+    Columns const_columns2;
+    const_columns2.emplace_back(data_column);
+    const_columns2.emplace_back(n_column2);
+    local_ctx->set_constant_columns(const_columns2);
+    func->reset(local_ctx.get(), const_columns2, state->state());
+
+    // Add new data after reset
+    auto data_column2 = Int32Column::create();
+    data_column2->append(10);
+    data_column2->append(20);
+    const Column* columns2[] = {data_column2.get(), n_column2.get()};
+    func->update_batch_single_state(local_ctx.get(), data_column2->size(), columns2, state->state());
+
+    auto result_column = ArrayColumn::create(Int32Column::create(), UInt32Column::create());
+    func->finalize_to_column(local_ctx.get(), state->state(), result_column.get());
+
+    ASSERT_EQ(result_column->size(), 1);
+    auto& array_col = down_cast<ArrayColumn&>(*result_column);
+    auto& elements = down_cast<Int32Column&>(array_col.elements());
+    ASSERT_EQ(elements.size(), 2);
+    EXPECT_EQ(elements.get_data()[0], 10);
+    EXPECT_EQ(elements.get_data()[1], 20);
+}
+
+TEST_F(AggregateTest, test_min_n_with_frame) {
+    // Test update_batch_single_state_with_frame (non-nullable and nullable)
+    const AggregateFunction* func = get_aggregate_function("min_n", TYPE_INT, TYPE_ARRAY, false);
+    ASSERT_TRUE(func != nullptr);
+
+    // Test non-nullable column
+    {
+        auto data_column = Int32Column::create();
+        data_column->append(85);
+        data_column->append(92);
+        data_column->append(78);
+        data_column->append(95);
+        data_column->append(88);
+        auto n_column = ColumnHelper::create_const_column<TYPE_INT>(3, data_column->size());
+
+        std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_INT),
+                                                 TypeDescriptor::from_logical_type(TYPE_INT)};
+        auto return_type = TypeDescriptor::from_logical_type(TYPE_ARRAY);
+        std::unique_ptr<FunctionContext> local_ctx(
+                FunctionContext::create_test_context(std::move(arg_types), return_type));
+
+        Columns const_columns;
+        const_columns.emplace_back(data_column);
+        const_columns.emplace_back(n_column);
+        local_ctx->set_constant_columns(const_columns);
+
+        auto state = ManagedAggrState::create(local_ctx.get(), func);
+        const Column* columns[] = {data_column.get(), n_column.get()};
+        func->update_batch_single_state_with_frame(local_ctx.get(), state->state(), columns, 0, data_column->size(), 0,
+                                                   3);
+
+        auto result_column = ArrayColumn::create(Int32Column::create(), UInt32Column::create());
+        func->finalize_to_column(local_ctx.get(), state->state(), result_column.get());
+
+        auto& array_col = down_cast<ArrayColumn&>(*result_column);
+        auto& elements = down_cast<Int32Column&>(array_col.elements());
+        ASSERT_EQ(elements.size(), 3);
+        EXPECT_EQ(elements.get_data()[0], 78);
+        EXPECT_EQ(elements.get_data()[1], 85);
+        EXPECT_EQ(elements.get_data()[2], 92);
+    }
+
+    // Test nullable column
+    {
+        auto data_column = Int32Column::create();
+        auto null_column = NullColumn::create();
+        data_column->append(85);
+        null_column->append(0);
+        data_column->append(0);
+        null_column->append(1); // NULL
+        data_column->append(78);
+        null_column->append(0);
+        data_column->append(95);
+        null_column->append(0);
+        data_column->append(88);
+        null_column->append(0);
+
+        auto nullable_column = NullableColumn::create(data_column, null_column);
+        auto n_column = ColumnHelper::create_const_column<TYPE_INT>(3, nullable_column->size());
+
+        std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_INT),
+                                                 TypeDescriptor::from_logical_type(TYPE_INT)};
+        auto return_type = TypeDescriptor::from_logical_type(TYPE_ARRAY);
+        std::unique_ptr<FunctionContext> local_ctx(
+                FunctionContext::create_test_context(std::move(arg_types), return_type));
+
+        Columns const_columns;
+        const_columns.emplace_back(nullable_column);
+        const_columns.emplace_back(n_column);
+        local_ctx->set_constant_columns(const_columns);
+
+        auto state = ManagedAggrState::create(local_ctx.get(), func);
+        const Column* columns[] = {nullable_column.get(), n_column.get()};
+        func->update_batch_single_state_with_frame(local_ctx.get(), state->state(), columns, 0, nullable_column->size(),
+                                                   0, nullable_column->size());
+
+        auto result_column = ArrayColumn::create(Int32Column::create(), UInt32Column::create());
+        func->finalize_to_column(local_ctx.get(), state->state(), result_column.get());
+
+        auto& array_col = down_cast<ArrayColumn&>(*result_column);
+        auto& elements = down_cast<Int32Column&>(array_col.elements());
+        ASSERT_EQ(elements.size(), 3);
+        EXPECT_EQ(elements.get_data()[0], 78);
+        EXPECT_EQ(elements.get_data()[1], 85);
+        EXPECT_EQ(elements.get_data()[2], 88);
+    }
+}
+
+TEST_F(AggregateTest, test_min_n_convert_to_serialize_format) {
+    // Test convert_to_serialize_format (non-nullable and nullable)
+    const AggregateFunction* func = get_aggregate_function("min_n", TYPE_INT, TYPE_ARRAY, false);
+    ASSERT_TRUE(func != nullptr);
+
+    auto data_column = Int32Column::create();
+    data_column->append(85);
+    data_column->append(92);
+    data_column->append(78);
+    auto n_column = ColumnHelper::create_const_column<TYPE_INT>(2, data_column->size());
+
+    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_INT),
+                                             TypeDescriptor::from_logical_type(TYPE_INT)};
+    auto return_type = TypeDescriptor::from_logical_type(TYPE_ARRAY);
+    std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
+
+    Columns const_columns;
+    const_columns.emplace_back(data_column);
+    const_columns.emplace_back(n_column);
+    local_ctx->set_constant_columns(const_columns);
+
+    // Test non-nullable
+    {
+        ColumnPtr convert_result_column = BinaryColumn::create();
+        Columns src_columns;
+        src_columns.emplace_back(data_column);
+        func->convert_to_serialize_format(local_ctx.get(), src_columns, data_column->size(), &convert_result_column);
+        ASSERT_TRUE(convert_result_column->is_binary());
+        ASSERT_EQ(convert_result_column->size(), data_column->size());
+    }
+
+    // Test nullable
+    {
+        auto null_column = NullColumn::create();
+        auto data_col2 = Int32Column::create();
+        data_col2->append(85);
+        null_column->append(0);
+        data_col2->append(0);
+        null_column->append(1); // NULL
+        data_col2->append(78);
+        null_column->append(0);
+        auto nullable_column = NullableColumn::create(data_col2, null_column);
+
+        ColumnPtr convert_result_column = BinaryColumn::create();
+        Columns src_columns;
+        src_columns.emplace_back(nullable_column);
+        func->convert_to_serialize_format(local_ctx.get(), src_columns, nullable_column->size(),
+                                          &convert_result_column);
+        ASSERT_TRUE(convert_result_column->is_binary());
+        ASSERT_EQ(convert_result_column->size(), nullable_column->size());
+    }
+}
+
+TEST_F(AggregateTest, test_min_n_batch_operations) {
+    // Test batch_serialize and batch_finalize
+    const AggregateFunction* func = get_aggregate_function("min_n", TYPE_INT, TYPE_ARRAY, false);
+    ASSERT_TRUE(func != nullptr);
+
+    auto data_column = Int32Column::create();
+    data_column->append(85);
+    data_column->append(92);
+    data_column->append(78);
+    auto n_column = ColumnHelper::create_const_column<TYPE_INT>(2, data_column->size());
+
+    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_INT),
+                                             TypeDescriptor::from_logical_type(TYPE_INT)};
+    auto return_type = TypeDescriptor::from_logical_type(TYPE_ARRAY);
+    std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
+
+    Columns const_columns;
+    const_columns.emplace_back(data_column);
+    const_columns.emplace_back(n_column);
+    local_ctx->set_constant_columns(const_columns);
+
+    auto state1 = ManagedAggrState::create(local_ctx.get(), func);
+    auto state2 = ManagedAggrState::create(local_ctx.get(), func);
+    const Column* columns[] = {data_column.get(), n_column.get()};
+    func->update_batch_single_state(local_ctx.get(), data_column->size(), columns, state1->state());
+    func->update_batch_single_state(local_ctx.get(), data_column->size(), columns, state2->state());
+
+    Buffer<AggDataPtr> agg_states;
+    agg_states.push_back(state1->state());
+    agg_states.push_back(state2->state());
+
+    // Test batch_serialize
+    auto serde_column = BinaryColumn::create();
+    func->batch_serialize(local_ctx.get(), 2, agg_states, 0, serde_column.get());
+    ASSERT_EQ(serde_column->size(), 2);
+
+    // Test batch_finalize
+    auto result_column = ArrayColumn::create(Int32Column::create(), UInt32Column::create());
+    func->batch_finalize(local_ctx.get(), 2, agg_states, 0, result_column.get());
+    ASSERT_EQ(result_column->size(), 2);
+}
+
+TEST_F(AggregateTest, test_min_n_get_values) {
+    // Test get_values
+    const AggregateFunction* func = get_aggregate_function("min_n", TYPE_INT, TYPE_ARRAY, false);
+    ASSERT_TRUE(func != nullptr);
+
+    auto data_column = Int32Column::create();
+    data_column->append(85);
+    data_column->append(92);
+    data_column->append(78);
+    data_column->append(95);
+    data_column->append(88);
+
+    auto n_column = ColumnHelper::create_const_column<TYPE_INT>(3, data_column->size());
+
+    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_INT),
+                                             TypeDescriptor::from_logical_type(TYPE_INT)};
+    auto return_type = TypeDescriptor::from_logical_type(TYPE_ARRAY);
+    std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
+
+    Columns const_columns;
+    const_columns.emplace_back(data_column);
+    const_columns.emplace_back(n_column);
+    local_ctx->set_constant_columns(const_columns);
+
+    auto state = ManagedAggrState::create(local_ctx.get(), func);
+    const Column* columns[] = {data_column.get(), n_column.get()};
+    func->update_batch_single_state(local_ctx.get(), data_column->size(), columns, state->state());
+
+    auto result_column = ArrayColumn::create(Int32Column::create(), UInt32Column::create());
+    func->get_values(local_ctx.get(), state->state(), result_column.get(), 0, 1);
+
+    ASSERT_EQ(result_column->size(), 1);
+    auto& array_col = down_cast<ArrayColumn&>(*result_column);
+    auto& elements = down_cast<Int32Column&>(array_col.elements());
+    ASSERT_EQ(elements.size(), 3);
+    EXPECT_EQ(elements.get_data()[0], 78);
+    EXPECT_EQ(elements.get_data()[1], 85);
+    EXPECT_EQ(elements.get_data()[2], 88);
+}
+
+TEST_F(AggregateTest, test_min_n_empty_result) {
+    // Test empty result case
+    const AggregateFunction* func = get_aggregate_function("min_n", TYPE_INT, TYPE_ARRAY, false);
+    ASSERT_TRUE(func != nullptr);
+
+    // Create state but don't add any values
+    auto n_column = ColumnHelper::create_const_column<TYPE_INT>(3, 1);
+
+    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_INT),
+                                             TypeDescriptor::from_logical_type(TYPE_INT)};
+    auto return_type = TypeDescriptor::from_logical_type(TYPE_ARRAY);
+    std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
+
+    Columns const_columns;
+    const_columns.emplace_back(Int32Column::create());
+    const_columns.emplace_back(n_column);
+    local_ctx->set_constant_columns(const_columns);
+
+    auto state = ManagedAggrState::create(local_ctx.get(), func);
+
+    auto result_column = ArrayColumn::create(Int32Column::create(), UInt32Column::create());
+    func->finalize_to_column(local_ctx.get(), state->state(), result_column.get());
+
+    ASSERT_EQ(result_column->size(), 1);
+    auto& array_col = down_cast<ArrayColumn&>(*result_column);
+    ASSERT_EQ(array_col.elements().size(), 0); // Empty result
+}
+
+TEST_F(AggregateTest, test_min_n_get_name) {
+    // Test get_name
+    const AggregateFunction* func_min = get_aggregate_function("min_n", TYPE_INT, TYPE_ARRAY, false);
+    ASSERT_TRUE(func_min != nullptr);
+    EXPECT_EQ(func_min->get_name(), "min_n");
+
+    const AggregateFunction* func_max = get_aggregate_function("max_n", TYPE_INT, TYPE_ARRAY, false);
+    ASSERT_TRUE(func_max != nullptr);
+    EXPECT_EQ(func_max->get_name(), "max_n");
+}
+
+TEST_F(AggregateTest, test_max_n_with_frame) {
+    // Test update_batch_single_state_with_frame for max_n (INT, nullable, VARCHAR)
+    const AggregateFunction* func = get_aggregate_function("max_n", TYPE_INT, TYPE_ARRAY, false);
+    ASSERT_TRUE(func != nullptr);
+
+    // Test INT non-nullable
+    {
+        auto data_column = Int32Column::create();
+        data_column->append(85);
+        data_column->append(92);
+        data_column->append(78);
+        data_column->append(95);
+        data_column->append(88);
+        auto n_column = ColumnHelper::create_const_column<TYPE_INT>(3, data_column->size());
+
+        std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_INT),
+                                                 TypeDescriptor::from_logical_type(TYPE_INT)};
+        auto return_type = TypeDescriptor::from_logical_type(TYPE_ARRAY);
+        std::unique_ptr<FunctionContext> local_ctx(
+                FunctionContext::create_test_context(std::move(arg_types), return_type));
+
+        Columns const_columns;
+        const_columns.emplace_back(data_column);
+        const_columns.emplace_back(n_column);
+        local_ctx->set_constant_columns(const_columns);
+
+        auto state = ManagedAggrState::create(local_ctx.get(), func);
+        const Column* columns[] = {data_column.get(), n_column.get()};
+        func->update_batch_single_state_with_frame(local_ctx.get(), state->state(), columns, 0, data_column->size(), 0,
+                                                   3);
+
+        auto result_column = ArrayColumn::create(Int32Column::create(), UInt32Column::create());
+        func->finalize_to_column(local_ctx.get(), state->state(), result_column.get());
+
+        auto& array_col = down_cast<ArrayColumn&>(*result_column);
+        auto& elements = down_cast<Int32Column&>(array_col.elements());
+        ASSERT_EQ(elements.size(), 3);
+        EXPECT_EQ(elements.get_data()[0], 78);
+        EXPECT_EQ(elements.get_data()[1], 85);
+        EXPECT_EQ(elements.get_data()[2], 92);
+    }
+
+    // Test INT nullable
+    {
+        auto data_column = Int32Column::create();
+        auto null_column = NullColumn::create();
+        data_column->append(85);
+        null_column->append(0);
+        data_column->append(0);
+        null_column->append(1); // NULL
+        data_column->append(78);
+        null_column->append(0);
+        data_column->append(95);
+        null_column->append(0);
+        data_column->append(88);
+        null_column->append(0);
+
+        auto nullable_column = NullableColumn::create(data_column, null_column);
+        auto n_column = ColumnHelper::create_const_column<TYPE_INT>(3, nullable_column->size());
+
+        std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_INT),
+                                                 TypeDescriptor::from_logical_type(TYPE_INT)};
+        auto return_type = TypeDescriptor::from_logical_type(TYPE_ARRAY);
+        std::unique_ptr<FunctionContext> local_ctx(
+                FunctionContext::create_test_context(std::move(arg_types), return_type));
+
+        Columns const_columns;
+        const_columns.emplace_back(nullable_column);
+        const_columns.emplace_back(n_column);
+        local_ctx->set_constant_columns(const_columns);
+
+        auto state = ManagedAggrState::create(local_ctx.get(), func);
+        const Column* columns[] = {nullable_column.get(), n_column.get()};
+        func->update_batch_single_state_with_frame(local_ctx.get(), state->state(), columns, 0, nullable_column->size(),
+                                                   0, nullable_column->size());
+
+        auto result_column = ArrayColumn::create(Int32Column::create(), UInt32Column::create());
+        func->finalize_to_column(local_ctx.get(), state->state(), result_column.get());
+
+        auto& array_col = down_cast<ArrayColumn&>(*result_column);
+        auto& elements = down_cast<Int32Column&>(array_col.elements());
+        ASSERT_EQ(elements.size(), 3);
+        EXPECT_EQ(elements.get_data()[0], 85);
+        EXPECT_EQ(elements.get_data()[1], 88);
+        EXPECT_EQ(elements.get_data()[2], 95);
+    }
+
+    // Test VARCHAR
+    {
+        const AggregateFunction* str_func = get_aggregate_function("max_n", TYPE_VARCHAR, TYPE_ARRAY, false);
+        auto data_column = BinaryColumn::create();
+        data_column->append("zebra");
+        data_column->append("apple");
+        data_column->append("banana");
+        data_column->append("cherry");
+        data_column->append("date");
+        auto n_column = ColumnHelper::create_const_column<TYPE_INT>(3, data_column->size());
+
+        std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_VARCHAR),
+                                                 TypeDescriptor::from_logical_type(TYPE_INT)};
+        auto return_type = TypeDescriptor::from_logical_type(TYPE_ARRAY);
+        MemPool pool;
+        std::unique_ptr<FunctionContext> local_ctx(
+                FunctionContext::create_context(nullptr, &pool, return_type, arg_types));
+
+        Columns const_columns;
+        const_columns.emplace_back(data_column);
+        const_columns.emplace_back(n_column);
+        local_ctx->set_constant_columns(const_columns);
+
+        auto state = ManagedAggrState::create(local_ctx.get(), str_func);
+        const Column* columns[] = {data_column.get(), n_column.get()};
+        str_func->update_batch_single_state_with_frame(local_ctx.get(), state->state(), columns, 0, data_column->size(),
+                                                       0, data_column->size());
+
+        auto result_column = ArrayColumn::create(BinaryColumn::create(), UInt32Column::create());
+        str_func->finalize_to_column(local_ctx.get(), state->state(), result_column.get());
+
+        auto& array_col = down_cast<ArrayColumn&>(*result_column);
+        auto& elements = down_cast<BinaryColumn&>(array_col.elements());
+        ASSERT_EQ(elements.size(), 3);
+        EXPECT_EQ(elements.get_slice(0).to_string(), "cherry");
+        EXPECT_EQ(elements.get_slice(1).to_string(), "date");
+        EXPECT_EQ(elements.get_slice(2).to_string(), "zebra");
+    }
 }
 
 } // namespace starrocks

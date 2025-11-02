@@ -1329,12 +1329,12 @@ public class FunctionSet {
             // min_n(value, n) - returns an array of n minimum values
             Type arrayType = new ArrayType(t);
             addBuiltin(AggregateFunction.createBuiltin(MIN_N,
-                    Lists.newArrayList(t, Type.INT), arrayType, Type.VARBINARY,
+                    Lists.newArrayList(t, IntegerType.INT), arrayType, VarbinaryType.VARBINARY,
                     false, false, false));
 
             // max_n(value, n) - returns an array of n maximum values
             addBuiltin(AggregateFunction.createBuiltin(MAX_N,
-                    Lists.newArrayList(t, Type.INT), arrayType, Type.VARBINARY,
+                    Lists.newArrayList(t, IntegerType.INT), arrayType, VarbinaryType.VARBINARY,
                     false, false, false));
 
             // MAX_BY
