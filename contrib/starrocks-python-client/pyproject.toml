@@ -25,8 +25,10 @@ include = '\.pyi?$'
 
 
 [tool.pytest.ini_options]
-addopts = "--tb native -v -r fxX --maxfail=500 -p no:warnings"
-testpaths = ["test/"]
+addopts = "--tb native -n4 -v -r fxX --maxfail=500 -p no:warnings"
+#testpaths = ["test/"]
+python_files = "test/*test_*.py"
+#python_functions = "test_select_direct"
 
 # Integration test markers
 markers = [
