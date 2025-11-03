@@ -52,6 +52,9 @@ public class ReplayFromDumpTestBase {
     public static ConnectContext connectContext;
     public static StarRocksAssert starRocksAssert;
 
+    // Whether print log to system out
+    protected static boolean isOutputSystemOut = false;
+
     public static List<String> MODEL_LISTS = Lists.newArrayList("[end]", "[dump]", "[result]", "[fragment]",
             "[fragment statistics]");
 
