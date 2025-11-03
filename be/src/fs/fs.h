@@ -332,8 +332,12 @@ public:
     virtual StatusOr<SpaceInfo> space(const std::string& path) { return Status::NotSupported("FileSystem::space()"); }
 
     // Given the path to a remote file, delete the file's cache on the local file system, if any.
-    // On success, removed cache size is returned. If there is no cache, Status::NotFound is returned.
-    virtual StatusOr<size_t> drop_local_cache(const std::string& path) { return Status::NotFound(path); }
+    // On success, Status::OK is returned. If there is no cache, Status::NotFound is returned.
+    virtual Status drop_local_cache(const std::string& path) { return Status::NotFound(path); }
+
+    // Try to delete the file's cache on the local file system.
+    // On success, return the disk space that is freed
+    virtual StatusOr<size_t> try_drop_local_cache(const std::string& path) { return Status::NotFound(path); }
 
     // Batch delete the given files.
     // return ok if all success (not found error ignored), error if any failed and the message indicates the fail message

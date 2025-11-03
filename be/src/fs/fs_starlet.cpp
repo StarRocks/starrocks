@@ -633,13 +633,22 @@ public:
         return Status::NotSupported("StarletFileSystem::link_file");
     }
 
-    StatusOr<size_t> drop_local_cache(const std::string& path) override {
+    Status drop_local_cache(const std::string& path) override {
         ASSIGN_OR_RETURN(auto pair, parse_starlet_uri(path));
         auto fs_st = get_shard_filesystem(pair.second);
         if (!fs_st.ok()) {
             return to_status(fs_st.status());
         }
-        auto drop_st = (*fs_st)->drop_cache(pair.first);
+        return to_status((*fs_st)->drop_cache(pair.first));
+    }
+
+    StatusOr<size_t> try_drop_local_cache(const std::string& path) override {
+        ASSIGN_OR_RETURN(auto pair, parse_starlet_uri(path));
+        auto fs_st = get_shard_filesystem(pair.second);
+        if (!fs_st.ok()) {
+            return to_status(fs_st.status());
+        }
+        auto drop_st = (*fs_st)->try_drop_cache(pair.first);
         if (!drop_st.ok()) {
             return to_status(drop_st.status());
         }

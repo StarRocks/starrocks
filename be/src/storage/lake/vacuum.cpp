@@ -765,7 +765,7 @@ void delete_tablet_cache(TabletManager* tablet_mgr, const DeleteTabletCacheReque
         if (config::lake_print_delete_log) {
             LOG(INFO) << "deleting cache file: " << path;
         }
-        auto st = fs.value()->drop_local_cache(path);
+        auto st = fs.value()->try_drop_local_cache(path);
         if (st.ok()) {
             deleted_file_size += *st;
             deleted_files++;
