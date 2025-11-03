@@ -378,9 +378,12 @@ private:
 
 static const TypeDescriptor TYPE_UNKNOWN_DESC = TypeDescriptor(LogicalType::TYPE_UNKNOWN);
 static const TypeDescriptor TYPE_BOOLEAN_DESC = TypeDescriptor{LogicalType::TYPE_BOOLEAN};
+static const TypeDescriptor TYPE_TINYINT_DESC = TypeDescriptor{LogicalType::TYPE_TINYINT};
 static const TypeDescriptor TYPE_SMALLINT_DESC = TypeDescriptor{LogicalType::TYPE_SMALLINT};
 static const TypeDescriptor TYPE_INT_DESC = TypeDescriptor(LogicalType::TYPE_INT);
 static const TypeDescriptor TYPE_BIGINT_DESC = TypeDescriptor(LogicalType::TYPE_BIGINT);
+static const TypeDescriptor TYPE_FLOAT_DESC = TypeDescriptor(LogicalType::TYPE_FLOAT);
+static const TypeDescriptor TYPE_DOUBLE_DESC = TypeDescriptor(LogicalType::TYPE_DOUBLE);
 static const TypeDescriptor TYPE_TIME_DESC = TypeDescriptor(LogicalType::TYPE_TIME);
 static const TypeDescriptor TYPE_DATE_DESC = TypeDescriptor(LogicalType::TYPE_DATE);
 static const TypeDescriptor TYPE_DATETIME_DESC = TypeDescriptor(LogicalType::TYPE_DATETIME);
