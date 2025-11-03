@@ -49,7 +49,6 @@ import java.util.stream.Stream;
 
 public class ReplayFromDumpTestBase {
     public static ConnectContext connectContext;
-    public static StarRocksAssert starRocksAssert;
 
     public static List<String> MODEL_LISTS = Lists.newArrayList("[end]", "[dump]", "[result]", "[fragment]",
             "[fragment statistics]");
