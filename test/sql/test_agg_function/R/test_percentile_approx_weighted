@@ -47,7 +47,11 @@ E: (1064, "Getting analyzing error. Detail message: percentile_approx requires t
 -- !result
 select percentile_approx_weighted(c1, c1, 0.9, 10000) from t1;
 -- result:
+<<<<<<< HEAD
 47434.98828125
+=======
+47435
+>>>>>>> c27b5a341c ([BugFix]When the PercentileApprox function is wrapped by NullableAggregateFunction, it causes compression to be lost. (#64845))
 -- !result
 select percentile_approx_weighted(c2, c1, 0.5) from t1;
 -- result:
@@ -99,7 +103,11 @@ select percentile_approx_weighted(c2, 1, 0.9, 8000) from t1;
 -- !result
 select percentile_approx_weighted(c2, c1, 0.9, 10000) from t1;
 -- result:
+<<<<<<< HEAD
 47434.98828125
+=======
+47435
+>>>>>>> c27b5a341c ([BugFix]When the PercentileApprox function is wrapped by NullableAggregateFunction, it causes compression to be lost. (#64845))
 -- !result
 select percentile_approx_weighted(c3, c1, 0.5) from t1;
 -- result:
@@ -262,7 +270,11 @@ E: (1064, "Getting analyzing error. Detail message: percentile_approx requires t
 -- !result
 select percentile_approx_weighted(c1, c1, 0.9, 10000) from t1;
 -- result:
+<<<<<<< HEAD
 47434.98828125
+=======
+47435
+>>>>>>> c27b5a341c ([BugFix]When the PercentileApprox function is wrapped by NullableAggregateFunction, it causes compression to be lost. (#64845))
 -- !result
 select percentile_approx_weighted(c2, c1, 0.5) from t1;
 -- result:
@@ -282,7 +294,11 @@ select percentile_approx_weighted(c2, 10, 0.9, 5000) from t1;
 -- !result
 select percentile_approx_weighted(c2, c1, 0.9, 10000) from t1;
 -- result:
+<<<<<<< HEAD
 47434.98828125
+=======
+47435
+>>>>>>> c27b5a341c ([BugFix]When the PercentileApprox function is wrapped by NullableAggregateFunction, it causes compression to be lost. (#64845))
 -- !result
 select percentile_approx_weighted(c3, c1, 0.5) from t1;
 -- result:
