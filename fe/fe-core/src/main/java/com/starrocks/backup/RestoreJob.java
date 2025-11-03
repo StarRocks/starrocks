@@ -870,18 +870,19 @@ public class RestoreJob extends AbstractJob {
 
     public Status resetMVIdsForRestore(GlobalStateMgr globalStateMgr,
                                        MaterializedView remoteOlapTbl,
-                                       Database db, int restoreReplicationNum,
+                                       Database db,
+                                       int restoreReplicationNum,
                                        MvRestoreContext mvRestoreContext) {
         // change db_id to new restore id
-        MvId oldMvId = new MvId(dbId, remoteOlapTbl.getId());
+        MvId oldMvId = new MvId(remoteOlapTbl.getDbId(), remoteOlapTbl.getId());
 
-        this.dbId = db.getId();
+        remoteOlapTbl.setDbId(db.getId());
         Status status = resetIdsForRestore(globalStateMgr, remoteOlapTbl, db, restoreReplicationNum, mvRestoreContext);
         if (!status.ok()) {
             return status;
         }
         // store new mvId to for old mvId
-        MvId newMvId = new MvId(dbId, remoteOlapTbl.getId());
+        MvId newMvId = new MvId(db.getId(), remoteOlapTbl.getId());
         MvBackupInfo mvBackupInfo = mvRestoreContext.getMvIdToTableNameMap()
                 .computeIfAbsent(oldMvId, x -> new MvBackupInfo(db.getFullName(), remoteOlapTbl.getName()));
         mvBackupInfo.setLocalMvId(newMvId);
