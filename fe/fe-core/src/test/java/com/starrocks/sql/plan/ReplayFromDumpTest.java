@@ -1090,49 +1090,4 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
             FeConstants.USE_MOCK_DICT_MANAGER = false;
         }
     }
-
-    @Test
-<<<<<<< HEAD
-    public void testViewBasedRewrite1() throws Exception {
-        String fileContent = getDumpInfoFromFile("query_dump/view_based_rewrite1");
-        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(fileContent);
-        SessionVariable sessionVariable = queryDumpInfo.getSessionVariable();
-        QueryDebugOptions debugOptions = new QueryDebugOptions();
-        debugOptions.setEnableQueryTraceLog(true);
-        sessionVariable.setQueryDebugOptions(debugOptions.toString());
-        new MockUp<MVTransformerContext>() {
-            /**
-             * {@link com.starrocks.sql.optimizer.transformer.MVTransformerContext#isEnableViewBasedMVRewrite(View)} ()}
-             */
-            @Mock
-            public boolean isEnableViewBasedMVRewrite(View view) {
-                return true;
-            }
-        };
-        Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(fileContent, sessionVariable);
-        String plan = replayPair.second;
-        PlanTestBase.assertContains(plan, "single_mv_ads_biz_customer_combine_td_for_task_2y");
-=======
-    public void testSingleNodePlanWithMultiAggStage1() throws Exception {
-        new MockUp<Utils>() {
-            @Mock
-            public static boolean isSingleNodeExecution(ConnectContext context) {
-                return true;
-            }
-            @Mock
-            public static boolean isRunningInUnitTest() {
-                return false;
-            }
-        };
-        String plan = getPlanFragment("query_dump/single_node_plan1", TExplainLevel.NORMAL);
-        PlanTestBase.assertContains(plan, "  2:AGGREGATE (update serialize)\n" +
-                "  |  STREAMING\n" +
-                "  |  output: sum(106: sum), count(107: count), avg(108: avg), count(3: UserID)\n" +
-                "  |  group by: 10: RegionID\n" +
-                "  |  \n" +
-                "  1:AGGREGATE (update serialize)\n" +
-                "  |  output: sum(41: AdvEngineID), count(*), avg(21: ResolutionWidth)\n" +
-                "  |  group by: 3: UserID, 10: RegionID");
->>>>>>> af3b9ba70e ([UT] Fix unstable mv related cases (#64829))
-    }
 }

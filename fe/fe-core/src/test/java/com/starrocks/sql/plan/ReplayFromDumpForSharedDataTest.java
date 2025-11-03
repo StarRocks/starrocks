@@ -23,8 +23,6 @@ import com.starrocks.server.RunMode;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import com.starrocks.warehouse.cngroup.ComputeResource;
-import com.starrocks.warehouse.cngroup.WarehouseComputeResourceProvider;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
@@ -34,12 +32,6 @@ import org.junit.jupiter.api.Test;
 public class ReplayFromDumpForSharedDataTest extends ReplayFromDumpTestBase {
     @BeforeAll
     public static void beforeClass() throws Exception {
-        new MockUp<WarehouseComputeResourceProvider>() {
-            @Mock
-            public boolean isResourceAvailable(ComputeResource computeResource) {
-                return true;
-            }
-        };
         UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
 
         // create connect context
