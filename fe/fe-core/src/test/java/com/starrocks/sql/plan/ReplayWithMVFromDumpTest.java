@@ -57,7 +57,6 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         sessionVariable.setTraceLogLevel(10);
 
         QueryDebugOptions queryDebugOptions = new QueryDebugOptions();
-        queryDebugOptions.setEnableQueryTraceLog(true);
         sessionVariable.setQueryDebugOptions(queryDebugOptions.toString());
         Pair<QueryDumpInfo, String> result = getPlanFragment(fileContent, sessionVariable, explainLevel);
         return result.second;
