@@ -506,13 +506,13 @@ Status LoadChannel::_update_and_serialize_profile(std::string* result, bool prin
     ThriftSerializer ser(false, 4096);
     Status st = ser.serialize(&thrift_profile, &len, &buf);
     if (!st.ok()) {
-        LOG(ERROR) << "Failed to serialize LoadChannel profile, load_id: " << _load_id << ", txn_id: " << _txn_id
-                   << ", status: " << st;
+        LOG(ERROR) << "Failed to serialize LoadChannel profile, load_id: " << print_id(_load_id)
+                   << ", txn_id: " << _txn_id << ", status: " << st;
         return Status::InternalError("Failed to serialize profile, error: " + st.to_string());
     }
     COUNTER_UPDATE(_profile_serialized_size, len);
     result->append((char*)buf, len);
-    VLOG(2) << "report profile, load_id: " << _load_id << ", txn_id: " << _txn_id << ", size: " << len;
+    VLOG(2) << "report profile, load_id: " << print_id(_load_id) << ", txn_id: " << _txn_id << ", size: " << len;
     return Status::OK();
 }
 
