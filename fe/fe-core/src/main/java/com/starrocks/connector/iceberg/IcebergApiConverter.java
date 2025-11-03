@@ -79,7 +79,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -98,7 +97,6 @@ import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ICEBERG_C
 import static com.starrocks.connector.iceberg.IcebergMetadata.COMPRESSION_CODEC;
 import static com.starrocks.connector.iceberg.IcebergMetadata.FILE_FORMAT;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.toResourceName;
-import static com.starrocks.sql.ast.OutFileClause.PARQUET_COMPRESSION_TYPE_MAP;
 import static java.lang.String.format;
 import static org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap.copyOf;
 import static org.apache.iceberg.view.ViewProperties.COMMENT;
