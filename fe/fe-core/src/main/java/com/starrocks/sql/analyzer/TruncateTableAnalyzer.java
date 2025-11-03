@@ -17,15 +17,35 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
 import com.starrocks.qe.ConnectContext;
+<<<<<<< HEAD
 import com.starrocks.sql.ast.PartitionNames;
+=======
+import com.starrocks.sql.ast.PartitionRef;
+import com.starrocks.sql.ast.QualifiedName;
+import com.starrocks.sql.ast.TableRef;
+>>>>>>> f658882e9e ([Enhancement] Support truncate iceberg table (#64768))
 import com.starrocks.sql.ast.TruncateTableStmt;
+
+import java.util.List;
 
 public class TruncateTableAnalyzer {
 
     public static void analyze(TruncateTableStmt statement, ConnectContext context) {
+<<<<<<< HEAD
         statement.getTblRef().getName().normalization(context);
         if (statement.getTblRef().hasExplicitAlias()) {
             throw new SemanticException("Not support truncate table with alias");
+=======
+        TableRef tableRef = statement.getTblRef();
+        
+        // Validate catalog
+        String catalog = tableRef.getCatalogName();
+        if (Strings.isNullOrEmpty(catalog)) {
+            catalog = context.getCurrentCatalog();
+            if (Strings.isNullOrEmpty(catalog)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalog);
+            }
+>>>>>>> f658882e9e ([Enhancement] Support truncate iceberg table (#64768))
         }
 
         PartitionNames partitionNames = statement.getTblRef().getPartitionNames();
@@ -38,5 +58,9 @@ public class TruncateTableAnalyzer {
                 throw new SemanticException("there are empty partition name");
             }
         }
+
+        TableRef nomalizedTableRef = new TableRef(QualifiedName.of(List.of(catalog, db, tbl)), partitionRef,
+                tableRef.getPos());
+        statement.setTblRef(nomalizedTableRef);
     }
 }

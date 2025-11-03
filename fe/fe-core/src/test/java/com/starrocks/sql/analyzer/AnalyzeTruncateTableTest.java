@@ -41,7 +41,11 @@ public class AnalyzeTruncateTableTest {
         stmt = (TruncateTableStmt) analyzeSuccess("TRUNCATE TABLE tbl PARTITION(p1, p2);");
         Assertions.assertEquals("tbl", stmt.getTblName());
         Assertions.assertEquals("test", stmt.getDbName());
+<<<<<<< HEAD
         Assertions.assertEquals(stmt.getTblRef().getPartitionNames().getPartitionNames().toString(), "[p1, p2]");
+=======
+        Assertions.assertEquals("[p1, p2]", stmt.getTblRef().getPartitionDef().getPartitionNames().toString());
+>>>>>>> f658882e9e ([Enhancement] Support truncate iceberg table (#64768))
     }
 
     @Test
