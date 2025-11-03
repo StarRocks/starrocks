@@ -76,7 +76,7 @@ public class SplitTopNAggregateRule extends TransformationRule {
         LogicalOlapScanOperator scan = input.inputAt(0).inputAt(0).getOp().cast();
 
         if (topN.getLimit() == Operator.DEFAULT_LIMIT
-                && topN.getLimit() > context.getSessionVariable().getSplitTopNAggLimit()) {
+                || topN.getLimit() > context.getSessionVariable().getSplitTopNAggLimit()) {
             return false;
         }
         if (scan.getProjection() != null) {
@@ -94,7 +94,7 @@ public class SplitTopNAggregateRule extends TransformationRule {
         }
 
         Statistics ss = input.inputAt(0).getStatistics();
-        if (!FeConstants.runningUnitTest && ss.getOutputRowCount() < (topN.getLimit() * 10)
+        if (!FeConstants.runningUnitTest && ss != null && ss.getOutputRowCount() < (topN.getLimit() * 10)
                 && ss.getColumnStatistics().values().stream().noneMatch(ColumnStatistic::isUnknown)) {
             return false;
         }
