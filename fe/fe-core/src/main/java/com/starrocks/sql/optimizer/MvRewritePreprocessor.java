@@ -223,7 +223,6 @@ public class MvRewritePreprocessor {
                         sessionVariable.getOptimizerMaterializedViewTimeLimitMillis()),
                 Pair.create("materialized_view_join_same_table_permutation_limit",
                         sessionVariable.getMaterializedViewJoinSameTablePermutationLimit()),
-                Pair.create("analyze_mv", sessionVariable.getAnalyzeForMV()),
                 Pair.create("query_excluding_mv_names", sessionVariable.getQueryExcludingMVNames()),
                 Pair.create("query_including_mv_names", sessionVariable.getQueryIncludingMVNames()),
                 Pair.create("cbo_materialized_view_rewrite_rule_output_limit",

@@ -2779,7 +2779,6 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                                         context.getState().reset();
                                         context.setQueryId(UUID.fromString(status.getQueryId()));
                                         context.setIsLastStmt(true);
-                                        context.getSessionVariable().setAnalyzeForMv("full");
                                         context.setThreadLocalInfo();
                                         return context;
                                     }
