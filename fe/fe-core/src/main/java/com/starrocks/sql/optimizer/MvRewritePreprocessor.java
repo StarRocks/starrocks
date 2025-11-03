@@ -855,16 +855,11 @@ public class MvRewritePreprocessor {
         
         // Log summary
         int successCount = mvInfos.size() - timeoutMvNames.size() - failedMvNames.size();
-<<<<<<< HEAD
-        logMVPrepare(connectContext, "MV preparation summary: {} successful, {} timeout, {} failed out of {} total",
-                successCount, timeoutMvNames.size(), failedMvNames.size(), mvInfos.size());
-=======
         logMVPrepare(connectContext, "MV preparation summary: {} successful, {} timeout, {} failed out of {} total. " +
                         "Timeout MVs: {}, Failed MVs: {}",
                 successCount, timeoutMvNames.size(), failedMvNames.size(), mvInfos.size(), 
                 timeoutMvNames.isEmpty() ? "none" : timeoutMvNames,
                 failedMvNames.isEmpty() ? "none" : failedMvNames);
->>>>>>> af3b9ba70e ([UT] Fix unstable mv related cases (#64829))
     }
 
     /**

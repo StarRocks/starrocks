@@ -15,6 +15,10 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
+import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.common.QueryDebugOptions;
+import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.BeforeAll;
@@ -22,6 +26,7 @@ import org.junit.jupiter.api.MethodOrderer.MethodName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
 
+import static com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase.disableMVRewriteConsiderDataLayout;
 import static com.starrocks.sql.plan.PlanTestNoneDBBase.assertContains;
 import static com.starrocks.sql.plan.PlanTestNoneDBBase.assertNotContains;
 
@@ -37,9 +42,7 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
         connectContext.getSessionVariable().setEnableViewBasedMvRewrite(true);
         FeConstants.isReplayFromQueryDump = true;
-<<<<<<< HEAD
-=======
-        MVTestBase.disableMVRewriteConsiderDataLayout();
+        disableMVRewriteConsiderDataLayout();
     }
 
     @Override
@@ -60,7 +63,6 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         sessionVariable.setQueryDebugOptions(queryDebugOptions.toString());
         Pair<QueryDumpInfo, String> result = getPlanFragment(fileContent, sessionVariable, explainLevel);
         return result.second;
->>>>>>> af3b9ba70e ([UT] Fix unstable mv related cases (#64829))
     }
 
     @Test
