@@ -47,6 +47,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import com.starrocks.thrift.TCacheParam;
@@ -416,7 +417,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     }
 
     public void setOutputExprs(List<Expr> outputExprs) {
-        this.outputExprs = Expr.cloneList(outputExprs, null);
+        this.outputExprs = ExprUtils.cloneList(outputExprs, null);
     }
 
     /**
@@ -1027,7 +1028,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     private void removeDictMappingProbeRuntimeFilters(PlanNode root) {
         root.getProbeRuntimeFilters().removeIf(filter -> {
             Expr probExpr = filter.getNodeIdToProbeExpr().get(root.getId().asInt());
-            return probExpr.containsDictMappingExpr();
+            return ExprUtils.containsDictMappingExpr(probExpr);
         });
 
         for (PlanNode child : root.getChildren()) {

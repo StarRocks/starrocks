@@ -295,6 +295,7 @@ public interface ConnectorMetadata {
     }
 
     default void truncateTable(TruncateTableStmt truncateTableStmt, ConnectContext context) throws DdlException {
+        throw new StarRocksConnectorException("This connector doesn't support truncate table");
     }
 
     default void createTableLike(CreateTableLikeStmt stmt) throws DdlException {

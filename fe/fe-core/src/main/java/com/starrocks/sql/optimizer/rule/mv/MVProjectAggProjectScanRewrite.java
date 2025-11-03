@@ -22,7 +22,7 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
-import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
@@ -90,7 +90,7 @@ public class MVProjectAggProjectScanRewrite {
                                            CallOperator queryAgg) {
         CallOperator percentileApproxRaw = new CallOperator(FunctionSet.PERCENTILE_APPROX_RAW,
                 Type.DOUBLE, Lists.newArrayList(aggUsedColumn.second, queryAgg.getChild(1)),
-                Expr.getBuiltinFunction(
+                ExprUtils.getBuiltinFunction(
                         FunctionSet.PERCENTILE_APPROX_RAW,
                         new Type[] {Type.PERCENTILE, Type.DOUBLE},
                         Function.CompareMode.IS_IDENTICAL));
@@ -177,7 +177,7 @@ public class MVProjectAggProjectScanRewrite {
     }
 
     private CallOperator getPercentileFunction(CallOperator oldAgg) {
-        Function fn = Expr.getBuiltinFunction(FunctionSet.PERCENTILE_UNION,
+        Function fn = ExprUtils.getBuiltinFunction(FunctionSet.PERCENTILE_UNION,
                 new Type[] {Type.PERCENTILE}, IS_IDENTICAL);
         ScalarOperator child = oldAgg.getChildren().get(0);
         if (child instanceof CastOperator) {

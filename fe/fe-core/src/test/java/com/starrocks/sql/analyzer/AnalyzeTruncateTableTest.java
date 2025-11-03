@@ -39,7 +39,7 @@ public class AnalyzeTruncateTableTest {
 
         stmt = (TruncateTableStmt) analyzeSuccess("TRUNCATE TABLE tbl PARTITION(p1, p2);");
         Assertions.assertEquals("tbl", stmt.getTblName());
-        Assertions.assertNull(stmt.getDbName());
+        Assertions.assertEquals("test", stmt.getDbName());
         Assertions.assertEquals("[p1, p2]", stmt.getTblRef().getPartitionDef().getPartitionNames().toString());
     }
 

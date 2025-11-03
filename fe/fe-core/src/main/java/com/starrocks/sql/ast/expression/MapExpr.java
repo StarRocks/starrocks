@@ -33,7 +33,7 @@ public class MapExpr extends Expr {
     public MapExpr(Type type, List<Expr> items) {
         super();
         this.type = type;
-        this.children = Expr.cloneList(items);
+        this.children = ExprUtils.cloneList(items);
         this.explicitType = this.type != null;
     }
 
@@ -41,7 +41,7 @@ public class MapExpr extends Expr {
     public MapExpr(Type type, List<Expr> items, NodePosition pos) {
         super(pos);
         this.type = type;
-        this.children = Expr.cloneList(items);
+        this.children = ExprUtils.cloneList(items);
         this.explicitType = this.type != null;
     }
 

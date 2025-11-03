@@ -14,7 +14,6 @@
 
 
 package com.starrocks.sql.optimizer.rewrite.scalar;
-
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;

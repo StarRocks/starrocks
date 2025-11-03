@@ -23,7 +23,7 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.ast.expression.BinaryType;
-import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
@@ -113,7 +113,7 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
         }
 
         Type[] argTypes = args.stream().map(ScalarOperator::getType).toArray(Type[]::new);
-        Function fn = Expr.getBuiltinFunction(FunctionSet.IF, argTypes, Function.CompareMode.IS_IDENTICAL);
+        Function fn = ExprUtils.getBuiltinFunction(FunctionSet.IF, argTypes, Function.CompareMode.IS_IDENTICAL);
 
         if (fn == null) {
             return operator;
@@ -470,7 +470,7 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
         if (result != 0) {
             String fnName = result < 0 ? Objects.requireNonNull(TIME_FNS.get(fn)).get(1) :
                     Objects.requireNonNull(TIME_FNS.get(fn)).get(0);
-            Function newFn = Expr.getBuiltinFunction(fnName, call.getFunction().getArgs(),
+            Function newFn = ExprUtils.getBuiltinFunction(fnName, call.getFunction().getArgs(),
                     Function.CompareMode.IS_SUPERTYPE_OF);
             return new CallOperator(fnName, call.getType(), Lists.newArrayList(child.getChild(0), interval), newFn);
         } else {
@@ -611,7 +611,7 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
             // Keep original behavior: only succeeds when argument list matches hour_from_unixtime signature
             Type[] argTypes = fromUnixTime.getChildren().stream().map(ScalarOperator::getType).toArray(Type[]::new);
             Function fn =
-                    Expr.getBuiltinFunction(FunctionSet.HOUR_FROM_UNIXTIME, argTypes,
+                    ExprUtils.getBuiltinFunction(FunctionSet.HOUR_FROM_UNIXTIME, argTypes,
                             Function.CompareMode.IS_IDENTICAL);
             if (fn == null) {
                 return call;
@@ -664,7 +664,7 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
             // Build hour_from_unixtime(...) with the converted unix time argument
             Type[] argTypes = new Type[] { unixtimeArgForHour.getType() };
             Function fn =
-                    Expr.getBuiltinFunction(FunctionSet.HOUR_FROM_UNIXTIME, argTypes, Function.CompareMode.IS_IDENTICAL);
+                    ExprUtils.getBuiltinFunction(FunctionSet.HOUR_FROM_UNIXTIME, argTypes, Function.CompareMode.IS_IDENTICAL);
 
             if (fn == null) {
                 return call;

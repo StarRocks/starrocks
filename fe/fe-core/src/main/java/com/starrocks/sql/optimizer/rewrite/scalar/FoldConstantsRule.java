@@ -29,7 +29,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.ArithmeticExpr;
 import com.starrocks.sql.ast.expression.BinaryType;
-import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.operator.scalar.ArrayOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -162,7 +162,7 @@ public class FoldConstantsRule extends BottomUpScalarOperatorRewriteRule {
         BinaryOperator<ConstantOperator> add = (lhs, rhs) -> {
             String opName = ArithmeticExpr.Operator.ADD.getName();
             com.starrocks.catalog.Function fn =
-                    Expr.getBuiltinFunction(opName, new Type[] {lhs.getType(), rhs.getType()},
+                    ExprUtils.getBuiltinFunction(opName, new Type[] {lhs.getType(), rhs.getType()},
                             com.starrocks.catalog.Function.CompareMode.IS_SUPERTYPE_OF);
             // for decimal types, add function should be rectified.
             if (call.getType().isDecimalV3()) {
@@ -221,7 +221,7 @@ public class FoldConstantsRule extends BottomUpScalarOperatorRewriteRule {
 
         String opName = ArithmeticExpr.Operator.DIVIDE.getName();
         com.starrocks.catalog.Function
-                fn = Expr.getBuiltinFunction(opName, new Type[] {call.getType(), call.getType()},
+                fn = ExprUtils.getBuiltinFunction(opName, new Type[] {call.getType(), call.getType()},
                 com.starrocks.catalog.Function.CompareMode.IS_SUPERTYPE_OF);
 
         // for decimal types, divide function should be rectified.

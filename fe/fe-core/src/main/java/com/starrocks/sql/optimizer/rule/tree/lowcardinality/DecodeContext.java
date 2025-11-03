@@ -22,7 +22,7 @@ import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
-import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -272,7 +272,7 @@ class DecodeContext {
             }
 
             Type[] argTypes = newChildren.stream().map(ScalarOperator::getType).toArray(Type[]::new);
-            Function arrayFn = Expr.getBuiltinFunction(call.getFnName(), argTypes,
+            Function arrayFn = ExprUtils.getBuiltinFunction(call.getFnName(), argTypes,
                     Function.CompareMode.IS_SUPERTYPE_OF);
             ScalarOperator result = new CallOperator(call.getFnName(), arrayFn.getReturnType(), newChildren, arrayFn);
 
@@ -328,7 +328,7 @@ class DecodeContext {
             if (call.getFunction() instanceof AggregateFunction) {
                 Type argType = newChildren.get(0).getType().isArrayType() ? new ArrayType(Type.INT) : Type.INT;
                 Type[] argTypes = new Type[] {argType};
-                Function fn = Expr.getBuiltinFunction(call.getFnName(), argTypes, Function.CompareMode.IS_SUPERTYPE_OF);
+                Function fn = ExprUtils.getBuiltinFunction(call.getFnName(), argTypes, Function.CompareMode.IS_SUPERTYPE_OF);
                 // min/max function: will rewrite all stage, return type is dict type
                 if (FunctionSet.MAX.equals(call.getFnName()) || FunctionSet.MIN.equals(call.getFnName())) {
                     return new CallOperator(call.getFnName(), fn.getReturnType(), newChildren, fn,
@@ -357,7 +357,7 @@ class DecodeContext {
             for (int i = 0; i < newChildren.size(); i++) {
                 argTypes[i] = newChildren.get(i).getType();
             }
-            Function fn = Expr.getBuiltinFunction(call.getFnName(), argTypes, Function.CompareMode.IS_SUPERTYPE_OF);
+            Function fn = ExprUtils.getBuiltinFunction(call.getFnName(), argTypes, Function.CompareMode.IS_SUPERTYPE_OF);
             return new CallOperator(call.getFnName(), fn.getReturnType(), newChildren, fn,
                     call.isDistinct(), call.isRemovedDistinct());
         }
