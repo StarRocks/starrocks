@@ -201,7 +201,7 @@ Status TabletSinkColocateSender::open_wait() {
     });
 
     if (_has_intolerable_failure()) {
-        LOG(WARNING) << "Open channel failed. load_id: " << _load_id << ", error: " << err_st.to_string();
+        LOG(WARNING) << "Open channel failed. load_id: " << print_id(_load_id) << ", error: " << err_st.to_string();
         return err_st;
     }
 
