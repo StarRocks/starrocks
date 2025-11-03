@@ -264,4 +264,10 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
                 getPlanFragment("query_dump/force_rule_based_mv_rewrite_drinks", TExplainLevel.COSTS);
         PlanTestBase.assertContains(plan, "partition_flat_consumptions_partition_drinks");
     }
+
+    @Test
+    public void testAggPushDownRewriteBugs6() throws Exception {
+        String plan = getPlanFragment("query_dump/materialized-view/mv_rewrite_bugs6", TExplainLevel.COSTS);
+        assertContains(plan, "mv_f_driver_online_detail_h_6");
+    }
 }

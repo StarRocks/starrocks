@@ -768,7 +768,7 @@ public class OlapTableFactory implements AbstractTableFactory {
             // do not create partition for external table
             if (table.isOlapOrCloudNativeTable()) {
                 if (partitionInfo.getType() == PartitionType.UNPARTITIONED) {
-                    if (properties != null && !properties.isEmpty()) {
+                    if (!FeConstants.isReplayFromQueryDump && properties != null && !properties.isEmpty()) {
                         // here, all properties should be checked
                         throw new DdlException("Unknown properties: " + properties);
                     }
@@ -802,7 +802,7 @@ public class OlapTableFactory implements AbstractTableFactory {
                         if (hasMedium) {
                             table.setStorageMedium(dataProperty.getStorageMedium());
                         }
-                        if (properties != null && !properties.isEmpty()) {
+                        if (!FeConstants.isReplayFromQueryDump && properties != null && !properties.isEmpty()) {
                             // here, all properties should be checked
                             throw new DdlException("Unknown properties: " + properties);
                         }

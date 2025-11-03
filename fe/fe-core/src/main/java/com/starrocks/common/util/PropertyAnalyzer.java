@@ -1662,7 +1662,11 @@ public class PropertyAnalyzer {
             // replication_num
             short replicationNum = RunMode.defaultReplicationNum();
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM)) {
-                replicationNum = PropertyAnalyzer.analyzeReplicationNum(properties, replicationNum);
+                if (FeConstants.isReplayFromQueryDump) {
+                    replicationNum = 1;
+                } else {
+                    replicationNum = PropertyAnalyzer.analyzeReplicationNum(properties, replicationNum);
+                }
                 materializedView.setReplicationNum(replicationNum);
             }
             // bloom_filter_columns
@@ -1940,11 +1944,15 @@ public class PropertyAnalyzer {
                 materializedView.getTableProperty().getProperties().putAll(properties);
             }
         } catch (AnalysisException e) {
-            if (materializedView.isCloudNativeMaterializedView()) {
-                GlobalStateMgr.getCurrentState().getStorageVolumeMgr()
-                        .unbindTableToStorageVolume(materializedView.getId());
+            if (FeConstants.isReplayFromQueryDump) {
+                LOG.warn("Ignore MV properties analysis error during replay from query dump: ", e);
+            } else {
+                if (materializedView.isCloudNativeMaterializedView()) {
+                    GlobalStateMgr.getCurrentState().getStorageVolumeMgr()
+                            .unbindTableToStorageVolume(materializedView.getId());
+                }
+                ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER, e.getMessage());
             }
-            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER, e.getMessage());
         }
     }
 

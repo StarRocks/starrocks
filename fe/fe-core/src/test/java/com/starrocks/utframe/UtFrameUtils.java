@@ -816,7 +816,8 @@ public class UtFrameUtils {
             String dropMv = String.format("drop materialized view if exists `%s`.`%s`;", dbName, mvName);
             connectContext.executeSql(dropMv);
             starRocksAssert.useDatabase(dbName);
-            starRocksAssert.withAsyncMvAndRefresh(entry.getValue());
+            // no need to refresh
+            starRocksAssert.withMaterializedView(entry.getValue());
         }
 
         // mock be core stat
