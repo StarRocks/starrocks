@@ -480,7 +480,7 @@ public class ScalarType extends Type implements Cloneable {
                 (t1.type.ordinal() < t2.type.ordinal() ? t1.type : t2.type);
         PrimitiveType largerType =
                 (t1.type.ordinal() > t2.type.ordinal() ? t1.type : t2.type);
-        PrimitiveType result = compatibilityMatrix[smallerType.ordinal()][largerType.ordinal()];
+        PrimitiveType result = TypeCompatibilityMatrix.getCompatibleType(smallerType, largerType);
         Preconditions.checkNotNull(result, String.format("No assignment from %s to %s", t1, t2));
         return createType(result);
     }
