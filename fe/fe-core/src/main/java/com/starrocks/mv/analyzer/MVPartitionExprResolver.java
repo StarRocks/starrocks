@@ -13,7 +13,7 @@
 // limitations under the License.
 package com.starrocks.mv.analyzer;
 
-import com.google.common.base.Preconditions;
+import com.google.common.base.Joiner;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -503,6 +503,7 @@ public class MVPartitionExprResolver {
                         } else {
                             return visitRelation(context.withRelation(r));
                         }
+<<<<<<< HEAD
                     })
                     .filter(r -> r != null)
                     .forEach(result::add);
@@ -516,6 +517,96 @@ public class MVPartitionExprResolver {
                 String tableName = slot.getTblNameWithoutAnalyzed().getTbl();
                 String cteName = node.getAlias() != null ? node.getAlias().getTbl() : node.getName();
                 if (cteName != null && !cteName.equalsIgnoreCase(tableName)) {
+=======
+                    }
+                    clearSlotTableName(slot);
+                    return visitRelation(context.withRelation(relation));
+                }
+
+                /**
+                 * Clear the table name in slot ref to avoid being affected by sub-query alias.
+                 * NOTE: Scope's output column names should be already unique, slot's table name is not necessary.
+                 * TODO: refactor this after we have a better way to handle table alias in sub-query.
+                 */
+                private void clearSlotTableName(SlotRef slot) {
+                    if (slot != null && slot.getTblNameWithoutAnalyzed() != null) {
+                        slot.setTblName(null);
+                    }
+                }
+
+                @Override
+                public Exprs visitSubqueryRelation(SubqueryRelation node, MVExprContext context) {
+                    SlotRef slot = context.getSlotRef();
+                    if (slot.getTblNameWithoutAnalyzed() != null) {
+                        String tableName = slot.getTblNameWithoutAnalyzed().getTbl();
+                        if (node.getAlias() != null && !node.getAlias().getTbl().equalsIgnoreCase(tableName)) {
+                            return null;
+                        }
+                        clearSlotTableName(slot);
+                    }
+                    Relation subRelation = node.getQueryStatement().getQueryRelation();
+                    return visitRelation(context.withSlotRef(slot).withRelation(subRelation));
+                }
+
+                @Override
+                public Exprs visitTable(TableRelation node, MVExprContext context) {
+                    SlotRef slot = context.getSlotRef();
+                    TableName tableName = slot.getTblNameWithoutAnalyzed();
+                    if (node.getName().equals(tableName)) {
+                        return Exprs.of(slot);
+                    }
+                    if (tableName != null && !node.getResolveTableName().equals(tableName)) {
+                        return null;
+                    }
+                    slot = (SlotRef) slot.clone();
+                    slot.setTblName(node.getName());
+                    // add into equivalent exprs
+                    context.equivalentExprs.add(slot);
+                    return Exprs.of(slot);
+                }
+
+                @Override
+                public Exprs visitView(ViewRelation node, MVExprContext context) {
+                    SlotRef slot = context.getSlotRef();
+                    TableName tableName = slot.getTblNameWithoutAnalyzed();
+                    if (tableName != null && !node.getResolveTableName().equals(tableName)) {
+                        return null;
+                    }
+                    List<Field> fields = node.getRelationFields().resolveFields(slot);
+                    if (fields.isEmpty()) {
+                        return null;
+                    }
+                    Relation newRelation = node.getQueryStatement().getQueryRelation();
+                    Expr newExpr = fields.get(0).getOriginExpression();
+                    return visitExpr(context.withRelation(newRelation).withExpr(newExpr));
+                }
+
+                @Override
+                public Exprs visitJoin(JoinRelation node, MVExprContext context) {
+                    Relation leftRelation = node.getLeft();
+                    Relation rightRelation = node.getRight();
+                    Expr joinOnPredicate = node.getOnPredicate();
+
+                    Exprs result = handleJoinChild(context, joinOnPredicate, leftRelation, rightRelation);
+                    if (result != null) {
+                        return result;
+                    }
+                    return handleJoinChild(context, joinOnPredicate, rightRelation, leftRelation);
+                }
+
+                private Exprs handleJoinChild(MVExprContext context, Expr joinOnPredicate,
+                                              Relation in, Relation out) {
+                    MVExprContext inContext = context.withRelation(in);
+                    Exprs inExprs = visitRelation(inContext);
+                    // not eager to return since mv support multi ref base tables
+                    if (inExprs != null) {
+                        Exprs result = new Exprs();
+                        result.add(inExprs);
+                        // merge it from an opposite
+                        mergeEquivalentExprs(inContext, in, out, joinOnPredicate, result);
+                        return result;
+                    }
+>>>>>>> 3a78b34f57 ([BugFix] Fix creating mv bug with generated partition column  (#64850))
                     return null;
                 }
                 slot = (SlotRef) slot.clone();
@@ -525,11 +616,138 @@ public class MVPartitionExprResolver {
             return visitRelation(context.withRelation(relation).withSlotRef(slot));
         }
 
+<<<<<<< HEAD
         @Override
         public Exprs visitValues(ValuesRelation node, MVExprContext slot) {
             return null;
         }
     };
+=======
+                public void mergeEquivalentExprs(MVExprContext context, Relation in, Relation out,
+                                                 Expr joinOnPredicate, Exprs result) {
+                    List<Expr> candidates = getEquivalentExprs(context, in, joinOnPredicate);
+                    mergeOthers(context, out, candidates, result);
+                }
+
+                public void mergeOthers(MVExprContext context, Relation other, List<Expr> candidates, Exprs result) {
+                    if (candidates == null || candidates.isEmpty()) {
+                        return;
+                    }
+                    candidates.stream().map(e -> visitExpr(context.withExpr(e).withRelation(other)))
+                            .filter(e -> e != null)
+                            .forEach(result::add);
+                }
+
+                private Expr getEquivalentExpr(MVExprContext context,
+                                               Relation out,
+                                               BinaryPredicate expr) {
+                    Expr child0 = expr.getChild(0);
+                    Expr child1 = expr.getChild(1);
+                    if (areEqualExprs(context, out, child0)) {
+                        return child1;
+                    } else if (areEqualExprs(context, out, child1)) {
+                        return child0;
+                    } else {
+                        return null;
+                    }
+                }
+
+                private boolean areEqualExprs(MVExprContext context, Relation in, Expr target) {
+                    if (target == null) {
+                        return false;
+                    }
+                    // check if the target is in the equivalent exprs
+                    Set<Expr> equivalentExprs = context.getEquivalentExprs();
+                    if (equivalentExprs.stream().anyMatch(e -> MVPartitionExprEqChecker.areEqualExprs(e, target))) {
+                        return true;
+                    }
+                    // check after target is resolved
+                    Exprs resolved = visitExpr(context.withExpr(target).withRelation(in));
+                    if (resolved == null) {
+                        return false;
+                    }
+                    return resolved.getExprs().stream().anyMatch(t ->
+                            equivalentExprs.stream().anyMatch(e -> MVPartitionExprEqChecker.areEqualExprs(e, t)));
+                }
+
+                private List<Expr> getEquivalentExprs(MVExprContext context, Relation in, Expr expr) {
+                    List<Expr> result = Lists.newArrayList();
+                    if (expr == null) {
+                        return result;
+                    }
+                    if (expr instanceof BinaryPredicate) {
+                        Expr eq = getEquivalentExpr(context, in, (BinaryPredicate) expr);
+                        if (eq != null) {
+                            result.add(eq);
+                        }
+                    } else if (expr instanceof CompoundPredicate) {
+                        result.addAll(getCompoundPredicate(context, in, (CompoundPredicate) expr));
+                    }
+                    return result;
+                }
+
+                private List<Expr> getCompoundPredicate(MVExprContext context, Relation in,
+                                                        CompoundPredicate compoundPredicate) {
+                    List<Expr> result = Lists.newArrayList();
+                    if (compoundPredicate.getOp() != CompoundPredicate.Operator.AND) {
+                        return result;
+                    }
+                    for (Expr expr : compoundPredicate.getChildren()) {
+                        result.addAll(getEquivalentExprs(context, in, expr));
+                    }
+                    return result;
+                }
+
+                private int findSlotRefIndex(SetOperationRelation setOp, SlotRef slot) {
+                    Relation firstRelation = setOp.getRelations().get(0);
+                    return IntStream.range(0, setOp.getOutputExpression().size())
+                            .mapToObj(i -> Pair.create(Integer.valueOf(i), firstRelation.getColumnOutputNames().get(i)))
+                            .filter(p -> SRStringUtils.areColumnNamesEqual(slot.getColumnName(), p.second))
+                            .findFirst()
+                            .map(p -> p.first)
+                            .orElse(-1);
+                }
+
+                @Override
+                public Exprs visitSetOp(SetOperationRelation node, MVExprContext context) {
+                    SlotRef slot = context.getSlotRef();
+                    int slotRefIdx = findSlotRefIndex(node, slot);
+                    Exprs result = new Exprs();
+                    node.getRelations().stream()
+                            .map(r -> {
+                                if (slotRefIdx != -1) {
+                                    Expr expr = r.getOutputExpression().get(slotRefIdx);
+                                    return visitExpr(context.withExpr(expr).withRelation(r));
+                                } else {
+                                    return visitRelation(context.withRelation(r));
+                                }
+                            })
+                            .filter(r -> r != null)
+                            .forEach(result::add);
+                    return result.isEmpty() ? null : result;
+                }
+
+                @Override
+                public Exprs visitCTE(CTERelation node, MVExprContext context) {
+                    SlotRef slot = context.getSlotRef();
+                    if (slot.getTblNameWithoutAnalyzed() != null) {
+                        String tableName = slot.getTblNameWithoutAnalyzed().getTbl();
+                        String cteName = node.getAlias() != null ? node.getAlias().getTbl() : node.getName();
+                        if (cteName != null && !cteName.equalsIgnoreCase(tableName)) {
+                            return null;
+                        }
+                        clearSlotTableName(slot);
+                    }
+                    Relation relation = node.getCteQueryStatement().getQueryRelation();
+                    return visitRelation(context.withRelation(relation).withSlotRef(slot));
+                }
+
+                @Override
+                public Exprs visitValues(ValuesRelation node, MVExprContext slot) {
+                    return null;
+                }
+            };
+>>>>>>> 3a78b34f57 ([BugFix] Fix creating mv bug with generated partition column  (#64850))
 
     public static Exprs resolveMVPartitionExpr(Expr expr, QueryStatement queryStatement) {
         final MVExprContext context = new MVExprContext(expr, queryStatement.getQueryRelation(), null, null);
@@ -554,7 +772,7 @@ public class MVPartitionExprResolver {
         int refBaseTableCols = -1;
         for (Expr mvRefPartitionExpr : mvRefPartitionExprs) {
             List<MVPartitionExpr> partitionExprMaps = getMVPartitionExprs(mvRefPartitionExpr, stmt);
-            if (partitionExprMaps == null) {
+            if (partitionExprMaps == null || partitionExprMaps.isEmpty()) {
                 LOG.warn("The partition expr maps slot ref should be from the base table, eqExprs:{}",
                         partitionExprMaps);
                 throw new SemanticException("Failed to build mv partition expr from base table: " + stmt.getOrigStmt());
@@ -574,13 +792,25 @@ public class MVPartitionExprResolver {
             for (BaseTableInfo baseTableInfo : baseTableInfos) {
                 Table table = MvUtils.getTableChecked(baseTableInfo);
                 List<MVPartitionExpr> refPartitionExprs = MvUtils.getMvPartitionExpr(mvPartitionExprMaps, table);
-                if (!refPartitionExprs.isEmpty()) {
+                if (refPartitionExprs != null && !refPartitionExprs.isEmpty()) {
                     mvPartitionExprs.add(refPartitionExprs);
                 }
             }
+<<<<<<< HEAD
             Preconditions.checkState(mvPartitionExprs.size() <= mvPartitionExprMaps.size(),
                     String.format("The size of mv partition exprs %s should be less or equal to the size of " +
                                     "partition expr maps: %s", mvPartitionExprs, mvPartitionExprMaps));
+=======
+            if (mvPartitionExprs.size() > mvPartitionExprMaps.size()) {
+                String errorMessage = String.format("The size of mv partition exprs %s should be less or equal to the size " +
+                        "of partition expr maps: %s", mvPartitionExprs, mvPartitionExprMaps);
+                throw new SemanticException(errorMessage);
+            }
+        }
+        if (mvPartitionExprMaps.isEmpty()) {
+            throw new SemanticException("Failed to build mv partition expr from base table: "
+                    + Joiner.on(",").join(mvRefPartitionExprs));
+>>>>>>> 3a78b34f57 ([BugFix] Fix creating mv bug with generated partition column  (#64850))
         }
         return mvPartitionExprMaps;
     }
