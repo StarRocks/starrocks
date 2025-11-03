@@ -646,12 +646,12 @@ public class LakePublishBatchTest {
                 Lists.newArrayList(), null);
 
         {
-            List<TransactionStateBatch> batches = globalTransactionMgr.getReadyPublishTransactionsBatch();
-            Assertions.assertEquals(1, batches.size());
-            Assertions.assertEquals(1, batches.get(0).size());
+            final List<TransactionStateBatch> batches1 = globalTransactionMgr.getReadyPublishTransactionsBatch();
+            Assertions.assertEquals(1, batches1.size(), () -> batches1.toString());
+            Assertions.assertEquals(1, batches1.get(0).size());
             // replication transaction
             Assertions.assertEquals(TransactionType.TXN_REPLICATION,
-                    batches.get(0).getTransactionStates().get(0).getTransactionType());
+                    batches1.get(0).getTransactionStates().get(0).getTransactionType());
 
             PublishVersionDaemon publishVersionDaemon = new PublishVersionDaemon();
             publishVersionDaemon.runAfterCatalogReady();
@@ -664,12 +664,12 @@ public class LakePublishBatchTest {
             assertEquals(TransactionStatus.VISIBLE, transactionState1.getTransactionStatus());
 
             // begin another batch
-            batches = globalTransactionMgr.getReadyPublishTransactionsBatch();
-            Assertions.assertEquals(1, batches.size());
-            Assertions.assertEquals(1, batches.get(0).size());
+            final List<TransactionStateBatch> batches2 = globalTransactionMgr.getReadyPublishTransactionsBatch();
+            Assertions.assertEquals(1, batches2.size(), () -> batches2.toString());
+            Assertions.assertEquals(1, batches2.get(0).size());
             // normal transaction
             Assertions.assertEquals(TransactionType.TXN_NORMAL,
-                    batches.get(0).getTransactionStates().get(0).getTransactionType());
+                    batches2.get(0).getTransactionStates().get(0).getTransactionType());
 
             publishVersionDaemon.runAfterCatalogReady();
             Assertions.assertTrue(waiter2.await(1, TimeUnit.MINUTES));
