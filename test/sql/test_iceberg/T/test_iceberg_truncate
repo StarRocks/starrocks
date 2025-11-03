@@ -1,0 +1,32 @@
+-- name: test_iceberg_truncate
+
+create external catalog iceberg_truncate_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}","enable_iceberg_metadata_cache"="true","aws.s3.access_key" = "${oss_ak}","aws.s3.secret_key" = "${oss_sk}","aws.s3.endpoint" = "${oss_endpoint}");
+
+create database iceberg_truncate_${uuid0}.iceberg_db_${uuid0} properties (
+    "location" = "oss://${oss_bucket}/iceberg_truncate_${uuid0}/iceberg_db/${uuid0}"
+);
+
+create external table iceberg_truncate_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} (k1 int);
+
+insert into iceberg_truncate_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} values(1),(2),(3);
+select * from iceberg_truncate_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} order by k1;
+truncate table iceberg_truncate_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0};
+select * from iceberg_truncate_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} order by k1;
+
+set catalog iceberg_truncate_${uuid0};
+insert into iceberg_db_${uuid0}.ice_tbl_${uuid0} values(1),(2),(3);
+select * from iceberg_db_${uuid0}.ice_tbl_${uuid0} order by k1;
+truncate table iceberg_db_${uuid0}.ice_tbl_${uuid0};
+select * from iceberg_db_${uuid0}.ice_tbl_${uuid0} order by k1;
+
+use iceberg_truncate_${uuid0}.iceberg_db_${uuid0};
+insert into ice_tbl_${uuid0} values(1),(2),(3);
+select * from ice_tbl_${uuid0} order by k1;
+truncate table ice_tbl_${uuid0};
+select * from ice_tbl_${uuid0} order by k1;
+
+drop table iceberg_truncate_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} force;
+drop database iceberg_truncate_${uuid0}.iceberg_db_${uuid0};
+drop catalog iceberg_truncate_${uuid0};
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/iceberg_truncate_${uuid0}/iceberg_db/${uuid0} > /dev/null || echo "exit 0" >/dev/null

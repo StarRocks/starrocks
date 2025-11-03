@@ -19,8 +19,11 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.PartitionRef;
+import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.TruncateTableStmt;
+
+import java.util.List;
 
 public class TruncateTableAnalyzer {
 
@@ -30,7 +33,8 @@ public class TruncateTableAnalyzer {
         // Validate catalog
         String catalog = tableRef.getCatalogName();
         if (Strings.isNullOrEmpty(catalog)) {
-            if (Strings.isNullOrEmpty(context.getCurrentCatalog())) {
+            catalog = context.getCurrentCatalog();
+            if (Strings.isNullOrEmpty(catalog)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalog);
             }
         }
@@ -61,5 +65,9 @@ public class TruncateTableAnalyzer {
                 throw new SemanticException("there are empty partition name");
             }
         }
+
+        TableRef nomalizedTableRef = new TableRef(QualifiedName.of(List.of(catalog, db, tbl)), partitionRef,
+                tableRef.getPos());
+        statement.setTblRef(nomalizedTableRef);
     }
 }
