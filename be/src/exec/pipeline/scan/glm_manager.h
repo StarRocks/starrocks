@@ -23,13 +23,14 @@
 
 namespace starrocks::pipeline {
 
-// global late materialization context
+// GlobalLateMaterilizationContext is used to describe the context information required
+// for global late materialization.
+// Each data source needs to have its own implementation.
 class GlobalLateMaterilizationContext {
 public:
     virtual ~GlobalLateMaterilizationContext() = default;
 };
 
-// @TODO we shoukd know scan_range_id
 class IcebergGlobalLateMaterilizationContext : public GlobalLateMaterilizationContext {
 public:
     int32_t assign_scan_range_id(const THdfsScanRange& scan_range) {
@@ -40,7 +41,8 @@ public:
 
     const THdfsScanRange& get_hdfs_scan_range(int32_t scan_range_id) const {
         std::shared_lock lock(_mutex);
-        DCHECK(scan_range_id < hdfs_scan_ranges.size()) << "scan_range_id: " << scan_range_id << ", size: " << hdfs_scan_ranges.size();
+        DCHECK(scan_range_id < hdfs_scan_ranges.size())
+                << "scan_range_id: " << scan_range_id << ", size: " << hdfs_scan_ranges.size();
         return hdfs_scan_ranges[scan_range_id];
     }
 
@@ -48,31 +50,20 @@ public:
     std::vector<THdfsScanRange> hdfs_scan_ranges;
     THdfsScanNode hdfs_scan_node;
     TPlanNode plan_node;
-
-    // DataCacheOptions datacache_options;
-    // int tuple_id;
-    // TCloudConfiguration cloud_configuration;
-    // @TODo scan_range_id -> hdfs_scan_range?
-
 };
 
 // manage all global late materialization contexts for different data sources
 class GlobalLateMaterilizationContextMgr {
 public:
-    // @TODO update ctx?
-    // @TODO
     void add_ctx(int32_t row_source_slot_id, GlobalLateMaterilizationContext* ctx);
     GlobalLateMaterilizationContext* get_ctx(int32_t row_source_slot_id) const;
-    GlobalLateMaterilizationContext* get_or_create_ctx(int32_t row_source_slot_id,
-            const std::function<GlobalLateMaterilizationContext*()>& ctor_func);
+    GlobalLateMaterilizationContext* get_or_create_ctx(
+            int32_t row_source_slot_id, const std::function<GlobalLateMaterilizationContext*()>& ctor_func);
 
-    // @TODO use parallel hash map
     using MutexType = std::shared_mutex;
-    using ContextMap =
-            phmap::parallel_flat_hash_map<int32_t, GlobalLateMaterilizationContext*, phmap::Hash<int32_t>, phmap::EqualTo<int32_t>,
-                                          phmap::Allocator<int32_t>, 4, MutexType>;
+    using ContextMap = phmap::parallel_flat_hash_map<int32_t, GlobalLateMaterilizationContext*, phmap::Hash<int32_t>,
+                                                     phmap::EqualTo<int32_t>, phmap::Allocator<int32_t>, 4, MutexType>;
 
     ContextMap _ctx_map;
-
 };
-}
+} // namespace starrocks::pipeline

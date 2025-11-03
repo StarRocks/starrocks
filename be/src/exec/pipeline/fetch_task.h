@@ -30,7 +30,6 @@ class FetchProcessor;
 class FetchTask;
 using FetchTaskPtr = std::shared_ptr<FetchTask>;
 
-// @TODO need a new name?
 struct BatchUnit {
     std::vector<ChunkPtr> input_chunks;
     phmap::flat_hash_map<TupleId, std::shared_ptr<std::vector<FetchTaskPtr>>> fetch_tasks;
@@ -44,15 +43,12 @@ struct BatchUnit {
     phmap::flat_hash_map<uint32_t, ColumnPtr> missing_positions;
     std::string debug_string() const;
 
-    bool all_fetch_done() const {
-        return finished_request_num == total_request_num;
-    }
+    bool all_fetch_done() const { return finished_request_num == total_request_num; }
 
     bool reach_end() const { return next_output_idx >= input_chunks.size(); }
     ChunkPtr get_next_chunk() { return input_chunks[next_output_idx++]; }
 };
 using BatchUnitPtr = std::shared_ptr<BatchUnit>;
-
 
 class FetchTaskContext {
 public:
@@ -78,16 +74,10 @@ public:
 
     // Submit the task, return OK if success
     virtual Status submit(RuntimeState* state);
-    virtual bool is_local() const {
-        return false;
-    }
+    virtual bool is_local() const { return false; }
     // Check if the task is done
-    virtual bool is_done() const {
-        return _is_done;
-    }
-    FetchTaskContextPtr get_ctx() const {
-        return _ctx;
-    }
+    virtual bool is_done() const { return _is_done; }
+    FetchTaskContextPtr get_ctx() const { return _ctx; }
 
 protected:
     virtual Status _submit_local_task(RuntimeState* state);
@@ -96,12 +86,10 @@ protected:
     std::atomic_bool _is_done = false;
 };
 
-// @TODO need LookUpRequest?
-
 class IcebergFetchTask : public FetchTask {
 public:
     IcebergFetchTask(FetchTaskContextPtr ctx) : FetchTask(std::move(ctx)) {}
 };
 using IcebergFetchTaskPtr = std::shared_ptr<IcebergFetchTask>;
 
-}
+} // namespace starrocks::pipeline

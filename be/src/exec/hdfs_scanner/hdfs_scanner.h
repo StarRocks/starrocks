@@ -312,10 +312,6 @@ struct HdfsScannerContext {
     // materialized column read from parquet file
     std::vector<ColumnInfo> materialized_columns;
 
-    // reserved field columns
-    // std::vector<SlotDescriptor*> reserved_field_slots;
-    // std::vector<ColumnInfo> reserved_field_columns;
-
     // partition column
     std::vector<ColumnInfo> partition_columns;
 

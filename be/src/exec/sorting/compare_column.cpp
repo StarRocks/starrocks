@@ -243,11 +243,6 @@ public:
         return Status::OK();
     }
 
-    Status do_visit(const RowIdColumn& column) {
-        DCHECK(false) << "not support row id column sort_and_tie";
-        return Status::NotSupported("Not support RowIdColumn");
-    }
-
     size_t get_equal_count() const { return _equal_count; }
 
 private:
@@ -321,10 +316,6 @@ public:
 
     template <typename T>
     Status do_visit(const ObjectColumn<T>& column) {
-        return Status::NotSupported("not support");
-    }
-    Status do_visit(const RowIdColumn& column) {
-        DCHECK(false) << "not support";
         return Status::NotSupported("not support");
     }
 

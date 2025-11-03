@@ -13,18 +13,20 @@
 // limitations under the License.
 
 #include "exec/pipeline/fetch_task.h"
-#include <butil/iobuf.h>
-#include <memory>
-#include "exec/pipeline/lookup_request.h"
-#include "runtime/descriptors.h"
-#include "util/disposable_closure.h"
 
-#include "gen_cpp/internal_service.pb.h"
-#include "util/defer_op.h"
+#include <butil/iobuf.h>
+
+#include <memory>
+
 #include "exec/pipeline/fetch_processor.h"
-#include "serde/column_array_serde.h"
+#include "exec/pipeline/lookup_request.h"
+#include "gen_cpp/internal_service.pb.h"
+#include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
+#include "serde/column_array_serde.h"
 #include "util/brpc_stub_cache.h"
+#include "util/defer_op.h"
+#include "util/disposable_closure.h"
 
 namespace starrocks::pipeline {
 
@@ -46,9 +48,7 @@ Status FetchTask::submit(RuntimeState* state) {
 
 Status FetchTask::_submit_local_task(RuntimeState* state) {
     _ctx->callback = [ctx = _ctx](const Status& status) {
-        DeferOp defer([&]() {
-            ctx->unit->finished_request_num++;
-        });
+        DeferOp defer([&]() { ctx->unit->finished_request_num++; });
         if (!status.ok()) {
             LOG(WARNING) << "local fetch request failed, error: " << status.to_string();
             ctx->processor->_set_io_task_status(status);
@@ -60,16 +60,14 @@ Status FetchTask::_submit_local_task(RuntimeState* state) {
 }
 
 Status FetchTask::_submit_remote_task(RuntimeState* state) {
-    // @TODO support submit local task
-    // build submit request
     const auto source_id = _ctx->source_node_id;
     const auto& request_chunk = _ctx->request_chunk;
 
     auto* closure = new DisposableClosure<PLookUpResponse, FetchTaskContextPtr>(_ctx);
-    closure->addSuccessHandler([this, closure] (const FetchTaskContextPtr& ctx, const PLookUpResponse& resp) noexcept {
+    closure->addSuccessHandler([this, closure](const FetchTaskContextPtr& ctx, const PLookUpResponse& resp) noexcept {
         DLOG(INFO) << "[GLM] receive a response, finished request num: " << ctx->unit->finished_request_num
-                 << ", total request num: " << ctx->unit->total_request_num << ", " << (void*)ctx->processor
-                 << ", latency: " << (MonotonicNanos() - ctx->send_ts) * 1.0 / 1000000 << "ms";
+                   << ", total request num: " << ctx->unit->total_request_num << ", " << (void*)ctx->processor
+                   << ", latency: " << (MonotonicNanos() - ctx->send_ts) * 1.0 / 1000000 << "ms";
         DeferOp defer([&]() {
             if (++ctx->unit->finished_request_num == ctx->unit->total_request_num) {
                 VLOG_ROW << "[GLM] all request finished, notify fetch processor, total_request_num: "
@@ -92,10 +90,11 @@ Status FetchTask::_submit_remote_task(RuntimeState* state) {
             butil::IOBuf& io_buf = closure->cntl.response_attachment();
             raw::RawString buffer;
 
-            for (size_t i = 0;i < resp.columns_size(); i++) {
+            for (size_t i = 0; i < resp.columns_size(); i++) {
                 const auto& pcolumn = resp.columns(i);
                 if (UNLIKELY(io_buf.size() < pcolumn.data_size())) {
-                    auto msg = fmt::format("io_buf size {} is less than column data size {}", io_buf.size(), pcolumn.data_size());
+                    auto msg = fmt::format("io_buf size {} is less than column data size {}", io_buf.size(),
+                                           pcolumn.data_size());
                     LOG(WARNING) << msg;
                     ctx->processor->_set_io_task_status(Status::InternalError(msg));
                     return;
@@ -127,7 +126,7 @@ Status FetchTask::_submit_remote_task(RuntimeState* state) {
         }
     });
 
-    closure->addFailedHandler([this] (const FetchTaskContextPtr& ctx, std::string_view rpc_error_msg) noexcept {
+    closure->addFailedHandler([this](const FetchTaskContextPtr& ctx, std::string_view rpc_error_msg) noexcept {
         DeferOp defer([&]() {
             if (++ctx->unit->finished_request_num == ctx->unit->total_request_num) {
                 DLOG(INFO) << "all request finished, notify fetch processor, " << (void*)ctx->processor;
@@ -139,7 +138,6 @@ Status FetchTask::_submit_remote_task(RuntimeState* state) {
     });
 
     closure->cntl.Reset();
-    // @TODO set state
     closure->cntl.set_timeout_ms(state->query_options().query_timeout * 1000);
 
     PLookUpRequest request;
@@ -151,9 +149,8 @@ Status FetchTask::_submit_remote_task(RuntimeState* state) {
     request.set_request_tuple_id(_ctx->request_tuple_id);
     {
         SCOPED_TIMER(_ctx->processor->_serialize_timer);
-        // @TODO
         size_t max_serialize_size = 0;
-        for (const auto& column: request_chunk->columns()) {
+        for (const auto& column : request_chunk->columns()) {
             max_serialize_size += serde::ColumnArraySerde::max_serialized_size(*column);
         }
 
@@ -177,8 +174,8 @@ Status FetchTask::_submit_remote_task(RuntimeState* state) {
         size_t actual_serialize_size = buff - begin;
         closure->cntl.request_attachment().append(_ctx->processor->_serialize_buffer.data(), actual_serialize_size);
     }
-    DLOG(INFO) << "[GLM] send fetch request, source_id: " << source_id << ", "
-              << (void*)_ctx->processor << ", unit: " << _ctx->unit->debug_string();
+    DLOG(INFO) << "[GLM] send fetch request, source_id: " << source_id << ", " << (void*)_ctx->processor
+               << ", unit: " << _ctx->unit->debug_string();
     _ctx->send_ts = MonotonicNanos();
     const auto* node_info = _ctx->processor->_nodes_info->find_node(source_id);
     auto stub = state->exec_env()->brpc_stub_cache()->get_stub(node_info->host, node_info->brpc_port);
@@ -187,4 +184,4 @@ Status FetchTask::_submit_remote_task(RuntimeState* state) {
     return Status::OK();
 }
 
-}
+} // namespace starrocks::pipeline

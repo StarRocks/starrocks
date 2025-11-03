@@ -51,7 +51,6 @@ public final class ColumnRefOperator extends ScalarOperator {
         this.nullable = nullable;
     }
 
-
     public int getId() {
         return id;
     }

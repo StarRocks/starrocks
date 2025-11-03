@@ -13,16 +13,16 @@
 // limitations under the License.
 
 #include "formats/parquet/row_source_reader.h"
+
 #include "column/column.h"
 
 namespace starrocks::parquet {
 Status RowSourceReader::read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) {
     size_t num_rows = range.end() - range.begin();
-    // @TODO need optimize
     for (size_t i = 0; i < num_rows; i++) {
         dst->append_datum(Datum(_node_id));
     }
     return Status::OK();
 }
 
-}
+} // namespace starrocks::parquet

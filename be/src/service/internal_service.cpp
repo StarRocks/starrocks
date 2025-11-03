@@ -1509,7 +1509,7 @@ void PInternalServiceImplBase<T>::lookup(google::protobuf::RpcController* cntl_b
     if (cntl->request_attachment().size() > 0) {
         // parse chunk
         butil::IOBuf& io_buf = cntl->request_attachment();
-        for (size_t i = 0; i < request->request_columns_size();i ++) {
+        for (size_t i = 0; i < request->request_columns_size(); i++) {
             auto pcolumn = req->mutable_request_columns(i);
             if (UNLIKELY(io_buf.size() < pcolumn->data_size())) {
                 auto msg = fmt::format("io_buf size {} is less than column data size {}", io_buf.size(),

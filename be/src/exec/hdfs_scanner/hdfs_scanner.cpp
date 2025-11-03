@@ -125,11 +125,9 @@ Status HdfsScanner::_build_scanner_context() {
     // build columns of materialized and partition.
     for (size_t i = 0; i < _scanner_params.materialize_slots.size(); i++) {
         auto* slot = _scanner_params.materialize_slots[i];
-        if (slot->col_name() == ICEBERG_ROW_ID
-            || slot->col_name() == "_row_source_id"
-            || slot->col_name() == "_scan_range_id"
-        ) {
-            ctx.reserved_field_slots.emplace_back(slot); 
+        if (slot->col_name() == ICEBERG_ROW_ID || slot->col_name() == "_row_source_id" ||
+            slot->col_name() == "_scan_range_id") {
+            ctx.reserved_field_slots.emplace_back(slot);
         } else {
             HdfsScannerContext::ColumnInfo column;
             column.slot_desc = slot;
@@ -151,7 +149,6 @@ Status HdfsScanner::_build_scanner_context() {
 
     for (size_t i = 0; i < _scanner_params.extended_col_slots.size(); i++) {
         auto* slot = _scanner_params.extended_col_slots[i];
-        LOG(INFO) << "extended columns: " << slot->debug_string();
         HdfsScannerContext::ColumnInfo column;
         column.slot_desc = slot;
         column.idx_in_chunk = _scanner_params.extended_col_index_in_chunk[i];
@@ -658,7 +655,6 @@ Status HdfsScannerContext::append_or_update_not_existed_columns_to_chunk(ChunkPt
         }
         ck->append_or_update_column(std::move(col), slot_desc->id());
     }
-    // @TODO fill row_id
     ck->set_num_rows(row_count);
     return Status::OK();
 }

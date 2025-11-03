@@ -1,22 +1,20 @@
--- name: test_glm_topn
-create table t0 (
-	v1 bigint null,
-	v2 bigint null,
-	v3 bigint null
-) engine=olap
-duplicate key(v1)
-distributed by hash(v1) buckets 3
-properties(
-'replication_num'='1'
-);
-insert into t0 select generate_series,generate_series,generate_series%10 from table(generate_series(1, 10000));
-insert into t0 values (10001, null, null), (10002, null, null), (10003, null, null);
+-- name: test_glm_topn_iceberg_v3
+create external catalog iceberg_sql_test_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}","enable_iceberg_metadata_cache"="true","aws.s3.access_key" = "${oss_ak}","aws.s3.secret_key" = "${oss_sk}","aws.s3.endpoint" = "${oss_endpoint}");
 set enable_global_late_materialization = true;
-select * from t0 order by v1 limit 10;
-select * from t0 order by v1 limit 100, 10;
-select * from t0 order by v1 desc limit 10;
-select * from t0 order by v1 desc limit 100,10;
-select v2 from t0 order by v1 limit 10;
-select v2 from t0 order by v1 limit 10, 10;
-select v2 from t0 order by v1 desc limit 10;
-select v2 from t0 order by v1 desc limit 10,10;
+
+use iceberg_sql_test_${uuid0}.iceberg_oss_db;
+
+set enable_global_late_materialization = true;
+
+select * from test_v3_t0 order by id limit 10;
+select * from test_v3_t0 order by id limit 100, 10;
+select * from test_v3_t0 order by id desc limit 10;
+select * from test_v3_t0 order by id desc limit 100,10;
+select c1 from test_v3_t0 order by id limit 10;
+select c1 from test_v3_t0 order by id limit 10, 10;
+select c1 from test_v3_t0 order by id desc limit 10;
+select c1 from test_v3_t0 order by id desc limit 10,10;
+
+drop catalog iceberg_sql_test_${uuid0};
+
+set catalog default_catalog;

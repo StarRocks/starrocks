@@ -117,6 +117,7 @@ public class ScanOperatorPredicates {
     public ColumnRefSet getUsedColumns() {
         ColumnRefSet refs = new ColumnRefSet();
         noEvalPartitionConjuncts.forEach(d -> refs.union(d.getUsedColumns()));
+        nonPartitionConjuncts.forEach(d -> refs.union(d.getUsedColumns()));
         partitionConjuncts.forEach(d -> refs.union(d.getUsedColumns()));
         minMaxConjuncts.forEach(d -> refs.union(d.getUsedColumns()));
         getMinMaxColumnRefMap().keySet().forEach(refs::union);

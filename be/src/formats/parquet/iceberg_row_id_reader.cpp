@@ -52,7 +52,7 @@ Status IcebergRowIdReader::fill_dst_column(ColumnPtr& dst, ColumnPtr& src) {
 }
 
 void IcebergRowIdReader::collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges,
-                                                  int64_t* end_offset, ColumnIOTypeFlags types, bool active) {
+                                                 int64_t* end_offset, ColumnIOTypeFlags types, bool active) {
     // No IO ranges to collect for row id reader.
 }
 
@@ -64,10 +64,6 @@ StatusOr<bool> IcebergRowIdReader::row_group_zone_map_filter(const std::vector<c
                                                              CompoundNodeType pred_relation,
                                                              const uint64_t rg_first_row,
                                                              const uint64_t rg_num_rows) const {
-    DLOG(INFO) << "IcebergRowIdReader::row_group_zone_map_filter, predicates size: " << predicates.size()
-               << ", rg_first_row: " << rg_first_row << ", rg_num_rows: " << rg_num_rows
-               << ", rg_first_row_id: " << _first_row_id;
-
     ZoneMapDetail zone_map{Datum(_first_row_id + rg_first_row), Datum(_first_row_id + rg_first_row + rg_num_rows - 1),
                            false};
     bool ret = !PredicateFilterEvaluatorUtils::zonemap_satisfy(predicates, zone_map, pred_relation);
@@ -88,7 +84,6 @@ StatusOr<bool> IcebergRowIdReader::page_index_zone_map_filter(const std::vector<
                                                               CompoundNodeType pred_relation,
                                                               const uint64_t rg_first_row, const uint64_t rg_num_rows) {
     SparseRange<int64_t> row_id_range(_first_row_id + rg_first_row, _first_row_id + rg_first_row + rg_num_rows);
-    DLOG(INFO) << "original range: " << row_id_range.to_string();
 
     if (pred_relation == CompoundNodeType::AND) {
         // For AND relation, apply all predicates sequentially with intersection
@@ -103,11 +98,9 @@ StatusOr<bool> IcebergRowIdReader::page_index_zone_map_filter(const std::vector<
                 return false;
             }
             row_id_range &= pred_range;
-            DLOG(INFO) << "after apply " << pred->debug_string() << ", ret: " << row_id_range.to_string();
 
             // Early exit if range becomes empty
             if (row_id_range.empty()) {
-                DLOG(INFO) << "range becomes empty after applying " << pred->debug_string();
                 break;
             }
         }
@@ -135,20 +128,17 @@ StatusOr<bool> IcebergRowIdReader::page_index_zone_map_filter(const std::vector<
         }
 
         row_id_range &= union_range;
-        DLOG(INFO) << "after applying OR predicates, ret: " << row_id_range.to_string();
     } else {
         return false;
     }
 
     if (row_id_range.span_size() == rg_num_rows) {
-        DLOG(INFO) << "no filtering applied";
         return false;
     }
 
     // Convert row_id range to row ranges
     for (size_t i = 0; i < row_id_range.size(); i++) {
         Range<int64_t> range = row_id_range[i];
-        DLOG(INFO) << "add range: " << range.to_string();
         row_ranges->add(Range<uint64_t>(range.begin() - _first_row_id, range.end() - _first_row_id));
     }
 

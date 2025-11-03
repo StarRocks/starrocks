@@ -678,7 +678,6 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     }
 
     public PlanFragment getDestFragment() {
-        // @TODO what is the dest fragment of lookup fragment
         if (destNode == null) {
             return null;
         }
