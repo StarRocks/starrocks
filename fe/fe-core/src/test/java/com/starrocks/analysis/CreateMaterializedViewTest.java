@@ -5719,72 +5719,6 @@ public class CreateMaterializedViewTest extends MVTestBase {
         Assertions.assertEquals(1048576, scalarType0.getLength());
         Config.transform_type_prefer_string_for_varchar = false;
     }
-<<<<<<< HEAD
-=======
-
-    @Test
-    public void testPartitionByDateTruncWithNestedMV1() throws Exception {
-        {
-            String sql = "create materialized view mv1 " +
-                    "partition by date_trunc('month', k1) " +
-                    "distributed by hash(k2) buckets 10 " +
-                    "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
-                    "PROPERTIES (\n" +
-                    "\"replication_num\" = \"1\"\n" +
-                    ") " +
-                    "as select k1, k2 from tbl1;";
-            starRocksAssert.withMaterializedView(sql);
-        }
-        {
-            String sql = "create materialized view mv2 " +
-                    "partition by date_trunc('month', k1) " +
-                    "distributed by hash(k2) buckets 10 " +
-                    "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
-                    "PROPERTIES (\n" +
-                    "\"replication_num\" = \"1\"\n" +
-                    ") " +
-                    "as select k1, k2 from mv1;";
-            starRocksAssert.withMaterializedView(sql);
-        }
-    }
-
-    @Test
-    public void testPartitionByDateTruncWithNestedMV2() throws Exception {
-        {
-            String sql = "create materialized view mv1 " +
-                    "partition by date_trunc('month', date) " +
-                    "distributed by random " +
-                    "REFRESH DEFERRED MANUAL " +
-                    "PROPERTIES (\n" +
-                    "'replication_num' = '1'\n" +
-                    ") \n" +
-                    "as select v1.date, v1.id from iceberg0.partitioned_db.t2 as v1; ";
-            starRocksAssert.withMaterializedView(sql);
-        }
-        {
-            String sql = "create materialized view mv2 " +
-                    "partition by date_trunc('month', date) " +
-                    "distributed by random " +
-                    "REFRESH DEFERRED MANUAL " +
-                    "PROPERTIES (\n" +
-                    "'replication_num' = '1'\n" +
-                    ") \n" +
-                    "as select v1.date, v1.id from mv1 as v1; ";
-            starRocksAssert.withMaterializedView(sql);
-        }
-    }
-    @Test
-    public void testPartitionByDateTruncWithNestedMV3() throws Exception {
-        String sql = "create materialized view mv1 " +
-                "partition by date_trunc('month', date) " +
-                "distributed by random " +
-                "REFRESH DEFERRED MANUAL " +
-                "PROPERTIES (\n" +
-                "'replication_num' = '1'\n" +
-                ") \n" +
-                "as select 'This is a test',123,v1.date, v1.id from iceberg0.partitioned_db.t2 as v1; ";
-        starRocksAssert.withMaterializedView(sql);
-    }
 
     @Test
     public void testCreateMVWithGeneratedColumn() throws Exception {
@@ -5883,5 +5817,4 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 "WHERE user_id IS NOT NULL AND user_id != ''\n" +
                 "GROUP BY dt, user_id, resource_type, resource_id;");
     }
->>>>>>> 3a78b34f57 ([BugFix] Fix creating mv bug with generated partition column  (#64850))
 }
