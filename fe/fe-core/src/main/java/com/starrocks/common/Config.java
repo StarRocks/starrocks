@@ -2362,7 +2362,7 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long connector_table_query_trigger_analyze_large_table_interval = 12 * 3600; // unit: second, default 12h
 
-    @ConfField(mutable = true)
+    @ConfField
     public static int connector_table_query_trigger_analyze_max_running_task_num = 2;
 
     @ConfField(mutable = true)
