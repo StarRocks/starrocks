@@ -875,22 +875,20 @@ Status MapColumnReader::_fill_map_column(orc::ColumnVectorBatch* cvb, ColumnPtr&
     copy_array_offset(orc_map->offsets, from, size + 1, offsets);
 
     ColumnPtr& keys = col_map->keys_column();
-    const int keys_from = implicit_cast<int>(orc_map->offsets[from]);
-    const int keys_size = implicit_cast<int>(orc_map->offsets[from + size] - keys_from);
+    const int kv_from = implicit_cast<int>(orc_map->offsets[from]);
+    const int kv_size = implicit_cast<int>(orc_map->offsets[from + size] - kv_from);
 
     if (_child_readers[0] == nullptr) {
-        keys->append_default(keys_size);
+        keys->append_default(kv_size);
     } else {
-        RETURN_IF_ERROR(_child_readers[0]->get_next(orc_map->keys.get(), keys, keys_from, keys_size));
+        RETURN_IF_ERROR(_child_readers[0]->get_next(orc_map->keys.get(), keys, kv_from, kv_size));
     }
 
     ColumnPtr& values = col_map->values_column();
-    const int values_from = implicit_cast<int>(orc_map->offsets[from]);
-    const int values_size = implicit_cast<int>(orc_map->offsets[from + size] - values_from);
     if (_child_readers[1] == nullptr) {
-        values->append_default(values_size);
+        values->append_default(kv_size);
     } else {
-        RETURN_IF_ERROR(_child_readers[1]->get_next(orc_map->elements.get(), values, values_from, values_size));
+        RETURN_IF_ERROR(_child_readers[1]->get_next(orc_map->elements.get(), values, kv_from, kv_size));
     }
     return Status::OK();
 }

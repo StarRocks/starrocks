@@ -29,49 +29,6 @@
 
 namespace starrocks::formats {
 
-OrcOutputStream::OrcOutputStream(std::unique_ptr<starrocks::WritableFile> wfile) : _wfile(std::move(wfile)) {}
-
-OrcOutputStream::~OrcOutputStream() {
-    if (!_is_closed) {
-        close();
-    }
-}
-
-uint64_t OrcOutputStream::getLength() const {
-    return _wfile->size();
-}
-
-uint64_t OrcOutputStream::getNaturalWriteSize() const {
-    return config::vector_chunk_size;
-}
-
-const std::string& OrcOutputStream::getName() const {
-    return _wfile->filename();
-}
-
-void OrcOutputStream::write(const void* buf, size_t length) {
-    if (_is_closed) {
-        throw std::runtime_error("The output stream is closed but there are still inputs");
-    }
-    const char* ch = reinterpret_cast<const char*>(buf);
-    Status st = _wfile->append(Slice(ch, length));
-    if (!st.ok()) {
-        throw std::runtime_error("write to orc failed: " + st.to_string());
-    }
-    return;
-}
-
-void OrcOutputStream::close() {
-    if (_is_closed) {
-        return;
-    }
-    _is_closed = true;
-
-    if (auto st = _wfile->close(); !st.ok()) {
-        throw std::runtime_error("close orc output stream failed: " + st.to_string());
-    }
-}
-
 AsyncOrcOutputStream::AsyncOrcOutputStream(io::AsyncFlushOutputStream* stream) : _stream(stream) {}
 
 uint64_t AsyncOrcOutputStream::getLength() const {
