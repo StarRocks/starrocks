@@ -354,7 +354,7 @@ public class MVPartitionExprResolver {
             if (tableName != null && !node.getResolveTableName().equals(tableName)) {
                 return null;
             }
-            clearSlotTableName(slot);
+            slot = (SlotRef) slot.clone();
             slot.setTblName(node.getName());
             // add into equivalent exprs
             context.equivalentExprs.add(slot);
