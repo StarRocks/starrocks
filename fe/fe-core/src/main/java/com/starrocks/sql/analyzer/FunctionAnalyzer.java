@@ -42,6 +42,7 @@ import com.starrocks.qe.SessionVariableConstants;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.expression.ArrayExpr;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.sql.ast.expression.FunctionParams;
@@ -849,12 +850,12 @@ public class FunctionAnalyzer {
             if (DecimalV3FunctionAnalyzer.argumentTypeContainDecimalV3(FunctionSet.ARRAY_CONCAT, argumentTypes)) {
                 fn = DecimalV3FunctionAnalyzer.getDecimalV3Function(session, node, argumentTypes);
             } else {
-                fn = Expr.getBuiltinFunction(FunctionSet.ARRAY_CONCAT, argumentTypes,
+                fn = ExprUtils.getBuiltinFunction(FunctionSet.ARRAY_CONCAT, argumentTypes,
                         Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             }
         } else if (FunctionSet.NAMED_STRUCT.equals(fnName)) {
             // deriver struct type
-            fn = Expr.getBuiltinFunction(FunctionSet.NAMED_STRUCT, argumentTypes,
+            fn = ExprUtils.getBuiltinFunction(FunctionSet.NAMED_STRUCT, argumentTypes,
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             fn = fn.copy();
             ArrayList<StructField> sf = Lists.newArrayList();
@@ -871,7 +872,7 @@ public class FunctionAnalyzer {
         } else if (FunctionSet.BITMAP_UNION.equals(fnName)) {
             // bitmap_union is analyzed here rather than `getAnalyzedAggregateFunction` because
             // it's just a syntax sugar for bitmap_agg transformed from bitmap_union(to_bitmap())
-            fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_IDENTICAL);
+            fn = ExprUtils.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_IDENTICAL);
             if (session.getSessionVariable().isEnableRewriteBitmapUnionToBitmapAgg() &&
                     node.getChild(0) instanceof FunctionCallExpr) {
                 FunctionCallExpr arg0Func = (FunctionCallExpr) node.getChild(0);
@@ -886,7 +887,7 @@ public class FunctionAnalyzer {
                         node.setChild(0, toBitmapArg0);
                         node.resetFnName("", FunctionSet.BITMAP_AGG);
                         node.getParams().setExprs(Lists.newArrayList(toBitmapArg0));
-                        fn = Expr.getBuiltinFunction(FunctionSet.BITMAP_AGG, argumentTypes,
+                        fn = ExprUtils.getBuiltinFunction(FunctionSet.BITMAP_AGG, argumentTypes,
                                 Function.CompareMode.IS_IDENTICAL);
                     }
                 }
@@ -899,13 +900,13 @@ public class FunctionAnalyzer {
                     case NDV:
                         node.resetFnName("", FunctionSet.NDV);
                         node.getParams().setIsDistinct(false);
-                        fn = Expr.getBuiltinFunction(FunctionSet.NDV, argumentTypes,
+                        fn = ExprUtils.getBuiltinFunction(FunctionSet.NDV, argumentTypes,
                                 Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
                         break;
                     case MULTI_COUNT_DISTINCT:
                         node.resetFnName("", FunctionSet.MULTI_DISTINCT_COUNT);
                         node.getParams().setIsDistinct(false);
-                        fn = Expr.getBuiltinFunction(FunctionSet.MULTI_DISTINCT_COUNT, argumentTypes,
+                        fn = ExprUtils.getBuiltinFunction(FunctionSet.MULTI_DISTINCT_COUNT, argumentTypes,
                                 Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
                         break;
                 }
@@ -932,7 +933,7 @@ public class FunctionAnalyzer {
             }
             Type[] argsTypes = new Type[1];
             argsTypes[0] = targetType;
-            fn = Expr.getBuiltinFunction(fnName, argsTypes, true, returnType, Function.CompareMode.IS_IDENTICAL);
+            fn = ExprUtils.getBuiltinFunction(fnName, argsTypes, true, returnType, Function.CompareMode.IS_IDENTICAL);
             // correct decimal's precision and scale
             if (targetType.isDecimalV3()) {
                 List<Type> argTypes = Arrays.asList(targetType);
@@ -954,13 +955,13 @@ public class FunctionAnalyzer {
                     argumentTypes[0].isArrayType() && ((ArrayType) argumentTypes[0]).getItemType().isNull()) {
                 argumentTypes[0] = Type.ARRAY_BOOLEAN;
                 argumentTypes[1] = Type.BOOLEAN;
-                fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_IDENTICAL);
+                fn = ExprUtils.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_IDENTICAL);
             }
         } else if (FunctionSet.ICEBERG_TRANSFORM_BUCKET.equalsIgnoreCase(fnName) ||
                 FunctionSet.ICEBERG_TRANSFORM_TRUNCATE.equalsIgnoreCase(fnName)) {
             Preconditions.checkState(argumentTypes.length == 2);
             Type[] args = new Type[] {argumentTypes[0], Type.INT};
-            fn = Expr.getBuiltinFunction(fnName, args, Function.CompareMode.IS_IDENTICAL);
+            fn = ExprUtils.getBuiltinFunction(fnName, args, Function.CompareMode.IS_IDENTICAL);
             if (args[0].isDecimalV3()) {
                 fn.setArgsType(args);
             }
@@ -988,7 +989,7 @@ public class FunctionAnalyzer {
      * datetime.
      */
     private static Function getStrToDateFunction(FunctionCallExpr node, Type[] argumentTypes) {
-        Function fn = Expr.getBuiltinFunction(node.getFnName().getFunction(),
+        Function fn = ExprUtils.getBuiltinFunction(node.getFnName().getFunction(),
                 argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         if (fn == null) {
             return null;
@@ -1003,7 +1004,7 @@ public class FunctionAnalyzer {
         ScalarOperator format = SqlToScalarOperatorTranslator.translate(node.getChild(1), expressionMapping,
                 new ColumnRefFactory());
         if (format.isConstantRef() && !HAS_TIME_PART.matcher(format.toString()).matches()) {
-            return Expr.getBuiltinFunction("str2date", argumentTypes,
+            return ExprUtils.getBuiltinFunction("str2date", argumentTypes,
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         }
 
@@ -1036,7 +1037,7 @@ public class FunctionAnalyzer {
         }
 
         Type[] argTypes = node.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
-        return Expr.getBuiltinFunction(
+        return ExprUtils.getBuiltinFunction(
             FunctionSet.ARRAY_GENERATE,
             argTypes,
             Function.CompareMode.IS_SUPERTYPE_OF);
@@ -1093,16 +1094,16 @@ public class FunctionAnalyzer {
         if (fnName.equals(FunctionSet.COUNT) && isDistinct) {
             // Compatible with the logic of the original search function "count distinct"
             // TODO: fix how we equal count distinct.
-            fn = Expr.getBuiltinFunction(FunctionSet.COUNT, new Type[] { argumentTypes[0] },
+            fn = ExprUtils.getBuiltinFunction(FunctionSet.COUNT, new Type[] { argumentTypes[0] },
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         } else if (fnName.equals(FunctionSet.EXCHANGE_BYTES) || fnName.equals(FunctionSet.EXCHANGE_SPEED)) {
-            fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+            fn = ExprUtils.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             fn = fn.copy();
             fn.setArgsType(argumentTypes); // as accepting various types
             fn.setIsNullable(false);
         } else if (fnName.equals(FunctionSet.ARRAY_AGG) || fnName.equals(FunctionSet.GROUP_CONCAT)) {
             // move order by expr to node child, and extract is_asc and null_first information.
-            fn = Expr.getBuiltinFunction(fnName, new Type[] {argumentTypes[0]},
+            fn = ExprUtils.getBuiltinFunction(fnName, new Type[] {argumentTypes[0]},
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             fn = fn.copy();
             List<Boolean> isAscOrder = new ArrayList<>();
@@ -1144,7 +1145,7 @@ public class FunctionAnalyzer {
             ((AggregateFunction) fn).setIsDistinct(isDistinct && (!isAscOrder.isEmpty() || outputConst));
         } else if (FunctionSet.PERCENTILE_DISC.equals(fnName) || FunctionSet.LC_PERCENTILE_DISC.equals(fnName)) {
             argumentTypes[1] = Type.DOUBLE;
-            fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_IDENTICAL);
+            fn = ExprUtils.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_IDENTICAL);
             // correct decimal's precision and scale
             if (fn.getArgs()[0].isDecimalV3()) {
                 List<Type> argTypes = Arrays.asList(argumentTypes[0], fn.getArgs()[1]);
@@ -1162,7 +1163,7 @@ public class FunctionAnalyzer {
                 fn = newFn;
             }
         } else if (AggStateUtils.isAggStateCombinator(fnName)) {
-            Function func = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+            Function func = ExprUtils.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             if (func == null) {
                 return null;
             }
@@ -1220,12 +1221,12 @@ public class FunctionAnalyzer {
         } else if (DecimalV3FunctionAnalyzer.argumentTypeContainDecimalV2(fnName, argumentTypes)) {
             fn = DecimalV3FunctionAnalyzer.getDecimalV2Function(fnName, argumentTypes);
         } else if (Arrays.stream(argumentTypes).anyMatch(arg -> arg.matchesType(Type.TIME))) {
-            fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+            fn = ExprUtils.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             if (fn instanceof AggregateFunction) {
                 throw new SemanticException("Time Type can not used in " + fnName + " function", pos);
             }
         } else {
-            fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+            fn = ExprUtils.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         }
         return fn;
     }

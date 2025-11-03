@@ -23,6 +23,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.expression.CollectionElementExpr;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.LikePredicate;
 import com.starrocks.sql.ast.expression.SlotRef;
@@ -161,39 +162,39 @@ public class ExpressionAnalyzerTest extends PlanTestBase {
         Type[] argumentTypes = {mapType};
 
         Function fnMapKeys =
-                Expr.getBuiltinFunction(mapKeys, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+                ExprUtils.getBuiltinFunction(mapKeys, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         Assertions.assertEquals(fnMapKeys.functionName(), "map_keys");
         Assertions.assertTrue(fnMapKeys.getReturnType().isArrayType());
         Assertions.assertEquals(((ArrayType) fnMapKeys.getReturnType()).getItemType(), keyType);
 
         Function fnMapValues =
-                Expr.getBuiltinFunction(mapValues, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+                ExprUtils.getBuiltinFunction(mapValues, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         Assertions.assertEquals(fnMapValues.functionName(), "map_values");
         Assertions.assertTrue(fnMapValues.getReturnType().isArrayType());
         Assertions.assertEquals(((ArrayType) fnMapValues.getReturnType()).getItemType(), valueType);
 
         Function fnMapSize =
-                Expr.getBuiltinFunction(mapSize, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+                ExprUtils.getBuiltinFunction(mapSize, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         Assertions.assertEquals(fnMapSize.functionName(), "map_size");
         Assertions.assertEquals(fnMapSize.getReturnType(), Type.INT);
 
         Type[] argumentTypesErrorNum = {mapType, keyType};
-        Function fnKeysErrorNum = Expr.getBuiltinFunction(mapKeys, argumentTypesErrorNum,
+        Function fnKeysErrorNum = ExprUtils.getBuiltinFunction(mapKeys, argumentTypesErrorNum,
                 Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         Assertions.assertNull(fnKeysErrorNum);
-        Expr.getBuiltinFunction(mapValues, argumentTypesErrorNum, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+        ExprUtils.getBuiltinFunction(mapValues, argumentTypesErrorNum, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         Assertions.assertNull(fnKeysErrorNum);
-        Expr.getBuiltinFunction(mapSize, argumentTypesErrorNum, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+        ExprUtils.getBuiltinFunction(mapSize, argumentTypesErrorNum, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         Assertions.assertNull(fnKeysErrorNum);
 
         Type[] argumentTypesErrorType = {keyType};
-        Function fnKeysErrorType = Expr.getBuiltinFunction(mapKeys, argumentTypesErrorType,
+        Function fnKeysErrorType = ExprUtils.getBuiltinFunction(mapKeys, argumentTypesErrorType,
                 Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         Assertions.assertNull(fnKeysErrorType);
-        Function fnValuesErrorType = Expr.getBuiltinFunction(mapValues, argumentTypesErrorType,
+        Function fnValuesErrorType = ExprUtils.getBuiltinFunction(mapValues, argumentTypesErrorType,
                 Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         Assertions.assertNull(fnValuesErrorType);
-        Function fnSizeErrorType = Expr.getBuiltinFunction(mapSize, argumentTypesErrorType,
+        Function fnSizeErrorType = ExprUtils.getBuiltinFunction(mapSize, argumentTypesErrorType,
                 Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         Assertions.assertNull(fnSizeErrorType);
     }
@@ -207,7 +208,7 @@ public class ExpressionAnalyzerTest extends PlanTestBase {
             Type[] argumentTypes = {dateType, dateTimeType};
             String coalesce = "coalesce";
             Function fnCoalesce =
-                    Expr.getBuiltinFunction(coalesce, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+                    ExprUtils.getBuiltinFunction(coalesce, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             Assertions.assertEquals(fnCoalesce.functionName(), "coalesce");
             Assertions.assertEquals(fnCoalesce.getReturnType(), dateTimeType);
         }
@@ -215,7 +216,7 @@ public class ExpressionAnalyzerTest extends PlanTestBase {
             Type[] argumentTypes = {dateTimeType, dateType};
             String coalesce = "coalesce";
             Function fnCoalesce =
-                    Expr.getBuiltinFunction(coalesce, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+                    ExprUtils.getBuiltinFunction(coalesce, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             Assertions.assertEquals(fnCoalesce.functionName(), "coalesce");
             Assertions.assertEquals(fnCoalesce.getReturnType(), dateTimeType);
         }

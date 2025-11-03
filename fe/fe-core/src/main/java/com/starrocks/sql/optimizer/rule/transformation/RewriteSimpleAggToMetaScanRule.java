@@ -26,7 +26,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Type;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnIdentifier;
@@ -126,7 +126,7 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
             if (aggCall.getFnName().equals(FunctionSet.COUNT)
                     || aggCall.getFnName().equals(FunctionSet.COLUMN_SIZE)
                     || aggCall.getFnName().equals(FunctionSet.COLUMN_COMPRESSED_SIZE)) {
-                aggFunction = Expr.getBuiltinFunction(FunctionSet.SUM,
+                aggFunction = ExprUtils.getBuiltinFunction(FunctionSet.SUM,
                         new Type[] {Type.BIGINT}, Function.CompareMode.IS_IDENTICAL);
                 newAggFnName = FunctionSet.SUM;
                 newAggReturnType = Type.BIGINT;

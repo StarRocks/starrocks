@@ -16,8 +16,6 @@ package com.starrocks.planner;
 
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.plan.PlanTestBase;
-import com.starrocks.sql.plan.PlanTestNoneDBBase;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;

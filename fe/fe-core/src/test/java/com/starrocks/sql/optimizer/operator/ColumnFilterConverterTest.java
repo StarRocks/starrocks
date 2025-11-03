@@ -24,7 +24,6 @@ import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RandomDistributionInfo;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
@@ -249,7 +248,7 @@ public class ColumnFilterConverterTest {
         FunctionCallExpr zdtestCallExpr = new FunctionCallExpr(FunctionSet.DATE_TRUNC,
                 params);
         exprList.add(ColumnIdExpr.create(zdtestCallExpr));
-        columns.add(new Column("date_col", ScalarType.DATE));
+        columns.add(new Column("date_col", Type.DATE));
         ExpressionRangePartitionInfo expressionRangePartitionInfo = new ExpressionRangePartitionInfo(exprList, columns,
                 PartitionType.RANGE);
 

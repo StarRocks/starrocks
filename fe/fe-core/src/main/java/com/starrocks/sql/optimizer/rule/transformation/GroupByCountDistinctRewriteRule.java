@@ -25,7 +25,7 @@ import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
-import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -230,14 +230,14 @@ public class GroupByCountDistinctRewriteRule extends TransformationRule {
             if (StringUtils.equals(originFuncName, firstFuncName)) {
                 return origin;
             } else {
-                Function newFunc = Expr.getBuiltinFunction(firstFuncName, origin.getFunction().getArgs(),
+                Function newFunc = ExprUtils.getBuiltinFunction(firstFuncName, origin.getFunction().getArgs(),
                         Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
                 return new CallOperator(firstFuncName, newFunc.getReturnType(), args, newFunc);
             }
         } else {
             String secondFuncName = OTHER_FUNCTION_TRANS.get(originFuncName).second;
             Type[] argTypes = args.stream().map(ScalarOperator::getType).toArray(Type[]::new);
-            Function newFunc = Expr.getBuiltinFunction(secondFuncName, argTypes,
+            Function newFunc = ExprUtils.getBuiltinFunction(secondFuncName, argTypes,
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             Preconditions.checkNotNull(newFunc);
             newFunc = newFunc.copy();
@@ -255,7 +255,7 @@ public class GroupByCountDistinctRewriteRule extends TransformationRule {
         if (StringUtils.equals(originFuncName, newFuncName)) {
             return new CallOperator(originFuncName, origin.getType(), origin.getChildren(), origin.getFunction());
         } else {
-            Function newFunc = Expr.getBuiltinFunction(newFuncName, origin.getFunction().getArgs(),
+            Function newFunc = ExprUtils.getBuiltinFunction(newFuncName, origin.getFunction().getArgs(),
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             return new CallOperator(newFuncName, newFunc.getReturnType(), origin.getChildren(), newFunc);
         }
