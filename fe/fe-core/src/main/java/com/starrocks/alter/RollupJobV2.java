@@ -84,6 +84,7 @@ import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.expression.CastExpr;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.MetaUtils;
@@ -458,7 +459,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         }
         Expr newExpr = defineExpr.clone(smap);
         newExpr = newExpr.accept(visitor, null);
-        newExpr = Expr.analyzeAndCastFold(newExpr);
+        newExpr = ExprUtils.analyzeAndCastFold(newExpr);
         Type newType = newExpr.getType();
         if (!type.isFullyCompatible(newType)) {
             newExpr = new CastExpr(type, newExpr);

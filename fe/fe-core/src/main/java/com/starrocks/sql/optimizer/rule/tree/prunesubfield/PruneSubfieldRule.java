@@ -23,7 +23,7 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Type;
-import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.Operator;
@@ -145,11 +145,11 @@ public class PruneSubfieldRule extends TransformationRule {
         private static final Map<PrimitiveType, Function> SUPPORT_CAST_TYPE;
 
         static {
-            Function jsonInt = Expr.getBuiltinFunction(FunctionSet.GET_JSON_INT,
+            Function jsonInt = ExprUtils.getBuiltinFunction(FunctionSet.GET_JSON_INT,
                     new Type[] {Type.JSON, Type.VARCHAR}, Function.CompareMode.IS_IDENTICAL);
-            Function jsonDouble = Expr.getBuiltinFunction(FunctionSet.GET_JSON_DOUBLE,
+            Function jsonDouble = ExprUtils.getBuiltinFunction(FunctionSet.GET_JSON_DOUBLE,
                     new Type[] {Type.JSON, Type.VARCHAR}, Function.CompareMode.IS_IDENTICAL);
-            Function jsonString = Expr.getBuiltinFunction(FunctionSet.GET_JSON_STRING,
+            Function jsonString = ExprUtils.getBuiltinFunction(FunctionSet.GET_JSON_STRING,
                     new Type[] {Type.JSON, Type.VARCHAR}, Function.CompareMode.IS_IDENTICAL);
 
             SUPPORT_GET_TYPE = ImmutableMap.<PrimitiveType, Function>builder()

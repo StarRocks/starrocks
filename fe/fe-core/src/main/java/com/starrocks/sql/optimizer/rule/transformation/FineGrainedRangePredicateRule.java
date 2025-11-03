@@ -24,7 +24,7 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.expression.BinaryType;
-import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -293,7 +293,7 @@ public class FineGrainedRangePredicateRule extends TransformationRule {
                 CallOperator callOperator = (CallOperator) info.getScalarOp();
                 if (FunctionSet.SUM.equals(callOperator.getFnName()) || FunctionSet.COUNT.equals(callOperator.getFnName())) {
                     Type[] argTypes = new Type[] {inputCol.getType()};
-                    Function newFunc = Expr.getBuiltinFunction(FunctionSet.SUM, argTypes,
+                    Function newFunc = ExprUtils.getBuiltinFunction(FunctionSet.SUM, argTypes,
                             Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
                     Preconditions.checkNotNull(newFunc);
                     newFunc = newFunc.copy();

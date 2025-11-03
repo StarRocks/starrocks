@@ -33,7 +33,7 @@ public class VirtualSlotRef extends SlotRef {
     protected VirtualSlotRef(VirtualSlotRef other) {
         super(other);
         if (other.realSlots != null) {
-            realSlots = Expr.cloneList(other.realSlots);
+            realSlots = ExprUtils.cloneList(other.realSlots);
         }
         tupleDescriptor = other.tupleDescriptor;
     }

@@ -20,6 +20,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.expression.CastExpr;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
 
@@ -38,7 +39,7 @@ public class PartitionExprAnalyzer {
             if (arg1 instanceof SlotRef) {
                 Type targetColType = partitionSlotRef.getType();
                 Type[] dateTruncType = {Type.VARCHAR, targetColType};
-                Function builtinFunction = Expr.getBuiltinFunction(funcCall.getFnName().getFunction(),
+                Function builtinFunction = ExprUtils.getBuiltinFunction(funcCall.getFnName().getFunction(),
                         dateTruncType, Function.CompareMode.IS_IDENTICAL);
 
                 funcCall.setFn(builtinFunction);
@@ -48,7 +49,7 @@ public class PartitionExprAnalyzer {
 
                 Type targetColType = arg1.getType();
                 Type[] dateTruncType = {Type.VARCHAR, targetColType};
-                Function builtinFunction = Expr.getBuiltinFunction(funcCall.getFnName().getFunction(),
+                Function builtinFunction = ExprUtils.getBuiltinFunction(funcCall.getFnName().getFunction(),
                         dateTruncType, Function.CompareMode.IS_IDENTICAL);
 
                 funcCall.setFn(builtinFunction);
@@ -72,7 +73,7 @@ public class PartitionExprAnalyzer {
                 targetColType = functionCallExpr.getType();
             } else if (functionName.equalsIgnoreCase(FunctionSet.TIME_SLICE)) {
                 Type[] timeSliceType = {Type.DATETIME, Type.INT, Type.VARCHAR, Type.VARCHAR};
-                builtinFunction = Expr.getBuiltinFunction(functionCallExpr.getFnName().getFunction(),
+                builtinFunction = ExprUtils.getBuiltinFunction(functionCallExpr.getFnName().getFunction(),
                         timeSliceType, Function.CompareMode.IS_IDENTICAL);
             } else if (functionName.equalsIgnoreCase(FunctionSet.SUBSTR) ||
                     functionName.equalsIgnoreCase(FunctionSet.SUBSTRING)) {
@@ -109,12 +110,12 @@ public class PartitionExprAnalyzer {
                     }
 
                 }
-                builtinFunction = Expr.getBuiltinFunction(functionCallExpr.getFnName().getFunction(),
+                builtinFunction = ExprUtils.getBuiltinFunction(functionCallExpr.getFnName().getFunction(),
                         subStrType, Function.CompareMode.IS_IDENTICAL);
                 targetColType = Type.VARCHAR;
             } else if (functionName.equalsIgnoreCase(FunctionSet.STR2DATE)) {
                 Type[] str2DateType = {partitionSlotRef.getType(), Type.VARCHAR};
-                builtinFunction = Expr.getBuiltinFunction(functionCallExpr.getFnName().getFunction(),
+                builtinFunction = ExprUtils.getBuiltinFunction(functionCallExpr.getFnName().getFunction(),
                         str2DateType, Function.CompareMode.IS_IDENTICAL);
                 if (builtinFunction == null) {
                     String msg = String.format("Unsupported partition expression %s for column %s type %s",
@@ -125,7 +126,7 @@ public class PartitionExprAnalyzer {
             } else if (functionName.equalsIgnoreCase(FunctionSet.FROM_UNIXTIME) || functionName.equalsIgnoreCase(
                     FunctionSet.FROM_UNIXTIME_MS)) {
                 Type[] fromUnixTimeStampType = {partitionSlotRef.getType()};
-                builtinFunction = Expr.getBuiltinFunction(functionCallExpr.getFnName().getFunction(),
+                builtinFunction = ExprUtils.getBuiltinFunction(functionCallExpr.getFnName().getFunction(),
                         fromUnixTimeStampType, Function.CompareMode.IS_IDENTICAL);
                 if (builtinFunction == null) {
                     String msg = String.format("Unsupported partition expression %s for column %s type %s",

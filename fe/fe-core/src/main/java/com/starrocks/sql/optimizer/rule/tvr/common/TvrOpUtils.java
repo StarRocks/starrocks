@@ -23,6 +23,7 @@ import com.starrocks.catalog.combinator.AggStateUtils;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -79,7 +80,7 @@ public class TvrOpUtils {
         Type[] argTypes = uniqueKeys.stream()
                 .map(ScalarOperator::getType)
                 .toArray(Type[]::new);
-        Function newFunc = Expr.getBuiltinFunction(FunctionSet.ENCODE_SORT_KEY, argTypes,
+        Function newFunc = ExprUtils.getBuiltinFunction(FunctionSet.ENCODE_SORT_KEY, argTypes,
                 Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         if (newFunc == null) {
             throw new IllegalArgumentException("Function " + FunctionSet.ENCODE_SORT_KEY + " not found");
@@ -91,7 +92,7 @@ public class TvrOpUtils {
 
     private static ScalarOperator fromBinaryToVarchar(ScalarOperator rowIdScalarOp) {
         Type[] argTypes = new Type[] { rowIdScalarOp.getType(), Type.VARCHAR };
-        Function newFunc = Expr.getBuiltinFunction(FunctionSet.FROM_BINARY, argTypes,
+        Function newFunc = ExprUtils.getBuiltinFunction(FunctionSet.FROM_BINARY, argTypes,
                 Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         if (newFunc == null) {
             throw new IllegalArgumentException("Function " + FunctionSet.FROM_BINARY + " not found");
@@ -110,7 +111,7 @@ public class TvrOpUtils {
         // get the state union function name
         String origAggFuncName = AggStateUtils.getAggFuncNameOfCombinator(aggFunc.getFnName());
         String stateUnionFunctionName = AggStateUtils.stateUnionFunctionName(origAggFuncName);
-        Function newFunc = Expr.getBuiltinFunction(stateUnionFunctionName, argTypes,
+        Function newFunc = ExprUtils.getBuiltinFunction(stateUnionFunctionName, argTypes,
                 Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         if (newFunc == null) {
             throw new IllegalArgumentException("Function " + stateUnionFunctionName + " not found");

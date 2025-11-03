@@ -16,7 +16,7 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization.equivale
 
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
-import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -45,43 +45,43 @@ public class BitmapRewriteEquivalentTest {
 
     private ScalarOperator createBitmapHashFunc(ScalarOperator arg0) {
         CallOperator op = new CallOperator(FunctionSet.BITMAP_HASH, Type.BITMAP, new ArrayList<>(),
-                Expr.getBuiltinFunction(FunctionSet.BITMAP_HASH, new Type[] {Type.BIGINT}, IS_IDENTICAL));
+                ExprUtils.getBuiltinFunction(FunctionSet.BITMAP_HASH, new Type[] {Type.BIGINT}, IS_IDENTICAL));
         return createCallOperatorBase(op, arg0);
     }
 
     private ScalarOperator createBitmapHash64Func(ScalarOperator arg0) {
         CallOperator op = new CallOperator(FunctionSet.BITMAP_HASH64, Type.BITMAP, new ArrayList<>(),
-                Expr.getBuiltinFunction(FunctionSet.BITMAP_HASH64, new Type[] {Type.BIGINT}, IS_IDENTICAL));
+                ExprUtils.getBuiltinFunction(FunctionSet.BITMAP_HASH64, new Type[] {Type.BIGINT}, IS_IDENTICAL));
         return createCallOperatorBase(op, arg0);
     }
 
     private ScalarOperator createToBitmapFunc(ScalarOperator arg0) {
         CallOperator op = new CallOperator(FunctionSet.TO_BITMAP, Type.BITMAP, new ArrayList<>(),
-                Expr.getBuiltinFunction(FunctionSet.TO_BITMAP, new Type[] {Type.BIGINT}, IS_IDENTICAL));
+                ExprUtils.getBuiltinFunction(FunctionSet.TO_BITMAP, new Type[] {Type.BIGINT}, IS_IDENTICAL));
         return createCallOperatorBase(op, arg0);
     }
 
     private ScalarOperator createBitmapFromString(ScalarOperator arg0) {
         CallOperator op = new CallOperator(FunctionSet.BITMAP_FROM_STRING, Type.BITMAP, new ArrayList<>(),
-                Expr.getBuiltinFunction(FunctionSet.BITMAP_FROM_STRING, new Type[] {Type.STRING}, IS_IDENTICAL));
+                ExprUtils.getBuiltinFunction(FunctionSet.BITMAP_FROM_STRING, new Type[] {Type.STRING}, IS_IDENTICAL));
         return createCallOperatorBase(op, arg0);
     }
 
     private ScalarOperator createBitmapUnionFunc(ScalarOperator arg0) {
         CallOperator op = new CallOperator(FunctionSet.BITMAP_UNION, Type.BITMAP, new ArrayList<>(),
-                Expr.getBuiltinFunction(FunctionSet.BITMAP_UNION, new Type[] {Type.BITMAP}, IS_IDENTICAL));
+                ExprUtils.getBuiltinFunction(FunctionSet.BITMAP_UNION, new Type[] {Type.BITMAP}, IS_IDENTICAL));
         return createCallOperatorBase(op, arg0);
     }
 
     private ScalarOperator createBitmapUnionCountFunc(ScalarOperator arg0) {
         CallOperator op = new CallOperator(FunctionSet.BITMAP_UNION_COUNT, Type.BITMAP, new ArrayList<>(),
-                Expr.getBuiltinFunction(FunctionSet.BITMAP_UNION_COUNT, new Type[] {Type.BITMAP}, IS_IDENTICAL));
+                ExprUtils.getBuiltinFunction(FunctionSet.BITMAP_UNION_COUNT, new Type[] {Type.BITMAP}, IS_IDENTICAL));
         return createCallOperatorBase(op, arg0);
     }
 
     private CallOperator createBitmapAggFunc(ScalarOperator arg0) {
         CallOperator op = new CallOperator(FunctionSet.BITMAP_AGG, Type.BITMAP, new ArrayList<>(),
-                Expr.getBuiltinFunction(FunctionSet.BITMAP_AGG, new Type[] {Type.BITMAP}, IS_IDENTICAL));
+                ExprUtils.getBuiltinFunction(FunctionSet.BITMAP_AGG, new Type[] {Type.BITMAP}, IS_IDENTICAL));
         return createCallOperatorBase(op, arg0);
     }
 

@@ -20,7 +20,7 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.SessionVariable;
-import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -162,19 +162,19 @@ public class HLLRewriteEquivalent extends IAggregateRewriteEquivalent {
     }
 
     private CallOperator makeHllUnionAggFunc(ScalarOperator arg0) {
-        Function fn = Expr.getBuiltinFunction(FunctionSet.HLL_UNION_AGG, new Type[] {Type.HLL}, IS_IDENTICAL);
+        Function fn = ExprUtils.getBuiltinFunction(FunctionSet.HLL_UNION_AGG, new Type[] {Type.HLL}, IS_IDENTICAL);
         Preconditions.checkState(fn != null);
         return new CallOperator(HLL_UNION_AGG, Type.BIGINT, Arrays.asList(arg0), fn);
     }
 
     private CallOperator makeHllCardinalityFunc(ScalarOperator arg0) {
-        Function fn = Expr.getBuiltinFunction(FunctionSet.HLL_CARDINALITY, new Type[] {Type.HLL}, IS_IDENTICAL);
+        Function fn = ExprUtils.getBuiltinFunction(FunctionSet.HLL_CARDINALITY, new Type[] {Type.HLL}, IS_IDENTICAL);
         Preconditions.checkState(fn != null);
         return new CallOperator(HLL_CARDINALITY, Type.BIGINT, Arrays.asList(arg0), fn);
     }
 
     private CallOperator makeHllUnion(ScalarOperator arg0) {
-        Function fn = Expr.getBuiltinFunction(HLL_UNION, new Type[] {arg0.getType()}, IS_IDENTICAL);
+        Function fn = ExprUtils.getBuiltinFunction(HLL_UNION, new Type[] {arg0.getType()}, IS_IDENTICAL);
         Preconditions.checkState(fn != null);
         return new CallOperator(HLL_UNION, Type.HLL, Arrays.asList(arg0), fn);
     }

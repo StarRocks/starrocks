@@ -166,6 +166,6 @@ public final class ExprSubstitutionMap {
 
     @Override
     public ExprSubstitutionMap clone() {
-        return new ExprSubstitutionMap(Expr.cloneList(lhs), Expr.cloneList(rhs));
+        return new ExprSubstitutionMap(ExprUtils.cloneList(lhs), ExprUtils.cloneList(rhs));
     }
 }

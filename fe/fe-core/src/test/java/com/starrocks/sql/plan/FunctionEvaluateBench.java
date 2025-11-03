@@ -18,7 +18,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
-import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorEvaluator;
@@ -62,7 +62,7 @@ public class FunctionEvaluateBench {
 
 
 
-    private Function function = Expr.getBuiltinFunction(FunctionSet.SUBDATE,
+    private Function function = ExprUtils.getBuiltinFunction(FunctionSet.SUBDATE,
             new com.starrocks.catalog.ScalarType[] {Type.DATETIME, Type.INT}, IS_IDENTICAL);
 
     @Benchmark

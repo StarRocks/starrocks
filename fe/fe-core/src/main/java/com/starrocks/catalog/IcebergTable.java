@@ -45,6 +45,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.LiteralExpr;
@@ -429,7 +430,7 @@ public class IcebergTable extends Table {
                                 } else {
                                     throw new SemanticException("Unsupported function call %s", expr.toString());
                                 }
-                                Function builtinFunction = Expr.getBuiltinFunction(
+                                Function builtinFunction = ExprUtils.getBuiltinFunction(
                                         ((FunctionCallExpr) expr).getFnName().getFunction(),
                                         args, Function.CompareMode.IS_IDENTICAL);
                                 ((FunctionCallExpr) expr).setFn(builtinFunction);

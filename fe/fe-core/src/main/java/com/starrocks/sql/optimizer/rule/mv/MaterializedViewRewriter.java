@@ -21,7 +21,7 @@ import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
-import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -135,7 +135,7 @@ public class MaterializedViewRewriter extends OptExpressionVisitor<OptExpression
             CallOperator callOperator = new CallOperator(FunctionSet.SUM,
                     queryAggFunc.getType(),
                     queryAggFunc.getChildren(),
-                    Expr.getBuiltinFunction(FunctionSet.SUM, new Type[] {Type.BIGINT}, IS_IDENTICAL));
+                    ExprUtils.getBuiltinFunction(FunctionSet.SUM, new Type[] {Type.BIGINT}, IS_IDENTICAL));
             return (CallOperator) replaceColumnRefRewriter.rewrite(callOperator);
         } else if (functionName.equals(FunctionSet.SUM) && !queryAggFunc.isDistinct()) {
             CallOperator callOperator = new CallOperator(FunctionSet.SUM,
@@ -149,7 +149,7 @@ public class MaterializedViewRewriter extends OptExpressionVisitor<OptExpression
             CallOperator callOperator = new CallOperator(FunctionSet.BITMAP_UNION_COUNT,
                     queryAggFunc.getType(),
                     queryAggFunc.getChildren(),
-                    Expr.getBuiltinFunction(FunctionSet.BITMAP_UNION_COUNT, new Type[] {Type.BITMAP},
+                    ExprUtils.getBuiltinFunction(FunctionSet.BITMAP_UNION_COUNT, new Type[] {Type.BITMAP},
                             IS_IDENTICAL));
             return (CallOperator) replaceColumnRefRewriter.rewrite(callOperator);
         } else if (functionName.equals(FunctionSet.BITMAP_AGG) &&
@@ -157,7 +157,7 @@ public class MaterializedViewRewriter extends OptExpressionVisitor<OptExpression
             CallOperator callOperator = new CallOperator(FunctionSet.BITMAP_UNION,
                     queryAggFunc.getType(),
                     queryAggFunc.getChildren(),
-                    Expr.getBuiltinFunction(FunctionSet.BITMAP_UNION, new Type[] {Type.BITMAP},
+                    ExprUtils.getBuiltinFunction(FunctionSet.BITMAP_UNION, new Type[] {Type.BITMAP},
                             IS_IDENTICAL));
             return (CallOperator) replaceColumnRefRewriter.rewrite(callOperator);
         } else if (
@@ -166,7 +166,7 @@ public class MaterializedViewRewriter extends OptExpressionVisitor<OptExpression
             CallOperator callOperator = new CallOperator(FunctionSet.HLL_UNION_AGG,
                     queryAggFunc.getType(),
                     queryAggFunc.getChildren(),
-                    Expr.getBuiltinFunction(FunctionSet.HLL_UNION_AGG, new Type[] {Type.HLL}, IS_IDENTICAL));
+                    ExprUtils.getBuiltinFunction(FunctionSet.HLL_UNION_AGG, new Type[] {Type.HLL}, IS_IDENTICAL));
             return (CallOperator) replaceColumnRefRewriter.rewrite(callOperator);
         } else if (functionName.equals(FunctionSet.PERCENTILE_APPROX) &&
                 mvColumn.getAggregationType() == AggregateType.PERCENTILE_UNION) {
@@ -179,7 +179,7 @@ public class MaterializedViewRewriter extends OptExpressionVisitor<OptExpression
             CallOperator callOperator = new CallOperator(FunctionSet.PERCENTILE_UNION,
                     queryAggFunc.getType(),
                     Lists.newArrayList(child),
-                    Expr.getBuiltinFunction(FunctionSet.PERCENTILE_UNION,
+                    ExprUtils.getBuiltinFunction(FunctionSet.PERCENTILE_UNION,
                             new Type[] {Type.PERCENTILE}, IS_IDENTICAL));
             return (CallOperator) replaceColumnRefRewriter.rewrite(callOperator);
         } else {

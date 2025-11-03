@@ -21,6 +21,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.CallProcedureStatement;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -29,7 +30,6 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import com.starrocks.sql.ast.StatementBase;
 
 import java.util.Arrays;
 import java.util.Map;

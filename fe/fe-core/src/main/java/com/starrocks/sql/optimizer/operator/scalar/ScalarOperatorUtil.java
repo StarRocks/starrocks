@@ -21,7 +21,7 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
@@ -64,7 +64,7 @@ public class ScalarOperatorUtil {
     }
 
     public static Function findArithmeticFunction(Type[] argsType, String fnName) {
-        return Expr.getBuiltinFunction(fnName, argsType, IS_IDENTICAL);
+        return ExprUtils.getBuiltinFunction(fnName, argsType, IS_IDENTICAL);
     }
 
     public static Function findSumFn(Type[] argTypes) {

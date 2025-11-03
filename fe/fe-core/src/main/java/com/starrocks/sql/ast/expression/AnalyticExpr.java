@@ -159,7 +159,7 @@ public class AnalyticExpr extends Expr {
             orderByElements.add(e.clone());
         }
 
-        partitionExprs = Expr.cloneList(other.partitionExprs);
+        partitionExprs = ExprUtils.cloneList(other.partitionExprs);
         window = (other.window != null ? other.window.clone() : null);
         resetWindow = other.resetWindow;
         partitionHint = other.partitionHint;
@@ -307,7 +307,7 @@ public class AnalyticExpr extends Expr {
             return;
         }
 
-        double value = getConstFromExpr(val);
+        double value = ExprUtils.getConstFromExpr(val);
         PrimitiveType type = call.getChild(0).getType().getPrimitiveType();
         boolean out = false;
 

@@ -16,7 +16,7 @@ package com.starrocks.connector.paimon;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.PaimonTable;
-import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.Type;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -114,7 +114,7 @@ public class PaimonConnectorTest {
         Assertions.assertEquals("tbl1", paimonTable.getCatalogTableName());
         Assertions.assertEquals(Lists.newArrayList("col1"), paimonTable.getPartitionColumnNames());
         Assertions.assertEquals("hdfs://127.0.0.1:10000/paimon", paimonTable.getTableLocation());
-        Assertions.assertEquals(ScalarType.INT, paimonTable.getBaseSchema().get(0).getType());
+        Assertions.assertEquals(Type.INT, paimonTable.getBaseSchema().get(0).getType());
         Assertions.assertEquals("paimon_catalog", paimonTable.getCatalogName());
     }
 

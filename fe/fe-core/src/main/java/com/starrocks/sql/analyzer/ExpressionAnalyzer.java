@@ -72,6 +72,7 @@ import com.starrocks.sql.ast.expression.DictionaryGetExpr;
 import com.starrocks.sql.ast.expression.ExistsPredicate;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprId;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FieldReference;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.FunctionName;
@@ -355,7 +356,7 @@ public class ExpressionAnalyzer {
     private void bottomUpAnalyze(Visitor visitor, Expr expression, Scope scope) {
         boolean hasLambdaFunc = false;
         try {
-            hasLambdaFunc = expression.hasLambdaFunction(expression);
+            hasLambdaFunc = ExprUtils.hasLambdaFunction(expression);
         } catch (SemanticException e) {
             throw e.appendOnlyOnceMsg(expression.toSql(), expression.getPos());
         }
@@ -689,7 +690,7 @@ public class ExpressionAnalyzer {
                     }
                     Preconditions.checkArgument(typeTriple != null);
                     Type[] args = {typeTriple.lhsTargetType, typeTriple.rhsTargetType};
-                    Function fn = Expr.getBuiltinFunction(op.getName(), args, Function.CompareMode.IS_IDENTICAL);
+                    Function fn = ExprUtils.getBuiltinFunction(op.getName(), args, Function.CompareMode.IS_IDENTICAL);
                     // In resolved function instance, it's argTypes and resultType are wildcard decimal type
                     // (both precision and and scale are -1, only used in function instance resolution), it's
                     // illegal for a function and expression to has a wildcard decimal type as its type in BE,
@@ -766,7 +767,7 @@ public class ExpressionAnalyzer {
                                     + " is invalid", node.getPos());
                 }
 
-                Function fn = Expr.getBuiltinFunction(op.getName(), new Type[] {lhsType, rhsType},
+                Function fn = ExprUtils.getBuiltinFunction(op.getName(), new Type[] {lhsType, rhsType},
                         Function.CompareMode.IS_SUPERTYPE_OF);
 
                 if (fn == null) {
@@ -783,7 +784,7 @@ public class ExpressionAnalyzer {
                 node.setFn(fn);
             } else if (node.getOp().getPos() == ArithmeticExpr.OperatorPosition.UNARY_PREFIX) {
 
-                Function fn = Expr.getBuiltinFunction(
+                Function fn = ExprUtils.getBuiltinFunction(
                         node.getOp().getName(), new Type[] {Type.BIGINT}, Function.CompareMode.IS_SUPERTYPE_OF);
 
                 node.setType(Type.BIGINT);
@@ -820,7 +821,7 @@ public class ExpressionAnalyzer {
 
             Type[] argumentTypes = node.getChildren().stream().map(Expr::getType)
                     .toArray(Type[]::new);
-            Function fn = Expr.getBuiltinFunction(funcOpName.toLowerCase(), argumentTypes,
+            Function fn = ExprUtils.getBuiltinFunction(funcOpName.toLowerCase(), argumentTypes,
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             if (fn == null) {
                 String msg = String.format("No matching function with signature: %s(%s)", funcOpName, Joiner.on(", ")
@@ -1423,7 +1424,7 @@ public class ExpressionAnalyzer {
 
             Type[] childTypes = new Type[1];
             childTypes[0] = Type.BIGINT;
-            Function fn = Expr.getBuiltinFunction(node.getFnName().getFunction(),
+            Function fn = ExprUtils.getBuiltinFunction(node.getFnName().getFunction(),
                     childTypes, Function.CompareMode.IS_IDENTICAL);
 
             node.setFn(fn);

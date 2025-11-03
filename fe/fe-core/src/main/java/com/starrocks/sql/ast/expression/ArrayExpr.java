@@ -33,7 +33,7 @@ public class ArrayExpr extends Expr {
     public ArrayExpr(Type type, List<Expr> items, NodePosition pos) {
         super(pos);
         this.type = type;
-        this.children = Expr.cloneList(items);
+        this.children = ExprUtils.cloneList(items);
     }
 
     public ArrayExpr(ArrayExpr other) {

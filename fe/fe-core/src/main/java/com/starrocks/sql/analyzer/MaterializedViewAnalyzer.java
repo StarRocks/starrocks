@@ -95,6 +95,7 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
@@ -2061,7 +2062,7 @@ public class MaterializedViewAnalyzer {
         {
             IntLiteral interval = new IntLiteral(zoneHourOffset, Type.INT);
             Type[] argTypes = {slotRef.getType(), interval.getType()};
-            Function dateSubFn = Expr.getBuiltinFunction(FunctionSet.DATE_SUB,
+            Function dateSubFn = ExprUtils.getBuiltinFunction(FunctionSet.DATE_SUB,
                     argTypes, Function.CompareMode.IS_IDENTICAL);
             Preconditions.checkNotNull(dateSubFn, "date_sub function is not found");
             TimestampArithmeticExpr newChild = new TimestampArithmeticExpr(FunctionSet.DATE_SUB, slotRef,
@@ -2075,7 +2076,7 @@ public class MaterializedViewAnalyzer {
         {
             IntLiteral interval = new IntLiteral(zoneHourOffset, Type.INT);
             Type[] argTypes = {slotRef.getType(), interval.getType()};
-            Function dateAddFn = Expr.getBuiltinFunction(FunctionSet.DATE_ADD,
+            Function dateAddFn = ExprUtils.getBuiltinFunction(FunctionSet.DATE_ADD,
                     argTypes, Function.CompareMode.IS_IDENTICAL);
             Preconditions.checkNotNull(dateAddFn, "date_add function is not found");
             TimestampArithmeticExpr dateAddFunc = new TimestampArithmeticExpr(FunctionSet.DATE_ADD, partitionByExpr,

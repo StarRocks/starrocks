@@ -17,8 +17,6 @@ package com.starrocks.connector.iceberg;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.iceberg.IcebergMetadata.IcebergSinkExtra;
-import com.starrocks.connector.iceberg.IcebergRewriteDataJob;
-import com.starrocks.connector.iceberg.IcebergRewriteDataJob.FinishArgs;
 import com.starrocks.planner.IcebergScanNode;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanNodeId;

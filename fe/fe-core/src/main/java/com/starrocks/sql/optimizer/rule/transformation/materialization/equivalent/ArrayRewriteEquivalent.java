@@ -23,7 +23,7 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
-import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -125,7 +125,7 @@ public class ArrayRewriteEquivalent extends IAggregateRewriteEquivalent {
     CallOperator makeArrayUniqAggFunc(ScalarOperator arg0, CallOperator aggFunc, Function.CompareMode compareMode) {
         Type newInputArgType = aggFunc.getChild(0).getType();
         Type[] argTypes = new Type[] {new ArrayType(newInputArgType)};
-        Function rollup = Expr.getBuiltinFunction(FunctionSet.ARRAY_UNIQUE_AGG, argTypes, compareMode);
+        Function rollup = ExprUtils.getBuiltinFunction(FunctionSet.ARRAY_UNIQUE_AGG, argTypes, compareMode);
         if (rollup == null) {
             return null;
         }
@@ -136,11 +136,11 @@ public class ArrayRewriteEquivalent extends IAggregateRewriteEquivalent {
                                    Function.CompareMode compareMode, String mapped) {
         Type newInputArgType = call.getChild(0).getType();
         Type[] argTypes = new Type[] {new ArrayType(newInputArgType)};
-        Function replaced = Expr.getBuiltinFunction(mapped, argTypes, compareMode);
+        Function replaced = ExprUtils.getBuiltinFunction(mapped, argTypes, compareMode);
         if (replaced == null) {
             return null;
         }
-        Function rollup = Expr.getBuiltinFunction(FunctionSet.ARRAY_UNIQUE_AGG, argTypes, compareMode);
+        Function rollup = ExprUtils.getBuiltinFunction(FunctionSet.ARRAY_UNIQUE_AGG, argTypes, compareMode);
         CallOperator res = new CallOperator(
                 FunctionSet.ARRAY_UNIQUE_AGG,
                 new ArrayType(newInputArgType),
@@ -153,7 +153,7 @@ public class ArrayRewriteEquivalent extends IAggregateRewriteEquivalent {
                                    Function.CompareMode compareMode, String mapped) {
         Type newInputArgType = call.getChild(0).getType();
         Type[] argTypes = new Type[] {new ArrayType(newInputArgType)};
-        Function replaced = Expr.getBuiltinFunction(mapped, argTypes, compareMode);
+        Function replaced = ExprUtils.getBuiltinFunction(mapped, argTypes, compareMode);
         if (replaced == null) {
             return null;
         }
