@@ -14,12 +14,7 @@
 
 package com.starrocks.planner;
 
-import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.RowPositionDescriptor;
-import com.starrocks.analysis.SlotDescriptor;
-import com.starrocks.analysis.SlotId;
-import com.starrocks.analysis.TupleDescriptor;
-import com.starrocks.analysis.TupleId;
 import com.starrocks.catalog.Table;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
@@ -29,8 +24,6 @@ import com.starrocks.thrift.TNodesInfo;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.warehouse.cngroup.ComputeResource;
-import software.amazon.awssdk.services.gamelift.model.Compute;
-import software.amazon.awssdk.services.lexruntimev2.model.Slot;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -39,6 +32,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+// Used in global late materialization,
+// the FetchNode is responsible for initiating a lazy read request to a LookUpNode,
+// reading certain columns of some specific rows based on the row position
 public class FetchNode extends PlanNode {
     PlanNodeId targetNodeId;
     List<TupleDescriptor> descs;
@@ -67,7 +63,6 @@ public class FetchNode extends PlanNode {
         rowPosDescs.forEach((tupleId, rowPosDescs) -> {
             msg.fetch_node.row_pos_descs.put(tupleId.asInt(), rowPosDescs.toThrift());
         });
-        // @TODO refactor nodes info
         msg.fetch_node.nodes_info = GlobalStateMgr.getCurrentState().createNodesInfo(computeResource,
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
     }

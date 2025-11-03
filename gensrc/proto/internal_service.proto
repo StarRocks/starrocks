@@ -746,7 +746,7 @@ message PColumn {
     optional int64 data_size = 2;
     optional bytes data = 3;
 }
-// 
+
 message PLookUpRequest {
     optional PUniqueId query_id = 1;
     optional int32 lookup_node_id = 2;

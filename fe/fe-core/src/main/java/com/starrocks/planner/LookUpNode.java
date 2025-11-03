@@ -15,17 +15,10 @@
 package com.starrocks.planner;
 
 import com.starrocks.analysis.RowPositionDescriptor;
-import com.starrocks.analysis.SlotDescriptor;
-import com.starrocks.analysis.SlotId;
-import com.starrocks.analysis.TupleDescriptor;
-import com.starrocks.analysis.TupleId;
-import com.starrocks.catalog.Table;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TLookUpNode;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
-import org.sparkproject.guava.collect.Lists;
-import software.amazon.awssdk.services.lexruntimev2.model.Slot;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -33,6 +26,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+// Used in global late materialization,
+// LookUpNode is responsible for handling lazy read requests from a FetchNode
+// and reading specific data from the data sources based on the row position,
+// and returning it to the FetchNode.
 public class LookUpNode extends PlanNode {
     private List<TupleDescriptor> descs;
     // row position desc for each table

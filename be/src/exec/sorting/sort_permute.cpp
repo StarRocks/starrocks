@@ -32,7 +32,6 @@
 #include "common/status.h"
 #include "exec/sorting/sorting.h"
 #include "gutil/casts.h"
-#include "gutil/integral_types.h"
 #include "gutil/strings/fastmem.h"
 
 namespace starrocks {
@@ -208,38 +207,6 @@ public:
     }
 
     Status do_visit(JsonColumn* dst) { return generic_visit(dst); }
-
-    Status do_visit(RowIdColumn* dst) {
-        using Container = typename FixedLengthColumnBase<uint32_t>::Container;
-        using ColumnType = FixedLengthColumnBase<uint32_t>;
-
-        auto func = [](FixedLengthColumnBase<uint32_t>* dst, Columns& columns, const PermutationView& perm) {
-            ColumnAppendPermutation visitor(columns, perm);
-            return dst->accept_mutable(&visitor);
-        };
-
-        std::vector<ColumnType*> dst_ids;
-        for (const auto& column : dst->columns()) {
-            dst_ids.emplace_back(UInt32Column::static_pointer_cast(column).get());
-        }
-
-        std::vector<Columns> tmp_inputs;
-        tmp_inputs.resize(3);
-        for (size_t i = 0; i < 3; i++) {
-            tmp_inputs[i].clear();
-            for (const auto& column : _columns) {
-                auto id_column = RowIdColumn::static_pointer_cast(column)->columns()[i];
-                tmp_inputs[i].emplace_back(id_column);
-            }
-        }
-
-        DCHECK_EQ(dst_ids.size(), 3);
-        for (size_t i = 0; i < 3; i++) {
-            RETURN_IF_ERROR(func(dst_ids[i], tmp_inputs[i], _perm));
-        }
-
-        return Status::OK();
-    }
 
 private:
     template <class COL_TYPE>

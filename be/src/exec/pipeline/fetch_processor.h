@@ -23,16 +23,42 @@
 #include "column/vectorized_fwd.h"
 #include "common/global_types.h"
 #include "exec/pipeline/fetch_sink_operator.h"
+#include "exec/pipeline/fetch_task.h"
 #include "exec/pipeline/lookup_request.h"
 #include "exec/sorting/sort_permute.h"
 #include "runtime/descriptors.h"
 #include "util/bthreads/bthread_shared_mutex.h"
 #include "util/phmap/phmap.h"
 #include "util/raw_container.h"
-#include "exec/pipeline/fetch_task.h"
 
 namespace starrocks::pipeline {
 
+// The fetch processor drives lookup-based table fetches for a single driver sequence.
+//
+// The pipeline pushes chunks that contain row-position metadata produced by a lookup operator.
+// `FetchProcessor` groups those chunks into `BatchUnit`s, builds fetch tasks for every referenced
+// external source (remote BE or local cache), and executes the tasks asynchronously. Once all
+// tasks in a batch finish, it merges fetched columns back into the original chunks in the correct
+// order so that downstream operators can consume the completed rows without extra coordination.
+//
+// Key data structures:
+// * `BatchUnit`: owns the set of input chunks, the generated fetch tasks, and bookkeeping for
+//   pending results. Each unit represents one logical batch that will be fetched and materialized
+//   together.
+// * `_queue`: a FIFO of `BatchUnit`s waiting to output. Batches are enqueued after fetch tasks are
+//   submitted and dequeued when their reconstructed chunks are pulled by the pipeline driver.
+// * `_row_pos_descs`: describes how to interpret row-position columns (source ids, reference slot
+//   ids, etc.) so the processor knows how to build requests and stitch results back.
+//
+// Processing flow:
+// 1. `push_chunk` buffers incoming chunks into the current `BatchUnit`. When the batch reaches the
+//    configured size (or sink finishes), `_fetch_data` materializes request chunks and generates
+//    per-source fetch tasks.
+// 2. `_submit_fetch_tasks` dispatches each task (local or remote). Tasks populate their response
+//    columns and signal completion.
+// 3. `pull_chunk` waits until the front batch has finished fetching. `_build_output_chunk` merges
+//    fetched columns and null placeholders back into the original chunk order. The driver then
+//    drains the rebuilt chunks from the queue.
 class FetchProcessor {
 public:
     friend class LocalLookUpRequestContext;
@@ -71,7 +97,8 @@ private:
     Status _fetch_data(RuntimeState* state, BatchUnitPtr& unit);
     StatusOr<ChunkPtr> _build_request_chunk(RuntimeState* state, const BatchUnitPtr& unit);
 
-    StatusOr<FetchTaskPtr> _create_fetch_task(TupleId request_tuple_id, const RowPositionDescriptor* row_pos_desc, BatchUnitPtr unit, int32_t source_id, const ChunkPtr& request_chunk);
+    StatusOr<FetchTaskPtr> _create_fetch_task(TupleId request_tuple_id, const RowPositionDescriptor* row_pos_desc,
+                                              BatchUnitPtr unit, int32_t source_id, const ChunkPtr& request_chunk);
 
     Status _gen_fetch_tasks(RuntimeState* state, const ChunkPtr& row_id_chunk, BatchUnitPtr& unit);
     Status _submit_fetch_tasks(RuntimeState* state, const BatchUnitPtr& unit);
@@ -140,7 +167,6 @@ public:
 
 private:
     int32_t _target_node_id;
-    // phmap::flat_hash_map<TupleId, SlotId> _row_id_slots;
     phmap::flat_hash_map<TupleId, RowPositionDescriptor*> _row_pos_descs;
     phmap::flat_hash_map<SlotId, SlotDescriptor*> _slot_id_to_desc;
     std::shared_ptr<StarRocksNodesInfo> _nodes_info;

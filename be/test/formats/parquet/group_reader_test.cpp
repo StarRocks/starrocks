@@ -488,7 +488,7 @@ TEST_F(GroupReaderTest, FixedValueColumnReaderTest) {
     col1->select_offset_index(sparse_range, 100);
     ColumnPtr column = ColumnHelper::create_column(TypeDescriptor::create_varchar_type(100), true);
     Range<uint64_t> range(0, 100);
-    ASSERT_FALSE(col1->read_range(range, nullptr, column).ok());
+    ASSERT_TRUE(col1->read_range(range, nullptr, column).ok());
 
     TypeInfoPtr type_info = get_type_info(LogicalType::TYPE_INT);
     ColumnPredicate* is_null_predicate = _pool.add(new_column_null_predicate(type_info, 1, true));

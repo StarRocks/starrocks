@@ -15,12 +15,13 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.common.FeConstants;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class GlobalLateMaterializationTest extends ConnectorPlanTestBase {
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         ConnectorPlanTestBase.beforeClass();
 
@@ -28,9 +29,13 @@ public class GlobalLateMaterializationTest extends ConnectorPlanTestBase {
         connectContext.getSessionVariable().setEnableGlobalLateMaterialization(true);
     }
 
+    @AfterAll
+    public static void afterClass() {
+        connectContext.getSessionVariable().setEnableGlobalLateMaterialization(false);
+    }
+
     @Test
     public void testIcebergV3TableJoin() throws Exception {
-        connectContext.getSessionVariable().setEnableGlobalLateMaterialization(true);
         String sql;
         String plan;
 

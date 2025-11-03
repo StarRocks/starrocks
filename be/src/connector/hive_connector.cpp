@@ -25,10 +25,10 @@
 #include "exec/hdfs_scanner/hdfs_scanner_partition.h"
 #include "exec/hdfs_scanner/hdfs_scanner_text.h"
 #include "exec/hdfs_scanner/jni_scanner.h"
+#include "exec/pipeline/query_context.h"
+#include "exec/pipeline/scan/glm_manager.h"
 #include "exprs/expr.h"
 #include "storage/chunk_helper.h"
-#include "exec/pipeline/scan/glm_manager.h"
-#include "exec/pipeline/query_context.h"
 
 namespace starrocks::connector {
 
@@ -106,7 +106,6 @@ Status HiveDataSource::open(RuntimeState* state) {
 
     _runtime_state = state;
     _tuple_desc = state->desc_tbl().get_tuple_descriptor(hdfs_scan_node.tuple_id);
-    // @TODO check _source_node_id exists
     _hive_table = dynamic_cast<const HiveTableDescriptor*>(_tuple_desc->table_desc());
     if (_hive_table == nullptr) {
         return Status::RuntimeError(
@@ -201,7 +200,6 @@ Status HiveDataSource::open(RuntimeState* state) {
     if (state->query_options().__isset.enable_dynamic_prune_scan_range) {
         _enable_dynamic_prune_scan_range = state->query_options().enable_dynamic_prune_scan_range;
     }
-
     if (state->query_options().__isset.enable_connector_split_io_tasks) {
         _enable_split_tasks = state->query_options().enable_connector_split_io_tasks;
     }
@@ -230,22 +228,18 @@ void HiveDataSource::_init_global_late_materialization_context(RuntimeState* sta
         }
         return false;
     });
-    if (will_be_lazy_read) {
-        // LOG(INFO) << "will be lazy read, scan_range: " << apache::thrift::ThriftDebugString(_scan_range);
-        // @TODO 
-        auto glm_ctx_mgr = state->query_ctx()->global_late_materialization_ctx_mgr();
 
-        pipeline::IcebergGlobalLateMaterilizationContext* glm_ctx = static_cast<pipeline::IcebergGlobalLateMaterilizationContext*>(
-            glm_ctx_mgr->get_or_create_ctx(row_source_slot_id, [&]() {
-                auto ctx = state->query_ctx()->object_pool()->add(new pipeline::IcebergGlobalLateMaterilizationContext());
-                ctx->hdfs_scan_node = _provider->_hdfs_scan_node;
-                // LOG(INFO) << "create glm ctx for row_source_slot_id: " << row_source_slot_id;
-                return ctx;
-            }));
+    if (will_be_lazy_read) {
+        auto glm_ctx_mgr = state->query_ctx()->global_late_materialization_ctx_mgr();
+        pipeline::IcebergGlobalLateMaterilizationContext* glm_ctx =
+                static_cast<pipeline::IcebergGlobalLateMaterilizationContext*>(
+                        glm_ctx_mgr->get_or_create_ctx(row_source_slot_id, [&]() {
+                            auto ctx = state->query_ctx()->object_pool()->add(
+                                    new pipeline::IcebergGlobalLateMaterilizationContext());
+                            ctx->hdfs_scan_node = _provider->_hdfs_scan_node;
+                            return ctx;
+                        }));
         _scan_range_id = glm_ctx->assign_scan_range_id(_scan_range);
-        // LOG(INFO) << "assigned scan_range_id: " << _scan_range_id 
-        //     << ", gml_ctx: " << (void*)glm_ctx
-        //     << " for scan_range: " << apache::thrift::ThriftDebugString(_scan_range);
     }
 }
 
@@ -391,7 +385,6 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
     }
 
     const auto& slots = _tuple_desc->slots();
-    // LOG(INFO) << "slots size: " << slots.size() << ", tuple: " << _tuple_desc->debug_string();
     for (int i = 0; i < slots.size(); i++) {
         if (_hive_table != nullptr && _hive_table->is_partition_col(slots[i])) {
             _partition_slots.push_back(slots[i]);
@@ -414,7 +407,6 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
             _materialize_index_in_chunk.push_back(i);
         }
     }
-    // @TODO add row id related slots
 
     if (hdfs_scan_node.__isset.hive_column_names) {
         _hive_column_names = hdfs_scan_node.hive_column_names;
@@ -725,10 +717,8 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     const auto& hdfs_scan_node = _provider->_hdfs_scan_node;
     auto fsOptions =
             FSOptions(hdfs_scan_node.__isset.cloud_configuration ? &hdfs_scan_node.cloud_configuration : nullptr);
-    // LOG(INFO) << "hdfs_scan_node: " << apache::thrift::ThriftDebugString(hdfs_scan_node);
-    // LOG(INFO) << "native_file_path: " << native_file_path << " isset: " << hdfs_scan_node.__isset.cloud_configuration;
+
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateUniqueFromString(native_file_path, fsOptions));
-    // LOG(INFO) << "HiveDataSource::_init_scanner, scan_range: " << apache::thrift::ThriftDebugString(scan_range);
     HdfsScannerParams scanner_params;
     RETURN_IF_ERROR(_init_global_dicts(&scanner_params));
     scanner_params.runtime_filter_collector = _runtime_filters;
@@ -877,7 +867,6 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         return Status::InternalError("create hdfs scanner failed");
     }
     _pool.add(scanner);
-    // @TODO copy a scanner into glm ctx?
 
     RETURN_IF_ERROR(scanner->init(state, scanner_params));
     Status st = scanner->open(state);

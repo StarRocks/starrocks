@@ -33,10 +33,9 @@
 #include "formats/parquet/iceberg_row_id_reader.h"
 #include "formats/parquet/metadata.h"
 #include "formats/parquet/predicate_filter_evaluator.h"
+#include "formats/parquet/row_source_reader.h"
 #include "formats/parquet/scalar_column_reader.h"
 #include "formats/parquet/schema.h"
-#include "formats/parquet/iceberg_row_id_reader.h"
-#include "formats/parquet/row_source_reader.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/types.h"
 #include "simd/simd.h"
@@ -195,14 +194,7 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
                 }
             }
         }
-        // fill reserved column
-        // if (_param.reserved_field_slots != nullptr) {
-        //     for (const auto* slot : *_param.reserved_field_slots) {
-        //         SlotId slot_id = slot->id();
-        //         LOG(INFO) << "read reserved field slot: " << slot->col_name() << ", id: " << slot_id;
-        //         RETURN_IF_ERROR(_column_readers[slot_id]->read_range(r, &chunk_filter, active_chunk->get_column_by_slot_id(slot_id)));
-        //     }
-        // }
+
         // we really have predicate to run round by round
         if (!_dict_column_indices.empty() || !_left_no_dict_filter_conjuncts_by_slot.empty()) {
             has_filter = true;
@@ -212,9 +204,6 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
                 continue;
             }
             active_chunk->filter_range(chunk_filter, 0, count);
-            // for (size_t i = 0;i < active_chunk->num_rows();i++) {
-            //     LOG(INFO) << "res data[" << i << "]: " << active_chunk->debug_row(i);
-            // }
         } else if (has_filter) {
             RETURN_IF_ERROR(_read_range(_active_column_indices, r, &chunk_filter, &active_chunk));
             active_chunk->filter_range(chunk_filter, 0, count);
@@ -282,7 +271,6 @@ Status GroupReader::_read_range(const std::vector<int>& read_columns, const Rang
 StatusOr<size_t> GroupReader::_read_range_round_by_round(const Range<uint64_t>& range, Filter* filter,
                                                          ChunkPtr* chunk) {
     const std::vector<int>& read_order = _column_read_order_ctx->get_column_read_order();
-    // LOG(INFO) << "GroupReader::_read_range_round_by_round, range: " << range.to_string() << ", read_order size:" << read_order.size();
     size_t round_cost = 0;
     double first_selectivity = -1;
     DeferOp defer([&]() { _column_read_order_ctx->update_ctx(round_cost, first_selectivity); });
@@ -311,7 +299,6 @@ StatusOr<size_t> GroupReader::_read_range_round_by_round(const Range<uint64_t>& 
         auto& column = _param.read_cols[col_idx];
         round_cost += _column_read_order_ctx->get_column_cost(col_idx);
         SlotId slot_id = column.slot_id();
-        // LOG(INFO) << "read column for slot: " << slot_id << ", range: " << range.to_string();
         RETURN_IF_ERROR(_column_readers[slot_id]->read_range(range, filter, (*chunk)->get_column_by_slot_id(slot_id)));
 
         if (std::find(_dict_column_indices.begin(), _dict_column_indices.end(), col_idx) !=
@@ -335,10 +322,7 @@ StatusOr<size_t> GroupReader::_read_range_round_by_round(const Range<uint64_t>& 
             temp_chunk->columns().reserve(1);
             ColumnPtr& column = (*chunk)->get_column_by_slot_id(slot_id);
             temp_chunk->append_column(column, slot_id);
-            // LOG(INFO) << "eval conjuncts for slot: " << slot_id
-            //             << ", column: " << column->get_name() << ", size: " << column->size();
             ASSIGN_OR_RETURN(hit_count, ExecNode::eval_conjuncts_into_filter(ctxs, temp_chunk.get(), filter));
-            // LOG(INFO) << "hit_count: " << hit_count << ", filter size: " << filter->size();
             if (hit_count == 0) {
                 break;
             }
@@ -366,7 +350,6 @@ Status GroupReader::_create_column_readers() {
     opts.file_size = _param.file_size;
     opts.datacache_options = _param.datacache_options;
     for (const auto& column : _param.read_cols) {
-        // LOG(INFO) << "create column reader for slot: " << column.slot_id() << ", name: " << column.slot_desc->col_name();
         ASSIGN_OR_RETURN(ColumnReaderPtr column_reader, _create_column_reader(column));
         _column_readers[column.slot_id()] = std::move(column_reader);
     }
@@ -388,26 +371,18 @@ Status GroupReader::_create_column_readers() {
             _column_readers.emplace(slot->id(), std::make_unique<FixedValueColumnReader>(kNullDatum));
         }
     }
-    // create fir reserved field slots
-    if (!_param.reserved_field_slots->empty()) {
+
+    if (_param.reserved_field_slots != nullptr && !_param.reserved_field_slots->empty()) {
         for (const auto* slot : *_param.reserved_field_slots) {
             if (slot->col_name() == HdfsScanner::ICEBERG_ROW_ID) {
-                // LOG(INFO) << "create column reader for reserved field slot: " << slot->col_name()
-                //           << ", id: " << slot->id();
-                // @TODO need a row id reader?
                 _column_readers.emplace(slot->id(), std::make_unique<IcebergRowIdReader>(_row_group_first_row_id));
             } else if (slot->col_name() == "_row_source_id") {
-                // @TODO get bakc end opt
-                // LOG(INFO) << "create column reader for reserved field slot: " << slot->col_name() << ", id: " << slot->id();
                 if (auto opt = get_backend_id(); opt.has_value()) {
                     _column_readers.emplace(slot->id(), std::make_unique<RowSourceReader>(opt.value()));
                 } else {
                     return Status::InternalError("get_backend_id failed");
                 }
             } else if (slot->col_name() == "_scan_range_id") {
-                // LOG(INFO) << "create column reader for reserved field slot: " << slot->col_name()
-                //           << ", id: " << slot->id() << ", scan_range_id: " << _param.scan_range_id;
-                // DCHECK(_param.scan_range_id != -1) << "scan_range_id is not set";
                 _column_readers.emplace(slot->id(), std::make_unique<FixedValueColumnReader>(_param.scan_range_id));
             }
         }
@@ -442,7 +417,6 @@ StatusOr<ColumnReaderPtr> GroupReader::_create_column_reader(const GroupReaderPa
 }
 
 Status GroupReader::_prepare_column_readers() const {
-    // @TODO add row_id column?
     SCOPED_RAW_TIMER(&_param.stats->column_reader_init_ns);
     for (const auto& [slot_id, column_reader] : _column_readers) {
         RETURN_IF_ERROR(column_reader->prepare());
@@ -459,7 +433,6 @@ Status GroupReader::_prepare_column_readers() const {
 
 void GroupReader::_process_columns_and_conjunct_ctxs() {
     const auto& conjunct_ctxs_by_slot = _param.conjunct_ctxs_by_slot;
-    
     int read_col_idx = 0;
 
     for (auto& column : _param.read_cols) {
@@ -494,13 +467,14 @@ void GroupReader::_process_columns_and_conjunct_ctxs() {
 
     bool has_reserved_field_filter = false;
     if (_param.reserved_field_slots != nullptr) {
-        for (auto* slot: *_param.reserved_field_slots) {
+        for (auto* slot : *_param.reserved_field_slots) {
             SlotId slot_id = slot->id();
             if (conjunct_ctxs_by_slot.find(slot_id) != conjunct_ctxs_by_slot.end()) {
                 for (ExprContext* ctx : conjunct_ctxs_by_slot.at(slot_id)) {
                     DLOG(INFO) << "append reserved field slot conjunct ctx: " << ctx->root()->debug_string()
-                              << ", id: " << slot_id;
-                    if (_left_no_dict_filter_conjuncts_by_slot.find(slot_id) == _left_no_dict_filter_conjuncts_by_slot.end()) {
+                               << ", id: " << slot_id;
+                    if (_left_no_dict_filter_conjuncts_by_slot.find(slot_id) ==
+                        _left_no_dict_filter_conjuncts_by_slot.end()) {
                         _left_no_dict_filter_conjuncts_by_slot.insert({slot_id, std::vector<ExprContext*>{ctx}});
                     } else {
                         _left_no_dict_filter_conjuncts_by_slot[slot_id].emplace_back(ctx);
@@ -518,20 +492,7 @@ void GroupReader::_process_columns_and_conjunct_ctxs() {
         col_cost.insert({col_idx, flat_size});
         all_cost += flat_size;
     }
-    {
-        [[maybe_unused]] std::ostringstream oss;
-        oss << "active column indices: [";
-        for (int col_idx : _active_column_indices) {
-            oss << _param.read_cols[col_idx].slot_id() << ", ";
-        }
-        oss << "], lazy column indices: [";
-        for (int col_idx : _lazy_column_indices) {
-            oss << _param.read_cols[col_idx].slot_id() << ", ";
-        }
-        oss << "]";
-        // LOG(INFO) << oss.str();
 
-    }
     _column_read_order_ctx =
             std::make_unique<ColumnReadOrderCtx>(_active_column_indices, all_cost, std::move(col_cost));
 

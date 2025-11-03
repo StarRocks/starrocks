@@ -1,61 +1,28 @@
--- name: test_glm_join
-create table t0 (
-	v1 bigint null,
-	v2 bigint null,
-	v3 bigint null
-) engine=olap
-duplicate key(v1)
-distributed by hash(v1) buckets 3
-properties(
-'replication_num'='1'
-);
-
-create table t1 (
-	v1 bigint null,
-	v2 bigint null,
-	v3 bigint null
-) engine=olap
-duplicate key(v1)
-distributed by hash(v1) buckets 3
-properties(
-'replication_num'='1'
-);
-create table t2 (
-	v1 bigint null,
-	v2 bigint null,
-	v3 bigint null
-) engine=olap
-duplicate key(v1)
-distributed by hash(v1) buckets 3
-properties(
-'replication_num'='1'
-);
-
-insert into t0 select generate_series,generate_series,generate_series%10 from table(generate_series(1, 10000));
-insert into t0 values (10001, null, null), (10002, null, null), (10003, null, null);
-insert into t1 select generate_series,generate_series,generate_series%10 from table(generate_series(1, 1000));
-insert into t1 values (10001, null, null), (10002, null, null), (10003, null, null);
-insert into t2 select generate_series,generate_series,generate_series%10 from table(generate_series(1, 1000));
-
+-- name: test_glm_join_iceberg_c1
+create external catalog iceberg_sql_test_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}","enable_iceberg_metadata_cache"="true","aws.s3.access_key" = "${oss_ak}","aws.s3.secret_key" = "${oss_sk}","aws.s3.endpoint" = "${oss_endpoint}");
 set enable_global_late_materialization = true;
 
+use iceberg_sql_test_${uuid0}.iceberg_oss_db;
 -- 1:1 join
-select * from t0 inner join t1 on t0.v1 = t1.v1 order by t0.v1 limit 5;
-select * from t0 inner join t1 on t0.v1 = t1.v1 order by t0.v1 desc limit 5;
-select count(t0.v1),count(t0.v2),count(t0.v3),count(t1.v1),count(t1.v2),count(t1.v3) from t0 inner join t1 on t0.v1 = t1.v1;
-select count(t0.v1),count(t0.v2),count(t0.v3),count(t1.v1),count(t1.v2),count(t1.v3) from t0 left outer join t1 on t0.v1 = t1.v1;
-select count(t0.v1),count(t0.v2),count(t0.v3),count(t1.v1),count(t1.v2),count(t1.v3) from t0 right outer join t1 on t0.v1 = t1.v1;
-select count(t0.v1),count(t0.v2),count(t0.v3),count(t1.v1),count(t1.v2),count(t1.v3) from t0 full outer join t1 on t0.v1 = t1.v1;
+select * from test_v3_t0 inner join test_v3_t1 on test_v3_t0.id = test_v3_t1.id order by test_v3_t0.id limit 5;
+select * from test_v3_t0 inner join test_v3_t1 on test_v3_t0.id = test_v3_t1.id order by test_v3_t0.id desc limit 5;
+select count(test_v3_t0.id),count(test_v3_t0.c0),count(test_v3_t0.c1),count(test_v3_t1.id),count(test_v3_t1.c0),count(test_v3_t1.c1) from test_v3_t0 inner join test_v3_t1 on test_v3_t0.id = test_v3_t1.id;
+select count(test_v3_t0.id),count(test_v3_t0.c0),count(test_v3_t0.c1),count(test_v3_t1.id),count(test_v3_t1.c0),count(test_v3_t1.c1) from test_v3_t0 left outer join test_v3_t1 on test_v3_t0.id = test_v3_t1.id;
+select count(test_v3_t0.id),count(test_v3_t0.c0),count(test_v3_t0.c1),count(test_v3_t1.id),count(test_v3_t1.c0),count(test_v3_t1.c1) from test_v3_t0 right outer join test_v3_t1 on test_v3_t0.id = test_v3_t1.id;
+select count(test_v3_t0.id),count(test_v3_t0.c0),count(test_v3_t0.c1),count(test_v3_t1.id),count(test_v3_t1.c0),count(test_v3_t1.c1) from test_v3_t0 full outer join test_v3_t1 on test_v3_t0.id = test_v3_t1.id;
 
 -- n:m join
-select * from t0 inner join t1 on t0.v3 = t1.v3 order by 1,2,3,4,5,6 limit 5;
-select count(t0.v1),count(t0.v2),count(t0.v3),count(t1.v1),count(t1.v2),count(t1.v3) from t0 inner join t1 on t0.v3 = t1.v3;
-select count(t0.v1),count(t0.v2),count(t0.v3),count(t1.v1),count(t1.v2),count(t1.v3) from t0 left outer join t1 on t0.v3 = t1.v3;
-select count(t0.v1),count(t0.v2),count(t0.v3),count(t1.v1),count(t1.v2),count(t1.v3) from t0 right outer join t1 on t0.v3 = t1.v3;
-select count(t0.v1),count(t0.v2),count(t0.v3),count(t1.v1),count(t1.v2),count(t1.v3) from t0 full outer join t1 on t0.v3 = t1.v3;
-select count(t0.v1),count(t0.v2),count(t0.v3),count(t1.v1),count(t1.v2),count(t1.v3) from t0 full outer join t1 on t0.v1 > t1.v1;
-select count(t0.v1),count(t0.v2),count(t0.v3),count(t1.v1),count(t1.v2),count(t1.v3) from t0 full outer join t1 on t0.v3 > t1.v3;
+select * from test_v3_t0 inner join test_v3_t1 on test_v3_t0.c1 = test_v3_t1.c1 order by 1,2,3,4,5,6 limit 5;
+select count(test_v3_t0.id),count(test_v3_t0.c0),count(test_v3_t0.c1),count(test_v3_t1.id),count(test_v3_t1.c0),count(test_v3_t1.c1) from test_v3_t0 inner join test_v3_t1 on test_v3_t0.c1 = test_v3_t1.c1;
+select count(test_v3_t0.id),count(test_v3_t0.c0),count(test_v3_t0.c1),count(test_v3_t1.id),count(test_v3_t1.c0),count(test_v3_t1.c1) from test_v3_t0 left outer join test_v3_t1 on test_v3_t0.c1 = test_v3_t1.c1;
+select count(test_v3_t0.id),count(test_v3_t0.c0),count(test_v3_t0.c1),count(test_v3_t1.id),count(test_v3_t1.c0),count(test_v3_t1.c1) from test_v3_t0 right outer join test_v3_t1 on test_v3_t0.c1 = test_v3_t1.c1;
+select count(test_v3_t0.id),count(test_v3_t0.c0),count(test_v3_t0.c1),count(test_v3_t1.id),count(test_v3_t1.c0),count(test_v3_t1.c1) from test_v3_t0 full outer join test_v3_t1 on test_v3_t0.c1 = test_v3_t1.c1;
+select count(test_v3_t0.id),count(test_v3_t0.c0),count(test_v3_t0.c1),count(test_v3_t1.id),count(test_v3_t1.c0),count(test_v3_t1.c1) from test_v3_t0 full outer join test_v3_t1 on test_v3_t0.id > test_v3_t1.id;
+select count(test_v3_t0.id),count(test_v3_t0.c0),count(test_v3_t0.c1),count(test_v3_t1.id),count(test_v3_t1.c0),count(test_v3_t1.c1) from test_v3_t0 full outer join test_v3_t1 on test_v3_t0.c1 > test_v3_t1.c1;
 
 -- multiple join
-select * from t0 join t1 join t2 on t0.v1 = t1.v1 and t0.v2 = t2.v2 order by 1,2,3,4,5,6,7,8,9 limit 10;
-select * from t0 join t1 join t2 on t0.v1 = t1.v1 and t0.v1 = t2.v1 order by 1,2,3,4,5,6,7,8,9 limit 10; 
+select * from test_v3_t0 join test_v3_t1 join test_v3_t2 on test_v3_t0.id = test_v3_t1.id and test_v3_t0.c0 = test_v3_t2.c0 order by 1,2,3,4,5,6,7,8,9 limit 10;
+select * from test_v3_t0 join test_v3_t1 join test_v3_t2 on test_v3_t0.id = test_v3_t1.id and test_v3_t0.id = test_v3_t2.id order by 1,2,3,4,5,6,7,8,9 limit 10; 
+
+drop catalog iceberg_sql_test_${uuid0};
+set catalog default_catalog;

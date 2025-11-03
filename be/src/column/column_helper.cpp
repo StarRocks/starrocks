@@ -259,10 +259,6 @@ public:
     Status do_visit(BinaryColumnBase<T>* column) {
         return Status::OK();
     }
-
-    Status do_visit(RowIdColumn* column) {
-        return Status::NotSupported("RowIdColumn is not supported");
-    }
 };
 
 Status ColumnHelper::update_nested_has_null(Column* column) {

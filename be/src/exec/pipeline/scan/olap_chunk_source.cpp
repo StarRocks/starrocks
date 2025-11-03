@@ -17,8 +17,6 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
-#include <memory>
-#include <sstream>
 #include <string_view>
 #include <unordered_map>
 
@@ -351,7 +349,6 @@ Status OlapChunkSource::_init_scanner_columns(std::vector<uint32_t>& scanner_col
             return Status::InternalError(ss.str());
         }
         scanner_columns.push_back(index);
-
         if (!_unused_output_column_ids.count(index)) {
             _query_slots.push_back(slot);
         }
@@ -578,7 +575,6 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
 
     // schema is new object, but fields not
     starrocks::Schema child_schema = ChunkHelper::convert_schema(_tablet_schema, reader_columns);
-
     RETURN_IF_ERROR(_init_column_access_paths(&child_schema));
     // will modify schema field, need to copy schema
     RETURN_IF_ERROR(_prune_schema_by_access_paths(&child_schema));
@@ -670,6 +666,7 @@ Status OlapChunkSource::_read_chunk_from_storage(RuntimeState* state, Chunk* chu
     do {
         RETURN_IF_ERROR(state->check_mem_limit("read chunk from storage"));
         RETURN_IF_ERROR(_prj_iter->get_next(chunk));
+
         TRY_CATCH_ALLOC_SCOPE_START()
 
         for (auto slot : _query_slots) {

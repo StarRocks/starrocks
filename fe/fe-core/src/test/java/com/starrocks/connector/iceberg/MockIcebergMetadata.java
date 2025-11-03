@@ -278,14 +278,14 @@ public class MockIcebergMetadata implements ConnectorMetadata {
             return TestTables.create(
                     new File(getStarRocksHome() + "/" + MOCKED_PARTITIONED_DB_NAME + "/"
                             + MOCKED_PARTITIONED_TABLE_NAME1), MOCKED_PARTITIONED_TABLE_NAME1,
-                    schema, spec, 1);
+                    schema, spec, 3);
         } else if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME2)) {
             PartitionSpec spec =
                     PartitionSpec.builderFor(schema).identity("date").build();
             return TestTables.create(
                     new File(getStarRocksHome() + "/" + MOCKED_PARTITIONED_DB_NAME + "/"
                             + MOCKED_PARTITIONED_TABLE_NAME2), MOCKED_PARTITIONED_TABLE_NAME2,
-                    schema, spec, 3);
+                    schema, spec, 1);
         } else {
             PartitionSpec spec =
                     PartitionSpec.builderFor(schema).identity("d").build();

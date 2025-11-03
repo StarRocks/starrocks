@@ -555,9 +555,9 @@ void PInternalServiceImplBase<T>::_cancel_plan_fragment(google::protobuf::RpcCon
     bool cancel_query_ctx = tid.hi == 0 && tid.lo == 0;
     if (cancel_query_ctx) {
         DCHECK(request->has_query_id());
-        // LOG(INFO) << "cancel query ctx, query_id=" << print_id(request->query_id()) << ", reason: " << reason_string;
+        LOG(INFO) << "cancel query ctx, query_id=" << print_id(request->query_id()) << ", reason: " << reason_string;
     } else {
-        // LOG(INFO) << "cancel fragment, fragment_instance_id=" << print_id(tid) << ", reason: " << reason_string;
+        LOG(INFO) << "cancel fragment, fragment_instance_id=" << print_id(tid) << ", reason: " << reason_string;
     }
 
     if (request->has_is_pipeline() && request->is_pipeline()) {
@@ -1396,7 +1396,7 @@ void PInternalServiceImplBase<T>::lookup(google::protobuf::RpcController* cntl_b
     if (cntl->request_attachment().size() > 0) {
         // parse chunk
         butil::IOBuf& io_buf = cntl->request_attachment();
-        for (size_t i = 0; i < request->request_columns_size();i ++) {
+        for (size_t i = 0; i < request->request_columns_size(); i++) {
             auto pcolumn = req->mutable_request_columns(i);
             if (UNLIKELY(io_buf.size() < pcolumn->data_size())) {
                 auto msg = fmt::format("io_buf size {} is less than column data size {}", io_buf.size(),

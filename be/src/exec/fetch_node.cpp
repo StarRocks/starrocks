@@ -15,6 +15,7 @@
 #include "exec/fetch_node.h"
 
 #include <protocol/TDebugProtocol.h>
+
 #include <stdexcept>
 
 #include "column/vectorized_fwd.h"
@@ -54,8 +55,8 @@ Status FetchNode::init(const TPlanNode& tnode, RuntimeState* state) {
         tuple_ids.emplace_back(tuple_id);
     }
 
-    _dispatcher =
-            state->exec_env()->lookup_dispatcher_mgr()->create_dispatcher(state, state->query_id(), _target_node_id, tuple_ids);
+    _dispatcher = state->exec_env()->lookup_dispatcher_mgr()->create_dispatcher(state, state->query_id(),
+                                                                                _target_node_id, tuple_ids);
     for (const auto& tuple_id : tuple_ids) {
         const auto& tuple_desc = state->desc_tbl().get_tuple_descriptor(tuple_id);
         for (const auto& slot : tuple_desc->slots()) {

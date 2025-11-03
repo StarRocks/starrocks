@@ -103,8 +103,6 @@ public class IcebergTable extends Table {
     public static final String EQUALITY_DELETE_TABLE_COMMENT = "equality_delete_table_comment";
     public static final String ROW_ID = "_row_id";
 
-    public static final String ROW_ID = "_row_id";
-
     private String catalogName;
     @SerializedName(value = "dn")
     protected String catalogDBName;
@@ -530,6 +528,11 @@ public class IcebergTable extends Table {
     @Override
     public boolean supportInsert() {
         // for now, only support writing iceberg table with parquet file format
+        return getNativeTable().properties().getOrDefault(DEFAULT_FILE_FORMAT, DEFAULT_FILE_FORMAT_DEFAULT)
+                .equalsIgnoreCase(PARQUET_FORMAT);
+    }
+
+    public boolean isParquetFormat() {
         return getNativeTable().properties().getOrDefault(DEFAULT_FILE_FORMAT, DEFAULT_FILE_FORMAT_DEFAULT)
                 .equalsIgnoreCase(PARQUET_FORMAT);
     }

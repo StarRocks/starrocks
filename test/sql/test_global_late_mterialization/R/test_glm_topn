@@ -1,78 +1,69 @@
--- name: test_glm_topn
-create table t0 (
-	v1 bigint null,
-	v2 bigint null,
-	v3 bigint null
-) engine=olap
-duplicate key(v1)
-distributed by hash(v1) buckets 3
-properties(
-'replication_num'='1'
-);
--- result:
--- !result
-insert into t0 select generate_series,generate_series,generate_series%10 from table(generate_series(1, 10000));
--- result:
--- !result
-insert into t0 values (10001, null, null), (10002, null, null), (10003, null, null);
+-- name: test_glm_topn_iceberg_v3
+create external catalog iceberg_sql_test_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}","enable_iceberg_metadata_cache"="true","aws.s3.access_key" = "${oss_ak}","aws.s3.secret_key" = "${oss_sk}","aws.s3.endpoint" = "${oss_endpoint}");
 -- result:
 -- !result
 set enable_global_late_materialization = true;
 -- result:
 -- !result
-select * from t0 order by v1 limit 10;
+use iceberg_sql_test_${uuid0}.iceberg_oss_db;
 -- result:
-1	1	1
-2	2	2
-3	3	3
-4	4	4
-5	5	5
-6	6	6
-7	7	7
-8	8	8
-9	9	9
-10	10	0
 -- !result
-select * from t0 order by v1 limit 100, 10;
+set enable_global_late_materialization = true;
 -- result:
-101	101	1
-102	102	2
-103	103	3
-104	104	4
-105	105	5
-106	106	6
-107	107	7
-108	108	8
-109	109	9
-110	110	0
 -- !result
-select * from t0 order by v1 desc limit 10;
+select * from test_v3_t0 order by id limit 10;
 -- result:
-10003	None	None
-10002	None	None
-10001	None	None
-10000	10000	0
-9999	9999	9
-9998	9998	8
-9997	9997	7
-9996	9996	6
-9995	9995	5
-9994	9994	4
+1	1	1	1
+2	2	2	2
+3	3	3	3
+4	4	4	4
+5	5	5	5
+6	6	6	6
+7	7	7	7
+8	8	8	8
+9	9	9	9
+10	10	0	10
 -- !result
-select * from t0 order by v1 desc limit 100,10;
+select * from test_v3_t0 order by id limit 100, 10;
 -- result:
-9903	9903	3
-9902	9902	2
-9901	9901	1
-9900	9900	0
-9899	9899	9
-9898	9898	8
-9897	9897	7
-9896	9896	6
-9895	9895	5
-9894	9894	4
+101	101	1	101
+102	102	2	102
+103	103	3	103
+104	104	4	104
+105	105	5	105
+106	106	6	106
+107	107	7	107
+108	108	8	108
+109	109	9	109
+110	110	0	110
 -- !result
-select v2 from t0 order by v1 limit 10;
+select * from test_v3_t0 order by id desc limit 10;
+-- result:
+10003	None	None	10003
+10002	None	None	10002
+10001	None	None	10001
+10000	10000	0	10000
+9999	9999	9	9999
+9998	9998	8	9998
+9997	9997	7	9997
+9996	9996	6	9996
+9995	9995	5	9995
+9994	9994	4	9994
+-- !result
+select * from test_v3_t0 order by id desc limit 100,10;
+-- result:
+9903	9903	3	9903
+9902	9902	2	9902
+9901	9901	1	9901
+9900	9900	0	9900
+9899	9899	9	9899
+9898	9898	8	9898
+9897	9897	7	9897
+9896	9896	6	9896
+9895	9895	5	9895
+9894	9894	4	9894
+-- !result
+select c1 from test_v3_t0 order by id limit 10;
 -- result:
 1
 2
@@ -83,44 +74,50 @@ select v2 from t0 order by v1 limit 10;
 7
 8
 9
-10
+0
 -- !result
-select v2 from t0 order by v1 limit 10, 10;
+select c1 from test_v3_t0 order by id limit 10, 10;
 -- result:
-11
-12
-13
-14
-15
-16
-17
-18
-19
-20
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
 -- !result
-select v2 from t0 order by v1 desc limit 10;
+select c1 from test_v3_t0 order by id desc limit 10;
 -- result:
 None
 None
 None
-10000
-9999
-9998
-9997
-9996
-9995
-9994
+0
+9
+8
+7
+6
+5
+4
 -- !result
-select v2 from t0 order by v1 desc limit 10,10;
+select c1 from test_v3_t0 order by id desc limit 10,10;
 -- result:
-9993
-9992
-9991
-9990
-9989
-9988
-9987
-9986
-9985
-9984
+3
+2
+1
+0
+9
+8
+7
+6
+5
+4
+-- !result
+drop catalog iceberg_sql_test_${uuid0};
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
 -- !result

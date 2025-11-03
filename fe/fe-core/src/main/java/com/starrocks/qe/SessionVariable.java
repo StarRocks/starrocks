@@ -1922,9 +1922,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_EVALUATE_SCHEMA_SCAN_RULE)
     private boolean enableEvaluateSchemaScanRule = true;
 
-    @VarAttr(name = ENABLE_DEFER_PROJECT_AFTER_TOPN)
-    private boolean enableDeferProjectAfterTopN = false;
-
     @VariableMgr.VarAttr(name = INTERLEAVING_GROUP_SIZE)
     private int interleavingGroupSize = 10;
 
@@ -2047,6 +2044,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = COLUMN_VIEW_CONCAT_BYTES_LIMIT)
     private long columnViewConcatBytesLimit = 4294967296L;
+
+    @VarAttr(name = ENABLE_DEFER_PROJECT_AFTER_TOPN)
+    private boolean enableDeferProjectAfterTopN = true;
 
     @VarAttr(name = ENABLE_DESENSITIZE_EXPLAIN)
     private boolean enableDesensitizeExplain = false;
