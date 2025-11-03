@@ -188,7 +188,6 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create_variant_column_reader(cons
     }
 
     const tparquet::ColumnChunk* column_chunks = opts.row_group_meta->columns.data();
-    // Use pointers to the original ParquetField objects to avoid stack-use-after-return
     const ParquetField* metadata_field = &variant_field->children[metadata_index];
     const ParquetField* value_field = &variant_field->children[value_index];
     auto _metadata_reader = std::make_unique<ScalarColumnReader>(
