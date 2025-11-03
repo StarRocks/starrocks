@@ -39,6 +39,10 @@ public:
 
     uint64_t output_file_size() const { return _output_file->size(); }
 
+    // Get the final output file size after close() is called
+    // Returns 0 if close() hasn't been called yet
+    uint64_t final_output_file_size() const { return _final_output_file_size; }
+
     virtual Status append(const void* data, size_t size) {
         return _output_file->append(Slice((const char*)data, size));
     }
@@ -49,6 +53,7 @@ public:
                          << ", output_file_size: " << _output_file->size();
             return Status::Corruption("File size not matched, input_file_size");
         }
+        _final_output_file_size = _output_file->size();
         return _output_file->close();
     }
 
@@ -56,6 +61,7 @@ protected:
     const std::string _input_file_name;
     const uint64_t _input_file_size;
     std::unique_ptr<WritableFile> _output_file;
+    uint64_t _final_output_file_size = 0;
 };
 
 } // namespace starrocks

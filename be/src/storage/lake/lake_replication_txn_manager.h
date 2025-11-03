@@ -53,10 +53,11 @@ public:
             std::unordered_map<std::string, std::pair<std::string, std::string>>& existed_filename_uuids);
 
     // Helper function to create replication txn log with converted metadata
+    // generate and replace file names to adapt for target storage
     StatusOr<std::shared_ptr<TabletMetadataPB>> convert_and_build_new_tablet_meta(
-            const TabletMetadataPtr& src_tablet_meta, int64_t src_tablet_id, int64_t target_tablet_id,
-            TTransactionId txn_id, int64_t data_version, const std::string& src_data_dir,
-            std::unordered_map<std::string, size_t>& segment_name_to_size_map,
+            const TabletMetadataPtr& src_tablet_meta, const TabletMetadataPtr& target_tablet_meta,
+            int64_t src_tablet_id, int64_t target_tablet_id, TTransactionId txn_id, int64_t data_version,
+            const std::string& src_data_dir, std::unordered_map<std::string, size_t>& segment_name_to_size_map,
             std::map<std::string, std::string>& file_locations,
             std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>>& filename_map);
 
@@ -67,6 +68,11 @@ public:
             std::string& final_filename, int64_t target_tablet_id, const std::string& src_data_dir,
             std::map<std::string, std::string>& file_locations,
             std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>>& filename_map);
+
+    // Update segment sizes in tablet metadata after segment conversion
+    // This is needed because segment file size may change after footer rewriting
+    Status update_tablet_metadata_segment_sizes(std::shared_ptr<TabletMetadataPB> tablet_metadata,
+                                                const std::unordered_map<std::string, size_t>& segment_size_changes);
 
 private:
     TabletManager* _tablet_manager;

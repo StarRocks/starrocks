@@ -638,28 +638,23 @@ static void shard_fs_cache_deleter(const CacheKey& /*key*/, void* value) {
 }
 
 std::shared_ptr<FileSystem> new_fs_starlet(int64_t shard_id) {
-    // Lazy initialization of cache (thread-safe)
-    static std::once_flag init_flag;
-    static std::unique_ptr<Cache> shard_fs_cache;
-    std::call_once(init_flag, []() {
-        // The cache here is used to store fslib's shard fs which is used for cross cluster migration,
-        // where each shard fs correspond to one storage volume on source cluster.
-        // We chose a small cache capacity size here, with expect that normally very few storage volumes are used.
-        constexpr size_t kDefaultCacheCapacity = 1024 * 10; // ~10 entries
-        shard_fs_cache.reset(new_lru_cache(kDefaultCacheCapacity));
-    });
+    // The cache here is used to store fslib's shard fs which is used for cross cluster migration,
+    // where each shard fs correspond to one storage volume on source cluster.
+    // We chose a small cache capacity size here, with expect that normally very few storage volumes are used.
+    constexpr size_t kDefaultCacheCapacity = 1024 * 10; // ~10 entries
+    static std::unique_ptr<Cache> g_shard_fs_cache(new_lru_cache(kDefaultCacheCapacity));
 
     // Build cache key from shard_id
     std::string key_str = std::to_string(shard_id);
     CacheKey cache_key(key_str);
 
     // Try cache lookup
-    Cache::Handle* handle = shard_fs_cache->lookup(cache_key);
+    Cache::Handle* handle = g_shard_fs_cache->lookup(cache_key);
     if (handle != nullptr) {
         auto* cached_ptr =
-                static_cast<std::shared_ptr<staros::starlet::fslib::FileSystem>*>(shard_fs_cache->value(handle));
+                static_cast<std::shared_ptr<staros::starlet::fslib::FileSystem>*>(g_shard_fs_cache->value(handle));
         std::shared_ptr<staros::starlet::fslib::FileSystem> shard_fs = *cached_ptr;
-        shard_fs_cache->release(handle);
+        g_shard_fs_cache->release(handle);
         return std::make_shared<StarletFileSystem>(shard_fs);
     }
 
@@ -676,16 +671,16 @@ std::shared_ptr<FileSystem> new_fs_starlet(int64_t shard_id) {
 
     // Insert into cache
     auto* cache_value = new std::shared_ptr<staros::starlet::fslib::FileSystem>(shard_fs);
-    handle = shard_fs_cache->insert(cache_key, cache_value, 1, shard_fs_cache_deleter);
+    handle = g_shard_fs_cache->insert(cache_key, cache_value, 1, shard_fs_cache_deleter);
     if (handle != nullptr) {
-        shard_fs_cache->release(handle);
+        g_shard_fs_cache->release(handle);
     } else {
         delete cache_value;
     }
 
     LOG(INFO) << "Created new shard filesystem, shard_id: " << shard_id
-              << ", cache_inserts: " << shard_fs_cache->get_insert_count()
-              << ", cache_memory: " << shard_fs_cache->get_memory_usage() << " bytes";
+              << ", cache_inserts: " << g_shard_fs_cache->get_insert_count()
+              << ", cache_memory: " << g_shard_fs_cache->get_memory_usage() << " bytes";
 
     return std::make_shared<StarletFileSystem>(shard_fs);
 }

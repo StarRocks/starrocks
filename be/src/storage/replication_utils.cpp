@@ -341,7 +341,8 @@ StatusOr<std::string> ReplicationUtils::download_remote_snapshot_file(
 
 Status ReplicationUtils::download_lake_segment_file(const std::string& src_file_path, const std::string& src_file_name,
                                                     size_t src_file_size, const std::shared_ptr<FileSystem>& src_fs,
-                                                    const FileConverterCreatorFunc& file_converters) {
+                                                    const FileConverterCreatorFunc& file_converters,
+                                                    size_t* final_file_size) {
     ASSIGN_OR_RETURN(auto src_file, src_fs->new_random_access_file(src_file_path));
     if (src_file_size == 0) {
         VLOG(3) << "No src file size for " << src_file_path << ", try to get it from file system";
@@ -351,6 +352,9 @@ Status ReplicationUtils::download_lake_segment_file(const std::string& src_file_
     VLOG(3) << "Start reading lake segment file, src file: " << src_file_path << ", src file size: " << src_file_size;
     ASSIGN_OR_RETURN(auto converter, file_converters(src_file_name, src_file_size));
     if (converter == nullptr) {
+        if (final_file_size != nullptr) {
+            *final_file_size = src_file_size;
+        }
         return Status::OK();
     }
 
@@ -367,8 +371,18 @@ Status ReplicationUtils::download_lake_segment_file(const std::string& src_file_
         offset += count;
         RETURN_IF_ERROR(converter->append(buf, count));
     }
-    LOG(INFO) << "Finish read lake segment file, src file: " << src_file_path << ", src file size: " << src_file_size;
     RETURN_IF_ERROR(converter->close());
+
+    // Get the final output file size after conversion
+    uint64_t output_size = converter->final_output_file_size();
+    if (final_file_size != nullptr) {
+        *final_file_size = output_size;
+    }
+
+    LOG(INFO) << "Finish read lake segment file, src file: " << src_file_path << ", src file size: " << src_file_size
+              << ", final file size: " << output_size
+              << ", size changed: " << (output_size != src_file_size ? "YES" : "NO");
+
     return Status::OK();
 }
 

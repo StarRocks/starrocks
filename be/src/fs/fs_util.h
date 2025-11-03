@@ -169,8 +169,9 @@ inline StatusOr<int64_t> copy_file(const std::string& src_path, const std::strin
 }
 
 // copy the file from src path to dest path, it will overwrite the existing files
-inline Status copy_file(const std::string& src_path, std::shared_ptr<FileSystem> src_fs, const std::string& dst_path,
-                        std::shared_ptr<FileSystem> dst_fs, size_t buffer_size = 8192) {
+inline StatusOr<int64_t> copy_file(const std::string& src_path, std::shared_ptr<FileSystem> src_fs,
+                                   const std::string& dst_path, std::shared_ptr<FileSystem> dst_fs,
+                                   size_t buffer_size = 8192) {
     TEST_ERROR_POINT("fs::copy_file");
     WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
     if (src_fs == nullptr) {
@@ -181,9 +182,10 @@ inline Status copy_file(const std::string& src_path, std::shared_ptr<FileSystem>
     }
     ASSIGN_OR_RETURN(auto src_file, src_fs->new_sequential_file(src_path));
     ASSIGN_OR_RETURN(auto dst_file, dst_fs->new_writable_file(opts, dst_path));
-    RETURN_IF_ERROR(copy(src_file.get(), dst_file.get(), buffer_size));
+    // record file size
+    ASSIGN_OR_RETURN(auto file_size, copy(src_file.get(), dst_file.get(), buffer_size));
     RETURN_IF_ERROR(dst_file->close());
-    return Status::OK();
+    return file_size;
 }
 
 // copy the file range [offset, offset + size] from src path to dest path, it will overwrite the existing files

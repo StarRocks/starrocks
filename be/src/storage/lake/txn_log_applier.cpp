@@ -406,25 +406,32 @@ private:
                       << ", txn_id: " << txn_id;
         } else {
             if (op_replication.has_tablet_metadata()) {
-                // Replace metadata with replication tablet metadata for shared-data cross cluster migration
                 // Same logic for pk and non-pk tables
-                auto old_metadata = std::make_shared<TabletMetadata>(*_metadata);
                 auto old_rowsets = std::move(*_metadata->mutable_rowsets());
 
-                _metadata->CopyFrom(op_replication.tablet_metadata());
-                if (old_metadata->has_prev_garbage_version()) {
-                    _metadata->set_prev_garbage_version(old_metadata->prev_garbage_version());
-                }
-                _metadata->set_commit_time(old_metadata->commit_time());
-                _metadata->set_gtid(old_metadata->gtid());
-
-                if (_metadata->compaction_inputs_size() > 0) {
-                    _metadata->mutable_compaction_inputs()->Clear();
+                auto copied_tablet_meta = op_replication.tablet_metadata();
+                if (copied_tablet_meta.rowsets_size() > 0) {
+                    _metadata->mutable_rowsets()->Clear();
+                    _metadata->mutable_rowsets()->CopyFrom(copied_tablet_meta.rowsets());
                 }
 
-                if (_metadata->orphan_files_size() > 0) {
-                    _metadata->mutable_orphan_files()->Clear();
+                if (copied_tablet_meta.has_dcg_meta()) {
+                    _metadata->mutable_dcg_meta()->Clear();
+                    _metadata->mutable_dcg_meta()->CopyFrom(copied_tablet_meta.dcg_meta());
                 }
+
+                if (copied_tablet_meta.has_sstable_meta()) {
+                    _metadata->mutable_sstable_meta()->Clear();
+                    _metadata->mutable_sstable_meta()->CopyFrom(copied_tablet_meta.sstable_meta());
+                }
+
+                if (copied_tablet_meta.has_delvec_meta()) {
+                    _metadata->mutable_delvec_meta()->Clear();
+                    _metadata->mutable_delvec_meta()->CopyFrom(copied_tablet_meta.delvec_meta());
+                }
+
+                _metadata->set_next_rowset_id(copied_tablet_meta.next_rowset_id());
+                _metadata->set_cumulative_point(0);
                 old_rowsets.Swap(_metadata->mutable_compaction_inputs());
 
                 VLOG(3) << "Apply pk replication log with tablet metadata provided. tablet_id: " << _tablet.id()
@@ -831,25 +838,32 @@ private:
                       << ", txn_id: " << txn_meta.txn_id();
         } else {
             if (op_replication.has_tablet_metadata()) {
-                // Replace metadata with replication tablet metadata for shared-data cross cluster migration
                 // Same logic for pk and non-pk tables
-                auto old_metadata = std::make_shared<TabletMetadata>(*_metadata);
                 auto old_rowsets = std::move(*_metadata->mutable_rowsets());
 
-                _metadata->CopyFrom(op_replication.tablet_metadata());
-                if (old_metadata->has_prev_garbage_version()) {
-                    _metadata->set_prev_garbage_version(old_metadata->prev_garbage_version());
-                }
-                _metadata->set_commit_time(old_metadata->commit_time());
-                _metadata->set_gtid(old_metadata->gtid());
-
-                if (_metadata->compaction_inputs_size() > 0) {
-                    _metadata->mutable_compaction_inputs()->Clear();
+                auto copied_tablet_meta = op_replication.tablet_metadata();
+                if (copied_tablet_meta.rowsets_size() > 0) {
+                    _metadata->mutable_rowsets()->Clear();
+                    _metadata->mutable_rowsets()->CopyFrom(copied_tablet_meta.rowsets());
                 }
 
-                if (_metadata->orphan_files_size() > 0) {
-                    _metadata->mutable_orphan_files()->Clear();
+                if (copied_tablet_meta.has_dcg_meta()) {
+                    _metadata->mutable_dcg_meta()->Clear();
+                    _metadata->mutable_dcg_meta()->CopyFrom(copied_tablet_meta.dcg_meta());
                 }
+
+                if (copied_tablet_meta.has_sstable_meta()) {
+                    _metadata->mutable_sstable_meta()->Clear();
+                    _metadata->mutable_sstable_meta()->CopyFrom(copied_tablet_meta.sstable_meta());
+                }
+
+                if (copied_tablet_meta.has_delvec_meta()) {
+                    _metadata->mutable_delvec_meta()->Clear();
+                    _metadata->mutable_delvec_meta()->CopyFrom(copied_tablet_meta.delvec_meta());
+                }
+
+                _metadata->set_next_rowset_id(copied_tablet_meta.next_rowset_id());
+                _metadata->set_cumulative_point(0);
                 old_rowsets.Swap(_metadata->mutable_compaction_inputs());
 
                 VLOG(3) << "Apply replication log with tablet metadata provided. tablet_id: " << _tablet.id()

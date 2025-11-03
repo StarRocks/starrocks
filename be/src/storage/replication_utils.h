@@ -49,7 +49,8 @@ public:
 
     static Status download_lake_segment_file(const std::string& src_file_path, const std::string& src_file_name,
                                              size_t src_file_size, const std::shared_ptr<FileSystem>& src_fs,
-                                             const FileConverterCreatorFunc& file_converters);
+                                             const FileConverterCreatorFunc& file_converters,
+                                             size_t* final_file_size = nullptr);
 
     static constexpr uint32_t kFakeColumnUniqueId = INT_MAX;
 
