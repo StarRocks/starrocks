@@ -47,7 +47,7 @@ E: (1064, "Getting analyzing error. Detail message: percentile_approx requires t
 -- !result
 select cast(percentile_approx_weighted(c1, c1, 0.9, 10000) as int) from t1;
 -- result:
-47434
+47435
 -- !result
 select cast(percentile_approx_weighted(c2, c1, 0.5) as int) from t1;
 -- result:
@@ -99,7 +99,7 @@ select cast(percentile_approx_weighted(c2, 1, 0.9, 8000) as int) from t1;
 -- !result
 select cast(percentile_approx_weighted(c2, c1, 0.9, 10000) as int) from t1;
 -- result:
-47434
+47435
 -- !result
 select cast(percentile_approx_weighted(c3, c1, 0.5) as int) from t1;
 -- result:
@@ -262,7 +262,7 @@ E: (1064, "Getting analyzing error. Detail message: percentile_approx requires t
 -- !result
 select cast(percentile_approx_weighted(c1, c1, 0.9, 10000) as int) from t1;
 -- result:
-47434
+47435
 -- !result
 select cast(percentile_approx_weighted(c2, c1, 0.5) as int) from t1;
 -- result:
@@ -282,7 +282,7 @@ select cast(percentile_approx_weighted(c2, 10, 0.9, 5000) as int) from t1;
 -- !result
 select cast(percentile_approx_weighted(c2, c1, 0.9, 10000) as int) from t1;
 -- result:
-47434
+47435
 -- !result
 select cast(percentile_approx_weighted(c3, c1, 0.5) as int) from t1;
 -- result:

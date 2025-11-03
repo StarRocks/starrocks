@@ -27,13 +27,23 @@ namespace starrocks {
 struct PercentileApproxState {
 public:
     PercentileApproxState() : percentile(new PercentileValue()) {}
-    explicit PercentileApproxState(double compression) : percentile(new PercentileValue(compression)) {}
+    explicit PercentileApproxState(double compression)
+            : percentile(new PercentileValue(compression)), compression_initialized(true) {}
     ~PercentileApproxState() = default;
+
+    // Reinitialize the PercentileValue with a new compression factor
+    // This is used when the state is already constructed (e.g., as part of NullableAggregateFunctionState)
+    // but we need to apply a different compression factor from FunctionContext
+    void reinit_with_compression(double compression) {
+        percentile.reset(new PercentileValue(compression));
+        compression_initialized = true;
+    }
 
     int64_t mem_usage() const { return percentile->mem_usage(); }
 
     std::unique_ptr<PercentileValue> percentile;
     double targetQuantile = std::numeric_limits<double>::infinity();
+    bool compression_initialized = false; // Flag to track if compression has been initialized from FunctionContext
 };
 
 class PercentileApproxAggregateFunctionBase
@@ -47,12 +57,18 @@ public:
     virtual double get_compression_factor(FunctionContext* ctx) const = 0;
 
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
+        double compression = get_compression_factor(ctx);
+        // Lazy initialization of compression factor on first merge
+        if (UNLIKELY(!data(state).compression_initialized)) {
+            data(state).reinit_with_compression(compression);
+        }
+
         const auto* binary_column = down_cast<const BinaryColumn*>(column);
         Slice src = binary_column->get_slice(row_num);
         double quantile;
         memcpy(&quantile, src.data, sizeof(double));
 
-        PercentileApproxState src_percentile(get_compression_factor(ctx));
+        PercentileApproxState src_percentile(compression);
         src_percentile.targetQuantile = quantile;
         src_percentile.percentile->deserialize((char*)src.data + sizeof(double));
 
@@ -81,11 +97,6 @@ public:
 // PercentileApproxAggregateFunction: percentile_approx(expr, DOUBLE p[, DOUBLE compression])
 class PercentileApproxAggregateFunction final : public PercentileApproxAggregateFunctionBase {
 public:
-    void create(FunctionContext* ctx, AggDataPtr __restrict ptr) const override {
-        double compression = (ctx == nullptr) ? DEFAULT_COMPRESSION_FACTOR : get_compression_factor(ctx);
-        new (ptr) PercentileApproxState(compression);
-    }
-
     double get_compression_factor(FunctionContext* ctx) const override {
         double compression = DEFAULT_COMPRESSION_FACTOR;
         if (ctx->get_num_args() > 2) {
@@ -100,6 +111,12 @@ public:
     }
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr state, size_t row_num) const override {
+        // Lazy initialization of compression factor on first update
+        if (UNLIKELY(!data(state).compression_initialized)) {
+            double compression = get_compression_factor(ctx);
+            data(state).reinit_with_compression(compression);
+        }
+
         // argument 0
         const auto* data_column = down_cast<const DoubleColumn*>(columns[0]);
         // argument 1
@@ -150,11 +167,6 @@ public:
 // PercentileApproxWeightedAggregateFunction: percentile_approx_weighted(expr, weight, DOUBLE p[, DOUBLE compression])
 class PercentileApproxWeightedAggregateFunction final : public PercentileApproxAggregateFunctionBase {
 public:
-    void create(FunctionContext* ctx, AggDataPtr __restrict ptr) const override {
-        double compression = (ctx == nullptr) ? DEFAULT_COMPRESSION_FACTOR : get_compression_factor(ctx);
-        new (ptr) PercentileApproxState(compression);
-    }
-
     double get_compression_factor(FunctionContext* ctx) const override {
         double compression = DEFAULT_COMPRESSION_FACTOR;
         if (ctx->get_num_args() > 3) {
@@ -169,6 +181,11 @@ public:
     }
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr state, size_t row_num) const override {
+        // Lazy initialization of compression factor on first update
+        if (UNLIKELY(!data(state).compression_initialized)) {
+            double compression = get_compression_factor(ctx);
+            data(state).reinit_with_compression(compression);
+        }
         // argument 0
         const auto* data_column = down_cast<const DoubleColumn*>(columns[0]);
         // argument 1: weight can be const or int64 column
