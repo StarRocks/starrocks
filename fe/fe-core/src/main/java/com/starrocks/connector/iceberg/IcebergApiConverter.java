@@ -465,11 +465,6 @@ public class IcebergApiConverter {
         } else if (fileFormat != null) {
             throw new IllegalArgumentException("Unsupported format in USING: " + fileFormat);
         }
-
-        if (!Strings.isNullOrEmpty(compressionCodec) &&
-                !PARQUET_COMPRESSION_TYPE_MAP.containsKey(compressionCodec.toLowerCase(Locale.ROOT))) {
-            throw new IllegalArgumentException("Unsupported compression codec in USING: " + compressionCodec);
-        }
         tableProperties.put(TableProperties.FORMAT_VERSION, "2");
 
         return tableProperties.build();
