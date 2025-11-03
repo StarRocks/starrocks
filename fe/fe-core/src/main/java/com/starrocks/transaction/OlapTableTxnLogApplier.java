@@ -104,8 +104,7 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
                         long lastFailedVersion = replica.getLastFailedVersion();
                         long newVersion = version;
                         long lastSucessVersion = replica.getLastSuccessVersion();
-                        if (!txnState.tabletCommitInfosContainsReplica(tablet.getId(), replica.getBackendId(),
-                                replica.getState())
+                        if (txnState.checkReplicaNeedSkip(tablet, replica, partitionCommitInfo)
                                 || errorReplicaIds.contains(replica.getId())) {
                             // There are 2 cases that we can't update version to visible version and need to 
                             // set lastFailedVersion.
