@@ -20,6 +20,7 @@ import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.StmtExecutor;
+import com.starrocks.qe.VariableMgr;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.HintNode;
 import com.starrocks.sql.ast.StatementBase;
@@ -33,6 +34,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
+import java.lang.reflect.Field;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
@@ -170,4 +172,36 @@ public class SetVarTest extends PlanTestBase {
         assertTrue(starRocksAssert.getCtx().getUserVariables().containsKey("aHint"));
         assertTrue(starRocksAssert.getCtx().getUserVariables().containsKey("bHint"));
     }
+
+    @Test
+    public void testSetAllSessionVariablesBySql() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        SessionVariable sessionVariable = new SessionVariable();
+        ctx.setSessionVariable(sessionVariable);
+
+        for (Field field : SessionVariable.class.getDeclaredFields()) {
+            VariableMgr.VarAttr attr = field.getAnnotation(VariableMgr.VarAttr.class);
+            if (attr == null) {
+                continue;
+            }
+            field.setAccessible(true);
+            Object value = field.get(sessionVariable);
+
+            String literal;
+            if (value == null) {
+                continue;
+            } else if (value instanceof String) {
+                literal = "'" + ((String) value).replace("'", "''") + "'";
+            } else {
+                literal = String.valueOf(value);
+            }
+
+            String sql = "set " + attr.name() + " = " + literal;
+            StatementBase stmt = SqlParser.parse(sql, ctx.getSessionVariable()).get(0);
+            new StmtExecutor(ctx, stmt).execute();
+
+            assertEquals(value, field.get(sessionVariable));
+        }
+    }
+
 }
