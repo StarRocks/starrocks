@@ -13,7 +13,6 @@
 // limitations under the License.
 
 package com.starrocks.transaction;
-
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.ErrorCode;
