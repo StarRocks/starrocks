@@ -107,4 +107,4 @@ Release date: October 17, 2025
 
 ### Downgrade Notes
 
-After File Bundling is enabled, you can only downgrade the cluster to v3.5.2 or later. If you want to downgrade to versions earlier than v3.5.2, you must first drop the tables that have enabled File Bundling. File Bundling is enabled by default for tables created in v4.0 or later。
+After File Bundling is enabled, you can only downgrade the cluster to v3.5.2 or later. If the cluster is downgraded to versions earlier than v3.5.2, you cannot read or write the tables that have enabled File Bundling. File Bundling is enabled by default for tables created in v4.0 or later。
