@@ -63,6 +63,7 @@ import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.connector.metadata.MetadataTableType;
 import com.starrocks.connector.statistics.ConnectorTableColumnStats;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.FeNameFormat;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.CleanTemporaryTableStmt;
@@ -650,7 +651,13 @@ public class MetadataMgr {
     }
 
     public Statistics getTableStatisticsFromInternalStatistics(Table table, Map<ColumnRefOperator, Column> columns) {
-        List<ColumnRefOperator> requiredColumnRefs = new ArrayList<>(columns.keySet());
+        List<ColumnRefOperator> requiredColumnRefs = new ArrayList<>();
+        for (ColumnRefOperator colRef : columns.keySet()) {
+            if (FeNameFormat.FORBIDDEN_COLUMN_NAMES.contains(colRef.getName())) {
+                continue;
+            }
+            requiredColumnRefs.add(colRef);
+        }
         List<String> columnNames = requiredColumnRefs.stream().map(col -> columns.get(col).getName()).collect(
                 Collectors.toList());
         List<ConnectorTableColumnStats> columnStatisticList =
