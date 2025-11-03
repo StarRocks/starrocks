@@ -18,6 +18,8 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.utframe.StarRocksTestBase;
 import com.starrocks.utframe.UtFrameUtils;
+import com.starrocks.warehouse.cngroup.ComputeResource;
+import com.starrocks.warehouse.cngroup.WarehouseComputeResourceProvider;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.BeforeAll;
@@ -29,6 +31,12 @@ public abstract class WarehouseTestBase extends StarRocksTestBase {
             @Mock
             public RunMode getCurrentRunMode() {
                 return RunMode.SHARED_DATA;
+            }
+        };
+        new MockUp<WarehouseComputeResourceProvider>() {
+            @Mock
+            public boolean isResourceAvailable(ComputeResource computeResource) {
+                return true;
             }
         };
         UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
