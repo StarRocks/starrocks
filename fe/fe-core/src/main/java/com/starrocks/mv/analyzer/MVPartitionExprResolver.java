@@ -13,7 +13,7 @@
 // limitations under the License.
 package com.starrocks.mv.analyzer;
 
-import com.google.common.base.Preconditions;
+import com.google.common.base.Joiner;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -330,7 +330,19 @@ public class MVPartitionExprResolver {
                             }
                         }
                     }
+                    clearSlotTableName(slot);
                     return visitRelation(context.withRelation(relation));
+                }
+
+                /**
+                 * Clear the table name in slot ref to avoid being affected by sub-query alias.
+                 * NOTE: Scope's output column names should be already unique, slot's table name is not necessary.
+                 * TODO: refactor this after we have a better way to handle table alias in sub-query.
+                 */
+                private void clearSlotTableName(SlotRef slot) {
+                    if (slot != null && slot.getTblNameWithoutAnalyzed() != null) {
+                        slot.setTblName(null);
+                    }
                 }
 
                 @Override
@@ -341,8 +353,7 @@ public class MVPartitionExprResolver {
                         if (node.getAlias() != null && !node.getAlias().getTbl().equalsIgnoreCase(tableName)) {
                             return null;
                         }
-                        slot = (SlotRef) slot.clone();
-                        slot.setTblName(null); //clear table name here, not check it inside
+                        clearSlotTableName(slot);
                     }
                     Relation subRelation = node.getQueryStatement().getQueryRelation();
                     return visitRelation(context.withSlotRef(slot).withRelation(subRelation));
@@ -522,8 +533,7 @@ public class MVPartitionExprResolver {
                         if (cteName != null && !cteName.equalsIgnoreCase(tableName)) {
                             return null;
                         }
-                        slot = (SlotRef) slot.clone();
-                        slot.setTblName(null); //clear table name here, not check it inside
+                        clearSlotTableName(slot);
                     }
                     Relation relation = node.getCteQueryStatement().getQueryRelation();
                     return visitRelation(context.withRelation(relation).withSlotRef(slot));
@@ -558,7 +568,7 @@ public class MVPartitionExprResolver {
         int refBaseTableCols = -1;
         for (Expr mvRefPartitionExpr : mvRefPartitionExprs) {
             List<MVPartitionExpr> partitionExprMaps = getMVPartitionExprs(mvRefPartitionExpr, stmt);
-            if (partitionExprMaps == null) {
+            if (partitionExprMaps == null || partitionExprMaps.isEmpty()) {
                 LOG.warn("The partition expr maps slot ref should be from the base table, eqExprs:{}",
                         partitionExprMaps);
                 throw new SemanticException("Failed to build mv partition expr from base table: " + stmt.getOrigStmt());
@@ -578,13 +588,19 @@ public class MVPartitionExprResolver {
             for (BaseTableInfo baseTableInfo : baseTableInfos) {
                 Table table = MvUtils.getTableChecked(baseTableInfo);
                 List<MVPartitionExpr> refPartitionExprs = MvUtils.getMvPartitionExpr(mvPartitionExprMaps, table);
-                if (!refPartitionExprs.isEmpty()) {
+                if (refPartitionExprs != null && !refPartitionExprs.isEmpty()) {
                     mvPartitionExprs.add(refPartitionExprs);
                 }
             }
-            Preconditions.checkState(mvPartitionExprs.size() <= mvPartitionExprMaps.size(),
-                    String.format("The size of mv partition exprs %s should be less or equal to the size of " +
-                            "partition expr maps: %s", mvPartitionExprs, mvPartitionExprMaps));
+            if (mvPartitionExprs.size() > mvPartitionExprMaps.size()) {
+                String errorMessage = String.format("The size of mv partition exprs %s should be less or equal to the size " +
+                        "of partition expr maps: %s", mvPartitionExprs, mvPartitionExprMaps);
+                throw new SemanticException(errorMessage);
+            }
+        }
+        if (mvPartitionExprMaps.isEmpty()) {
+            throw new SemanticException("Failed to build mv partition expr from base table: "
+                    + Joiner.on(",").join(mvRefPartitionExprs));
         }
         return mvPartitionExprMaps;
     }
