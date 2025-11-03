@@ -600,7 +600,7 @@ Status OlapTableSink::_incremental_open_node_channel(const std::vector<TOlapTabl
         });
 
         if (channel->has_intolerable_failure()) {
-            LOG(WARNING) << "Open channel failed. load_id: " << _load_id << ", error: " << err_st.to_string();
+            LOG(WARNING) << "Open channel failed. load_id: " << print_id(_load_id) << ", error: " << err_st.to_string();
             return err_st;
         }
     }
