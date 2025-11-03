@@ -685,20 +685,21 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
     const size_t actual_rows = metadata_column->size();
     variant_column->reserve(expected_size);
 
+    auto append_variant_column = [&](const size_t idx) {
+        const Slice metadata_slice = metadata_column->get_slice(idx);
+        const Slice value_slice = value_column->get_slice(idx);
+        const std::string_view metadata_view(metadata_slice.data, metadata_slice.size);
+        const std::string_view value_view(value_slice.data, value_slice.size);
+
+        variant_column->append(VariantValue(metadata_view, value_view));
+    };
+
     if (def_levels != nullptr && num_levels > 0) {
         size_t data_idx = 0;
-
         for (size_t i = 0; i < expected_size && i < num_levels; ++i) {
             if (def_levels[i] >= level_info.max_def_level) {
                 if (data_idx < actual_rows) {
-                    const Slice metadata_slice = metadata_column->get_slice(data_idx);
-                    const Slice value_slice = value_column->get_slice(data_idx);
-
-                    const std::string_view metadata_view(metadata_slice.data, metadata_slice.size);
-                    const std::string_view value_view(value_slice.data, value_slice.size);
-
-                    VariantValue variant_value(metadata_view, value_view);
-                    variant_column->append(variant_value);
+                    append_variant_column(data_idx);
                     data_idx++;
                 } else {
                     variant_column->append(VariantValue::of_null());
@@ -715,7 +716,16 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
             variant_column->append_nulls(to_fill);
         }
     } else {
-        return Status::InternalError("Variant column requires definition levels for null value determination");
+        // Variant group is required, so all rows are non-null
+        for (size_t i = 0; i < actual_rows; ++i) {
+            append_variant_column(i);
+        }
+
+        DCHECK_EQ(actual_rows, expected_size);
+        if (actual_rows < expected_size) {
+            size_t to_fill = expected_size - actual_rows;
+            variant_column->append_nulls(to_fill);
+        }
     }
 
     // Handle nullable column null flags
