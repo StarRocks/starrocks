@@ -932,7 +932,7 @@ TEST_F(OrcFileWriterTest, TestWriteMapNullable) {
     auto writer = std::make_unique<formats::ORCFileWriter>(_file_path, std::move(output_stream), column_names,
                                                            type_descs, std::move(column_evaluators),
                                                            TCompressionType::NO_COMPRESSION, writer_options, []() {});
-    ASSERT_ERROR(writer->init());
+    ASSERT_OK(writer->init());
 }
 
 TEST_F(OrcFileWriterTest, TestWriteMapNotNull) {
@@ -954,7 +954,7 @@ TEST_F(OrcFileWriterTest, TestWriteMapNotNull) {
     auto writer = std::make_unique<formats::ORCFileWriter>(_file_path, std::move(output_stream), column_names,
                                                            type_descs, std::move(column_evaluators),
                                                            TCompressionType::NO_COMPRESSION, writer_options, []() {});
-    ASSERT_ERROR(writer->init());
+    ASSERT_OK(writer->init());
 }
 
 TEST_F(OrcFileWriterTest, TestWriteArrayNullable) {
