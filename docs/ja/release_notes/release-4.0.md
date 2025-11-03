@@ -104,3 +104,7 @@ displayed_sidebar: docs
   - `CREATE_TIME`、`SCHEDULE_TIME` および `FINISH_TIME` 列のデータ型を `DOUBLE` から `DATETIME` に変更しました。
 - 一部の FE メトリクスに `is_leader` ラベルを追加しました。[#63004](https://github.com/StarRocks/starrocks/pull/63004)
 - Microsoft Azure Blob Storage および Data Lake Storage Gen 2 をオブジェクト ストレージとして使用する共有データクラスターは、v4.0 へのアップグレード後にデータキャッシュの障害が発生します。システムは自動的にキャッシュを再読み込みします。
+
+### ダウングレードノート
+
+ファイルバンドリングを有効化した後、クラスターを v3.5.2 以降にダウングレードできます。v3.5.2 より前のバージョンにダウングレードしたい場合は、まずファイルバンドリングを有効化したテーブルを削除する必要があります。ファイルバンドリングは、v4.0 以降で作成されたテーブルに対してデフォルトで有効化されています。

@@ -104,3 +104,7 @@ Release date: October 17, 2025
   - The data types of the `CREATE_TIME`, `SCHEDULE_TIME` and `FINISH_TIME` columns have been changed from `DOUBLE` to `DATETIME`.
 - The `is_leader` label has been added to some FE metrics. [#63004](https://github.com/StarRocks/starrocks/pull/63004)
 - Shared-data clusters using Microsoft Azure Blob Storage and Data Lake Storage Gen 2 as object storage will experience Data Cache failure after being upgraded to v4.0. The system will automatically reload the cache.
+
+### Downgrade Notes
+
+After File Bundling is enabled, you can only downgrade the cluster to v3.5.2 or later. If you want to downgrade to versions earlier than v3.5.2, you must first drop the tables that have enabled File Bundling. File Bundling is enabled by default for tables created in v4.0 or later。
