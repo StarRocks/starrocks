@@ -417,31 +417,4 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
     public RuntimeProfile getRuntimeProfile() {
         return runtimeProfile;
     }
-
-    private String getPostRun(ConnectContext ctx, MaterializedView mv) {
-        // check whether it's enabled to analyze MV task after task run for each task run,
-        // so the analyze_for_mv can be set in session variable dynamically
-        if (mv == null) {
-            return "";
-        }
-        return TaskBuilder.getAnalyzeMVStmt(ctx, mv.getName());
-    }
-
-    @Override
-    public void postTaskRun(TaskRunContext context) throws Exception {
-        if (taskRunState != Constants.TaskRunState.SUCCESS) {
-            return;
-        }
-        // recreate post run context for each task run
-        final ConnectContext ctx = context.getCtx();
-        final String postRun = getPostRun(ctx, mv);
-        // visible for tests
-        if (mvTaskRunContext != null) {
-            mvTaskRunContext.setPostRun(postRun);
-        }
-        context.setPostRun(postRun);
-        if (StringUtils.isNotEmpty(postRun)) {
-            ctx.executeSql(postRun);
-        }
-    }
 }

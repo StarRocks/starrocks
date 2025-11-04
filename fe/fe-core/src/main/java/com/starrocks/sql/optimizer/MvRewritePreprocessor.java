@@ -52,6 +52,8 @@ import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.LakeMaterializedView;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
@@ -223,7 +225,6 @@ public class MvRewritePreprocessor {
                         sessionVariable.getOptimizerMaterializedViewTimeLimitMillis()),
                 Pair.create("materialized_view_join_same_table_permutation_limit",
                         sessionVariable.getMaterializedViewJoinSameTablePermutationLimit()),
-                Pair.create("analyze_mv", sessionVariable.getAnalyzeForMV()),
                 Pair.create("query_excluding_mv_names", sessionVariable.getQueryExcludingMVNames()),
                 Pair.create("query_including_mv_names", sessionVariable.getQueryIncludingMVNames()),
                 Pair.create("cbo_materialized_view_rewrite_rule_output_limit",
@@ -335,13 +336,18 @@ public class MvRewritePreprocessor {
     }
 
     private static MaterializedView copyOnlyMaterializedView(MaterializedView mv) {
-        // TODO: add read lock?
         // Query will not lock dbs in the optimizer stage, so use a shallow copy of mv to avoid
         // metadata race for different operations.
         // Ensure to re-optimize if the mv's version has changed after the optimization.
-        MaterializedView copiedMV = new MaterializedView();
-        mv.copyOnlyForQuery(copiedMV);
-        return copiedMV;
+        Locker locker = new Locker();
+        locker.lockTableWithIntensiveDbLock(mv.getDbId(), mv.getId(), LockType.READ);
+        try {
+            MaterializedView copiedMV = new MaterializedView();
+            mv.copyOnlyForQuery(copiedMV);
+            return copiedMV;
+        } finally {
+            locker.unLockTableWithIntensiveDbLock(mv.getDbId(), mv.getId(), LockType.READ);
+        }
     }
 
     @VisibleForTesting
