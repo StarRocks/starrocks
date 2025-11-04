@@ -35,6 +35,7 @@ import com.starrocks.sql.ast.expression.ArrayExpr;
 import com.starrocks.sql.ast.expression.CaseExpr;
 import com.starrocks.sql.ast.expression.CompoundPredicate;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.FieldReference;
 import com.starrocks.sql.ast.expression.InPredicate;
 import com.starrocks.sql.ast.expression.LargeInPredicate;
@@ -473,11 +474,6 @@ public class AST2SQLVisitor extends AST2StringVisitor {
     }
 
     @Override
-    public String visitExpression(Expr expr, Void context) {
-        return expr.toSql();
-    }
-
-    @Override
     public String visitSlot(SlotRef expr, Void context) {
         if (expr.getOriginType().isStructType()) {
             return buildStructColumnName(expr.getTblNameWithoutAnalyzed(),
@@ -567,7 +563,7 @@ public class AST2SQLVisitor extends AST2StringVisitor {
             List<SlotRef> exprs = node.collectAllSlotRefs(true);
             String sortedSlots = exprs.stream()
                     .filter(SlotRef::isColumnRef)
-                    .map(SlotRef::toSql)
+                    .map(ExprToSql::toSql)
                     .sorted()
                     .collect(Collectors.joining(","));
             return "$massive_compounds[" + sortedSlots + "]$";

@@ -46,6 +46,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.expression.DecimalLiteral;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
@@ -229,7 +230,7 @@ public class AggregationNode extends PlanNode implements RuntimeFilterBuildNode 
             if (sqlAggFuncBuilder.length() > 0) {
                 sqlAggFuncBuilder.append(", ");
             }
-            sqlAggFuncBuilder.append(e.toSql());
+            sqlAggFuncBuilder.append(ExprToSql.toSql(e));
         }
 
         msg.agg_node =
@@ -252,7 +253,7 @@ public class AggregationNode extends PlanNode implements RuntimeFilterBuildNode 
                 if (sqlGroupingKeysBuilder.length() > 0) {
                     sqlGroupingKeysBuilder.append(", ");
                 }
-                sqlGroupingKeysBuilder.append(e.toSql());
+                sqlGroupingKeysBuilder.append(ExprToSql.toSql(e));
             }
             if (sqlGroupingKeysBuilder.length() > 0) {
                 msg.agg_node.setSql_grouping_keys(sqlGroupingKeysBuilder.toString());

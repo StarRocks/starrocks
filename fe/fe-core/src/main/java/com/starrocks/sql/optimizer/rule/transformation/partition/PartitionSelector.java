@@ -51,6 +51,7 @@ import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.TableName;
@@ -160,7 +161,7 @@ public class PartitionSelector {
             }
             Expr deinfedExpr = column.getGeneratedColumnExpr(olapTable.getIdToColumn());
             if (deinfedExpr != null) {
-                return deinfedExpr.toSqlWithoutTbl();
+                return ExprToSql.toSqlWithoutTbl(deinfedExpr);
             }
             return "`" + column.getName() + "`";
         } else {
@@ -181,7 +182,7 @@ public class PartitionSelector {
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         if (!partitionInfo.isPartitioned()) {
             throw new SemanticException(String.format("Partition condition `%s` is supported for a partitioned table",
-                    whereExpr.toSql()));
+                    ExprToSql.toSql(whereExpr)));
         }
         Scope scope = new Scope(RelationId.anonymous(), new RelationFields(
                 olapTable.getBaseSchema().stream()
@@ -250,7 +251,7 @@ public class PartitionSelector {
         String partitionExpressions = Joiner.on("/").join(partitionDefinedQueries);
         if (scalarOperator == null) {
             throw new SemanticException(String.format("Failed to parse the partition condition:%s, please use " +
-                            "table's partition expressions directly: %s", whereExpr.toSql(), partitionExpressions));
+                            "table's partition expressions directly: %s", ExprToSql.toSql(whereExpr), partitionExpressions));
         }
         // validate scalar operator
         validateRetentionConditionPredicate(olapTable, scalarOperator);
@@ -270,7 +271,7 @@ public class PartitionSelector {
         scalarOperator.getColumnRefs(usedPartitionColumnRefs);
         if (CollectionUtils.isEmpty(usedPartitionColumnRefs)) {
             throw new SemanticException(String.format("No partition columns are used in the partition condition: %s, " +
-                    "please use table's partition expressions directly: %s" + whereExpr.toSql(), partitionExpressions));
+                    "please use table's partition expressions directly: %s" + ExprToSql.toSql(whereExpr), partitionExpressions));
         }
         // check if all used columns are partition columns
         for (ColumnRefOperator colRef : usedPartitionColumnRefs) {
@@ -294,7 +295,7 @@ public class PartitionSelector {
             throw new SemanticException("Unsupported partition type: " + partitionInfo.getType());
         }
         if (selectedPartitionIds == null) {
-            throw new SemanticException("Failed to get partitions with partition condition: " + whereExpr.toSql());
+            throw new SemanticException("Failed to get partitions with partition condition: " + ExprToSql.toSql(whereExpr));
         }
         return selectedPartitionIds;
     }
@@ -845,7 +846,7 @@ public class PartitionSelector {
             aliasMap.put(e.getKey(), alias);
         }
         Expr newExpr = whereExpr.substitute(aliasMap);
-        String newWhereSql = newExpr.toSql();
+        String newWhereSql = ExprToSql.toSql(newExpr);
         String sql = String.format(PARTITIONS_META_TEMPLATE, dbName, olapTable.getName(), newWhereSql);
         LOG.info("Get partition ids by sql: {}", sql);
         return sql;

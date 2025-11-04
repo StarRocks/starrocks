@@ -96,6 +96,7 @@ import com.starrocks.sql.ast.expression.CastExpr;
 import com.starrocks.sql.ast.expression.CompoundPredicate;
 import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.FieldReference;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.FunctionName;
@@ -1729,7 +1730,7 @@ public class AnalyzerUtils {
             public Void visitFunctionCall(FunctionCallExpr expr, Void context) {
                 if (expr.isNondeterministicBuiltinFnName()) {
                     throw new SemanticException("Materialized view query statement select item " +
-                            expr.toSql() + " not supported nondeterministic function", expr.getPos());
+                            ExprToSql.toSql(expr) + " not supported nondeterministic function", expr.getPos());
                 }
                 return null;
             }
@@ -1836,7 +1837,7 @@ public class AnalyzerUtils {
         List<Expr> paramsExpr = expr.getParams().exprs();
         if (FunctionSet.DATE_TRUNC.equals(functionName)) {
             if (paramsExpr.size() != 2) {
-                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
+                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(ExprToSql.toSql(expr), "PARTITION BY"), pos);
             }
             Expr firstExpr = paramsExpr.get(0);
             Expr secondExpr = paramsExpr.get(1);
@@ -1845,24 +1846,24 @@ public class AnalyzerUtils {
                 partitionColumnName = ((SlotRef) secondExpr).getColumnName();
                 columnList.add(partitionColumnName);
             } else {
-                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
+                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(ExprToSql.toSql(expr), "PARTITION BY"), pos);
             }
 
             if (firstExpr instanceof StringLiteral) {
                 StringLiteral stringLiteral = (StringLiteral) firstExpr;
                 String fmt = stringLiteral.getValue();
                 if (!supportedDateTruncFormats.contains(fmt.toLowerCase())) {
-                    throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"),
+                    throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(ExprToSql.toSql(expr), "PARTITION BY"),
                             pos);
                 }
                 checkPartitionColumnTypeValid(expr, columnDefs, pos, partitionColumnName, fmt);
             } else {
-                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
+                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(ExprToSql.toSql(expr), "PARTITION BY"), pos);
             }
 
         } else if (FunctionSet.TIME_SLICE.equals(functionName)) {
             if (paramsExpr.size() != 4) {
-                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
+                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(ExprToSql.toSql(expr), "PARTITION BY"), pos);
             }
             Expr firstExpr = paramsExpr.get(0);
             String partitionColumnName;
@@ -1870,7 +1871,7 @@ public class AnalyzerUtils {
                 partitionColumnName = ((SlotRef) firstExpr).getColumnName();
                 columnList.add(partitionColumnName);
             } else {
-                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
+                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(ExprToSql.toSql(expr), "PARTITION BY"), pos);
             }
             Expr secondExpr = paramsExpr.get(1);
             Expr thirdExpr = paramsExpr.get(2);
@@ -1878,28 +1879,28 @@ public class AnalyzerUtils {
                 StringLiteral stringLiteral = (StringLiteral) thirdExpr;
                 String fmt = stringLiteral.getValue();
                 if (!AnalyzerUtils.TIME_SLICE_SUPPORTED_PARTITION_FORMAT.contains(fmt.toLowerCase())) {
-                    throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"),
+                    throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(ExprToSql.toSql(expr), "PARTITION BY"),
                             pos);
                 }
                 // For materialized views currently columnDefs == null
                 checkPartitionColumnTypeValid(expr, columnDefs, pos, partitionColumnName, fmt);
             } else {
-                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
+                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(ExprToSql.toSql(expr), "PARTITION BY"), pos);
             }
             Expr fourthExpr = paramsExpr.get(3);
             if (fourthExpr instanceof StringLiteral) {
                 StringLiteral boundaryLiteral = (StringLiteral) fourthExpr;
                 String boundary = boundaryLiteral.getValue();
                 if (!"floor".equalsIgnoreCase(boundary)) {
-                    throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfoAndExplain(expr.toSql(),
+                    throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfoAndExplain(ExprToSql.toSql(expr),
                             "PARTITION BY", "Automatic partitioning does not support the ceil parameter"), pos);
                 }
             } else {
-                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
+                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(ExprToSql.toSql(expr), "PARTITION BY"), pos);
             }
         } else if (FunctionSet.STR2DATE.equals(functionName)) {
             if (paramsExpr.size() != 2) {
-                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
+                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(ExprToSql.toSql(expr), "PARTITION BY"), pos);
             }
             Expr firstExpr = paramsExpr.get(0);
             Expr secondExpr = paramsExpr.get(1);
@@ -1907,15 +1908,15 @@ public class AnalyzerUtils {
                 SlotRef slotRef = (SlotRef) firstExpr;
                 columnList.add(slotRef.getColumnName());
             } else {
-                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
+                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(ExprToSql.toSql(expr), "PARTITION BY"), pos);
             }
 
             if (!(secondExpr instanceof StringLiteral)) {
-                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
+                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(ExprToSql.toSql(expr), "PARTITION BY"), pos);
             }
 
         } else {
-            throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
+            throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(ExprToSql.toSql(expr), "PARTITION BY"), pos);
         }
         return columnList;
     }
@@ -1926,10 +1927,10 @@ public class AnalyzerUtils {
         if (columnDefs != null && ("hour".equalsIgnoreCase(fmt) || "minute".equalsIgnoreCase(fmt))) {
             ColumnDef partitionDef = findPartitionDefByName(columnDefs, partitionColumnName);
             if (partitionDef == null) {
-                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
+                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(ExprToSql.toSql(expr), "PARTITION BY"), pos);
             }
             if (partitionDef.getType() != Type.DATETIME) {
-                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfoAndExplain(expr.toSql(),
+                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfoAndExplain(ExprToSql.toSql(expr),
                         "PARTITION BY", "The hour/minute parameter only supports datetime type"), pos);
             }
         }

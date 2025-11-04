@@ -19,6 +19,7 @@ import com.google.common.base.Strings;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.load.ExportJob.JobState;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.LimitElement;
 import com.starrocks.sql.parser.NodePosition;
 import org.apache.logging.log4j.LogManager;
@@ -135,14 +136,14 @@ public class ShowExportStmt extends ShowStmt {
         }
 
         if (whereClause != null) {
-            sb.append(" WHERE ").append(whereClause.toSql());
+            sb.append(" WHERE ").append(ExprToSql.toSql(whereClause));
         }
 
         // Order By clause
         if (orderByElements != null) {
             sb.append(" ORDER BY ");
             for (int i = 0; i < orderByElements.size(); ++i) {
-                sb.append(orderByElements.get(i).getExpr().toSql());
+                sb.append(ExprToSql.toSql(orderByElements.get(i).getExpr()));
                 sb.append((orderByElements.get(i).getIsAsc()) ? " ASC" : " DESC");
                 sb.append((i + 1 != orderByElements.size()) ? ", " : "");
             }

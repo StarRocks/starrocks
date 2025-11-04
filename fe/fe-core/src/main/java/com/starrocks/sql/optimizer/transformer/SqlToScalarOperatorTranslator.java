@@ -46,6 +46,7 @@ import com.starrocks.sql.ast.expression.DictQueryExpr;
 import com.starrocks.sql.ast.expression.DictionaryGetExpr;
 import com.starrocks.sql.ast.expression.ExistsPredicate;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.FieldReference;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.GroupingFunctionCallExpr;
@@ -921,7 +922,7 @@ public final class SqlToScalarOperatorTranslator {
                     return ref;
                 }
             }
-            throw unsupportedException("unknown slot: " + node.toSql());
+            throw unsupportedException("unknown slot: " + ExprToSql.toSql(node));
         }
     }
 
@@ -939,7 +940,7 @@ public final class SqlToScalarOperatorTranslator {
                 // So if you need to visit SlotRef here, it must be the case where the old version of analyzed is true
                 // (currently mainly used by some Load logic).
                 // TODO: delete old analyze in Load
-                LOG.warn("Can't use IgnoreSlotVisitor with not analyzed slot ref: " + node.toSql());
+                LOG.warn("Can't use IgnoreSlotVisitor with not analyzed slot ref: " + ExprToSql.toSql(node));
                 throw unsupportedException("Can't use IgnoreSlotVisitor with not analyzed slot ref");
             }
             String columnName = node.getColumnName() == null ? node.getLabel() : node.getColumnName();

@@ -36,6 +36,7 @@ package com.starrocks.sql.ast.expression;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.sql.ast.ParseNode;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TAnalyticWindow;
 import com.starrocks.thrift.TAnalyticWindowBoundary;
@@ -194,7 +195,7 @@ public class AnalyticWindow implements ParseNode {
             StringBuilder sb = new StringBuilder();
 
             if (expr != null) {
-                sb.append(expr.toSql()).append(" ");
+                sb.append(ExprToSql.toSql(expr)).append(" ");
             }
 
             sb.append(type.toString());

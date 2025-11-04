@@ -43,6 +43,7 @@ import com.starrocks.catalog.ColumnStats;
 import com.starrocks.common.FeConstants;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.thrift.TSlotDescriptor;
 import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
@@ -243,7 +244,7 @@ public class SlotDescriptor {
      * Initializes a slot by setting its source expression information
      */
     public void initFromExpr(Expr expr) {
-        setLabel(expr.toSql());
+        setLabel(ExprToSql.toSql(expr));
         Preconditions.checkState(sourceExprs_.isEmpty());
         setSourceExpr(expr);
         setStats(ColumnStats.fromExpr(expr));

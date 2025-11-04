@@ -46,6 +46,7 @@ import com.starrocks.sql.ast.expression.CompoundPredicate;
 import com.starrocks.sql.ast.expression.DefaultValueExpr;
 import com.starrocks.sql.ast.expression.ExistsPredicate;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FieldReference;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
@@ -201,7 +202,7 @@ public class SimpleExpressionAnalyzer {
             // 'col' will be parsed as StringLiteral, it's invalid.
             // TODO(SmithCruise) We should handle this problem in parser in the future.
             Preconditions.checkArgument(child.getType().isStructType(),
-                    String.format("%s must be a struct type, check if you are using `'`", child.toSql()));
+                    String.format("%s must be a struct type, check if you are using `'`", ExprToSql.toSql(child)));
 
             List<String> fieldNames = node.getFieldNames();
             Type tmpType = child.getType();

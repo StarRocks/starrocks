@@ -424,7 +424,7 @@ public class ArithmeticExpr extends Expr {
 
     @Override
     public String toString() {
-        return toSql();
+        return ExprToSql.toSql(this);
     }
 
     @Override

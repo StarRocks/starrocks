@@ -47,6 +47,7 @@ import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UnionRelation;
 import com.starrocks.sql.ast.expression.BoolLiteral;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
@@ -84,14 +85,14 @@ public class MVPCTRefreshPlanBuilder {
         if (table == null || partitionPredicate == null) {
             return;
         }
-        mvPlanBuildMessage.put(table.getName(), partitionPredicate.toSql());
+        mvPlanBuildMessage.put(table.getName(), ExprToSql.toSql(partitionPredicate));
     }
 
     private void tracePartitionPredicates(Expr partitionPredicate) {
         if (partitionPredicate == null) {
             return;
         }
-        mvPlanBuildMessage.put(EXTRA_PREDICATE_KEY, partitionPredicate.toSql());
+        mvPlanBuildMessage.put(EXTRA_PREDICATE_KEY, ExprToSql.toSql(partitionPredicate));
     }
 
     public Map<String, String> getPlanBuilderMessage() {
@@ -241,7 +242,7 @@ public class MVPCTRefreshPlanBuilder {
                 extraPartitionPredicates.add(selectRelation.getWhereClause());
                 selectRelation.setWhereClause(finalPredicate);
                 logger.info("Optimize materialized view {} refresh task, generate insert stmt final " +
-                        "predicate(select relation):{} ", mv.getName(), finalPredicate.toSql());
+                        "predicate(select relation):{} ", mv.getName(), ExprToSql.toSql(finalPredicate));
             } else {
                 // support to generate partition predicate for other query relation types
                 logger.warn("MV Refresh cannot push down partition predicate since " +
@@ -380,7 +381,7 @@ public class MVPCTRefreshPlanBuilder {
 
         logger.info("Optimize materialized view {} refresh task, push down partition predicate into table " +
                         "relation {},  partition predicate:{} ",
-                mv.getName(), tableRelation.getName(), partitionPredicate.toSql());
+                mv.getName(), tableRelation.getName(), ExprToSql.toSql(partitionPredicate));
         tableRelation.setPartitionPredicate(partitionPredicate);
         tracePartitionPredicate(table, partitionPredicate);
         return true;

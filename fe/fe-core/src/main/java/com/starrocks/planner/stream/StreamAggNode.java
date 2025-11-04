@@ -21,6 +21,7 @@ import com.starrocks.planner.FragmentNormalizer;
 import com.starrocks.planner.PlanNode;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
 import com.starrocks.sql.optimizer.operator.stream.IMTInfo;
 import com.starrocks.thrift.TExplainLevel;
@@ -94,7 +95,7 @@ public class StreamAggNode extends PlanNode {
 
         // Aggregate expression
         String sqlAggFunctions =
-                aggInfo.getMaterializedAggregateExprs().stream().map(Expr::toSql).collect(Collectors.joining(","));
+                aggInfo.getMaterializedAggregateExprs().stream().map(ExprToSql::toSql).collect(Collectors.joining(","));
         msg.stream_agg_node.setSql_aggregate_functions(sqlAggFunctions);
 
         // Grouping expression
@@ -102,7 +103,7 @@ public class StreamAggNode extends PlanNode {
         if (CollectionUtils.isNotEmpty(groupingExprs)) {
             msg.stream_agg_node.setGrouping_exprs(ExprToThriftVisitor.treesToThrift(groupingExprs));
         }
-        String groupingStr = groupingExprs.stream().map(Expr::toSql).collect(Collectors.joining(", "));
+        String groupingStr = groupingExprs.stream().map(ExprToSql::toSql).collect(Collectors.joining(", "));
         msg.stream_agg_node.setSql_grouping_keys(groupingStr);
 
         msg.stream_agg_node.setAgg_func_set_version(3);

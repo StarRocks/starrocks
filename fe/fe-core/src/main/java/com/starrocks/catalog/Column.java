@@ -52,6 +52,7 @@ import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
@@ -237,7 +238,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
                 // for default value is null or default value is not set the defaultExpr = null
                 this.defaultExpr = null;
             } else {
-                this.defaultExpr = new DefaultExpr(defaultValueDef.expr.toSql(), defaultValueDef.hasArguments);
+                this.defaultExpr = new DefaultExpr(ExprToSql.toSql(defaultValueDef.expr), defaultValueDef.hasArguments);
             }
         }
         this.isAutoIncrement = false;
@@ -817,7 +818,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         if (isGeneratedColumn()) {
             String generatedColumnSql;
             if (idToColumn != null) {
-                generatedColumnSql = generatedColumnExpr.convertToColumnNameExpr(idToColumn).toSql();
+                generatedColumnSql = ExprToSql.toSql(generatedColumnExpr.convertToColumnNameExpr(idToColumn));
             } else {
                 generatedColumnSql = generatedColumnExpr.toSql();
             }

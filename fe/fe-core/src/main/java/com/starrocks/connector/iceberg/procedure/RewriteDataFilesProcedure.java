@@ -19,6 +19,7 @@ import com.starrocks.connector.iceberg.IcebergRewriteDataJob;
 import com.starrocks.connector.iceberg.IcebergTableOperation;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -119,7 +120,7 @@ public class RewriteDataFilesProcedure extends IcebergTableProcedure {
             for (SlotRef slot : slots) {
                 slot.setTblName(new TableName(dbName, tableName));
             }
-            partitionFilterSql = partitionFilter.toSql();
+            partitionFilterSql = ExprToSql.toSql(partitionFilter);
         }
         velCtx.put("partitionFilterSql", partitionFilterSql);
         VelocityEngine defaultVelocityEngine = new VelocityEngine();

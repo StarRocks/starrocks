@@ -17,6 +17,7 @@ package com.starrocks.sql.analyzer;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.sql.ast.CTERelation;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.LambdaArgument;
 import com.starrocks.sql.ast.expression.PlaceHolderExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
@@ -93,7 +94,7 @@ public class Scope {
     public ResolvedField resolveField(SlotRef expression, RelationId outerRelationId) {
         Optional<ResolvedField> resolvedField = resolveField(expression, 0, outerRelationId);
         if (!resolvedField.isPresent()) {
-            throw new SemanticException("Column '%s' cannot be resolved", expression.toSql());
+            throw new SemanticException("Column '%s' cannot be resolved", ExprToSql.toSql(expression));
         }
         return resolvedField.get();
     }

@@ -43,6 +43,7 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
 import com.starrocks.sql.ast.expression.ExprUtils;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TMySQLScanNode;
@@ -151,7 +152,7 @@ public class MysqlScanNode extends ScanNode {
         ArrayList<Expr> mysqlConjuncts = ExprUtils.cloneList(conjuncts, sMap);
         for (Expr p : mysqlConjuncts) {
             p = p.replaceLargeStringLiteral();
-            filters.add(p.toMySql());
+            filters.add(ExprToSql.toMySql(p));
         }
     }
 

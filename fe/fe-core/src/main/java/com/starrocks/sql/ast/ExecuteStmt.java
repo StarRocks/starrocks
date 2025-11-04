@@ -15,6 +15,7 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -41,7 +42,7 @@ public class ExecuteStmt extends StatementBase {
     @Override
     public String toSql() {
         return "EXECUTE `" + stmtName + "`"
-                + paramsExpr.stream().map(Expr::toSql).collect(Collectors.joining(", ", " USING ", ""));
+                + paramsExpr.stream().map(ExprToSql::toSql).collect(Collectors.joining(", ", " USING ", ""));
     }
 
     @Override

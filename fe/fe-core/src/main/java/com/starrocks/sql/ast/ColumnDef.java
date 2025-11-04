@@ -37,6 +37,7 @@ package com.starrocks.sql.ast;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.combinator.AggStateDesc;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.StringLiteral;
@@ -281,7 +282,6 @@ public class ColumnDef implements ParseNode {
         return defaultCharset;
     }
 
-    @Override
     public String toSql() {
         StringBuilder sb = new StringBuilder();
         sb.append("`").append(name).append("` ");
@@ -303,7 +303,7 @@ public class ColumnDef implements ParseNode {
         }
 
         if (isGeneratedColumn()) {
-            sb.append("AS " + generatedColumnExpr.toSql() + " ");
+            sb.append("AS " + ExprToSql.toSql(generatedColumnExpr) + " ");
         }
 
         if (defaultValueDef.isSet) {

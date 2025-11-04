@@ -226,6 +226,7 @@ import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.IntervalLiteral;
 import com.starrocks.sql.ast.expression.SetVarHint;
@@ -3217,7 +3218,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                         Column generatedCol = generatedPartitionCols.get(i);
                         if (generatedCol == null) {
                             throw new DdlException("Partition expression for list must be a generated column: "
-                                    + partitionByExpr.toSql());
+                                    + ExprToSql.toSql(partitionByExpr));
                         }
                         baseSchema.add(generatedCol);
                         newPartitionColumns.add(generatedCol);
@@ -3225,7 +3226,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                         if (!(partitionByExpr instanceof SlotRef || MvUtils.isFuncCallExpr(partitionByExpr,
                                 FunctionSet.DATE_TRUNC))) {
                             throw new DdlException("List partition expression can only be ref-base-table's partition " +
-                                    "expression but contains: " + partitionByExpr.toSql());
+                                    "expression but contains: " + ExprToSql.toSql(partitionByExpr));
                         }
                         newPartitionColumns.add(mvPartitionColumn);
                     }

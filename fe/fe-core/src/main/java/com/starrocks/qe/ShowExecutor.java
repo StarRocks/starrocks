@@ -226,6 +226,7 @@ import com.starrocks.sql.ast.ShowVariablesStmt;
 import com.starrocks.sql.ast.UserRef;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.LikePredicate;
 import com.starrocks.sql.ast.expression.LimitElement;
 import com.starrocks.sql.ast.expression.Predicate;
@@ -1115,7 +1116,7 @@ public class ShowExecutor {
                         defaultValue = col.getMetaDefaultValue(Lists.newArrayList());
                     }
                     final String aggType = col.getAggregationType() == null
-                            || col.isAggregationTypeImplicit() ? "" : col.getAggregationType().toSql();
+                            || col.isAggregationTypeImplicit() ? "" : col.getAggregationType().getSqlName();
                     if (statement.isVerbose()) {
                         // Field Type Collation Null Key Default Extra
                         // Privileges Comment
@@ -1313,7 +1314,7 @@ public class ShowExecutor {
             }
             if (routineLoadJob.getWhereExpr() != null) {
                 createRoutineLoadSql.append(",\nWHERE ");
-                createRoutineLoadSql.append(routineLoadJob.getWhereExpr().toSql());
+                createRoutineLoadSql.append(ExprToSql.toSql(routineLoadJob.getWhereExpr()));
             }
 
             createRoutineLoadSql.append("\nPROPERTIES\n").append(routineLoadJob.jobPropertiesToSql());

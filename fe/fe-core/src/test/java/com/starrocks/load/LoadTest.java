@@ -36,6 +36,7 @@ import com.starrocks.sql.ast.ImportColumnsStmt;
 import com.starrocks.sql.ast.expression.ArithmeticExpr;
 import com.starrocks.sql.ast.expression.CompoundPredicate;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
@@ -377,7 +378,7 @@ public class LoadTest {
                         + "result: ARRAY<JSON>; args nullable: true; result nullable: true][1], '$.id'); "
                         + "args: JSON,VARCHAR; result: VARCHAR; args nullable: true; result nullable: true]",
                     t0SlotId, eSlotId, eSlotId, t0SlotId);
-        Assertions.assertEquals(c2ExprExplain, exprsByName.get("c2").explain());
+        Assertions.assertEquals(c2ExprExplain, ExprToSql.explain(exprsByName.get("c2")));
 
         int t1SlotId = slotDescByName.get("t1").getId().asInt();
         int kSlotId = slotDescByName.get("k").getId().asInt();
@@ -395,7 +396,7 @@ public class LoadTest {
                         + "nullable: true][1], '$.id'); args: JSON,VARCHAR; result: VARCHAR; args nullable: true; result "
                         + "nullable: true]",
                 t1SlotId, kSlotId, vSlotId, kSlotId, vSlotId, t1SlotId);
-        Assertions.assertEquals(c3ExprExplain, exprsByName.get("c3").explain());
+        Assertions.assertEquals(c3ExprExplain, ExprToSql.explain(exprsByName.get("c3")));
     }
     
     @Test
@@ -428,11 +429,11 @@ public class LoadTest {
         Expr c1Expr = exprsByName.get("c1");
         Assertions.assertNotNull(c1Expr);
         Assertions.assertEquals(
-                "now[(); args: ; result: DATETIME; args nullable: false; result nullable: false]", c1Expr.explain());
+                "now[(); args: ; result: DATETIME; args nullable: false; result nullable: false]", ExprToSql.explain(c1Expr));
 
         Expr c2Expr = exprsByName.get("c2");
         Assertions.assertNotNull(c2Expr);
         Assertions.assertEquals(
-                "now[(6); args: INT; result: DATETIME; args nullable: false; result nullable: false]", c2Expr.explain());
+                "now[(6); args: INT; result: DATETIME; args nullable: false; result nullable: false]", ExprToSql.explain(c2Expr));
     }
 }

@@ -287,14 +287,6 @@ public class SlotRef extends Expr {
         return tblName != null && !isFromLambda();
     }
 
-    @Override
-    public String toMySql() {
-        if (label == null) {
-            throw new IllegalArgumentException("should set label for cols in MySQLScanNode. SlotRef: " + debugString());
-        }
-        return label;
-    }
-
     public TableName getTableName() {
         Preconditions.checkState(isAnalyzed);
         Preconditions.checkNotNull(desc);

@@ -32,6 +32,7 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.FieldReference;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.TableName;
@@ -220,7 +221,7 @@ public class SqlWithIdUtils {
 
         @Override
         public String visitExpression(Expr expr, Void context) {
-            return expr.toSql();
+            return ExprToSql.toSql(expr);
         }
 
         @Override

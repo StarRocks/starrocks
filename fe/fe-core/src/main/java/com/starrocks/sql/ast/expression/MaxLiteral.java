@@ -48,7 +48,7 @@ public final class MaxLiteral extends LiteralExpr {
 
     @Override
     public String toString() {
-        return toSql();
+        return ExprToSql.toSql(this);
     }
 
     @Override

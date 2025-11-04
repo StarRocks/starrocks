@@ -134,7 +134,7 @@ public final class ExprSubstitutionMap {
         Preconditions.checkState(lhs.size() == rhs.size());
         List<String> output = Lists.newArrayList();
         for (int i = 0; i < lhs.size(); ++i) {
-            output.add(lhs.get(i).toSql() + ":" + rhs.get(i).toSql());
+            output.add(ExprToSql.toSql(lhs.get(i)) + ":" + ExprToSql.toSql(rhs.get(i)));
             output.add("(" + lhs.get(i).debugString() + ":" + rhs.get(i).debugString() + ")");
         }
         return "smap(" + Joiner.on(" ").join(output) + ")";

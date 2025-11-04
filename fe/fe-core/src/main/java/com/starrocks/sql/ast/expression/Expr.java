@@ -50,10 +50,6 @@ import com.starrocks.planner.TupleId;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.ParseNode;
-import com.starrocks.sql.formatter.AST2SQLVisitor;
-import com.starrocks.sql.formatter.ExprExplainVisitor;
-import com.starrocks.sql.formatter.ExprVerboseVisitor;
-import com.starrocks.sql.formatter.FormatOptions;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.type.Type;
 import org.roaringbitmap.RoaringBitmap;
@@ -70,11 +66,6 @@ import java.util.stream.Collectors;
  * Root of the expr node hierarchy.
  */
 public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneable, Writable {
-
-    // id that's unique across the entire query statement and is assigned by
-    // Analyzer.registerConjuncts(); only assigned for the top-level terms of a
-    // conjunction, and therefore null for most Exprs
-    protected ExprId id;
 
     protected Type type;  // result of analysis
 
@@ -145,7 +136,6 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     protected Expr(Expr other) {
         super();
         pos = other.pos;
-        id = other.id;
         type = other.type;
         originType = other.type;
         isAnalyzed = other.isAnalyzed;
@@ -166,10 +156,6 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
 
     public boolean isAnalyzed() {
         return isAnalyzed;
-    }
-
-    public ExprId getId() {
-        return id;
     }
 
     public Type getType() {
@@ -301,36 +287,6 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         return "(" + Joiner.on(" ").join(strings) + ")";
     }
 
-    /**
-     * toSql is an obsolete interface, because of historical reasons, the implementation of toSql is not rigorous enough.
-     * Newly developed code should use AstToSQLBuilder::toSQL instead
-     */
-    @Deprecated
-    public String toSql() {
-        Preconditions.checkState(!printSqlInParens);
-        ExprExplainVisitor explain = new ExprExplainVisitor();
-        return explain.visit(this);
-    }
-
-    /**
-     * `toSqlWithoutTbl` will return sql without table name for column name, so it can be easier to compare two expr.
-     */
-    public String toSqlWithoutTbl() {
-        return AST2SQLVisitor.withOptions(
-                FormatOptions.allEnable().setColumnSimplifyTableName(false).setColumnWithTableName(false)
-                        .setEnableDigest(false)).visit(this);
-    }
-
-    public String explain() {
-        Preconditions.checkState(!printSqlInParens);
-        ExprVerboseVisitor explain = new ExprVerboseVisitor();
-        return explain.visit(this);
-    }
-
-    public String toMySql() {
-        return toSql();
-    }
-
     public String debugString() {
         return debugString(children);
     }
@@ -409,17 +365,13 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
 
     @Override
     public int hashCode() {
-        // in group by clause, group by list need to remove duplicate exprs, the expr may be not not analyzed, the id
-        // may be null.
+        // in group by clause, group by list need to remove duplicate exprs, the expr may be not analyzed.
         // NOTE that all the types of the related member variables must implement hashCode() and equals().
-        if (id == null) {
-            int result = 31 * Objects.hashCode(type);
-            for (Expr child : children) {
-                result = 31 * result + Objects.hashCode(child);
-            }
-            return result;
+        int result = 31 * Objects.hashCode(type);
+        for (Expr child : children) {
+            result = 31 * result + Objects.hashCode(child);
         }
-        return id.asInt();
+        return result;
     }
 
     /**
@@ -454,9 +406,6 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         for (int i = 0; i < sMap.getLhs().size(); ++i) {
             if (this.equals(sMap.getLhs().get(i))) {
                 Expr result = sMap.getRhs().get(i).clone(null);
-                if (id != null) {
-                    result.id = id;
-                }
                 return result;
             }
         }
@@ -575,7 +524,7 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
             return this;
         }
         if (!Type.canCastTo(this.type, targetType)) {
-            throw new AnalysisException("Cannot cast '" + this.toSql() + "' from " + this.type + " to " + targetType);
+            throw new AnalysisException("Cannot cast '" + ExprToSql.toSql(this) + "' from " + this.type + " to " + targetType);
         }
         return uncheckedCastTo(targetType);
     }
@@ -626,7 +575,7 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
 
     @Override
     public String toString() {
-        return MoreObjects.toStringHelper(this.getClass()).add("id", id).add("type", type).add("sel",
+        return MoreObjects.toStringHelper(this.getClass()).add("type", type).add("sel",
                 selectivity).add("#distinct", numDistinctValues).add("scale", outputScale).toString();
     }
 

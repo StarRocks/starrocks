@@ -39,6 +39,7 @@ import com.google.common.base.Preconditions;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -124,7 +125,7 @@ public class InPredicate extends Predicate {
 
     @Override
     public String toString() {
-        return toSql();
+        return ExprToSql.toSql(this);
     }
 
     @Override

@@ -42,6 +42,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.expression.DateLiteral;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.LargeIntLiteral;
 import com.starrocks.sql.ast.expression.LiteralExpr;
@@ -405,7 +406,7 @@ public class PartitionKey implements Comparable<PartitionKey>, Writable {
         for (LiteralExpr expr : keys) {
             Object value = null;
             if (expr == MaxLiteral.MAX_VALUE) {
-                value = expr.toSql();
+                value = ExprToSql.toSql(expr);
                 sb.append(value);
                 continue;
             } else {
@@ -434,7 +435,7 @@ public class PartitionKey implements Comparable<PartitionKey>, Writable {
         for (LiteralExpr expr : keys) {
             Object value = null;
             if (expr == MaxLiteral.MAX_VALUE) {
-                value = expr.toSql();
+                value = ExprToSql.toSql(expr);
             } else {
                 value = expr.getStringValue();
             }

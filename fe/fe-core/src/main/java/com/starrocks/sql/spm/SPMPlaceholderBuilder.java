@@ -23,6 +23,7 @@ import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.CompoundPredicate;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.InPredicate;
 import com.starrocks.sql.ast.expression.IntLiteral;
@@ -51,9 +52,9 @@ public class SPMPlaceholderBuilder {
         @Override
         public String toString() {
             return "PlaceholderExpr{" +
-                    "originalExpr=" + originalExpr.toMySql() +
-                    ", placeholderExpr=" + placeholderExpr.toMySql() +
-                    ", parentExpr=" + (parentExpr == null ? "null" : parentExpr.toMySql()) +
+                    "originalExpr=" + ExprToSql.toMySql(originalExpr) +
+                    ", placeholderExpr=" + ExprToSql.toMySql(placeholderExpr) +
+                    ", parentExpr=" + (parentExpr == null ? "null" : ExprToSql.toMySql(parentExpr)) +
                     '}';
         }
     }
@@ -111,7 +112,7 @@ public class SPMPlaceholderBuilder {
                 Preconditions.checkState(node.getChild(0).isLiteral());
                 long spmId = ((IntLiteral) node.getChild(0)).getValue();
                 if (userSPMIds.contains(spmId)) {
-                    throw new SemanticException("sql plan found conflict placeholder expression: " + node.toMySql());
+                    throw new SemanticException("sql plan found conflict placeholder expression: " + ExprToSql.toMySql(node));
                 }
                 userSPMIds.add(spmId);
                 return node;
@@ -134,7 +135,7 @@ public class SPMPlaceholderBuilder {
             if (placeholder.isPresent()) {
                 if (isStrictCheck) {
                     throw new SemanticException("sql plan found conflict placeholder expression: "
-                            + (root == null ? node.toMySql() : root.toMySql()));
+                            + (root == null ? ExprToSql.toMySql(node) : ExprToSql.toMySql(root)));
                 } else {
                     return placeholder.get();
                 }
@@ -157,7 +158,7 @@ public class SPMPlaceholderBuilder {
             if (placeholder.isPresent()) {
                 if (isStrictCheck) {
                     throw new SemanticException("sql plan found conflict placeholder expression: "
-                            + (root == null ? node.toMySql() : root.toMySql()));
+                            + (root == null ? ExprToSql.toMySql(node) : ExprToSql.toMySql(root)));
                 } else {
                     return placeholder.get();
                 }
@@ -242,7 +243,7 @@ public class SPMPlaceholderBuilder {
             }
             for (Expr pe : usePlaceholders) {
                 if (placeholderExprs.stream().noneMatch(e -> e.placeholderExpr.equals(pe))) {
-                    throw new SemanticException("can't found expression[" + pe.toMySql() + "] used in bind stmt");
+                    throw new SemanticException("can't found expression[" + ExprToSql.toMySql(pe) + "] used in bind stmt");
                 }
             }
         }
@@ -260,7 +261,7 @@ public class SPMPlaceholderBuilder {
             Optional<Expr> spm = findPlaceholderExpr(node, root);
             if (spm.isEmpty()) {
                 throw new SemanticException("can't find expression placeholder or placeholder conflict, "
-                        + "expression : " + node.toMySql());
+                        + "expression : " + ExprToSql.toMySql(node));
             }
             usePlaceholders.add(spm.get());
             return spm.get();
@@ -277,7 +278,7 @@ public class SPMPlaceholderBuilder {
 
             if (spm.isEmpty()) {
                 throw new SemanticException("can't find expression placeholder or placeholder conflict, "
-                        + "expression : " + node.toMySql());
+                        + "expression : " + ExprToSql.toMySql(node));
             }
             usePlaceholders.add(spm.get());
             return spm.get();

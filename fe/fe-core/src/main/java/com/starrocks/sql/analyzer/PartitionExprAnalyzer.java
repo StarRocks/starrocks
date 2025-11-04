@@ -19,6 +19,7 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.expression.CastExpr;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
@@ -137,7 +138,7 @@ public class PartitionExprAnalyzer {
             }
             if (builtinFunction == null) {
                 String msg = String.format("Unsupported partition type %s for function %s", targetColType,
-                        functionCallExpr.toSql());
+                        ExprToSql.toSql(functionCallExpr));
                 throw new SemanticException(msg, expr.getPos());
             }
 
@@ -149,7 +150,7 @@ public class PartitionExprAnalyzer {
             try {
                 castExpr.analyze();
             } catch (AnalysisException e) {
-                throw new SemanticException("Failed to analyze cast expr:" + castExpr.toSql(), expr.getPos());
+                throw new SemanticException("Failed to analyze cast expr:" + ExprToSql.toSql(castExpr), expr.getPos());
             }
             ArrayList<Expr> children = castExpr.getChildren();
             for (Expr child : children) {

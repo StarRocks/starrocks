@@ -59,6 +59,7 @@ import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.sql.ast.expression.DictionaryGetExpr;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
@@ -447,7 +448,8 @@ public class CreateTableAnalyzer {
                 for (OrderByElement orderByElement : orderByElements) {
                     String column = orderByElement.castAsSlotRef();
                     if (column == null) {
-                        throw new SemanticException("Unknown column '%s' in order by clause", orderByElement.getExpr().toSql());
+                        throw new SemanticException("Unknown column '%s' in order by clause",
+                                ExprToSql.toSql(orderByElement.getExpr()));
                     }
                     int idx = columnNames.indexOf(column);
                     if (idx == -1) {
@@ -467,7 +469,8 @@ public class CreateTableAnalyzer {
                 for (OrderByElement orderByElement : orderByElements) {
                     String column = orderByElement.castAsSlotRef();
                     if (column == null) {
-                        throw new SemanticException("Unknown column '%s' in order by clause", orderByElement.getExpr().toSql());
+                        throw new SemanticException("Unknown column '%s' in order by clause",
+                                ExprToSql.toSql(orderByElement.getExpr()));
                     }
                     int idx = columnNames.indexOf(column);
                     if (idx == -1) {

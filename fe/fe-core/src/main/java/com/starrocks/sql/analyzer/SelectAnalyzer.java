@@ -33,6 +33,7 @@ import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.expression.AnalyticExpr;
 import com.starrocks.sql.ast.expression.CastExpr;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FieldReference;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
@@ -421,7 +422,7 @@ public class SelectAnalyzer {
             expression.collect(AnalyticExpr.class, window);
             if (window.stream()
                     .anyMatch((e -> TreeNode.contains(e.getChildren(), AnalyticExpr.class)))) {
-                throw new SemanticException("Nesting of analytic expressions is not allowed: " + expression.toSql());
+                throw new SemanticException("Nesting of analytic expressions is not allowed: " + ExprToSql.toSql(expression));
             }
             outputWindowFunctions.addAll(window);
         }
@@ -433,7 +434,7 @@ public class SelectAnalyzer {
             expression.collect(AnalyticExpr.class, window);
             if (window.stream()
                     .anyMatch((e -> TreeNode.contains(e.getChildren(), AnalyticExpr.class)))) {
-                throw new SemanticException("Nesting of analytic expressions is not allowed: " + expression.toSql());
+                throw new SemanticException("Nesting of analytic expressions is not allowed: " + ExprToSql.toSql(expression));
             }
             orderByWindowFunctions.addAll(window);
         }
@@ -457,7 +458,7 @@ public class SelectAnalyzer {
         } else if (!session.getSessionVariable().isEnableStrictType() && Type.canCastTo(predicate.getType(), Type.BOOLEAN)) {
             predicate = new CastExpr(Type.BOOLEAN, predicate);
         } else {
-            throw new SemanticException("WHERE clause %s can not be converted to boolean type", predicate.toSql());
+            throw new SemanticException("WHERE clause %s can not be converted to boolean type", ExprToSql.toSql(predicate));
         }
 
         analyzeState.setPredicate(predicate);
@@ -489,7 +490,7 @@ public class SelectAnalyzer {
             if (agg.isDistinct() && agg.getChildren().size() > 0) {
                 Type[] args = agg.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
                 if (Arrays.stream(args).anyMatch(t -> (t.isJsonType() || t.isComplexType()) && !t.canGroupBy())) {
-                    throw new SemanticException(agg.toSql() + " can't rewrite distinct to group by on (" +
+                    throw new SemanticException(ExprToSql.toSql(agg) + " can't rewrite distinct to group by on (" +
                             Arrays.stream(args).map(Type::toSql).collect(Collectors.joining(",")) + ")");
                 }
             }
@@ -632,7 +633,7 @@ public class SelectAnalyzer {
                 ((UserVariableExpr) limitExpr).getValue() instanceof IntLiteral) {
             limit = ((IntLiteral) ((UserVariableExpr) limitExpr).getValue()).getLongValue();
         } else {
-            throw new SemanticException("LIMIT clause %s must be number", limitExpr.toMySql());
+            throw new SemanticException("LIMIT clause %s must be number", ExprToSql.toMySql(limitExpr));
         }
         if (limit == -1) {
             return null;
@@ -644,7 +645,7 @@ public class SelectAnalyzer {
                 ((UserVariableExpr) offsetExpr).getValue() instanceof IntLiteral) {
             offset = ((IntLiteral) ((UserVariableExpr) offsetExpr).getValue()).getLongValue();
         } else {
-            throw new SemanticException("OFFSET clause %s must be number", offsetExpr.toMySql());
+            throw new SemanticException("OFFSET clause %s must be number", ExprToSql.toMySql(offsetExpr));
         }
         return new LimitElement(offset, limit, limitElement.getPos());
     }

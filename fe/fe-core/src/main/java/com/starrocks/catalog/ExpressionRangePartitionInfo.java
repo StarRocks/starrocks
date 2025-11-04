@@ -30,6 +30,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.expression.CastExpr;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.TableName;
@@ -97,7 +98,7 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo implements 
             Expr expr = columnIdExpr.getExpr();
             SlotRef slotRef = getPartitionExprSlotRef(expr);
             if (slotRef == null) {
-                LOG.warn("Unknown expr type: {}", expr.toSql());
+                LOG.warn("Unknown expr type: {}", ExprToSql.toSql(expr));
                 continue;
             }
             // FIXME: use the slot ref's column name to find the partition column which maybe not the same as the slot ref's
@@ -158,7 +159,7 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo implements 
         try {
             PartitionExprAnalyzer.analyzePartitionExpr(partitionExpr, slotRef);
         } catch (SemanticException ex) {
-            LOG.warn("Failed to analyze partition expr: {}", partitionExpr.toSql(), ex);
+            LOG.warn("Failed to analyze partition expr: {}", ExprToSql.toSql(partitionExpr), ex);
         }
     }
 
@@ -243,7 +244,7 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo implements 
                             break;
                         }
                     }
-                    sb.append(cloneExpr.toSql()).append(",");
+                    sb.append(ExprToSql.toSql(cloneExpr)).append(",");
                 }
             }
             sb.deleteCharAt(sb.length() - 1);
@@ -252,7 +253,7 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo implements 
         }
         sb.append(Joiner.on(", ").join(partitionExprs
                 .stream()
-                .map(columnIdExpr -> columnIdExpr.convertToColumnNameExpr(table.getIdToColumn()).toSql())
+                .map(columnIdExpr -> ExprToSql.toSql(columnIdExpr.convertToColumnNameExpr(table.getIdToColumn())))
                 .collect(toList())));
         return sb.toString();
     }
