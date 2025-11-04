@@ -356,6 +356,11 @@ public class MVPartitionExprResolver {
             if (tableName != null && !node.getResolveTableName().equals(tableName)) {
                 return null;
             }
+            // ensure column name matches
+            List<Field> fields = node.getRelationFields().resolveFields(slot);
+            if (fields.isEmpty()) {
+                return null;
+            }
             slot = (SlotRef) slot.clone();
             slot.setTblName(node.getName());
             // add into equivalent exprs
@@ -522,7 +527,6 @@ public class MVPartitionExprResolver {
             return result.isEmpty() ? null : result;
         }
 
-<<<<<<< HEAD
         @Override
         public Exprs visitCTE(CTERelation node, MVExprContext context) {
             SlotRef slot = context.getSlotRef();
@@ -530,96 +534,6 @@ public class MVPartitionExprResolver {
                 String tableName = slot.getTblNameWithoutAnalyzed().getTbl();
                 String cteName = node.getAlias() != null ? node.getAlias().getTbl() : node.getName();
                 if (cteName != null && !cteName.equalsIgnoreCase(tableName)) {
-=======
-                /**
-                 * Clear the table name in slot ref to avoid being affected by sub-query alias.
-                 * NOTE: Scope's output column names should be already unique, slot's table name is not necessary.
-                 * TODO: refactor this after we have a better way to handle table alias in sub-query.
-                 */
-                private void clearSlotTableName(SlotRef slot) {
-                    if (slot != null && slot.getTblNameWithoutAnalyzed() != null) {
-                        slot.setTblName(null);
-                    }
-                }
-
-                @Override
-                public Exprs visitSubqueryRelation(SubqueryRelation node, MVExprContext context) {
-                    SlotRef slot = context.getSlotRef();
-                    if (slot.getTblNameWithoutAnalyzed() != null) {
-                        String tableName = slot.getTblNameWithoutAnalyzed().getTbl();
-                        if (node.getAlias() != null && !node.getAlias().getTbl().equalsIgnoreCase(tableName)) {
-                            return null;
-                        }
-                        clearSlotTableName(slot);
-                    }
-                    Relation subRelation = node.getQueryStatement().getQueryRelation();
-                    return visitRelation(context.withSlotRef(slot).withRelation(subRelation));
-                }
-
-                @Override
-                public Exprs visitTable(TableRelation node, MVExprContext context) {
-                    SlotRef slot = context.getSlotRef();
-                    TableName tableName = slot.getTblNameWithoutAnalyzed();
-                    if (node.getName().equals(tableName)) {
-                        return Exprs.of(slot);
-                    }
-                    if (tableName != null && !node.getResolveTableName().equals(tableName)) {
-                        return null;
-                    }
-                    // ensure column name matches
-                    List<Field> fields = node.getRelationFields().resolveFields(slot);
-                    if (fields.isEmpty()) {
-                        return null;
-                    }
-                    slot = (SlotRef) slot.clone();
-                    slot.setTblName(node.getName());
-                    // add into equivalent exprs
-                    context.equivalentExprs.add(slot);
-                    return Exprs.of(slot);
-                }
-
-                @Override
-                public Exprs visitView(ViewRelation node, MVExprContext context) {
-                    SlotRef slot = context.getSlotRef();
-                    TableName tableName = slot.getTblNameWithoutAnalyzed();
-                    if (tableName != null && !node.getResolveTableName().equals(tableName)) {
-                        return null;
-                    }
-                    List<Field> fields = node.getRelationFields().resolveFields(slot);
-                    if (fields.isEmpty()) {
-                        return null;
-                    }
-                    Relation newRelation = node.getQueryStatement().getQueryRelation();
-                    Expr newExpr = fields.get(0).getOriginExpression();
-                    return visitExpr(context.withRelation(newRelation).withExpr(newExpr));
-                }
-
-                @Override
-                public Exprs visitJoin(JoinRelation node, MVExprContext context) {
-                    Relation leftRelation = node.getLeft();
-                    Relation rightRelation = node.getRight();
-                    Expr joinOnPredicate = node.getOnPredicate();
-
-                    Exprs result = handleJoinChild(context, joinOnPredicate, leftRelation, rightRelation);
-                    if (result != null) {
-                        return result;
-                    }
-                    return handleJoinChild(context, joinOnPredicate, rightRelation, leftRelation);
-                }
-
-                private Exprs handleJoinChild(MVExprContext context, Expr joinOnPredicate,
-                                              Relation in, Relation out) {
-                    MVExprContext inContext = context.withRelation(in);
-                    Exprs inExprs = visitRelation(inContext);
-                    // not eager to return since mv support multi ref base tables
-                    if (inExprs != null) {
-                        Exprs result = new Exprs();
-                        result.add(inExprs);
-                        // merge it from an opposite
-                        mergeEquivalentExprs(inContext, in, out, joinOnPredicate, result);
-                        return result;
-                    }
->>>>>>> 0b7112b43a ([BugFix] Fix MVPartitionExprResolver column name not matched bug (#64914))
                     return null;
                 }
                 clearSlotTableName(slot);
