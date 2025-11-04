@@ -2,6 +2,7 @@
 
 set enable_rewrite_bitmap_union_to_bitamp_agg = false;
 set new_planner_optimize_timeout=10000;
+set enable_evaluate_schema_scan_rule=false;
 create database test_show_materialized_view;
 use test_show_materialized_view;
 create table user_tags (time date, user_id int, user_name varchar(20), tag_id int) partition by range (time)  (partition p1 values less than MAXVALUE) distributed by hash(time) buckets 3 properties('replication_num' = '1');
@@ -19,6 +20,7 @@ show create table user_tags_mv1;
 
 -- information_schema.materialized_views
 refresh materialized view user_tags_mv1 with sync mode;
+function: wait_show_materialized_view_finish('user_tags_mv1')
 select 
     TABLE_NAME,
     LAST_REFRESH_STATE,
@@ -28,13 +30,12 @@ select
 from information_schema.materialized_views where table_name = 'user_tags_mv1' and TABLE_SCHEMA = 'test_show_materialized_view';
 set @last_refresh_time = (
     select max(last_refresh_start_time)
-    from information_schema.materialized_views where table_name = 'user_tags_mv1' and TABLE_SCHEMA = 'test_show_materialized_view';
+    from information_schema.materialized_views where table_name = 'user_tags_mv1' and TABLE_SCHEMA = 'test_show_materialized_view'
 );
-
-select sleep(3);
 
 -- multiple refresh tasks
 refresh materialized view user_tags_mv1 force with sync mode;
+function: wait_show_materialized_view_finish('user_tags_mv1')
 select 
     TABLE_NAME,
     LAST_REFRESH_STATE,

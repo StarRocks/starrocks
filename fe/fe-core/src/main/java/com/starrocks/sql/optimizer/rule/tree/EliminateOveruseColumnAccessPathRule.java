@@ -112,14 +112,6 @@ public class EliminateOveruseColumnAccessPathRule implements TreeRewriteRule {
                     .stream()
                     .collect(Collectors.toMap(e -> e.getValue().getName(), Map.Entry::getKey));
 
-            for (ColumnAccessPath accessPath : subfieldPruningProjectings) {
-                if (!columnNameToIdMap.containsKey(accessPath.getPath())) {
-                    LOG.warn("ColumnAccessPath {} not found in scan's column map {}, skip eliminating overuse",
-                            accessPath.getPath(), scan.getColRefToColumnMetaMap());
-                    return Optional.empty();
-                }
-            }
-
             Predicate<ColumnAccessPath> isOveruseProjecting = accessPath ->
                     columnNameToIdMap.containsKey(accessPath.getPath()) &&
                     parentUsedColumnRefs.contains(Objects.requireNonNull(columnNameToIdMap.get(accessPath.getPath())));
