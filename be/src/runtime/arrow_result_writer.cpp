@@ -41,8 +41,12 @@ namespace starrocks {
 // - parent_profile: the parent runtime profile for performance tracking
 // - row_desc: the row descriptor (schema) of the output
 ArrowResultWriter::ArrowResultWriter(BufferControlBlock* sinker, std::vector<ExprContext*>& output_expr_ctxs,
+                                     const std::vector<std::string>& output_column_names,
                                      RuntimeProfile* parent_profile, const RowDescriptor& row_desc)
-        : BufferControlResultWriter(sinker, parent_profile), _output_expr_ctxs(output_expr_ctxs), _row_desc(row_desc) {}
+        : BufferControlResultWriter(sinker, parent_profile),
+          _output_expr_ctxs(output_expr_ctxs),
+          _output_column_names(output_column_names),
+          _row_desc(row_desc) {}
 
 // ┌────────────────────────────────────────────────────────────┐
 // │ init(): Initialize ArrowResultWriter                       │
@@ -58,8 +62,9 @@ Status ArrowResultWriter::init(RuntimeState* state) {
         return Status::InternalError("sinker is NULL pointer.");
     }
 
-    _prepare_id_to_col_name_map();
-    RETURN_IF_ERROR(convert_to_arrow_schema(_row_desc, _id_to_col_name, &_arrow_schema, _output_expr_ctxs));
+    std::unordered_map<int64_t, std::string> temp_id_to_col_name;
+    RETURN_IF_ERROR(convert_to_arrow_schema(_row_desc, temp_id_to_col_name, &_arrow_schema, _output_expr_ctxs,
+                                            &_output_column_names));
 
     state->exec_env()->result_mgr()->set_arrow_schema(state->fragment_instance_id(), _arrow_schema);
 
@@ -91,25 +96,8 @@ StatusOr<TFetchDataResultPtrs> ArrowResultWriter::process_chunk(Chunk* chunk) {
     RETURN_IF_ERROR(convert_chunk_to_arrow_batch(chunk, _output_expr_ctxs, _arrow_schema, arrow::default_memory_pool(),
                                                  &result));
     RETURN_IF_ERROR(_sinker->add_arrow_batch(result));
-    return TFetchDataResultPtrs{};
-}
 
-// ┌────────────────────────────────────────────────────────────┐
-// │ _prepare_id_to_col_name_map(): Build ID → name map         │
-// └────────────────────────────────────────────────────────────┘
-// For each (tuple_id, slot_id):
-//   → column_id = (tuple_id << 32) | slot_id
-//   → map to slot->col_name()
-void ArrowResultWriter::_prepare_id_to_col_name_map() {
-    for (auto* tuple_desc : _row_desc.tuple_descriptors()) {
-        auto& slots = tuple_desc->slots();
-        int64_t tuple_id = tuple_desc->id();
-        for (auto slot : slots) {
-            int64_t slot_id = slot->id();
-            int64_t id = tuple_id << 32 | slot_id;
-            _id_to_col_name.emplace(id, slot->col_name());
-        }
-    }
+    return TFetchDataResultPtrs{};
 }
 
 } // namespace starrocks

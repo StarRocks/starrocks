@@ -395,7 +395,7 @@ public class PlanFragmentBuilder {
 
         List<PlanFragment> fragments = execPlan.getFragments();
         for (PlanFragment fragment : fragments) {
-            fragment.createDataSink(resultSinkType);
+            fragment.createDataSink(resultSinkType, execPlan);
             fragment.setCollectExecStatsIds(execPlan.getCollectExecStatsIds());
         }
         Collections.reverse(fragments);
