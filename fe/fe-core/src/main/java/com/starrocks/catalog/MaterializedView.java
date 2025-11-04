@@ -1072,7 +1072,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      * @param postLoadImage: whether this reload is called after FE's image loading process.
      */
     public void onReload(boolean postLoadImage) {
-        onReload(postLoadImage, isActive());
+        onReload(postLoadImage, isActive(), false);
     }
 
     /**

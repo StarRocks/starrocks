@@ -98,14 +98,12 @@ import org.junit.rules.TestName;
 
 import java.time.LocalDateTime;
 import java.util.Arrays;
-<<<<<<< HEAD
 import java.util.Collection;
-=======
 import java.util.HashMap;
->>>>>>> 0b7112b43a ([BugFix] Fix MVPartitionExprResolver column name not matched bug (#64914))
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -4195,8 +4193,6 @@ public class CreateMaterializedViewTest extends MVTestBase {
 
     @Test
     public void createDeltaLakeMV() throws Exception {
-<<<<<<< HEAD
-=======
         new MockUp<DeltaLakeTable>() {
             @Mock
             public String getTableIdentifier() {
@@ -4211,7 +4207,6 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 return Optional.of(mockTable);
             }
         };
->>>>>>> 0b7112b43a ([BugFix] Fix MVPartitionExprResolver column name not matched bug (#64914))
         starRocksAssert.withMaterializedView("create materialized view mv_deltalake " +
                 " refresh manual" +
                 " as select * from deltalake_catalog.deltalake_db.tbl");
