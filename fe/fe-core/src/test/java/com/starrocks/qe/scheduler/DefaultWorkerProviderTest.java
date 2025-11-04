@@ -48,7 +48,7 @@ import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-public class DefaultWorkerProviderTest {
+public class    DefaultWorkerProviderTest {
     private final ImmutableMap<Long, ComputeNode> id2Backend = genWorkers(0, 10, Backend::new, false);
     private final ImmutableMap<Long, ComputeNode> id2ComputeNode = genWorkers(10, 15, ComputeNode::new, false);
     private final ImmutableMap<Long, ComputeNode> availableId2Backend = ImmutableMap.of(
