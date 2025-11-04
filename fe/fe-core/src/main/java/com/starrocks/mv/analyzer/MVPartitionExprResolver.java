@@ -19,9 +19,11 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.BaseTableInfo;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.SRStringUtils;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
@@ -369,6 +371,11 @@ public class MVPartitionExprResolver {
                     if (tableName != null && !node.getResolveTableName().equals(tableName)) {
                         return null;
                     }
+                    // ensure column name matches
+                    List<Field> fields = node.getRelationFields().resolveFields(slot);
+                    if (fields.isEmpty()) {
+                        return null;
+                    }
                     slot = (SlotRef) slot.clone();
                     slot.setTblName(node.getName());
                     // add into equivalent exprs
@@ -585,10 +592,17 @@ public class MVPartitionExprResolver {
         }
         if (baseTableInfos != null) {
             Set<List<MVPartitionExpr>> mvPartitionExprs = Sets.newHashSet();
+            ConnectContext connectContext = ConnectContext.get() == null ? new ConnectContext() : ConnectContext.get();
             for (BaseTableInfo baseTableInfo : baseTableInfos) {
                 Table table = MvUtils.getTableChecked(baseTableInfo);
                 List<MVPartitionExpr> refPartitionExprs = MvUtils.getMvPartitionExpr(mvPartitionExprMaps, table);
                 if (refPartitionExprs != null && !refPartitionExprs.isEmpty()) {
+                    //  ensure the partition expr is valid
+                    TableName tableName = new TableName(baseTableInfo.getCatalogName(),
+                            baseTableInfo.getDbName(), baseTableInfo.getTableName());
+                    for (MVPartitionExpr refPartitionExpr : refPartitionExprs) {
+                        MaterializedView.analyzePartitionExpr(connectContext, table, tableName, refPartitionExpr.getExpr());
+                    }
                     mvPartitionExprs.add(refPartitionExprs);
                 }
             }
