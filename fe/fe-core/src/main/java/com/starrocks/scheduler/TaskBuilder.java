@@ -21,7 +21,6 @@ import com.starrocks.analysis.IntLiteral;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
@@ -118,28 +117,6 @@ public class TaskBuilder {
         }
     }
 
-    public static String getAnalyzeMVStmt(String tableName) {
-        final ConnectContext ctx = ConnectContext.get();
-        return getAnalyzeMVStmt(ctx, tableName);
-    }
-
-    public static String getAnalyzeMVStmt(ConnectContext ctx, String tableName) {
-        if (FeConstants.runningUnitTest || ctx == null) {
-            return "";
-        }
-        final String analyze = ctx.getSessionVariable().getAnalyzeForMV();
-        final String async = Config.mv_auto_analyze_async ? " WITH ASYNC MODE" : "";
-        String stmt;
-        if ("sample".equalsIgnoreCase(analyze)) {
-            stmt = "ANALYZE SAMPLE TABLE " + tableName + async;
-        } else if ("full".equalsIgnoreCase(analyze)) {
-            stmt = "ANALYZE TABLE " + tableName + async;
-        } else {
-            stmt = "";
-        }
-        return stmt;
-    }
-
     public static OptimizeTask buildOptimizeTask(String name, Map<String, String> properties, String sql, String dbName,
                                                  long warehouseId) {
         OptimizeTask task = new OptimizeTask(name);
@@ -172,7 +149,6 @@ public class TaskBuilder {
         task.setProperties(taskProperties);
 
         task.setDefinition(materializedView.getTaskDefinition());
-        task.setPostRun(getAnalyzeMVStmt(materializedView.getName()));
         task.setExpireTime(0L);
         if (ConnectContext.get() != null) {
             task.setCreateUser(ConnectContext.get().getCurrentUserIdentity().getUser());
@@ -191,7 +167,6 @@ public class TaskBuilder {
         previousTaskProperties.put(MV_ID, mvId);
         task.setProperties(previousTaskProperties);
         task.setDefinition(materializedView.getTaskDefinition());
-        task.setPostRun(getAnalyzeMVStmt(materializedView.getName()));
         task.setExpireTime(0L);
         if (previousTask != null) {
             task.setCreateUser(previousTask.getCreateUser());

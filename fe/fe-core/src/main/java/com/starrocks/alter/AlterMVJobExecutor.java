@@ -554,7 +554,6 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 TaskBuilder.getMvTaskName(materializedView.getId()));
         if (currentTask != null) {
             currentTask.setDefinition(materializedView.getTaskDefinition());
-            currentTask.setPostRun(TaskBuilder.getAnalyzeMVStmt(materializedView.getName()));
         }
     }
 
