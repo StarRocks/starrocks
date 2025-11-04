@@ -2688,11 +2688,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                                         taskRun.getProcessor();
                                 final MvTaskRunContext mvTaskRunContext = processor.getMvContext();
                                 final String postRun = mvTaskRunContext.getPostRun();
-<<<<<<< HEAD
-                                Assert.assertFalse(postRun.contains("ANALYZE TABLE "));
-=======
                                 Assertions.assertTrue(Strings.isNullOrEmpty(postRun));
->>>>>>> 5884e77516 ([BugFix] Remove depredated analyze_mv session variable (#64863))
                             });
                 }
         );

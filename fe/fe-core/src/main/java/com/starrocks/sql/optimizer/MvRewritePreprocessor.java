@@ -202,48 +202,6 @@ public class MvRewritePreprocessor {
         SessionVariable sessionVariable = connectContext.getSessionVariable();
         logMVPrepare(connectContext, "Query input tables: {}", queryTables);
 
-<<<<<<< HEAD
-        // enable or not
-=======
-        // Get all MV related session variables
-        List<Pair<String, Object>> mvSessionVariables = Lists.newArrayList(
-                Pair.create("enable_materialized_view_rewrite", sessionVariable.isEnableMaterializedViewRewrite()),
-                Pair.create("enable_view_based_mv_rewrite", sessionVariable.isEnableViewBasedMvRewrite()),
-                Pair.create("enable_materialized_view_union_rewrite", sessionVariable.isEnableMaterializedViewUnionRewrite()),
-                Pair.create("enable_materialized_view_view_delta_rewrite",
-                        sessionVariable.isEnableMaterializedViewViewDeltaRewrite()),
-                Pair.create("enable_materialized_view_plan_cache", sessionVariable.isEnableMaterializedViewPlanCache()),
-                Pair.create("enable_sync_materialized_view_rewrite", sessionVariable.isEnableSyncMaterializedViewRewrite()),
-                Pair.create("enable_materialized_view_text_match_rewrite",
-                        sessionVariable.isEnableMaterializedViewTextMatchRewrite()),
-                Pair.create("enable_materialized_view_multi_stages_rewrite",
-                        sessionVariable.isEnableMaterializedViewMultiStagesRewrite()),
-                Pair.create("optimizer_materialized_view_timelimit",
-                        sessionVariable.getOptimizerMaterializedViewTimeLimitMillis()),
-                Pair.create("materialized_view_join_same_table_permutation_limit",
-                        sessionVariable.getMaterializedViewJoinSameTablePermutationLimit()),
-                Pair.create("query_excluding_mv_names", sessionVariable.getQueryExcludingMVNames()),
-                Pair.create("query_including_mv_names", sessionVariable.getQueryIncludingMVNames()),
-                Pair.create("cbo_materialized_view_rewrite_rule_output_limit",
-                        sessionVariable.getCboMaterializedViewRewriteRuleOutputLimit()),
-                Pair.create("cbo_materialized_view_rewrite_candidate_limit",
-                        sessionVariable.getCboMaterializedViewRewriteCandidateLimit()),
-                Pair.create("cbo_materialized_view_rewrite_related_mvs_limit",
-                        sessionVariable.getCboMaterializedViewRewriteRelatedMVsLimit()),
-                Pair.create("materialized_view_rewrite_mode", sessionVariable.getMaterializedViewRewriteMode())
-        );
-
-        // Get all MV related config variables
-        List<Pair<String, Object>> mvConfigVariables = Lists.newArrayList(
-                Pair.create("enable_experimental_mv", Config.enable_experimental_mv),
-                Pair.create("mv_auto_analyze_async", Config.mv_auto_analyze_async),
-                Pair.create("enable_mv_automatic_active_check", Config.enable_mv_automatic_active_check),
-                Pair.create("skip_whole_phase_lock_mv_limit", Config.skip_whole_phase_lock_mv_limit),
-                Pair.create("enable_materialized_view_concurrent_prepare", Config.enable_materialized_view_concurrent_prepare)
-        );
-
-        // Log session variables
->>>>>>> 5884e77516 ([BugFix] Remove depredated analyze_mv session variable (#64863))
         logMVPrepare(connectContext, "---------------------------------");
         logMVPrepare(connectContext, "Materialized View Enable/Disable Params: ");
         logMVPrepare(connectContext, "  enable_experimental_mv: {}", Config.enable_experimental_mv);
@@ -285,7 +243,6 @@ public class MvRewritePreprocessor {
         // config
         logMVPrepare(connectContext, "---------------------------------");
         logMVPrepare(connectContext, "Materialized View Config Params: ");
-        logMVPrepare(connectContext, "  analyze_mv: {}", sessionVariable.getAnalyzeForMV());
         logMVPrepare(connectContext, "  query_excluding_mv_names: {}", sessionVariable.getQueryExcludingMVNames());
         logMVPrepare(connectContext, "  query_including_mv_names: {}", sessionVariable.getQueryIncludingMVNames());
         logMVPrepare(connectContext, "  cbo_materialized_view_rewrite_rule_output_limit: {}",
