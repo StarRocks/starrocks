@@ -2191,7 +2191,7 @@ public class MvRewriteTest extends MVTestBase {
             starRocksAssert.withMaterializedView("create materialized view " + mvName + "\n" +
                     "refresh async " +
                     "properties('query_rewrite_consistency'='nocheck') " +
-                    "as select " + dimension + ", sum(c0) from t_many_dimensions group by " + dimension);
+                    "as select " + dimension + ", sum(c0) from t_many_dimensions group by " + dimension, true, true);
         }
 
         for (int i = 1; i < numDimensions; i++) {
