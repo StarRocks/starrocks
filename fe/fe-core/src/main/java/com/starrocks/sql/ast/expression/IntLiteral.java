@@ -44,9 +44,6 @@ import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.validate.ValidateException;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.thrift.TExprNode;
-import com.starrocks.thrift.TExprNodeType;
-import com.starrocks.thrift.TIntLiteral;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -333,11 +330,6 @@ public class IntLiteral extends LiteralExpr {
         return (double) value;
     }
 
-    @Override
-    protected void toThrift(TExprNode msg) {
-        msg.node_type = TExprNodeType.INT_LITERAL;
-        msg.int_literal = new TIntLiteral(value);
-    }
 
     @Override
     public Expr uncheckedCastTo(Type targetType) throws AnalysisException {

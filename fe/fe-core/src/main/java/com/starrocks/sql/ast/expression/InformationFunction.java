@@ -37,9 +37,6 @@ package com.starrocks.sql.ast.expression;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.thrift.TExprNode;
-import com.starrocks.thrift.TExprNodeType;
-import com.starrocks.thrift.TInfoFunc;
 
 public class InformationFunction extends Expr {
     private final String funcType;
@@ -100,11 +97,6 @@ public class InformationFunction extends Expr {
         return strValue;
     }
 
-    @Override
-    protected void toThrift(TExprNode msg) {
-        msg.node_type = TExprNodeType.INFO_FUNC;
-        msg.info_func = new TInfoFunc(intValue, strValue);
-    }
 
     /**
      * Below function is added by new analyzer

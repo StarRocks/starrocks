@@ -39,8 +39,6 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.thrift.TExprNode;
-import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.thrift.TExprOpcode;
 
 import java.util.Objects;
@@ -84,11 +82,6 @@ public class CompoundPredicate extends Predicate {
         return super.equalsWithoutChild(obj) && ((CompoundPredicate) obj).op == op;
     }
 
-    @Override
-    protected void toThrift(TExprNode msg) {
-        msg.node_type = TExprNodeType.COMPOUND_PRED;
-        msg.setOpcode(op.toThrift());
-    }
 
     public enum Operator {
         AND("AND", TExprOpcode.COMPOUND_AND),

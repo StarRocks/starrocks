@@ -60,8 +60,6 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.ParseNode;
-import com.starrocks.sql.common.ErrorType;
-import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.formatter.AST2SQLVisitor;
 import com.starrocks.sql.formatter.ExprExplainVisitor;
@@ -340,6 +338,10 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
 
     public int getOutputColumn() {
         return outputColumn;
+    }
+
+    public TExprOpcode getVectorOpcode() {
+        return vectorOpcode;
     }
 
     public boolean isFilter() {
@@ -662,8 +664,8 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
 
     // Convert this expr into msg (excluding children), which requires setting
     // msg.op as well as the expr-specific field.
-    protected void toThrift(TExprNode msg) {
-        throw new StarRocksPlannerException("Not implement toThrift function", ErrorType.INTERNAL_ERROR);
+    protected final void toThrift(TExprNode msg) {
+        ExprToThriftVisitor.INSTANCE.visit(this, msg);
     }
 
     public List<String> childrenToSql() {

@@ -23,8 +23,6 @@ import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.thrift.TExprNode;
-import com.starrocks.thrift.TExprNodeType;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -88,10 +86,6 @@ public class MapExpr extends Expr {
         return e;
     }
 
-    @Override
-    protected void toThrift(TExprNode msg) {
-        msg.setNode_type(TExprNodeType.MAP_EXPR);
-    }
 
     @Override
     public Expr clone() {

@@ -40,9 +40,6 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.thrift.TCaseExpr;
-import com.starrocks.thrift.TExprNode;
-import com.starrocks.thrift.TExprNodeType;
 
 import java.util.List;
 
@@ -137,12 +134,6 @@ public class CaseExpr extends Expr {
         return hasElseExpr;
     }
 
-    @Override
-    protected void toThrift(TExprNode msg) {
-        msg.node_type = TExprNodeType.CASE_EXPR;
-        msg.case_expr = new TCaseExpr(hasCaseExpr, hasElseExpr);
-        msg.setChild_type(getChild(0).getType().getPrimitiveType().toThrift());
-    }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) throws SemanticException {

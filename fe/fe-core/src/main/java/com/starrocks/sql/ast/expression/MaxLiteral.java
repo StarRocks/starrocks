@@ -19,7 +19,6 @@ package com.starrocks.sql.ast.expression;
 
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
-import com.starrocks.thrift.TExprNode;
 
 public final class MaxLiteral extends LiteralExpr {
 
@@ -46,9 +45,6 @@ public final class MaxLiteral extends LiteralExpr {
         return 1;
     }
 
-    @Override
-    protected void toThrift(TExprNode msg) {
-    }
 
     @Override
     public String toString() {

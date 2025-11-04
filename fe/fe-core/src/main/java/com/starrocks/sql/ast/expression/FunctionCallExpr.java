@@ -45,9 +45,6 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.thrift.TAggregateExpr;
-import com.starrocks.thrift.TExprNode;
-import com.starrocks.thrift.TExprNodeType;
 
 import java.util.List;
 import java.util.Objects;
@@ -237,17 +234,6 @@ public class FunctionCallExpr extends Expr {
         return fnParams.isDistinct();
     }
 
-    @Override
-    protected void toThrift(TExprNode msg) {
-        // TODO: we never serialize this to thrift if it's an aggregate function
-        // except in test cases that do it explicitly.
-        if (isAggregate() || isAnalyticFnCall) {
-            msg.node_type = TExprNodeType.AGG_EXPR;
-            msg.setAgg_expr(new TAggregateExpr(isMergeAggFn));
-        } else {
-            msg.node_type = TExprNodeType.FUNCTION_CALL;
-        }
-    }
 
     public void setMergeAggFnHasNullableChild(boolean value) {
         this.mergeAggFnHasNullableChild = value;

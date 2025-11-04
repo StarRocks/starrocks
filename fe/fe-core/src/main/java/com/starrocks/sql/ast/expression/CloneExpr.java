@@ -18,8 +18,6 @@ package com.starrocks.sql.ast.expression;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
-import com.starrocks.thrift.TExprNode;
-import com.starrocks.thrift.TExprNodeType;
 
 public class CloneExpr extends Expr {
     public CloneExpr(Expr child) {
@@ -39,10 +37,6 @@ public class CloneExpr extends Expr {
         getChild(0).setType(type);
     }
 
-    @Override
-    protected void toThrift(TExprNode msg) {
-        msg.setNode_type(TExprNodeType.CLONE_EXPR);
-    }
 
     @Override
     public Expr clone() {

@@ -19,8 +19,6 @@ import com.google.common.base.Preconditions;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.thrift.TExprNode;
-import com.starrocks.thrift.TExprNodeType;
 
 import java.util.List;
 import java.util.Map;
@@ -69,11 +67,6 @@ public class LambdaFunctionExpr extends Expr {
         }
     }
 
-    @Override
-    protected void toThrift(TExprNode msg) {
-        msg.setNode_type(TExprNodeType.LAMBDA_FUNCTION_EXPR);
-        msg.setOutput_column(commonSubOperatorNum);
-    }
 
     @Override
     public Expr clone() {
