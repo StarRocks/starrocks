@@ -671,6 +671,15 @@ uint32_t JsonPathDeriver::_dfs_finalize(JsonFlatPath* node, const std::string& a
             // Node was marked as remain because it was empty in some row(s)
             // Keep it as remain even if all children are flattened
         }
+        // IMPORTANT: If a node has children in path tree (expects object), but actual data
+        // might have primitive value at this level, we need remain to preserve it.
+        // This is a conservative approach: if path tree expects object, enable remain
+        // to handle cases where actual data has primitive instead of object.
+        if (!node->children.empty() && !absolute_path.empty()) {
+            // Path tree expects this node to be an object, but actual data might have primitive
+            // Mark as remain to preserve the actual data structure
+            node->remain = true;
+        }
         return 1;
     }
 }
