@@ -88,7 +88,6 @@ import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TUniqueId;
 import org.apache.commons.collections.CollectionUtils;
-import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
@@ -1397,32 +1396,5 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     @VisibleForTesting
     public Map<Long, TableSnapshotInfo> getSnapshotBaseTables() {
         return snapshotBaseTables;
-    }
-
-    private String getPostRun(ConnectContext ctx, MaterializedView mv) {
-        // check whether it's enabled to analyze MV task after task run for each task run,
-        // so the analyze_for_mv can be set in session variable dynamically
-        if (mv == null) {
-            return "";
-        }
-        return TaskBuilder.getAnalyzeMVStmt(ctx, mv.getName());
-    }
-
-    @Override
-    public void postTaskRun(TaskRunContext context) throws Exception {
-        if (!isNeedToTriggerPostProcess) {
-            return;
-        }
-        // recreate post run context for each task run
-        final ConnectContext ctx = context.getCtx();
-        final String postRun = getPostRun(ctx, mv);
-        // visible for tests
-        if (mvContext != null) {
-            mvContext.setPostRun(postRun);
-        }
-        context.setPostRun(postRun);
-        if (StringUtils.isNotEmpty(postRun)) {
-            ctx.executeSql(postRun);
-        }
     }
 }
