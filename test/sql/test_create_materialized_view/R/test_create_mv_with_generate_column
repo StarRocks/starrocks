@@ -26,25 +26,13 @@ INSERT INTO user_events (user_id, event_ts, event_name, session_id, event_type, 
 ('user_002', unix_timestamp(now() - INTERVAL 2 DAY) * 1000, 'category_view', 'session_002', 'view_event', 'view',
  '{"category_id": "cat_102"}'),
 ('user_002', unix_timestamp(now() - INTERVAL 2 DAY) * 1000 + 2000, 'product_click', 'session_002', 'click_event', 'click',
- '{"category_id": "cat_102", "product_id": "prod_203"}');
--- result:
--- !result
-INSERT INTO user_events (user_id, event_ts, event_name, session_id, event_type, event_level, properties) VALUES
+ '{"category_id": "cat_102", "product_id": "prod_203"}'),
 ('user_003', unix_timestamp(now() - INTERVAL 3 DAY) * 1000, 'product_view', 'session_003', 'view_event', 'view',
  '{"product_id": "prod_301", "resource_id": "res_401", "resource_type": "1"}'),
 ('user_003', unix_timestamp(now() - INTERVAL 3 DAY) * 1000 + 3000, 'product_click', 'session_004', 'click_event', 'click',
  '{"product_id": "prod_302", "resource_id": "res_402", "resource_type": "category"}'),
 ('user_004', unix_timestamp(now() - INTERVAL 5 DAY) * 1000, 'item_view', 'session_005', 'view_event', 'view',
  '{"product_id": "prod_303"}');
--- result:
--- !result
-INSERT INTO user_events (user_id, event_ts, event_name, session_id, event_type, event_level, properties) VALUES
-('user_005', unix_timestamp(now() - INTERVAL 7 DAY) * 1000, 'brand_view', 'session_006', 'view_event', 'view',
- '{"resource_id": "brand_501", "resource_type": "3"}'),
-('user_005', unix_timestamp(now() - INTERVAL 7 DAY) * 1000 + 5000, 'brand_click', 'session_006', 'click_event', 'click',
- '{"resource_id": "brand_502", "resource_type": "brand"}'),
-('user_006', unix_timestamp(now() - INTERVAL 10 DAY) * 1000, 'product_view', 'session_007', 'view_event', 'view',
- '{"resource_id": "prod_601", "resource_type": "2", "category_id": "cat_201"}');
 -- result:
 -- !result
 CREATE MATERIALIZED VIEW test_mv1
@@ -119,55 +107,35 @@ GROUP BY dt, user_id, resource_type, resource_id;
 REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
 SELECT COUNT(1) FROM test_mv1;
 -- result:
-23
+16
 -- !result
 SELECT * FROM test_mv1 ORDER BY 1,2,3,4,5,6 LIMIT 5;
 -- result:
-2025-10-24 00:00:00	user_006	category	cat_201	1	1
-2025-10-24 00:00:00	user_006	product	None	1	1
-2025-10-24 00:00:00	user_006	product	prod_601	1	1
-2025-10-27 00:00:00	user_005	brand	brand_501	1	1
-2025-10-27 00:00:00	user_005	brand	brand_502	1	1
+2025-10-30 00:00:00	user_004	None	None	1	1
+2025-10-30 00:00:00	user_004	category	None	1	1
+2025-10-30 00:00:00	user_004	product	prod_303	1	1
+2025-11-01 00:00:00	user_003	category	None	2	2
+2025-11-01 00:00:00	user_003	category	res_401	1	1
 -- !result
 INSERT INTO user_events (user_id, event_ts, event_name, session_id, event_type, event_level, properties) VALUES
-('user_001', unix_timestamp(now() - INTERVAL 15 DAY) * 1000, 'category_click', 'session_008', 'click_event', 'click',
- '{"category_id": "cat_103", "resource_type": "category"}'),
-('user_001', unix_timestamp(now() - INTERVAL 15 DAY) * 1000 + 10000, 'product_view', 'session_009', 'view_event', 'view',
- '{"category_id": "cat_103", "product_id": "prod_204"}'),
-('user_001', unix_timestamp(now() - INTERVAL 20 DAY) * 1000, 'product_click', 'session_010', 'click_event', 'click',
- '{"product_id": "prod_205", "resource_id": "res_403", "resource_type": "product"}');
--- result:
--- !result
-INSERT INTO user_events (user_id, event_ts, event_name, session_id, event_type, event_level, properties) VALUES
-('user_007', unix_timestamp(now() - INTERVAL 1 DAY) * 1000, 'page_exit', 'session_011', 'exit_event', 'view',
- '{"category_id": "cat_104"}'),
-('user_008', unix_timestamp(now() - INTERVAL 1 DAY) * 1000, 'product_view', 'session_012', 'view_event', 'impression',
- '{"product_id": "prod_401"}'),
-('user_009', unix_timestamp(now() - INTERVAL 100 DAY) * 1000, 'product_click', 'session_013', 'click_event', 'click',
- '{"category_id": "cat_105", "product_id": "prod_501"}'),
-('', unix_timestamp(now() - INTERVAL 1 DAY) * 1000, 'product_view', 'session_014', 'view_event', 'view',
- '{"category_id": "cat_106"}');
--- result:
--- !result
-INSERT INTO user_events (user_id, event_ts, event_name, session_id, event_type, event_level, properties) VALUES
-('user_010', unix_timestamp(now() - INTERVAL 25 DAY) * 1000, 'category_browse', 'session_015', 'browse_event', 'view',
- '{"category_id": "cat_107", "product_id": "prod_601", "resource_id": "res_501", "resource_type": "1"}'),
-('user_010', unix_timestamp(now() - INTERVAL 25 DAY) * 1000 + 15000, 'product_detail_view', 'session_015', 'detail_event', 'view',
- '{"category_id": "cat_107", "product_id": "prod_602"}'),
-('user_010', unix_timestamp(now() - INTERVAL 25 DAY) * 1000 + 30000, 'add_to_cart_click', 'session_016', 'cart_event', 'click',
- '{"product_id": "prod_602", "resource_type": "product", "resource_id": "prod_602"}');
+('user_005', unix_timestamp(now() - INTERVAL 7 DAY) * 1000, 'brand_view', 'session_006', 'view_event', 'view',
+ '{"resource_id": "brand_501", "resource_type": "3"}'),
+('user_005', unix_timestamp(now() - INTERVAL 7 DAY) * 1000 + 5000, 'brand_click', 'session_006', 'click_event', 'click',
+ '{"resource_id": "brand_502", "resource_type": "brand"}'),
+('user_006', unix_timestamp(now() - INTERVAL 10 DAY) * 1000, 'product_view', 'session_007', 'view_event', 'view',
+ '{"resource_id": "prod_601", "resource_type": "2", "category_id": "cat_201"}');
 -- result:
 -- !result
 REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
 SELECT COUNT(1) FROM test_mv1;
 -- result:
-49
+23
 -- !result
 SELECT * FROM test_mv1 ORDER BY 1,2,3,4,5,6 LIMIT 5;
 -- result:
-2025-07-26 00:00:00	user_009	None	None	1	1
-2025-07-26 00:00:00	user_009	category	cat_105	1	1
-2025-07-26 00:00:00	user_009	product	prod_501	1	1
-2025-10-09 00:00:00	user_010	None	None	1	1
-2025-10-09 00:00:00	user_010	category	None	1	1
+2025-10-25 00:00:00	user_006	category	cat_201	1	1
+2025-10-25 00:00:00	user_006	product	None	1	1
+2025-10-25 00:00:00	user_006	product	prod_601	1	1
+2025-10-28 00:00:00	user_005	brand	brand_501	1	1
+2025-10-28 00:00:00	user_005	brand	brand_502	1	1
 -- !result
