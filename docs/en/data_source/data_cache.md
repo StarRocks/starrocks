@@ -4,47 +4,49 @@ displayed_sidebar: docs
 
 # Data Cache
 
-This topic will introduce the core principles of Data Cache and how to accelerate data queries by enabling the Data Cache feature.
+Understand the core principles of Data Cache and how to accelerate data queries with Data Cache.
 
-Data Cache is used to cache data from internal tables and external tables. This feature is enabled by default starting from version v3.3.0, and beginning with version V4.0, the memory caches and disk caches of internal tables and external tables have been uniformly integrated into the Data Cache system for management.
+Data Cache is used to cache the data of native tables and external tables. This feature is enabled by default from v3.3.0 onwards. And from v4.0 onwards, the in-memory cache and disk cache have been uniformly integrated into the Data Cache system to facilitate management.
 
-Data Cache consists of two components: Page Cache (memory cache) and Block Cache (disk cache).
+Data Cache consists of two components: Page Cache (in-memory cache) and Block Cache (disk cache).
 
 ## Principles of Page Cache
 
-As an in-memory cache, Page Cache is responsible for storing data pages of internal and external tables after decompression. The size of these pages is not fixed. Currently, Page Cache supports caching the following types of data:
+As an in-memory cache, Page Cache is responsible for storing data pages of native and external tables after decompression. The size of these pages is not fixed. Currently, Page Cache supports caching the following types of data:
 
-1. Data pages and index pages of internal tables
-2. Footer information of external table data files
-3. Partial decompressed data pages of external tables
+- Data pages and index pages of native tables
+- Footer information of external table data files
+- Partial decompressed data pages of external tables
 
 Page Cache currently uses the LRU (Least Recently Used) strategy for data eviction.
 
 ## Principles of Block Cache
 
-Block Cache is a disk-based cache whose primary function is to cache data files—from external tables and internal tables in compute-storage separation scenarios that are stored in remote object storage—to local disks. This reduces remote data access latency and improves query efficiency. The size of each Block is fixed.
+Block Cache is a disk-based cache whose primary function is to cache data files (from external tables, and also from cloud-native tables in shared-data cluster) to local disks. This reduces remote data access latency and improves query efficiency. The size of each data block is fixed.
 
-### Background and Value of the Feature
+### Background and values
 
-In data lake analytics or internal table scenarios with shared-data mode, StarRocks—acting as an OLAP query engine—needs to scan data files stored in HDFS or object storage (hereinafter collectively referred to as the "external storage system"). This process faces two major performance bottlenecks:
+In data lake analytics and cloud-native table scenarios, StarRocks, acting as an OLAP query engine, needs to scan data files stored in HDFS or object storage (hereinafter referred to as the "remote storage system"). This process faces two major performance bottlenecks:
 
-* The more files a query needs to read, the greater the remote I/O overhead.
-* In ad-hoc query scenarios, frequent access to the same data leads to redundant remote I/O consumption.
+- The more files a query needs to read, the greater the remote I/O overhead.
+- In ad-hoc query scenarios, frequent access to the same data leads to redundant remote I/O consumption.
 
-To address these issues, StarRocks has introduced the Block Cache feature since version 2.5. It splits raw data from the external storage system into multiple blocks based on a specific strategy and caches these blocks in the local BE nodes of StarRocks. By avoiding repeated retrieval of remote data, the query and analysis performance for hot data is significantly improved.
+To address these issues, the Block Cache feature has been introduced in v2.5. It splits raw data from the remote storage system into multiple blocks based on a specific strategy and caches these blocks in the local disks of BE or CN nodes. By avoiding repeated retrieval of remote data, the query performance against hot data is significantly improved.
 
-### Applicable Scenarios
+### Scenarios
 
-- When querying data from external storage systems using external tables (excluding JDBC external tables).
-- When querying StarRocks native tables in the shared-data mode.
+- Query against data from remote storage systems using external catalogs (except JDBC Catalogs).
+- Query against cloud-native tables in the shared-data clusters.
 
-### Core Working Mechanism
+### Core mechanism
 
-**Data Splitting and Cache Unit**
+#### Data splitting and cache unit
 
-When StarRocks caches remote files, it splits the original files into blocks of equal size according to the configured strategy (a block is the minimum cache unit, and its size is customizable).
+When the system caches remote files, it splits the original files into blocks of equal size according to the configured strategy. A block is the minimum cache unit, and its size is customizable.
 
-- Example: If the block size is configured as 1 MB, when querying a 128 MB Parquet file on Amazon S3, the file will be split into 128 consecutive blocks (e.g., [0, 1 MB), [1 MB, 2 MB), ..., [127 MB, 128 MB)).
+Example: 
+
+If the block size is configured as 1 MB, when querying a 128 MB Parquet file on Amazon S3, the file will be split into 128 consecutive blocks (that is, `[0, 1 MB)`, `[1 MB, 2 MB)`, ..., `[127 MB, 128 MB)`).
 
 Each block is assigned a globally unique cache identifier (cache key), which consists of the following three parts:
 
@@ -52,77 +54,78 @@ Each block is assigned a globally unique cache identifier (cache key), which con
 hash(filename) + fileModificationTime + blockId
 ```
 
-The description of each component is as follows:
+| **Component**        | **Description**                                |
+| -------------------- | ---------------------------------------------- |
+| filename             | The name of the data file.                     |
+| fileModificationTime | The last time when the data file was modified. |
+| blockId              | The ID assigned to each block when a data file was split. This ID is unique within a single file but not globally unique. |
 
-| **Component** | **Description**|
-|----|----|
-|filename|The name of the data file.|
-|fileModificationTime|The last modification time of the data file.|
-|blockId|The ID assigned to each block by StarRocks when splitting a data file. This ID is unique within a single file but not globally unique.|
+#### Cache Hit and Read Process
 
-### Cache Medium
+Assuming a query hits the block within the range `[1 MB, 2 MB)`, Block Cache proceeds as follows:
 
-Block Cache uses the local disks of BE nodes as its storage medium, and the cache acceleration effect is directly related to disk performance:
+1. The system first checks whether the block exists in the local BE node's Block Cache (by matching the cache key).
+2. If found (cache hit), the block is read directly from the local disk.
+3. If not found (cache miss), the block is fetched from remote storage and synchronized to the local BE node's Block Cache for reuse in subsequent queries.
 
-- It is recommended to use high-performance local disks (such as NVMe disks) to minimize cache read/write latency.
-- If disk performance is average, you can increase the number of disks to achieve load balancing and reduce I/O pressure on individual disks.
+### Cache medium
+
+Block Cache uses the local disks of BE or CN nodes as its storage medium, and the cache acceleration effect is directly related to disk performance:
+
+- It is recommended to use high-performance local disks (for example, NVMe disks) to minimize cache read/write latency.
+- If disk performance is not optimal, you can increase the number of disks to achieve load balancing and reduce I/O pressure on individual disks.
 
 ### Cache replacement policies
 
-Block Cache supports two data caching and eviction strategies, with SLRU (Segmented LRU) being the default:
+Block Cache supports two data caching and eviction strategies: LRU and SLRU (Segmented LRU).
 
-| **Strategy** | **Core Logic**                                                                                                                                                                                                                                                                                                                                                                                                                          | **Advantage** |
-|----|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----|
-|LRU| Based on the "Least Recently Used" principle: evicts the blocks that have not been accessed for the longest time.                                                                                                                                                                                                                                                                                                                       |Simple to implement, suitable for scenarios with stable access patterns.|
-|SLRU| Divides the cache space into an eviction segment and a protection segment, both following the LRU rule: <br/>1. Data enters the eviction segment on first access; <br/>2. Data in the eviction segment is promoted to the protection segment when accessed again; <br/>3. Data evicted from the protection segment falls back to the eviction segment, while data evicted from the eviction segment is directly removed from the cache. |Effectively resists sudden sparse traffic, preventing "temporary data accessed only once" from directly evicting hot data in the protection segment. It offers better stability than LRU.|
+#### LRU
 
-## Enable Data Cache
+The LRU strategy is based on the "Least Recently Used" principle - evicting the blocks that have not been accessed for the longest time. It is simple to implement, and suitable for scenarios with stable access patterns.
 
-The Data Cache feature is enabled by default. Its activation status and resource limits are controlled through configuration parameters on BE nodes. Details are as follows:
+#### SLRU
 
-### Switch Parameters
+The SLRU strategy divides the cache space into an eviction segment and a protection segment, both following the LRU rules:
 
-1. Master Switch: Controls Overall Activation/Deactivation of Data Cache
+1. Data enters the eviction segment on first access.
+2. Data in the eviction segment is promoted to the protection segment when accessed again.
+3. Data evicted from the protection segment falls back to the eviction segment, while data evicted from the eviction segment is directly removed from the cache.
 
-- Parameter Name: datacache_enable
-- Function: Serves as the master switch for the Data Cache feature, directly controlling the overall status of both Page Cache and Block Cache.
-- Value Description:
-  - true (default): Data Cache is fully enabled; Page Cache and Block Cache can be independently controlled via their respective sub-switches.
-  - false: Data Cache is fully disabled; both Page Cache and Block Cache become ineffective.
+The SLRU strategy can effectively resist sudden sparse traffic, preventing "temporary data accessed only once" from directly evicting hot data in the protection segment. It offers better stability than LRU.
 
-2. Sub-Cache Switches: Independently Control Page Cache/Block Cache
+## Enable and configure Data Cache
 
-| Sub-Cache Type	 |Parameter Name	|Function	| Value Description |
-|-----------------|----|----|-------------------|
-| Page Cache      |disable_storage_page_cache	|Controls Page Cache on/off	|false (default, enabled); true (disabled)|
-| Block Cache     |block_cache_enable	|Controls Block Cache on/off	|true (default, enabled); false (disabled)|
+Data Cache is enabled by default, controlled by the BE configuration item `datacache_enable` (Default: `true`). Page Cache and Block Cache, as two independent components, are also enabled by default. Setting `datacache_enable` to `false` will disable Data Cache overall, that is, both Page Cache and Block Cache.
 
-### Resource Limit Configuration Parameters
+You can also activate or deactivate Page Cache and Block Cache separately using different BE configuration items.
 
-Use the following BE node parameters to set the maximum memory and disk usage limits for Data Cache, preventing excessive resource occupation:
+- Page Cache (enabled by default) is controlled by `disable_storage_page_cache` (Default: `false`).
+- Block Cache (enabled by default) is controlled by `block_cache_enable` (Default: `true`).
 
-- datacache_mem_size: Sets the maximum memory usage limit for Data Cache (used for storing data in Page Cache).
-- datacache_disk_size: Sets the maximum disk usage limit for Data Cache (used for storing data in Block Cache).
+You can further use the following BE configurations to set the maximum memory and disk usage limits for Data Cache, preventing excessive resource occupation:
 
-## Populate block cache
+- `datacache_mem_size`: Sets the maximum memory usage limit for Data Cache (used for storing data in Page Cache).
+- `datacache_disk_size`: Sets the maximum disk usage limit for Data Cache (used for storing data in Block Cache).
+
+## Populate Block Cache
 
 ### Population rules
 
-Since v3.3.2, in order to improve the cache hit rate of Block Cache, StarRocks populates Block Cache according to the following rules:
+From v3.3.2 onwards, in order to improve the cache hit rate of Block Cache, the system populates Block Cache according to the following rules:
 
 - The cache will not be populated for statements that are not `SELECT`, for example, `ANALYZE TABLE` and `INSERT INTO SELECT`.
 - Queries that scan all partitions of a table will not populate the cache. However, if the table has only one partition, population is performed by default.
 - Queries that scan all columns of a table will not populate the cache. However, if the table has only one column, population is performed by default.
 - The cache will not be populated for tables that are not Hive, Paimon, Delta Lake, Hudi, or Iceberg.
 
-### Viewing Cache Population Behavior
+### View Cache Population Behavior
 
 You can view the population behavior for a specific query with the `EXPLAIN VERBOSE` command.
 
 Example:
 
 ```sql
-mysql> explain verbose select col1 from hudi_table;
+mysql> EXPLAIN VERBOSE SELECT col1 FROM hudi_table;
 ...
 |   0:HudiScanNode                        |
 |      TABLE: hudi_table                  |
@@ -136,32 +139,37 @@ mysql> explain verbose select col1 from hudi_table;
 
 `dataCacheOptions={populate: false}` indicates that the cache will not be populated because the query will scan all partitions.
 
-You can also fine tune the population behavior of Block Cache via the Session Variable [populate_datacache_mode](../sql-reference/System_variable.md#populate_datacache_mode).
+You can also fine-tune the population behavior of Block Cache via the session variable [`populate_datacache_mode`](../sql-reference/System_variable.md#populate_datacache_mode).
 
 ### Population mode
 
-Block Cache supports two modes: synchronous population and asynchronous population. You can choose between them based on your business requirements for "first query performance" and "cache efficiency":
+Block Cache supports two modes, that is, synchronous population and asynchronous population. You can choose between them based on your business requirements for "first query performance" and "cache efficiency".
 
-|Population Mode|Core Logic| Pros and Cons Comparison                                                                                                                                                                                                                                              |
-|----|----|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-|Synchronous Population	|When remote data is read for the first query, the data is immediately cached locally. Subsequent queries can directly reuse the cache.	| Pros: High cache efficiency—data caching is completed with a single query. <br/>Cons: Cache operations are executed synchronously with read operations, which may increase latency for the first query.                                                               |
-|Asynchronous Population	|For the first query, data reading is prioritized and completed first. Cache writing is executed asynchronously in the background, without blocking the current query process.	| Pros: Does not affect first query performance and prevents read operations from being delayed due to caching. <br/>Cons: Lower cache efficiency—a single query may not fully cache all accessed data, requiring multiple queries to gradually improve cache coverage. |
+**Synchronous Population**
+- Core Logic: When remote data is read for the first query, the data is immediately cached locally. Subsequent queries can directly reuse the cache.
+- Pros: High cache efficiency because data caching is completed with a single query.
+- Cons: Cache operations are executed synchronously with read operations, which may increase latency for the first query.
 
-From v3.3.0, asynchronous cache population is enabled by default. You can change the population mode by setting the session variable [enable_datacache_async_populate_mode](../sql-reference/System_variable.md).
+**Asynchronous Population**
+- Core Logic: For the first query, data reading is prioritized and completed first. Cache writing is executed asynchronously in the background, without blocking the current query process.
+- Pros: It will not affect the performance of first query and prevent read operations from being delayed due to caching.
+- Cons: Lower cache efficiency because a single query may not fully cache all accessed data. It requires multiple queries to gradually improve cache coverage.
+
+From v3.3.0, asynchronous cache population is enabled by default. You can change the population mode by setting the session variable [`enable_datacache_async_populate_mode`](../sql-reference/System_variable.md).
 
 ### Persistence
 
-The cached data in disks can be persistent by default, and these data can be reused after BE restarts.
+The cached data in disks can be persistent by default, and these data can be reused after BE or CN restarts.
 
 ## Check whether a query hits data cache
 
-You can check whether a query hits data cache by analyzing the following metrics in the query profile:
+You can check whether a query hits Data Cache by analyzing the following metrics in the query profile:
 
-- `DataCacheReadBytes`: the size of data that StarRocks reads directly from its memory and disks.
-- `DataCacheWriteBytes`: the size of data loaded from an external storage system to StarRocks' memory and disks.
-- `BytesRead`: the total amount of data that is read, including data that StarRocks reads from an external storage system, and its memory and disks.
+- `DataCacheReadBytes`: the size of data that the system reads directly from the memory and disks.
+- `DataCacheWriteBytes`: the size of data loaded from the remote storage system to the memory and disks.
+- `BytesRead`: the total amount of data that is read, including data that the system reads from the remote storage system, and its memory and disks.
 
-Example 1: In this example, StarRocks reads a large amount of data (7.65 GB) from the external storage system and only a few data (518.73 MB) from the disks. This means that few block caches were hit.
+Example 1: In this example, the system reads a large amount of data (7.65 GB) from the remote storage system and only a few data (518.73 MB) from the disks. This means that few Block Caches were hit.
 
 ```Plain
  - Table: lineorder
@@ -189,7 +197,7 @@ Example 1: In this example, StarRocks reads a large amount of data (7.65 GB) fro
    - __MIN_OF_BytesRead: 0.00
 ```
 
-Example 2: In this example, StarRocks reads a large amount of data (46.08 GB) from data cache and no data from the external storage system, which means StarRocks reads data only from block cache.
+Example 2: In this example, the system reads a large amount of data (46.08 GB) from data cache and no data from the remote storage system, which means it reads data only from Block Cache.
 
 ```Plain
 Table: lineitem
@@ -215,7 +223,7 @@ Table: lineitem
 
 ## I/O Adaptor
 
-To prevent significant tail latency in disk access due to high cache disk I/O load, which can lead to negative optimization of the cache system, Data Cache provides the I/O adaptor feature. This feature routes some cache requests to remote storage when disk load is high, utilizing both local cache and remote storage to improve I/O throughput. This feature is enabled by default.
+To prevent significant tail latency in disk access due to high cache disk I/O load, which can lead to negative optimization of the cache system, Data Cache provides the I/O Adaptor feature. This feature routes some cache requests to remote storage when disk load is high, utilizing both local cache and remote storage to improve I/O throughput. This feature is enabled by default.
 
 You can enable I/O Adaptor by setting the following system variable:
 
@@ -223,11 +231,11 @@ You can enable I/O Adaptor by setting the following system variable:
 SET GLOBAL enable_datacache_io_adaptor=true;
 ```
 
-## Dynamic Scaling
+## Dynamic scaling
 
 Data Cache supports manual adjustment of cache capacity without restarting the BE process, and also supports automatic adjustment of cache capacity.
 
-### Manual Scaling
+### Manual scaling
 
 You can modify Data Cache's memory limit or disk capacity by dynamically adjusting BE configuration items.
 
@@ -244,16 +252,16 @@ UPDATE be_configs SET VALUE="10%" WHERE NAME="datacache_mem_size";
 UPDATE be_configs SET VALUE="2T" WHERE NAME="datacache_disk_size";
 ```
 
-> **NOTE**
->
-> - Be cautious when adjusting capacities in this way. Make sure not to omit the WHERE clause to avoid modifying irrelevant configuration items.
-> - Cache capacity adjustments made this way will not be persisted and will be lost after the BE process restarts. Therefore, you can first adjust the parameters dynamically as described above, and then manually modify the BE configuration file to ensure that the changes take effect after the next restart.
+:::note
+- Be cautious when adjusting capacities in this way. Make sure not to omit the WHERE clause to avoid modifying irrelevant configuration items.
+- Cache capacity adjustments made this way will not be persisted and will be lost after the BE or CN process restarts. Therefore, you can first adjust the parameters dynamically as described above, and then manually modify the BE or CN configuration file to ensure that the changes take effect after the next restart.
+:::
 
 ### Automatic Scaling
 
 StarRocks currently supports automatic scaling of disk capacity. If you do not specify the cache disk path and capacity limit in the BE configuration, automatic scaling is enabled by default.
 
-You can also enable automatic scaling by adding the following configuration item to the BE configuration file and restarting the BE process:
+You can also enable automatic scaling by adding the following configuration item to the configuration file and restarting the BE or CN process:
 
 ```Plain
 datacache_auto_adjust_enable=true
@@ -261,9 +269,9 @@ datacache_auto_adjust_enable=true
 
 After automatic scaling is enabled:
 
-- When the disk usage exceeds the threshold specified by the BE parameter `disk_high_level` (default value is `90`, that is, 90% of disk space), the system will automatically evict cache data to free up disk space.
-- When the disk usage is consistently below the threshold specified by the BE parameter `disk_low_level` (default value is `60`, that is, 60% of disk space), and the current disk space used by Data Cache is full, the system will automatically expand the cache capacity.
-- When automatically scaling the cache capacity, the system will aim to adjust the cache capacity to the level specified by the BE parameter `disk_safe_level` (default value is `80`, that is, 80% of disk space).
+- When the disk usage exceeds the threshold specified by the BE configuration `disk_high_level` (default value is `90`, that is, 90% of disk space), the system will automatically evict cache data to free up disk space.
+- When the disk usage is consistently below the threshold specified by the BE configuration `disk_low_level` (default value is `60`, that is, 60% of disk space), and the current disk space used by Data Cache is full, the system will automatically expand the cache capacity.
+- When automatically scaling the cache capacity, the system will aim to adjust the cache capacity to the level specified by the BE configuration `disk_safe_level` (default value is `80`, that is, 80% of disk space).
 
 ## Cache Sharing
 
@@ -280,9 +288,9 @@ You can enable the Cache Sharing feature by configuring the following two items:
 
 In addition, you can check the following metrics in query profile to monitor Cache Sharing:
 
-- `DataCacheReadPeerCounter`: The read count from other cache nodes.
-- `DataCacheReadPeerBytes`: The bytes read from other cache nodes.
-- `DataCacheReadPeerTimer`: The time used for accessing cache data from other cache nodes.
+- `DataCacheReadPeerCounter`: The read count from other nodes.
+- `DataCacheReadPeerBytes`: The bytes read from other nodes.
+- `DataCacheReadPeerTimer`: The time used for accessing cache data from other nodes.
 
 ## Configurations and variables
 
@@ -296,11 +304,11 @@ You can configure Data Cache using the following system variables and parameters
 - [enable_datacache_async_populate_mode](../sql-reference/System_variable.md)
 - [enable_datacache_sharing](../sql-reference/System_variable.md#enable_datacache_sharing)
 
-### FE Parameters
+### FE configurations
 
 - [enable_trace_historical_node](../administration/management/FE_configuration.md#enable_trace_historical_node)
 
-### BE Parameters
+### BE configurations
 
 - [datacache_enable](../administration/management/BE_configuration.md#datacache_enable)
 - [datacache_mem_size](../administration/management/BE_configuration.md#datacache_mem_size)
