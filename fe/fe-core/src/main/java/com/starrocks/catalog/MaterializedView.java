@@ -1057,12 +1057,27 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     }
 
     /**
+     * This is method is called in mv creating, if error is met, throw exception to fail the creating operation.
+     * @param database database where the table is created
+     * @throws DdlException
+     */
+    @Override
+    public void onCreate(Database database) throws DdlException {
+        onReload(false, isActive(), true);
+    }
+
+    /**
      * Reload the materialized view with original active state.
      * NOTE: This method will not try to activate the materialized view.
      * @param postLoadImage: whether this reload is called after FE's image loading process.
      */
+<<<<<<< HEAD
     public void onReload(boolean postLoadImage) {
         onReload(postLoadImage, isActive());
+=======
+    public void onReload(boolean isReloadAsync) {
+        onReload(isReloadAsync, isActive(), false);
+>>>>>>> 0b7112b43a ([BugFix] Fix MVPartitionExprResolver column name not matched bug (#64914))
     }
 
     /**
@@ -1076,7 +1091,13 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      * @param postLoadImage whether this reload is called after FE's image loading process.
      * @param desiredActive whether the materialized view should be active after reload.
      */
+<<<<<<< HEAD
     private void onReload(boolean postLoadImage, boolean desiredActive) {
+=======
+    private void onReload(boolean isReloadAsync,
+                          boolean desiredActive,
+                          boolean isThrowException) {
+>>>>>>> 0b7112b43a ([BugFix] Fix MVPartitionExprResolver column name not matched bug (#64914))
         try {
             active = false;
             boolean reloadActive = onReloadImpl();
@@ -1085,7 +1106,59 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             }
         } catch (Throwable e) {
             LOG.error("reload mv failed: {}", this, e);
+<<<<<<< HEAD
             setInactiveAndReason("reload failed: " + e.getMessage());
+=======
+            // only set inactive when it is desired to be active
+            if (desiredActive) {
+                setInActiveReason(InactiveReason.ofInactive("reload failed: " + e.getMessage()));
+            }
+            if (isThrowException) {
+                throw e;
+            }
+        } finally {
+            if (!isReloadAsync || !desiredActive) {
+                LOG.info("finish reloading mv {}. current active state: {}", getName(), isActive());
+                changeReloadState(RELOAD_STATE_DONE);
+            }
+        }
+    }
+
+    private void checkAndSetActive(boolean isReloadAsync) {
+        // to avoid blocking the main replay thread and reduce fe restart time, check isActive asynchronously,
+        // this method is time costing because:
+        // - if mv contains external base tables, it may need to connect external systems to check table existence
+        // - if mv contains hierarchical mvs, it may need to recursively reload base mvs
+        // so we submit an async task to do this check
+        if (isReloadAsync) {
+            CachingMvPlanContextBuilder.submitAsyncTask(buildTaskName("MVCheckIsActive"), () -> {
+                try {
+                    InactiveReason reason = checkIsActiveOnLoadBlocking();
+                    setInActiveReason(reason);
+                } catch (Throwable e) {
+                    LOG.error("check and set active failed for mv: {}", this, e);
+                    setInActiveReason(InactiveReason.ofInactive("check and set active failed: " + e.getMessage()));
+                } finally {
+                    changeReloadState(RELOAD_STATE_DONE);
+                }
+                return null;
+            });
+        } else {
+            InactiveReason reason = checkIsActiveOnLoadBlocking();
+            setInActiveReason(reason);
+        }
+    }
+
+    private String buildTaskName(String prefix) {
+        return String.format("%s-%s-%d", prefix, getName(), getId());
+    }
+
+    private void setInActiveReason(InactiveReason reason) {
+        if (!reason.isActive) {
+            setInactiveAndReason(reason.reason);
+        } else {
+            setActive();
+>>>>>>> 0b7112b43a ([BugFix] Fix MVPartitionExprResolver column name not matched bug (#64914))
         }
     }
 
@@ -1096,7 +1169,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      * NOTE: caller need to hold the db lock
      */
     public void fixRelationship() {
-        onReload(false, true);
+        onReload(false, true, false);
     }
 
     /**
@@ -2065,10 +2138,13 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         refBaseTablePartitionColumnsOpt = Optional.of(result);
     }
 
-    private void analyzePartitionExpr(ConnectContext connectContext,
-                                      Table refBaseTable,
-                                      TableName tableName,
-                                      Expr partitionExpr) {
+    /**
+     * Analyze partition expr for ref base table based on mv's partition expr.
+     */
+    public static void analyzePartitionExpr(ConnectContext connectContext,
+                                            Table refBaseTable,
+                                            TableName tableName,
+                                            Expr partitionExpr) {
         if (partitionExpr == null) {
             return;
         }
