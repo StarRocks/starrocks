@@ -77,13 +77,38 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
+    private String appendProjectionAndPredicate(Operator op) {
+        StringBuilder sb = new StringBuilder();
+        if (op.getProjection() != null && !op.getProjection().getColumnRefMap().isEmpty()) {
+            sb.append(appendProject(op.getProjection().getColumnRefMap()));
+        }
+        if (op.getPredicate() != null) {
+            sb.append(", predicate=").append(op.getPredicate());
+        }
+        return sb.toString();
+    }
+
+    private String appendProject(Map<ColumnRefOperator, ScalarOperator> project) {
+        StringBuilder sb = new StringBuilder();
+        if (project != null && !project.isEmpty()) {
+            String projectionStr = project.entrySet()
+                    .stream()
+                    .map(e -> e.getKey() + "->" + e.getValue())
+                    .collect(Collectors.joining(", ", "projection=[", "]"));
+            sb.append(projectionStr);
+        }
+        return sb.toString();
+    }
+
     @Override
     public String visitOperator(Operator op, Void context) {
         return op.toString();
@@ -94,6 +119,7 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
         return "LogicalScanOperator" + " {" +
                 "table='" + node.getTable().getName() + '\'' +
                 ", outputColumns='" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) + '\'' +
+                appendProjectionAndPredicate(node) +
                 '}';
     }
 
@@ -102,6 +128,7 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
         return "LogicalViewScanOperator" + " {" +
                 "table='" + node.getTable().getName() + '\'' +
                 ", outputColumns='" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) + '\'' +
+                appendProjectionAndPredicate(node) +
                 '}';
     }
 
@@ -116,9 +143,9 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
                 ", selectedPartitionId=" + node.getSelectedPartitionId() +
                 ", selectedIndexId=" + node.getSelectedIndexId() +
                 ", outputColumns=" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) +
-                ", predicate=" + node.getPredicate() +
                 ", prunedPartitionPredicates=" + node.getPrunedPartitionPredicates() +
                 ", limit=" + node.getLimit() +
+                appendProjectionAndPredicate(node) +
                 "}";
     }
 
@@ -128,6 +155,7 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
                 ", outputColumns=" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) +
                 ", predicates=" + node.getScanOperatorPredicates() +
                 ", limit=" + node.getLimit() +
+                appendProjectionAndPredicate(node) +
                 "}";
     }
 
@@ -137,6 +165,11 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
         sb.append(" {").append("table=").append(node.getTable().getCatalogTableName())
                 .append(", outputColumns=").append(new ArrayList<>(node.getColRefToColumnMetaMap().keySet()))
                 .append(", predicates=").append(node.getScanOperatorPredicates())
+<<<<<<< HEAD
+=======
+                .append(", tvrVersionRange=").append(node.getTvrVersionRange())
+                .append(appendProjectionAndPredicate(node))
+>>>>>>> bfc5365aec ([Enhancement] Add more debug info in DebugOperatorTracer (#64883))
                 .append("}");
         return sb.toString();
     }
@@ -147,6 +180,7 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
                 ", outputColumns=" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) +
                 ", predicates=" + node.getScanOperatorPredicates() +
                 ", limit=" + node.getLimit() +
+                appendProjectionAndPredicate(node) +
                 "}";
     }
 
@@ -154,8 +188,8 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
     public String visitLogicalMysqlScan(LogicalMysqlScanOperator node, Void context) {
         return "LogicalMysqlScanOperator" + " {" + "table=" + node.getTable().getCatalogTableName() +
                 ", outputColumns=" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) +
-                ", predicate=" + node.getPredicate() +
                 ", limit=" + node.getLimit() +
+                appendProjectionAndPredicate(node) +
                 "}";
     }
 
@@ -168,8 +202,8 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
     public String visitLogicalEsScan(LogicalEsScanOperator node, Void context) {
         return "LogicalEsScanOperator" + " {" + "selectedIndex=" + node.getSelectedIndex() +
                 ", outputColumns=" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) +
-                ", predicate=" + node.getPredicate() +
                 ", limit=" + node.getLimit() +
+                appendProjectionAndPredicate(node) +
                 "}";
     }
 
@@ -177,15 +211,15 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
     public String visitLogicalJDBCScan(LogicalJDBCScanOperator node, Void context) {
         return "LogicalJDBCScanOperator" + " {" + "table=" + node.getTable().getCatalogTableName() +
                 ", outputColumns=" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) +
-                ", predicate=" + node.getPredicate() +
                 ", limit=" + node.getLimit() +
+                appendProjectionAndPredicate(node) +
                 "}";
     }
 
     @Override
     public String visitLogicalProject(LogicalProjectOperator node, Void context) {
-        StringBuilder sb = new StringBuilder("LogicalProjectOperator {projection=");
-        sb.append(new ArrayList<>(node.getColumnRefMap().values()));
+        StringBuilder sb = new StringBuilder("LogicalProjectOperator {");
+        sb.append(appendProject(node.getColumnRefMap()));
         sb.append("}");
         return sb.toString();
     }
@@ -201,8 +235,7 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
                 " ,aggregations=" + node.getAggregations() +
                 " ,groupKeys=" + node.getGroupingKeys() +
                 ", partitionBys=" + node.getPartitionByColumns() +
-                " ,projection=" + node.getProjection() +
-                " ,predicate=" + node.getPredicate() +
+                appendProjectionAndPredicate(node) +
                 "}";
     }
 
@@ -212,6 +245,7 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
                 ", orderBy=" + node.getOrderByElements() +
                 ", limit=" + node.getLimit() +
                 ", offset=" + node.getOffset() +
+                appendProjectionAndPredicate(node) +
                 "}";
     }
 
@@ -227,6 +261,7 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
         sb.append(", partitions=").append(node.getPartitionExpressions());
         sb.append(", orderBy=").append(node.getOrderByElements());
         sb.append(", enforceSort").append(node.getEnforceSortColumns());
+        sb.append(appendProjectionAndPredicate(node));
         sb.append("}");
         return sb.toString();
     }
@@ -234,19 +269,19 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
     @Override
     public String visitLogicalUnion(LogicalUnionOperator node, Void context) {
         return getSetOperationBuilder("LogicalUnionOperator", node.getOutputColumnRefOp(),
-                node.getChildOutputColumns());
+                node.getChildOutputColumns(), node);
     }
 
     @Override
     public String visitLogicalExcept(LogicalExceptOperator node, Void context) {
         return getSetOperationBuilder("LogicalExceptOperator", node.getOutputColumnRefOp(),
-                node.getChildOutputColumns());
+                node.getChildOutputColumns(), node);
     }
 
     @Override
     public String visitLogicalIntersect(LogicalIntersectOperator node, Void context) {
         return getSetOperationBuilder("LogicalIntersectOperator", node.getOutputColumnRefOp(),
-                node.getChildOutputColumns());
+                node.getChildOutputColumns(), node);
     }
 
     @Override
@@ -258,7 +293,8 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
     public String visitLogicalRawValues(LogicalRawValuesOperator node, Void context) {
         return "LogicalRawValuesOperator {" +
                "count=" + node.getConstantCount() +
-               ", constantType=" + node.getConstantType() + "}";
+               ", constantType=" + node.getConstantType() +
+               appendProjectionAndPredicate(node) + "}";
     }
 
     @Override
@@ -268,7 +304,7 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
 
     @Override
     public String visitLogicalFilter(LogicalFilterOperator node, Void context) {
-        return "LogicalFilterOperator" + " {" + "predicate=" + node.getPredicate() + "}";
+        return "LogicalFilterOperator" + " {" + appendProjectionAndPredicate(node) + "}";
     }
 
     @Override
@@ -280,6 +316,7 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
     public String visitLogicalLimit(LogicalLimitOperator node, Void context) {
         return "LogicalLimitOperator {" + node.getPhase().name() + " limit=" + node.getLimit() +
                 ", offset=" + node.getOffset() +
+                appendProjectionAndPredicate(node) +
                 "}";
     }
 
@@ -307,13 +344,14 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
     public String visitPhysicalDistribution(PhysicalDistributionOperator node, Void context) {
         return "PhysicalDistributionOperator" + " {distributionSpec=" + node.getDistributionSpec() +
                 " ,globalDict=" + node.getGlobalDicts() +
+                appendProjectionAndPredicate(node) +
                 "}";
     }
 
     @Override
     public String visitPhysicalProject(PhysicalProjectOperator node, Void context) {
-        StringBuilder sb = new StringBuilder("PhysicalProjectOperator {projection=");
-        sb.append(new ArrayList<>(node.getColumnRefMap().values()));
+        StringBuilder sb = new StringBuilder("PhysicalProjectOperator {");
+        sb.append(appendProject(node.getColumnRefMap()));
         sb.append("}");
         return sb.toString();
     }
@@ -324,7 +362,7 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
                 ", groupBy=" + node.getGroupBys() +
                 ", partitionBy=" + node.getPartitionByColumns() +
                 " ,aggregations=" + node.getAggregations() +
-                ", projection=" + node.getProjection() +
+                appendProjectionAndPredicate(node) +
                 "}";
     }
 
@@ -344,10 +382,9 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
                 ", selectedPartitionId=" + node.getSelectedPartitionId() +
                 ", selectedIndexId=" + node.getSelectedIndexId() +
                 ", outputColumns=" + node.getOutputColumns() +
-                ", projection=" + node.getProjection() +
-                ", predicate=" + node.getPredicate() +
                 ", prunedPartitionPredicates=" + node.getPrunedPartitionPredicates() +
                 ", limit=" + node.getLimit() +
+                appendProjectionAndPredicate(node) +
                 "}";
     }
 
@@ -357,6 +394,7 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
                 ", outputColumns=" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) +
                 ", predicates=" + node.getScanOperatorPredicates() +
                 ", limit=" + node.getLimit() +
+                appendProjectionAndPredicate(node) +
                 "}";
     }
 
@@ -366,6 +404,11 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
         sb.append(" {").append("table=").append(node.getTable().getCatalogTableName())
                 .append(", outputColumns=").append(new ArrayList<>(node.getColRefToColumnMetaMap().keySet()))
                 .append(", predicates=").append(node.getScanOperatorPredicates())
+<<<<<<< HEAD
+=======
+                .append(", tvrVersionRange=").append(node.getTvrVersionRange())
+                .append(appendProjectionAndPredicate(node))
+>>>>>>> bfc5365aec ([Enhancement] Add more debug info in DebugOperatorTracer (#64883))
                 .append("}");
         return sb.toString();
     }
@@ -376,6 +419,7 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
                 ", outputColumns=" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) +
                 ", predicates=" + node.getScanOperatorPredicates() +
                 ", limit=" + node.getLimit() +
+                appendProjectionAndPredicate(node) +
                 "}";
     }
 
@@ -388,8 +432,8 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
     public String visitPhysicalMysqlScan(PhysicalMysqlScanOperator node, Void context) {
         return "PhysicalMysqlScanOperator" + " {" + "table=" + node.getTable().getCatalogTableName() +
                 ", outputColumns=" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) +
-                ", predicate=" + node.getPredicate() +
                 ", limit=" + node.getLimit() +
+                appendProjectionAndPredicate(node) +
                 "}";
     }
 
@@ -397,8 +441,8 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
     public String visitPhysicalEsScan(PhysicalEsScanOperator node, Void context) {
         return "PhysicalEsScanOperator" + " {" + "selectedIndex=" + node.getSelectedIndex() +
                 ", outputColumns=" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) +
-                ", predicate=" + node.getPredicate() +
                 ", limit=" + node.getLimit() +
+                appendProjectionAndPredicate(node) +
                 "}";
     }
 
@@ -411,8 +455,8 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
     public String visitPhysicalJDBCScan(PhysicalJDBCScanOperator node, Void context) {
         return "PhysicalJDBCScanOperator" + " {" + "table=" + node.getTable().getCatalogTableName() +
                 ", outputColumns=" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) +
-                ", predicate=" + node.getPredicate() +
                 ", limit=" + node.getLimit() +
+                appendProjectionAndPredicate(node) +
                 "}";
     }
 
@@ -422,6 +466,7 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
                 ", orderBy=" + node.getOrderSpec() +
                 ", limit=" + node.getLimit() +
                 ", offset=" + node.getOffset() +
+                appendProjectionAndPredicate(node) +
                 "}";
     }
 
@@ -438,24 +483,24 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
     @Override
     public String visitPhysicalUnion(PhysicalUnionOperator node, Void context) {
         return getSetOperationBuilder("PhysicalUnionOperator", node.getOutputColumnRefOp(),
-                node.getChildOutputColumns());
+                node.getChildOutputColumns(), node);
     }
 
     @Override
     public String visitPhysicalExcept(PhysicalExceptOperator node, Void context) {
         return getSetOperationBuilder("PhysicalExceptOperator", node.getOutputColumnRefOp(),
-                node.getChildOutputColumns());
+                node.getChildOutputColumns(), node);
     }
 
     @Override
     public String visitPhysicalIntersect(PhysicalIntersectOperator node, Void context) {
         return getSetOperationBuilder("PhysicalIntersectOperator", node.getOutputColumnRefOp(),
-                node.getChildOutputColumns());
+                node.getChildOutputColumns(), node);
     }
 
     @NotNull
     private String getSetOperationBuilder(String name, List<ColumnRefOperator> outputColumnRefOp,
-                                          List<List<ColumnRefOperator>> childOutputColumns) {
+                                          List<List<ColumnRefOperator>> childOutputColumns, Operator op) {
         StringBuilder sb = new StringBuilder(name);
         sb.append("{");
         sb.append("output=[").append(outputColumnRefOp.stream().map(ColumnRefOperator::toString)
@@ -465,7 +510,9 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
                 .map(l -> l.stream().map(ColumnRefOperator::toString).collect(Collectors.joining(", ")))
                 .collect(Collectors.joining(", "));
 
-        sb.append(child).append("}");
+        sb.append(child);
+        sb.append(appendProjectionAndPredicate(op));
+        sb.append("}");
         return sb.toString();
     }
 
@@ -478,7 +525,8 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
     public String visitPhysicalRawValues(PhysicalRawValuesOperator node, Void context) {
         return "PhysicalRawValuesOperator {" +
                "count=" + node.getConstantCount() +
-               ", constantType=" + node.getConstantType() + "}";
+               ", constantType=" + node.getConstantType() +
+               appendProjectionAndPredicate(node) + "}";
     }
 
     @Override
@@ -500,6 +548,7 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
     public String visitPhysicalLimit(PhysicalLimitOperator node, Void context) {
         return "PhysicalLimitOperator" + " {limit=" + node.getLimit() +
                 ", offset=" + node.getOffset() +
+                appendProjectionAndPredicate(node) +
                 "}";
     }
 
