@@ -772,7 +772,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitBackupStatement(BackupStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getBackupHandler().process(stmt);
+                context.getGlobalStateMgr().getBackupHandler().process(context, stmt);
             });
             return null;
         }
@@ -780,7 +780,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitRestoreStatement(RestoreStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getBackupHandler().process(stmt);
+                context.getGlobalStateMgr().getBackupHandler().process(context, stmt);
             });
             return null;
         }

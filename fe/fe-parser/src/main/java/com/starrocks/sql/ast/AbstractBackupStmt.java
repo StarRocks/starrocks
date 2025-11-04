@@ -12,20 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.persist.TableRefPersist;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-
-import static com.starrocks.common.util.Util.normalizeName;
 
 public class AbstractBackupStmt extends DdlStmt {
     public enum BackupObjectType {
@@ -38,7 +34,7 @@ public class AbstractBackupStmt extends DdlStmt {
 
     protected LabelName labelName;
     protected String repoName;
-    protected List<TableRefPersist> tblRefs;
+    protected List<TableRef> tblRefs;
     protected List<FunctionRef> fnRefs;
     protected List<CatalogRef> externalCatalogRefs;
 
@@ -54,9 +50,16 @@ public class AbstractBackupStmt extends DdlStmt {
 
     protected long timeoutMs;
 
-    public AbstractBackupStmt(LabelName labelName, String repoName, List<TableRefPersist> tableRefs,
-                              List<FunctionRef> fnRefs, List<CatalogRef> externalCatalogRefs, Set<BackupObjectType> allMarker,
-                              boolean withOnClause, String originDbName, Map<String, String> properties, NodePosition pos) {
+    public AbstractBackupStmt(LabelName labelName,
+                              String repoName,
+                              List<TableRef> tableRefs,
+                              List<FunctionRef> fnRefs,
+                              List<CatalogRef> externalCatalogRefs,
+                              Set<BackupObjectType> allMarker,
+                              boolean withOnClause,
+                              String originDbName,
+                              Map<String, String> properties,
+                              NodePosition pos) {
         super(pos);
         this.labelName = labelName;
         this.repoName = repoName;
@@ -77,7 +80,7 @@ public class AbstractBackupStmt extends DdlStmt {
             this.allMarker = Sets.newHashSet();
         }
 
-        this.originDbName = normalizeName(originDbName);
+        this.originDbName = originDbName;
         this.withOnClause = withOnClause;
         this.properties = properties == null ? Maps.newHashMap() : properties;
     }
@@ -98,7 +101,7 @@ public class AbstractBackupStmt extends DdlStmt {
         return repoName;
     }
 
-    public List<TableRefPersist> getTableRefs() {
+    public List<TableRef> getTableRefs() {
         return tblRefs;
     }
 
@@ -154,4 +157,3 @@ public class AbstractBackupStmt extends DdlStmt {
         return allExternalCatalog() || !externalCatalogRefs.isEmpty();
     }
 }
-

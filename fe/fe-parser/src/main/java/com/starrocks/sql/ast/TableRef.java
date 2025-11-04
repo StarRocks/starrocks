@@ -19,11 +19,17 @@ import com.starrocks.sql.parser.NodePosition;
 public class TableRef implements ParseNode {
     private final QualifiedName tableName;
     private final PartitionRef partitionRef;
+    private final String alias;
     private final NodePosition pos;
 
     public TableRef(QualifiedName tableName, PartitionRef partitionRef, NodePosition pos) {
+        this(tableName, partitionRef, null, pos);
+    }
+
+    public TableRef(QualifiedName tableName, PartitionRef partitionRef, String alias, NodePosition pos) {
         this.tableName = tableName;
         this.partitionRef = partitionRef;
+        this.alias = alias;
         this.pos = pos;
     }
 
@@ -55,5 +61,28 @@ public class TableRef implements ParseNode {
 
     public PartitionRef getPartitionDef() {
         return partitionRef;
+    }
+
+    public PartitionRef getPartitionRef() {
+        return partitionRef;
+    }
+
+    public QualifiedName getQualifiedName() {
+        return tableName;
+    }
+
+    public String getAlias() {
+        if (alias != null) {
+            return alias;
+        }
+        return getTableName();
+    }
+
+    public boolean hasExplicitAlias() {
+        return alias != null;
+    }
+
+    public String getExplicitAlias() {
+        return alias;
     }
 }

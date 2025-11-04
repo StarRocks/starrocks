@@ -704,4 +704,12 @@ public interface AstVisitor<R, C> {
     default R visitRestoreTableFromSnapshotStatement(RestoreTableFromSnapshotStmt clause, C context) {
         return visitDDLStatement(clause, context);
     }
+
+    default R visitBackupStatement(BackupStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitRestoreStatement(RestoreStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
 }
