@@ -14,6 +14,7 @@
 
 package com.starrocks.scheduler;
 
+import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
@@ -2523,7 +2524,6 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                                         context.getState().reset();
                                         context.setQueryId(UUID.fromString(status.getQueryId()));
                                         context.setIsLastStmt(true);
-                                        context.getSessionVariable().setAnalyzeForMv("full");
                                         context.setThreadLocalInfo();
                                         return context;
                                     }
@@ -2537,7 +2537,11 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                                         taskRun.getProcessor();
                                 final MvTaskRunContext mvTaskRunContext = processor.getMvContext();
                                 final String postRun = mvTaskRunContext.getPostRun();
+<<<<<<< HEAD
                                 Assert.assertFalse(postRun.contains("ANALYZE TABLE "));
+=======
+                                Assertions.assertTrue(Strings.isNullOrEmpty(postRun));
+>>>>>>> 5884e77516 ([BugFix] Remove depredated analyze_mv session variable (#64863))
                             });
                 }
         );

@@ -1324,8 +1324,12 @@ public class UtFrameUtils {
 
             // Disable text based rewrite by default.
             connectContext.getSessionVariable().setEnableMaterializedViewTextMatchRewrite(false);
+<<<<<<< HEAD
             // disable mv analyze stats in FE UTs
             connectContext.getSessionVariable().setAnalyzeForMv("");
+=======
+            connectContext.getSessionVariable().setTraceLogLevel(10);
+>>>>>>> 5884e77516 ([BugFix] Remove depredated analyze_mv session variable (#64863))
         }
 
         new MockUp<PlanTestBase>() {

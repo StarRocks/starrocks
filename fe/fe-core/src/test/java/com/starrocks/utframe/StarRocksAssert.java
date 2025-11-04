@@ -738,8 +738,12 @@ public class StarRocksAssert {
             withMaterializedView(sql);
             action.accept(mvName);
         } catch (Exception e) {
+<<<<<<< HEAD
             e.printStackTrace();
             Assert.fail();
+=======
+            Assertions.fail(e.getMessage());
+>>>>>>> 5884e77516 ([BugFix] Remove depredated analyze_mv session variable (#64863))
         } finally {
             // Create mv may fail.
             if (!Strings.isNullOrEmpty(mvName)) {
