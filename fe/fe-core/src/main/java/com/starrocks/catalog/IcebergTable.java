@@ -27,6 +27,21 @@ import com.starrocks.common.util.Util;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergApiConverter;
 import com.starrocks.connector.iceberg.IcebergCatalogType;
+<<<<<<< HEAD
+=======
+import com.starrocks.connector.iceberg.IcebergTableOperation;
+import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
+import com.starrocks.connector.iceberg.procedure.AddFilesProcedure;
+import com.starrocks.connector.iceberg.procedure.CherryPickSnapshotProcedure;
+import com.starrocks.connector.iceberg.procedure.ExpireSnapshotsProcedure;
+import com.starrocks.connector.iceberg.procedure.FastForwardProcedure;
+import com.starrocks.connector.iceberg.procedure.IcebergTableProcedure;
+import com.starrocks.connector.iceberg.procedure.RemoveOrphanFilesProcedure;
+import com.starrocks.connector.iceberg.procedure.RewriteDataFilesProcedure;
+import com.starrocks.connector.iceberg.procedure.RollbackToSnapshotProcedure;
+import com.starrocks.persist.ColumnIdExpr;
+import com.starrocks.planner.DescriptorTable;
+>>>>>>> 000b2f7ee9 ([Enhancement] add iceberg scan metrics in explain verbose and profile (#64875))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.rpc.ConfigurableSerDesFactory;
 import com.starrocks.server.CatalogMgr;
@@ -84,6 +99,7 @@ public class IcebergTable extends Table {
     private List<Column> partitionColumns;
 
     private final AtomicLong partitionIdGen = new AtomicLong(0L);
+    private IcebergMetricsReporter metricsReporter = new IcebergMetricsReporter();
 
     public IcebergTable() {
         super(TableType.ICEBERG);
@@ -402,6 +418,34 @@ public class IcebergTable extends Table {
                 Objects.equal(tableIdentifier, otherTable.getTableIdentifier());
     }
 
+<<<<<<< HEAD
+=======
+    public IcebergTableProcedure getTableProcedure(String procedureName) {
+        IcebergTableOperation op = IcebergTableOperation.fromString(procedureName);
+        if (op == IcebergTableOperation.UNKNOWN) {
+            throw new StarRocksConnectorException("Unknown iceberg table operation : %s", procedureName);
+        }
+        return switch (op) {
+            case FAST_FORWARD -> FastForwardProcedure.getInstance();
+            case CHERRYPICK_SNAPSHOT -> CherryPickSnapshotProcedure.getInstance();
+            case EXPIRE_SNAPSHOTS -> ExpireSnapshotsProcedure.getInstance();
+            case REMOVE_ORPHAN_FILES -> RemoveOrphanFilesProcedure.getInstance();
+            case ROLLBACK_TO_SNAPSHOT -> RollbackToSnapshotProcedure.getInstance();
+            case REWRITE_DATA_FILES -> RewriteDataFilesProcedure.getInstance();
+            case ADD_FILES -> AddFilesProcedure.getInstance();
+            default -> throw new StarRocksConnectorException("Unsupported table operation %s", op);
+        };
+    }
+
+    public void setIcebergMetricsReporter(IcebergMetricsReporter reporter) {
+        this.metricsReporter = reporter;
+    }
+
+    public IcebergMetricsReporter getIcebergMetricsReporter() {
+        return metricsReporter;
+    }
+    
+>>>>>>> 000b2f7ee9 ([Enhancement] add iceberg scan metrics in explain verbose and profile (#64875))
     public static Builder builder() {
         return new Builder();
     }

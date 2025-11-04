@@ -116,8 +116,11 @@ import org.apache.iceberg.expressions.ResidualEvaluator;
 import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.io.CloseableIterator;
 import org.apache.iceberg.io.FileIO;
+<<<<<<< HEAD
 import org.apache.iceberg.metrics.ScanReport;
 import org.apache.iceberg.types.Conversions;
+=======
+>>>>>>> 000b2f7ee9 ([Enhancement] add iceberg scan metrics in explain verbose and profile (#64875))
 import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
 import org.apache.iceberg.util.SerializationUtil;
@@ -189,7 +192,6 @@ public class IcebergMetadata implements ConnectorMetadata {
     private final Map<FileScanTaskSchema, Pair<String, String>> fileScanTaskSchemas = new ConcurrentHashMap<>();
     private final ExecutorService jobPlanningExecutor;
     private final ExecutorService refreshOtherFeExecutor;
-    private final IcebergMetricsReporter metricsReporter;
     private final IcebergCatalogProperties catalogProperties;
     private final ConnectorProperties properties;
 
@@ -206,7 +208,6 @@ public class IcebergMetadata implements ConnectorMetadata {
         this.catalogName = catalogName;
         this.hdfsEnvironment = hdfsEnvironment;
         this.icebergCatalog = icebergCatalog;
-        this.metricsReporter = new IcebergMetricsReporter();
         this.jobPlanningExecutor = jobPlanningExecutor;
         this.refreshOtherFeExecutor = refreshOtherFeExecutor;
         this.catalogProperties = catalogProperties;
@@ -802,6 +803,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             icebergScanTasks.add(icebergSplitScanTask);
         }
 
+<<<<<<< HEAD
         Optional<ScanReport> metrics = metricsReporter.getReporter(
                 catalogName, dbName, tableName, snapshotId, icebergPredicate, nativeTbl);
 
@@ -818,6 +820,8 @@ public class IcebergMetadata implements ConnectorMetadata {
             }
         }
 
+=======
+>>>>>>> 000b2f7ee9 ([Enhancement] add iceberg scan metrics in explain verbose and profile (#64875))
         splitTasks.put(key, icebergScanTasks);
         scannedTables.add(key);
     }
@@ -924,10 +928,37 @@ public class IcebergMetadata implements ConnectorMetadata {
         scanContext.setLocalParallelism(catalogProperties.getIcebergJobPlanningThreadNum());
         scanContext.setLocalPlanningMaxSlotSize(catalogProperties.getLocalPlanningMaxSlotBytes());
 
+<<<<<<< HEAD
         TableScan scan = icebergCatalog.getTableScan(nativeTbl, scanContext)
                 .useSnapshot(snapshotId)
                 .metricsReporter(metricsReporter)
                 .planWith(jobPlanningExecutor);
+=======
+        final long snapshotId = tvrVersionRange.end().orElseThrow(() -> new StarRocksConnectorException(
+                "Snapshot ID is not present in tvrVersionRange: " + tvrVersionRange));
+        Scan scan;
+        IcebergMetricsReporter metricsReporter = icebergTable.getIcebergMetricsReporter();
+        if (metricsReporter == null) {
+            throw new StarRocksConnectorException("IcebergMetricsReporter is null for table: " +
+                    dbName + "." + tableName);
+        }
+        if (tvrVersionRange instanceof TvrTableDelta &&
+                tvrVersionRange.start() != null && tvrVersionRange.start().isPresent()) {
+            IncrementalAppendScan incrementalAppendScan = nativeTbl.newIncrementalAppendScan();
+            incrementalAppendScan =
+                    incrementalAppendScan.fromSnapshotExclusive(tvrVersionRange.from.getVersion());
+            incrementalAppendScan =
+                    incrementalAppendScan.toSnapshot(snapshotId);
+            scan = incrementalAppendScan
+                    .metricsReporter(metricsReporter)
+                    .planWith(jobPlanningExecutor);
+        } else {
+            scan = icebergCatalog.getTableScan(nativeTbl, scanContext)
+                    .useSnapshot(snapshotId)
+                    .metricsReporter(metricsReporter)
+                    .planWith(jobPlanningExecutor);
+        }
+>>>>>>> 000b2f7ee9 ([Enhancement] add iceberg scan metrics in explain verbose and profile (#64875))
 
         if (enableCollectColumnStats) {
             scan = scan.includeColumnStats();
@@ -968,6 +999,18 @@ public class IcebergMetadata implements ConnectorMetadata {
                         fileScanTaskIterator.close();
                     } catch (Exception e) {
                         // ignore
+                    } finally {
+                        //record scan metrics profile
+                        if (tableScan instanceof StarRocksIcebergTableScan) {
+                            IcebergMetricsReporter metricsReporter =
+                                    ((StarRocksIcebergTableScan) tableScan).getMetricsReporter();
+                            if (metricsReporter.getScanReport() != null) {
+                                String name = "ICEBERG.ScanMetrics." + 
+                                        ((StarRocksIcebergTableScan) tableScan).getIcebergTableName().toString();
+                                String value = metricsReporter.getScanReport().toString();
+                                Tracers.record(Tracers.Module.EXTERNAL, name, value);
+                            }
+                        }
                     }
                     hasMore = false;
                 }
@@ -1316,7 +1359,6 @@ public class IcebergMetadata implements ConnectorMetadata {
         databases.clear();
         tables.clear();
         scannedTables.clear();
-        metricsReporter.clear();
     }
 
     interface BatchWrite {
