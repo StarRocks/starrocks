@@ -1,0 +1,15 @@
+-- name: test_normal_flat_json_compatibility
+
+
+-- Test: compatible with adaptive DOP
+SET enable_runtime_adaptive_dop = true;
+CREATE TABLE t1(c1 int, c2 json);
+
+INSERT INTO t1 
+SELECT generate_series, json_object('a', generate_series)
+FROM TABLE(generate_series(1, 100000));
+
+SELECT count(c2) FROM t1;
+SELECT c2 FROM t1 ORDER BY c1 LIMIT 10;
+
+SET enable_runtime_adaptive_dop = false;
