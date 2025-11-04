@@ -217,12 +217,6 @@ private:
 
     void _update_tablet_profile(const DeltaWriter* writer, RuntimeProfile* profile) const;
 
-<<<<<<< HEAD
-=======
-    static bool _is_data_file_bundle_enabled(const PTabletWriterOpenRequest& params);
-
-    static bool _is_multi_statements_txn(const PTabletWriterOpenRequest& params);
-
     Status log_and_error_tablet_not_found(int64_t tablet_id, const PUniqueId& id, std::string_view signature) const;
 
     // write access to the delta writers map
@@ -247,7 +241,6 @@ private:
         }
     };
 
->>>>>>> e8a69384dc ([Refactor] enhance member variable access in LocalTabletsChannel and LakeTabletsChannel (#64481))
     LoadChannel* _load_channel;
     lake::TabletManager* _tablet_manager;
 
@@ -277,17 +270,11 @@ private:
     mutable bthreads::BThreadSharedMutex _rw_mtx;
     // tablet_id -> sequence id started from 0.
     std::unordered_map<int64_t, uint32_t> _tablet_id_to_sorted_indexes;
-<<<<<<< HEAD
-    std::unordered_map<int64_t, std::unique_ptr<AsyncDeltaWriter>> _delta_writers;
-=======
     // place holder of the real DeltaWriters definition
     DeltaWritersImpl _delta_writers_impl;
     // read-only access to the delta writer map
     const std::unordered_map<int64_t, std::unique_ptr<AsyncDeltaWriter>>& _delta_writers =
             _delta_writers_impl.delta_writers();
-    // Partition id -> BundleWritableFileContext
-    std::unordered_map<int64_t, std::unique_ptr<BundleWritableFileContext>> _bundle_wfile_ctx_by_partition;
->>>>>>> e8a69384dc ([Refactor] enhance member variable access in LocalTabletsChannel and LakeTabletsChannel (#64481))
 
     GlobalDictByNameMaps _global_dicts;
     std::unique_ptr<MemPool> _mem_pool;
