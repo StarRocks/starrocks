@@ -24,7 +24,6 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DateUtils;
@@ -51,6 +50,7 @@ import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.compensation.MVCompensation;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.compensation.MVCompensationBuilder;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.compensation.OptCompensator;
+import com.starrocks.type.Type;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

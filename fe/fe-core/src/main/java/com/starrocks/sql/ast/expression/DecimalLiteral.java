@@ -36,9 +36,6 @@ package com.starrocks.sql.ast.expression;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.NotImplementedException;
@@ -47,6 +44,9 @@ import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.optimizer.validate.ValidateException;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.Type;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

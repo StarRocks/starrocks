@@ -16,7 +16,6 @@ package com.starrocks.planner;
 
 import com.google.common.base.MoreObjects;
 import com.starrocks.catalog.FileTable;
-import com.starrocks.catalog.Type;
 import com.starrocks.connector.RemoteFileBlockDesc;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.hive.RemoteFileInputFormat;
@@ -34,6 +33,7 @@ import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
+import com.starrocks.type.Type;
 
 import java.util.ArrayList;
 import java.util.List;

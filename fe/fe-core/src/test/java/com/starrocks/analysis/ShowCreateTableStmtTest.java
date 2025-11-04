@@ -19,7 +19,6 @@ package com.starrocks.analysis;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveTable;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.FeConstants;
 import com.starrocks.connector.hive.HiveStorageFormat;
 import com.starrocks.qe.ConnectContext;
@@ -30,6 +29,7 @@ import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.sql.ast.expression.TableName;
+import com.starrocks.type.Type;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;

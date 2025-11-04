@@ -14,7 +14,6 @@
 
 package com.starrocks.connector.iceberg.procedure;
 
-import com.starrocks.catalog.Type;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergTableOperation;
@@ -23,6 +22,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterTableOperationClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.type.Type;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;

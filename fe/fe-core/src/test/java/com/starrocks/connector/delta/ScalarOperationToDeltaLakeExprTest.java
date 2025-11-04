@@ -14,7 +14,6 @@
 
 package com.starrocks.connector.delta;
 
-import com.starrocks.catalog.Type;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -23,6 +22,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.type.Type;
 import io.delta.kernel.expressions.AlwaysTrue;
 import io.delta.kernel.expressions.And;
 import io.delta.kernel.expressions.Column;

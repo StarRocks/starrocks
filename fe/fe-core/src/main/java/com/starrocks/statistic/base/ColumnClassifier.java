@@ -16,9 +16,9 @@ package com.starrocks.statistic.base;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
+import com.starrocks.type.StructType;
+import com.starrocks.type.Type;
 
 import java.util.List;
 

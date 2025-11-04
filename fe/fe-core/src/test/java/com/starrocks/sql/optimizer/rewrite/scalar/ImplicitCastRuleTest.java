@@ -17,8 +17,6 @@ package com.starrocks.sql.optimizer.rewrite.scalar;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Function;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -32,6 +30,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.Type;
 import mockit.Expectations;
 import org.junit.jupiter.api.Test;
 

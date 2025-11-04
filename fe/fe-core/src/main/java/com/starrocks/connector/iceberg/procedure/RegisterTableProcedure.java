@@ -14,7 +14,6 @@
 
 package com.starrocks.connector.iceberg.procedure;
 
-import com.starrocks.catalog.Type;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.Procedure;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -22,6 +21,7 @@ import com.starrocks.connector.iceberg.IcebergCatalog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.type.Type;
 
 import java.util.Arrays;
 import java.util.Map;

@@ -18,15 +18,15 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableSortedSet;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.AggregateFunction;
-import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.Type;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.FunctionAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.FunctionParams;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.Type;
 
 import java.util.Arrays;
 import java.util.List;

@@ -15,7 +15,6 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.catalog.IcebergTable;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.ConnectContext;
@@ -32,6 +31,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.Type;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;

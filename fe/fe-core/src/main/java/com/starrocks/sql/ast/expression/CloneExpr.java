@@ -15,9 +15,9 @@
 
 package com.starrocks.sql.ast.expression;
 
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
+import com.starrocks.type.Type;
 
 public class CloneExpr extends Expr {
     public CloneExpr(Expr child) {

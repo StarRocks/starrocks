@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.catalog;
+package com.starrocks.type;
 
 import com.google.common.base.Objects;
 import com.google.common.base.Strings;
@@ -87,7 +87,7 @@ public class StructField {
         return fieldId;
     }
 
-    String getFieldPhysicalName() {
+    public String getFieldPhysicalName() {
         return fieldPhysicalName;
     }
 

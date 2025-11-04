@@ -35,7 +35,6 @@
 package com.starrocks.sql.ast.expression;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.sql.ast.AstVisitor;
@@ -44,6 +43,7 @@ import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.validate.ValidateException;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.Type;
 
 import java.io.DataInput;
 import java.io.DataOutput;

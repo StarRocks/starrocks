@@ -16,7 +16,7 @@ package com.starrocks.connector.odps;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OdpsTable;
-import com.starrocks.catalog.Type;
+import com.starrocks.type.Type;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;

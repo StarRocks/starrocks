@@ -15,8 +15,6 @@
 package com.starrocks.connector.metadata.iceberg;
 
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.metadata.MetadataTable;
@@ -25,13 +23,15 @@ import com.starrocks.planner.DescriptorTable;
 import com.starrocks.thrift.THdfsTable;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
 
 import java.util.List;
 import java.util.stream.Collectors;
 
-import static com.starrocks.catalog.Type.ARRAY_BIGINT;
-import static com.starrocks.catalog.Type.ARRAY_INT;
 import static com.starrocks.connector.metadata.TableMetaMetadata.METADATA_DB_NAME;
+import static com.starrocks.type.Type.ARRAY_BIGINT;
+import static com.starrocks.type.Type.ARRAY_INT;
 
 public class LogicalIcebergMetadataTable extends MetadataTable {
     public static final String TABLE_NAME = "starrocks_connector_iceberg_logical_metadata_table";

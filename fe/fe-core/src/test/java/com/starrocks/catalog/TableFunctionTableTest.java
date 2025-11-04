@@ -31,6 +31,8 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.Type;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;

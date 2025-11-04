@@ -14,7 +14,7 @@
 
 package com.starrocks.statistic.sample;
 
-import com.starrocks.catalog.Type;
+import com.starrocks.type.Type;
 
 import java.util.List;
 import java.util.stream.Collectors;

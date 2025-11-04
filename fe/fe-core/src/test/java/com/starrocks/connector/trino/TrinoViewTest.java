@@ -16,12 +16,12 @@ package com.starrocks.connector.trino;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveView;
-import com.starrocks.catalog.MapType;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.StructField;
-import com.starrocks.catalog.StructType;
 import com.starrocks.connector.hive.HiveMetastoreApiConverter;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.type.MapType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.StructField;
+import com.starrocks.type.StructType;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.hadoop.hive.metastore.api.Table;

@@ -61,6 +61,7 @@ import com.starrocks.thrift.TPartitionMap;
 import com.starrocks.thrift.TSortOrder;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
+import com.starrocks.type.Type;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.NullOrder;
 import org.apache.iceberg.PartitionField;

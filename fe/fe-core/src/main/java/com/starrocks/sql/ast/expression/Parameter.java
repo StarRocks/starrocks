@@ -14,9 +14,9 @@
 
 package com.starrocks.sql.ast.expression;
 
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
+import com.starrocks.type.Type;
 
 /**
  * Parameter used in prepare-statement, placeholder ? is translated into a Parameter

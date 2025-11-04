@@ -19,8 +19,8 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.io.LittleEndianDataOutputStream;
 import com.google.gson.Gson;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.Type;
 import com.starrocks.thrift.TRowFormat;
+import com.starrocks.type.Type;
 import org.apache.commons.lang3.ObjectUtils;
 
 import java.io.ByteArrayOutputStream;

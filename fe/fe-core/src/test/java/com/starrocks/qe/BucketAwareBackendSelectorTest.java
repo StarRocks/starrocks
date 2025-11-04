@@ -16,7 +16,6 @@ package com.starrocks.qe;
 
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.BucketProperty;
 import com.starrocks.planner.PlanNodeId;
@@ -32,6 +31,7 @@ import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TScanRangeParams;
+import com.starrocks.type.Type;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;

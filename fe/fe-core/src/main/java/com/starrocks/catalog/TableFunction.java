@@ -27,6 +27,8 @@ import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.thrift.TFunction;
 import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.thrift.TTableFunction;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeSerializer;
 
 import java.util.List;
 import java.util.Map;

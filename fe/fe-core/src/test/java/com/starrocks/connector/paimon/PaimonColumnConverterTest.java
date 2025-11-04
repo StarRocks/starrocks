@@ -14,10 +14,10 @@
 
 package com.starrocks.connector.paimon;
 
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.StructType;
-import com.starrocks.catalog.Type;
 import com.starrocks.connector.ColumnTypeConverter;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.StructType;
+import com.starrocks.type.Type;
 import org.apache.paimon.types.ArrayType;
 import org.apache.paimon.types.BigIntType;
 import org.apache.paimon.types.BinaryType;
@@ -159,8 +159,8 @@ public class PaimonColumnConverterTest {
     public void testConvertArray() {
         ArrayType paimonType = new ArrayType(new SmallIntType());
         Type result = ColumnTypeConverter.fromPaimonType(paimonType);
-        Assertions.assertTrue(result instanceof com.starrocks.catalog.ArrayType);
-        com.starrocks.catalog.ArrayType srType = (com.starrocks.catalog.ArrayType) result;
+        Assertions.assertTrue(result instanceof com.starrocks.type.ArrayType);
+        com.starrocks.type.ArrayType srType = (com.starrocks.type.ArrayType) result;
         Assertions.assertEquals(Type.SMALLINT, srType.getItemType());
     }
 
@@ -168,8 +168,8 @@ public class PaimonColumnConverterTest {
     public void testConvertMap() {
         MapType paimonType = new MapType(new VarCharType(20), new TimestampType());
         Type result = ColumnTypeConverter.fromPaimonType(paimonType);
-        Assertions.assertTrue(result instanceof com.starrocks.catalog.MapType);
-        com.starrocks.catalog.MapType srType = (com.starrocks.catalog.MapType) result;
+        Assertions.assertTrue(result instanceof com.starrocks.type.MapType);
+        com.starrocks.type.MapType srType = (com.starrocks.type.MapType) result;
         Assertions.assertEquals(ScalarType.createDefaultCatalogString(), srType.getKeyType());
         Assertions.assertEquals(Type.DATETIME, srType.getValueType());
     }

@@ -16,10 +16,10 @@ package com.starrocks.sql.ast;
 
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.type.ScalarType;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.Comparator;

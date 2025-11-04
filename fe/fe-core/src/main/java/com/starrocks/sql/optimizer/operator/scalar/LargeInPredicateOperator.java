@@ -14,7 +14,7 @@
 
 package com.starrocks.sql.optimizer.operator.scalar;
 
-import com.starrocks.catalog.Type;
+import com.starrocks.type.Type;
 
 import java.util.List;
 import java.util.Objects;

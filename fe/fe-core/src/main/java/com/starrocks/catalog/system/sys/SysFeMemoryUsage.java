@@ -17,8 +17,6 @@ package com.starrocks.catalog.system.sys;
 import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeType;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
@@ -30,6 +28,8 @@ import com.starrocks.thrift.TFeMemoryItem;
 import com.starrocks.thrift.TFeMemoryReq;
 import com.starrocks.thrift.TFeMemoryRes;
 import com.starrocks.thrift.TSchemaTableType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
 import org.apache.thrift.TException;
 
 

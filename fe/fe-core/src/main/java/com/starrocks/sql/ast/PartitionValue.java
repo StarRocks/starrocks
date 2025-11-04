@@ -15,12 +15,12 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.Type;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;

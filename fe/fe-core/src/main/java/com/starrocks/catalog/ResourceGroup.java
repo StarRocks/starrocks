@@ -21,6 +21,7 @@ import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.thrift.TWorkGroup;
 import com.starrocks.thrift.TWorkGroupType;
+import com.starrocks.type.ScalarType;
 
 import java.text.DecimalFormat;
 import java.util.Collections;

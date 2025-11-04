@@ -47,13 +47,13 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageType;
+import com.starrocks.type.Type;
 import mockit.Expectations;
 
 import java.util.LinkedList;

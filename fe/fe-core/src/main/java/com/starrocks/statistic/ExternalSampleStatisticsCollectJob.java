@@ -18,7 +18,7 @@ import com.google.common.hash.HashFunction;
 import com.google.common.hash.Hashing;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
+import com.starrocks.type.Type;
 
 import java.util.List;
 import java.util.Map;

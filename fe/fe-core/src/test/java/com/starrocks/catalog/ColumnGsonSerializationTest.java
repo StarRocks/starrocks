@@ -42,6 +42,8 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.Type;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;

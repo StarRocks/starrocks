@@ -49,6 +49,7 @@ import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
+import com.starrocks.type.Type;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;

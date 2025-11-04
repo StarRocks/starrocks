@@ -21,8 +21,6 @@ import com.google.common.collect.Maps;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
@@ -48,6 +46,8 @@ import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.sql.common.EngineType;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

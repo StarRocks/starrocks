@@ -15,6 +15,7 @@
 
 package com.starrocks.catalog;
 
+import com.starrocks.type.PrimitiveType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 

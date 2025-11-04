@@ -17,11 +17,11 @@ package com.starrocks.planner;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.TableFunctionTable;
-import com.starrocks.catalog.Type;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TDataSinkType;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.type.Type;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;

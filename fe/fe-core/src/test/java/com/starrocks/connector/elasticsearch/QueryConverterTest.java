@@ -16,7 +16,6 @@
 package com.starrocks.connector.elasticsearch;
 
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -33,6 +32,7 @@ import com.starrocks.sql.ast.expression.IsNullPredicate;
 import com.starrocks.sql.ast.expression.LikePredicate;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.type.Type;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 

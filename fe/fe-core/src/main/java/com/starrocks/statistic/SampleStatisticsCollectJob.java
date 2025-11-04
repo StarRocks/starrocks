@@ -16,7 +16,6 @@ package com.starrocks.statistic;
 
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -24,6 +23,7 @@ import com.starrocks.statistic.sample.ColumnSampleManager;
 import com.starrocks.statistic.sample.ColumnStats;
 import com.starrocks.statistic.sample.SampleInfo;
 import com.starrocks.statistic.sample.TabletSampleManager;
+import com.starrocks.type.Type;
 
 import java.util.List;
 import java.util.Map;

@@ -20,9 +20,9 @@ package com.starrocks.sql.analyzer;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.KeysType;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.sql.ast.IndexDef;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 

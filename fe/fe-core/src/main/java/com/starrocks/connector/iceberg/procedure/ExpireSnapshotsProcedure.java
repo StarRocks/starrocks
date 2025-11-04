@@ -14,11 +14,11 @@
 
 package com.starrocks.connector.iceberg.procedure;
 
-import com.starrocks.catalog.Type;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergTableOperation;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.type.Type;
 import org.apache.iceberg.ExpireSnapshots;
 
 import java.time.Duration;

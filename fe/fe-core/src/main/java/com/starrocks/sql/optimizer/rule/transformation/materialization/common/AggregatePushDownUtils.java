@@ -18,9 +18,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.MvRewriteContext;
@@ -41,6 +39,8 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.Aggregate
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.PredicateSplit;
 import com.starrocks.sql.optimizer.rule.tree.pdagg.AggregatePushDownContext;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.Type;
 
 import java.util.List;
 import java.util.Map;

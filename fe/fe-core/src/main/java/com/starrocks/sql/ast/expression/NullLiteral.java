@@ -35,11 +35,11 @@
 package com.starrocks.sql.ast.expression;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.Type;
 
 import java.nio.ByteBuffer;
 

@@ -16,7 +16,6 @@ package com.starrocks.connector.kudu;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.KuduTable;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.connector.GetRemoteFilesParams;
@@ -24,6 +23,7 @@ import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.type.ScalarType;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.kudu.Schema;
@@ -47,7 +47,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static com.starrocks.catalog.KuduTableTest.genColumnSchema;
-import static com.starrocks.catalog.ScalarType.CATALOG_MAX_VARCHAR_LENGTH;
+import static com.starrocks.type.ScalarType.CATALOG_MAX_VARCHAR_LENGTH;
 
 public class KuduMetadataTest {
     @Mocked

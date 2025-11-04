@@ -15,8 +15,8 @@
 package com.starrocks.connector.delta;
 
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+import com.starrocks.type.Type;
 import io.delta.kernel.types.IntegerType;
 import io.delta.kernel.types.StringType;
 import io.delta.kernel.types.StructType;

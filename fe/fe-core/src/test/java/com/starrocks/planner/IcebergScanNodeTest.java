@@ -2,7 +2,6 @@ package com.starrocks.planner;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.connector.BucketProperty;
@@ -47,6 +46,7 @@ import com.starrocks.thrift.TIcebergTable;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TSinkCommitInfo;
 import com.starrocks.thrift.TTableDescriptor;
+import com.starrocks.type.ScalarType;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;

@@ -16,8 +16,6 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.lake.LakeMaterializedView;
@@ -31,6 +29,8 @@ import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.optimizer.operator.ColumnFilterConverter;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.Type;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;

@@ -14,8 +14,8 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.Type;
 
 import java.util.List;
 import java.util.Map;

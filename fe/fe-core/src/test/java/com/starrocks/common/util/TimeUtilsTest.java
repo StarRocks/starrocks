@@ -17,12 +17,12 @@
 
 package com.starrocks.common.util;
 
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.sql.ast.expression.DateLiteral;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.Type;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
