@@ -981,10 +981,18 @@ public class QueryAnalyzer {
         }
 
         private RelationFields createJoinRelationFields(RelationFields joinedFields, JoinRelation join) {
-            if (CollectionUtils.isNotEmpty(join.getUsingColNames()) && !join.getJoinOp().isFullOuterJoin()) {
-                return new CoalescedJoinFields(joinedFields.getAllFields(), join.getUsingColNames(), join.getJoinOp());
+            if (CollectionUtils.isNotEmpty(join.getUsingColNames())) {
+                if (join.getJoinOp().isFullOuterJoin()) {
+                    // FULL OUTER JOIN USING: create CoalescedJoinFields with pre-built COALESCE fields
+                    List<Field> leftFields = join.getLeft().getRelationFields().getAllFields();
+                    List<Field> rightFields = join.getRight().getRelationFields().getAllFields();
+                    return new CoalescedJoinFields(joinedFields.getAllFields(), join.getUsingColNames(), 
+                                                   join.getJoinOp(), leftFields, rightFields);
+                } else {
+                    // Other JOIN USING: use standard CoalescedJoinFields
+                    return new CoalescedJoinFields(joinedFields.getAllFields(), join.getUsingColNames(), join.getJoinOp());
+                }
             } else {
-                // TODO: Support FULL OUTER JOIN USING with proper COALESCE semantics
                 return joinedFields;
             }
         }

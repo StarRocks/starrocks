@@ -282,8 +282,10 @@ public class SelectAnalyzer {
                      * eg: "select * from (select count(*) from table) t"
                      */
                     FieldReference fieldReference = new FieldReference(fieldIndex, item.getTblName());
-                    analyzeExpression(fieldReference, analyzeState, scope);
-                    outputExpressionBuilder.add(fieldReference);
+                    
+                    Expr actualExpr = rewriteFullOuterJoinUsingExpr(fieldReference, scope);
+                    analyzeExpression(actualExpr, analyzeState, scope);
+                    outputExpressionBuilder.add(actualExpr);
                 }
                 outputFields.addAll(fields);
 
@@ -296,16 +298,16 @@ public class SelectAnalyzer {
                             AstToStringBuilder.getAliasName(item.getExpr(), false, false) : item.getAlias();
                 }
 
-                analyzeExpression(item.getExpr(), analyzeState, scope);
-                outputExpressionBuilder.add(item.getExpr());
+                Expr actualExpr = rewriteFullOuterJoinUsingExpr(item.getExpr(), scope);
+                analyzeExpression(actualExpr, analyzeState, scope);
+                outputExpressionBuilder.add(actualExpr);
 
-                if (item.getExpr() instanceof SlotRef) {
-                    outputFields.add(new Field(name, item.getExpr().getType(),
-                            ((SlotRef) item.getExpr()).getTblNameWithoutAnalyzed(), item.getExpr(),
-                            true, item.getExpr().isNullable()));
+                if (actualExpr instanceof SlotRef) {
+                    outputFields.add(new Field(name, actualExpr.getType(),
+                            ((SlotRef) actualExpr).getTblNameWithoutAnalyzed(), actualExpr,
+                            true, actualExpr.isNullable()));
                 } else {
-                    outputFields.add(new Field(name, item.getExpr().getType(), null, item.getExpr(),
-                            true, item.getExpr().isNullable()));
+                    outputFields.add(new Field(name, actualExpr.getType(), null, actualExpr, true, actualExpr.isNullable()));
                 }
 
                 // outputExprInOrderByScope is used to record which expressions in outputExpression are to be
@@ -446,6 +448,8 @@ public class SelectAnalyzer {
         }
 
         Expr predicate = pushNegationToOperands(whereClause);
+        // Rewrite FULL OUTER JOIN USING columns to COALESCE expressions
+        predicate = rewriteFullOuterJoinUsingExpr(predicate, scope);
         analyzeExpression(predicate, analyzeState, scope);
 
         AnalyzerUtils.verifyNoAggregateFunctions(predicate, "WHERE");
@@ -598,6 +602,9 @@ public class SelectAnalyzer {
                                Scope outputScope, List<Expr> outputExprs) {
         if (havingClause != null) {
             Expr predicate = pushNegationToOperands(havingClause);
+
+            // Rewrite FULL OUTER JOIN USING columns to COALESCE expressions
+            predicate = rewriteFullOuterJoinUsingExpr(predicate, sourceScope);
 
             RewriteAliasVisitor visitor = new RewriteAliasVisitor(sourceScope, outputScope, outputExprs, session);
             predicate = predicate.accept(visitor, null);
@@ -786,6 +793,81 @@ public class SelectAnalyzer {
         }
     }
 
+    /**
+     * Rewrites expressions containing FULL OUTER JOIN USING columns to use COALESCE expressions.
+     * This ensures that unqualified references to USING columns in FULL OUTER JOIN resolve to
+     * COALESCE(left.col, right.col) semantics.
+     */
+    private Expr rewriteFullOuterJoinUsingExpr(Expr expr, Scope scope) {
+        FullOuterJoinUsingRewriter rewriter = new FullOuterJoinUsingRewriter(scope);
+        return expr.accept(rewriter, null);
+    }
+
+    /**
+     * Visitor that rewrites SlotRef expressions to COALESCE expressions for FULL OUTER JOIN USING columns.
+     */
+    private static class FullOuterJoinUsingRewriter implements AstVisitorExtendInterface<Expr, Void> {
+        private final Scope scope;
+
+        public FullOuterJoinUsingRewriter(Scope scope) {
+            this.scope = scope;
+        }
+
+        @Override
+        public Expr visit(ParseNode expr) {
+            return visit(expr, null);
+        }
+
+        @Override
+        public Expr visitExpression(Expr expr, Void context) {
+            for (int i = 0; i < expr.getChildren().size(); ++i) {
+                expr.setChild(i, visit(expr.getChild(i)));
+            }
+            return expr;
+        }
+
+        @Override
+        public Expr visitSlot(SlotRef slotRef, Void context) {
+            // Only rewrite unqualified SlotRefs
+            if (slotRef.getTblNameWithoutAnalyzed() != null) {
+                return slotRef;
+            }
+
+            try {
+                ResolvedField resolvedField = scope.resolveField(slotRef);
+                Field field = resolvedField.getField();
+
+                if (field.getOriginExpression() instanceof FunctionCallExpr funcExpr) {
+                    if (FunctionSet.COALESCE.equalsIgnoreCase(funcExpr.getFnName().getFunction())) {
+                        return funcExpr.clone();
+                    }
+                }
+            } catch (SemanticException e) {
+            }
+
+            return slotRef;
+        }
+
+        @Override
+        public Expr visitFieldReference(FieldReference fieldRef, Void context) {
+            try {
+                List<Field> allFields = scope.getRelationFields().getAllFields();
+                if (fieldRef.getFieldIndex() >= 0 && fieldRef.getFieldIndex() < allFields.size()) {
+                    Field field = allFields.get(fieldRef.getFieldIndex());
+                    
+                    if (field.getOriginExpression() instanceof FunctionCallExpr funcExpr) {
+                        if (FunctionSet.COALESCE.equalsIgnoreCase(funcExpr.getFnName().getFunction())) {
+                            return funcExpr.clone();
+                        }
+                    }
+                }
+            } catch (Exception e) {
+            }
+
+            return fieldRef;
+        }
+    }
+
     private Scope computeAndAssignOrderScope(AnalyzeState analyzeState, Scope sourceScope, Scope outputScope,
                                              boolean isDistinct) {
 
@@ -926,16 +1008,16 @@ public class SelectAnalyzer {
 
         JoinRelation joinRelation = getJoinRelationWithUsing(fromRelation);
 
-        // TODO(stephen): Support FULL OUTER JOIN USING with proper COALESCE semantics
-        if (joinRelation.getJoinOp().isFullOuterJoin()) {
-            return scope.getRelationFields().getAllFields();
-        }
-
         Set<String> usingColSet = joinRelation.getUsingColNames().stream()
                 .map(String::toLowerCase)
                 .collect(Collectors.toSet());
 
         List<Field> allFields = scope.getRelationFields().getAllFields();
+        
+        // For FULL OUTER JOIN USING, we need special handling since we keep all original fields
+        if (joinRelation.getJoinOp().isFullOuterJoin()) {
+            return getFieldsForFullOuterJoinUsingStar(allFields, usingColSet, joinRelation.getUsingColNames(), scope);
+        }
 
         // Step 1: Add USING columns once with appropriate table preference
         Map<String, Field> usingFields = new LinkedHashMap<>();
@@ -976,6 +1058,33 @@ public class SelectAnalyzer {
         return result;
     }
 
+    /**
+     * Handles SELECT * for FULL OUTER JOIN USING.
+     * Order: [USING columns (COALESCE), left non-USING, right non-USING]
+     */
+    private List<Field> getFieldsForFullOuterJoinUsingStar(List<Field> allFields, Set<String> usingColSet, 
+                                                           List<String> usingColNames, Scope scope) {
+        List<Field> result = new ArrayList<>();
+        
+        if (scope.getRelationFields() instanceof CoalescedJoinFields coalescedFields) {
+            for (String usingCol : usingColNames) {
+                List<Field> resolved = coalescedFields.resolveFields(new SlotRef(null, usingCol));
+                if (!resolved.isEmpty()) {
+                    result.add(resolved.get(0));
+                }
+            }
+        }
+        
+        for (Field field : allFields) {
+            String fieldName = field.getName();
+            if (fieldName == null || !usingColSet.contains(fieldName.toLowerCase())) {
+                result.add(field);
+            }
+        }
+        
+        return result;
+    }
+
     private void addNonUsingFieldsByCount(List<Field> allFields, Set<String> usingColSet, 
                                           List<Field> result, int leftFieldCount, int rightFieldCount,
                                           boolean addLeftTable) {
@@ -1000,3 +1109,4 @@ public class SelectAnalyzer {
         }
     }
 }
+
