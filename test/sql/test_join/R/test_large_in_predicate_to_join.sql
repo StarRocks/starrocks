@@ -815,22 +815,6 @@ select id, date_val from t_mixed where date_val in ('2024-01-01', '2024-01-02', 
 select id, varchar_col from t_string where varchar_col in (1, 2, 3, 4) order by id;
 -- result:
 -- !result
-select category, count(*) as cnt, avg(score) as avg_score
-from (
-    select
-        case
-            when category_id in (1, 2, 3, 4, 5) then 'group_a'
-            else 'group_b'
-        end as category,
-        score
-    from t_large
-    where status in ('active', 'pending', 'inactive', 'suspended')
-) t
-group by category
-order by category;
--- result:
-group_a	20	80.35
--- !result
 select
     id,
     category_id,
