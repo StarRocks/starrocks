@@ -56,12 +56,12 @@ import javax.annotation.Nullable;
  * across all transaction types. Additionally, specific groups can be enabled via configuration.
  * For instance, transactions from {@code BACKEND_STREAMING}, {@code FRONTEND_STREAMING},
  * and {@code MULTI_STATEMENT_STREAMING} are all categorized under the "stream_load" group.
- * When metrics are exported (e.g., to Prometheus), they will include a 'group' label
+ * When metrics are exported (e.g., to Prometheus), they will include a 'type' label
  * corresponding to the group name. A sample metric might look like:
  * <pre>
- *   starrocks_fe_txn_total_latency_ms{group="all", quantile="0.99"} 150.78
- *   starrocks_fe_txn_total_latency_ms{group="stream_load", quantile="0.99"} 123.45
- *   starrocks_fe_txn_total_latency_ms{group="routine_load", quantile="0.99"} 234.56
+ *   starrocks_fe_txn_total_latency_ms{type="all", quantile="0.99"} 150.78
+ *   starrocks_fe_txn_total_latency_ms{type="stream_load", quantile="0.99"} 123.45
+ *   starrocks_fe_txn_total_latency_ms{type="routine_load", quantile="0.99"} 234.56
  * </pre>
  * This allows for monitoring both the overall transaction performance (using "all") and the
  * performance of specific load types like "stream_load", abstracting away the specific
@@ -241,7 +241,7 @@ public class TransactionMetricRegistry {
         return groups;
     }
 
-    /** Create the six latency histograms with a shared group label for a group. */
+    /** Create the six latency histograms with a shared type label for a group. */
     private TransactionMetrics buildLatencyMetrics(String groupName) {
         LeaderAwareHistogramMetric totalLatencyMs = createHistogram("txn_total_latency_ms", groupName);
         LeaderAwareHistogramMetric writeLatencyMs = createHistogram("txn_write_latency_ms", groupName);
@@ -254,10 +254,10 @@ public class TransactionMetricRegistry {
 
     }
 
-    /** Create a labeled leader-aware histogram metric. */
-    private LeaderAwareHistogramMetric createHistogram(String name, String groupLabel) {
+    /** Create a type-labeled leader-aware histogram metric. */
+    private LeaderAwareHistogramMetric createHistogram(String name, String typeLabel) {
         LeaderAwareHistogramMetric histogram = new LeaderAwareHistogramMetric(name);
-        histogram.addLabel(new MetricLabel("group", groupLabel));
+        histogram.addLabel(new MetricLabel("type", typeLabel));
         return histogram;
     }
 

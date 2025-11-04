@@ -1805,7 +1805,7 @@ Each metric includes the following outputs:
 - **`<metric_name>_count`**: The total number of transactions recorded for this phase, e.g., `starrocks_fe_txn_total_latency_ms_count`.
 
 All transaction metrics share the following labels:
-- `group`: Categorizes transactions by their load job source type (e.g., `all`, `stream_load`, `routine_load`). This allows for monitoring both overall transaction performance and the performance of specific load types. The reported groups can be configured via the [`txn_latency_metric_report_groups`](../FE_configuration.md#txn_latency_metric_report_groups) FE parameter.
+- `type`: Categorizes transactions by their load job source type (e.g., `all`, `stream_load`, `routine_load`). This allows for monitoring both overall transaction performance and the performance of specific load types. The reported groups can be configured via the [`txn_latency_metric_report_groups`](../FE_configuration.md#txn_latency_metric_report_groups) FE parameter.
 - `is_leader`: Indicates whether the reporting FE node is the leader. Only the leader FE (`is_leader="true"`) reports actual metric values. Followers will have `is_leader="false"` and report no data.
 
 #### starrocks_fe_txn_total_latency_ms

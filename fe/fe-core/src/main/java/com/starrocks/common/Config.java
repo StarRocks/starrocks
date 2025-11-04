@@ -1214,7 +1214,7 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true, comment = "A comma-separated list of transaction latency metric groups to report. " +
             "Load job source types (see TransactionState.LoadJobSourceType) are categorized into logical groups " +
-            "for monitoring. When a group is enabled, its name is added as a 'group' label to transaction metrics. " +
+            "for monitoring. When a group is enabled, its name is added as a 'type' label to transaction metrics. " +
             "Common groups include 'stream_load', 'routine_load', 'broker_load', 'insert', and 'compaction' " +
             "(for shared-data clusters). e.g. \"stream_load,routine_load\"")
     public static String txn_latency_metric_report_groups = "";

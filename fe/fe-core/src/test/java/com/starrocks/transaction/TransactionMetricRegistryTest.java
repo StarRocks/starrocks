@@ -49,25 +49,25 @@ public class TransactionMetricRegistryTest {
         // enable multiple groups with case/space variants
         setReportGroups(registry, " Stream_Load , ROUTINE_LOAD  ");
         String out1 = renderReport(registry);
-        Assertions.assertTrue(out1.contains("group=\"stream_load\""), out1);
-        Assertions.assertTrue(out1.contains("group=\"routine_load\""), out1);
-        Assertions.assertTrue(out1.contains("group=\"all\""), out1);
+        Assertions.assertTrue(out1.contains("type=\"stream_load\""), out1);
+        Assertions.assertTrue(out1.contains("type=\"routine_load\""), out1);
+        Assertions.assertTrue(out1.contains("type=\"all\""), out1);
         // idempotent when unchanged
         registry.updateConfig();
         String out2 = renderReport(registry);
         Assertions.assertEquals(out1, out2);
-        Assertions.assertTrue(out2.contains("group=\"all\""), out2);
+        Assertions.assertTrue(out2.contains("type=\"all\""), out2);
         // unknown ignored, all remains
         setReportGroups(registry, "unknown,another_unknown");
         String out3 = renderReport(registry);
-        Assertions.assertFalse(out3.contains("group=\"unknown\""), out3);
-        Assertions.assertTrue(out3.contains("group=\"all\""), out3);
+        Assertions.assertFalse(out3.contains("type=\"unknown\""), out3);
+        Assertions.assertTrue(out3.contains("type=\"all\""), out3);
         // disable clears enabled groups
         setReportGroups(registry, "");
         String out4 = renderReport(registry);
-        Assertions.assertFalse(out4.contains("group=\"stream_load\""), out4);
-        Assertions.assertFalse(out4.contains("group=\"routine_load\""), out4);
-        Assertions.assertTrue(out4.contains("group=\"all\""), out4);
+        Assertions.assertFalse(out4.contains("type=\"stream_load\""), out4);
+        Assertions.assertFalse(out4.contains("type=\"routine_load\""), out4);
+        Assertions.assertTrue(out4.contains("type=\"all\""), out4);
     }
 
     @Test
@@ -76,16 +76,16 @@ public class TransactionMetricRegistryTest {
         TransactionMetricRegistry registry = newRegistry();
         // all group always reported
         String out = renderReport(registry);
-        Assertions.assertTrue(out.contains("group=\"all\""), out);
+        Assertions.assertTrue(out.contains("type=\"all\""), out);
         // enable one group then disable
         setReportGroups(registry, "broker_load");
         String out1 = renderReport(registry);
-        Assertions.assertTrue(out1.contains("group=\"broker_load\""), out1);
-        Assertions.assertTrue(out1.contains("group=\"all\""), out1);
+        Assertions.assertTrue(out1.contains("type=\"broker_load\""), out1);
+        Assertions.assertTrue(out1.contains("type=\"all\""), out1);
         setReportGroups(registry, "");
         String out2 = renderReport(registry);
-        Assertions.assertFalse(out2.contains("group=\"broker_load\""), out2);
-        Assertions.assertTrue(out2.contains("group=\"all\""), out2);
+        Assertions.assertFalse(out2.contains("type=\"broker_load\""), out2);
+        Assertions.assertTrue(out2.contains("type=\"all\""), out2);
     }
 
     @Test
@@ -114,7 +114,7 @@ public class TransactionMetricRegistryTest {
         registry.update(t3);
         String outC = renderReport(registry);
         Assertions.assertEquals(3, extractCount(outC, "txn_total_latency_ms", "all", true));
-        Assertions.assertFalse(outC.contains("group=\"stream_load\""), outC);
+        Assertions.assertFalse(outC.contains("type=\"stream_load\""), outC);
     }
 
     @Test
@@ -175,12 +175,12 @@ public class TransactionMetricRegistryTest {
         TransactionMetricRegistry registry = newRegistry();
         setReportGroups(registry, "insert");
         String out1 = renderReport(registry);
-        Assertions.assertTrue(out1.contains("group=\"insert\""), out1);
-        Assertions.assertTrue(out1.contains("group=\"all\""), out1);
+        Assertions.assertTrue(out1.contains("type=\"insert\""), out1);
+        Assertions.assertTrue(out1.contains("type=\"all\""), out1);
         Assertions.assertTrue(out1.contains("is_leader=\"true\""), out1);
         setLeader(false, globalStateMgr);
         String out2 = renderReport(registry);
-        Assertions.assertTrue(out2.contains("group=\"all\""), out2);
+        Assertions.assertTrue(out2.contains("type=\"all\""), out2);
         Assertions.assertTrue(out2.contains("is_leader=\"false\""), out2);
     }
 
@@ -233,10 +233,10 @@ public class TransactionMetricRegistryTest {
         };
     }
 
-    private int extractCount(String output, String metric, String group, boolean leader) {
+    private int extractCount(String output, String metric, String typeName, boolean leader) {
         String leaderTag = leader ? "true" : "false";
         String pattern =
-                ".*_(" + Pattern.quote(metric) + ")_count\\{([^}]*group=\"" + Pattern.quote(group) + "\"[^}]*)}\\s+(\\d+)";
+                ".*_(" + Pattern.quote(metric) + ")_count\\{([^}]*type=\"" + Pattern.quote(typeName) + "\"[^}]*)}\\s+(\\d+)";
         Pattern p = Pattern.compile(pattern, Pattern.DOTALL);
         Matcher m = p.matcher(output);
         int last = -1;

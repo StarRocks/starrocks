@@ -1799,7 +1799,7 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 - **`<metric_name>_count`**: このフェーズで記録されたトランザクションの総数。
 
 すべてのトランザクションメトリクスは以下のラベルを共有します。
-- `group`: トランザクションをロードジョブのソースタイプ（例: `all`、`stream_load`、`routine_load`）で分類します。これにより、全体的なトランザクションパフォーマンスと特定のロードタイプのパフォーマンスの両方を監視できます。報告されるグループは、FEパラメータ [`txn_latency_metric_report_groups`](../FE_configuration.md#txn_latency_metric_report_groups) を介して設定できます。
+- `type`: トランザクションをロードジョブのソースタイプ（例: `all`、`stream_load`、`routine_load`）で分類します。これにより、全体的なトランザクションパフォーマンスと特定のロードタイプのパフォーマンスの両方を監視できます。報告されるグループは、FEパラメータ [`txn_latency_metric_report_groups`](../FE_configuration.md#txn_latency_metric_report_groups) を介して設定できます。
 - `is_leader`: 報告元のFEノードがリーダーであるかどうかを示します。リーダーFE（`is_leader="true"`）のみが実際のメトリック値を報告します。フォロワーは `is_leader="false"` となり、データを報告しません。
 
 #### starrocks_fe_txn_total_latency_ms
