@@ -137,8 +137,10 @@ public class MockedBase {
         when(table.getProject()).thenReturn("project");
         doNothing().when(table).reload();
         when(table.getPartitions()).thenReturn(ImmutableList.of(partition));
+        when(table.getPartitionSpecs()).thenReturn(ImmutableList.of(new PartitionSpec("p1=a/p2=b")));
 
         when(partition.getPartitionSpec()).thenReturn(new PartitionSpec("p1=a/p2=b"));
+        when(table.getPartition(any())).thenReturn(partition);
         when(partition.getLastDataModifiedTime()).thenReturn(new Date());
 
         TableSchema tableSchema = new TableSchema();

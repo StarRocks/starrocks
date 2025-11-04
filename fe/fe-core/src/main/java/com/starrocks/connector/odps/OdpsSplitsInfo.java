@@ -16,13 +16,7 @@ package com.starrocks.connector.odps;
 
 import com.aliyun.odps.table.read.TableBatchReadSession;
 import com.aliyun.odps.table.read.split.InputSplit;
-import com.starrocks.connector.exception.StarRocksConnectorException;
 
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.ObjectOutputStream;
-import java.io.Serializable;
-import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 
@@ -72,18 +66,6 @@ public class OdpsSplitsInfo {
     }
 
     public String getSerializeSession() {
-        try {
-            return serialize(session);
-        } catch (IOException e) {
-            throw new StarRocksConnectorException("Serialize odps read session failed", e);
-        }
-    }
-
-    private String serialize(Serializable object) throws IOException {
-        ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
-        ObjectOutputStream objectOutputStream = new ObjectOutputStream(byteArrayOutputStream);
-        objectOutputStream.writeObject(object);
-        byte[] serializedBytes = byteArrayOutputStream.toByteArray();
-        return Base64.getEncoder().encodeToString(serializedBytes);
+        return session.toJson();
     }
 }
