@@ -24,7 +24,7 @@ import com.starrocks.thrift.THdfsTable;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.ScalarType;
+import com.starrocks.type.TypeFactory;
 
 import java.util.List;
 
@@ -44,10 +44,10 @@ public class IcebergHistoryTable extends MetadataTable {
                 TABLE_NAME,
                 Table.TableType.METADATA,
                 builder()
-                        .column("made_current_at", ScalarType.createType(PrimitiveType.DATETIME))
-                        .column("snapshot_id", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("parent_id", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("is_current_ancestor", ScalarType.createType(PrimitiveType.VARCHAR))
+                        .column("made_current_at", TypeFactory.createType(PrimitiveType.DATETIME))
+                        .column("snapshot_id", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("parent_id", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("is_current_ancestor", TypeFactory.createType(PrimitiveType.VARCHAR))
                         .build(),
                 originDb,
                 originTable,

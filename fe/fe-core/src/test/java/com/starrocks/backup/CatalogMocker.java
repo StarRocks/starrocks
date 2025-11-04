@@ -76,7 +76,7 @@ import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.ScalarType;
+import com.starrocks.type.TypeFactory;
 import mockit.Expectations;
 
 import java.util.List;
@@ -197,14 +197,14 @@ public class CatalogMocker {
     public static List<Column> TEST_ROLLUP_SCHEMA = Lists.newArrayList();
 
     static {
-        Column k1 = new Column("k1", ScalarType.createType(PrimitiveType.TINYINT), true, null, "", "key1");
-        Column k2 = new Column("k2", ScalarType.createType(PrimitiveType.SMALLINT), true, null, "", "key2");
-        Column k3 = new Column("k3", ScalarType.createType(PrimitiveType.INT), true, null, "", "key3");
-        Column k4 = new Column("k4", ScalarType.createType(PrimitiveType.BIGINT), true, null, "", "key4");
-        Column k5 = new Column("k5", ScalarType.createType(PrimitiveType.LARGEINT), true, null, "", "key5");
-        Column k6 = new Column("k6", ScalarType.createType(PrimitiveType.DATE), true, null, "", "key6");
-        Column k7 = new Column("k7", ScalarType.createType(PrimitiveType.DATETIME), true, null, "", "key7");
-        Column k8 = new Column("k8", ScalarType.createDecimalV2Type(10, 3), true, null, "", "key8");
+        Column k1 = new Column("k1", TypeFactory.createType(PrimitiveType.TINYINT), true, null, "", "key1");
+        Column k2 = new Column("k2", TypeFactory.createType(PrimitiveType.SMALLINT), true, null, "", "key2");
+        Column k3 = new Column("k3", TypeFactory.createType(PrimitiveType.INT), true, null, "", "key3");
+        Column k4 = new Column("k4", TypeFactory.createType(PrimitiveType.BIGINT), true, null, "", "key4");
+        Column k5 = new Column("k5", TypeFactory.createType(PrimitiveType.LARGEINT), true, null, "", "key5");
+        Column k6 = new Column("k6", TypeFactory.createType(PrimitiveType.DATE), true, null, "", "key6");
+        Column k7 = new Column("k7", TypeFactory.createType(PrimitiveType.DATETIME), true, null, "", "key7");
+        Column k8 = new Column("k8", TypeFactory.createDecimalV2Type(10, 3), true, null, "", "key8");
         k1.setIsKey(true);
         k2.setIsKey(true);
         k3.setIsKey(true);
@@ -215,13 +215,13 @@ public class CatalogMocker {
         k8.setIsKey(true);
 
         Column v1 = new Column("v1",
-                ScalarType.createCharType(10), false, AggregateType.REPLACE, "none", " value1");
+                TypeFactory.createCharType(10), false, AggregateType.REPLACE, "none", " value1");
         Column v2 = new Column("v2",
-                ScalarType.createType(PrimitiveType.FLOAT), false, AggregateType.MAX, "none", " value2");
+                TypeFactory.createType(PrimitiveType.FLOAT), false, AggregateType.MAX, "none", " value2");
         Column v3 = new Column("v3",
-                ScalarType.createType(PrimitiveType.DOUBLE), false, AggregateType.MIN, "none", " value3");
+                TypeFactory.createType(PrimitiveType.DOUBLE), false, AggregateType.MIN, "none", " value3");
         Column v4 = new Column("v4",
-                ScalarType.createType(PrimitiveType.INT), false, AggregateType.SUM, "", " value4");
+                TypeFactory.createType(PrimitiveType.INT), false, AggregateType.SUM, "", " value4");
 
         TEST_TBL_BASE_SCHEMA.add(k1);
         TEST_TBL_BASE_SCHEMA.add(k2);

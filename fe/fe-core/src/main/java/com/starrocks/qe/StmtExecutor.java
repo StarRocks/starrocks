@@ -254,7 +254,7 @@ import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.transaction.TransactionStmtExecutor;
 import com.starrocks.transaction.VisibleStateWaiter;
-import com.starrocks.type.ScalarType;
+import com.starrocks.type.TypeFactory;
 import com.starrocks.warehouse.WarehouseIdleChecker;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang.exception.ExceptionUtils;
@@ -2171,7 +2171,7 @@ public class StmtExecutor {
 
         ShowResultSetMetaData metaData =
                 ShowResultSetMetaData.builder()
-                        .addColumn(new Column("Explain String", ScalarType.createVarchar(20)))
+                        .addColumn(new Column("Explain String", TypeFactory.createVarchar(20)))
                         .build();
         sendMetaData(metaData);
 

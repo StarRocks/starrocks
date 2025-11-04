@@ -18,7 +18,7 @@ import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.thrift.TSchemaTableType;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.ScalarType;
+import com.starrocks.type.TypeFactory;
 
 import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
 import static com.starrocks.catalog.system.SystemTable.builder;
@@ -31,12 +31,12 @@ public class BeConfigsSystemTable {
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("BE_ID", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("VALUE", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("TYPE", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("DEFAULT", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("MUTABLE", ScalarType.createType(PrimitiveType.BOOLEAN))
+                        .column("BE_ID", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("VALUE", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("TYPE", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("DEFAULT", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("MUTABLE", TypeFactory.createType(PrimitiveType.BOOLEAN))
                         .build(), TSchemaTableType.SCH_BE_CONFIGS);
     }
 }

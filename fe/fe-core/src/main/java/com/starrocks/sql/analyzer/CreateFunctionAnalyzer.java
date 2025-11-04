@@ -38,6 +38,7 @@ import com.starrocks.type.MapType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import org.apache.commons.codec.binary.Hex;
 import org.apache.commons.lang.StringUtils;
 
@@ -310,7 +311,7 @@ public class CreateFunctionAnalyzer {
         FunctionArgsDef argsDef = stmt.getArgsDef();
         TypeDef returnType = stmt.getReturnType();
         String objectFile = stmt.getProperties().get(CreateFunctionStmt.FILE_KEY);
-        TypeDef intermediateType = TypeDef.createVarchar(ScalarType.getOlapMaxVarcharLength());
+        TypeDef intermediateType = TypeDef.createVarchar(TypeFactory.getOlapMaxVarcharLength());
         ;
         Map<String, String> properties = stmt.getProperties();
         boolean isAnalyticFn = "true".equalsIgnoreCase(properties.get(CreateFunctionStmt.IS_ANALYTIC_NAME));

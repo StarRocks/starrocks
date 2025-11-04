@@ -32,8 +32,8 @@ import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletType;
-import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -154,7 +154,7 @@ public class CatalogRecycleBinTest {
         FakeEditLog fakeEditLog = new FakeEditLog();
 
         CatalogRecycleBin bin = new CatalogRecycleBin();
-        List<Column> columns = Lists.newArrayList(new Column("k1", ScalarType.createVarcharType(10)));
+        List<Column> columns = Lists.newArrayList(new Column("k1", TypeFactory.createVarcharType(10)));
         Range<PartitionKey> range =
                 Range.range(PartitionKey.createPartitionKey(Lists.newArrayList(new PartitionValue("1")), columns),
                         BoundType.CLOSED,
@@ -179,7 +179,7 @@ public class CatalogRecycleBinTest {
     @Test
     public void testGetPhysicalPartition() throws Exception {
         CatalogRecycleBin bin = new CatalogRecycleBin();
-        List<Column> columns = Lists.newArrayList(new Column("k1", ScalarType.createVarcharType(10)));
+        List<Column> columns = Lists.newArrayList(new Column("k1", TypeFactory.createVarcharType(10)));
         Range<PartitionKey> range =
                 Range.range(PartitionKey.createPartitionKey(Lists.newArrayList(new PartitionValue("1")), columns),
                         BoundType.CLOSED,

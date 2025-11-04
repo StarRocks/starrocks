@@ -96,6 +96,7 @@ import com.starrocks.type.ScalarType;
 import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import io.trino.sql.tree.AliasedRelation;
 import io.trino.sql.tree.AllColumns;
 import io.trino.sql.tree.ArithmeticBinaryExpression;
@@ -1345,9 +1346,9 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         } else if (dataType instanceof DateTimeDataType) {
             DateTimeDataType dateTimeType = (DateTimeDataType) dataType;
             if (dateTimeType.getType() == DateTimeDataType.Type.TIME) {
-                return ScalarType.createType(PrimitiveType.TIME);
+                return TypeFactory.createType(PrimitiveType.TIME);
             } else {
-                return ScalarType.createType(PrimitiveType.DATETIME);
+                return TypeFactory.createType(PrimitiveType.DATETIME);
             }
         } else if (dataType instanceof RowDataType) {
             RowDataType rowDataType = (RowDataType) dataType;
@@ -1379,29 +1380,29 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
             }
         }
         if (typeName.equals("varchar")) {
-            ScalarType type = ScalarType.createVarcharType(length);
+            ScalarType type = TypeFactory.createVarcharType(length);
             return type;
         } else if (typeName.equals("char")) {
-            ScalarType type = ScalarType.createCharType(length);
+            ScalarType type = TypeFactory.createCharType(length);
             return type;
         } else if (typeName.equals("decimal")) {
             if (precision != -1) {
                 if (scale != -1) {
-                    return ScalarType.createUnifiedDecimalType(precision, scale);
+                    return TypeFactory.createUnifiedDecimalType(precision, scale);
                 }
-                return ScalarType.createUnifiedDecimalType(precision, 0);
+                return TypeFactory.createUnifiedDecimalType(precision, 0);
             }
-            return ScalarType.createUnifiedDecimalType(38, 0);
+            return TypeFactory.createUnifiedDecimalType(38, 0);
         } else if (typeName.contains("decimal")) {
             throw new ParsingException("Unknown type: %s", typeName);
         } else if (typeName.equals("real")) {
-            return ScalarType.createType(PrimitiveType.FLOAT);
+            return TypeFactory.createType(PrimitiveType.FLOAT);
         } else if (typeName.equals("array")) {
             TypeParameter typeParam = (TypeParameter) dataType.getArguments().get(0);
             return new ArrayType(getType(typeParam.getValue()));
         } else {
             // this contains datetime/date/numeric type
-            return ScalarType.createType(typeName);
+            return TypeFactory.createType(typeName);
         }
     }
 }

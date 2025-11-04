@@ -22,10 +22,10 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.MapType;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.ScalarType;
 import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import io.delta.kernel.internal.util.ColumnMapping;
 import io.delta.kernel.types.DataType;
 import org.apache.avro.LogicalType;
@@ -140,11 +140,11 @@ public class ColumnTypeConverter {
                 primitiveType = PrimitiveType.DATE;
                 break;
             case "STRING":
-                return ScalarType.createDefaultCatalogString();
+                return TypeFactory.createDefaultCatalogString();
             case "VARCHAR":
-                return ScalarType.createVarcharType(getVarcharLength(hiveType));
+                return TypeFactory.createVarcharType(getVarcharLength(hiveType));
             case "CHAR":
-                return ScalarType.createCharType(getCharLength(hiveType));
+                return TypeFactory.createCharType(getCharLength(hiveType));
             case "BINARY":
                 return Type.VARBINARY;
             case "BOOLEAN":
@@ -177,10 +177,10 @@ public class ColumnTypeConverter {
         }
 
         if (primitiveType != PrimitiveType.DECIMAL32) {
-            return ScalarType.createType(primitiveType);
+            return TypeFactory.createType(primitiveType);
         } else {
             int[] parts = getPrecisionAndScale(hiveType);
-            return ScalarType.createUnifiedDecimalType(parts[0], parts[1]);
+            return TypeFactory.createUnifiedDecimalType(parts[0], parts[1]);
         }
     }
 
@@ -285,7 +285,7 @@ public class ColumnTypeConverter {
                 primitiveType = PrimitiveType.DOUBLE;
                 break;
             case STRING:
-                return ScalarType.createDefaultCatalogString();
+                return TypeFactory.createDefaultCatalogString();
             case ARRAY:
                 Type type = new ArrayType(fromHudiType(avroSchema.getElementType()));
                 if (type.isArrayType()) {
@@ -299,7 +299,7 @@ public class ColumnTypeConverter {
                 if (logicalType instanceof LogicalTypes.Decimal) {
                     int precision = ((LogicalTypes.Decimal) logicalType).getPrecision();
                     int scale = ((LogicalTypes.Decimal) logicalType).getScale();
-                    return ScalarType.createUnifiedDecimalType(precision, scale);
+                    return TypeFactory.createUnifiedDecimalType(precision, scale);
                 } else {
                     primitiveType = PrimitiveType.VARCHAR;
                     break;
@@ -333,7 +333,7 @@ public class ColumnTypeConverter {
 
                 if (!isConvertedFailed) {
                     // Hudi map's key must be string
-                    return new MapType(ScalarType.createDefaultCatalogString(), valueType);
+                    return new MapType(TypeFactory.createDefaultCatalogString(), valueType);
                 }
                 break;
             case UNION:
@@ -357,7 +357,7 @@ public class ColumnTypeConverter {
             primitiveType = PrimitiveType.UNKNOWN_TYPE;
         }
 
-        return ScalarType.createType(primitiveType);
+        return TypeFactory.createType(primitiveType);
     }
 
     // used for HUDI MOR reader only
@@ -468,11 +468,11 @@ public class ColumnTypeConverter {
                 primitiveType = PrimitiveType.DATETIME;
                 break;
             case STRING:
-                return ScalarType.createDefaultCatalogString();
+                return TypeFactory.createDefaultCatalogString();
             case DECIMAL:
                 int precision = ((io.delta.kernel.types.DecimalType) dataType).getPrecision();
                 int scale = ((io.delta.kernel.types.DecimalType) dataType).getScale();
-                return ScalarType.createUnifiedDecimalType(precision, scale);
+                return TypeFactory.createUnifiedDecimalType(precision, scale);
             case BINARY:
                 primitiveType = PrimitiveType.VARBINARY;
                 break;
@@ -485,7 +485,7 @@ public class ColumnTypeConverter {
             default:
                 primitiveType = PrimitiveType.UNKNOWN_TYPE;
         }
-        return ScalarType.createType(primitiveType);
+        return TypeFactory.createType(primitiveType);
     }
 
     public static Type fromPaimonType(org.apache.paimon.types.DataType type) {
@@ -497,67 +497,67 @@ public class ColumnTypeConverter {
         private static final PaimonToHiveTypeVisitor INSTANCE = new PaimonToHiveTypeVisitor();
 
         public Type visit(BinaryType binaryType) {
-            return ScalarType.createType(PrimitiveType.VARBINARY);
+            return TypeFactory.createType(PrimitiveType.VARBINARY);
         }
 
         public Type visit(VarBinaryType varBinaryType) {
-            return ScalarType.createType(PrimitiveType.VARBINARY);
+            return TypeFactory.createType(PrimitiveType.VARBINARY);
         }
 
         public Type visit(CharType charType) {
-            return ScalarType.createCharType(charType.getLength());
+            return TypeFactory.createCharType(charType.getLength());
         }
 
         public Type visit(VarCharType varCharType) {
-            return ScalarType.createDefaultCatalogString();
+            return TypeFactory.createDefaultCatalogString();
         }
 
         public Type visit(BooleanType booleanType) {
-            return ScalarType.createType(PrimitiveType.BOOLEAN);
+            return TypeFactory.createType(PrimitiveType.BOOLEAN);
         }
 
         public Type visit(DecimalType decimalType) {
-            return ScalarType.createUnifiedDecimalType(decimalType.getPrecision(), decimalType.getScale());
+            return TypeFactory.createUnifiedDecimalType(decimalType.getPrecision(), decimalType.getScale());
         }
 
         public Type visit(TinyIntType tinyIntType) {
-            return ScalarType.createType(PrimitiveType.TINYINT);
+            return TypeFactory.createType(PrimitiveType.TINYINT);
         }
 
         public Type visit(SmallIntType smallIntType) {
-            return ScalarType.createType(PrimitiveType.SMALLINT);
+            return TypeFactory.createType(PrimitiveType.SMALLINT);
         }
 
         public Type visit(IntType intType) {
-            return ScalarType.createType(PrimitiveType.INT);
+            return TypeFactory.createType(PrimitiveType.INT);
         }
 
         public Type visit(BigIntType bigIntType) {
-            return ScalarType.createType(PrimitiveType.BIGINT);
+            return TypeFactory.createType(PrimitiveType.BIGINT);
         }
 
         public Type visit(FloatType floatType) {
-            return ScalarType.createType(PrimitiveType.FLOAT);
+            return TypeFactory.createType(PrimitiveType.FLOAT);
         }
 
         public Type visit(DoubleType doubleType) {
-            return ScalarType.createType(PrimitiveType.DOUBLE);
+            return TypeFactory.createType(PrimitiveType.DOUBLE);
         }
 
         public Type visit(DateType dateType) {
-            return ScalarType.createType(PrimitiveType.DATE);
+            return TypeFactory.createType(PrimitiveType.DATE);
         }
 
         public Type visit(TimeType timeType) {
-            return ScalarType.createType(PrimitiveType.TIME);
+            return TypeFactory.createType(PrimitiveType.TIME);
         }
 
         public Type visit(TimestampType timestampType) {
-            return ScalarType.createType(PrimitiveType.DATETIME);
+            return TypeFactory.createType(PrimitiveType.DATETIME);
         }
 
         public Type visit(LocalZonedTimestampType timestampType) {
-            return ScalarType.createType(PrimitiveType.DATETIME);
+            return TypeFactory.createType(PrimitiveType.DATETIME);
         }
 
         public Type visit(org.apache.paimon.types.ArrayType arrayType) {
@@ -581,7 +581,7 @@ public class ColumnTypeConverter {
 
         @Override
         protected Type defaultMethod(org.apache.paimon.types.DataType dataType) {
-            return ScalarType.createType(PrimitiveType.UNKNOWN_TYPE);
+            return TypeFactory.createType(PrimitiveType.UNKNOWN_TYPE);
         }
     }
 
@@ -622,20 +622,20 @@ public class ColumnTypeConverter {
                 primitiveType = PrimitiveType.DATETIME;
                 break;
             case STRING:
-                return ScalarType.createDefaultCatalogString();
+                return TypeFactory.createDefaultCatalogString();
             case VARCHAR:
-                return ScalarType.createVarcharType(columnSchema.getTypeAttributes().getLength());
+                return TypeFactory.createVarcharType(columnSchema.getTypeAttributes().getLength());
             case DECIMAL:
                 ColumnTypeAttributes typeAttributes = columnSchema.getTypeAttributes();
                 int precision = typeAttributes.getPrecision();
                 int scale = typeAttributes.getScale();
-                return ScalarType.createUnifiedDecimalType(precision, scale);
+                return TypeFactory.createUnifiedDecimalType(precision, scale);
             case BINARY:
                 return Type.VARBINARY;
             default:
                 primitiveType = PrimitiveType.UNKNOWN_TYPE;
         }
-        return ScalarType.createType(primitiveType);
+        return TypeFactory.createType(primitiveType);
     }
 
     public static Type fromIcebergType(org.apache.iceberg.types.Type icebergType) {
@@ -668,16 +668,16 @@ public class ColumnTypeConverter {
                 primitiveType = PrimitiveType.DATETIME;
                 break;
             case STRING:
-                return ScalarType.createDefaultCatalogString();
+                return TypeFactory.createDefaultCatalogString();
             case DECIMAL:
                 int precision = ((Types.DecimalType) icebergType).precision();
                 int scale = ((Types.DecimalType) icebergType).scale();
                 if (precision <= 9) {
-                    return ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL32, precision, scale);
+                    return TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL32, precision, scale);
                 } else if (precision <= 18) {
-                    return ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, precision, scale);
+                    return TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, precision, scale);
                 } else {
-                    return ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, precision, scale);
+                    return TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, precision, scale);
                 }
             case LIST:
                 Type type = convertToArrayTypeForIceberg(icebergType);
@@ -717,7 +717,7 @@ public class ColumnTypeConverter {
             default:
                 primitiveType = PrimitiveType.UNKNOWN_TYPE;
         }
-        return ScalarType.createType(primitiveType);
+        return TypeFactory.createType(primitiveType);
     }
 
     private static ArrayType convertToArrayTypeForIceberg(org.apache.iceberg.types.Type icebergType) {

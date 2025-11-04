@@ -52,6 +52,7 @@ import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeDeserializer;
+import com.starrocks.type.TypeFactory;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -117,31 +118,31 @@ public class TypeTest {
         Assertions.assertEquals(63, MysqlCodec.getMysqlResultSetFieldCharsetIndex(type));
 
         // decimal
-        type = ScalarType.createDecimalV2Type(15, 5);
+        type = TypeFactory.createDecimalV2Type(15, 5);
         Assertions.assertEquals(19, MysqlCodec.getMysqlResultSetFieldLength(type));
         Assertions.assertEquals(5, type.getMysqlResultSetFieldDecimals());
         Assertions.assertEquals(63, MysqlCodec.getMysqlResultSetFieldCharsetIndex(type));
 
         // decimalv2
-        type = ScalarType.createDecimalV2Type(15, 0);
+        type = TypeFactory.createDecimalV2Type(15, 0);
         Assertions.assertEquals(18, MysqlCodec.getMysqlResultSetFieldLength(type));
         Assertions.assertEquals(0, type.getMysqlResultSetFieldDecimals());
         Assertions.assertEquals(63, MysqlCodec.getMysqlResultSetFieldCharsetIndex(type));
 
         // char
-        type = ScalarType.createCharType(10);
+        type = TypeFactory.createCharType(10);
         Assertions.assertEquals(30, MysqlCodec.getMysqlResultSetFieldLength(type));
         Assertions.assertEquals(0, type.getMysqlResultSetFieldDecimals());
         Assertions.assertEquals(33, MysqlCodec.getMysqlResultSetFieldCharsetIndex(type));
 
         // varchar
-        type = ScalarType.createVarcharType(11);
+        type = TypeFactory.createVarcharType(11);
         Assertions.assertEquals(33, MysqlCodec.getMysqlResultSetFieldLength(type));
         Assertions.assertEquals(0, type.getMysqlResultSetFieldDecimals());
         Assertions.assertEquals(33, MysqlCodec.getMysqlResultSetFieldCharsetIndex(type));
 
         // wildcard varchar
-        type = ScalarType.createVarcharType(-1);
+        type = TypeFactory.createVarcharType(-1);
         Assertions.assertEquals(192, MysqlCodec.getMysqlResultSetFieldLength(type));
         Assertions.assertEquals(0, type.getMysqlResultSetFieldDecimals());
         Assertions.assertEquals(33, MysqlCodec.getMysqlResultSetFieldCharsetIndex(type));
@@ -179,13 +180,13 @@ public class TypeTest {
         Assertions.assertEquals(60, MysqlCodec.getMysqlResultSetFieldLength(type));
 
         MapType mapType =
-                new MapType(ScalarType.createType(PrimitiveType.INT), ScalarType.createType(PrimitiveType.INT));
+                new MapType(TypeFactory.createType(PrimitiveType.INT), TypeFactory.createType(PrimitiveType.INT));
         // default 20 * 3
         Assertions.assertEquals(60, MysqlCodec.getMysqlResultSetFieldLength(mapType));
         Assertions.assertEquals(0, mapType.getMysqlResultSetFieldDecimals());
         Assertions.assertEquals(33, MysqlCodec.getMysqlResultSetFieldCharsetIndex(mapType));
 
-        StructField structField = new StructField("a", ScalarType.createType(PrimitiveType.INT));
+        StructField structField = new StructField("a", TypeFactory.createType(PrimitiveType.INT));
         ArrayList<StructField> structFields = new ArrayList<>();
         structFields.add(structField);
         StructType structType = new StructType(structFields);
@@ -198,13 +199,13 @@ public class TypeTest {
     @Test
     public void testCanonicalName() {
         Object[][] testCases = new Object[][] {
-                {ScalarType.createDecimalV3NarrowestType(9, 2), "DECIMAL(9,2)"},
-                {ScalarType.createDecimalV3NarrowestType(18, 4), "DECIMAL(18,4)"},
-                {ScalarType.createDecimalV3NarrowestType(38, 6), "DECIMAL(38,6)"},
-                {ScalarType.createVarchar(16), "VARCHAR(16)"},
-                {ScalarType.createCharType(16), "CHAR(16)"},
-                {ScalarType.createType(PrimitiveType.INT), "INT"},
-                {ScalarType.createType(PrimitiveType.FLOAT), "FLOAT"},
+                {TypeFactory.createDecimalV3NarrowestType(9, 2), "DECIMAL(9,2)"},
+                {TypeFactory.createDecimalV3NarrowestType(18, 4), "DECIMAL(18,4)"},
+                {TypeFactory.createDecimalV3NarrowestType(38, 6), "DECIMAL(38,6)"},
+                {TypeFactory.createVarchar(16), "VARCHAR(16)"},
+                {TypeFactory.createCharType(16), "CHAR(16)"},
+                {TypeFactory.createType(PrimitiveType.INT), "INT"},
+                {TypeFactory.createType(PrimitiveType.FLOAT), "FLOAT"},
         };
 
         for (Object[] tc : testCases) {
@@ -217,9 +218,9 @@ public class TypeTest {
     @Test
     public void testMysqlDataType() {
         Object[][] testCases = new Object[][] {
-                {ScalarType.createType(PrimitiveType.BOOLEAN), "tinyint"},
-                {ScalarType.createType(PrimitiveType.LARGEINT), "bigint unsigned"},
-                {ScalarType.createDecimalV3NarrowestType(18, 4), "decimal"},
+                {TypeFactory.createType(PrimitiveType.BOOLEAN), "tinyint"},
+                {TypeFactory.createType(PrimitiveType.LARGEINT), "bigint unsigned"},
+                {TypeFactory.createDecimalV3NarrowestType(18, 4), "decimal"},
                 {new ArrayType(Type.INT), "array"},
                 {new MapType(Type.INT, Type.INT), "map"},
                 {new StructType(Lists.newArrayList(Type.INT)), "struct"},
@@ -235,9 +236,9 @@ public class TypeTest {
     @Test
     public void testMysqlColumnType() {
         Object[][] testCases = new Object[][] {
-                {ScalarType.createType(PrimitiveType.BOOLEAN), "tinyint(1)"},
-                {ScalarType.createType(PrimitiveType.LARGEINT), "bigint(20) unsigned"},
-                {ScalarType.createDecimalV3NarrowestType(18, 4), "decimal(18, 4)"},
+                {TypeFactory.createType(PrimitiveType.BOOLEAN), "tinyint(1)"},
+                {TypeFactory.createType(PrimitiveType.LARGEINT), "bigint(20) unsigned"},
+                {TypeFactory.createDecimalV3NarrowestType(18, 4), "decimal(18, 4)"},
                 {new ArrayType(Type.INT), "array<int(11)>"},
                 {new MapType(Type.INT, Type.INT), "map<int(11),int(11)>"},
                 {new StructType(Lists.newArrayList(Type.INT)), "struct<col1 int(11)>"},
@@ -254,11 +255,11 @@ public class TypeTest {
     public void testMapSerialAndDeser() {
         // map<int,struct<c1:int,cc1:string>>
         StructType c1 = new StructType(Lists.newArrayList(
-                new StructField("c1", ScalarType.createType(PrimitiveType.INT)),
-                new StructField("cc1", ScalarType.createDefaultCatalogString())
+                new StructField("c1", TypeFactory.createType(PrimitiveType.INT)),
+                new StructField("cc1", TypeFactory.createDefaultCatalogString())
         ));
         MapType mapType =
-                new MapType(ScalarType.createType(PrimitiveType.INT), c1);
+                new MapType(TypeFactory.createType(PrimitiveType.INT), c1);
         String json = GsonUtils.GSON.toJson(mapType);
         Type deType = GsonUtils.GSON.fromJson(json, Type.class);
         Assertions.assertTrue(deType.isMapType());
@@ -272,11 +273,11 @@ public class TypeTest {
     public void testStructSerialAndDeser() {
         // "struct<struct_test:int,c1:struct<c1:int,cc1:string>>"
         StructType c1 = new StructType(Lists.newArrayList(
-                new StructField("c1", ScalarType.createType(PrimitiveType.INT)),
-                new StructField("cc1", ScalarType.createDefaultCatalogString())
+                new StructField("c1", TypeFactory.createType(PrimitiveType.INT)),
+                new StructField("cc1", TypeFactory.createDefaultCatalogString())
         ));
         StructType root = new StructType(Lists.newArrayList(
-                new StructField("struct_test", ScalarType.createType(PrimitiveType.INT), "comment test"),
+                new StructField("struct_test", TypeFactory.createType(PrimitiveType.INT), "comment test"),
                 new StructField("c1", c1)
         ));
         String json = GsonUtils.GSON.toJson(root);
@@ -402,7 +403,7 @@ public class TypeTest {
 
     @Test
     public void testExtendedPrecision() {
-        ScalarType type = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 10, 4);
+        ScalarType type = TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 10, 4);
         Assertions.assertSame(type, ColumnDefAnalyzer.extendedPrecision(type, true));
         Assertions.assertNotSame(type, ColumnDefAnalyzer.extendedPrecision(type, false));
     }
@@ -446,8 +447,8 @@ public class TypeTest {
         Assertions.assertTrue(Type.DECIMAL64.supportZoneMap());
         Assertions.assertTrue(Type.DECIMAL128.supportZoneMap());
         Assertions.assertTrue(Type.DECIMAL256.supportZoneMap());
-        Assertions.assertTrue(ScalarType.createVarcharType(10).supportZoneMap());
-        Assertions.assertTrue(ScalarType.createCharType(5).supportZoneMap());
+        Assertions.assertTrue(TypeFactory.createVarcharType(10).supportZoneMap());
+        Assertions.assertTrue(TypeFactory.createCharType(5).supportZoneMap());
 
         // Negative cases: Non-scalar types or scalar types that are not numeric, date, or string
         Assertions.assertFalse(Type.NULL.supportZoneMap());

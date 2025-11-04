@@ -27,6 +27,7 @@ import com.starrocks.thrift.TShowResultSet;
 import com.starrocks.thrift.TShowResultSetMetaData;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
+import com.starrocks.type.TypeFactory;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -44,19 +45,19 @@ public class ShowResultTest {
 
     private ShowResultSetMetaData createTestMetaData() {
         return ShowResultSetMetaData.builder()
-                .addColumn(new Column("string_col", ScalarType.createType(PrimitiveType.VARCHAR)))
-                .addColumn(new Column("int_col", ScalarType.createType(PrimitiveType.INT)))
-                .addColumn(new Column("long_col", ScalarType.createType(PrimitiveType.BIGINT)))
-                .addColumn(new Column("short_col", ScalarType.createType(PrimitiveType.SMALLINT)))
-                .addColumn(new Column("byte_col", ScalarType.createType(PrimitiveType.TINYINT)))
+                .addColumn(new Column("string_col", TypeFactory.createType(PrimitiveType.VARCHAR)))
+                .addColumn(new Column("int_col", TypeFactory.createType(PrimitiveType.INT)))
+                .addColumn(new Column("long_col", TypeFactory.createType(PrimitiveType.BIGINT)))
+                .addColumn(new Column("short_col", TypeFactory.createType(PrimitiveType.SMALLINT)))
+                .addColumn(new Column("byte_col", TypeFactory.createType(PrimitiveType.TINYINT)))
                 .build();
     }
 
     private ShowResultSetMetaData createDecimalMetaData() {
         return ShowResultSetMetaData.builder()
-                .addColumn(new Column("decimal_col", ScalarType.createDecimalV2Type(10, 2)))
-                .addColumn(new Column("char_col", ScalarType.createCharType(5)))
-                .addColumn(new Column("varchar_col", ScalarType.createVarcharType(255)))
+                .addColumn(new Column("decimal_col", TypeFactory.createDecimalV2Type(10, 2)))
+                .addColumn(new Column("char_col", TypeFactory.createCharType(5)))
+                .addColumn(new Column("varchar_col", TypeFactory.createVarcharType(255)))
                 .build();
     }
 
@@ -72,8 +73,8 @@ public class ShowResultTest {
     @Test
     public void testMetaDataBasicCreation() {
         ShowResultSetMetaData metaData = ShowResultSetMetaData.builder()
-                .addColumn(new Column("col1", ScalarType.createType(PrimitiveType.INT)))
-                .addColumn(new Column("col2", ScalarType.createType(PrimitiveType.VARCHAR)))
+                .addColumn(new Column("col1", TypeFactory.createType(PrimitiveType.INT)))
+                .addColumn(new Column("col2", TypeFactory.createType(PrimitiveType.VARCHAR)))
                 .build();
 
         Assertions.assertEquals(2, metaData.getColumnCount());
@@ -94,9 +95,9 @@ public class ShowResultTest {
     @Test
     public void testMetaDataBuilderWithColumn() {
         ShowResultSetMetaData metaData = ShowResultSetMetaData.builder()
-                .column("test_col", ScalarType.createType(PrimitiveType.BIGINT))
-                .column("varchar_col", ScalarType.createVarcharType(255))
-                .column("decimal_col", ScalarType.createDecimalV2Type(10, 2))
+                .column("test_col", TypeFactory.createType(PrimitiveType.BIGINT))
+                .column("varchar_col", TypeFactory.createVarcharType(255))
+                .column("decimal_col", TypeFactory.createDecimalV2Type(10, 2))
                 .build();
 
         Assertions.assertEquals(3, metaData.getColumnCount());
@@ -112,8 +113,8 @@ public class ShowResultTest {
     @Test
     public void testMetaDataGetColumns() {
         ShowResultSetMetaData metaData = ShowResultSetMetaData.builder()
-                .addColumn(new Column("col1", ScalarType.createType(PrimitiveType.INT)))
-                .addColumn(new Column("col2", ScalarType.createType(PrimitiveType.VARCHAR)))
+                .addColumn(new Column("col1", TypeFactory.createType(PrimitiveType.INT)))
+                .addColumn(new Column("col2", TypeFactory.createType(PrimitiveType.VARCHAR)))
                 .build();
 
         List<Column> columns = metaData.getColumns();
@@ -125,9 +126,9 @@ public class ShowResultTest {
     @Test
     public void testMetaDataGetColumnIdx() {
         ShowResultSetMetaData metaData = ShowResultSetMetaData.builder()
-                .addColumn(new Column("FirstColumn", ScalarType.createType(PrimitiveType.INT)))
-                .addColumn(new Column("SecondColumn", ScalarType.createType(PrimitiveType.VARCHAR)))
-                .addColumn(new Column("ThirdColumn", ScalarType.createType(PrimitiveType.DOUBLE)))
+                .addColumn(new Column("FirstColumn", TypeFactory.createType(PrimitiveType.INT)))
+                .addColumn(new Column("SecondColumn", TypeFactory.createType(PrimitiveType.VARCHAR)))
+                .addColumn(new Column("ThirdColumn", TypeFactory.createType(PrimitiveType.DOUBLE)))
                 .build();
 
         // Test exact case match
@@ -144,8 +145,8 @@ public class ShowResultTest {
     @Test
     public void testMetaDataGetColumnIdxNotFound() {
         ShowResultSetMetaData metaData = ShowResultSetMetaData.builder()
-                .addColumn(new Column("col1", ScalarType.createType(PrimitiveType.INT)))
-                .addColumn(new Column("col2", ScalarType.createType(PrimitiveType.VARCHAR)))
+                .addColumn(new Column("col1", TypeFactory.createType(PrimitiveType.INT)))
+                .addColumn(new Column("col2", TypeFactory.createType(PrimitiveType.VARCHAR)))
                 .build();
 
         assertThrows(StarRocksPlannerException.class, () -> {
@@ -156,7 +157,7 @@ public class ShowResultTest {
     @Test
     public void testMetaDataGetColumnIdxEmptyName() {
         ShowResultSetMetaData metaData = ShowResultSetMetaData.builder()
-                .addColumn(new Column("col1", ScalarType.createType(PrimitiveType.INT)))
+                .addColumn(new Column("col1", TypeFactory.createType(PrimitiveType.INT)))
                 .build();
 
         assertThrows(StarRocksPlannerException.class, () -> {
@@ -167,7 +168,7 @@ public class ShowResultTest {
     @Test
     public void testMetaDataGetColumnIdxNullName() {
         ShowResultSetMetaData metaData = ShowResultSetMetaData.builder()
-                .addColumn(new Column("col1", ScalarType.createType(PrimitiveType.INT)))
+                .addColumn(new Column("col1", TypeFactory.createType(PrimitiveType.INT)))
                 .build();
 
         assertThrows(StarRocksPlannerException.class, () -> {
@@ -178,10 +179,10 @@ public class ShowResultTest {
     @Test
     public void testMetaDataMixedBuilderMethods() {
         ShowResultSetMetaData metaData = ShowResultSetMetaData.builder()
-                .addColumn(new Column("explicit_col", ScalarType.createType(PrimitiveType.INT)))
-                .column("builder_col", ScalarType.createType(PrimitiveType.VARCHAR))
-                .addColumn(new Column("another_explicit", ScalarType.createCharType(10)))
-                .column("final_col", ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 4))
+                .addColumn(new Column("explicit_col", TypeFactory.createType(PrimitiveType.INT)))
+                .column("builder_col", TypeFactory.createType(PrimitiveType.VARCHAR))
+                .addColumn(new Column("another_explicit", TypeFactory.createCharType(10)))
+                .column("final_col", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 4))
                 .build();
 
         Assertions.assertEquals(4, metaData.getColumnCount());
@@ -200,13 +201,13 @@ public class ShowResultTest {
     @Test
     public void testMetaDataSpecialColumnNames() {
         ShowResultSetMetaData metaData = ShowResultSetMetaData.builder()
-                .column("", ScalarType.createType(PrimitiveType.INT)) // Empty name
-                .column("Column With Spaces", ScalarType.createType(PrimitiveType.VARCHAR))
-                .column("column_with_underscores", ScalarType.createType(PrimitiveType.DOUBLE))
-                .column("UPPERCASE", ScalarType.createType(PrimitiveType.BOOLEAN))
-                .column("MiXeDcAsE", ScalarType.createType(PrimitiveType.DATE))
-                .column("123numeric", ScalarType.createType(PrimitiveType.TIME))
-                .column("special@#$%chars", ScalarType.createType(PrimitiveType.DATETIME))
+                .column("", TypeFactory.createType(PrimitiveType.INT)) // Empty name
+                .column("Column With Spaces", TypeFactory.createType(PrimitiveType.VARCHAR))
+                .column("column_with_underscores", TypeFactory.createType(PrimitiveType.DOUBLE))
+                .column("UPPERCASE", TypeFactory.createType(PrimitiveType.BOOLEAN))
+                .column("MiXeDcAsE", TypeFactory.createType(PrimitiveType.DATE))
+                .column("123numeric", TypeFactory.createType(PrimitiveType.TIME))
+                .column("special@#$%chars", TypeFactory.createType(PrimitiveType.DATETIME))
                 .build();
 
         Assertions.assertEquals(7, metaData.getColumnCount());
@@ -230,24 +231,24 @@ public class ShowResultTest {
     @Test
     public void testMetaDataAllScalarTypes() {
         ShowResultSetMetaData metaData = ShowResultSetMetaData.builder()
-                .column("boolean_col", ScalarType.createType(PrimitiveType.BOOLEAN))
-                .column("tinyint_col", ScalarType.createType(PrimitiveType.TINYINT))
-                .column("smallint_col", ScalarType.createType(PrimitiveType.SMALLINT))
-                .column("int_col", ScalarType.createType(PrimitiveType.INT))
-                .column("bigint_col", ScalarType.createType(PrimitiveType.BIGINT))
-                .column("largeint_col", ScalarType.createType(PrimitiveType.LARGEINT))
-                .column("float_col", ScalarType.createType(PrimitiveType.FLOAT))
-                .column("double_col", ScalarType.createType(PrimitiveType.DOUBLE))
-                .column("date_col", ScalarType.createType(PrimitiveType.DATE))
-                .column("datetime_col", ScalarType.createType(PrimitiveType.DATETIME))
-                .column("time_col", ScalarType.createType(PrimitiveType.TIME))
-                .column("char_col", ScalarType.createCharType(10))
-                .column("varchar_col", ScalarType.createVarcharType(255))
-                .column("varbinary_col", ScalarType.createVarbinary(1024))
-                .column("hll_col", ScalarType.createHllType())
-                .column("bitmap_col", ScalarType.createType(PrimitiveType.BITMAP))
-                .column("percentile_col", ScalarType.createType(PrimitiveType.PERCENTILE))
-                .column("json_col", ScalarType.createType(PrimitiveType.JSON))
+                .column("boolean_col", TypeFactory.createType(PrimitiveType.BOOLEAN))
+                .column("tinyint_col", TypeFactory.createType(PrimitiveType.TINYINT))
+                .column("smallint_col", TypeFactory.createType(PrimitiveType.SMALLINT))
+                .column("int_col", TypeFactory.createType(PrimitiveType.INT))
+                .column("bigint_col", TypeFactory.createType(PrimitiveType.BIGINT))
+                .column("largeint_col", TypeFactory.createType(PrimitiveType.LARGEINT))
+                .column("float_col", TypeFactory.createType(PrimitiveType.FLOAT))
+                .column("double_col", TypeFactory.createType(PrimitiveType.DOUBLE))
+                .column("date_col", TypeFactory.createType(PrimitiveType.DATE))
+                .column("datetime_col", TypeFactory.createType(PrimitiveType.DATETIME))
+                .column("time_col", TypeFactory.createType(PrimitiveType.TIME))
+                .column("char_col", TypeFactory.createCharType(10))
+                .column("varchar_col", TypeFactory.createVarcharType(255))
+                .column("varbinary_col", TypeFactory.createVarbinary(1024))
+                .column("hll_col", TypeFactory.createHllType())
+                .column("bitmap_col", TypeFactory.createType(PrimitiveType.BITMAP))
+                .column("percentile_col", TypeFactory.createType(PrimitiveType.PERCENTILE))
+                .column("json_col", TypeFactory.createType(PrimitiveType.JSON))
                 .build();
 
         Assertions.assertEquals(18, metaData.getColumnCount());
@@ -276,11 +277,11 @@ public class ShowResultTest {
     @Test
     public void testMetaDataDecimalTypes() {
         ShowResultSetMetaData metaData = ShowResultSetMetaData.builder()
-                .column("decimalv2_col", ScalarType.createDecimalV2Type(10, 2))
-                .column("decimal32_col", ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL32, 9, 2))
-                .column("decimal64_col", ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 4))
-                .column("decimal128_col", ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 8))
-                .column("decimal256_col", ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL256, 76, 16))
+                .column("decimalv2_col", TypeFactory.createDecimalV2Type(10, 2))
+                .column("decimal32_col", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL32, 9, 2))
+                .column("decimal64_col", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 4))
+                .column("decimal128_col", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 8))
+                .column("decimal256_col", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL256, 76, 16))
                 .build();
 
         Assertions.assertEquals(5, metaData.getColumnCount());
@@ -318,15 +319,15 @@ public class ShowResultTest {
         
         // Create first metadata with 2 columns
         ShowResultSetMetaData metaData1 = builder
-                .column("col1", ScalarType.createType(PrimitiveType.INT))
-                .column("col2", ScalarType.createType(PrimitiveType.VARCHAR))
+                .column("col1", TypeFactory.createType(PrimitiveType.INT))
+                .column("col2", TypeFactory.createType(PrimitiveType.VARCHAR))
                 .build();
         
         // Create new builder for second metadata
         ShowResultSetMetaData metaData2 = ShowResultSetMetaData.builder()
-                .column("col1", ScalarType.createType(PrimitiveType.INT))
-                .column("col2", ScalarType.createType(PrimitiveType.VARCHAR))
-                .column("col3", ScalarType.createType(PrimitiveType.DOUBLE))
+                .column("col1", TypeFactory.createType(PrimitiveType.INT))
+                .column("col2", TypeFactory.createType(PrimitiveType.VARCHAR))
+                .column("col3", TypeFactory.createType(PrimitiveType.DOUBLE))
                 .build();
         
         // First metadata should have 2 columns
@@ -344,9 +345,9 @@ public class ShowResultTest {
     @Test
     public void testMetaDataDuplicateColumnNames() {
         ShowResultSetMetaData metaData = ShowResultSetMetaData.builder()
-                .column("duplicate", ScalarType.createType(PrimitiveType.INT))
-                .column("Duplicate", ScalarType.createType(PrimitiveType.VARCHAR))  // Different case
-                .column("duplicate", ScalarType.createType(PrimitiveType.DOUBLE))   // Exact duplicate
+                .column("duplicate", TypeFactory.createType(PrimitiveType.INT))
+                .column("Duplicate", TypeFactory.createType(PrimitiveType.VARCHAR))  // Different case
+                .column("duplicate", TypeFactory.createType(PrimitiveType.DOUBLE))   // Exact duplicate
                 .build();
 
         Assertions.assertEquals(3, metaData.getColumnCount());
@@ -636,9 +637,9 @@ public class ShowResultTest {
     @Test
     public void testResultSetToThriftWithDecimalV3Types() {
         ShowResultSetMetaData metaData = ShowResultSetMetaData.builder()
-                .addColumn(new Column("decimal32_col", ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL32, 9, 2)))
-                .addColumn(new Column("decimal64_col", ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 4)))
-                .addColumn(new Column("decimal128_col", ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 8)))
+                .addColumn(new Column("decimal32_col", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL32, 9, 2)))
+                .addColumn(new Column("decimal64_col", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 4)))
+                .addColumn(new Column("decimal128_col", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 8)))
                 .build();
         
         List<List<String>> rows = Lists.newArrayList();

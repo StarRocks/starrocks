@@ -93,7 +93,7 @@ import com.starrocks.system.Backend.BackendState;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TResourceGroupUsage;
 import com.starrocks.thrift.TStatusCode;
-import com.starrocks.type.ScalarType;
+import com.starrocks.type.TypeFactory;
 import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import com.starrocks.warehouse.cngroup.ComputeResourceProvider;
@@ -389,7 +389,7 @@ public class SystemInfoService implements GsonPostProcessable {
             opMessage = String.format(formatSb.toString(), willBeModifiedHost, backend.getHeartbeatPort(), fqdn);
         }
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
-        builder.addColumn(new Column("Message", ScalarType.createVarchar(1024)));
+        builder.addColumn(new Column("Message", TypeFactory.createVarchar(1024)));
         List<List<String>> messageResult = new ArrayList<>();
         messageResult.add(Collections.singletonList(opMessage));
         return new ShowResultSet(builder.build(), messageResult);
@@ -407,7 +407,7 @@ public class SystemInfoService implements GsonPostProcessable {
         }
 
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
-        builder.addColumn(new Column("Message", ScalarType.createVarchar(1024)));
+        builder.addColumn(new Column("Message", TypeFactory.createVarchar(1024)));
         List<List<String>> messageResult = new ArrayList<>();
 
         // update backend based on properties

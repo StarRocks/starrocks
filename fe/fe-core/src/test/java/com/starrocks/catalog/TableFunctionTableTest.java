@@ -31,8 +31,8 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
-import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -74,9 +74,9 @@ public class TableFunctionTableTest {
             Assertions.assertEquals(5, schema.size());
             Assertions.assertEquals(new Column("col_int", Type.INT), schema.get(0));
             Assertions.assertEquals(new Column("col_string", Type.VARCHAR), schema.get(1));
-            Assertions.assertEquals(new Column("col_path1", ScalarType.createDefaultString(), true), schema.get(2));
-            Assertions.assertEquals(new Column("col_path2", ScalarType.createDefaultString(), true), schema.get(3));
-            Assertions.assertEquals(new Column("col_path3", ScalarType.createDefaultString(), true), schema.get(4));
+            Assertions.assertEquals(new Column("col_path1", TypeFactory.createDefaultString(), true), schema.get(2));
+            Assertions.assertEquals(new Column("col_path2", TypeFactory.createDefaultString(), true), schema.get(3));
+            Assertions.assertEquals(new Column("col_path3", TypeFactory.createDefaultString(), true), schema.get(4));
         });
     }
 

@@ -19,7 +19,7 @@ import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.thrift.TSchemaTableType;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.ScalarType;
+import com.starrocks.type.TypeFactory;
 
 import static com.starrocks.catalog.system.SystemTable.builder;
 
@@ -31,8 +31,8 @@ public class KeywordsSystemTable {
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("WORD", ScalarType.createVarchar(128))
-                        .column("RESERVED", ScalarType.createType(PrimitiveType.BOOLEAN))
+                        .column("WORD", TypeFactory.createVarchar(128))
+                        .column("RESERVED", TypeFactory.createType(PrimitiveType.BOOLEAN))
                         .build(),
                 TSchemaTableType.SCH_KEYWORDS);
     }

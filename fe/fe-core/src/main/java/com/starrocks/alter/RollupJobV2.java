@@ -101,8 +101,8 @@ import com.starrocks.thrift.TTabletSchema;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TTaskType;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import io.opentelemetry.api.trace.StatusCode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -545,7 +545,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
 
         Expr whereExpr = null;
         if (whereClause != null) {
-            Type type = ScalarType.createType(PrimitiveType.BOOLEAN);
+            Type type = TypeFactory.createType(PrimitiveType.BOOLEAN);
             whereExpr = analyzeExpr(visitor, type, CreateMaterializedViewStmt.WHERE_PREDICATE_COLUMN_NAME,
                     whereClause, slotDescByName);
             List<SlotRef> slots = Lists.newArrayList();
