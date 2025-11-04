@@ -156,7 +156,7 @@ public class TransactionMetricRegistry {
             updateLatencyMetrics(allTxnGroup.metrics,
                     prepareTime, commitTime, publishVersionTime, publishVersionFinishTime, finishTime);
             TransactionState.LoadJobSourceType sourceType = txnState.getSourceType();
-            if (sourceType.ordinal() >= sourceTypeIndexToGroup.length) {
+            if (sourceType == null || sourceType.ordinal() >= sourceTypeIndexToGroup.length) {
                 return;
             }
             updateLatencyMetrics(sourceTypeIndexToGroup[sourceType.ordinal()].metrics,
