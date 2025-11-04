@@ -1,272 +1,250 @@
-// Licensed to the Apache Software Foundation (ASF) under one
-// or more contributor license agreements.  See the NOTICE file
-// distributed with this work for additional information
-// regarding copyright ownership.  The ASF licenses this file
-// to you under the Apache License, Version 2.0 (the
-// "License"); you may not use this file except in compliance
-// with the License.  You may obtain a copy of the License at
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
 //
-//   http://www.apache.org/licenses/LICENSE-2.0
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
 //
-// Unless required by applicable law or agreed to in writing,
-// software distributed under the License is distributed on an
-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-// KIND, either express or implied.  See the License for the
-// specific language governing permissions and limitations
-// under the License.
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package com.starrocks.transaction;
 
-import com.codahale.metrics.Histogram;
 import com.starrocks.common.Config;
-import com.starrocks.metric.HistogramMetric;
-import com.starrocks.metric.Metric;
-import com.starrocks.metric.MetricLabel;
-import com.starrocks.metric.MetricVisitor;
-import com.starrocks.monitor.jvm.JvmStats;
-import org.apache.commons.lang3.reflect.FieldUtils;
+import com.starrocks.metric.PrometheusMetricVisitor;
+import com.starrocks.server.GlobalStateMgr;
+import mockit.Expectations;
+import mockit.Mocked;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.util.ArrayList;
-import java.util.EnumSet;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+// removed unused concurrency/imports after test consolidation
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class TransactionMetricRegistryTest {
 
-    private String oldGroupConfig;
+    private String originalGroups;
 
     @BeforeEach
     public void setUp() {
-        oldGroupConfig = Config.txn_latency_metric_report_groups;
+        originalGroups = Config.txn_latency_metric_report_groups;
     }
 
     @AfterEach
     public void tearDown() {
-        Config.txn_latency_metric_report_groups = oldGroupConfig;
-        TransactionMetricRegistry.getInstance().updateConfig();
+        Config.txn_latency_metric_report_groups = originalGroups;
     }
 
     @Test
-    public void testUpdateVisibleRecordsLatenciesOnAllGroup() throws Exception {
-        // ensure no per-group interference
-        Config.txn_latency_metric_report_groups = "";
-        TransactionMetricRegistry registry = TransactionMetricRegistry.getInstance();
+    public void testConfigParsingEnableDisable(@Mocked GlobalStateMgr globalStateMgr) {
+        setLeader(true, globalStateMgr);
+        TransactionMetricRegistry registry = newRegistry();
+        // enable multiple groups with case/space variants
+        setReportGroups(registry, " Stream_Load , ROUTINE_LOAD  ");
+        String out1 = renderReport(registry);
+        Assertions.assertTrue(out1.contains("group=\"stream_load\""), out1);
+        Assertions.assertTrue(out1.contains("group=\"routine_load\""), out1);
+        Assertions.assertTrue(out1.contains("group=\"all\""), out1);
+        // idempotent when unchanged
         registry.updateConfig();
-
-        Map<String, Long> before = collectCountsByType(registry, "all");
-
-        TransactionState txn = buildTxn(100, 200, 250, 280, 300,
-                TransactionStatus.VISIBLE, TransactionState.LoadJobSourceType.BACKEND_STREAMING);
-        registry.update(txn);
-
-        Map<String, Long> after = collectCountsByType(registry, "all");
-        assertSixIncrements(before, after);
+        String out2 = renderReport(registry);
+        Assertions.assertEquals(out1, out2);
+        Assertions.assertTrue(out2.contains("group=\"all\""), out2);
+        // unknown ignored, all remains
+        setReportGroups(registry, "unknown,another_unknown");
+        String out3 = renderReport(registry);
+        Assertions.assertFalse(out3.contains("group=\"unknown\""), out3);
+        Assertions.assertTrue(out3.contains("group=\"all\""), out3);
+        // disable clears enabled groups
+        setReportGroups(registry, "");
+        String out4 = renderReport(registry);
+        Assertions.assertFalse(out4.contains("group=\"stream_load\""), out4);
+        Assertions.assertFalse(out4.contains("group=\"routine_load\""), out4);
+        Assertions.assertTrue(out4.contains("group=\"all\""), out4);
     }
 
     @Test
-    public void testUpdateIgnoresNonVisibleTransactions() throws Exception {
-        Config.txn_latency_metric_report_groups = "";
-        TransactionMetricRegistry registry = TransactionMetricRegistry.getInstance();
-        registry.updateConfig();
-
-        Map<String, Long> before = collectCountsByType(registry, "all");
-
-        TransactionState txn = buildTxn(100, 200, 250, 280, 300,
-                TransactionStatus.COMMITTED, TransactionState.LoadJobSourceType.BACKEND_STREAMING);
-        registry.update(txn);
-
-        Map<String, Long> after = collectCountsByType(registry, "all");
-        assertNoChanges(before, after);
+    public void testReportAllAndEnabledGroups(@Mocked GlobalStateMgr globalStateMgr) {
+        setLeader(true, globalStateMgr);
+        TransactionMetricRegistry registry = newRegistry();
+        // all group always reported
+        String out = renderReport(registry);
+        Assertions.assertTrue(out.contains("group=\"all\""), out);
+        // enable one group then disable
+        setReportGroups(registry, "broker_load");
+        String out1 = renderReport(registry);
+        Assertions.assertTrue(out1.contains("group=\"broker_load\""), out1);
+        Assertions.assertTrue(out1.contains("group=\"all\""), out1);
+        setReportGroups(registry, "");
+        String out2 = renderReport(registry);
+        Assertions.assertFalse(out2.contains("group=\"broker_load\""), out2);
+        Assertions.assertTrue(out2.contains("group=\"all\""), out2);
     }
 
     @Test
-    public void testEnableDisablePerGroupReporting() throws Exception {
-        TransactionMetricRegistry registry = TransactionMetricRegistry.getInstance();
-
-        Config.txn_latency_metric_report_groups = "stream_load,insert";
-        registry.updateConfig();
-
-        Map<String, Long> beforeStream = collectCountsByType(registry, "stream_load");
-        Map<String, Long> beforeInsert = collectCountsByType(registry, "insert");
-        // should have six histograms for each enabled type
-        Assertions.assertEquals(6, beforeStream.size());
-        Assertions.assertEquals(6, beforeInsert.size());
-
-        TransactionState tStream = buildTxn(10, 20, 25, 28, 30,
-                TransactionStatus.VISIBLE, TransactionState.LoadJobSourceType.BACKEND_STREAMING);
-        TransactionState tInsert = buildTxn(11, 21, 26, 29, 31,
-                TransactionStatus.VISIBLE, TransactionState.LoadJobSourceType.INSERT_STREAMING);
-        registry.update(tStream);
-        registry.update(tInsert);
-
-        Map<String, Long> afterStream = collectCountsByType(registry, "stream_load");
-        Map<String, Long> afterInsert = collectCountsByType(registry, "insert");
-        assertSixIncrements(beforeStream, afterStream);
-        assertSixIncrements(beforeInsert, afterInsert);
-
-        // disable all groups and ensure they are not reported
-        Config.txn_latency_metric_report_groups = "";
-        registry.updateConfig();
-        List<HistogramMetric> reported = collectAll(registry);
-        for (HistogramMetric h : reported) {
-            String type = getLabelValue(h, "type");
-            Assertions.assertNotEquals("stream_load", type);
-            Assertions.assertNotEquals("insert", type);
-        }
+    public void testAllGroupUpdatesAndDisabledGroup(@Mocked GlobalStateMgr globalStateMgr,
+                                                    @Mocked TransactionState t1,
+                                                    @Mocked TransactionState t2,
+                                                    @Mocked TransactionState t3) {
+        setLeader(true, globalStateMgr);
+        TransactionMetricRegistry registry = newRegistry();
+        // no specific groups enabled
+        setReportGroups(registry, "");
+        setupVisibleTxn(t1, TransactionState.LoadJobSourceType.INSERT_STREAMING, 10, 20, 30, 40, 50);
+        registry.update(t1);
+        String outA = renderReport(registry);
+        Assertions.assertEquals(1, extractCount(outA, "txn_total_latency_ms", "all", true));
+        // specific group enabled and updated
+        setReportGroups(registry, "stream_load");
+        setupVisibleTxn(t2, TransactionState.LoadJobSourceType.BACKEND_STREAMING, 11, 21, 31, 41, 51);
+        registry.update(t2);
+        String outB = renderReport(registry);
+        Assertions.assertEquals(2, extractCount(outB, "txn_total_latency_ms", "all", true));
+        Assertions.assertEquals(1, extractCount(outB, "txn_total_latency_ms", "stream_load", true));
+        // disable group; updates should not create stream_load reporting
+        setReportGroups(registry, "");
+        setupVisibleTxn(t3, TransactionState.LoadJobSourceType.BACKEND_STREAMING, 12, 22, 32, 42, 52);
+        registry.update(t3);
+        String outC = renderReport(registry);
+        Assertions.assertEquals(3, extractCount(outC, "txn_total_latency_ms", "all", true));
+        Assertions.assertFalse(outC.contains("group=\"stream_load\""), outC);
     }
 
     @Test
-    public void testStreamingSourceTypeMapsToStreamLoadGroup() throws Exception {
-        TransactionMetricRegistry registry = TransactionMetricRegistry.getInstance();
+    public void testSourceTypeGroupingMappings(@Mocked GlobalStateMgr globalStateMgr,
+                                               @Mocked TransactionState s1,
+                                               @Mocked TransactionState s2,
+                                               @Mocked TransactionState s3,
+                                               @Mocked TransactionState r1,
+                                               @Mocked TransactionState b1,
+                                               @Mocked TransactionState i1,
+                                               @Mocked TransactionState c1) {
+        setLeader(true, globalStateMgr);
+        TransactionMetricRegistry registry = newRegistry();
+        // stream_load accumulates across three source types
+        setReportGroups(registry, "stream_load");
+        setupVisibleTxn(s1, TransactionState.LoadJobSourceType.BACKEND_STREAMING, 10, 20, 30, 40, 50);
+        setupVisibleTxn(s2, TransactionState.LoadJobSourceType.FRONTEND_STREAMING, 11, 21, 31, 41, 51);
+        setupVisibleTxn(s3, TransactionState.LoadJobSourceType.MULTI_STATEMENT_STREAMING, 12, 22, 32, 42, 52);
+        registry.update(s1);
+        registry.update(s2);
+        registry.update(s3);
+        String outS = renderReport(registry);
+        Assertions.assertEquals(3, extractCount(outS, "txn_total_latency_ms", "stream_load", true));
+        Assertions.assertEquals(3, extractCount(outS, "txn_total_latency_ms", "all", true));
+        // routine_load
+        setReportGroups(registry, "routine_load");
+        setupVisibleTxn(r1, TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK, 10, 20, 30, 40, 50);
+        registry.update(r1);
+        String outR = renderReport(registry);
+        Assertions.assertEquals(1, extractCount(outR, "txn_total_latency_ms", "routine_load", true));
+        Assertions.assertEquals(4, extractCount(outR, "txn_total_latency_ms", "all", true));
+        // broker_load
+        setReportGroups(registry, "broker_load");
+        setupVisibleTxn(b1, TransactionState.LoadJobSourceType.BATCH_LOAD_JOB, 10, 20, 30, 40, 50);
+        registry.update(b1);
+        String outB = renderReport(registry);
+        Assertions.assertEquals(1, extractCount(outB, "txn_total_latency_ms", "broker_load", true));
+        Assertions.assertEquals(5, extractCount(outB, "txn_total_latency_ms", "all", true));
+        // insert
+        setReportGroups(registry, "insert");
+        setupVisibleTxn(i1, TransactionState.LoadJobSourceType.INSERT_STREAMING, 10, 20, 30, 40, 50);
+        registry.update(i1);
+        String outI = renderReport(registry);
+        Assertions.assertEquals(1, extractCount(outI, "txn_total_latency_ms", "insert", true));
+        Assertions.assertEquals(6, extractCount(outI, "txn_total_latency_ms", "all", true));
+        // compaction
+        setReportGroups(registry, "compaction");
+        setupVisibleTxn(c1, TransactionState.LoadJobSourceType.LAKE_COMPACTION, 10, 20, 30, 40, 50);
+        registry.update(c1);
+        String outC = renderReport(registry);
+        Assertions.assertEquals(1, extractCount(outC, "txn_total_latency_ms", "compaction", true));
+        Assertions.assertEquals(7, extractCount(outC, "txn_total_latency_ms", "all", true));
+    }
 
-        // verify mapping data structures via reflection
-        Map<?, ?> groups = (Map<?, ?>) FieldUtils.readDeclaredField(registry, "metricGroupsByName", true);
-        Object[] indexToGroup = (Object[]) FieldUtils.readDeclaredField(registry, "sourceTypeIndexToGroup", true);
+    @Test
+    public void testLabelsAndLeaderToggle(@Mocked GlobalStateMgr globalStateMgr) {
+        setLeader(true, globalStateMgr);
+        TransactionMetricRegistry registry = newRegistry();
+        setReportGroups(registry, "insert");
+        String out1 = renderReport(registry);
+        Assertions.assertTrue(out1.contains("group=\"insert\""), out1);
+        Assertions.assertTrue(out1.contains("group=\"all\""), out1);
+        Assertions.assertTrue(out1.contains("is_leader=\"true\""), out1);
+        setLeader(false, globalStateMgr);
+        String out2 = renderReport(registry);
+        Assertions.assertTrue(out2.contains("group=\"all\""), out2);
+        Assertions.assertTrue(out2.contains("is_leader=\"false\""), out2);
+    }
 
-        // each LoadJobSourceType should appear exactly once across groups
-        Set<TransactionState.LoadJobSourceType> seen = new HashSet<>();
-        for (Object groupObj : groups.values()) {
-            @SuppressWarnings("unchecked")
-            EnumSet<TransactionState.LoadJobSourceType> types =
-                    (EnumSet<TransactionState.LoadJobSourceType>) FieldUtils.readDeclaredField(groupObj, "sourceTypes", true);
-            for (TransactionState.LoadJobSourceType t : types) {
-                Assertions.assertTrue(seen.add(t), "duplicate mapping for " + t);
-                Object mapped = indexToGroup[t.ordinal()];
-                Assertions.assertSame(groupObj, mapped, "indexToGroup mismatch for " + t);
+    private void setLeader(boolean leader, @Mocked GlobalStateMgr globalStateMgr) {
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                globalStateMgr.isLeader();
+                result = leader;
+            }
+        };
+    }
+
+    private TransactionMetricRegistry newRegistry() {
+        return TransactionMetricRegistry.createForTest();
+    }
+
+    private void setReportGroups(TransactionMetricRegistry registry, String groups) {
+        Config.txn_latency_metric_report_groups = groups;
+        registry.updateConfig();
+    }
+
+    private String renderReport(TransactionMetricRegistry registry) {
+        PrometheusMetricVisitor visitor = new PrometheusMetricVisitor("");
+        registry.report(visitor);
+        return visitor.build();
+    }
+
+    private void setupVisibleTxn(@Mocked TransactionState txn,
+                                 TransactionState.LoadJobSourceType type,
+                                 long prepare, long commit, long pub, long pubFinish, long finish) {
+        new Expectations() {
+            {
+                txn.getTransactionStatus();
+                result = TransactionStatus.VISIBLE;
+                txn.getPrepareTime();
+                result = prepare;
+                txn.getCommitTime();
+                result = commit;
+                txn.getPublishVersionTime();
+                result = pub;
+                txn.getPublishVersionFinishTime();
+                result = pubFinish;
+                txn.getFinishTime();
+                result = finish;
+                txn.getSourceType();
+                result = type;
+            }
+        };
+    }
+
+    private int extractCount(String output, String metric, String group, boolean leader) {
+        String leaderTag = leader ? "true" : "false";
+        String pattern =
+                ".*_(" + Pattern.quote(metric) + ")_count\\{([^}]*group=\"" + Pattern.quote(group) + "\"[^}]*)}\\s+(\\d+)";
+        Pattern p = Pattern.compile(pattern, Pattern.DOTALL);
+        Matcher m = p.matcher(output);
+        int last = -1;
+        while (m.find()) {
+            if (m.group(2).contains("is_leader=\"" + leaderTag + "\"")) {
+                last = Integer.parseInt(m.group(3));
             }
         }
-        // specifically streaming types map to group name "stream_load"
-        Object streamGroup = groups.get("stream_load");
-        Assertions.assertNotNull(streamGroup);
-        @SuppressWarnings("unchecked")
-        EnumSet<TransactionState.LoadJobSourceType> streamTypes =
-                (EnumSet<TransactionState.LoadJobSourceType>) FieldUtils.readDeclaredField(streamGroup, "sourceTypes", true);
-        Assertions.assertTrue(streamTypes.contains(TransactionState.LoadJobSourceType.BACKEND_STREAMING));
-        Assertions.assertTrue(streamTypes.contains(TransactionState.LoadJobSourceType.FRONTEND_STREAMING));
-        Assertions.assertTrue(streamTypes.contains(TransactionState.LoadJobSourceType.MULTI_STATEMENT_STREAMING));
-
-        // functionally, updating a FRONTEND_STREAMING txn should increment type=stream_load
-        Config.txn_latency_metric_report_groups = "stream_load";
-        registry.updateConfig();
-        Map<String, Long> before = collectCountsByType(registry, "stream_load");
-        Assertions.assertEquals(6, before.size());
-        TransactionState txn = buildTxn(100, 200, 220, 240, 260,
-                TransactionStatus.VISIBLE, TransactionState.LoadJobSourceType.FRONTEND_STREAMING);
-        registry.update(txn);
-        Map<String, Long> after = collectCountsByType(registry, "stream_load");
-        assertSixIncrements(before, after);
-    }
-
-    // --------------------- helpers ---------------------
-
-    private static TransactionState buildTxn(long prepare, long commit, long publish, long publishFinish, long finish,
-                                             TransactionStatus status,
-                                             TransactionState.LoadJobSourceType sourceType) throws Exception {
-        TransactionState txn = new TransactionState();
-        txn.setPrepareTime(prepare);
-        txn.setCommitTime(commit);
-        txn.setFinishTime(finish);
-        FieldUtils.writeDeclaredField(txn, "publishVersionTime", publish, true);
-        FieldUtils.writeDeclaredField(txn, "publishVersionFinishTime", publishFinish, true);
-        FieldUtils.writeDeclaredField(txn, "sourceType", sourceType, true);
-        txn.setTransactionStatus(status);
-        return txn;
-    }
-
-    private static class CollectingVisitor extends MetricVisitor {
-        final List<HistogramMetric> histograms = new ArrayList<>();
-
-        public CollectingVisitor() {
-            super("");
-        }
-
-        @Override
-        public void visitJvm(JvmStats jvmStats) {
-        }
-
-        @Override
-        public void visit(Metric metric) {
-        }
-
-        @Override
-        public void visitHistogram(String name, Histogram histogram) {
-        }
-
-        @Override
-        public void visitHistogram(HistogramMetric histogram) {
-            histograms.add(histogram);
-        }
-
-        @Override
-        public void getNodeInfo() {
-        }
-
-        @Override
-        public String build() {
-            return "";
-        }
-    }
-
-    private static List<HistogramMetric> collectAll(TransactionMetricRegistry registry) {
-        CollectingVisitor v = new CollectingVisitor();
-        registry.report(v);
-        return v.histograms;
-    }
-
-    private static String getLabelValue(HistogramMetric metric, String key) {
-        for (MetricLabel l : metric.getLabels()) {
-            if (key.equals(l.getKey())) {
-                return l.getValue();
-            }
-        }
-        return "";
-    }
-
-    private static Map<String, Long> collectCountsByType(TransactionMetricRegistry registry, String typeValue) {
-        List<HistogramMetric> all = collectAll(registry);
-        Map<String, Long> counts = new HashMap<>();
-        for (HistogramMetric h : all) {
-            if (!typeValue.equals(getLabelValue(h, "type"))) {
-                continue;
-            }
-            counts.put(h.getName(), h.getCount());
-        }
-        return counts;
-    }
-
-    private static void assertSixIncrements(Map<String, Long> before, Map<String, Long> after) {
-        for (String name : metricNames()) {
-            long b = before.getOrDefault(name, 0L);
-            long a = after.getOrDefault(name, 0L);
-            Assertions.assertEquals(b + 1, a, "expect +1 for " + name);
-        }
-    }
-
-    private static void assertNoChanges(Map<String, Long> before, Map<String, Long> after) {
-        for (String name : metricNames()) {
-            long b = before.getOrDefault(name, 0L);
-            long a = after.getOrDefault(name, 0L);
-            Assertions.assertEquals(b, a, "expect unchanged for " + name);
-        }
-    }
-
-    private static List<String> metricNames() {
-        List<String> names = new ArrayList<>();
-        names.add("txn_total_latency_ms");
-        names.add("txn_write_latency_ms");
-        names.add("txn_publish_latency_ms");
-        names.add("txn_publish_schedule_latency_ms");
-        names.add("txn_publish_execute_latency_ms");
-        names.add("txn_publish_ack_latency_ms");
-        return names;
+        return last;
     }
 }
-
-

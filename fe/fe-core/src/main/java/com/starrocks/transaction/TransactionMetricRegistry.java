@@ -35,8 +35,6 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
-
-import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
 /**
@@ -73,7 +71,7 @@ public class TransactionMetricRegistry {
 
     private static final Logger LOG = LoggerFactory.getLogger(TransactionMetricRegistry.class);
 
-    private static final TransactionMetricRegistry INSTANCE = new TransactionMetricRegistry();
+    private static volatile TransactionMetricRegistry INSTANCE;
 
     // Aggregated metrics across all source types
     private final TransactionMetricGroup allTxnGroup;
@@ -93,11 +91,25 @@ public class TransactionMetricRegistry {
      * @return The singleton {@link TransactionMetricRegistry} instance.
      */
     public static TransactionMetricRegistry getInstance() {
-        return INSTANCE;
+        TransactionMetricRegistry inst = INSTANCE;
+        if (inst == null) {
+            synchronized (TransactionMetricRegistry.class) {
+                if (INSTANCE == null) {
+                    INSTANCE = new TransactionMetricRegistry();
+                }
+                inst = INSTANCE;
+            }
+        }
+        return inst;
     }
 
     /** Initializes groups and registers a config refresh listener. */
     private TransactionMetricRegistry() {
+        this(true);
+    }
+
+    /** Internal constructor with option to skip registering config listener (for tests). */
+    private TransactionMetricRegistry(boolean registerConfigListener) {
         this.allTxnGroup = new TransactionMetricGroup("all", TransactionState.LoadJobSourceType.values());
         this.allTxnGroup.metrics = Optional.of(buildLatencyMetrics(allTxnGroup.name));
         this.metricGroupsByName = buildMetricGroups();
@@ -108,7 +120,17 @@ public class TransactionMetricRegistry {
             }
         }
         updateConfig();
-        GlobalStateMgr.getCurrentState().getConfigRefreshDaemon().registerListener(this::updateConfig);
+        if (registerConfigListener) {
+            GlobalStateMgr.getCurrentState().getConfigRefreshDaemon().registerListener(this::updateConfig);
+        }
+    }
+
+    /**
+     * Create a new instance for tests to avoid interfering with the global singleton and listeners.
+     */
+    @VisibleForTesting
+    static TransactionMetricRegistry createForTest() {
+        return new TransactionMetricRegistry(false);
     }
 
     /**
