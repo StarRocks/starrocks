@@ -351,32 +351,31 @@ TEST_F(BitmapIndexTest, test_dict_ngram_index) {
         const size_t dict_num = reader->bitmap_nums();
         ASSERT_EQ(dict_num, num_keywords);
 
-        size_t to_read = dict_num;
+        const size_t ngram_num = reader->ngram_bitmap_nums();
+        ASSERT_EQ(ngram_num, ngram.size());
+
+        size_t to_read = ngram_num;
         const auto col = ChunkHelper::column_from_field_type(TYPE_VARCHAR, false);
         ASSERT_TRUE(iter->next_batch_ngram(0, &to_read, col.get()).ok());
-        ASSERT_EQ(dict_num, to_read);
+        ASSERT_EQ(ngram_num, to_read);
 
         ColumnViewer<TYPE_VARCHAR> viewer(std::move(col));
         ASSERT_EQ(ngram.size(), viewer.size());
 
         auto it = ngram.begin();
-        for (int i = 0; i < viewer.size(); ++i) {
+        for (rowid_t i = 0; i < viewer.size(); ++i) {
             auto value = viewer.value(i);
             ASSERT_EQ(*it, value.to_string());
             ++it;
-        }
 
-        ASSERT_EQ(ngram.size(), reader->ngram_bitmap_nums());
-        for (rowid_t i = 0; i < ngram.size(); ++i) {
-            roaring::Roaring result;
-            ASSERT_TRUE(iter->read_ngram_bitmap(i, &result).ok());
-            if (i < num_keywords) {
-                ASSERT_EQ(1, result.cardinality());
-                ASSERT_EQ(i, result.minimum());
+            roaring::Roaring r1, r2;
+            ASSERT_TRUE(iter->read_ngram_bitmap(i, &r1).ok());
+            ASSERT_TRUE(iter->seek_dict_by_ngram(&value, &r2).ok());
+            ASSERT_EQ(r1, r2);
+            if (it->starts_with("d ")) {
+                ASSERT_EQ(1, r1.cardinality());
             } else {
-                ASSERT_EQ(num_keywords, result.cardinality());
-                ASSERT_EQ(0, result.minimum());
-                ASSERT_EQ(num_keywords - 1, result.maximum());
+                ASSERT_EQ(num_keywords, r1.cardinality());
             }
         }
     }

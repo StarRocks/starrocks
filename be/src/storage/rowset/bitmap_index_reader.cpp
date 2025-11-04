@@ -145,17 +145,25 @@ Status BitmapIndexIterator::seek_dict_by_ngram(const void* value, roaring::Roari
     std::vector<size_t> index;
     const size_t slice_gram_num = get_utf8_index(*slice_val, &index);
 
-    bool first = true;
+    std::vector<Slice> ngrams;
+    ngrams.reserve(slice_gram_num - gram_num + 1);
+
     for (size_t j = 0; j + gram_num <= slice_gram_num; ++j) {
         // find next ngram
         size_t cur_ngram_length =
                 j + gram_num < slice_gram_num ? index[j + gram_num] - index[j] : slice_val->get_size() - index[j];
         Slice cur_ngram(slice_val->data + index[j], cur_ngram_length);
+        ngrams.emplace_back(cur_ngram);
+    }
+    std::ranges::sort(ngrams);
 
+    bool first = true;
+    for (const auto& cur_ngram : ngrams) {
+        // search in order.
         bool match = false;
         RETURN_IF_ERROR(_ngram_dict_column_iter->seek_at_or_after(&cur_ngram, &match));
         if (!match) {
-            continue;
+            return Status::OK();
         }
 
         RETURN_IF_ERROR(_ngram_bitmap_column_iter->seek_to_ordinal(_ngram_dict_column_iter->get_current_ordinal()));
@@ -191,7 +199,7 @@ StatusOr<Buffer<rowid_t>> BitmapIndexIterator::filter_dict_by_predicate(
         const roaring::Roaring* rowids, const std::function<bool(const Slice*)>& predicate) const {
     BitmapRangeIterator it(*rowids);
     uint32_t from, to;
-    const auto max_range = rowids->maximum() - rowids->minimum();
+    const auto max_range = rowids->cardinality();
     Buffer<rowid_t> hit_rowids;
     while (it.next_range(max_range, &from, &to)) {
         auto col = ChunkHelper::column_from_field_type(TYPE_VARCHAR, false);
