@@ -688,10 +688,8 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
     auto append_variant_column = [&](const size_t idx) {
         const Slice metadata_slice = metadata_column->get_slice(idx);
         const Slice value_slice = value_column->get_slice(idx);
-        const std::string_view metadata_view(metadata_slice.data, metadata_slice.size);
-        const std::string_view value_view(value_slice.data, value_slice.size);
-
-        variant_column->append(VariantValue(metadata_view, value_view));
+        variant_column->append(VariantValue(std::string(metadata_slice.data, metadata_slice.size),
+                                            std::string(value_slice.data, value_slice.size)));
     };
 
     if (def_levels != nullptr && num_levels > 0) {
@@ -705,7 +703,6 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
                     variant_column->append(VariantValue::of_null());
                 }
             } else {
-                // Variant group is null at definition level
                 variant_column->append(VariantValue::of_null());
             }
         }
