@@ -1561,4 +1561,18 @@ public class QueryCacheTest {
                 .collect(Collectors.toSet());
         Assertions.assertEquals(digests.size(), columnNames.length);
     }
+
+    @Test
+    public void testQueryCacheWithHeavyExprPushDown() {
+        String sql0 = "select (ifnull(sum(murmur_hash3_32(k)), 0)+" +
+                "ifnull(sum(murmur_hash3_32(l)), 0)+" +
+                "ifnull(sum(murmur_hash3_32(c)), 0)+" +
+                "ifnull(sum(murmur_hash3_32(__c_0)), 0)) as fingerprint " +
+                "from (SELECT REGEXP_REPLACE(Referer,'^https?://(?:www\\.)?([^/]+)/.*$','\\1') AS k," +
+                "left(AVG(length(Referer)),6) AS l,COUNT(*) AS c," +
+                "(min(Referer)) as __c_0  FROM hits WHERE Referer <> '' " +
+                "GROUP BY k HAVING COUNT(*) > 100000 ORDER BY l DESC LIMIT 25) as t";
+        Optional<PlanFragment> frag = getCachedFragment(sql0);
+        Assertions.assertTrue(frag.isPresent());
+    }
 }

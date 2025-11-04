@@ -1313,7 +1313,10 @@ public class OlapScanNode extends ScanNode {
 
     private Optional<SlotId> associateSlotIdsWithColumns(FragmentNormalizer normalizer, TNormalPlanNode planNode,
                                                          Optional<Column> optPartitionColumn) {
-        List<SlotDescriptor> slots = normalizer.getExecPlan().getDescTbl().getTupleDesc(tupleIds.get(0)).getSlots();
+        List<SlotDescriptor> slots = normalizer.getExecPlan()
+                .getDescTbl().getTupleDesc(tupleIds.get(0)).getSlots().stream()
+                .filter(s -> s.getColumn() != null).collect(Collectors.toList());
+
         List<Pair<SlotId, String>> slotIdToColNames =
                 slots.stream().map(s -> new Pair<>(s.getId(), s.getColumn().getName()))
                         .collect(Collectors.toList());
@@ -1511,6 +1514,7 @@ public class OlapScanNode extends ScanNode {
                     columns.stream().filter(Column::isAggregated).map(Column::getName).collect(Collectors.toSet());
             Set<SlotId> aggColumnSlotIds =
                     normalizer.getExecPlan().getDescTbl().getTupleDesc(tupleIds.get(0)).getSlots().stream()
+                            .filter(s -> s.getColumn() != null)
                             .filter(s -> aggColumnNames.contains(s.getColumn().getName())).map(s -> s.getId())
                             .collect(Collectors.toSet());
             normalizer.setSlotsUseAggColumns(aggColumnSlotIds);
