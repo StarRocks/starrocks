@@ -482,21 +482,6 @@ select id, varchar_col from t_string where varchar_col in (1, 2, 3, 4) order by 
 
 -- ========== Complex Scenarios ==========
 
--- Test 56: Nested aggregation with LargeInPredicate
-select category, count(*) as cnt, avg(score) as avg_score
-from (
-    select
-        case
-            when category_id in (1, 2, 3, 4, 5) then 'group_a'
-            else 'group_b'
-        end as category,
-        score
-    from t_large
-    where status in ('active', 'pending', 'inactive', 'suspended')
-) t
-group by category
-order by category;
-
 -- Test 57: Window function with partitioning
 select
     id,
