@@ -438,6 +438,8 @@ vectorized_functions = [
 
     [30460, 'format_bytes', True, False, 'VARCHAR', ['BIGINT'], 'StringFunctions::format_bytes'],
 
+    [30461, 'format', True, False, 'VARCHAR', ['VARCHAR', '...'], 'StringFunctions::format'],
+
     # Binary Functions
     # to_binary
     [30600, 'to_binary', True, True, 'VARBINARY', ['VARCHAR', 'VARCHAR'], 'BinaryFunctions::to_binary',
