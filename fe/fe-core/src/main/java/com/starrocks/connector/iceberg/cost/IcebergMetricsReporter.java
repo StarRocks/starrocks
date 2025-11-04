@@ -14,86 +14,26 @@
 
 package com.starrocks.connector.iceberg.cost;
 
-import org.apache.iceberg.Table;
-import org.apache.iceberg.expressions.Expression;
-import org.apache.iceberg.expressions.ExpressionUtil;
+import org.apache.iceberg.metrics.InMemoryMetricsReporter;
 import org.apache.iceberg.metrics.MetricsReport;
 import org.apache.iceberg.metrics.MetricsReporter;
 import org.apache.iceberg.metrics.ScanReport;
 
-import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
-
 public class IcebergMetricsReporter implements MetricsReporter {
-    private final Map<ScanMetricsFilter, ScanReport> reports = new ConcurrentHashMap<>();
+    //for scan metrics, will be collected during scan plan.
+    private InMemoryMetricsReporter scanMetricsReporter = new InMemoryMetricsReporter();
 
     @Override
     public void report(MetricsReport report) {
         if (report instanceof ScanReport) {
-            ScanReport scanReport = (ScanReport) report;
-            String tableName = scanReport.tableName();
-            long snapshotId = scanReport.snapshotId();
-            Expression predicate = scanReport.filter();
-            ScanMetricsFilter filter = new ScanMetricsFilter(tableName, predicate, snapshotId);
-            reports.put(filter, scanReport);
+            scanMetricsReporter.report(report);
+        } else {
+            // Can implement other kinds of reporter & report if needed
         }
     }
 
-    public Optional<ScanReport> getReporter(String catalogName, String dbName, String tableName,
-                                            long snapshotId, Expression icebergPredicate, Table table) {
-        if (reports.isEmpty()) {
-            return Optional.empty();
-        }
-
-        ScanMetricsFilter filter = ScanMetricsFilter.from(catalogName, dbName, tableName, snapshotId, icebergPredicate, table);
-
-        ScanReport report = reports.get(filter);
-        return Optional.ofNullable(report);
+    public ScanReport getScanReport() {
+        return scanMetricsReporter.scanReport();
     }
 
-    public void clear() {
-        reports.clear();
-    }
-
-    private static class ScanMetricsFilter {
-        String icebergTableName;
-        Expression predicate;
-        long snapshotId;
-
-        static ScanMetricsFilter from(String catalogName, String dbName, String tableName,
-                                      long snapshotId, Expression icebergPredicate, Table table) {
-            String icebergTableName = catalogName + '.' + dbName + "." + tableName;
-            Expression sanitizeExpr = ExpressionUtil.sanitize(table.schema().asStruct(), icebergPredicate, false);
-            return new ScanMetricsFilter(icebergTableName, sanitizeExpr, snapshotId);
-        }
-
-        public ScanMetricsFilter(String tableName, Expression predicate, long snapshotId) {
-            this.icebergTableName = tableName;
-            this.predicate = predicate;
-            this.snapshotId = snapshotId;
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) {
-                return true;
-            }
-
-            if (o == null || getClass() != o.getClass()) {
-                return false;
-            }
-            ScanMetricsFilter filter = (ScanMetricsFilter) o;
-            return snapshotId == filter.snapshotId &&
-                    Objects.equals(icebergTableName, filter.icebergTableName) &&
-                    ExpressionUtil.toSanitizedString(predicate).equalsIgnoreCase(
-                            ExpressionUtil.toSanitizedString(filter.predicate));
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(icebergTableName, snapshotId);
-        }
-    }
 }
