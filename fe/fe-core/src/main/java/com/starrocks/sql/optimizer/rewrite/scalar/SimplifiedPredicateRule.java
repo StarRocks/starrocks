@@ -21,7 +21,6 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.ScalarFunction;
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -38,6 +37,7 @@ import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
 import com.starrocks.sql.optimizer.rewrite.EliminateNegationsRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
 import com.starrocks.sql.spm.SPMFunctions;
+import com.starrocks.type.Type;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.text.StrTokenizer;
 

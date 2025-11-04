@@ -49,6 +49,8 @@ import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.thrift.TFunction;
 import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.thrift.TTypeDesc;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeSerializer;
 import org.apache.commons.lang.ArrayUtils;
 
 import java.util.ArrayList;

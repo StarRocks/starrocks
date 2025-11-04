@@ -21,7 +21,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
@@ -61,6 +60,7 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
 import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.thrift.TResultSinkType;
+import com.starrocks.type.Type;
 
 import java.util.Arrays;
 import java.util.HashMap;

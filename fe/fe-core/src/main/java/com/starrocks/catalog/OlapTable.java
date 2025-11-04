@@ -131,6 +131,7 @@ import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import com.starrocks.thrift.TWriteQuorumType;
+import com.starrocks.type.PrimitiveType;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.collections4.map.CaseInsensitiveMap;

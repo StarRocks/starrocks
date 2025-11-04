@@ -14,6 +14,8 @@
 
 package com.starrocks.catalog;
 
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.Type;
 import org.junit.jupiter.api.Test;
 
 import static com.starrocks.catalog.SchemaChangeTypeCompatibility.canReuseZonemapIndex;

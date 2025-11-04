@@ -18,7 +18,6 @@ package com.starrocks.connector.analyzer;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.TableFunction;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.sql.analyzer.AnalyzeState;
@@ -58,6 +57,7 @@ import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.TypeManager;
+import com.starrocks.type.Type;
 
 import java.util.ArrayList;
 import java.util.Arrays;

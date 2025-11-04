@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.catalog;
+package com.starrocks.type;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
@@ -83,7 +83,7 @@ public class ScalarType extends Type implements Cloneable {
     @SerializedName(value = "scale")
     private int scale;
 
-    protected ScalarType(PrimitiveType type) {
+    public ScalarType(PrimitiveType type) {
         this.type = type;
     }
 

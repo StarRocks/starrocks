@@ -23,7 +23,6 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.connector.statistics.ConnectorTableColumnStats;
 import com.starrocks.server.GlobalStateMgr;
@@ -31,6 +30,7 @@ import com.starrocks.sql.optimizer.statistics.Bucket;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Histogram;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
+import com.starrocks.type.Type;
 import org.apache.commons.collections4.map.CaseInsensitiveMap;
 import org.junit.jupiter.api.Assertions;
 

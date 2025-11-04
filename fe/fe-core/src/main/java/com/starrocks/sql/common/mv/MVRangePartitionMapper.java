@@ -15,8 +15,8 @@
 
 package com.starrocks.sql.common.mv;
 
-import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.sql.common.PCellSortedSet;
+import com.starrocks.type.PrimitiveType;
 
 import static com.starrocks.sql.common.TimeUnitUtils.DAY;
 import static com.starrocks.sql.common.TimeUnitUtils.TIME_MAP;

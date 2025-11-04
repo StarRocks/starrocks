@@ -18,12 +18,12 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.JDBCTable;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.Type;
 import org.jetbrains.annotations.NotNull;
 
 import java.sql.Connection;

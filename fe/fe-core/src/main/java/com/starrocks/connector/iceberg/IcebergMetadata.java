@@ -486,9 +486,9 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     private static long getTargetSnapshotIdFromVersion(org.apache.iceberg.Table table, ConstantOperator version) {
         long snapshotId;
-        if (version.getType() == com.starrocks.catalog.Type.BIGINT) {
+        if (version.getType() == com.starrocks.type.Type.BIGINT) {
             snapshotId = version.getBigint();
-        } else if (version.getType() == com.starrocks.catalog.Type.VARCHAR) {
+        } else if (version.getType() == com.starrocks.type.Type.VARCHAR) {
             String refName = version.getVarchar();
             SnapshotRef ref = table.refs().get(refName);
             if (ref == null) {
@@ -507,13 +507,13 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     private static long getSnapshotIdFromTemporalVersion(org.apache.iceberg.Table table, ConstantOperator version) {
         try {
-            if (version.getType() != com.starrocks.catalog.Type.DATETIME &&
-                    version.getType() != com.starrocks.catalog.Type.DATE &&
-                    version.getType() != com.starrocks.catalog.Type.VARCHAR) {
+            if (version.getType() != com.starrocks.type.Type.DATETIME &&
+                    version.getType() != com.starrocks.type.Type.DATE &&
+                    version.getType() != com.starrocks.type.Type.VARCHAR) {
                 throw new StarRocksConnectorException("Unsupported type for table temporal version: %s." +
                         " You should use timestamp type", version);
             }
-            Optional<ConstantOperator> timestampVersion = version.castTo(com.starrocks.catalog.Type.DATETIME);
+            Optional<ConstantOperator> timestampVersion = version.castTo(com.starrocks.type.Type.DATETIME);
             if (timestampVersion.isEmpty()) {
                 throw new StarRocksConnectorException("Unsupported type for table temporal version: %s." +
                         " You should use timestamp type", version);
@@ -800,7 +800,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             }
 
             try {
-                List<com.starrocks.catalog.Type> srTypes = new ArrayList<>();
+                List<com.starrocks.type.Type> srTypes = new ArrayList<>();
                 for (PartitionField partitionField : spec.fields()) {
                     if (partitionField.transform().isVoid()) {
                         continue;

@@ -16,11 +16,11 @@ package com.starrocks.connector.paimon;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.PaimonTable;
-import com.starrocks.catalog.Type;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.type.Type;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.paimon.catalog.Catalog;

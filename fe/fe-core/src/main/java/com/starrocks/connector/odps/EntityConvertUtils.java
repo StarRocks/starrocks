@@ -22,12 +22,12 @@ import com.aliyun.odps.type.MapTypeInfo;
 import com.aliyun.odps.type.StructTypeInfo;
 import com.aliyun.odps.type.TypeInfo;
 import com.aliyun.odps.type.VarcharTypeInfo;
-import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.MapType;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.StructType;
-import com.starrocks.catalog.Type;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.MapType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.StructType;
+import com.starrocks.type.Type;
 
 import java.util.ArrayList;
 import java.util.List;

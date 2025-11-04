@@ -17,10 +17,8 @@ package com.starrocks.qe;
 import com.google.api.client.util.Strings;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceMgr;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.proc.BackendsProcDir;
 import com.starrocks.common.proc.BrokerProcNode;
@@ -128,6 +126,8 @@ import com.starrocks.sql.ast.spm.ShowBaselinePlanStmt;
 import com.starrocks.sql.ast.warehouse.ShowClustersStmt;
 import com.starrocks.sql.ast.warehouse.ShowNodesStmt;
 import com.starrocks.sql.ast.warehouse.ShowWarehousesStmt;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
 
 import java.util.List;
 

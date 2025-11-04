@@ -14,7 +14,6 @@
 
 package com.starrocks.connector.iceberg.procedure;
 
-import com.starrocks.catalog.Type;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergRewriteDataJob;
 import com.starrocks.connector.iceberg.IcebergTableOperation;
@@ -23,6 +22,7 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.type.Type;
 import org.apache.velocity.VelocityContext;
 import org.apache.velocity.app.VelocityEngine;
 import org.slf4j.Logger;

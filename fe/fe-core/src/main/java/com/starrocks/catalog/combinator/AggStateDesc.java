@@ -21,8 +21,6 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.Type;
-import com.starrocks.catalog.TypeSerializer;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.FunctionAnalyzer;
@@ -32,6 +30,8 @@ import com.starrocks.thrift.TAggStateDesc;
 import com.starrocks.thrift.TFunctionVersion;
 import com.starrocks.thrift.TTypeDesc;
 import com.starrocks.thrift.TTypeNode;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeSerializer;
 
 import java.util.ArrayList;
 import java.util.Arrays;

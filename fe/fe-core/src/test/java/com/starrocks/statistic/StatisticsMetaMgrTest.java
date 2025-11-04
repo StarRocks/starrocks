@@ -17,8 +17,6 @@ package com.starrocks.statistic;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.KeysType;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.server.GlobalStateMgr;
@@ -31,6 +29,8 @@ import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.sql.common.EngineType;
 import com.starrocks.sql.plan.PlanTestBase;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 

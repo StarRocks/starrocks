@@ -40,9 +40,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.CsvFormat;
@@ -77,6 +75,8 @@ import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TUniqueId;
 
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.Type;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;

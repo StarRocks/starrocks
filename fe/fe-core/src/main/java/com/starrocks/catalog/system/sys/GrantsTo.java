@@ -38,7 +38,6 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.GlobalFunctionMgr;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.ResourceGroup;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.catalog.system.SystemId;
@@ -56,6 +55,7 @@ import com.starrocks.thrift.TGetGrantsToRolesOrUserRequest;
 import com.starrocks.thrift.TGetGrantsToRolesOrUserResponse;
 import com.starrocks.thrift.TGrantsToType;
 import com.starrocks.thrift.TSchemaTableType;
+import com.starrocks.type.ScalarType;
 import com.starrocks.warehouse.Warehouse;
 
 import java.util.ArrayList;

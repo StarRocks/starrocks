@@ -19,7 +19,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.Type;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Utils;
@@ -34,6 +33,7 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
+import com.starrocks.type.Type;
 import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.Collection;

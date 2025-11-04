@@ -18,13 +18,13 @@ package com.starrocks.connector.jdbc;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.JDBCTable;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.SchemaConstants;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.Type;
 
 import java.sql.Connection;
 import java.sql.ResultSet;

@@ -39,13 +39,13 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
-import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.HintNode;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.PrimitiveType;
 import org.apache.commons.collections.CollectionUtils;
 
 import java.util.ArrayList;

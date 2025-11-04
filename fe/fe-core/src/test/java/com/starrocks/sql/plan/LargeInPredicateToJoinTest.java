@@ -15,7 +15,6 @@
 package com.starrocks.sql.plan;
 
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.IntLiteral;
@@ -28,6 +27,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalRawValuesOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LargeInPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.type.Type;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

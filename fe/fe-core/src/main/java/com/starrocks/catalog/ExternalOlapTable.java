@@ -45,6 +45,8 @@ import com.starrocks.thrift.TReplicaMeta;
 import com.starrocks.thrift.TSinglePartitionDesc;
 import com.starrocks.thrift.TTableMeta;
 import com.starrocks.thrift.TTabletMeta;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeDeserializer;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

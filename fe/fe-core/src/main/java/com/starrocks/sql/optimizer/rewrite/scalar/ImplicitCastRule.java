@@ -19,8 +19,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.MapType;
-import com.starrocks.catalog.Type;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariableConstants;
 import com.starrocks.sql.ast.expression.ArithmeticExpr;
@@ -43,6 +41,8 @@ import com.starrocks.sql.optimizer.operator.scalar.MapOperator;
 import com.starrocks.sql.optimizer.operator.scalar.MultiInPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
+import com.starrocks.type.MapType;
+import com.starrocks.type.Type;
 
 import java.util.Arrays;
 import java.util.List;

@@ -14,11 +14,11 @@
 
 package com.starrocks.sql.ast.expression;
 
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.Type;
 
 import java.util.List;
 import java.util.Objects;

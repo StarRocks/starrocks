@@ -16,7 +16,6 @@ package com.starrocks.datacache;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.monitor.unit.ByteSizeValue;
 import com.starrocks.monitor.unit.TimeValue;
 import com.starrocks.qe.ShowResultSet;
@@ -24,6 +23,7 @@ import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.type.ScalarType;
 
 import java.util.HashMap;
 import java.util.List;

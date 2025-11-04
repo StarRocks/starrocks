@@ -44,6 +44,8 @@ import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.thrift.TAggregateFunction;
 import com.starrocks.thrift.TFunction;
 import com.starrocks.thrift.TFunctionBinaryType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeSerializer;
 import org.apache.logging.log4j.util.Strings;
 
 import java.util.List;

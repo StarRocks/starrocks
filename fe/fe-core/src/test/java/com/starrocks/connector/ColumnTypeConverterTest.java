@@ -16,16 +16,16 @@ package com.starrocks.connector;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.MapType;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.StructField;
-import com.starrocks.catalog.StructType;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.MapType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.StructField;
+import com.starrocks.type.StructType;
+import com.starrocks.type.Type;
 import org.apache.avro.Schema;
 import org.apache.hadoop.hive.common.type.HiveVarchar;
 import org.junit.jupiter.api.Assertions;
@@ -35,9 +35,6 @@ import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 
-import static com.starrocks.catalog.ScalarType.CATALOG_MAX_VARCHAR_LENGTH;
-import static com.starrocks.catalog.ScalarType.getOlapMaxVarcharLength;
-import static com.starrocks.catalog.Type.UNKNOWN_TYPE;
 import static com.starrocks.connector.ColumnTypeConverter.columnEquals;
 import static com.starrocks.connector.ColumnTypeConverter.fromHiveTypeToArrayType;
 import static com.starrocks.connector.ColumnTypeConverter.fromHiveTypeToMapType;
@@ -45,6 +42,9 @@ import static com.starrocks.connector.ColumnTypeConverter.fromHudiType;
 import static com.starrocks.connector.ColumnTypeConverter.fromPaimonType;
 import static com.starrocks.connector.ColumnTypeConverter.getPrecisionAndScale;
 import static com.starrocks.connector.ColumnTypeConverter.toHiveType;
+import static com.starrocks.type.ScalarType.CATALOG_MAX_VARCHAR_LENGTH;
+import static com.starrocks.type.ScalarType.getOlapMaxVarcharLength;
+import static com.starrocks.type.Type.UNKNOWN_TYPE;
 
 
 public class ColumnTypeConverterTest {

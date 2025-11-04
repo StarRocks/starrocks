@@ -17,7 +17,6 @@ package com.starrocks.sql.optimizer.rule.transformation;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Function;
-import com.starrocks.catalog.Type;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.connector.metadata.MetadataTableType;
@@ -33,6 +32,7 @@ import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import com.starrocks.type.Type;
 
 import java.util.ArrayList;
 import java.util.Collections;

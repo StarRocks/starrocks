@@ -59,6 +59,10 @@ import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.thrift.TAggStateDesc;
 import com.starrocks.thrift.TAggregationType;
 import com.starrocks.thrift.TColumn;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeSerializer;
 import org.apache.commons.lang.StringEscapeUtils;
 import org.apache.commons.text.translate.UnicodeUnescaper;
 

@@ -15,7 +15,6 @@
 package com.starrocks.qe;
 
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.sql.ast.AddBackendBlackListStmt;
 import com.starrocks.sql.ast.AddComputeNodeBlackListStmt;
 import com.starrocks.sql.ast.AddSqlBlackListStmt;
@@ -275,6 +274,7 @@ import com.starrocks.sql.ast.warehouse.ShowNodesStmt;
 import com.starrocks.sql.ast.warehouse.ShowWarehousesStmt;
 import com.starrocks.sql.ast.warehouse.SuspendWarehouseStmt;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.PrimitiveType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 

@@ -19,8 +19,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.common.collect.Streams;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.TreeNode;
 import com.starrocks.qe.ConnectContext;
@@ -45,6 +43,8 @@ import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.ast.expression.UserVariableExpr;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.Type;
 import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.ArrayList;
