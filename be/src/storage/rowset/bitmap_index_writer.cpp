@@ -307,6 +307,9 @@ public:
                 for (const auto& it : ordered_mem_index) {
                     RETURN_IF_ERROR(_build_ngram(ngram_index, &it.first, offset++));
                 }
+                for (auto& it: ngram_index) {
+                    it.second.flush_pending_adds();
+                }
                 RETURN_IF_ERROR(_write_dictionary(ngram_index, wfile, meta->mutable_ngram_dict_column()));
                 RETURN_IF_ERROR(_write_bitmap(ngram_index, wfile, meta->mutable_ngram_bitmap_column()));
             }
