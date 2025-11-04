@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-cmake_minimum_required(VERSION 2.8.12)
+cmake_minimum_required(VERSION 3.10.12)
 
 # where to put generated libraries
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/exec")
@@ -342,6 +342,6 @@ set(EXEC_FILES
     stream/aggregate/stream_aggregate_operator.cpp
     stream/stream_aggregate_node.cpp)
 
-add_library(Exec STATIC
+ADD_BE_LIB(Exec
     ${EXEC_FILES}
 )
