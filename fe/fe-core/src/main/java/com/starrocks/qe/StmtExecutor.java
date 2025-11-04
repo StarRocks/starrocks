@@ -183,6 +183,7 @@ import com.starrocks.sql.ast.SetCatalogStmt;
 import com.starrocks.sql.ast.SetDefaultRoleStmt;
 import com.starrocks.sql.ast.SetRoleStmt;
 import com.starrocks.sql.ast.SetStmt;
+import com.starrocks.sql.ast.RefreshConnectionsStmt;
 import com.starrocks.sql.ast.ShowExportStmt;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.StatementBase;
@@ -850,6 +851,8 @@ public class StmtExecutor {
                 }
             } else if (parsedStmt instanceof SetStmt) {
                 handleSetStmt();
+            } else if (parsedStmt instanceof RefreshConnectionsStmt) {
+                handleRefreshConnectionsStmt();
             } else if (parsedStmt instanceof UseDbStmt) {
                 handleUseDbStmt();
             } else if (parsedStmt instanceof SetWarehouseStmt) {
@@ -1382,6 +1385,17 @@ public class StmtExecutor {
             executor.execute();
         } catch (DdlException e) {
             // Return error message to client.
+            context.getState().setError(e.getMessage());
+            return;
+        }
+        context.getState().setOk();
+    }
+
+    // Process refresh connections statement.
+    private void handleRefreshConnectionsStmt() {
+        try {
+            GlobalStateMgr.getCurrentState().getVariableMgr().refreshConnections();
+        } catch (Exception e) {
             context.getState().setError(e.getMessage());
             return;
         }

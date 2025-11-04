@@ -78,11 +78,19 @@ public class GlobalVarPersistInfo implements Writable {
         return persistJsonString;
     }
 
+    public List<String> getVarNames() {
+        return varNames;
+    }
+
     @Override
     public void write(DataOutput out) throws IOException {
         try {
             JSONObject root = new JSONObject();
-            for (String varName : varNames) {
+            // Handle refresh connections command (empty varNames)
+            if (varNames == null || varNames.isEmpty()) {
+                root = new JSONObject(); // Empty JSON
+            } else {
+                for (String varName : varNames) {
                 // find attr in defaultSessionVariable or GlobalVariables
                 Object varInstance = null;
                 Field theField = null;
@@ -145,6 +153,7 @@ public class GlobalVarPersistInfo implements Writable {
                         throw new IOException("invalid type: " + theField.getType().getSimpleName());
                 }
             } // end for all variables
+            }
 
             Text.writeString(out, root.toString());
         } catch (Exception e) {

@@ -287,6 +287,7 @@ statement
     // Set Statement
     | setStatement
     | setUserPropertyStatement
+    | refreshConnectionsStatement
 
     // Storage Volume Statement
     | createStorageVolumeStatement
@@ -2153,6 +2154,10 @@ setExprOrDefault
     | ON
     | ALL
     | expression
+    ;
+
+refreshConnectionsStatement
+    : REFRESH CONNECTIONS
     ;
 
 setUserPropertyStatement
