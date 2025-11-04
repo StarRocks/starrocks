@@ -356,8 +356,7 @@ if(NOT ZLIB_LIB)
 endif()
 add_library(zlib STATIC IMPORTED GLOBAL)
 set_target_properties(zlib PROPERTIES
-    IMPORTED_LOCATION ${ZLIB_LIB}
-    INTERFACE_INCLUDE_DIRECTORIES ${HOMEBREW_PREFIX}/include)
+    IMPORTED_LOCATION ${ZLIB_LIB})
 message(STATUS "zlib found: ${ZLIB_LIB}")
 
 # Bzip2 library for compression support - use dynamic lookup
@@ -371,8 +370,7 @@ if(NOT BZIP2_LIB)
 endif()
 add_library(bzip2 STATIC IMPORTED GLOBAL)
 set_target_properties(bzip2 PROPERTIES
-    IMPORTED_LOCATION ${BZIP2_LIB}
-    INTERFACE_INCLUDE_DIRECTORIES ${HOMEBREW_PREFIX}/include)
+    IMPORTED_LOCATION ${BZIP2_LIB})
 message(STATUS "bzip2 found: ${BZIP2_LIB}")
 
 # Ryu library for fast float-to-string conversion
