@@ -56,6 +56,7 @@ import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.schema.MTable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.AlterSystemStmtAnalyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
@@ -89,6 +90,7 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import org.apache.hadoop.hive.metastore.TableType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.jupiter.api.Assertions;
@@ -100,6 +102,7 @@ import org.junit.jupiter.api.TestInfo;
 import java.lang.reflect.Method;
 import java.time.LocalDateTime;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -4213,6 +4216,13 @@ public class CreateMaterializedViewTest extends MVTestBase {
             public String getTableIdentifier() {
                 String uuid = UUID.randomUUID().toString();
                 return Joiner.on(":").join("tbl", uuid);
+            }
+        };
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Optional<Table> getTableWithIdentifier(ConnectContext context, BaseTableInfo baseTableInfo) {
+                DeltaLakeTable mockTable = new DeltaLakeTable();
+                return Optional.of(mockTable);
             }
         };
         starRocksAssert.withMaterializedView("create materialized view mv_deltalake " +
