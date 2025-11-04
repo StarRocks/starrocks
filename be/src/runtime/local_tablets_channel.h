@@ -57,7 +57,7 @@ public:
                             std::shared_ptr<OlapTableSchemaParam> schema) override;
 
     void add_segment(brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
-                     PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done);
+                     PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done) const;
 
     void cancel() override;
 
@@ -68,9 +68,9 @@ public:
     void update_profile() override;
 
     void get_load_replica_status(const std::string& remote_ip, const PLoadReplicaStatusRequest* request,
-                                 PLoadReplicaStatusResult* response);
+                                 PLoadReplicaStatusResult* response) const;
 
-    MemTracker* mem_tracker() { return _mem_tracker; }
+    inline MemTracker* mem_tracker() const { return _mem_tracker; }
 
     const std::unordered_map<int64_t, std::unique_ptr<AsyncDeltaWriter>>& TEST_delta_writers() const {
         return _delta_writers;
@@ -179,9 +179,9 @@ private:
 
     Status _open_all_writers(const PTabletWriterOpenRequest& params);
 
-    StatusOr<std::shared_ptr<WriteContext>> _create_write_context(Chunk* chunk,
+    StatusOr<std::shared_ptr<WriteContext>> _create_write_context(const Chunk* chunk,
                                                                   const PTabletWriterAddChunkRequest& request,
-                                                                  PTabletWriterAddBatchResult* response);
+                                                                  PTabletWriterAddBatchResult* response) const;
 
     int _close_sender(const int64_t* partitions, size_t partitions_size);
 
@@ -192,10 +192,32 @@ private:
                                 const std::unordered_map<int64_t, std::vector<int64_t>>& node_id_to_abort_tablets);
 
     void _flush_stale_memtables();
+    Status log_and_error_tablet_not_found(int64_t tablet_id, const PUniqueId& id, std::string_view signature) const;
 
-    void _update_peer_replica_profile(DeltaWriter* writer, RuntimeProfile* profile);
-    void _update_primary_replica_profile(DeltaWriter* writer, RuntimeProfile* profile);
-    void _update_secondary_replica_profile(DeltaWriter* writer, RuntimeProfile* profile);
+    static void _update_peer_replica_profile(DeltaWriter* writer, RuntimeProfile* profile);
+    static void _update_primary_replica_profile(DeltaWriter* writer, RuntimeProfile* profile);
+    static void _update_secondary_replica_profile(DeltaWriter* writer, RuntimeProfile* profile);
+
+    inline std::unordered_map<int64_t, std::unique_ptr<AsyncDeltaWriter>>* mutable_delta_writers() {
+        return _delta_writers_impl.mutable_delta_writers();
+    }
+
+private:
+    // A nested class to encapsulate the access to _delta_writers.
+    class DeltaWritersImpl {
+    private:
+        // tablet_id -> std::unique_ptr<AsyncDeltaWriter>
+        std::unordered_map<int64_t, std::unique_ptr<AsyncDeltaWriter>> _delta_writers;
+
+    public:
+        inline std::unordered_map<int64_t, std::unique_ptr<AsyncDeltaWriter>>* mutable_delta_writers() {
+            return &_delta_writers;
+        }
+
+        inline const std::unordered_map<int64_t, std::unique_ptr<AsyncDeltaWriter>>& delta_writers() {
+            return _delta_writers;
+        }
+    };
 
     LoadChannel* _load_channel;
 
@@ -221,8 +243,11 @@ private:
     // rw mutex to protect the following two maps
     mutable bthreads::BThreadSharedMutex _rw_mtx;
     std::unordered_map<int64_t, uint32_t> _tablet_id_to_sorted_indexes;
-    // tablet_id -> TabletChannel
-    std::unordered_map<int64_t, std::unique_ptr<AsyncDeltaWriter>> _delta_writers;
+    // place holder of the real DeltaWriters definition
+    DeltaWritersImpl _delta_writers_impl;
+    // read-only access to the delta writer map
+    const std::unordered_map<int64_t, std::unique_ptr<AsyncDeltaWriter>>& _delta_writers =
+            _delta_writers_impl.delta_writers();
 
     GlobalDictByNameMaps _global_dicts;
     std::unique_ptr<MemPool> _mem_pool;
