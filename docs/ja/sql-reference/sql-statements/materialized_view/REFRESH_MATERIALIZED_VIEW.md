@@ -36,6 +36,13 @@ REFRESH MATERIALIZED VIEW [database.]mv_name
 >
 > external catalog に基づいて作成されたマテリアライズドビューをリフレッシュする場合、StarRocks はマテリアライズドビュー内のすべてのパーティションをリフレッシュします。
 
+## モニタリング
+
+`REFRESH MATERIALIZED VIEW` を実行した後、以下の方法でリフレッシュ操作のステータスと結果を監視できます。
+
+- [`SHOW MATERIALIZED VIEWS`](SHOW_MATERIALIZED_VIEW.md) を実行して、マテリアライズドビューのステータス、最後のリフレッシュ時間、リフレッシュ状態、およびエラーメッセージを確認します。
+- 特に非同期リフレッシュタスクの詳細な実行情報については、システムビュー [`information_schema.task_runs`](../../information_schema/task_runs.md) をクエリします。このビューは、タスクの実行記録と状態 (PENDING, RUNNING, SUCCESS, FAILED) を提供します。マテリアライズドビューのリフレッシュに関しては、`EXTRA_MESSAGE` フィールドに各リフレッシュサブタスクのパーティションと実行詳細に関する情報が含まれています。詳細は [マテリアライズドビュータスク実行の理解](../../../using_starrocks/async_mv/materialized_view_task_run_details.md) を参照してください。
+
 ## 例
 
 例 1: 非同期呼び出しを介して特定のマテリアライズドビューを手動でリフレッシュします。
