@@ -2688,7 +2688,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                                         taskRun.getProcessor();
                                 final MvTaskRunContext mvTaskRunContext = processor.getMvContext();
                                 final String postRun = mvTaskRunContext.getPostRun();
-                                Assertions.assertTrue(Strings.isNullOrEmpty(postRun));
+                                Assert.assertTrue(Strings.isNullOrEmpty(postRun));
                             });
                 }
         );
