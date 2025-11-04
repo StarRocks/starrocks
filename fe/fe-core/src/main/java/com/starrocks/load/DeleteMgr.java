@@ -332,10 +332,14 @@ public class DeleteMgr implements Writable, MemoryTrackable {
         } finally {
             currentSession.setBypassAuthorizerCheck(false);
         }
+        // Get the selected partition ids. `selectedPartitionId` may contain outdated partitions since of concurrent
+        // DDL operations, such as automatic partition generating, so filter them out.
         List<Long> selectedPartitionId = physicalOlapScanOperator.getSelectedPartitionId();
         return ListUtils.emptyIfNull(selectedPartitionId)
                 .stream()
-                .map(x -> table.getPartition(x).getName())
+                .map(x -> table.getPartition(x))
+                .filter(Objects::nonNull)
+                .map(Partition::getName)
                 .collect(Collectors.toList());
     }
 
