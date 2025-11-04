@@ -186,7 +186,7 @@ Status LocalTabletsChannel::open(const PTabletWriterOpenRequest& params, PTablet
 }
 
 void LocalTabletsChannel::add_segment(brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
-                                      PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done) {
+                                      PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done) const {
     std::shared_lock<bthreads::BThreadSharedMutex> lk(_rw_mtx);
     ClosureGuard closure_guard(done);
     auto it = _delta_writers.find(request->tablet_id());
@@ -208,7 +208,7 @@ void LocalTabletsChannel::add_segment(brpc::Controller* cntl, const PTabletWrite
     closure_guard.release();
 }
 
-static bool is_delta_writer_finished(AsyncDeltaWriter* delta_writer) {
+static bool is_delta_writer_finished(const AsyncDeltaWriter* delta_writer) {
     auto state = delta_writer->get_state();
     return state == kCommitted || state == kAborted || state == kUninitialized;
 }
@@ -335,18 +335,13 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
         total_row_num += size;
         auto tablet_id = tablet_ids[row_indexes[from]];
         auto it = _delta_writers.find(tablet_id);
-        if (it == _delta_writers.end()) {
-            // SHOULD NEVER HAPPEN!
-            // The tablet ids are already checked in _create_write_context() when chunk != nullptr.
-            auto msg = fmt::format(
-                    "Failed to add the chunk because the DeltaWriter for the tablet is not found, txn_id: {}, "
-                    "load_id: {}, tablet_id: {}",
-                    _txn_id, print_id(request.id()), tablet_id);
-            LOG(WARNING) << msg;
-            context->update_status(Status::InternalError(msg));
+        // The tablet ids are already checked in _create_write_context() when chunk != nullptr.
+        DCHECK(it != _delta_writers.end());
+        if (UNLIKELY(it == _delta_writers.end())) {
+            auto st = log_and_error_tablet_not_found(tablet_id, request.id(), "add_chunk");
+            context->update_status(st);
             break;
         }
-
         auto& delta_writer = it->second;
 
         // back pressure OlapTableSink since there are too many memtables need to flush
@@ -454,12 +449,8 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
     for (auto tablet_id : request.tablet_ids()) {
         auto it = _delta_writers.find(tablet_id);
         if (it == _delta_writers.end()) {
-            LOG(WARNING) << "LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(request.id())
-                         << " not found tablet_id: " << tablet_id;
-            response->mutable_status()->set_status_code(TStatusCode::INTERNAL_ERROR);
-            response->mutable_status()->add_error_msgs(
-                    fmt::format("Failed to add_chunk since tablet_id {} does not exist, txn_id: {}, load_id: {}",
-                                tablet_id, _txn_id, print_id(request.id())));
+            auto st = log_and_error_tablet_not_found(tablet_id, request.id(), "add_chunk");
+            st.to_protobuf(response->mutable_status());
             return;
         }
         auto& writer = it->second;
@@ -539,6 +530,15 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
     if (close_channel) {
         _load_channel->remove_tablets_channel(_key);
     }
+}
+
+Status LocalTabletsChannel::log_and_error_tablet_not_found(int64_t tablet_id, const PUniqueId& id,
+                                                           std::string_view signature) const {
+    auto msg = fmt::format(
+            "Failed in {} because the channel for the tablet is not found, txn_id: {}, load_id: {}, tablet_id: {}",
+            signature, _txn_id, print_id(id), tablet_id);
+    LOG(WARNING) << msg;
+    return Status::InternalError(msg);
 }
 
 void LocalTabletsChannel::_flush_stale_memtables() {
@@ -780,7 +780,7 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
         auto res = AsyncDeltaWriter::open(options, _mem_tracker);
         if (res.status().ok()) {
             auto writer = std::move(res).value();
-            _delta_writers.emplace(tablet.tablet_id(), std::move(writer));
+            mutable_delta_writers()->emplace(tablet.tablet_id(), std::move(writer));
             tablet_ids.emplace_back(tablet.tablet_id());
         } else {
             if (options.replica_state == Secondary) {
@@ -862,7 +862,7 @@ void LocalTabletsChannel::abort(const std::vector<int64_t>& tablet_ids, const st
 }
 
 StatusOr<std::shared_ptr<LocalTabletsChannel::WriteContext>> LocalTabletsChannel::_create_write_context(
-        Chunk* chunk, const PTabletWriterAddChunkRequest& request, PTabletWriterAddBatchResult* response) {
+        const Chunk* chunk, const PTabletWriterAddChunkRequest& request, PTabletWriterAddBatchResult* response) const {
     if (chunk == nullptr && !request.eos() && !request.wait_all_sender_close()) {
         return Status::InvalidArgument("PTabletWriterAddChunkRequest has no chunk or eos");
     }
@@ -892,12 +892,7 @@ StatusOr<std::shared_ptr<LocalTabletsChannel::WriteContext>> LocalTabletsChannel
         auto tablet_id = tablet_ids[i];
         auto it = _tablet_id_to_sorted_indexes.find(tablet_id);
         if (UNLIKELY(it == _tablet_id_to_sorted_indexes.end())) {
-            auto msg = fmt::format(
-                    "Failed in _create_write_context because the channel for the tablet is not found, txn_id: {}, "
-                    "load_id: {}, tablet_id: {}",
-                    _txn_id, print_id(request.id()), tablet_id);
-            LOG(WARNING) << msg;
-            return Status::InternalError(msg);
+            return log_and_error_tablet_not_found(tablet_id, request.id(), "create_write_context");
         }
         channel_row_idx_start_points[it->second]++;
     }
@@ -910,8 +905,9 @@ StatusOr<std::shared_ptr<LocalTabletsChannel::WriteContext>> LocalTabletsChannel
     for (int i = tablet_ids_size - 1; i >= 0; --i) {
         const auto& tablet_id = tablet_ids[i];
         // Already checked in the previous for-loop, so use DCHECK just in case.
-        DCHECK(_tablet_id_to_sorted_indexes.find(tablet_id) != _tablet_id_to_sorted_indexes.end());
-        uint32_t channel_index = _tablet_id_to_sorted_indexes[tablet_id];
+        auto iter = _tablet_id_to_sorted_indexes.find(tablet_id);
+        DCHECK(iter != _tablet_id_to_sorted_indexes.end());
+        uint32_t channel_index = iter->second;
         row_indexes[channel_row_idx_start_points[channel_index] - 1] = i;
         channel_row_idx_start_points[channel_index]--;
     }
@@ -953,7 +949,7 @@ Status LocalTabletsChannel::incremental_open(const PTabletWriterOpenRequest& par
         RETURN_IF_ERROR(res.status());
         auto writer = std::move(res).value();
         ss << "[" << tablet.tablet_id() << ":" << writer->replica_state() << "]";
-        _delta_writers.emplace(tablet.tablet_id(), std::move(writer));
+        mutable_delta_writers()->emplace(tablet.tablet_id(), std::move(writer));
         tablet_ids.emplace_back(tablet.tablet_id());
     }
 
@@ -1115,7 +1111,7 @@ void LocalTabletsChannel::update_profile() {
 
 void LocalTabletsChannel::get_load_replica_status(const std::string& remote_ip,
                                                   const PLoadReplicaStatusRequest* request,
-                                                  PLoadReplicaStatusResult* response) {
+                                                  PLoadReplicaStatusResult* response) const {
     std::shared_lock<bthreads::BThreadSharedMutex> lk(_rw_mtx);
     for (int64_t tablet_id : request->tablet_ids()) {
         LoadReplicaStatePB replica_state;
