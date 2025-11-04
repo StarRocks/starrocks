@@ -43,6 +43,7 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -50,6 +51,9 @@ import java.util.stream.Stream;
 public class ReplayFromDumpTestBase {
     public static ConnectContext connectContext;
     public static StarRocksAssert starRocksAssert;
+
+    // Whether print log to system out
+    protected static boolean isOutputSystemOut = false;
 
     public static List<String> MODEL_LISTS = Lists.newArrayList("[end]", "[dump]", "[result]", "[fragment]",
             "[fragment statistics]");
@@ -192,6 +196,27 @@ public class ReplayFromDumpTestBase {
         QueryDebugOptions queryDebugOptions = new QueryDebugOptions();
         queryDebugOptions.setEnableQueryTraceLog(true);
         sessionVariable.setQueryDebugOptions(queryDebugOptions.toString());
+        if (isOutputSystemOut) {
+            System.out.println("==== Session Variable ====");
+            for (Map.Entry<String, SessionVariable.NonDefaultValue> e : sessionVariable.getNonDefaultVariables().entrySet()) {
+                System.out.printf("set %s='%s';\n", e.getKey(), e.getValue().actualValue);
+            }
+
+            System.out.println("==== Create Table Stmts ====");
+            for (Map.Entry<String, String> e : queryDumpInfo.getCreateTableStmtMap().entrySet()) {
+                System.out.println(e.getValue());
+            }
+
+            System.out.println("==== Create View Stmts ====");
+            for (Map.Entry<String, String> e : queryDumpInfo.getCreateViewStmtMap().entrySet()) {
+                String viewDDL = String.format("CREATE VIEW %s AS %s;", e.getKey(), e.getValue());
+                System.out.println(viewDDL);
+            }
+
+            System.out.println("==== Original Query ====");
+            System.out.println(queryDumpInfo.getOriginStmt());
+
+        }
         Pair<QueryDumpInfo, String> result = getPlanFragment(fileContent, sessionVariable, explainLevel);
         return result.second;
     }
