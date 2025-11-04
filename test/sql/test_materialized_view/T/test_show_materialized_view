@@ -67,4 +67,4 @@ select TABLE_NAME, LAST_REFRESH_ERROR_CODE, IS_ACTIVE, INACTIVE_REASON from info
 [UC] show materialized views where name like '%user_tags_mv1%';
 [UC] show materialized views where name = 'user_tags_mv1';
 
--- drop database test_show_materialized_view;
+drop database test_show_materialized_view;
