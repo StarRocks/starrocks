@@ -20,8 +20,12 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.NoAliveBackendException;
 import com.starrocks.common.proc.RollupProcDir;
+import com.starrocks.lake.Utils;
+import com.starrocks.proto.AggregatePublishVersionRequest;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
@@ -31,6 +35,7 @@ import com.starrocks.task.AgentBatchTask;
 import com.starrocks.utframe.MockedWarehouseManager;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.AfterAll;
@@ -198,6 +203,19 @@ public class LakeRollupJobTest {
             @Mock
             public void sendAgentTask(AgentBatchTask batchTask) {
                 batchTask.getAllTasks().forEach(t -> t.setFinished(true));
+            }
+        };
+
+        // Mock Utils.sendAggregatePublishVersionRequest to avoid RPC calls in test
+        // environment
+        new MockUp<Utils>() {
+            @Mock
+            public static void sendAggregatePublishVersionRequest(AggregatePublishVersionRequest request,
+                    long baseVersion, ComputeResource computeResource,
+                    Map<Long, Double> compactionScores,
+                    Map<Long, Long> tabletRowNum)
+                    throws NoAliveBackendException, RpcException {
+                // Do nothing, just return successfully
             }
         };
 
