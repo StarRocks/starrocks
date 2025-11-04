@@ -917,7 +917,7 @@ struct ScalarTypeInfoImpl<TYPE_DATETIME_V1> : public ScalarTypeInfoImplBase<TYPE
 template <>
 struct ScalarTypeInfoImpl<TYPE_DATETIME> : public ScalarTypeInfoImplBase<TYPE_DATETIME> {
     static Status from_string(void* buf, const std::string& scan_key) {
-        auto timestamp = unaligned_load<TimestampValue>(buf);
+        TimestampValue timestamp;
         if (!timestamp.from_string(scan_key.data(), scan_key.size())) {
             // Compatible with TYPE_DATETIME_V1
             timestamp.from_string("1400-01-01 00:00:00", sizeof("1400-01-01 00:00:00") - 1);
@@ -952,7 +952,7 @@ struct ScalarTypeInfoImpl<TYPE_CHAR> : public ScalarTypeInfoImplBase<TYPE_CHAR> 
                                                        value_len, get_olap_string_max_length()));
         }
 
-        auto slice = unaligned_load<Slice>(buf);
+        Slice slice;
         memory_copy(slice.data, scan_key.c_str(), value_len);
         if (slice.size < value_len) {
             /*
@@ -1019,7 +1019,7 @@ struct ScalarTypeInfoImpl<TYPE_VARCHAR> : public ScalarTypeInfoImpl<TYPE_CHAR> {
                                                      get_olap_string_max_length()));
         }
 
-        auto slice = unaligned_load<Slice>(buf);
+        Slice slice;
         memory_copy(slice.data, scan_key.c_str(), value_len);
         slice.size = value_len;
         unaligned_store<Slice>(buf, slice);
