@@ -682,13 +682,17 @@ public class MetadataMgr {
     }
 
     public Statistics getTableStatisticsFromInternalStatistics(Table table, Map<ColumnRefOperator, Column> columns) {
+        Statistics.Builder statistics = Statistics.builder();
+
         List<ColumnRefOperator> requiredColumnRefs = new ArrayList<>();
         for (ColumnRefOperator colRef : columns.keySet()) {
             if (FeNameFormat.FORBIDDEN_COLUMN_NAMES.contains(colRef.getName())) {
+                statistics.addColumnStatistic(colRef, ColumnStatistic.unknown());
                 continue;
             }
             requiredColumnRefs.add(colRef);
         }
+
         List<String> columnNames = requiredColumnRefs.stream().map(col -> columns.get(col).getName()).collect(
                 Collectors.toList());
         List<ConnectorTableColumnStats> columnStatisticList =
@@ -697,7 +701,6 @@ public class MetadataMgr {
         Map<String, Histogram> histogramStatistics =
                 GlobalStateMgr.getCurrentState().getStatisticStorage().getConnectorHistogramStatistics(table, columnNames);
 
-        Statistics.Builder statistics = Statistics.builder();
         for (int i = 0; i < requiredColumnRefs.size(); ++i) {
             ColumnRefOperator columnRef = requiredColumnRefs.get(i);
             ConnectorTableColumnStats connectorTableColumnStats;
