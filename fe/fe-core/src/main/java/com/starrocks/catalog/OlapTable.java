@@ -3366,7 +3366,7 @@ public class OlapTable extends Table {
     }
 
     @Override
-    public void onCreate(Database db) {
+    public void onCreate(Database db) throws DdlException {
         super.onCreate(db);
 
         ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
