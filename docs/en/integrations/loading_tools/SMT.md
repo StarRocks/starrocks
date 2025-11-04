@@ -788,11 +788,11 @@ The Flink CDC connector captures data by directly reading full and incremental d
 
 For TiDB whose version is before v4.0.0, additional configuration of `flink.cdc.pd-addresses` is required.
 
-````
+```Plain
 ############################################
 ### flink-cdc configuration for `tidb`
 ############################################
 # # Only takes effect on TiDB before v4.0.0. 
 # # TiKV cluster's PD address.
 # flink.cdc.pd-addresses = 127.0.0.1:2379
-````
+```
