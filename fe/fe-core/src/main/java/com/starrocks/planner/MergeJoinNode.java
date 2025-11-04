@@ -36,8 +36,9 @@ package com.starrocks.planner;
 
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
-import com.starrocks.sql.ast.expression.ExprOpcodeRegistry;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprOpcodeRegistry;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
 import com.starrocks.sql.ast.expression.JoinOperator;
 import com.starrocks.thrift.TEqJoinCondition;
@@ -75,14 +76,14 @@ public class MergeJoinNode extends JoinNode {
             if (sqlJoinPredicatesBuilder.length() > 0) {
                 sqlJoinPredicatesBuilder.append(", ");
             }
-            sqlJoinPredicatesBuilder.append(eqJoinPredicate.toSql());
+            sqlJoinPredicatesBuilder.append(ExprToSql.toSql(eqJoinPredicate));
         }
         for (Expr e : otherJoinConjuncts) {
             msg.merge_join_node.addToOther_join_conjuncts(ExprToThriftVisitor.treeToThrift(e));
             if (sqlJoinPredicatesBuilder.length() > 0) {
                 sqlJoinPredicatesBuilder.append(", ");
             }
-            sqlJoinPredicatesBuilder.append(e.toSql());
+            sqlJoinPredicatesBuilder.append(ExprToSql.toSql(e));
         }
         if (sqlJoinPredicatesBuilder.length() > 0) {
             msg.merge_join_node.setSql_join_predicates(sqlJoinPredicatesBuilder.toString());
@@ -93,7 +94,7 @@ public class MergeJoinNode extends JoinNode {
                 if (sqlPredicatesBuilder.length() > 0) {
                     sqlPredicatesBuilder.append(", ");
                 }
-                sqlPredicatesBuilder.append(e.toSql());
+                sqlPredicatesBuilder.append(ExprToSql.toSql(e));
             }
             if (sqlPredicatesBuilder.length() > 0) {
                 msg.merge_join_node.setSql_predicates(sqlPredicatesBuilder.toString());

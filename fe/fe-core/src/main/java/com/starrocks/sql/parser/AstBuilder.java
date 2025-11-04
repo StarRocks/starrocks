@@ -48,6 +48,7 @@ import com.starrocks.scheduler.persist.TaskSchedule;
 import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.FunctionAnalyzer;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -439,6 +440,7 @@ import com.starrocks.sql.ast.expression.DictQueryExpr;
 import com.starrocks.sql.ast.expression.DictionaryGetExpr;
 import com.starrocks.sql.ast.expression.ExistsPredicate;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.FloatLiteral;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.FunctionName;
@@ -1037,15 +1039,15 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                 if (firstExpr instanceof SlotRef) {
                     columnList.add(((SlotRef) firstExpr).getColumnName());
                 } else {
-                    throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"),
+                    throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(ExprToSql.toSql(expr), "PARTITION BY"),
                             pos);
                 }
             } else {
-                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
+                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(ExprToSql.toSql(expr), "PARTITION BY"), pos);
             }
             if (functionName.equals(FunctionSet.FROM_UNIXTIME) || functionName.equals(FunctionSet.FROM_UNIXTIME_MS)) {
                 if (hasCast || paramsExpr.size() > 1) {
-                    throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"),
+                    throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(ExprToSql.toSql(expr), "PARTITION BY"),
                             pos);
                 }
             }
@@ -1998,7 +2000,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         if (desc.taskInterval() != null) {
             var intervalLiteral = (IntervalLiteral) visit(desc.taskInterval());
             if (!(intervalLiteral.getValue() instanceof IntLiteral)) {
-                String exprSql = intervalLiteral.getValue().toSql();
+                String exprSql = ExprToSql.toSql(intervalLiteral.getValue());
                 throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(exprSql, "INTERVAL"),
                         createPos(desc.taskInterval()));
             }
@@ -2175,7 +2177,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                                 AnalyzerUtils.MV_DATE_TRUNC_SUPPORTED_PARTITION_FORMAT);
                         partitionByExprs.add(expr);
                     } else {
-                        throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"),
+                        throw new ParsingException(
+                                PARSER_ERROR_MSG.unsupportedExprWithInfo(ExprToSql.toSql(expr), "PARTITION BY"),
                                 expr.getPos());
                     }
                 }
@@ -5386,7 +5389,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         }
         ParseNode insertNode = visit(context.insertStatement());
         if (!(insertNode instanceof InsertStmt)) {
-            throw new ParsingException(PARSER_ERROR_MSG.unsupportedStatement(insertNode.toSql()),
+            String sql = AstToSQLBuilder.toSQL(insertNode);
+            throw new ParsingException(PARSER_ERROR_MSG.unsupportedStatement(sql),
                     context.insertStatement());
         }
         Map<String, String> properties = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
@@ -7581,7 +7585,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                     try {
                         ((LiteralExpr) child).swapSign();
                     } catch (NotImplementedException e) {
-                        throw new ParsingException(PARSER_ERROR_MSG.unsupportedExpr(child.toSql()), child.getPos());
+                        throw new ParsingException(PARSER_ERROR_MSG.unsupportedExpr(ExprToSql.toSql(child)), child.getPos());
                     }
                     return child;
                 } else {
@@ -7679,7 +7683,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                 exprs.add(value);
             }
         } catch (Exception e) {
-            throw new IllegalArgumentException(String.format("Cast argument %s to int type failed.", value.toSql()));
+            throw new IllegalArgumentException(String.format("Cast argument %s to int type failed.", ExprToSql.toSql(value)));
         }
     }
 
@@ -8751,7 +8755,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             if (expr instanceof IntLiteral) {
                 intervalVal = ((IntLiteral) expr).getLongValue();
             } else {
-                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(),
+                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(ExprToSql.toSql(expr),
                         "RANGE DESC"), expr.getPos());
             }
             return new MultiRangePartitionDesc(
@@ -8927,7 +8931,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             if (context.interval() != null) {
                 intervalLiteral = (IntervalLiteral) visit(context.interval());
                 if (!(intervalLiteral.getValue() instanceof IntLiteral)) {
-                    String exprSql = intervalLiteral.getValue().toSql();
+                    String exprSql = ExprToSql.toSql(intervalLiteral.getValue());
                     throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(exprSql, "INTERVAL"),
                             createPos(context.interval()));
                 }

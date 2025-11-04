@@ -117,6 +117,6 @@ public class SubfieldExpr extends Expr {
         if (children.get(0) instanceof SlotRef) {
             return ((SlotRef) children.get(0)).getColumnName();
         }
-        return children.get(0).toSql();
+        return ExprToSql.toSql(children.get(0));
     }
 }

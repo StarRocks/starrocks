@@ -87,7 +87,6 @@ public class UserVariable extends SetListItem {
         return isFromHint;
     }
 
-    @Override
     public String toSql() {
         return AstToSQLBuilder.toSQL(unevaluatedExpression);
     }

@@ -34,6 +34,7 @@ import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.expression.AnalyticExpr;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.GroupingFunctionCallExpr;
@@ -198,7 +199,7 @@ public class SimpleSelectAnalyzer {
             expression.collect(AnalyticExpr.class, window);
             if (outputWindowFunctions.stream()
                     .anyMatch((e -> TreeNode.contains(e.getChildren(), AnalyticExpr.class)))) {
-                throw new SemanticException("Nesting of analytic expressions is not allowed: " + expression.toSql());
+                throw new SemanticException("Nesting of analytic expressions is not allowed: " + ExprToSql.toSql(expression));
             }
             outputWindowFunctions.addAll(window);
         }
@@ -210,7 +211,7 @@ public class SimpleSelectAnalyzer {
             expression.collect(AnalyticExpr.class, window);
             if (orderByWindowFunctions.stream()
                     .anyMatch((e -> TreeNode.contains(e.getChildren(), AnalyticExpr.class)))) {
-                throw new SemanticException("Nesting of analytic expressions is not allowed: " + expression.toSql());
+                throw new SemanticException("Nesting of analytic expressions is not allowed: " + ExprToSql.toSql(expression));
             }
             orderByWindowFunctions.addAll(window);
         }

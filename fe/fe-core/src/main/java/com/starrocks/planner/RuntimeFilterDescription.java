@@ -21,6 +21,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.thrift.TBucketProperty;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TRuntimeFilterBuildJoinMode;
@@ -486,7 +487,7 @@ public class RuntimeFilterDescription {
         StringBuilder sb = new StringBuilder();
         sb.append("filter_id = ").append(filterId);
         if (probeNodeId >= 0) {
-            sb.append(", probe_expr = (").append(nodeIdToProbeExpr.get(probeNodeId).toSql()).append(")");
+            sb.append(", probe_expr = (").append(ExprToSql.toSql(nodeIdToProbeExpr.get(probeNodeId))).append(")");
             if (isCanUsePartitionByExprs() && nodeIdToParitionByExprs.containsKey(probeNodeId) &&
                     !nodeIdToParitionByExprs.get(probeNodeId).isEmpty()) {
                 sb.append(", partition_exprs = (");
@@ -494,15 +495,15 @@ public class RuntimeFilterDescription {
                 for (int i = 0; i < partitionByExprs.size(); i++) {
                     Expr partitionByExpr = partitionByExprs.get(i);
                     if (i != partitionByExprs.size() - 1) {
-                        sb.append(partitionByExpr.toSql() + ",");
+                        sb.append(ExprToSql.toSql(partitionByExpr) + ",");
                     } else {
-                        sb.append(partitionByExpr.toSql());
+                        sb.append(ExprToSql.toSql(partitionByExpr));
                     }
                 }
                 sb.append(")");
             }
         } else {
-            sb.append(", build_expr = (").append(buildExpr.toSql()).append(")");
+            sb.append(", build_expr = (").append(ExprToSql.toSql(buildExpr)).append(")");
             sb.append(", remote = ").append(hasRemoteTargets);
         }
         return sb.toString();

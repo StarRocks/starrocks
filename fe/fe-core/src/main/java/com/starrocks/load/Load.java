@@ -74,6 +74,7 @@ import com.starrocks.sql.ast.expression.CastExpr;
 import com.starrocks.sql.ast.expression.DictQueryExpr;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.FunctionName;
@@ -402,7 +403,7 @@ public class Load {
                             throw new AnalysisException("const load op type column should only be upsert(0)/delete(1)");
                         }
                     }
-                    LOG.info("load __op column expr: " + (expr != null ? expr.toSql() : "null"));
+                    LOG.info("load __op column expr: " + (expr != null ? ExprToSql.toSql(expr) : "null"));
                     break;
                 }
             }
@@ -922,7 +923,7 @@ public class Load {
         if (!node.isFromLambda() && !node.isAnalyzed()) {
             // The SlotRef for non-lambda argument is analyzed manually before using Analyzer
             // TODO: delete old analyze in Load
-            String errMsg = String.format("The SlotRef not from lambda is not analyzed, %s", node.toSql());
+            String errMsg = String.format("The SlotRef not from lambda is not analyzed, %s", ExprToSql.toSql(node));
             LOG.warn(errMsg);
             throw unsupportedException(errMsg);
         }

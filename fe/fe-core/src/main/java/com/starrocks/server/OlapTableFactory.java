@@ -70,6 +70,7 @@ import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.thrift.TCompactionStrategy;
 import com.starrocks.thrift.TCompressionType;
@@ -190,7 +191,8 @@ public class OlapTableFactory implements AbstractTableFactory {
             for (OrderByElement orderByElement : stmt.getOrderByElements()) {
                 String column = orderByElement.castAsSlotRef();
                 if (column == null) {
-                    throw new DdlException("Unknown column '" + orderByElement.getExpr().toSql() + "' in order by clause");
+                    throw new DdlException("Unknown column '" +
+                            ExprToSql.toSql(orderByElement.getExpr()) + "' in order by clause");
                 }
                 int idx = IntStream.range(0, baseSchemaNames.size())
                         .filter(i -> baseSchemaNames.get(i).equalsIgnoreCase(column))

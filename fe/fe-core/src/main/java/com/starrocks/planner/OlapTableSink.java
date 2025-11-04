@@ -87,6 +87,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.IndexDef.IndexType;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.LiteralExpr;
@@ -488,7 +489,7 @@ public class OlapTableSink extends DataSink {
 
                 indexSchema.setWhere_clause(ExprToThriftVisitor.treeToThrift(whereClause));
                 if (LOG.isDebugEnabled()) {
-                    LOG.debug("OlapTableSink Where clause: {}", whereClause.explain());
+                    LOG.debug("OlapTableSink Where clause: {}", ExprToSql.explain(whereClause));
                 }
             }
         }

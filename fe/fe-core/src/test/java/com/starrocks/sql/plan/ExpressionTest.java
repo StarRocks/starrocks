@@ -23,6 +23,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.CastExpr;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.LambdaFunctionExpr;
@@ -276,7 +277,7 @@ public class ExpressionTest extends PlanTestBase {
         Expr lambdaFunc = ScalarOperatorToExpr.buildExecExpression(lambda, context);
 
         Assertions.assertTrue(lambdaFunc instanceof LambdaFunctionExpr);
-        Assertions.assertEquals("<slot 100000> -> <slot 100000> = 1", lambdaFunc.toSql());
+        Assertions.assertEquals("<slot 100000> -> <slot 100000> = 1", ExprToSql.toSql(lambdaFunc));
 
         LambdaFunctionExpr lexpr = ((LambdaFunctionExpr) lambdaFunc);
         Assertions.assertTrue(lexpr.getChildren().size() == 2 && lexpr.getChild(1) instanceof SlotRef);
