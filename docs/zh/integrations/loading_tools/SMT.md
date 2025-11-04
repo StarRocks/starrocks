@@ -777,7 +777,7 @@ SMT 可以根据 TiDB 和 StarRocks 的集群信息和表结构自动生成 sour
 
 Tidb v4.0.0 之前的版本需要额外配置 flink.cdc.pd-addresses。
 
-```Bash
+```Plain
 ############################################
 ### flink-cdc configuration for `tidb`
 ############################################
