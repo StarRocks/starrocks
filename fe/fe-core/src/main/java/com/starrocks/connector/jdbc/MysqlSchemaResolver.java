@@ -87,7 +87,8 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
     @Override
     public Type convertColumnType(int dataType, String typeName, int columnSize, int digits) {
         PrimitiveType primitiveType;
-        boolean isUnsigned = typeName.toLowerCase().contains("unsigned");
+        String lowerTypeName = typeName.toLowerCase();
+        boolean isUnsigned = lowerTypeName.contains("unsigned");
 
         switch (dataType) {
             case Types.BOOLEAN:
@@ -109,7 +110,9 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
                 }
                 break;
             case Types.INTEGER:
-                if (isUnsigned) {
+                if (lowerTypeName.startsWith("mediumint")) {
+                    primitiveType = PrimitiveType.INT;
+                } else if (isUnsigned) {
                     primitiveType = PrimitiveType.BIGINT;
                 } else {
                     primitiveType = PrimitiveType.INT;
@@ -130,13 +133,48 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
                 primitiveType = PrimitiveType.DOUBLE;
                 break;
             case Types.DECIMAL:
+            case Types.NUMERIC:
                 primitiveType = PrimitiveType.DECIMAL32;
                 break;
             case Types.CHAR:
-                return ScalarType.createCharType(columnSize);
+                if (lowerTypeName.startsWith("enum")) {
+                    return ScalarType.createVarcharType(columnSize);
+                } else if (lowerTypeName.startsWith("set")) {
+                    return ScalarType.createVarcharType(columnSize);
+                } else {
+                    return ScalarType.createCharType(columnSize);
+                }
             case Types.VARCHAR:
-            case Types.LONGVARCHAR: //text type in mysql
                 return ScalarType.createVarcharType(columnSize);
+            case Types.LONGVARCHAR:
+                if (lowerTypeName.equals("json")) {
+                    return ScalarType.createVarcharType(1073741824);
+                } else if (lowerTypeName.startsWith("tiny") || lowerTypeName.startsWith("medium") ||
+                        lowerTypeName.equals("text") || lowerTypeName.startsWith("long")) {
+                    return ScalarType.createVarcharType(columnSize);
+                } else if (lowerTypeName.contains("geometry") || lowerTypeName.contains("point") ||
+                        lowerTypeName.contains("linestring") || lowerTypeName.contains("polygon") ||
+                        lowerTypeName.contains("multipoint") || lowerTypeName.contains("multilinestring") ||
+                        lowerTypeName.contains("multipolygon") || lowerTypeName.contains("collection")) {
+                    return ScalarType.createVarbinary(ScalarType.CATALOG_MAX_VARCHAR_LENGTH);
+                } else {
+                    return ScalarType.createVarcharType(columnSize);
+                }
+            case Types.BINARY:
+                return ScalarType.createVarbinary(columnSize);
+            case Types.VARBINARY:
+                return ScalarType.createVarbinary(columnSize);
+            case Types.LONGVARBINARY:
+                if (lowerTypeName.contains("blob")) {
+                    return ScalarType.createVarbinary(columnSize);
+                } else if (lowerTypeName.contains("geometry") || lowerTypeName.contains("point") ||
+                        lowerTypeName.contains("linestring") || lowerTypeName.contains("polygon") ||
+                        lowerTypeName.contains("multipoint") || lowerTypeName.contains("multilinestring") ||
+                        lowerTypeName.contains("multipolygon") || lowerTypeName.contains("collection")) {
+                    return ScalarType.createVarbinary(ScalarType.CATALOG_MAX_VARCHAR_LENGTH);
+                } else {
+                    return ScalarType.createVarbinary(columnSize);
+                }
             case Types.DATE:
                 primitiveType = PrimitiveType.DATE;
                 break;
@@ -147,12 +185,16 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
                 primitiveType = PrimitiveType.DATETIME;
                 break;
             default:
-                // The mysql-connector-j will convert the JSON type in MySQL to Types.LONGVARCHAR(1073741824).
-                // However, the mariadb-java-client does not handle the JSON type,
-                // so it will be converted to Types.Other. Here, in order to handle JSON, for the Types.Other,
-                // it is uniformly converted to Types.LONGVARCHAR(1073741824).
-                // If later mariadb-java-client support json, this code can be reverted.
-                return ScalarType.createVarcharType(1073741824);
+                if (lowerTypeName.equals("json")) {
+                    return ScalarType.createVarcharType(1073741824);
+                } else if (lowerTypeName.contains("geometry") || lowerTypeName.contains("point") ||
+                        lowerTypeName.contains("linestring") || lowerTypeName.contains("polygon") ||
+                        lowerTypeName.contains("multipoint") || lowerTypeName.contains("multilinestring") ||
+                        lowerTypeName.contains("multipolygon") || lowerTypeName.contains("collection")) {
+                    return ScalarType.createVarbinary(ScalarType.CATALOG_MAX_VARCHAR_LENGTH);
+                } else {
+                    return ScalarType.createVarcharType(1073741824);
+                }
         }
 
         if (primitiveType != PrimitiveType.DECIMAL32) {
