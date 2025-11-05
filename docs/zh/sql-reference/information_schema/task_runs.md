@@ -22,11 +22,6 @@ displayed_sidebar: docs
 | ERROR_MESSAGE | 任务的错误消息。                                             |
 | PROGRESS      | 任务的进度。                                                 |
 | EXTRA_MESSAGE | 任务的额外消息，例如在异步物化视图创建任务中的分区信息。     |
-<<<<<<< HEAD
-=======
-| PROPERTIES    | 任务的属性。                                                 |
-| JOB_ID        | 任务的作业 ID。                                              |
-| PROCESS_TIME  | 任务的处理时间。                                             |
 
 Task Run 记录由 [SUBMIT TASK](../sql-statements/loading_unloading/ETL/SUBMIT_TASK.md) 或 [CREATE MATRIALIZED VIEW](../sql-statements/materialized_view/CREATE_MATERIALIZED_VIEW.md) 生成。
 
@@ -37,4 +32,3 @@ Task Run 记录由 [SUBMIT TASK](../sql-statements/loading_unloading/ETL/SUBMIT_
 ## `EXTRA_MESSAGE`
 
 对于物化视图任务运行，`EXTRA_MESSAGE` 字段将包含物化视图 Task Run 的详细信息，您可以在 [materialized_view_task_run_details](../../using_starrocks/async_mv/materialized_view_task_run_details.md) 中找到更多详细信息。
->>>>>>> 1476abffaa ([Doc] Add materialized view task run details doc (#64550))
