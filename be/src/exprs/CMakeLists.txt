@@ -121,4 +121,4 @@ if(STARROCKS_JIT_ENABLE)
 
 endif()
 
-add_library(Exprs ${EXPR_FILES})
+ADD_BE_LIB(Exprs ${EXPR_FILES})

@@ -121,6 +121,6 @@ set(UTIL_FILES
   llm_query_service.cpp
 )
 
-add_library(Util STATIC
+ADD_BE_LIB(Util
     ${UTIL_FILES}
 )

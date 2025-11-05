@@ -14,7 +14,7 @@
 
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/connector")
 
-add_library(Connector STATIC
+ADD_BE_LIB(Connector
         connector.cpp
         hive_connector.cpp
         es_connector.cpp

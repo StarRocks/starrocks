@@ -21,17 +21,13 @@
 #include <openssl/types.h>
 #endif
 #include <bvar/bvar.h>
+#include <cpuid.h>
 
-#include "common/config.h"
 #include "fmt/format.h"
 #include "fs/encrypt_file.h"
 #include "gutil/endian.h"
 #include "io/input_stream.h"
 #include "util/defer_op.h"
-
-#ifdef __x86_64__
-extern "C" unsigned int OPENSSL_ia32cap_P[];
-#endif
 
 namespace starrocks {
 
@@ -43,7 +39,11 @@ bool openssl_supports_aesni() {
     }
 #endif
 #ifdef __x86_64__
-    return OPENSSL_ia32cap_P[1] & (1 << (57 - 32));
+    unsigned int eax, ebx, ecx, edx;
+    if (__get_cpuid(1, &eax, &ebx, &ecx, &edx)) {
+        return ecx & (1 << 25); // bit 25 of ECX = AES-NI
+    }
+    return false;
 #else
     return false;
 #endif
