@@ -91,11 +91,15 @@ public:
                                       const TabletMetadataPtr& metadata, Tablet* tablet, IndexEntry* index_entry,
                                       MetaFileBuilder* builder, int64_t base_version, bool batch_apply = false);
 
-    Status _write_segment_for_upsert(const TxnLogPB_OpWrite& op_write, const TabletSchemaCSPtr& tschema, Tablet* tablet,
-                                     const std::shared_ptr<FileSystem>& fs, int64_t txn_id, uint32_t seg,
-                                     const std::vector<uint32_t>& insert_rowids,
-                                     const std::vector<uint32_t>& update_cids, TxnLogPB_OpWrite* new_rows_op,
-                                     uint64_t* total_rows, ChunkPtr* out_chunk);
+    StatusOr<MutableColumnPtr> _load_segment_pk_column(const TxnLogPB_OpWrite& op_write,
+                                                       const TabletSchemaCSPtr& tschema, Tablet* tablet,
+                                                       const std::shared_ptr<FileSystem>& fs, uint32_t seg,
+                                                       const Schema& pkey_schema);
+
+    Status _read_chunk_for_upsert(const TxnLogPB_OpWrite& op_write, const TabletSchemaCSPtr& tschema, Tablet* tablet,
+                                  const std::shared_ptr<FileSystem>& fs, uint32_t seg,
+                                  const std::vector<uint32_t>& insert_rowids, const std::vector<uint32_t>& update_cids,
+                                  ChunkPtr* out_chunk);
 
     Status _handle_column_upsert_mode(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
                                       const TabletMetadataPtr& metadata, Tablet* tablet, LakePrimaryIndex& index,
