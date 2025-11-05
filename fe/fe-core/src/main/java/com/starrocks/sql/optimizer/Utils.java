@@ -30,6 +30,7 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.expression.JoinOperator;
+import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.LogicalProperty;
 import com.starrocks.sql.optimizer.operator.Operator;
@@ -570,7 +571,7 @@ public class Utils {
         }
         // Guarantee that both childType casting to lhsType and rhsType casting to childType are
         // lossless
-        if (!Type.isAssignable2Decimal((ScalarType) lhsType, (ScalarType) childType)) {
+        if (!TypeManager.isAssignable2Decimal((ScalarType) lhsType, (ScalarType) childType)) {
             return Optional.empty();
         }
 
@@ -582,7 +583,7 @@ public class Utils {
         if (result.isEmpty()) {
             return Optional.empty();
         }
-        if (Type.isAssignable2Decimal((ScalarType) childType, (ScalarType) rhsType)) {
+        if (TypeManager.isAssignable2Decimal((ScalarType) childType, (ScalarType) rhsType)) {
             return Optional.of(result.get());
         } else if (result.get().toString().equalsIgnoreCase(rhs.toString())) {
             // check lossless

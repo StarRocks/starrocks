@@ -25,6 +25,7 @@ import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.sql.ast.expression.InPredicate;
 import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
@@ -33,7 +34,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
-import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
 import org.apache.commons.lang3.StringUtils;
 
@@ -92,7 +92,7 @@ public class SPMFunctions {
             if (argsTypes.size() != 3) {
                 throw new SemanticException("spm function _spm_const_range must have three parameters");
             }
-            if (!ScalarType.canCastTo(argsTypes.get(1), argsTypes.get(2))) {
+            if (!TypeManager.canCastTo(argsTypes.get(1), argsTypes.get(2))) {
                 throw new SemanticException("spm function _spm_const_range min/max type must be same");
             }
         } else if (CONST_ENUM_FUNC.equalsIgnoreCase(fnName)) {
@@ -101,7 +101,7 @@ public class SPMFunctions {
             }
             Type type1 = argsTypes.get(1);
             for (int i = 2; i < argsTypes.size(); i++) {
-                if (!ScalarType.canCastTo(argsTypes.get(i), type1)) {
+                if (!TypeManager.canCastTo(argsTypes.get(i), type1)) {
                     throw new SemanticException("spm function _spm_const_enum enum type must be same");
                 }
             }
