@@ -60,8 +60,7 @@ public class MySQLReadListener implements ChannelListener<ConduitStreamSourceCha
                     if (!ctx.isKilled() && ctx.getState().isRunning()) {
                         ctx.kill(false, "client closed");
                     }
-                    channel.shutdownReads();
-                    channel.close();
+                    ctx.cleanup();
                     return;
                 }
 
