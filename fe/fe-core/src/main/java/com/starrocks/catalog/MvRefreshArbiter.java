@@ -16,7 +16,6 @@ package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Range;
 import com.starrocks.catalog.mv.MVTimelinessArbiter;
 import com.starrocks.catalog.mv.MVTimelinessListPartitionArbiter;
 import com.starrocks.catalog.mv.MVTimelinessNonPartitionArbiter;
@@ -26,7 +25,8 @@ import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.common.PCell;
+import com.starrocks.sql.common.PCellSortedSet;
+import com.starrocks.sql.common.PRangeCell;
 import com.starrocks.sql.common.UnsupportedException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -207,10 +207,10 @@ public class MvRefreshArbiter {
                 List<Column> refPartitionColumns = refBaseTablePartitionColumns.get(baseTable);
                 PartitionInfo mvPartitionInfo = mv.getPartitionInfo();
                 if (mvPartitionInfo.isListPartition()) {
-                    Map<String, PCell> mvPartitionNameWithList = getMVPartitionToCells(baseTable,
+                    PCellSortedSet mvPartitionNameWithList = getMVPartitionToCells(baseTable,
                             refPartitionColumns, updatedPartitionNamesList);
                     baseTableUpdateInfo.addPartitionCells(mvPartitionNameWithList);
-                    baseTableUpdateInfo.addToRefreshPartitionNames(mvPartitionNameWithList.keySet());
+                    baseTableUpdateInfo.addToRefreshPartitionNames(mvPartitionNameWithList.getPartitionNames());
                 } else if (mvPartitionInfo.isRangePartition()) {
                     Preconditions.checkArgument(refPartitionColumns.size() == 1,
                             "Range partition column size must be 1");
@@ -218,12 +218,13 @@ public class MvRefreshArbiter {
                     Optional<Expr> partitionExprOpt = mv.getRangePartitionFirstExpr();
                     Preconditions.checkArgument(partitionExprOpt.isPresent(),
                             "Range partition expr must be present");
-                    Map<String, Range<PartitionKey>> partitionNameWithRange = getMVPartitionNameWithRange(baseTable,
+                    PCellSortedSet partitionNameWithRange = getMVPartitionNameWithRange(baseTable,
                             partitionColumn, updatedPartitionNamesList, partitionExprOpt.get());
-                    for (Map.Entry<String, Range<PartitionKey>> e : partitionNameWithRange.entrySet()) {
-                        baseTableUpdateInfo.addRangePartitionKeys(e.getKey(), e.getValue());
-                    }
-                    baseTableUpdateInfo.addToRefreshPartitionNames(partitionNameWithRange.keySet());
+                    partitionNameWithRange
+                            .stream()
+                            .forEach(p ->
+                                    baseTableUpdateInfo.addRangePartitionKeys(p.name(), (PRangeCell) p.cell()));
+                    baseTableUpdateInfo.addToRefreshPartitionNames(partitionNameWithRange.getPartitionNames());
                 } else {
                     return null;
                 }

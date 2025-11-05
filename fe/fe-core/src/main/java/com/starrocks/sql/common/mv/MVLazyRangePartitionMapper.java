@@ -16,7 +16,6 @@ package com.starrocks.sql.common.mv;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.PartitionKey;
@@ -27,11 +26,13 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.MaxLiteral;
+import com.starrocks.sql.common.PCellSortedSet;
+import com.starrocks.sql.common.PCellWithName;
+import com.starrocks.sql.common.PRangeCell;
 import com.starrocks.sql.common.PartitionMapping;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 import static com.starrocks.sql.common.SyncPartitionUtils.convertToDatePartitionRange;
@@ -61,19 +62,20 @@ public class MVLazyRangePartitionMapper extends MVRangePartitionMapper {
     public static final MVLazyRangePartitionMapper INSTANCE = new MVLazyRangePartitionMapper();
 
     @Override
-    public Map<String, Range<PartitionKey>> toMappingRanges(Map<String, Range<PartitionKey>> baseRangeMap,
-                                                            String granularity,
-                                                            PrimitiveType partitionType) {
+    public PCellSortedSet toMappingRanges(PCellSortedSet baseRangeMap,
+                                          String granularity,
+                                          PrimitiveType partitionType) {
         Set<LocalDateTime> timePointSet = Sets.newTreeSet();
-        for (Map.Entry<String, Range<PartitionKey>> rangeEntry : baseRangeMap.entrySet()) {
-            PartitionMapping mappedRange = toMappingRanges(rangeEntry.getValue(), granularity);
+        for (PCellWithName rangeEntry : baseRangeMap.getPartitions()) {
+            PRangeCell rangeCell = rangeEntry.cell().cast();
+            PartitionMapping mappedRange = toMappingRanges(rangeCell.getRange(), granularity);
             // this mappedRange may exist range overlap
             timePointSet.add(mappedRange.getLowerDateTime());
             timePointSet.add(mappedRange.getUpperDateTime());
         }
         List<LocalDateTime> timePointList = Lists.newArrayList(timePointSet);
         // deal overlap
-        Map<String, Range<PartitionKey>> result = Maps.newHashMap();
+        PCellSortedSet result = PCellSortedSet.of();
         if (timePointList.size() < 2) {
             return result;
         }
@@ -84,7 +86,7 @@ public class MVLazyRangePartitionMapper extends MVRangePartitionMapper {
                 PartitionKey lowerPartitionKey = toPartitionKey(lowerDateTime, partitionType);
                 PartitionKey upperPartitionKey = toPartitionKey(upperDateTime, partitionType);
                 String mvPartitionName = getMVPartitionName(lowerDateTime, upperDateTime, granularity);
-                result.put(mvPartitionName, Range.closedOpen(lowerPartitionKey, upperPartitionKey));
+                result.add(mvPartitionName, new PRangeCell(Range.closedOpen(lowerPartitionKey, upperPartitionKey)));
             } catch (AnalysisException ex) {
                 throw new SemanticException("Convert to DateLiteral failed:", ex);
             }

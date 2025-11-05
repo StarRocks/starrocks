@@ -14,15 +14,10 @@
 
 package com.starrocks.catalog;
 
-import com.google.common.base.Preconditions;
-import com.google.common.collect.Maps;
-import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
-import com.starrocks.sql.common.PCell;
-import com.starrocks.sql.common.PListCell;
+import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.PRangeCell;
 
-import java.util.Map;
 import java.util.Set;
 
 /**
@@ -32,27 +27,27 @@ public class MvBaseTableUpdateInfo {
     // The partition names of base table that have been updated
     private final Set<String> toRefreshPartitionNames = Sets.newHashSet();
     // The mapping of partition name to partition range
-    private final Map<String, PCell> partitionToCells = Maps.newHashMap();
+    private final PCellSortedSet partitionToCells = PCellSortedSet.of();
 
     // If the base table is a mv, needs to record the mapping of mv partition name to partition range
-    private final Map<String, PCell> mvPartitionNameToCellMap = Maps.newHashMap();
+    private final PCellSortedSet mvPartitionNameToCellMap = PCellSortedSet.of();
 
     public MvBaseTableUpdateInfo() {
     }
 
-    public Map<String, PCell> getMvPartitionNameToCellMap() {
+    public PCellSortedSet getMvPartitionNameToCellMap() {
         return mvPartitionNameToCellMap;
     }
 
-    public void addMVPartitionNameToCellMap(Map<String, PCell> partitionNameToRangeMap) {
-        mvPartitionNameToCellMap.putAll(partitionNameToRangeMap);
+    public void addMVPartitionNameToCellMap(PCellSortedSet partitionNameToRangeMap) {
+        mvPartitionNameToCellMap.addAll(partitionNameToRangeMap);
     }
 
     public Set<String> getToRefreshPartitionNames() {
         return toRefreshPartitionNames;
     }
 
-    public Map<String, PCell> getPartitionToCells() {
+    public PCellSortedSet getPartitionToCells() {
         return partitionToCells;
     }
 
@@ -67,49 +62,23 @@ public class MvBaseTableUpdateInfo {
     /**
      * Add partition name that needs to be refreshed and its associated range partition key
      * @param partitionName mv partition name
-     * @param rangePartitionKey the associated range partition
+     * @param rangeCell the associated range partition
      */
     public void addRangePartitionKeys(String partitionName,
-                                      Range<PartitionKey> rangePartitionKey) {
-        partitionToCells.put(partitionName, new PRangeCell(rangePartitionKey));
+                                      PRangeCell rangeCell) {
+        partitionToCells.add(partitionName, rangeCell);
     }
 
     /**
      * Add partition name that needs to be refreshed and its associated list partition key
      */
-    public void addPartitionCells(Map<String, PCell> cells) {
-        partitionToCells.putAll(cells);
-    }
-
-    /**
-     * Get the partition name with its associated range partition key when the mv is range partitioned.
-     */
-    public Map<String, Range<PartitionKey>> getPartitionNameWithRanges() {
-        Map<String, Range<PartitionKey>> result = Maps.newHashMap();
-        for (Map.Entry<String, PCell> e : partitionToCells.entrySet()) {
-            Preconditions.checkState(e.getValue() instanceof PRangeCell);
-            PRangeCell rangeCell = (PRangeCell) e.getValue();
-            result.put(e.getKey(), rangeCell.getRange());
-        }
-        return result;
-    }
-
-    /**
-     * Get the partition name with its associated list partition key when the mv is list partitioned.
-     */
-    public Map<String, PListCell> getPartitionNameWithLists() {
-        Map<String, PListCell> result = Maps.newHashMap();
-        for (Map.Entry<String, PCell> e : partitionToCells.entrySet()) {
-            Preconditions.checkState(e.getValue() instanceof PListCell);
-            PListCell listCell = (PListCell) e.getValue();
-            result.put(e.getKey(), listCell);
-        }
-        return result;
+    public void addPartitionCells(PCellSortedSet cells) {
+        partitionToCells.addAll(cells);
     }
 
     @Override
     public String toString() {
-        return "BaseTableRefreshInfo{" +
+        return "{" +
                 ", toRefreshPartitionNames=" + toRefreshPartitionNames +
                 ", nameToPartKeys=" + partitionToCells +
                 '}';

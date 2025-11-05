@@ -27,19 +27,19 @@ import java.util.Map;
  * The base class for partition diff which is used to represent the difference between two partition sets.
  */
 public class PartitionDiff {
-    private final Map<String, PCell> adds;
-    private final Map<String, PCell> deletes;
+    private final PCellSortedSet adds;
+    private final PCellSortedSet deletes;
 
-    public PartitionDiff(Map<String, PCell> adds, Map<String, PCell> deletes) {
+    public PartitionDiff(PCellSortedSet adds, PCellSortedSet deletes) {
         this.adds = adds;
         this.deletes = deletes;
     }
 
-    public Map<String, PCell> getAdds() {
+    public PCellSortedSet getAdds() {
         return adds;
     }
 
-    public Map<String, PCell> getDeletes() {
+    public PCellSortedSet getDeletes() {
         return deletes;
     }
 
@@ -56,8 +56,8 @@ public class PartitionDiff {
         }
         RangeMap<PartitionKey, String> addRanges = TreeRangeMap.create();
         for (PartitionDiff diff : diffList) {
-            for (Map.Entry<String, PCell> add : diff.getAdds().entrySet()) {
-                Range<PartitionKey> range = ((PRangeCell) add.getValue()).getRange();
+            for (PCellWithName add : diff.getAdds().getPartitions()) {
+                Range<PartitionKey> range = ((PRangeCell) add.cell()).getRange();
                 Map<Range<PartitionKey>, String> intersectedRange = addRanges.subRangeMap(range).asMapOfRanges();
                 // should either empty or exactly same
                 if (!intersectedRange.isEmpty()) {
@@ -68,7 +68,8 @@ public class PartitionDiff {
                     }
                 }
             }
-            diff.getAdds().forEach((key, value) -> addRanges.put(((PRangeCell) value).getRange(), key));
+            diff.getAdds().forEach((pCellWithName ->
+                    addRanges.put(((PRangeCell) pCellWithName.cell()).getRange(), pCellWithName.name())));
         }
     }
 

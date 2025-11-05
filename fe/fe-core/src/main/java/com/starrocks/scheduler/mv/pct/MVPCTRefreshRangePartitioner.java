@@ -53,7 +53,6 @@ import com.starrocks.sql.ast.expression.IsNullPredicate;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.DmlException;
-import com.starrocks.sql.common.PCell;
 import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.PCellWithName;
 import com.starrocks.sql.common.PRangeCell;
@@ -93,13 +92,7 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
 
     public PCellSortedSet getMVPartitionsToRefreshByParams() throws AnalysisException {
         if (mvRefreshParams.isCompleteRefresh()) {
-            Map<String, Range<PartitionKey>> rangePartitionMap = mv.getRangePartitionMap();
-            if (rangePartitionMap.isEmpty()) {
-                return PCellSortedSet.of();
-            }
-            return PCellSortedSet.of(rangePartitionMap.entrySet()
-                    .stream()
-                    .collect(Collectors.toMap(Map.Entry::getKey, e -> new PRangeCell(e.getValue()))));
+            return mv.getRangePartitionMap();
         } else {
             String start = mvRefreshParams.getRangeStart();
             String end = mvRefreshParams.getRangeEnd();
@@ -109,15 +102,15 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
             // range partition must have partition column, and its column size must be 1
             Column partitionColumn = mv.getRangePartitionFirstColumn().get();
             Range<PartitionKey> rangeToInclude = createRange(start, end, partitionColumn);
-            Map<String, Range<PartitionKey>> rangePartitionMap = mv.getRangePartitionMap();
+            PCellSortedSet rangePartitionMap = mv.getRangePartitionMap();
             if (rangePartitionMap.isEmpty()) {
                 return PCellSortedSet.of();
             }
             PCellSortedSet result = PCellSortedSet.of();
-            for (Map.Entry<String, Range<PartitionKey>> entry : rangePartitionMap.entrySet()) {
-                Range<PartitionKey> rangeToCheck = entry.getValue();
+            for (PCellWithName entry : rangePartitionMap.getPartitions()) {
+                Range<PartitionKey> rangeToCheck = ((PRangeCell) entry.cell()).getRange();
                 if (RangePartitionDiffer.isRangeIncluded(rangeToInclude, rangeToCheck)) {
-                    result.add(new PCellWithName(entry.getKey(), new PRangeCell(rangeToCheck)));
+                    result.add(new PCellWithName(entry.name(), new PRangeCell(rangeToCheck)));
                 }
             }
             return result;
@@ -139,21 +132,21 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
         }
 
         // Delete old partitions and then add new partitions because the old and new partitions may overlap
-        Map<String, PCell> deletes = result.diff.getDeletes();
-        for (String mvPartitionName : deletes.keySet()) {
+        PCellSortedSet deletes = result.diff.getDeletes();
+        for (String mvPartitionName : deletes.getPartitionNames()) {
             dropPartition(db, mv, mvPartitionName);
         }
         logger.info("The process of synchronizing materialized view delete partitions range [{}]", deletes);
 
         // Create new added materialized views' ranges
-        Map<String, PCell> adds = result.diff.getAdds();
-        Map<String, PCell> mvPartitionToCells = result.mvPartitionToCells;
+        PCellSortedSet adds = result.diff.getAdds();
+        PCellSortedSet mvPartitionToCells = result.mvPartitionToCells;
         // filter partition ttl for all add ranges
         filterPartitionsByTTL(adds, true);
         Map<String, String> partitionProperties = MvUtils.getPartitionProperties(mv);
         DistributionDesc distributionDesc = MvUtils.getDistributionDesc(mv);
         addRangePartitions(db, mv, adds, partitionProperties, distributionDesc);
-        adds.entrySet().stream().forEach(entry -> mvPartitionToCells.put(entry.getKey(), entry.getValue()));
+        mvPartitionToCells.addAll(adds);
         logger.info("The process of synchronizing materialized view [{}] add partitions range [{}]",
                 mv.getName(), adds);
 
@@ -175,10 +168,10 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
     public Expr generatePartitionPredicate(Table table, Set<String> refBaseTablePartitionNames,
                                            List<Expr> mvPartitionSlotRefs) throws AnalysisException {
         List<Range<PartitionKey>> sourceTablePartitionRange = Lists.newArrayList();
-        Map<Table, Map<String, PCell>> refBaseTablePartitionCells = mvContext.getRefBaseTableToCellMap();
+        Map<Table, PCellSortedSet> refBaseTablePartitionCells = mvContext.getRefBaseTableToCellMap();
         for (String partitionName : refBaseTablePartitionNames) {
             Preconditions.checkArgument(refBaseTablePartitionCells.containsKey(table));
-            PRangeCell rangeCell = (PRangeCell) refBaseTablePartitionCells.get(table).get(partitionName);
+            PRangeCell rangeCell = (PRangeCell) refBaseTablePartitionCells.get(table).getPCell(partitionName);
             sourceTablePartitionRange.add(rangeCell.getRange());
         }
         sourceTablePartitionRange = MvUtils.mergeRanges(sourceTablePartitionRange);
@@ -255,10 +248,10 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
         Expr partitionExpr = mvPartitionExprs.get(0);
 
         List<Range<PartitionKey>> mvPartitionRange = Lists.newArrayList();
-        Map<String, PCell> mvToCellMap = mvContext.getMVToCellMap();
+        PCellSortedSet mvToCellMap = mvContext.getMVToCellMap();
         for (String partitionName : mvPartitionNames) {
-            Preconditions.checkArgument(mvToCellMap.containsKey(partitionName));
-            PRangeCell rangeCell = (PRangeCell) mvToCellMap.get(partitionName);
+            Preconditions.checkArgument(mvToCellMap.containsName(partitionName));
+            PRangeCell rangeCell = (PRangeCell) mvToCellMap.getPCell(partitionName);
             mvPartitionRange.add(rangeCell.getRange());
         }
         mvPartitionRange = MvUtils.mergeRanges(mvPartitionRange);
@@ -333,7 +326,7 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
                 refreshPartitionLimit > 0 && mvToRefreshedPartitions.size() > refreshPartitionLimit) {
             // remove the oldest partitions
             int toRemoveNum = mvToRefreshedPartitions.size() - refreshPartitionLimit;
-            mvToRefreshedPartitions.removeWithSize(toRemoveNum);
+            mvToRefreshedPartitions.removeFromStart(toRemoveNum);
         }
     }
 
@@ -355,7 +348,7 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
             Column partitionColumn = mv.getRangePartitionFirstColumn().get();
             Range<PartitionKey> rangeToInclude = createRange(start, end, partitionColumn);
             PCellSortedSet sortedPCells = getValidRangePartitionMap(partitionTTLNumber);
-            for (PCellWithName pCellWrapper : sortedPCells.partitions()) {
+            for (PCellWithName pCellWrapper : sortedPCells.getPartitions()) {
                 PRangeCell pRangeCell = (PRangeCell) pCellWrapper.cell();
                 Range<PartitionKey> rangeToCheck = pRangeCell.getRange();
                 int lowerCmp = rangeToInclude.lowerEndpoint().compareTo(rangeToCheck.upperEndpoint());
@@ -378,14 +371,14 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
      * NOTE: The result is sorted by the lower endpoint of the range.
      */
     private PCellSortedSet getValidRangePartitionMap(int lastPartitionNum) throws AnalysisException {
-        Map<String, Range<PartitionKey>> rangePartitionMap = mv.getRangePartitionMap();
+        PCellSortedSet rangePartitionMap = mv.getRangePartitionMap();
         if (rangePartitionMap.isEmpty()) {
             return PCellSortedSet.of();
         }
         List<PCellWithName> pCellWithNames = rangePartitionMap
-                .entrySet()
+                .getPartitions()
                 .stream()
-                .map(e -> PCellWithName.of(e.getKey(), new PRangeCell(e.getValue())))
+                .map(e -> PCellWithName.of(e.name(), new PRangeCell(((PRangeCell) e.cell()).getRange())))
                 .collect(Collectors.toList());
         // ensure the partition cells are sorted by the range
         PCellSortedSet pCells = PCellSortedSet.of(pCellWithNames);
@@ -393,11 +386,13 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
         if (lastPartitionNum < 0) {
             return pCells;
         }
-        int partitionNum = rangePartitionMap.size();
+        int partitionNum = pCells.size();
         if (lastPartitionNum > partitionNum) {
             return pCells;
         }
-        return pCells.limit(lastPartitionNum);
+        // get the last N partitions
+        pCells.reserveToSize(lastPartitionNum);
+        return pCells;
     }
 
     public void filterPartitionsByTTL(PCellSortedSet toRefreshPartitions,
@@ -410,7 +405,7 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
         if (partitionTTLNumber > 0 && toRefreshPartitionNum > partitionTTLNumber) {
             // remove the oldest partitions
             int toRemoveNum = toRefreshPartitionNum - partitionTTLNumber;
-            toRefreshPartitions.removeWithSize(toRemoveNum);
+            toRefreshPartitions.removeFromStart(toRemoveNum);
         }
     }
 
@@ -418,29 +413,35 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
     public void filterPartitionByRefreshNumber(PCellSortedSet mvPartitionsToRefresh,
                                                MaterializedView.PartitionRefreshStrategy refreshStrategy) {
         int partitionRefreshNumber = mv.getTableProperty().getPartitionRefreshNumber();
-        Map<String, Range<PartitionKey>> mvRangePartitionMap = mv.getRangePartitionMap();
-        if (partitionRefreshNumber <= 0 || partitionRefreshNumber >= mvRangePartitionMap.size()) {
+        PCellSortedSet mvRangePartitionMap = mv.getRangePartitionMap();
+        if (partitionRefreshNumber <= 0 || partitionRefreshNumber >= mvRangePartitionMap.size()
+                || partitionRefreshNumber >= mvPartitionsToRefresh.size()) {
             return;
         }
 
         // remove invalid cells from the input to-refresh partitions
-        mvPartitionsToRefresh
+        Set<PCellWithName> invalidCells = mvPartitionsToRefresh.getPartitions()
                 .stream()
-                .filter(pCell -> !mvRangePartitionMap.containsKey(pCell.name()))
-                .forEach(mvPartitionsToRefresh::remove);
+                .filter(pCell -> !mvRangePartitionMap.containsName(pCell.name()))
+                .collect(Collectors.toSet());
+        invalidCells.forEach(cell -> {
+            logger.info("partition {} is not in mv's range partition map, remove it from to-refresh partitions",
+                    cell.name());
+            mvPartitionsToRefresh.remove(cell);
+        });
 
-        boolean isAscending = Config.materialized_view_refresh_ascending;
-        Iterator<PCellWithName> iterator = getToRefreshPartitionsIterator(mvPartitionsToRefresh, isAscending);
         // dynamically get the number of partitions to be refreshed this time
         partitionRefreshNumber = getPartitionRefreshNumberAdaptive(mvPartitionsToRefresh, refreshStrategy);
         if (partitionRefreshNumber <= 0 || mvPartitionsToRefresh.size() <= partitionRefreshNumber) {
             return;
         }
 
+        boolean isAscending = Config.materialized_view_refresh_ascending;
+        Iterator<PCellWithName> iterator = getToRefreshPartitionsIterator(mvPartitionsToRefresh, isAscending);
         int i = 0;
         while (i++ < partitionRefreshNumber && iterator.hasNext()) {
             PCellWithName pCell = iterator.next();
-            logger.debug("Materialized view [{}] to refresh partition name {}, value {}",
+            logger.debug("need to refresh partition name {}, value {}",
                     mv.getName(), pCell.name(), pCell.cell());
             // NOTE: if mv's need to refresh partitions in the many-to-many mappings, no need to filter to
             // avoid data lose.
@@ -462,7 +463,7 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
             // more mv's partitions as more as possible.
             // TODO: But it may cause much memory to refresh many partitions, support fine-grained partition refresh later.
             if (!mvToRefreshPotentialPartitions.isEmpty() && mvToRefreshPotentialPartitions.contains(pCell.name())) {
-                logger.info("Materialized view [{}] partition {} is in the many-to-many mappings, " +
+                logger.info("partition {} is in the many-to-many mappings, " +
                         "skip to filter it, mvToRefreshPotentialPartitions:{}", mv.getName(),
                         pCell.name(), mvToRefreshPotentialPartitions);
                 return;
@@ -511,7 +512,7 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
     }
 
     private void addRangePartitions(Database database, MaterializedView materializedView,
-                                    Map<String, PCell> adds,
+                                    PCellSortedSet adds,
                                     Map<String, String> partitionProperties,
                                     DistributionDesc distributionDesc) {
         if (adds.isEmpty()) {
@@ -519,10 +520,10 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
         }
         List<PartitionDesc> partitionDescs = Lists.newArrayList();
 
-        for (Map.Entry<String, PCell> addEntry : adds.entrySet()) {
-            String mvPartitionName = addEntry.getKey();
-            Preconditions.checkArgument(addEntry.getValue() instanceof PRangeCell);
-            Range<PartitionKey> partitionKeyRange = ((PRangeCell) addEntry.getValue()).getRange();
+        for (PCellWithName addEntry : adds.getPartitions()) {
+            String mvPartitionName = addEntry.name();
+            Preconditions.checkArgument(addEntry.cell() instanceof PRangeCell);
+            Range<PartitionKey> partitionKeyRange = ((PRangeCell) addEntry.cell()).getRange();
             String lowerBound = partitionKeyRange.lowerEndpoint().getKeys().get(0).getStringValue();
             String upperBound = partitionKeyRange.upperEndpoint().getKeys().get(0).getStringValue();
             boolean isMaxValue = partitionKeyRange.upperEndpoint().isMaxValue();

@@ -324,9 +324,7 @@ public class MVPartitionExprResolverTest extends MVTestBase {
                         "as select a.k1, b.k2 from test.tbl15 as a join test.tbl16 as b " +
                         "on a.k1 = date_trunc('month', b.k1);", () -> {
 
-                    MaterializedView materializedView =
-                            ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                                    .getTable(testDb.getFullName(), "mv_join_predicate"));
+                    MaterializedView materializedView = getMv(testDb.getFullName(), "mv_join_predicate");
                     Assertions.assertEquals(2, materializedView.getPartitionExprMaps().size());
 
                     Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());

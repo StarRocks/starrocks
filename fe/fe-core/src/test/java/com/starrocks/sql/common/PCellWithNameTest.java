@@ -22,7 +22,7 @@ import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
 
-public class PRangeCellPlusTest {
+public class PCellWithNameTest {
     @Test
     public void testComparison() throws AnalysisException {
         final String partitionName = "p1";
@@ -32,25 +32,25 @@ public class PRangeCellPlusTest {
         final PartitionKey key4 = PartitionKey.ofDateTime(LocalDateTime.of(2025, 5, 27, 13, 0, 0));
 
         Range<PartitionKey> r1 = Range.closed(key1, key2);
-        PRangeCellPlus cell1 = new PRangeCellPlus(partitionName, r1);
+        PCellWithName cell1 = new PCellWithName(partitionName, new PRangeCell(r1));
         Assertions.assertEquals(0, cell1.compareTo(cell1));
 
         Range<PartitionKey> r2 = Range.closed(key2, key3);
-        PRangeCellPlus cell2 = new PRangeCellPlus(partitionName, r2);
+        PCellWithName cell2 = new PCellWithName(partitionName, new PRangeCell(r2));
         Assertions.assertEquals(-1, cell1.compareTo(cell2));
         Assertions.assertEquals(1, cell2.compareTo(cell1));
 
         Range<PartitionKey> r3 = Range.closed(key3, key4);
-        PRangeCellPlus cell3 = new PRangeCellPlus(partitionName, r3);
+        PCellWithName cell3 = new PCellWithName(partitionName, new PRangeCell(r3));
         Assertions.assertEquals(-1, cell2.compareTo(cell3));
         Assertions.assertEquals(1, cell3.compareTo(cell2));
         Assertions.assertEquals(-1, cell1.compareTo(cell3));
         Assertions.assertEquals(1, cell3.compareTo(cell1));
 
         Range<PartitionKey> r4 = Range.closed(key1, key4);
-        PRangeCellPlus cell4 = new PRangeCellPlus(partitionName, r4);
-        PRangeCellPlus cell5 = new PRangeCellPlus(partitionName, r3);
-        PRangeCellPlus cell6 = new PRangeCellPlus(partitionName, r1);
+        PCellWithName cell4 = new PCellWithName(partitionName, new PRangeCell(r4));
+        PCellWithName cell5 = new PCellWithName(partitionName, new PRangeCell(r3));
+        PCellWithName cell6 = new PCellWithName(partitionName, new PRangeCell(r1));
         Assertions.assertEquals(-1, cell4.compareTo(cell5));
         Assertions.assertEquals(1, cell4.compareTo(cell6));
         Assertions.assertEquals(1, cell5.compareTo(cell6));

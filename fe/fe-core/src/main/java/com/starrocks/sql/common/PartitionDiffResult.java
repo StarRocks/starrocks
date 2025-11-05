@@ -23,16 +23,16 @@ public class PartitionDiffResult {
     // For external table, the mapping of base table partition to mv partition:
     // <base table, <base table partition name, mv partition name>>
     public final Map<Table, Map<String, Set<String>>> refBaseTableMVPartitionMap;
-    // The partition range of the base tables: <base table, <base table partition name, base table partition range>>
-    public final Map<Table, Map<String, PCell>> refBaseTablePartitionMap;
-    // The partition range of the materialized view: <mv partition name, mv partition range>
-    public final Map<String, PCell> mvPartitionToCells;
+    // The partition range of the base tables: <base table, partition cells>
+    public final Map<Table, PCellSortedSet> refBaseTablePartitionMap;
+    // The partition range of the materialized view
+    public final PCellSortedSet mvPartitionToCells;
     // The diff result of partition range between materialized view and base tables
     public final PartitionDiff diff;
 
     public PartitionDiffResult(Map<Table, Map<String, Set<String>>> refBaseTableMVPartitionMap,
-                               Map<Table, Map<String, PCell>> refBaseTablePartitionMap,
-                               Map<String, PCell> mvPartitionToCells,
+                               Map<Table, PCellSortedSet> refBaseTablePartitionMap,
+                               PCellSortedSet mvPartitionToCells,
                                PartitionDiff diff) {
         this.refBaseTableMVPartitionMap = refBaseTableMVPartitionMap;
         this.refBaseTablePartitionMap = refBaseTablePartitionMap;

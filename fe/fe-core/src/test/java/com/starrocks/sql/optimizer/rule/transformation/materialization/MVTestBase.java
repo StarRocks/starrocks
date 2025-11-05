@@ -17,7 +17,6 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
@@ -65,7 +64,7 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.TableName;
-import com.starrocks.sql.common.PCell;
+import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.PListCell;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.MaterializedViewOptimizer;
@@ -801,18 +800,18 @@ public abstract class MVTestBase extends StarRocksTestBase {
     }
 
     protected void addListPartition(String tbl, List<String> values) {
-        Map<String, PCell> partitions = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+        PCellSortedSet partitions = PCellSortedSet.of();
         for (String val : values) {
             PListCell pListCell = new PListCell(val);
             String pName = AnalyzerUtils.getFormatPartitionValue(val);
-            if (partitions.containsKey(pName)) {
+            if (partitions.containsName(pName)) {
                 try {
                     pName = AnalyzerUtils.calculateUniquePartitionName(pName, pListCell, partitions);
                 } catch (Exception e) {
                     Assertions.fail("add partition failed:" + e);
                 }
             }
-            partitions.put(pName, pListCell);
+            partitions.add(pName, pListCell);
             addListPartition(tbl, pName, val);
         }
     }

@@ -27,6 +27,8 @@ import com.starrocks.sql.automv.pn.Op;
 import com.starrocks.sql.automv.pn.OpUtil;
 import com.starrocks.sql.automv.pn.Val;
 import com.starrocks.sql.automv.util.MetaUtil;
+import com.starrocks.sql.common.PCellWithName;
+import com.starrocks.sql.common.PRangeCell;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 
 import java.util.Collections;
@@ -102,9 +104,9 @@ public class PartitionExtractor {
         if (olapTable.getPartitionInfo().isUnPartitioned()) {
             return Collections.emptyMap();
         }
-        return olapTable.getRangePartitionMap().entrySet()
+        return olapTable.getRangePartitionMap().getPartitions()
                 .stream()
-                .collect(Collectors.toMap(Map.Entry::getKey, e -> rangeToOp(e.getValue())));
+                .collect(Collectors.toMap(PCellWithName::name, e -> rangeToOp(((PRangeCell) e.cell()).getRange())));
     }
 
     private List<Op> multiValuesToSetOp(List<List<String>> values) {
