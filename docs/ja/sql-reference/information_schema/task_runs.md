@@ -22,3 +22,13 @@ displayed_sidebar: docs
 | ERROR_MESSAGE | タスクのエラーメッセージ。                                   |
 | PROGRESS      | タスクの進捗。                                               |
 | EXTRA_MESSAGE | タスクの追加メッセージ。例えば、非同期マテリアライズドビュー作成タスクにおけるパーティション情報など。 |
+
+タスク実行記録は、[SUBMIT TASK](../sql-statements/loading_unloading/ETL/SUBMIT_TASK.md) または [CREATE MATERIALIZED VIEW](../sql-statements/materialized_view/CREATE_MATERIALIZED_VIEW.md) によって生成されます。
+
+:::note
+マテリアライズドビューリフレッシュ操作は複数のタスク実行を生成することがあり、各タスク実行は `partition_refresh_number` 設定に従って分割されたリフレッシュサブタスクを表します。
+:::
+
+## `EXTRA_MESSAGE`
+
+マテリアライズドビューリフレッシュタスク実行の場合、`EXTRA_MESSAGE` フィールドにはマテリアライズドビュータスク実行の詳細メッセージが含まれます。詳細は [マテリアライズドビュータスク実行の理解](../../using_starrocks/async_mv/materialized_view_task_run_details.md) で確認できます。
