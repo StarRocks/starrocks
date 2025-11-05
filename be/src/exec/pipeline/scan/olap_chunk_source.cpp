@@ -166,6 +166,9 @@ void OlapChunkSource::_init_counter(RuntimeState* state) {
     _bf_filtered_counter = ADD_CHILD_COUNTER(_runtime_profile, "BloomFilterFilterRows", TUnit::UNIT, segment_init_name);
     _gin_filtered_counter = ADD_CHILD_COUNTER(_runtime_profile, "GinFilterRows", TUnit::UNIT, segment_init_name);
     _gin_filtered_timer = ADD_CHILD_TIMER(_runtime_profile, "GinFilter", segment_init_name);
+    _gin_prefix_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "GinPrefixFilter", segment_init_name);
+    _gin_ngram_dict_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "GinNgramDictFilter", segment_init_name);
+    _gin_dict_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "GinDictFilter", segment_init_name);
     _seg_zm_filtered_counter =
             ADD_CHILD_COUNTER_SKIP_MIN_MAX(_runtime_profile, "SegmentZoneMapFilterRows", TUnit::UNIT,
                                            _get_counter_min_max_type("SegmentZoneMapFilterRows"), segment_init_name);
@@ -790,6 +793,9 @@ void OlapChunkSource::_update_counter() {
     COUNTER_UPDATE(_bi_filter_timer, _reader->stats().bitmap_index_filter_timer);
     COUNTER_UPDATE(_gin_filtered_counter, _reader->stats().rows_gin_filtered);
     COUNTER_UPDATE(_gin_filtered_timer, _reader->stats().gin_index_filter_ns);
+    COUNTER_UPDATE(_gin_prefix_filter_timer, _reader->stats().gin_prefix_filter_ns);
+    COUNTER_UPDATE(_gin_ngram_dict_filter_timer, _reader->stats().gin_ngram_filter_dict_ns);
+    COUNTER_UPDATE(_gin_dict_filter_timer, _reader->stats().gin_filter_dict_ns);
     COUNTER_UPDATE(_get_row_ranges_by_vector_index_timer, _reader->stats().get_row_ranges_by_vector_index_timer);
     COUNTER_UPDATE(_vector_search_timer, _reader->stats().vector_search_timer);
     COUNTER_UPDATE(_process_vector_distance_and_id_timer, _reader->stats().process_vector_distance_and_id_timer);
