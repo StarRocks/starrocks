@@ -91,68 +91,68 @@ public class GlobalVarPersistInfo implements Writable {
                 root = new JSONObject(); // Empty JSON
             } else {
                 for (String varName : varNames) {
-                // find attr in defaultSessionVariable or GlobalVariables
-                Object varInstance = null;
-                Field theField = null;
-                boolean found = false;
-                // 1. first find in defaultSessionVariable
-                for (Field field : SessionVariable.class.getDeclaredFields()) {
-                    VariableMgr.VarAttr attr = field.getAnnotation(VariableMgr.VarAttr.class);
-                    if (attr == null) {
-                        continue;
-                    }
-                    if (attr.name().equalsIgnoreCase(varName)) {
-                        varInstance = this.defaultSessionVariable;
-                        theField = field;
-                        found = true;
-                        break;
-                    }
-                }
-
-                if (!found) {
-                    // find in GlobalVariables
-                    for (Field field : GlobalVariable.class.getDeclaredFields()) {
+                    // find attr in defaultSessionVariable or GlobalVariables
+                    Object varInstance = null;
+                    Field theField = null;
+                    boolean found = false;
+                    // 1. first find in defaultSessionVariable
+                    for (Field field : SessionVariable.class.getDeclaredFields()) {
                         VariableMgr.VarAttr attr = field.getAnnotation(VariableMgr.VarAttr.class);
                         if (attr == null) {
                             continue;
                         }
-
                         if (attr.name().equalsIgnoreCase(varName)) {
-                            found = true;
-                            varInstance = null;
+                            varInstance = this.defaultSessionVariable;
                             theField = field;
+                            found = true;
                             break;
                         }
                     }
-                }
-                Preconditions.checkState(found, varName);
 
-                theField.setAccessible(true);
-                String fieldName = theField.getAnnotation(VariableMgr.VarAttr.class).name();
-                switch (theField.getType().getSimpleName()) {
-                    case "boolean":
-                        root.put(fieldName, (Boolean) theField.get(varInstance));
-                        break;
-                    case "int":
-                        root.put(fieldName, (Integer) theField.get(varInstance));
-                        break;
-                    case "long":
-                        root.put(fieldName, (Long) theField.get(varInstance));
-                        break;
-                    case "float":
-                        root.put(fieldName, (Float) theField.get(varInstance));
-                        break;
-                    case "double":
-                        root.put(fieldName, (Double) theField.get(varInstance));
-                        break;
-                    case "String":
-                        root.put(fieldName, (String) theField.get(varInstance));
-                        break;
-                    default:
-                        // Unsupported type variable.
-                        throw new IOException("invalid type: " + theField.getType().getSimpleName());
-                }
-            } // end for all variables
+                    if (!found) {
+                        // find in GlobalVariables
+                        for (Field field : GlobalVariable.class.getDeclaredFields()) {
+                            VariableMgr.VarAttr attr = field.getAnnotation(VariableMgr.VarAttr.class);
+                            if (attr == null) {
+                                continue;
+                            }
+
+                            if (attr.name().equalsIgnoreCase(varName)) {
+                                found = true;
+                                varInstance = null;
+                                theField = field;
+                                break;
+                            }
+                        }
+                    }
+                    Preconditions.checkState(found, varName);
+
+                    theField.setAccessible(true);
+                    String fieldName = theField.getAnnotation(VariableMgr.VarAttr.class).name();
+                    switch (theField.getType().getSimpleName()) {
+                        case "boolean":
+                            root.put(fieldName, (Boolean) theField.get(varInstance));
+                            break;
+                        case "int":
+                            root.put(fieldName, (Integer) theField.get(varInstance));
+                            break;
+                        case "long":
+                            root.put(fieldName, (Long) theField.get(varInstance));
+                            break;
+                        case "float":
+                            root.put(fieldName, (Float) theField.get(varInstance));
+                            break;
+                        case "double":
+                            root.put(fieldName, (Double) theField.get(varInstance));
+                            break;
+                        case "String":
+                            root.put(fieldName, (String) theField.get(varInstance));
+                            break;
+                        default:
+                            // Unsupported type variable.
+                            throw new IOException("invalid type: " + theField.getType().getSimpleName());
+                    }
+                } // end for all variables
             }
 
             Text.writeString(out, root.toString());
