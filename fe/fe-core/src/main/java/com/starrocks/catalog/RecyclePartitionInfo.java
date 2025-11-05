@@ -58,6 +58,7 @@ public abstract class RecyclePartitionInfo extends JsonWriter {
         this.replicationNum = replicationNum;
         this.isInMemory = isInMemory;
         this.recoverable = true;
+        this.retentionPeriod = 0L;
     }
 
     public long getDbId() {

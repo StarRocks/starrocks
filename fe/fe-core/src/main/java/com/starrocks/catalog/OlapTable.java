@@ -1286,7 +1286,7 @@ public class OlapTable extends Table {
     }
 
     // This is a private method.
-    // Call public "dropPartitionAndReserveTablet", "dropPartition" and "dropPartitionGracefully"
+    // Call public "dropPartitionAndReserveTablet", "dropPartition" and "dropPartitionWithRetention"
     private void dropPartition(long dbId, String partitionName, boolean isForceDrop, boolean reserveTablets) {
         Partition partition = nameToPartition.get(partitionName);
         if (partition == null) {
@@ -1351,8 +1351,10 @@ public class OlapTable extends Table {
      *  Try to retain the partition for a while to avoid tablet missing errors.
      *  This method is used in `insert overwrite`, `mv rewrite` etc. scenarios,
      *  where we don't want to delete data immediately
+     *
+     *  This method is not thread safe. The caller should ensure that this method is called under lock.
      */
-    public void dropPartitionGracefully(long dbId, String partitionName, long partitionRetentionPeriod) {
+    public void dropPartitionWithRetention(long dbId, String partitionName, long partitionRetentionPeriod) {
         Partition partition = nameToPartition.get(partitionName);
         if (partition == null) {
             return;
@@ -2534,7 +2536,7 @@ public class OlapTable extends Table {
                 Partition oldPartition = nameToPartition.get(oldPartitionName);
                 if (oldPartition != null) {
                     // drop old partition
-                    dropPartitionGracefully(dbId, oldPartitionName, Config.partition_retention_period_before_drop);
+                    dropPartitionWithRetention(dbId, oldPartitionName, Config.partition_recycle_retention_period_secs);
                 }
                 // add new partition
                 addPartition(partition);
@@ -2633,7 +2635,7 @@ public class OlapTable extends Table {
         // 1. drop old partitions
         for (String partitionName : partitionNames) {
             // This will also drop all tablets of the partition from TabletInvertedIndex
-            dropPartitionGracefully(dbId, partitionName, Config.partition_retention_period_before_drop);
+            dropPartitionWithRetention(dbId, partitionName, Config.partition_recycle_retention_period_secs);
         }
 
         // 2. add temp partitions' range info to rangeInfo, and remove them from
@@ -2669,7 +2671,7 @@ public class OlapTable extends Table {
         // drop source partition
         Partition srcPartition = nameToPartition.get(sourcePartitionName);
         if (srcPartition != null) {
-            dropPartitionGracefully(dbId, sourcePartitionName, Config.partition_retention_period_before_drop);
+            dropPartitionWithRetention(dbId, sourcePartitionName, Config.partition_recycle_retention_period_secs);
         }
 
         Partition partition = tempPartitions.getPartition(tempPartitionName);

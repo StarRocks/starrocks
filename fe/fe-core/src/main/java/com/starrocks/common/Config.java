@@ -1283,7 +1283,7 @@ public class Config extends ConfigBase {
      * The retention time for partition dropped by insert overwrite/mv rewrite etc.
      */
     @ConfField(mutable = true)
-    public static long partition_retention_period_before_drop = 30 * 60L; // 30mins
+    public static long partition_recycle_retention_period_secs = 30 * 60L; // 30mins
 
     /**
      * Parallel load fragment instance num in single host

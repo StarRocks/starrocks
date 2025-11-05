@@ -1800,6 +1800,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：删除表/数据库之后，元数据在回收站中保留的时长，超过这个时长，数据就不可以通过[RECOVER](../../sql-reference/sql-statements/backup_restore/RECOVER.md) 语句恢复。
 - 引入版本：-
 
+##### partition_recycle_retention_period_secs
+
+- 默认值：1800
+- 类型：Long
+- 单位：Seconds
+- 是否动态：是
+- 描述：通过insert overwrite、MV刷新等方式替换旧分区后将旧分区的元数据移动到回收站中。该参数控制旧分区元数据在回收站中保留的时长。注意，这些元数据不支持通过[RECOVER](../../sql-reference/sql-statements/backup_restore/RECOVER.md) 语句恢复。
+- 引入版本：-
+
 ##### check_consistency_default_timeout_second
 
 - 默认值：600
