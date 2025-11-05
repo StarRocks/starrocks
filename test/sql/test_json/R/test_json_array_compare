@@ -1,0 +1,98 @@
+-- name: test_json_array_compare
+-- Test JSON array comparison with large integers to ensure no overflow
+
+-- Test case 1: Small integer vs INT64_MAX
+select json_array(1) < json_array(9223372036854775807);
+-- result:
+1
+-- !result
+
+-- Test case 2: Small integer vs large integer (original bug report)
+select json_array(1) < json_array(922337203685477580);
+-- result:
+1
+-- !result
+
+-- Test case 3: Small integer vs medium large integer (original bug report)
+select json_array(1) < json_array(92233720368547758);
+-- result:
+1
+-- !result
+
+-- Test case 4: Reverse comparisons should also work
+select json_array(9223372036854775807) > json_array(1);
+-- result:
+1
+-- !result
+select json_array(922337203685477580) > json_array(1);
+-- result:
+1
+-- !result
+select json_array(92233720368547758) > json_array(1);
+-- result:
+1
+-- !result
+
+-- Test case 5: Equality
+select json_array(9223372036854775807) = json_array(9223372036854775807);
+-- result:
+1
+-- !result
+select json_array(1) = json_array(1);
+-- result:
+1
+-- !result
+
+-- Test case 6: Greater than or equal
+select json_array(9223372036854775807) >= json_array(1);
+-- result:
+1
+-- !result
+select json_array(1) >= json_array(1);
+-- result:
+1
+-- !result
+
+-- Test case 7: Less than or equal
+select json_array(1) <= json_array(9223372036854775807);
+-- result:
+1
+-- !result
+select json_array(1) <= json_array(1);
+-- result:
+1
+-- !result
+
+-- Test case 8: Negative numbers
+select json_array(-1) < json_array(1);
+-- result:
+1
+-- !result
+select json_array(-9223372036854775808) < json_array(-1);
+-- result:
+1
+-- !result
+select json_array(-9223372036854775808) < json_array(9223372036854775807);
+-- result:
+1
+-- !result
+
+-- Test case 9: Zero comparisons
+select json_array(0) < json_array(9223372036854775807);
+-- result:
+1
+-- !result
+select json_array(0) > json_array(-9223372036854775808);
+-- result:
+1
+-- !result
+
+-- Test case 10: Multiple element arrays
+select json_array(1, 2) < json_array(9223372036854775807, 2);
+-- result:
+1
+-- !result
+select json_array(1, 9223372036854775807) < json_array(1, 9223372036854775807);
+-- result:
+0
+-- !result
