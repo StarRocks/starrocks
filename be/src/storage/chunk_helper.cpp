@@ -490,6 +490,34 @@ void ChunkAccumulator::reset() {
     _accumulate_count = 0;
 }
 
+namespace {
+bool check_json_schema_compatibility(const Chunk* one, const Chunk* two) {
+    if (one->num_columns() != two->num_columns()) {
+        return false;
+    }
+
+    for (size_t i = 0; i < one->num_columns(); i++) {
+        auto& c1 = one->get_column_by_index(i);
+        auto& c2 = two->get_column_by_index(i);
+        const auto* a1 = ColumnHelper::get_data_column(c1.get());
+        const auto* a2 = ColumnHelper::get_data_column(c2.get());
+
+        if (a1->is_json() && a2->is_json()) {
+            auto json1 = down_cast<const JsonColumn*>(a1);
+            if (!json1->is_equallity_schema(a2)) {
+                return false;
+            }
+        } else if (a1->is_json() || a2->is_json()) {
+            // never hit
+            DCHECK_EQ(a1->is_json(), a2->is_json());
+            return false;
+        }
+    }
+
+    return true;
+}
+} // namespace
+
 Status ChunkAccumulator::push(ChunkPtr&& chunk) {
     size_t input_rows = chunk->num_rows();
     // TODO: optimize for zero-copy scenario
@@ -499,7 +527,15 @@ Status ChunkAccumulator::push(ChunkPtr&& chunk) {
         size_t need_rows = 0;
         if (_tmp_chunk) {
             need_rows = std::min(_desired_size - _tmp_chunk->num_rows(), remain_rows);
-            TRY_CATCH_BAD_ALLOC(_tmp_chunk->append(*chunk, start, need_rows));
+            // Check JSON schema compatibility before appending
+            if (!check_json_schema_compatibility(_tmp_chunk.get(), chunk.get())) {
+                // Schema mismatch, output current chunk and create a new one
+                _output.emplace_back(std::move(_tmp_chunk));
+                _tmp_chunk = chunk->clone_empty(_desired_size);
+                TRY_CATCH_BAD_ALLOC(_tmp_chunk->append(*chunk, start, need_rows));
+            } else {
+                TRY_CATCH_BAD_ALLOC(_tmp_chunk->append(*chunk, start, need_rows));
+            }
             RETURN_IF_ERROR(_tmp_chunk->capacity_limit_reached());
         } else {
             need_rows = std::min(_desired_size, remain_rows);
@@ -542,29 +578,7 @@ void ChunkAccumulator::finalize() {
 }
 
 bool ChunkPipelineAccumulator::_check_json_schema_equallity(const Chunk* one, const Chunk* two) {
-    if (one->num_columns() != two->num_columns()) {
-        return false;
-    }
-
-    for (size_t i = 0; i < one->num_columns(); i++) {
-        auto& c1 = one->get_column_by_index(i);
-        auto& c2 = two->get_column_by_index(i);
-        const auto* a1 = ColumnHelper::get_data_column(c1.get());
-        const auto* a2 = ColumnHelper::get_data_column(c2.get());
-
-        if (a1->is_json() && a2->is_json()) {
-            auto json1 = down_cast<const JsonColumn*>(a1);
-            if (!json1->is_equallity_schema(a2)) {
-                return false;
-            }
-        } else if (a1->is_json() || a2->is_json()) {
-            // never hit
-            DCHECK_EQ(a1->is_json(), a2->is_json());
-            return false;
-        }
-    }
-
-    return true;
+    return check_json_schema_compatibility(one, two);
 }
 
 void ChunkPipelineAccumulator::push(const ChunkPtr& chunk) {
