@@ -15,15 +15,14 @@
 #pragma once
 
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 #include "column/column_access_path.h"
 #include "options.h"
 #include "runtime/global_dict/types.h"
-#include "storage/chunk_iterator.h"
 #include "storage/olap_common.h"
-#include "storage/predicate_tree/predicate_tree.hpp"
+#include "storage/rowset/rowset_options.h"
+#include "storage/rowset/segment_options.h"
 #include "storage/runtime_filter_predicate.h"
 #include "storage/runtime_range_pruner.h"
 #include "storage/tuple.h"
@@ -107,6 +106,21 @@ struct TabletReaderParams {
 
     TTableSampleOptions sample_options;
     bool enable_join_runtime_filter_pushdown = false;
+
+    // Reuse the RowsetReadOptions & SegmentReadOptions
+    bool reuse_chunk_source = false;
+    RowsetReadOptions rs_opts;
+    SegmentReadOptions seg_opts;
+
+    RowsetReadOptions* reuse_rowset_options() {
+        DCHECK(reuse_chunk_source);
+        return &rs_opts;
+    }
+
+    SegmentReadOptions* reuse_segment_options() {
+        DCHECK(reuse_chunk_source);
+        return &seg_opts;
+    }
 
 public:
     std::string to_string() const;

@@ -36,6 +36,7 @@
 
 #include "common/status.h"
 #include "storage/column_predicate.h"
+#include "storage/range.h"
 #include "storage/rowset/binary_dict_page.h"
 #include "storage/rowset/bitshuffle_page.h"
 #include "storage/rowset/column_reader.h"
@@ -413,7 +414,8 @@ Status ScalarColumnIterator::_read_data_page(const OrdinalPageIndexIterator& ite
 
 Status ScalarColumnIterator::get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
                                                         const ColumnPredicate* del_predicate, SparseRange<>* row_ranges,
-                                                        CompoundNodeType pred_relation) {
+                                                        CompoundNodeType pred_relation,
+                                                        const SparseRange<>& scan_range) {
     DCHECK(row_ranges->empty());
     if (_reader->has_zone_map()) {
         if (!_delete_partial_satisfied_pages.has_value()) {
@@ -427,7 +429,7 @@ Status ScalarColumnIterator::get_row_ranges_by_zone_map(const std::vector<const 
         opts.read_file = _opts.read_file;
         opts.stats = _opts.stats;
         RETURN_IF_ERROR(_reader->zone_map_filter(predicates, del_predicate, &_delete_partial_satisfied_pages.value(),
-                                                 row_ranges, opts, pred_relation));
+                                                 row_ranges, opts, pred_relation, scan_range));
     } else {
         row_ranges->add({0, static_cast<rowid_t>(_reader->num_rows())});
     }

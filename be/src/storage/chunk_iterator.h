@@ -19,6 +19,7 @@
 #include "column/chunk.h"
 #include "column/schema.h"
 #include "runtime/global_dict/types.h"
+#include "storage/range.h"
 #include "storage/row_source_mask.h"
 #include "util/runtime_profile.h"
 
@@ -38,6 +39,8 @@ public:
     ChunkIterator(Schema schema, int chunk_size) : _schema(std::move(schema)), _chunk_size(chunk_size) {}
 
     virtual ~ChunkIterator() = default;
+
+    virtual Status reset(const SparseRange<>& scan_range) { return Status::NotSupported("not supported"); }
 
     // Fetch records from |this| iterator into |chunk|.
     //

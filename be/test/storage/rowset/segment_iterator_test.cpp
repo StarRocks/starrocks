@@ -868,4 +868,156 @@ TEST_F(SegmentIteratorTest, testCharToVarcharZoneMapFilter) {
     }
 }
 
+TEST_F(SegmentIteratorTest, TestResetFunction) {
+    using namespace starrocks::test;
+
+    // Create a simple segment with integer data
+    std::string file_name = kSegmentDir + "/reset_test";
+    ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(file_name));
+    SegmentWriterOptions opts;
+    opts.num_rows_per_block = 10;
+
+    TabletSchemaBuilder builder;
+    std::shared_ptr<TabletSchema> tablet_schema =
+            builder.create(1, false, TYPE_INT, true).create(2, false, TYPE_INT, false).build();
+    SegmentWriter writer(std::move(wfile), 0, tablet_schema, opts);
+
+    const int32_t chunk_size = config::vector_chunk_size;
+    const size_t num_rows = 100; // Create 100 rows of data
+
+    // Create data: row i has values [i, i*2]
+    auto col1_provider = [](int32_t i) { return i; };
+    auto col2_provider = [](int32_t i) { return i * 2; };
+
+    // Build the segment
+    TabletDataBuilder segment_data_builder(writer, tablet_schema, chunk_size, num_rows);
+    ASSERT_OK(segment_data_builder.append(0, col1_provider));
+    ASSERT_OK(segment_data_builder.append(1, col2_provider));
+    ASSERT_OK(segment_data_builder.finalize_footer());
+
+    // Open the segment
+    auto segment = *Segment::open(_fs, FileInfo{file_name}, 0, tablet_schema);
+    ASSERT_EQ(segment->num_rows(), num_rows);
+
+    // Setup read options
+    SegmentReadOptions seg_options;
+    OlapReaderStatistics stats;
+    seg_options.fs = _fs;
+    seg_options.stats = &stats;
+    seg_options.chunk_size = 20; // Small chunk size for testing
+
+    // Setup schema
+    VecSchemaBuilder schema_builder;
+    schema_builder.add(0, "c0", TYPE_INT).add(1, "c1", TYPE_INT);
+    auto vec_schema = schema_builder.build();
+
+    // Create iterator
+    auto chunk_iter = new_segment_iterator(segment, vec_schema, seg_options);
+    ASSERT_OK(chunk_iter->init_output_schema(std::unordered_set<uint32_t>()));
+
+    auto res_chunk = ChunkHelper::new_chunk(chunk_iter->output_schema(), chunk_size);
+
+    // Test 1: Read first 20 rows (0-19)
+    ASSERT_OK(chunk_iter->get_next(res_chunk.get()));
+    ASSERT_EQ(res_chunk->num_rows(), 20);
+    ASSERT_EQ(res_chunk->num_columns(), 2);
+
+    // Verify first few rows
+    auto col0 = down_cast<Int32Column*>(res_chunk->get_column_by_index(0).get());
+    auto col1 = down_cast<Int32Column*>(res_chunk->get_column_by_index(1).get());
+    ASSERT_EQ(col0->get_data()[0], 0);
+    ASSERT_EQ(col1->get_data()[0], 0);
+    ASSERT_EQ(col0->get_data()[1], 1);
+    ASSERT_EQ(col1->get_data()[1], 2);
+
+    // Test 2: Reset to scan rows 50-69
+    SparseRange<> new_range;
+    new_range.add(Range<>(50, 70));
+    ASSERT_OK(chunk_iter->reset(new_range));
+
+    // Read from the new range
+    res_chunk->reset();
+    ASSERT_OK(chunk_iter->get_next(res_chunk.get()));
+    ASSERT_EQ(res_chunk->num_rows(), 20);
+
+    // Verify we're reading from the correct range
+    col0 = down_cast<Int32Column*>(res_chunk->get_column_by_index(0).get());
+    col1 = down_cast<Int32Column*>(res_chunk->get_column_by_index(1).get());
+    ASSERT_EQ(col0->get_data()[0], 50);
+    ASSERT_EQ(col1->get_data()[0], 100);
+    ASSERT_EQ(col0->get_data()[1], 51);
+    ASSERT_EQ(col1->get_data()[1], 102);
+
+    // Test 3: Reset to scan rows 80-99 (last 20 rows)
+    new_range.clear();
+    new_range.add(Range<>(80, 100));
+    ASSERT_OK(chunk_iter->reset(new_range));
+
+    // Read from the new range
+    res_chunk->reset();
+    ASSERT_OK(chunk_iter->get_next(res_chunk.get()));
+    ASSERT_EQ(res_chunk->num_rows(), 20);
+
+    // Verify we're reading from the correct range
+    col0 = down_cast<Int32Column*>(res_chunk->get_column_by_index(0).get());
+    col1 = down_cast<Int32Column*>(res_chunk->get_column_by_index(1).get());
+    ASSERT_EQ(col0->get_data()[0], 80);
+    ASSERT_EQ(col1->get_data()[0], 160);
+    ASSERT_EQ(col0->get_data()[19], 99);
+    ASSERT_EQ(col1->get_data()[19], 198);
+
+    // Test 4: Reset to scan a smaller range (rows 10-15)
+    new_range.clear();
+    new_range.add(Range<>(10, 16));
+    ASSERT_OK(chunk_iter->reset(new_range));
+
+    // Read from the new range
+    res_chunk->reset();
+    ASSERT_OK(chunk_iter->get_next(res_chunk.get()));
+    ASSERT_EQ(res_chunk->num_rows(), 6);
+
+    // Verify we're reading from the correct range
+    col0 = down_cast<Int32Column*>(res_chunk->get_column_by_index(0).get());
+    col1 = down_cast<Int32Column*>(res_chunk->get_column_by_index(1).get());
+    ASSERT_EQ(col0->get_data()[0], 10);
+    ASSERT_EQ(col1->get_data()[0], 20);
+    ASSERT_EQ(col0->get_data()[5], 15);
+    ASSERT_EQ(col1->get_data()[5], 30);
+
+    // Test 5: Reset to scan multiple ranges (rows 5-10 and 25-30)
+    new_range.clear();
+    new_range.add(Range<>(5, 11));
+    new_range.add(Range<>(25, 31));
+    ASSERT_OK(chunk_iter->reset(new_range));
+
+    // Read from the new range
+    res_chunk->reset();
+    ASSERT_OK(chunk_iter->get_next(res_chunk.get()));
+    ASSERT_EQ(res_chunk->num_rows(), 12); // 6 + 6 = 12 rows
+
+    // Verify we're reading from the correct ranges
+    col0 = down_cast<Int32Column*>(res_chunk->get_column_by_index(0).get());
+    col1 = down_cast<Int32Column*>(res_chunk->get_column_by_index(1).get());
+
+    // First range: 5-10
+    ASSERT_EQ(col0->get_data()[0], 5);
+    ASSERT_EQ(col1->get_data()[0], 10);
+    ASSERT_EQ(col0->get_data()[5], 10);
+    ASSERT_EQ(col1->get_data()[5], 20);
+
+    // Second range: 25-30
+    ASSERT_EQ(col0->get_data()[6], 25);
+    ASSERT_EQ(col1->get_data()[6], 50);
+    ASSERT_EQ(col0->get_data()[11], 30);
+    ASSERT_EQ(col1->get_data()[11], 60);
+
+    // Test 6: Test error handling - reset before initialization
+    auto uninitialized_iter = new_segment_iterator(segment, vec_schema, seg_options);
+    new_range.clear();
+    new_range.add(Range<>(0, 10));
+    auto status = uninitialized_iter->reset(new_range);
+    ASSERT_FALSE(status.ok());
+    ASSERT_TRUE(status.is_internal_error());
+}
+
 } // namespace starrocks

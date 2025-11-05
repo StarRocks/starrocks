@@ -25,7 +25,6 @@
 #include "gen_cpp/tablet_schema.pb.h"
 #include "gutil/stl_util.h"
 #include "primary_key_encoder.h"
-#include "service/backend_options.h"
 #include "storage/aggregate_iterator.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate.h"
@@ -36,8 +35,13 @@
 #include "storage/merge_iterator.h"
 #include "storage/olap_common.h"
 #include "storage/predicate_parser.h"
+#include "storage/range.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/rowid_range_option.h"
+#include "storage/rowset/rowset.h"
+#include "storage/rowset/rowset_options.h"
+#include "storage/rowset/segment_iterator.h"
+#include "storage/rowset/short_key_range_option.h"
 #include "storage/seek_range.h"
 #include "storage/tablet.h"
 #include "storage/tablet_updates.h"
@@ -302,7 +306,8 @@ Status TabletReader::_init_collector_for_pk_index_read() {
     rs_opts.rowid_range_option->add(rowset.get(), rowset->segments()[segment_idx].get(), rowid_range, true);
 
     std::vector<ChunkIteratorPtr> iters;
-    RETURN_IF_ERROR(rowset->get_segment_iterators(schema(), rs_opts, &iters));
+    SegmentReadOptions seg_opts;
+    RETURN_IF_ERROR(rowset->get_segment_iterators(schema(), rs_opts, seg_opts, &iters));
 
     if (iters.size() != 1) {
         return Status::InternalError(
@@ -340,7 +345,7 @@ Status TabletReader::do_get_next(Chunk* chunk, std::vector<RowSourceMask>* sourc
 }
 
 Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std::vector<ChunkIteratorPtr>* iters) {
-    RowsetReadOptions rs_opts;
+    RowsetReadOptions& rs_opts = const_cast<RowsetReadOptions&>(params.rs_opts);
     KeysType keys_type = _tablet_schema->keys_type();
     RETURN_IF_ERROR(_init_predicates(params));
     RETURN_IF_ERROR(_init_delete_predicates(params, &_delete_predicates));
@@ -389,12 +394,13 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     }
 
     SCOPED_RAW_TIMER(&_stats.create_segment_iter_ns);
+    SegmentReadOptions& seg_opts = const_cast<SegmentReadOptions&>(params.seg_opts);
     for (auto& rowset : _rowsets) {
         if (params.rowid_range_option != nullptr && !params.rowid_range_option->contains_rowset(rowset.get())) {
             continue;
         }
 
-        RETURN_IF_ERROR(rowset->get_segment_iterators(schema(), rs_opts, iters));
+        RETURN_IF_ERROR(rowset->get_segment_iterators(schema(), rs_opts, seg_opts, iters));
     }
     return Status::OK();
 }
@@ -689,6 +695,138 @@ Status TabletReader::parse_seek_range(const TabletSchemaCSPtr& tablet_schema,
         ranges->back().set_inclusive_lower(lower_inclusive);
         ranges->back().set_inclusive_upper(upper_inclusive);
     }
+    return Status::OK();
+}
+
+// Helper method to generate cache key for segment iterator
+// Per (rowset, segment, tablet) key so different ranges can reuse the same iterator via reset.
+std::string TabletReader::_generate_segment_cache_key(const RowsetSharedPtr& rowset, const SegmentSharedPtr& segment,
+                                                      const SegmentReadOptions& options) {
+    std::string key;
+    key.reserve(64);
+    key.append(rowset->rowset_meta()->rowset_id().to_string());
+    key.push_back('#');
+    key.append(std::to_string(segment->id()));
+    key.push_back('#');
+    key.append(std::to_string(options.tablet_id));
+    return key;
+}
+
+Status TabletReader::reuse(TabletReaderParams& params) {
+    // close existing top collector only; keep cached per-segment iterators for reuse
+    // _collect_iter->close();
+    _collect_iter.reset();
+
+    // RowsetReadOptions
+    auto rs_opts = params.reuse_rowset_options();
+    rs_opts->rowid_range_option = params.rowid_range_option;
+    rs_opts->short_key_ranges_option = params.short_key_ranges_option;
+    RETURN_IF_ERROR(_init_delete_predicates(params, &_delete_predicates));
+    RETURN_IF_ERROR(parse_seek_range(_tablet_schema, params.range, params.end_range, params.start_key, params.end_key,
+                                     &rs_opts->ranges, &_mempool));
+
+    // SegmentReadOptions
+    auto seg_opts = params.reuse_segment_options();
+    seg_opts->is_cancelled = (rs_opts->runtime_state != nullptr) ? &rs_opts->runtime_state->cancelled_ref() : nullptr;
+    seg_opts->ranges = rs_opts->ranges;
+
+    std::vector<ChunkIteratorPtr> iters;
+    for (auto& rowset : _rowsets) {
+        if (params.rowid_range_option != nullptr && !params.rowid_range_option->contains_rowset(rowset.get())) {
+            continue;
+        }
+
+        // Initialize SegmentReadOptions
+        seg_opts->rowset_path = rowset->rowset_path();
+        seg_opts->rowsetid = rowset->rowset_meta()->rowset_id();
+        seg_opts->rowset_id = rowset->rowset_meta()->get_rowset_seg_id();
+
+        if (rs_opts->delete_predicates != nullptr) {
+            seg_opts->delete_predicates = rs_opts->delete_predicates->get_predicates(rowset->end_version());
+        }
+
+        if (rs_opts->short_key_ranges_option != nullptr) {
+            seg_opts->short_key_ranges = rs_opts->short_key_ranges_option->short_key_ranges;
+        }
+
+        for (auto& seg_ptr : rowset->segments()) {
+            if (seg_ptr->num_rows() == 0) {
+                continue;
+            }
+
+            auto [rowid_range, is_first_split_of_segment] =
+                    rs_opts->rowid_range_option->get_segment_rowid_range(rowset.get(), seg_ptr.get());
+            if (rowid_range == nullptr) {
+                continue;
+            }
+            seg_opts->rowid_range_option = std::move(rowid_range);
+            seg_opts->is_first_split_of_segment = is_first_split_of_segment;
+
+            // Try to reuse cached iterator or create new one
+            std::string cache_key = _generate_segment_cache_key(rowset, seg_ptr, *seg_opts);
+            ChunkIteratorPtr iterator;
+
+            auto cached_it = _cached_segment_iterators.find(cache_key);
+            if (cached_it != _cached_segment_iterators.end() && cached_it->second.is_initialized) {
+                // Attempt to reuse by calling virtual reset on the cached iterator
+                if (seg_opts->rowid_range_option != nullptr) {
+                    SparseRange<> new_scan_range;
+                    new_scan_range.add(
+                            Range<>(seg_opts->rowid_range_option->begin(), seg_opts->rowid_range_option->end()));
+                    Status rs = cached_it->second.iterator->reset(new_scan_range);
+                    if (rs.ok()) {
+                        iterator = cached_it->second.iterator;
+                        VLOG(2) << "reuse SegmentIterator with reset " << seg_opts->tablet_id << "/"
+                                << seg_opts->rowset_id << "/" << seg_ptr->id() << "/"
+                                << seg_opts->rowid_range_option->to_string();
+                    } else {
+                        // Fallback: build a new iterator and replace cache entry
+                        auto res = seg_ptr->new_iterator(schema(), *seg_opts);
+                        if (res.status().is_end_of_file()) {
+                            continue;
+                        }
+                        if (!res.ok()) {
+                            return res.status();
+                        }
+                        iterator = std::move(res).value();
+                        _cached_segment_iterators[cache_key] = {iterator, *seg_opts, true};
+                        VLOG(2) << "reset failed; create new SegmentIterator " << seg_opts->tablet_id << "/"
+                                << seg_opts->rowset_id << "/" << seg_ptr->id() << "/"
+                                << seg_opts->rowid_range_option->to_string();
+                    }
+                } else {
+                    // No explicit rowid range; just reuse as-is
+                    iterator = cached_it->second.iterator;
+                    VLOG(2) << "reuse SegmentIterator without explicit range " << seg_opts->tablet_id << "/"
+                            << seg_opts->rowset_id << "/" << seg_ptr->id();
+                }
+            } else {
+                // Create new iterator and cache it
+                auto res = seg_ptr->new_iterator(schema(), *seg_opts);
+                if (res.status().is_end_of_file()) {
+                    continue;
+                }
+                if (!res.ok()) {
+                    return res.status();
+                }
+                iterator = std::move(res).value();
+                _cached_segment_iterators[cache_key] = {iterator, *seg_opts, true};
+                VLOG(2) << "create new SegmentIterator " << seg_opts->tablet_id << "/" << seg_opts->rowset_id << "/"
+                        << seg_ptr->id() << "/" << seg_opts->rowid_range_option->to_string();
+            }
+
+            iters.emplace_back(std::move(iterator));
+        }
+    }
+
+    if (iters.empty()) {
+        _collect_iter = new_empty_iterator(schema(), params.chunk_size);
+    } else if (iters.size() == 1) {
+        _collect_iter = std::move(iters[0]);
+    } else {
+        _collect_iter = new_union_iterator(std::move(iters));
+    }
+
     return Status::OK();
 }
 

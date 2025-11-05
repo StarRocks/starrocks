@@ -168,7 +168,7 @@ public:
     // |segment_iterators|. If segments in this rowset has no overlapping, a single `UnionIterator`,
     // instead of multiple `ChunkIterator`s, will be created and appended into |segment_iterators|.
     Status get_segment_iterators(const Schema& schema, const RowsetReadOptions& options,
-                                 std::vector<ChunkIteratorPtr>* seg_iterators);
+                                 SegmentReadOptions& seg_options, std::vector<ChunkIteratorPtr>* seg_iterators);
 
     // estimate the number of compaction segment iterator
     StatusOr<int64_t> estimate_compaction_segment_iterator_num();
