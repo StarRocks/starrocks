@@ -50,7 +50,6 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
-import com.starrocks.lake.LakeMaterializedView;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
@@ -233,7 +232,6 @@ public class MvRewritePreprocessor {
         // config
         logMVPrepare(connectContext, "---------------------------------");
         logMVPrepare(connectContext, "Materialized View Config Params: ");
-        logMVPrepare(connectContext, "  analyze_mv: {}", sessionVariable.getAnalyzeForMV());
         logMVPrepare(connectContext, "  query_excluding_mv_names: {}", sessionVariable.getQueryExcludingMVNames());
         logMVPrepare(connectContext, "  query_including_mv_names: {}", sessionVariable.getQueryIncludingMVNames());
         logMVPrepare(connectContext, "  cbo_materialized_view_rewrite_rule_output_limit: {}",
@@ -326,13 +324,14 @@ public class MvRewritePreprocessor {
         // metadata race for different operations.
         // Ensure to re-optimize if the mv's version has changed after the optimization.
         Locker locker = new Locker();
-        locker.lockTableWithIntensiveDbLock(mv.getDbId(), mv.getId(), LockType.READ);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mv.getDbId());
+        locker.lockTableWithIntensiveDbLock(db, mv.getId(), LockType.READ);
         try {
             MaterializedView copiedMV = new MaterializedView();
             mv.copyOnlyForQuery(copiedMV);
             return copiedMV;
         } finally {
-            locker.unLockTableWithIntensiveDbLock(mv.getDbId(), mv.getId(), LockType.READ);
+            locker.unLockTableWithIntensiveDbLock(db, mv.getId(), LockType.READ);
         }
     }
 
