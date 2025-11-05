@@ -15,7 +15,6 @@ displayed_sidebar: docs
 | CREATE_TIME   | タスクが作成された時間。                                     |
 | FINISH_TIME   | タスクが終了した時間。                                       |
 | STATE         | タスクの状態。 有効な値は `PENDING`、`RUNNING`、`FAILED`、`SUCCESS` です。バージョン 3.1.12 から、特にマテリアライズドビューのリフレッシュタスク用に新しい状態 `MERGED` が追加されました。新しいリフレッシュタスクが提出され、古いタスクがまだ保留キューにある場合、これらのタスクはマージされ、その優先度レベルが維持されます。 |
-| CATALOG       | タスクが属するカタログ。                                     |
 | DATABASE      | タスクが属するデータベース。                                 |
 | DEFINITION    | タスクの SQL 定義。                                          |
 | EXPIRE_TIME   | タスクが期限切れになる時間。                                 |
