@@ -69,7 +69,7 @@ public class MetricRepoTest extends PlanTestBase {
 
         // verify metric
         JsonMetricVisitor visitor = new JsonMetricVisitor("m");
-        MetricsAction.RequestParams params = new MetricsAction.RequestParams(true, true, true, true);
+        MetricsAction.RequestParams params = new MetricsAction.RequestParams(true, true, true, true, true);
         MetricRepo.getMetric(visitor, params);
         String json = visitor.build();
         Assertions.assertTrue(StringUtils.isNotEmpty(json));
@@ -263,7 +263,7 @@ public class MetricRepoTest extends PlanTestBase {
             Config.enable_routine_load_lag_time_metrics = true;
             
             JsonMetricVisitor visitor = new JsonMetricVisitor("test");
-            MetricsAction.RequestParams params = new MetricsAction.RequestParams(true, true, true, true);
+            MetricsAction.RequestParams params = new MetricsAction.RequestParams(true, true, true, true, true);
             
             // This should execute line 914 and call RoutineLoadLagTimeMetricMgr.getInstance().collectRoutineLoadLagTimeMetrics(visitor)
             String result = MetricRepo.getMetric(visitor, params);
