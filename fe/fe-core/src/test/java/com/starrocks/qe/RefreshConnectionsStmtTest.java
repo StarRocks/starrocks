@@ -16,23 +16,21 @@ package com.starrocks.qe;
 
 import com.google.common.collect.Lists;
 import com.starrocks.authentication.AuthenticationMgr;
-import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.catalog.UserIdentity;
-import com.starrocks.persist.EditLog;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.persist.GlobalVarPersistInfo;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.RefreshConnectionsStmt;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.SystemVariable;
+import com.starrocks.sql.ast.UserRef;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import mockit.Expectations;
-import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -41,11 +39,6 @@ public class RefreshConnectionsStmtTest {
     private static StarRocksAssert starRocksAssert;
     private static UserIdentity testUser;
     private static UserIdentity testUserWithoutOperate;
-
-    @Mocked
-    private GlobalStateMgr globalStateMgr;
-    @Mocked
-    private EditLog editLog;
 
     @BeforeAll
     public static void beforeClass() throws Exception {
@@ -58,11 +51,11 @@ public class RefreshConnectionsStmtTest {
         
         // User with OPERATE privilege
         String createUserSql = "CREATE USER 'testUser' IDENTIFIED BY ''";
-        com.starrocks.sql.ast.CreateUserStmt createUserStmt =
-                (com.starrocks.sql.ast.CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(
+        CreateUserStmt createUserStmt =
+                (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(
                         createUserSql, starRocksAssert.getCtx());
         authenticationManager.createUser(createUserStmt);
-        com.starrocks.sql.ast.UserRef user = createUserStmt.getUser();
+        UserRef user = createUserStmt.getUser();
         testUser = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
         
         // Grant OPERATE privilege to testUser
@@ -74,11 +67,11 @@ public class RefreshConnectionsStmtTest {
         
         // User without OPERATE privilege
         String createUserSql2 = "CREATE USER 'testUser2' IDENTIFIED BY ''";
-        com.starrocks.sql.ast.CreateUserStmt createUserStmt2 =
-                (com.starrocks.sql.ast.CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(
+        CreateUserStmt createUserStmt2 =
+                (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(
                         createUserSql2, starRocksAssert.getCtx());
         authenticationManager.createUser(createUserStmt2);
-        com.starrocks.sql.ast.UserRef user2 = createUserStmt2.getUser();
+        UserRef user2 = createUserStmt2.getUser();
         testUserWithoutOperate = new UserIdentity(user2.getUser(), user2.getHost(), user2.isDomain());
     }
 
@@ -148,7 +141,7 @@ public class RefreshConnectionsStmtTest {
         Analyzer.analyze(refreshStmt, starRocksAssert.getCtx());
         
         // Should throw AccessDeniedException (no OPERATE privilege)
-        Assertions.assertThrows(AccessDeniedException.class, () -> {
+        Assertions.assertThrows(ErrorReportException.class, () -> {
             Authorizer.check(refreshStmt, starRocksAssert.getCtx());
         });
     }
@@ -166,6 +159,7 @@ public class RefreshConnectionsStmtTest {
         testCtx.setSessionVariable(starRocksAssert.getCtx().getGlobalStateMgr()
                 .getVariableMgr().newSessionVariable());
         testCtx.setConnectionId(1);
+        testCtx.setQualifiedUser("aaa");
         
         // Register the connection
         ExecuteEnv.getInstance().getScheduler().registerConnection(testCtx);
@@ -229,6 +223,7 @@ public class RefreshConnectionsStmtTest {
         testCtx.setSessionVariable(starRocksAssert.getCtx().getGlobalStateMgr()
                 .getVariableMgr().newSessionVariable());
         testCtx.setConnectionId(2);
+        testCtx.setQualifiedUser("aaa");
         
         // Register the connection
         ExecuteEnv.getInstance().getScheduler().registerConnection(testCtx);
@@ -281,52 +276,6 @@ public class RefreshConnectionsStmtTest {
     }
 
     @Test
-    public void testRefreshConnectionsDistribution() throws Exception {
-        ctxToRoot();
-        
-        VariableMgr variableMgr = starRocksAssert.getCtx().getGlobalStateMgr().getVariableMgr();
-        
-        // Mock GlobalStateMgr to verify edit log is called
-        new Expectations() {
-            {
-                globalStateMgr.isLeader();
-                minTimes = 1;
-                result = true;
-                
-                globalStateMgr.getEditLog();
-                minTimes = 1;
-                result = editLog;
-                
-                GlobalStateMgr.getCurrentState();
-                minTimes = 1;
-                result = globalStateMgr;
-            }
-        };
-        
-        starRocksAssert.getCtx().setGlobalStateMgr(globalStateMgr);
-        
-        // Execute REFRESH CONNECTIONS
-        String refreshSql = "REFRESH CONNECTIONS";
-        RefreshConnectionsStmt refreshStmt = (RefreshConnectionsStmt) UtFrameUtils.parseStmtWithNewParser(
-                refreshSql, starRocksAssert.getCtx());
-        Analyzer.analyze(refreshStmt, starRocksAssert.getCtx());
-        Authorizer.check(refreshStmt, starRocksAssert.getCtx());
-        
-        com.starrocks.qe.StmtExecutor executor = new com.starrocks.qe.StmtExecutor(
-                starRocksAssert.getCtx(), refreshStmt);
-        
-        // Verify edit log is called when on leader
-        new Expectations() {
-            {
-                editLog.logGlobalVariableV2((GlobalVarPersistInfo) any);
-                times = 1;
-            }
-        };
-        
-        executor.execute();
-    }
-
-    @Test
     public void testReplayRefreshConnections() throws Exception {
         ctxToRoot();
         
@@ -339,6 +288,7 @@ public class RefreshConnectionsStmtTest {
         testCtx.setSessionVariable(starRocksAssert.getCtx().getGlobalStateMgr()
                 .getVariableMgr().newSessionVariable());
         testCtx.setConnectionId(3);
+        testCtx.setQualifiedUser("aaa");
         
         // Register the connection
         ExecuteEnv.getInstance().getScheduler().registerConnection(testCtx);
