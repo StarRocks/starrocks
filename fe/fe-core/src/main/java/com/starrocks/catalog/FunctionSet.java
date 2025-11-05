@@ -632,11 +632,7 @@ public class FunctionSet {
                     .add(FunctionSet.HLL_EMPTY)
                     .add(FunctionSet.EXCHANGE_BYTES)
                     .add(FunctionSet.EXCHANGE_SPEED)
-<<<<<<< HEAD
-=======
-                    .add(FunctionSet.FIELD)
                     .add(FunctionSet.SPLIT_PART)
->>>>>>> c1e47b2d3d ([BugFix] split_part function should not return null when delimiter is not matched (#56967))
                     .build();
 
     public static final Set<String> DECIMAL_ROUND_FUNCTIONS =
