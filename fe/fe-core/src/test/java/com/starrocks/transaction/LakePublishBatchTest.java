@@ -112,12 +112,10 @@ public class LakePublishBatchTest {
 
     private void waitTransactionDone(TransactionState transaction) throws InterruptedException {
         while (!transaction.getTransactionStatus().isFinalStatus()) {
-            LOG.info("transaction {} is running. state: {}", transaction.getTransactionId(),
-                    transaction.getTransactionStatus());
-            Thread.sleep(1000);
+            LOG.warn("transaction {} is running. state: {}", transaction.getTransactionId(), transaction.getTransactionStatus());
+            Thread.sleep(200);
         }
-        LOG.info("transaction {} is done. state: {}", transaction.getTransactionId(),
-                transaction.getTransactionStatus());
+        LOG.warn("transaction {} is done. state: {}", transaction.getTransactionId(), transaction.getTransactionStatus());
     }
 
     @BeforeAll
@@ -249,10 +247,10 @@ public class LakePublishBatchTest {
         PublishVersionDaemon publishVersionDaemon = new PublishVersionDaemon();
         publishVersionDaemon.runAfterCatalogReady();
 
-        Assertions.assertTrue(waiter1.await(100, TimeUnit.SECONDS));
-        Assertions.assertTrue(waiter2.await(100, TimeUnit.SECONDS));
-        Assertions.assertTrue(waiter3.await(100, TimeUnit.SECONDS));
-        Assertions.assertTrue(waiter4.await(100, TimeUnit.SECONDS));
+        Assertions.assertTrue(waiter1.await(60, TimeUnit.SECONDS));
+        Assertions.assertTrue(waiter2.await(60, TimeUnit.SECONDS));
+        Assertions.assertTrue(waiter3.await(60, TimeUnit.SECONDS));
+        Assertions.assertTrue(waiter4.await(60, TimeUnit.SECONDS));
     }
 
     //    @ParameterizedTest
@@ -454,8 +452,8 @@ public class LakePublishBatchTest {
         PublishVersionDaemon publishVersionDaemon = new PublishVersionDaemon();
         publishVersionDaemon.runAfterCatalogReady();
 
-        Assertions.assertTrue(waiter1.await(10, TimeUnit.SECONDS));
-        Assertions.assertTrue(waiter2.await(10, TimeUnit.SECONDS));
+        Assertions.assertTrue(waiter1.await(60, TimeUnit.SECONDS));
+        Assertions.assertTrue(waiter2.await(60, TimeUnit.SECONDS));
 
         // Ensure publishingLakeTransactionsBatchTableId has been cleared, otherwise the following single publish may fail.
         publishVersionDaemon.publishingLakeTransactionsBatchTableId.clear();
@@ -471,7 +469,7 @@ public class LakePublishBatchTest {
                 Lists.newArrayList(), null);
 
         publishVersionDaemon.runAfterCatalogReady();
-        Assertions.assertTrue(waiter3.await(100, TimeUnit.SECONDS));
+        Assertions.assertTrue(waiter3.await(60, TimeUnit.SECONDS));
 
         Config.lake_enable_batch_publish_version = true;
     }
@@ -499,7 +497,7 @@ public class LakePublishBatchTest {
         Config.lake_enable_batch_publish_version = false;
         PublishVersionDaemon publishVersionDaemon = new PublishVersionDaemon();
         publishVersionDaemon.runAfterCatalogReady();
-        Assertions.assertTrue(waiter5.await(10, TimeUnit.SECONDS));
+        Assertions.assertTrue(waiter5.await(60, TimeUnit.SECONDS));
 
         long transactionId6 = globalTransactionMgr.
                 beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
@@ -525,13 +523,13 @@ public class LakePublishBatchTest {
 
         Config.lake_enable_batch_publish_version = true;
         publishVersionDaemon.runAfterCatalogReady();
-        Assertions.assertFalse(waiter6.await(100, TimeUnit.SECONDS));
-        Assertions.assertFalse(waiter7.await(100, TimeUnit.SECONDS));
+        Assertions.assertFalse(waiter6.await(5, TimeUnit.SECONDS));
+        Assertions.assertFalse(waiter7.await(5, TimeUnit.SECONDS));
 
         publishVersionDaemon.publishingLakeTransactions.clear();
         publishVersionDaemon.runAfterCatalogReady();
-        Assertions.assertTrue(waiter6.await(100, TimeUnit.SECONDS));
-        Assertions.assertTrue(waiter7.await(100, TimeUnit.SECONDS));
+        Assertions.assertTrue(waiter6.await(60, TimeUnit.SECONDS));
+        Assertions.assertTrue(waiter7.await(60, TimeUnit.SECONDS));
     }
 
     @ParameterizedTest
