@@ -35,7 +35,6 @@ import com.starrocks.lake.Utils;
 import com.starrocks.proto.PublishLogVersionBatchRequest;
 import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.replication.ReplicationTxnCommitAttachment;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.RpcException;
@@ -658,6 +657,7 @@ public class LakePublishBatchTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testBatchPublishReplicationTransaction() throws Exception {
         int minBatchSize = Config.lake_batch_publish_min_version_num;
         Config.lake_batch_publish_min_version_num = 1;
@@ -739,5 +739,101 @@ public class LakePublishBatchTest {
         }
 
         Config.lake_batch_publish_min_version_num = minBatchSize;
+=======
+    public void testBatchPublishShadowIndex() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), TABLE_SCHEMA_CHANGE);
+        assertEquals(1, table.getPartitions().size());
+        PhysicalPartition physicalPartition = table.getPartitions().iterator().next().getDefaultPhysicalPartition();
+        List<MaterializedIndex> normalIndices =
+                physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE);
+        assertEquals(1, normalIndices.size());
+        MaterializedIndex normalIndex = normalIndices.get(0);
+        assertEquals(1, normalIndex.getTabletIds().size());
+        LakeTablet normalTablet = (LakeTablet) normalIndex.getTablets().get(0);
+
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+
+        // txn1 only includes tablets of base index
+        long txn1 = globalTransactionMgr.beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
+                        "txn1" + "_" + UUIDUtil.genUUID().toString(), transactionSource,
+                        TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        TransactionState txnState1 = globalTransactionMgr.getTransactionState(db.getId(), txn1);
+        txnState1.addTableIndexes((OlapTable) table);
+        List<TabletCommitInfo> commitInfo1 = commitAllTablets(List.of(normalTablet));
+
+        // do a schema change, which will create a shadow index
+        String alterSql = String.format("alter table %s add index idx (v0) using bitmap", TABLE_SCHEMA_CHANGE);
+        AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSql, connectContext);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(connectContext, stmt);
+        List<AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getAlterJobMgr()
+                .getSchemaChangeHandler().getUnfinishedAlterJobV2ByTableId(table.getId());
+        assertEquals(1, alterJobs.size());
+        assertInstanceOf(LakeTableSchemaChangeJob.class, alterJobs.get(0));
+        LakeTableSchemaChangeJob schemaChangeJob = (LakeTableSchemaChangeJob) alterJobs.get(0);
+        Awaitility.await().atMost(60, TimeUnit.SECONDS).until(
+                () -> schemaChangeJob.getJobState() == AlterJobV2.JobState.WAITING_TXN);
+
+        List<MaterializedIndex> shadowIndices =
+                physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW);
+        assertEquals(1, shadowIndices.size());
+        MaterializedIndex shadowIndex = shadowIndices.get(0);
+        assertEquals(1, shadowIndex.getTabletIds().size());
+        LakeTablet shadowTablet = (LakeTablet) shadowIndex.getTablets().get(0);
+
+        // txn2 includes tablets of both base index and shadow index
+        long txn2 = globalTransactionMgr.beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
+                        "txn2" + "_" + UUIDUtil.genUUID().toString(), transactionSource,
+                        TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        TransactionState txnState2 = globalTransactionMgr.getTransactionState(db.getId(), txn2);
+        txnState2.addTableIndexes((OlapTable) table);
+        List<TabletCommitInfo> commitInfo2 = commitAllTablets(List.of(normalTablet, shadowTablet));
+
+        // txn3 includes tablets of both base index and shadow index
+        long txn3 = globalTransactionMgr.beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
+                "txn3" + "_" + UUIDUtil.genUUID().toString(), transactionSource,
+                TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        TransactionState txnState3 = globalTransactionMgr.getTransactionState(db.getId(), txn3);
+        txnState3.addTableIndexes((OlapTable) table);
+        List<TabletCommitInfo> commitInfo3 = commitAllTablets(List.of(normalTablet, shadowTablet));
+
+        // commit in the order of txn2, tnx1, and txn3
+        VisibleStateWaiter waiter2 = globalTransactionMgr.commitTransaction(db.getId(), txn2, commitInfo2,
+                Lists.newArrayList(), null);
+        VisibleStateWaiter waiter1 = globalTransactionMgr.commitTransaction(db.getId(), txn1, commitInfo1,
+                Lists.newArrayList(), null);
+        VisibleStateWaiter waiter3 = globalTransactionMgr.commitTransaction(db.getId(), txn3, commitInfo3,
+                Lists.newArrayList(), null);
+
+        PublishVersionDaemon publishVersionDaemon = new PublishVersionDaemon();
+        publishVersionDaemon.runAfterCatalogReady();
+
+        Assertions.assertTrue(waiter1.await(1, TimeUnit.MINUTES));
+        Assertions.assertTrue(waiter2.await(1, TimeUnit.MINUTES));
+        Assertions.assertTrue(waiter3.await(1, TimeUnit.MINUTES));
+
+        ComputeNode shadowTabletNode = GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                .getComputeNodeAssignedToTablet(WarehouseManager.DEFAULT_RESOURCE, shadowTablet.getId());
+        LakeService lakeService = BrpcProxy.getLakeService(shadowTabletNode.getHost(), shadowTabletNode.getBrpcPort());
+        assertInstanceOf(MockedBackend.MockLakeService.class, lakeService);
+        MockedBackend.MockLakeService mockLakeService = (MockedBackend.MockLakeService) lakeService;
+        PublishLogVersionBatchRequest request = mockLakeService.pollPublishLogVersionBatchRequests();
+        assertNotNull(request);
+        assertEquals(List.of(shadowTablet.getId()), request.getTabletIds());
+        assertEquals(2, request.getTxnInfos().size());
+        assertEquals(txn2, request.getTxnInfos().get(0).getTxnId());
+        assertEquals(txn3, request.getTxnInfos().get(1).getTxnId());
+    }
+
+    private List<TabletCommitInfo> commitAllTablets(List<LakeTablet> tablets) {
+        List<TabletCommitInfo> commitInfos = Lists.newArrayList();
+        List<Long> backends = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds();
+        for (LakeTablet tablet : tablets) {
+            TabletCommitInfo tabletCommitInfo = new TabletCommitInfo(tablet.getId(), backends.get(0));
+            commitInfos.add(tabletCommitInfo);
+        }
+        return commitInfos;
+>>>>>>> f2758b61f0 ([UT] Remove unstable test case (#65008))
     }
 }
