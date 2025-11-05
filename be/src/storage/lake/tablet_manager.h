@@ -31,12 +31,6 @@
 #include "storage/rowset/base_rowset.h"
 #include "util/bthreads/single_flight.h"
 
-#if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
-namespace staros::starlet {
-class ShardInfo;
-} // namespace staros::starlet
-#endif // USE_STAROS
-
 namespace starrocks {
 struct FileInfo;
 struct TabletBasicInfo;
@@ -80,7 +74,7 @@ public:
 
     StatusOr<Tablet> get_tablet(int64_t tablet_id);
 
-    StatusOr<VersionedTablet> get_tablet(int64_t tablet_id, int64_t version);
+    StatusOr<VersionedTablet> get_tablet(int64_t tablet_id, int64_t version, bool fill_cache = true);
 
     StatusOr<CompactionTaskPtr> compact(CompactionTaskContext* context);
 
@@ -265,10 +259,9 @@ private:
     Status corrupted_tablet_meta_handler(const Status& s, const std::string& metadata_location);
 
 #if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
-    void get_tablet_basic_info(const staros::starlet::ShardInfo* shard_info, int64_t table_id, int64_t partition_id,
-                               const std::set<int64_t>& authorized_table_ids,
-                               const std::unordered_map<int64_t, int64_t>& partition_versions,
-                               std::vector<TabletBasicInfo>& tablet_infos);
+    StatusOr<TabletBasicInfo> get_tablet_basic_info(int64_t tablet_id, int64_t table_id, int64_t partition_id,
+                                                    const std::set<int64_t>& authorized_table_ids,
+                                                    const std::unordered_map<int64_t, int64_t>& partition_versions);
 #endif // USE_STAROS
 
 private:

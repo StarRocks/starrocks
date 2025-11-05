@@ -1171,8 +1171,8 @@ void TabletManager::TEST_set_global_schema_cache(int64_t schema_id, TabletSchema
     _metacache->cache_tablet_schema(cache_key, std::move(schema), 0);
 }
 
-StatusOr<VersionedTablet> TabletManager::get_tablet(int64_t tablet_id, int64_t version) {
-    ASSIGN_OR_RETURN(auto metadata, get_tablet_metadata(tablet_id, version));
+StatusOr<VersionedTablet> TabletManager::get_tablet(int64_t tablet_id, int64_t version, bool fill_cache) {
+    ASSIGN_OR_RETURN(auto metadata, get_tablet_metadata(tablet_id, version, fill_cache));
     return VersionedTablet(this, std::move(metadata));
 }
 
@@ -1235,38 +1235,44 @@ static std::pair<int64_t, int64_t> get_table_partition_id(const staros::starlet:
     return std::make_pair(table_id, partition_id);
 }
 
-void TabletManager::get_tablet_basic_info(const staros::starlet::ShardInfo* shard_info, int64_t table_id,
-                                          int64_t partition_id, const std::set<int64_t>& authorized_table_ids,
-                                          const std::unordered_map<int64_t, int64_t>& partition_versions,
-                                          std::vector<TabletBasicInfo>& tablet_infos) {
-    const auto& id_pair = get_table_partition_id(*shard_info);
+StatusOr<TabletBasicInfo> TabletManager::get_tablet_basic_info(
+        int64_t tablet_id, int64_t table_id, int64_t partition_id, const std::set<int64_t>& authorized_table_ids,
+        const std::unordered_map<int64_t, int64_t>& partition_versions) {
+    auto shard_info_or = g_worker->retrieve_shard_info(tablet_id);
+    if (!shard_info_or.ok()) {
+        return Status::InternalError(fmt::format("fail to get shard info of tablet: {}, err: {}", tablet_id,
+                                                 shard_info_or.status().message()));
+    }
+
+    auto shard_info = shard_info_or.value();
+    auto id_pair = get_table_partition_id(shard_info);
     auto shard_table_id = id_pair.first;
     auto shard_partition_id = id_pair.second;
 
     if ((partition_id != -1 && partition_id != shard_partition_id) || (table_id != -1 && table_id != shard_table_id) ||
         authorized_table_ids.find(shard_table_id) == authorized_table_ids.end()) {
-        return;
+        return Status::NotAuthorized(fmt::format("tablet: {}, table_id: {}, partition_id: {} not authorized", tablet_id,
+                                                 table_id, partition_id));
     }
 
-    int64_t tablet_id = shard_info->id;
     auto search = partition_versions.find(shard_partition_id);
     if (search == partition_versions.end()) {
-        LOG(WARNING) << "partition: " << shard_partition_id << " not found, tablet: " << tablet_id;
-        return;
+        return Status::NotFound(fmt::format("partition: {} not found, tablet: {}", shard_partition_id, tablet_id));
     }
 
-    int version = search->second;
-    auto tablet_or = get_tablet(tablet_id, version);
+    // Don't fill cache to avoid polluting the cache
+    int64_t version = search->second;
+    auto tablet_or = get_tablet(tablet_id, version, false);
     if (!tablet_or.ok()) {
-        LOG(WARNING) << "fail to get tablet: " << tablet_id << ", version: " << version
-                     << ", err: " << tablet_or.status();
-        return;
+        return Status::InternalError(fmt::format("fail to get tablet: {}, version: {}, err: {}", tablet_id, version,
+                                                 tablet_or.status().to_string()));
     }
 
-    auto& info = tablet_infos.emplace_back();
+    auto info = tablet_or.value().get_basic_info();
     info.table_id = shard_table_id;
     info.partition_id = shard_partition_id;
-    tablet_or.value().get_basic_info(info);
+
+    return info;
 }
 #endif // USE_STAROS
 
@@ -1279,36 +1285,41 @@ void TabletManager::get_tablets_basic_info(int64_t table_id, int64_t partition_i
         return;
     }
 
-    // process the tablet with the given tablet_id
     if (tablet_id != -1) {
-        auto shard_info_or = g_worker->retrieve_shard_info(tablet_id);
-        if (shard_info_or.ok()) {
-            const auto& shard_info = shard_info_or.value();
-            get_tablet_basic_info(&shard_info, table_id, partition_id, authorized_table_ids, partition_versions,
-                                  tablet_infos);
-        } else {
-            LOG(WARNING) << "fail to get shard info of tablet: " << tablet_id << ", err: " << shard_info_or.status();
+        // process the tablet with the given tablet_id
+        auto tablet_info_or =
+                get_tablet_basic_info(tablet_id, table_id, partition_id, authorized_table_ids, partition_versions);
+        auto st = tablet_info_or.status();
+        if (st.ok()) {
+            tablet_infos.emplace_back(std::move(tablet_info_or.value()));
+        } else if (!st.is_not_authorized() && !st.is_not_found()) {
+            LOG(WARNING) << "fail to get tablet basic info, err: " << st;
         }
-        return;
-    }
+    } else {
+        // iterate all shards and get the tablets belong to the given table_id and partition_id
+        auto shard_ids = g_worker->shard_ids();
+        for (const auto& shard_id : shard_ids) {
+            auto tablet_info_or =
+                    get_tablet_basic_info(shard_id, table_id, partition_id, authorized_table_ids, partition_versions);
+            auto st = tablet_info_or.status();
+            if (st.ok()) {
+                tablet_infos.emplace_back(std::move(tablet_info_or.value()));
+            } else if (!st.is_not_authorized() && !st.is_not_found()) {
+                LOG(WARNING) << "fail to get tablet basic info, err: " << st;
+            }
+        }
 
-    // iterate all shards and get the tablets belong to the given table_id and partition_id
-    const auto& shards = g_worker->shards();
-    for (const auto& shard_info : shards) {
-        get_tablet_basic_info(&shard_info, table_id, partition_id, authorized_table_ids, partition_versions,
-                              tablet_infos);
+        // order by table_id, partition_id, tablet_id by default
+        std::sort(tablet_infos.begin(), tablet_infos.end(), [](const TabletBasicInfo& a, const TabletBasicInfo& b) {
+            if (a.partition_id == b.partition_id) {
+                return a.tablet_id < b.tablet_id;
+            }
+            if (a.table_id == b.table_id) {
+                return a.partition_id < b.partition_id;
+            }
+            return a.table_id < b.table_id;
+        });
     }
-
-    // order by table_id, partition_id, tablet_id by default
-    std::sort(tablet_infos.begin(), tablet_infos.end(), [](const TabletBasicInfo& a, const TabletBasicInfo& b) {
-        if (a.partition_id == b.partition_id) {
-            return a.tablet_id < b.tablet_id;
-        }
-        if (a.table_id == b.table_id) {
-            return a.partition_id < b.partition_id;
-        }
-        return a.table_id < b.table_id;
-    });
 #endif // USE_STAROS
 }
 

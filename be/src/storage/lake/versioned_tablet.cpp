@@ -104,7 +104,7 @@ std::vector<RowsetPtr> VersionedTablet::get_rowsets() const {
     return Rowset::get_rowsets(_tablet_mgr, _metadata);
 }
 
-void VersionedTablet::get_basic_info(TabletBasicInfo& info) const {
+TabletBasicInfo VersionedTablet::get_basic_info() const {
     int64_t num_rowset = _metadata->rowsets_size();
     int64_t num_segment = 0;
     int64_t num_row = 0;
@@ -117,6 +117,7 @@ void VersionedTablet::get_basic_info(TabletBasicInfo& info) const {
 
     auto keys_type = _metadata->schema().keys_type();
 
+    TabletBasicInfo info;
     // set table_id and partition_id outside
     info.tablet_id = id();
     info.num_version = num_rowset;
@@ -148,6 +149,8 @@ void VersionedTablet::get_basic_info(TabletBasicInfo& info) const {
             info.data_size += index_disk_usage;
         }
     }
+
+    return info;
 }
 
 } // namespace starrocks::lake

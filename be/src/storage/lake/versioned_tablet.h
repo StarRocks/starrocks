@@ -88,7 +88,7 @@ public:
 
     bool has_delete_predicates() const;
 
-    void get_basic_info(TabletBasicInfo& info) const;
+    TabletBasicInfo get_basic_info() const;
 
 private:
     TabletManager* _tablet_mgr;
