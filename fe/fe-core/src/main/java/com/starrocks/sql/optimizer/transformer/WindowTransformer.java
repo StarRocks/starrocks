@@ -28,6 +28,7 @@ import com.starrocks.sql.ast.expression.AnalyticExpr;
 import com.starrocks.sql.ast.expression.AnalyticWindow;
 import com.starrocks.sql.ast.expression.DecimalLiteral;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.IntLiteral;
@@ -48,6 +49,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -535,6 +537,7 @@ public class WindowTransformer {
     public static class WindowOperator {
         private final List<AnalyticExpr> windowFunctions = Lists.newArrayList();
         private final List<Expr> partitionExprs;
+        private final List<Expr> orderedPartitionExprs;
         private List<OrderByElement> orderByElements;
         private final AnalyticWindow window;
         private final boolean useHashBasedPartition;
@@ -547,6 +550,13 @@ public class WindowTransformer {
                               List<OrderByElement> orderByElements, AnalyticWindow window) {
             this.windowFunctions.add(analyticExpr);
             this.partitionExprs = partitionExprs;
+            // AnalyticExpr with the iso-window can merged into one WindowOperator;
+            // partition exprs are unordered, the same partition exprs may have
+            // different permutations, so we sort them for normalization and it used for equals
+            // and hashCode methods.
+            this.orderedPartitionExprs = Optional.ofNullable(partitionExprs)
+                    .map(partitions -> partitions.stream().sorted(Comparator.comparing(ExprToSql::toSql)).toList())
+                    .orElse(List.of());
             this.orderByElements = orderByElements;
             this.window = window;
             SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
@@ -615,7 +625,7 @@ public class WindowTransformer {
                 return false;
             }
             WindowOperator that = (WindowOperator) o;
-            return Objects.equals(partitionExprs, that.partitionExprs) &&
+            return Objects.equals(orderedPartitionExprs, that.orderedPartitionExprs) &&
                     Objects.equals(orderByElements, that.orderByElements) &&
                     Objects.equals(window, that.window) &&
                     Objects.equals(useHashBasedPartition, that.useHashBasedPartition);
@@ -623,7 +633,7 @@ public class WindowTransformer {
 
         @Override
         public int hashCode() {
-            return Objects.hash(partitionExprs, orderByElements, window, useHashBasedPartition);
+            return Objects.hash(orderedPartitionExprs, orderByElements, window, useHashBasedPartition);
         }
     }
 }
