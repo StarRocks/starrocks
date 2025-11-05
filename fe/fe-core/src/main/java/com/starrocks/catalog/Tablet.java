@@ -16,6 +16,7 @@
 package com.starrocks.catalog;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.common.Range;
 import com.starrocks.common.io.Writable;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 
@@ -31,12 +32,32 @@ public abstract class Tablet extends MetaObject implements Writable {
     @SerializedName(value = JSON_KEY_ID)
     protected long id;
 
+    /*
+     * Add the serialization when the feature is almost finished
+     * @SerializedName(value = "range")
+     */
+    protected Range<Tuple> range;
+
     public Tablet(long id) {
         this.id = id;
+        this.range = Range.all();
+    }
+
+    public Tablet(long id, Range<Tuple> range) {
+        this.id = id;
+        this.range = range;
     }
 
     public long getId() {
         return id;
+    }
+
+    public Range<Tuple> getRange() {
+        return range;
+    }
+
+    public void setRange(Range<Tuple> range) {
+        this.range = range;
     }
 
     public abstract long getDataSize(boolean singleReplica);
