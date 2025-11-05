@@ -3334,65 +3334,6 @@ public class JoinTest extends PlanTestBase {
                 "  |    \n" +
                 "  2:EXCHANGE");
     }
-
-<<<<<<< HEAD
-=======
-    @Test
-    public void testAsofJoinConditionNormalizeWithMultipleJoins() throws Exception {
-        String sql1 = "select t0.v1 from t0 asof join t1 on t0.v1 = t1.v4 and t0.v2 <= t1.v5 " +
-                "asof join t2 on t1.v4 = t2.v7 and t2.v8 > t1.v5";
-        String plan1 = getFragmentPlan(sql1);
-        assertContains(plan1, "asof join conjunct: 5: v5 < 8: v8");
-
-        String sql3 = "select t0.v1 from t0 join t1 on t0.v1 = t1.v4 " +
-                "asof join t2 on t1.v4 = t2.v7 and t2.v8 >= t1.v5";
-        String plan3 = getFragmentPlan(sql3);
-        assertContains(plan3, "asof join conjunct: 5: v5 <= 8: v8");
-    }
-
-    @Test
-    public void testAsofJoinConditionNormalizeWithSubqueries() {
-        String sql1 = "select t0.v1 from t0 asof join t1 on t0.v1 = t1.v4 and (SELECT MAX(v5) FROM t1) > t0.v2";
-        ExceptionChecker.expectThrowsWithMsg(IllegalStateException.class,
-                "ASOF JOIN requires exactly one temporal inequality condition",
-                () -> getFragmentPlan(sql1));
-    }
-
-    @Test
-    public void testAsofJoinOtherPredicates() throws Exception {
-        String sql1 = "SELECT t0.v1 FROM t0 asof JOIN t1 ON t0.v1 = t1.v4 and t0.v2 <= t1.v5 " +
-                "WHERE t0.v2 = t0.v3 + t1.v4 and t0.v1 =1 ;";
-        String plan1 = getFragmentPlan(sql1);
-        assertContains(plan1, "3:HASH JOIN\n" +
-                "  |  join op: ASOF INNER JOIN (BROADCAST)\n" +
-                "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 1: v1 = 4: v4\n" +
-                "  |  asof join conjunct: 2: v2 <= 5: v5\n" +
-                "  |  other join predicates: 2: v2 = 3: v3 + 4: v4");
-
-        String sql2 = "SELECT t0.v1 FROM t0 asof JOIN t1 ON t0.v1 = t1.v4 and t0.v2 < t0.v3 + t1.v4";
-        ExceptionChecker.expectThrowsWithMsg(IllegalStateException.class,
-                "ASOF JOIN requires exactly one temporal inequality condition",
-                () -> getFragmentPlan(sql2));
-
-        String sql3 = "select * from t0 asof join t1 on t0.v1 = t1.v4 and  t1.v5 <= t0.v2 where (v1 > 4 and v5 < 2)";
-        String plan3 = getFragmentPlan(sql3);
-        assertContains(plan3, "3:HASH JOIN\n" +
-                "  |  join op: ASOF INNER JOIN (BROADCAST)\n" +
-                "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 1: v1 = 4: v4\n" +
-                "  |  asof join conjunct: 2: v2 >= 5: v5");
-
-        String sql4 = "SELECT t0.v1 FROM t0 ASOF JOIN t1 ON t0.v1 = t1.v4 AND t0.v2 <= t1.v5 " +
-                "where (t0.v3 = t1.v6 OR t0.v3 = t1.v4)";
-        String plan4 = getFragmentPlan(sql4);
-        assertContains(plan4, "3:HASH JOIN\n" +
-                "  |  join op: ASOF INNER JOIN (BROADCAST)\n" +
-                "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 1: v1 = 4: v4\n" +
-                "  |  asof join conjunct: 2: v2 <= 5: v5\n" +
-                "  |  other join predicates: (3: v3 = 6: v6) OR (3: v3 = 4: v4)");
-    }
     
     @Test
     public void testJoinWithMultiAnalytic() throws Exception {
@@ -3418,5 +3359,4 @@ public class JoinTest extends PlanTestBase {
                 "  |  offset: 0");
         FeConstants.runningUnitTest = false;
     }
->>>>>>> d54980e64b ([BugFix] Reset Sort Property in Join's Output Property (#64086))
 }
