@@ -36,8 +36,8 @@ import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.MapType;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -202,27 +202,27 @@ public class HudiTableTest {
     @Test
     public void testColumnTypeConvert() {
         Assertions.assertEquals(ColumnTypeConverter.fromHudiType(Schema.create(Schema.Type.BOOLEAN)),
-                ScalarType.createType(PrimitiveType.BOOLEAN));
+                TypeFactory.createType(PrimitiveType.BOOLEAN));
         Assertions.assertEquals(ColumnTypeConverter.fromHudiType(Schema.create(Schema.Type.INT)),
-                ScalarType.createType(PrimitiveType.INT));
+                TypeFactory.createType(PrimitiveType.INT));
         Assertions.assertEquals(ColumnTypeConverter.fromHudiType(Schema.create(Schema.Type.FLOAT)),
-                ScalarType.createType(PrimitiveType.FLOAT));
+                TypeFactory.createType(PrimitiveType.FLOAT));
         Assertions.assertEquals(ColumnTypeConverter.fromHudiType(Schema.create(Schema.Type.DOUBLE)),
-                ScalarType.createType(PrimitiveType.DOUBLE));
+                TypeFactory.createType(PrimitiveType.DOUBLE));
         Assertions.assertEquals(ColumnTypeConverter.fromHudiType(Schema.create(Schema.Type.STRING)),
-                ScalarType.createDefaultCatalogString());
+                TypeFactory.createDefaultCatalogString());
         Assertions.assertEquals(ColumnTypeConverter.fromHudiType(
                         Schema.createArray(Schema.create(Schema.Type.INT))),
-                new ArrayType(ScalarType.createType(PrimitiveType.INT)));
+                new ArrayType(TypeFactory.createType(PrimitiveType.INT)));
         Assertions.assertEquals(ColumnTypeConverter.fromHudiType(
                         Schema.createFixed("FIXED", "FIXED", "F", 1)),
-                ScalarType.createType(PrimitiveType.VARCHAR));
+                TypeFactory.createType(PrimitiveType.VARCHAR));
         Assertions.assertEquals(ColumnTypeConverter.fromHudiType(
                         Schema.createMap(Schema.create(Schema.Type.INT))),
-                new MapType(ScalarType.createDefaultCatalogString(), ScalarType.createType(PrimitiveType.INT)));
+                new MapType(TypeFactory.createDefaultCatalogString(), TypeFactory.createType(PrimitiveType.INT)));
         Assertions.assertEquals(ColumnTypeConverter.fromHudiType(
                         Schema.createUnion(Schema.create(Schema.Type.INT))),
-                ScalarType.createType(PrimitiveType.INT));
+                TypeFactory.createType(PrimitiveType.INT));
     }
 
     @Test

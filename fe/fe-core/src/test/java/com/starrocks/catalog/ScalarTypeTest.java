@@ -21,6 +21,7 @@ import com.starrocks.common.Config;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
+import com.starrocks.type.TypeFactory;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -30,58 +31,58 @@ public class ScalarTypeTest {
 
     @Test
     public void createUnifiedDecimalTypeWithoutPrecisionAndScale() throws AnalysisException {
-        ScalarType.createUnifiedDecimalType();
+        TypeFactory.createUnifiedDecimalType();
     }
 
     @Test
     public void testCreateUnifiedDecimalTypeWithoutScale() throws AnalysisException {
-        ScalarType.createUnifiedDecimalType(18);
+        TypeFactory.createUnifiedDecimalType(18);
     }
 
     @Test
     public void testCreateUnifiedDecimalType() {
         Config.enable_decimal_v3 = false;
         Assertions.assertEquals(
-                ScalarType.createUnifiedDecimalType(27, 3),
-                ScalarType.createDecimalV2Type(27, 3));
+                TypeFactory.createUnifiedDecimalType(27, 3),
+                TypeFactory.createDecimalV2Type(27, 3));
         Assertions.assertEquals(
-                ScalarType.createUnifiedDecimalType(28, 9),
-                ScalarType.createDecimalV2Type(28, 9));
+                TypeFactory.createUnifiedDecimalType(28, 9),
+                TypeFactory.createDecimalV2Type(28, 9));
         Assertions.assertEquals(
-                ScalarType.createUnifiedDecimalType(18, 10),
-                ScalarType.createUnifiedDecimalType(18, 10));
+                TypeFactory.createUnifiedDecimalType(18, 10),
+                TypeFactory.createUnifiedDecimalType(18, 10));
 
         Config.enable_decimal_v3 = true;
         Assertions.assertEquals(
-                ScalarType.createUnifiedDecimalType(9, 3),
-                ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 9, 3));
+                TypeFactory.createUnifiedDecimalType(9, 3),
+                TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 9, 3));
 
         Assertions.assertEquals(
-                ScalarType.createUnifiedDecimalType(18, 15),
-                ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 15));
+                TypeFactory.createUnifiedDecimalType(18, 15),
+                TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 15));
 
         Assertions.assertEquals(
-                ScalarType.createUnifiedDecimalType(19, 15),
-                ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 19, 15));
+                TypeFactory.createUnifiedDecimalType(19, 15),
+                TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 19, 15));
 
         Assertions.assertEquals(
-                ScalarType.createUnifiedDecimalType(27, 15),
-                ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 27, 15));
+                TypeFactory.createUnifiedDecimalType(27, 15),
+                TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 27, 15));
 
         Assertions.assertEquals(
-                ScalarType.createUnifiedDecimalType(28, 28),
-                ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 28, 28));
+                TypeFactory.createUnifiedDecimalType(28, 28),
+                TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 28, 28));
 
         Assertions.assertEquals(
-                ScalarType.createUnifiedDecimalType(38, 0),
-                ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 0));
+                TypeFactory.createUnifiedDecimalType(38, 0),
+                TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 0));
 
         Assertions.assertEquals(
-                ScalarType.createUnifiedDecimalType(38, 38),
-                ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 38));
+                TypeFactory.createUnifiedDecimalType(38, 38),
+                TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 38));
 
-        Assertions.assertThrows(Throwable.class, () -> ScalarType.createUnifiedDecimalType(79, 38));
-        Assertions.assertThrows(Throwable.class, () -> ScalarType.createUnifiedDecimalType(10, 11));
+        Assertions.assertThrows(Throwable.class, () -> TypeFactory.createUnifiedDecimalType(79, 38));
+        Assertions.assertThrows(Throwable.class, () -> TypeFactory.createUnifiedDecimalType(10, 11));
     }
 
     @Test
@@ -89,49 +90,49 @@ public class ScalarTypeTest {
 
         ScalarType[][] testCases = {
                 {
-                        ScalarType.createDecimalV3NarrowestType(9, 9),
-                        ScalarType.createDecimalV3NarrowestType(0, 0),
-                        ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL32, 9, 9),
+                        TypeFactory.createDecimalV3NarrowestType(9, 9),
+                        TypeFactory.createDecimalV3NarrowestType(0, 0),
+                        TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL32, 9, 9),
                 },
                 {
-                        ScalarType.createDecimalV3NarrowestType(9, 9),
-                        ScalarType.createDecimalV3NarrowestType(3, 2),
-                        ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 10, 9),
+                        TypeFactory.createDecimalV3NarrowestType(9, 9),
+                        TypeFactory.createDecimalV3NarrowestType(3, 2),
+                        TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 10, 9),
                 },
                 {
-                        ScalarType.createDecimalV3NarrowestType(9, 9),
-                        ScalarType.createDecimalV3NarrowestType(3, 3),
-                        ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL32, 9, 9),
+                        TypeFactory.createDecimalV3NarrowestType(9, 9),
+                        TypeFactory.createDecimalV3NarrowestType(3, 3),
+                        TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL32, 9, 9),
                 },
                 {
-                        ScalarType.createDecimalV3NarrowestType(18, 9),
-                        ScalarType.createDecimalV3NarrowestType(11, 10),
-                        ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 19, 10),
+                        TypeFactory.createDecimalV3NarrowestType(18, 9),
+                        TypeFactory.createDecimalV3NarrowestType(11, 10),
+                        TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 19, 10),
                 },
                 {
-                        ScalarType.createDecimalV3NarrowestType(35, 4),
-                        ScalarType.createDecimalV3NarrowestType(18, 6),
-                        ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 37, 6),
+                        TypeFactory.createDecimalV3NarrowestType(35, 4),
+                        TypeFactory.createDecimalV3NarrowestType(18, 6),
+                        TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 37, 6),
                 },
                 {
-                        ScalarType.createDecimalV3NarrowestType(38, 4),
-                        ScalarType.createDecimalV3NarrowestType(18, 10),
+                        TypeFactory.createDecimalV3NarrowestType(38, 4),
+                        TypeFactory.createDecimalV3NarrowestType(18, 10),
                         ScalarType.DOUBLE,
                 },
                 {
-                        ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 7, 4),
-                        ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL32, 3, 0),
-                        ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 7, 4),
+                        TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 7, 4),
+                        TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL32, 3, 0),
+                        TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 7, 4),
                 },
                 {
-                        ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 15, 11),
-                        ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 15, 11),
-                        ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 15, 11),
+                        TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 15, 11),
+                        TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 15, 11),
+                        TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 15, 11),
                 },
                 {
-                        ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 9, 4),
-                        ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL32, 9, 4),
-                        ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 9, 4),
+                        TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 9, 4),
+                        TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL32, 9, 4),
+                        TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 9, 4),
                 },
         };
 
@@ -169,18 +170,18 @@ public class ScalarTypeTest {
                 ScalarType.LARGEINT
         );
         List<ScalarType> stringTypes = Lists.newArrayList(
-                ScalarType.createCharType(-1),
-                ScalarType.createVarcharType(-1)
+                TypeFactory.createCharType(-1),
+                TypeFactory.createVarcharType(-1)
         );
         List<ScalarType> decimalTypes = Lists.newArrayList(
-                ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL32, 3, 0),
-                ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL32, 6, 2),
-                ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL32, 9, 4),
-                ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 12, 8),
-                ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 15, 10),
-                ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 12),
-                ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 21, 14),
-                ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 24, 16)
+                TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL32, 3, 0),
+                TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL32, 6, 2),
+                TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL32, 9, 4),
+                TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 12, 8),
+                TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 15, 10),
+                TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 12),
+                TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 21, 14),
+                TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 24, 16)
         );
 
         // integer to integer

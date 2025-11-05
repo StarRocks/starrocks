@@ -21,9 +21,9 @@ import com.starrocks.thrift.TSchemaTableType;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.MapType;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.ScalarType;
 import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
+import com.starrocks.type.TypeFactory;
 
 import java.util.ArrayList;
 
@@ -35,23 +35,23 @@ public class BeDataCacheMetricsTable {
 
     public static SystemTable create() {
         ArrayList<StructField> dirSpacesFields = new ArrayList<>();
-        dirSpacesFields.add(new StructField("path", ScalarType.createVarcharType(MAX_FIELD_VARCHAR_LENGTH)));
-        dirSpacesFields.add(new StructField("quota_bytes", ScalarType.createType(PrimitiveType.BIGINT)));
+        dirSpacesFields.add(new StructField("path", TypeFactory.createVarcharType(MAX_FIELD_VARCHAR_LENGTH)));
+        dirSpacesFields.add(new StructField("quota_bytes", TypeFactory.createType(PrimitiveType.BIGINT)));
         StructType dirSpacesType = new StructType(dirSpacesFields);
         ArrayType dirSpacesArrayType = new ArrayType(dirSpacesType);
 
         MapType usedBytesDetailType =
-                new MapType(ScalarType.createType(PrimitiveType.INT), ScalarType.createType(PrimitiveType.BIGINT));
+                new MapType(TypeFactory.createType(PrimitiveType.INT), TypeFactory.createType(PrimitiveType.BIGINT));
 
         return new SystemTable(SystemId.BE_DATACACHE_METRICS, NAME, Table.TableType.SCHEMA,
                 SystemTable.builder()
-                        .column("BE_ID", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("STATUS", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("DISK_QUOTA_BYTES", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("DISK_USED_BYTES", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("MEM_QUOTA_BYTES", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("MEM_USED_BYTES", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("META_USED_BYTES", ScalarType.createType(PrimitiveType.BIGINT))
+                        .column("BE_ID", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("STATUS", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("DISK_QUOTA_BYTES", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("DISK_USED_BYTES", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("MEM_QUOTA_BYTES", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("MEM_USED_BYTES", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("META_USED_BYTES", TypeFactory.createType(PrimitiveType.BIGINT))
                         .column("DIR_SPACES", dirSpacesArrayType)
                         .column("USED_BYTES_DETAIL", usedBytesDetailType)
                         .build(),

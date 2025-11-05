@@ -24,7 +24,7 @@ import com.starrocks.thrift.THdfsTable;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.ScalarType;
+import com.starrocks.type.TypeFactory;
 
 import java.util.List;
 
@@ -45,11 +45,11 @@ public class IcebergMetadataLogEntriesTable extends MetadataTable {
                 TABLE_NAME,
                 Table.TableType.METADATA,
                 builder()
-                        .column("timestamp", ScalarType.createType(PrimitiveType.DATETIME))
-                        .column("file", ScalarType.createVarcharType())
-                        .column("latest_snapshot_id", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("latest_schema_id", ScalarType.createType(PrimitiveType.INT))
-                        .column("latest_sequence_number", ScalarType.createType(PrimitiveType.BIGINT))
+                        .column("timestamp", TypeFactory.createType(PrimitiveType.DATETIME))
+                        .column("file", TypeFactory.createVarcharType())
+                        .column("latest_snapshot_id", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("latest_schema_id", TypeFactory.createType(PrimitiveType.INT))
+                        .column("latest_sequence_number", TypeFactory.createType(PrimitiveType.BIGINT))
                         .build(),
                 originDb,
                 originTable,

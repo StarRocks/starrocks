@@ -119,8 +119,8 @@ import com.starrocks.transaction.TransactionState.LoadJobSourceType;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import com.starrocks.warehouse.WarehouseIdleChecker;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -1043,7 +1043,7 @@ public class SparkLoadJob extends BulkLoadJob {
                 Type type = column.getType();
                 if (type.isLargeIntType() || type.isBoolean() || type.isBitmapType() || type.isHllType()) {
                     // largeint, boolean, bitmap, hll type using varchar in spark dpp parquet file
-                    srcSlotDesc.setType(ScalarType.createType(PrimitiveType.VARCHAR));
+                    srcSlotDesc.setType(TypeFactory.createType(PrimitiveType.VARCHAR));
                     srcSlotDesc.setColumn(new Column(column.getName(), Type.VARCHAR));
                 } else {
                     srcSlotDesc.setType(type);

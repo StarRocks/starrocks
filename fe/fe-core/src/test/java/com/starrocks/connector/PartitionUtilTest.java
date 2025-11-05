@@ -36,8 +36,8 @@ import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.PRangeCell;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -59,7 +59,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class PartitionUtilTest {
     private final List<Column> partColumns = Lists.newArrayList(new Column("k1", Type.INT),
-            new Column("k2", ScalarType.createVarcharType(10)),
+            new Column("k2", TypeFactory.createVarcharType(10)),
             new Column("k3", Type.DOUBLE),
             new Column("k4", Type.INT));
 

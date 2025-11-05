@@ -33,8 +33,8 @@ import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWriteQuorumType;
-import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -118,11 +118,11 @@ public class ListPartitionInfoTest {
 
         // k2
         SlotDescriptor k2 = descTable.addSlotDescriptor(tuple);
-        k2.setColumn(new Column("k2", ScalarType.createVarchar(25)));
+        k2.setColumn(new Column("k2", TypeFactory.createVarchar(25)));
         k2.setIsMaterialized(true);
         // v1
         SlotDescriptor v1 = descTable.addSlotDescriptor(tuple);
-        v1.setColumn(new Column("v1", ScalarType.createVarchar(25)));
+        v1.setColumn(new Column("v1", TypeFactory.createVarchar(25)));
         v1.setIsMaterialized(true);
         // v2
         SlotDescriptor v2 = descTable.addSlotDescriptor(tuple);

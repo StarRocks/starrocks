@@ -18,7 +18,7 @@ import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.thrift.TSchemaTableType;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.ScalarType;
+import com.starrocks.type.TypeFactory;
 
 import static com.starrocks.catalog.system.SystemTable.MAX_FIELD_VARCHAR_LENGTH;
 import static com.starrocks.catalog.system.SystemTable.builder;
@@ -33,31 +33,31 @@ public class TriggersSystemTable {
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("TRIGGER_CATALOG", ScalarType.createVarchar(512))
-                        .column("TRIGGER_SCHEMA", ScalarType.createVarchar(64))
-                        .column("TRIGGER_NAME", ScalarType.createVarchar(64))
-                        .column("EVENT_MANIPULATION", ScalarType.createVarchar(6))
-                        .column("EVENT_OBJECT_CATALOG", ScalarType.createVarchar(512))
-                        .column("EVENT_OBJECT_SCHEMA", ScalarType.createVarchar(64))
-                        .column("EVENT_OBJECT_TABLE", ScalarType.createVarchar(64))
-                        .column("ACTION_ORDER", ScalarType.createType(PrimitiveType.BIGINT))
+                        .column("TRIGGER_CATALOG", TypeFactory.createVarchar(512))
+                        .column("TRIGGER_SCHEMA", TypeFactory.createVarchar(64))
+                        .column("TRIGGER_NAME", TypeFactory.createVarchar(64))
+                        .column("EVENT_MANIPULATION", TypeFactory.createVarchar(6))
+                        .column("EVENT_OBJECT_CATALOG", TypeFactory.createVarchar(512))
+                        .column("EVENT_OBJECT_SCHEMA", TypeFactory.createVarchar(64))
+                        .column("EVENT_OBJECT_TABLE", TypeFactory.createVarchar(64))
+                        .column("ACTION_ORDER", TypeFactory.createType(PrimitiveType.BIGINT))
                         // TODO: Type for ACTION_CONDITION && ACTION_STATEMENT should be `longtext`, but `varchar(65535)` was set at this stage.
                         .column("ACTION_CONDITION",
-                                ScalarType.createVarchar(MAX_FIELD_VARCHAR_LENGTH))
+                                TypeFactory.createVarchar(MAX_FIELD_VARCHAR_LENGTH))
                         .column("ACTION_STATEMENT",
-                                ScalarType.createVarchar(MAX_FIELD_VARCHAR_LENGTH))
-                        .column("ACTION_ORIENTATION", ScalarType.createVarchar(9))
-                        .column("ACTION_TIMING", ScalarType.createVarchar(6))
-                        .column("ACTION_REFERENCE_OLD_TABLE", ScalarType.createVarchar(64))
-                        .column("ACTION_REFERENCE_NEW_TABLE", ScalarType.createVarchar(64))
-                        .column("ACTION_REFERENCE_OLD_ROW", ScalarType.createVarchar(3))
-                        .column("ACTION_REFERENCE_NEW_ROW", ScalarType.createVarchar(3))
-                        .column("CREATED", ScalarType.createType(PrimitiveType.DATETIME))
-                        .column("SQL_MODE", ScalarType.createVarchar(8192))
-                        .column("DEFINER", ScalarType.createVarchar(77))
-                        .column("CHARACTER_SET_CLIENT", ScalarType.createVarchar(32))
-                        .column("COLLATION_CONNECTION", ScalarType.createVarchar(32))
-                        .column("DATABASE_COLLATION", ScalarType.createVarchar(32))
+                                TypeFactory.createVarchar(MAX_FIELD_VARCHAR_LENGTH))
+                        .column("ACTION_ORIENTATION", TypeFactory.createVarchar(9))
+                        .column("ACTION_TIMING", TypeFactory.createVarchar(6))
+                        .column("ACTION_REFERENCE_OLD_TABLE", TypeFactory.createVarchar(64))
+                        .column("ACTION_REFERENCE_NEW_TABLE", TypeFactory.createVarchar(64))
+                        .column("ACTION_REFERENCE_OLD_ROW", TypeFactory.createVarchar(3))
+                        .column("ACTION_REFERENCE_NEW_ROW", TypeFactory.createVarchar(3))
+                        .column("CREATED", TypeFactory.createType(PrimitiveType.DATETIME))
+                        .column("SQL_MODE", TypeFactory.createVarchar(8192))
+                        .column("DEFINER", TypeFactory.createVarchar(77))
+                        .column("CHARACTER_SET_CLIENT", TypeFactory.createVarchar(32))
+                        .column("COLLATION_CONNECTION", TypeFactory.createVarchar(32))
+                        .column("DATABASE_COLLATION", TypeFactory.createVarchar(32))
                         .build(), TSchemaTableType.SCH_TRIGGERS);
     }
 }

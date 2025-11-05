@@ -16,6 +16,7 @@ package com.starrocks.catalog;
 
 import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import org.junit.jupiter.api.Test;
 
 import static com.starrocks.catalog.SchemaChangeTypeCompatibility.canReuseZonemapIndex;
@@ -77,12 +78,12 @@ public class SchemaChangeTypeCompatibilityTest {
 
         assertTrue(canReuseZonemapIndex(Type.DATETIME, Type.DATETIME));
 
-        ScalarType char10 = ScalarType.createCharType(10);
-        ScalarType varchar20 = ScalarType.createVarcharType(20);
+        ScalarType char10 = TypeFactory.createCharType(10);
+        ScalarType varchar20 = TypeFactory.createVarcharType(20);
         assertTrue(canReuseZonemapIndex(char10, char10));
         assertTrue(canReuseZonemapIndex(char10, varchar20));
 
-        ScalarType varchar30 = ScalarType.createVarcharType(30);
+        ScalarType varchar30 = TypeFactory.createVarcharType(30);
         assertTrue(canReuseZonemapIndex(varchar20, varchar30));
     }
 
@@ -104,8 +105,8 @@ public class SchemaChangeTypeCompatibilityTest {
         assertFalse(canReuseZonemapIndex(Type.DATETIME, Type.DATE));
 
         // varchar to char not allowed by reuse matrix
-        ScalarType varchar20 = ScalarType.createVarcharType(20);
-        ScalarType char10 = ScalarType.createCharType(10);
+        ScalarType varchar20 = TypeFactory.createVarcharType(20);
+        ScalarType char10 = TypeFactory.createCharType(10);
         assertFalse(canReuseZonemapIndex(varchar20, char10));
 
         // string <-> int not allowed
