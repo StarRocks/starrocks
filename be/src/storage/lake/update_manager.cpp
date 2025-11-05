@@ -1259,11 +1259,10 @@ Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op
                                                op_compaction.input_rowsets().end());
         ASSIGN_OR_RETURN(auto tablet_schema, ExecEnv::GetInstance()->lake_tablet_manager()->get_output_rowset_schema(
                                                      input_rowsets_id, &metadata));
-        RETURN_IF_ERROR(builder->apply_opcompaction(
+        return builder->apply_opcompaction(
                 op_compaction,
                 *std::max_element(op_compaction.input_rowsets().begin(), op_compaction.input_rowsets().end()),
-                tablet_schema->id()));
-        return Status::OK();
+                tablet_schema->id());
     });
     if (CompactionUpdateConflictChecker::conflict_check(op_compaction, txn_id, metadata, builder)) {
         // conflict happens
