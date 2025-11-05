@@ -84,16 +84,23 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
         for (Map.Entry<ColumnRefOperator, CallOperator> kv : aggs.entrySet()) {
             CallOperator aggCall = kv.getValue();
             ColumnRefOperator usedColumn;
+            String metaColumnName;
             if (!aggCall.getFnName().equals(FunctionSet.COUNT)) {
                 ColumnRefSet usedColumns = aggCall.getUsedColumns();
                 Preconditions.checkArgument(usedColumns.cardinality() == 1);
                 usedColumn = columnRefFactory.getColumnRef(usedColumns.getFirstId());
+                metaColumnName = aggCall.getFnName() + "_" + usedColumn.getName();
             } else {
-                // for count, just use the first output column as a placeholder, BE won't read this column.
                 usedColumn = scanOperator.getOutputColumns().get(0);
+                // for count, distinguish between count(*) and count(column)
+                if (aggCall.getUsedColumns().isEmpty()) {
+                    // count(*) - should count all rows including NULLs, use "rows" as field name
+                    metaColumnName = "rows_" + usedColumn.getName();
+                } else {
+                    // count(column) - should count non-NULL values, use "count" as field name
+                    metaColumnName = "count_" + usedColumn.getName();
+                }
             }
-
-            String metaColumnName = aggCall.getFnName() + "_" + usedColumn.getName();
             Type columnType = aggCall.getType();
 
             ColumnRefOperator metaColumn;
