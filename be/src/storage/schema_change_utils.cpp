@@ -281,6 +281,9 @@ bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, co
             // init for expression evaluation only
             auto new_col_status = (_schema_mapping[i].mv_expr_ctx)->evaluate(base_chunk.get());
             if (!new_col_status.ok()) {
+                LOG(WARNING) << "expr evaluate failed for rollup column: column_index=" << i
+                             << ", column_name=" << new_schema.field(i)->name() << ", ref_column=" << ref_column
+                             << ", status: " << new_col_status.status();
                 return false;
             }
             auto new_col = new_col_status.value();
