@@ -21,6 +21,7 @@
 #include "exprs/function_context.h"
 #include "exprs/like_predicate.h"
 #include "storage/chunk_helper.h"
+#include "util/runtime_profile.h"
 
 namespace starrocks {
 static std::string get_next_prefix(const Slice& prefix_s) {
@@ -64,6 +65,10 @@ Status BuiltinInvertedIndexIterator::_equal_query(const Slice* search_query, roa
 }
 
 Status BuiltinInvertedIndexIterator::_wildcard_query(const Slice* search_query, roaring::Roaring* bit_map) {
+    if (_stats == nullptr) {
+        return Status::InternalError("stats is null for builtin inverted index");
+    }
+
     const std::string& query = search_query->to_string();
     size_t wildcard_pos = query.find('%');
     if (wildcard_pos == std::string::npos) {
@@ -71,6 +76,7 @@ Status BuiltinInvertedIndexIterator::_wildcard_query(const Slice* search_query, 
     }
 
     if (wildcard_pos == search_query->size - 1) {
+        SCOPED_RAW_TIMER(&_stats->gin_prefix_filter_ns);
         // optimize for pure prefix query
         Slice prefix_s(search_query->data, wildcard_pos);
         std::string next_prefix = get_next_prefix(prefix_s);
@@ -97,7 +103,8 @@ Status BuiltinInvertedIndexIterator::_wildcard_query(const Slice* search_query, 
         std::pair<rowid_t, std::string> lower = std::make_pair(0, Slice::min_value().to_string());
         ASSIGN_OR_RETURN(lower, seek(prefix_s));
 
-        std::pair<rowid_t, std::string> upper = std::make_pair(_bitmap_itr->bitmap_nums(), Slice::max_value().to_string());
+        std::pair<rowid_t, std::string> upper =
+                std::make_pair(_bitmap_itr->bitmap_nums(), Slice::max_value().to_string());
         ASSIGN_OR_RETURN(upper, seek(next_prefix_s));
 
         if (lower.first >= upper.first) {
@@ -115,6 +122,7 @@ Status BuiltinInvertedIndexIterator::_wildcard_query(const Slice* search_query, 
     roaring::Roaring filtered_key_words;
     std::vector<std::string> keywords;
 
+    SCOPED_RAW_TIMER(&_stats->gin_ngram_filter_dict_ns);
     // parse wildcard like '%%key%word%%' into ['key', 'word']
     // use ngram to filter each word
     wildcard_pos = 0;
@@ -172,6 +180,7 @@ Status BuiltinInvertedIndexIterator::_wildcard_query(const Slice* search_query, 
         return true;
     };
 
+    SCOPED_RAW_TIMER(&_stats->gin_filter_dict_ns);
     ASSIGN_OR_RETURN(const auto hit_rowids, _bitmap_itr->filter_dict_by_predicate(&filtered_key_words, predicate));
     return _bitmap_itr->read_union_bitmap(hit_rowids, bit_map);
 }
