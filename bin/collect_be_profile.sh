@@ -30,6 +30,7 @@ CLEANUP_DAYS=$DEFAULT_CLEANUP_DAYS
 CLEANUP_SIZE=$DEFAULT_CLEANUP_SIZE
 DAEMON_MODE=false
 INTERVAL=$DEFAULT_INTERVAL
+INTERVAL_SET_BY_USER=false  # Track if interval was set via command line
 PID_FILE=""
 LOG_FILE="/tmp/collect_be_profile.log"  # Default log file, will be updated in read_config
 PROFILING_TYPE="cpu"  # Default profiling type
@@ -136,6 +137,16 @@ read_config() {
                 BRPC_PORT=$port
             fi
         fi
+        
+        # Read collect_be_profile_interval if not set by user
+        # Support both lowercase and uppercase formats
+        if [ "$INTERVAL_SET_BY_USER" != true ]; then
+            local interval=$(grep -i "^collect_be_profile_interval" "$be_conf" | cut -d'=' -f2 | tr -d ' ' | tr -d '"' | head -n 1)
+            if [ -n "$interval" ] && [ "$interval" -gt 0 ] 2>/dev/null; then
+                INTERVAL=$interval
+                log "Using collect_be_profile_interval from be.conf: $INTERVAL seconds"
+            fi
+        fi
     else
         if [ -z "$OUTPUT_DIR" ]; then
             OUTPUT_DIR="$STARROCKS_HOME/log"
@@ -153,6 +164,7 @@ read_config() {
     # Log configuration values
     log "BRPC_PORT: $BRPC_PORT"
     log "OUTPUT_DIR: $OUTPUT_DIR"
+    log "Collection interval: $INTERVAL seconds"
 }
 
 # Create output directory
@@ -395,6 +407,7 @@ parse_args() {
                 ;;
             --interval)
                 INTERVAL="$2"
+                INTERVAL_SET_BY_USER=true
                 shift 2
                 ;;
             --help)
