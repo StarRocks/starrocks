@@ -160,8 +160,8 @@ Status DefaultValueColumnIterator::fetch_values_by_rowid(const rowid_t* rowids, 
 
 Status DefaultValueColumnIterator::get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
                                                               const ColumnPredicate* del_predicate,
-                                                              SparseRange<>* row_ranges,
-                                                              CompoundNodeType pred_relation) {
+                                                              SparseRange<>* row_ranges, CompoundNodeType pred_relation,
+                                                              const SparseRange<>& scan_range) {
     DCHECK(row_ranges->empty());
     // TODO
     row_ranges->add({0, static_cast<rowid_t>(_num_rows)});

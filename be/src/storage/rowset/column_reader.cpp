@@ -607,16 +607,16 @@ Status ColumnReader::zone_map_filter(const std::vector<const ColumnPredicate*>& 
                                      const ColumnPredicate* del_predicate,
                                      std::unordered_set<uint32_t>* del_partial_filtered_pages,
                                      SparseRange<>* row_ranges, const IndexReadOptions& opts,
-                                     CompoundNodeType pred_relation) {
+                                     CompoundNodeType pred_relation, const SparseRange<>& scan_range) {
     RETURN_IF_ERROR(_load_zonemap_index(opts));
 
     std::vector<uint32_t> page_indexes;
     if (pred_relation == CompoundNodeType::AND) {
         RETURN_IF_ERROR(_zone_map_filter<CompoundNodeType::AND>(predicates, del_predicate, del_partial_filtered_pages,
-                                                                &page_indexes));
+                                                                &page_indexes, scan_range));
     } else {
         RETURN_IF_ERROR(_zone_map_filter<CompoundNodeType::OR>(predicates, del_predicate, del_partial_filtered_pages,
-                                                               &page_indexes));
+                                                               &page_indexes, scan_range));
     }
 
     RETURN_IF_ERROR(_calculate_row_ranges(page_indexes, row_ranges));
@@ -645,7 +645,7 @@ template <CompoundNodeType PredRelation>
 Status ColumnReader::_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
                                       const ColumnPredicate* del_predicate,
                                       std::unordered_set<uint32_t>* del_partial_filtered_pages,
-                                      std::vector<uint32_t>* pages) {
+                                      std::vector<uint32_t>* pages, const SparseRange<>& scan_range) {
     const ColumnPredicate* predicate;
     if (!predicates.empty()) {
         predicate = predicates[0];
@@ -666,8 +666,24 @@ Status ColumnReader::_zone_map_filter(const std::vector<const ColumnPredicate*>&
     };
 
     const std::vector<ZoneMapPB>& zone_maps = _zonemap_index->page_zone_maps();
-    int32_t page_size = _zonemap_index->num_pages();
-    for (int32_t i = 0; i < page_size; ++i) {
+    int32_t page_start = 0;
+    int32_t page_end = _zonemap_index->num_pages();
+
+    // Skip pages that are completely outside the scan range to reduce filtering overhead
+    if (!scan_range.empty() && scan_range.is_sorted()) {
+        auto ordinal_iter = _ordinal_index->seek_at_or_before(scan_range.begin());
+        if (ordinal_iter.valid()) {
+            page_start = ordinal_iter.page_index();
+            for (; ordinal_iter.valid(); ordinal_iter.next()) {
+                if (ordinal_iter.last_ordinal() > scan_range.end()) {
+                    break;
+                }
+                page_end = ordinal_iter.page_index() + 1;
+            }
+        }
+    }
+
+    for (int32_t i = page_start; i < page_end; ++i) {
         const ZoneMapPB& zm = zone_maps[i];
         ZoneMapDetail detail;
         RETURN_IF_ERROR(_parse_zone_map(lt, zm, &detail));
