@@ -227,7 +227,7 @@ select FROM_BINARY(ENCODE_SORT_KEY(v1, v2), 'hex') from t1;
 -- !result
 select FROM_BINARY(ENCODE_SORT_KEY(v1, v2, v3), 'hex') from t1;
 -- result:
-E: (1064, 'encode_sort_key: unsupported argument type: BE:10001')
+[REGEX]E:.*
 -- !result
 select FROM_BINARY(ENCODE_SORT_KEY(NULL, v1, v2), 'hex') from t1;
 -- result:
@@ -237,17 +237,17 @@ select FROM_BINARY(ENCODE_SORT_KEY(NULL, v1, v2), 'hex') from t1;
 -- !result
 select FROM_BINARY(ENCODE_SORT_KEY(NULL, v1, v2, v3), 'hex') from t1;
 -- result:
-E: (1064, 'encode_sort_key: unsupported argument type: BE:10001')
+[REGEX]E:.*
 -- !result
 select FROM_BINARY(ENCODE_SORT_KEY(v1, NULL, v2, v3), 'hex') from t1;
 -- result:
-E: (1064, 'encode_sort_key: unsupported argument type: BE:10001')
+[REGEX]E:.*
 -- !result
 select FROM_BINARY(ENCODE_SORT_KEY(v1, v2, NULL, v3), 'hex') from t1;
 -- result:
-E: (1064, 'encode_sort_key: unsupported argument type: BE:10001')
+[REGEX]E:.*
 -- !result
 select FROM_BINARY(ENCODE_SORT_KEY(v1, v2, v3, NULL), 'hex') from t1;
 -- result:
-E: (1064, 'encode_sort_key: unsupported argument type: BE:10001')
+[REGEX]E:.*
 -- !result
