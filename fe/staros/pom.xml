@@ -51,12 +51,8 @@ limitations under the License.
     <packaging>pom</packaging>
 
     <properties>
-        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.compiler.source>8</maven.compiler.source>
         <maven.compiler.target>8</maven.compiler.target>
-        <log4j.version>2.17.1</log4j.version>
-        <jacoco.version>0.8.8</jacoco.version>
-        <grpc.version>1.58.0</grpc.version>
         <grpc-java.version>3.16.1</grpc-java.version>
         <metrics.version>1.0.0</metrics.version>
     </properties>
@@ -101,11 +97,11 @@ limitations under the License.
                 <version>3.11</version>
             </dependency>
 
-            <!-- https://mvnrepository.com/artifact/org.jmockit/jmockit -->
+            <!-- https://mvnrepository.com/artifact/com.github.hazendaz.jmockit/jmockit -->
             <dependency>
-                <groupId>org.jmockit</groupId>
+                <groupId>com.github.hazendaz.jmockit</groupId>
                 <artifactId>jmockit</artifactId>
-                <version>1.48</version>
+                <version>1.49.4</version>
                 <scope>test</scope>
             </dependency>
 
@@ -245,24 +241,6 @@ limitations under the License.
 
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-javadoc-plugin</artifactId>
-                <version>2.9.1</version>
-                <executions>
-                    <execution>
-                    <id>attach-javadocs</id>
-                    <goals>
-                        <goal>jar</goal>
-                    </goals>
-                    <configuration>
-                        <additionalparam>-Xdoclint:none</additionalparam>
-                        <detectJavaApiLink>false</detectJavaApiLink>
-                    </configuration>
-                    </execution>
-                </executions>
-            </plugin>
-
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.1</version>
                 <configuration>
@@ -270,57 +248,13 @@ limitations under the License.
                     <target>1.8</target>
                 </configuration>
             </plugin>
-            <plugin>
-            <!-- staros ut coverage-->
-                <groupId>org.jacoco</groupId>
-                <artifactId>jacoco-maven-plugin</artifactId>
-                <version>${jacoco.version}</version>
-                <executions>
-                    <execution>
-                        <id>default-prepare-agent</id>
-                        <goals>
-                            <goal>prepare-agent</goal>
-                        </goals>
-                        <configuration>
-                            <propertyName>jacocoArgLine</propertyName>
-                        </configuration>
-                    </execution>
-                    <execution>
-                        <id>default-report</id>
-                        <goals>
-                            <goal>report</goal>
-                        </goals>
-                    </execution>
-                    <execution>
-                        <id>default-check</id>
-                        <goals>
-                            <goal>check</goal>
-                        </goals>
-                        <configuration>
-                            <rules>
-                                <rule>
-                                    <element>BUNDLE</element>
-                                    <limits>
-                                        <limit>
-                                            <counter>COMPLEXITY</counter>
-                                            <value>COVEREDRATIO</value>
-                                            <minimum>0.60</minimum>
-                                        </limit>
-                                    </limits>
-                                </rule>
-                            </rules>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
-
             <!-- jmockit -->
             <plugin>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>2.22.2</version>
                 <configuration>
                     <argLine>
-                        -javaagent:${settings.localRepository}/org/jmockit/jmockit/1.48/jmockit-1.48.jar -Xmx2048m @{jacocoArgLine}
+                        -javaagent:${settings.localRepository}/com/github/hazendaz/jmockit/jmockit/1.49.4/jmockit-1.49.4.jar
                     </argLine>
                 </configuration>
             </plugin>

@@ -76,9 +76,8 @@ limitations under the License.
             <version>2.13.4.2</version>
         </dependency>
 
-        <!-- https://mvnrepository.com/artifact/org.jmockit/jmockit -->
         <dependency>
-            <groupId>org.jmockit</groupId>
+            <groupId>com.github.hazendaz.jmockit</groupId>
             <artifactId>jmockit</artifactId>
             <scope>test</scope>
         </dependency>
