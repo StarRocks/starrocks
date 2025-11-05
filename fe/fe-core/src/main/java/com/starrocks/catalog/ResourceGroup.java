@@ -23,6 +23,8 @@ import com.starrocks.thrift.TWorkGroup;
 import com.starrocks.thrift.TWorkGroupType;
 import com.starrocks.type.ScalarType;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.text.DecimalFormat;
 import java.util.Collections;
 import java.util.List;
@@ -99,7 +101,13 @@ public class ResourceGroup {
                     (rg, classifier) -> "" + rg.getNormalizedExclusiveCpuCores()),
             new ColumnMeta(
                     new Column(MEM_LIMIT, ScalarType.createVarchar(200)),
-                    (rg, classifier) -> (rg.getMemLimit() * 100) + "%"),
+                    (rg, classifier) -> {
+                        // Avoid double pression issue
+                        BigDecimal memLimit = BigDecimal.valueOf(rg.getMemLimit())
+                                .multiply(BigDecimal.valueOf(100))
+                                .setScale(2, RoundingMode.HALF_UP);
+                        return memLimit.toPlainString() + "%";
+                    }),
             new ColumnMeta(
                     new Column(MAX_CPU_CORES, ScalarType.createVarchar(200)),
                     (rg, classifier) -> "" + rg.getMaxCpuCores(), false),
