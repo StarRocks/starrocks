@@ -63,7 +63,7 @@ public class MetricRepoTest extends PlanTestBase {
 
         // verify metric
         JsonMetricVisitor visitor = new JsonMetricVisitor("m");
-        MetricsAction.RequestParams params = new MetricsAction.RequestParams(true, true, true, true);
+        MetricsAction.RequestParams params = new MetricsAction.RequestParams(true, true, true, true, true);
         MetricRepo.getMetric(visitor, params);
         String json = visitor.build();
         Assert.assertTrue(StringUtils.isNotEmpty(json));
@@ -139,5 +139,100 @@ public class MetricRepoTest extends PlanTestBase {
             Assert.assertTrue(line, line.contains("is_leader=\"true\""));
         }
 
+<<<<<<< HEAD
+=======
+        List<Metric> scheduledRunningTabletNums = MetricRepo.getMetricsByName("scheduled_running_tablet_num");
+        Assertions.assertEquals(2, scheduledRunningTabletNums.size());
+        for (Metric metric : scheduledRunningTabletNums) {
+            // label 0 is is_leader
+            MetricLabel label = (MetricLabel) metric.getLabels().get(1);
+            String type = label.getValue();
+            if (type.equals("REPAIR")) {
+                Assertions.assertEquals(1L, metric.getValue());
+            } else if (type.equals("BALANCE")) {
+                Assertions.assertEquals(0L, metric.getValue());
+            } else {
+                Assertions.fail("Unknown type: " + type);
+            }
+        }
+
+        List<Metric> cloneTaskTotal = MetricRepo.getMetricsByName("clone_task_total");
+        Assertions.assertEquals(1, cloneTaskTotal.size());
+        Assertions.assertEquals(1L, (Long) cloneTaskTotal.get(0).getValue());
+
+        List<Metric> cloneTaskSuccess = MetricRepo.getMetricsByName("clone_task_success");
+        Assertions.assertEquals(1, cloneTaskSuccess.size());
+        Assertions.assertEquals(1L, (Long) cloneTaskSuccess.get(0).getValue());
+
+        List<Metric> cloneTaskCopyBytes = MetricRepo.getMetricsByName("clone_task_copy_bytes");
+        Assertions.assertEquals(2, cloneTaskCopyBytes.size());
+        for (Metric metric : cloneTaskCopyBytes) {
+            // label 0 is is_leader
+            MetricLabel label0 = (MetricLabel) metric.getLabels().get(0);
+            Assertions.assertEquals("is_leader", label0.getKey());
+            Assertions.assertEquals("true", label0.getValue());
+
+            MetricLabel label1 = (MetricLabel) metric.getLabels().get(1);
+            String type = label1.getValue();
+            if (type.equals("INTER_NODE")) {
+                Assertions.assertEquals(100L, metric.getValue());
+            } else if (type.equals("INTRA_NODE")) {
+                Assertions.assertEquals(101L, metric.getValue());
+            } else {
+                Assertions.fail("Unknown type: " + type);
+            }
+        }
+
+        List<Metric> cloneTaskCopyDurationMs = MetricRepo.getMetricsByName("clone_task_copy_duration_ms");
+        Assertions.assertEquals(2, cloneTaskCopyDurationMs.size());
+        for (Metric metric : cloneTaskCopyDurationMs) {
+            // label 0 is is_leader
+            MetricLabel label0 = (MetricLabel) metric.getLabels().get(0);
+            Assertions.assertEquals("is_leader", label0.getKey());
+            Assertions.assertEquals("true", label0.getValue());
+
+            MetricLabel label1 = (MetricLabel) metric.getLabels().get(1);
+            String type = label1.getValue();
+            if (type.equals("INTER_NODE")) {
+                Assertions.assertEquals(10L, metric.getValue());
+            } else if (type.equals("INTRA_NODE")) {
+                Assertions.assertEquals(11L, metric.getValue());
+            } else {
+                Assertions.fail("Unknown type: " + type);
+            }
+        }
+    }
+
+    @Test
+    public void testRoutineLoadLagTimeMetricsCollection() {
+        // Test that routine load lag time metrics are collected when config is enabled
+        boolean originalConfigValue = Config.enable_routine_load_lag_time_metrics;
+        try {
+            // Test case 1: Config enabled - should collect metrics
+            Config.enable_routine_load_lag_time_metrics = true;
+            
+            JsonMetricVisitor visitor = new JsonMetricVisitor("test");
+            MetricsAction.RequestParams params = new MetricsAction.RequestParams(true, true, true, true, true);
+            
+            // This should execute line 914 and call RoutineLoadLagTimeMetricMgr.getInstance().collectRoutineLoadLagTimeMetrics(visitor)
+            String result = MetricRepo.getMetric(visitor, params);
+            
+            // Verify that the method completed successfully (no exceptions thrown)
+            Assertions.assertNotNull(result);
+            
+            // Test case 2: Config disabled - should skip metrics collection
+            Config.enable_routine_load_lag_time_metrics = false;
+            
+            JsonMetricVisitor visitor2 = new JsonMetricVisitor("test2");
+            String result2 = MetricRepo.getMetric(visitor2, params);
+            
+            // Verify that the method completed successfully even when config is disabled
+            Assertions.assertNotNull(result2);
+            
+        } finally {
+            // Restore original config value
+            Config.enable_routine_load_lag_time_metrics = originalConfigValue;
+        }
+>>>>>>> 61152317b8 ([Enhancement]Enable auth for metric about connection of per user (#64635))
     }
 }
