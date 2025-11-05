@@ -1604,6 +1604,11 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
     const bool scan_range_normalized = _scan_range.is_sorted();
     const int64_t prev_raw_rows_read = _opts.stats->raw_rows_read;
 
+    if (UNLIKELY(_context->_read_chunk == nullptr || _context->_dict_chunk == nullptr ||
+                 _context->_final_chunk == nullptr || _context->_adapt_global_dict_chunk == nullptr)) {
+        return Status::InternalError("One or more chunk pointers are null in _do_get_next");
+    }
+
     _context->_read_chunk->reset();
     _context->_dict_chunk->reset();
     _context->_final_chunk->reset();
@@ -1757,6 +1762,11 @@ Status SegmentIterator::_switch_context(ScanContext* to) {
             to->_dict_chunk = ChunkHelper::new_chunk(to->_dict_decode_schema, _reserve_chunk_size);
         }
     } else {
+        // When there are no dict columns, _dict_chunk points to the same chunk as _read_chunk
+        // Ensure _read_chunk is valid before aliasing
+        if (UNLIKELY(to->_read_chunk == nullptr)) {
+            return Status::InternalError("read_chunk is null when trying to initialize dict_chunk");
+        }
         to->_dict_chunk = to->_read_chunk;
     }
 
@@ -2222,6 +2232,10 @@ Status SegmentIterator::_check_low_cardinality_optimization() {
 Status SegmentIterator::_finish_late_materialization(ScanContext* ctx) {
     const size_t m = ctx->_read_schema.num_fields();
 
+    if (UNLIKELY(ctx->_dict_chunk == nullptr)) {
+        return Status::InternalError("dict_chunk is null in _finish_late_materialization");
+    }
+
     bool may_has_del_row = ctx->_dict_chunk->delete_state() != DEL_NOT_SATISFIED;
 
     // last column of |_dict_chunk| is a fake column: it's filled by `RowIdColumnIterator`.
@@ -2261,6 +2275,9 @@ Status SegmentIterator::_finish_late_materialization(ScanContext* ctx) {
 
 void SegmentIterator::_build_final_chunk(ScanContext* ctx) {
     // trim all use less columns
+    if (UNLIKELY(ctx->_dict_chunk == nullptr)) {
+        return;
+    }
     Columns& input_columns = ctx->_dict_chunk->columns();
     for (size_t i = 0; i < ctx->_read_index_map.size(); i++) {
         ctx->_final_chunk->get_column_by_index(i).swap(input_columns[ctx->_read_index_map[i]]);
