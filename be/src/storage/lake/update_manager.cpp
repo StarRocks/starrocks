@@ -615,7 +615,6 @@ Status UpdateManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_writ
             size_t batch_end = std::min(batch_start + batch_size, insert_rowids.size());
             std::vector<uint32_t> batch_insert_rowids(insert_rowids.begin() + batch_start,
                                                       insert_rowids.begin() + batch_end);
-
             ChunkPtr full_chunk;
             RETURN_IF_ERROR(_read_chunk_for_upsert(op_write, tschema, tablet, fs, seg, batch_insert_rowids, update_cids,
                                                    &full_chunk));
