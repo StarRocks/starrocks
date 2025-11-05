@@ -47,9 +47,6 @@ import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
@@ -323,64 +320,6 @@ public class DateLiteral extends LiteralExpr {
     public java.time.LocalDateTime toLocalDateTime() {
         return java.time.LocalDateTime.of((int) year, (int) month, (int) day, (int) hour, (int) minute, (int) second,
                 (int) microsecond * 1000);
-    }
-
-    private long makePackedDatetime() {
-        long ymd = ((year * 13 + month) << 5) | day;
-        long hms = (hour << 12) | (minute << 6) | second;
-        return ((ymd << 17) | hms) << 24 + microsecond;
-    }
-
-    @Override
-    public void write(DataOutput out) throws IOException {
-        super.write(out);
-        // set flag bit in meta, 0 is DATETIME and 1 is DATE
-        if (this.type.isDatetime()) {
-            out.writeShort(DateLiteralType.DATETIME.value());
-        } else if (this.type.isDate()) {
-            out.writeShort(DateLiteralType.DATE.value());
-        } else {
-            throw new IOException("Error date literal type : " + type);
-        }
-        out.writeLong(makePackedDatetime());
-    }
-
-    private void fromPackedDatetime(long packedTime) {
-        microsecond = (packedTime % (1L << 24));
-        long ymdhms = (packedTime >> 24);
-        long ymd = ymdhms >> 17;
-        long hms = ymdhms % (1 << 17);
-
-        day = ymd % (1 << 5);
-        long ym = ymd >> 5;
-        month = ym % 13;
-        year = ym / 13;
-        year %= 10000;
-        second = hms % (1 << 6);
-        minute = (hms >> 6) % (1 << 6);
-        hour = (hms >> 12);
-        // set default date literal type to DATETIME
-        // date literal read from meta will set type by flag bit;
-        this.type = DateType.DATETIME;
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-        short dateLiteralType = in.readShort();
-        fromPackedDatetime(in.readLong());
-        if (dateLiteralType == DateLiteralType.DATETIME.value()) {
-            this.type = DateType.DATETIME;
-        } else if (dateLiteralType == DateLiteralType.DATE.value()) {
-            this.type = DateType.DATE;
-        } else {
-            throw new IOException("Error date literal type : " + type);
-        }
-    }
-
-    public static DateLiteral read(DataInput in) throws IOException {
-        DateLiteral literal = new DateLiteral();
-        literal.readFields(in);
-        return literal;
     }
 
     public long unixTimestamp(TimeZone timeZone) {

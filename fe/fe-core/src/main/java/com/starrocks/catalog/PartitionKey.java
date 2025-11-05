@@ -38,8 +38,6 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.io.Text;
-import com.starrocks.common.io.Writable;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.sql.ast.expression.ExprToSql;
@@ -57,9 +55,6 @@ import com.starrocks.type.TypeFactory;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.math.BigInteger;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -68,7 +63,7 @@ import java.util.Calendar;
 import java.util.List;
 import java.util.Objects;
 
-public class PartitionKey implements Comparable<PartitionKey>, Writable {
+public class PartitionKey implements Comparable<PartitionKey> {
     private static final Logger LOG = LogManager.getLogger(PartitionKey.class);
     private List<LiteralExpr> keys;
     private List<PrimitiveType> types;
@@ -497,70 +492,6 @@ public class PartitionKey implements Comparable<PartitionKey>, Writable {
             }
         }
         return Math.max(higher, 0);
-    }
-
-    @Override
-    public void write(DataOutput out) throws IOException {
-        int count = keys.size();
-        if (count != types.size()) {
-            throw new IOException("Size of keys and types are not equal");
-        }
-
-        out.writeInt(count);
-        for (int i = 0; i < count; i++) {
-            PrimitiveType type = types.get(i);
-            Text.writeString(out, type.toString());
-            if (keys.get(i) == MaxLiteral.MAX_VALUE) {
-                out.writeBoolean(true);
-            } else {
-                out.writeBoolean(false);
-                keys.get(i).write(out);
-            }
-        }
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        int count = in.readInt();
-        for (int i = 0; i < count; i++) {
-            PrimitiveType type = PrimitiveType.valueOf(Text.readString(in));
-            types.add(type);
-
-            LiteralExpr literal = null;
-            boolean isMax = in.readBoolean();
-            if (isMax) {
-                literal = MaxLiteral.MAX_VALUE;
-            } else {
-                switch (type) {
-                    case TINYINT:
-                    case SMALLINT:
-                    case INT:
-                    case BIGINT:
-                        literal = IntLiteral.read(in);
-                        break;
-                    case LARGEINT:
-                        literal = LargeIntLiteral.read(in);
-                        break;
-                    case DATE:
-                    case DATETIME:
-                        literal = DateLiteral.read(in);
-                        break;
-                    case CHAR:
-                    case VARCHAR:
-                        literal =  StringLiteral.read(in);
-                        break;
-                    default:
-                        throw new IOException("type[" + type.name() + "] not supported: ");
-                }
-            }
-            literal.setType(TypeFactory.createType(type));
-            keys.add(literal);
-        }
-    }
-
-    public static PartitionKey read(DataInput in) throws IOException {
-        PartitionKey key = new PartitionKey();
-        key.readFields(in);
-        return key;
     }
 
     @Override
