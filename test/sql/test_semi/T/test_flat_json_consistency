@@ -93,5 +93,34 @@ insert into test_json_cast_map values
 select * from test_json_cast_map order by c1;
 select flat_json_meta(c2) from test_json_cast_map [_META_];
 
+-- Test 9: inconsistent intermediate node
+DROP TABLE test_json_cast_map;
+CREATE TABLE test_json_cast_map (c1 int, c2 json) 
+DISTRIBUTED BY HASH(c1) BUCKETS 1;
+
+insert into test_json_cast_map values
+(1, '{"level1": {"level2": {"level3": {"level4": {"5":"abc"}}}}}'),
+(4, '{"level1": {"level2": {"level3": {"4":null}}}}'),
+(7, '{"level1": {"level2": {"level3": "abc"}}}');
+
+select * from test_json_cast_map order by c1;
+select flat_json_meta(c2) from test_json_cast_map [_META_];
+
+-- Test 10: inconsistent intermediate node
+drop table test_json_cast_map;
+CREATE TABLE test_json_cast_map (c1 int, c2 json) 
+DISTRIBUTED BY RANDOM BUCKETS 3;
+
+insert into test_json_cast_map values
+(1, '{"level1": {"level2": {"level3": {"level4": {"5":"abc"}}}}}'),
+(2, '{"level1": {"level2": {"level3": {"4":23234982794}}}}'),
+(3, '{"level1": {"level2": {"level3": {"4":true}}}}'),
+(4, '{"level1": {"level2": {"level3": {"4":null}}}}'),
+(5, '{"level1": {"level2": {"level3": {"4":["abc", 100, 200]}}}}'),
+(6, '{"level1": {"level2": {"level3": {"4":{"5": "abc"}}}}}'),
+(7, '{"level1": {"level2": {"level3": "abc"}}}'),
+(8, '{"100": {"200": {"300": {"500":"abc"}}}}'),
+(9, '{"100": {"200": {"300": "abc"}}}');
+
 
 drop table test_json_cast_map;
