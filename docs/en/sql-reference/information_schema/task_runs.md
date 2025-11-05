@@ -22,11 +22,6 @@ The following fields are provided in `task_runs`:
 | ERROR_MESSAGE | Error message of the task.                                   |
 | PROGRESS      | The progress of the task.                                    |
 | EXTRA_MESSAGE | Extra message for the task, for example, the partition information in an asynchronous materialized view creation task. |
-<<<<<<< HEAD
-=======
-| PROPERTIES    | Properties of the task.                                      |
-| JOB_ID        | Job ID of the task.                                          |
-| PROCESS_TIME  | Process time of the task.                                    |
 
 A task run record is produced by either [SUBMIT TASK](../sql-statements/loading_unloading/ETL/SUBMIT_TASK.md) or [CREATE MATRIALIZED VIEW](../sql-statements/materialized_view/CREATE_MATERIALIZED_VIEW.md).
 
@@ -37,4 +32,3 @@ A materialized view operation may generate multi task runs, and each task run re
 ## `EXTRA_MESSAGE`
 
 For a materialized view task run, `EXTRA_MESSAGE` field will contain the materialized view task run's detail messages, you can find more details in [materialized_view_task_run_details](../../using_starrocks/async_mv/materialized_view_task_run_details.md).
->>>>>>> 1476abffaa ([Doc] Add materialized view task run details doc (#64550))
