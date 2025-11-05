@@ -255,6 +255,7 @@ if [ ! -f $PATCHED_MARK ] && [ $GLOG_SOURCE == "glog-0.7.1" ]; then
     patch -p1 < $TP_PATCH_DIR/glog-0.7.1.patch
     patch -p1 < $TP_PATCH_DIR/glog-0.7.1-add-handler-after-output-log.patch
     patch -p1 < $TP_PATCH_DIR/glog-0.7.1-lwp.patch
+    patch -p0 < $TP_PATCH_DIR/glog-0.7.1-no-hidden.patch
     touch $PATCHED_MARK
 fi
 cd -
@@ -564,6 +565,7 @@ if [[ -d $TP_SOURCE_DIR/$CLUCENE_SOURCE ]] ; then
     cd $TP_SOURCE_DIR/$CLUCENE_SOURCE
     if [ ! -f "$PATCHED_MARK" ] ; then
         patch -p1 < "$TP_PATCH_DIR/clucene-gcc14.patch"
+        patch -p0 < "$TP_PATCH_DIR/clucene-no-hidden.patch"
         touch "$PATCHED_MARK"
     fi
     cd -
