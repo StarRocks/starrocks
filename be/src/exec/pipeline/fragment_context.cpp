@@ -461,7 +461,7 @@ void FragmentContext::add_timer_observer(PipelineObserver* observer, uint64_t ti
     if (auto iter = _rf_timeout_tasks.find(timeout); iter != _rf_timeout_tasks.end()) {
         task = down_cast<RFScanWaitTimeout*>(iter->second);
     } else {
-        task = new RFScanWaitTimeout(this);
+        task = new RFScanWaitTimeout();
         _rf_timeout_tasks.emplace(timeout, task);
     }
     task->add_observer(_runtime_state.get(), observer);

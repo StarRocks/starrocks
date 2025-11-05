@@ -483,7 +483,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
                     .build(&load_segment_pool));
     _load_segment_thread_pool = load_segment_pool.release();
 
-    _broker_mgr = new BrokerMgr(this);
+    _broker_mgr = new BrokerMgr();
 
     RETURN_IF_ERROR(ThreadPoolBuilder("put_combined_txn_log_thread_pool")
                             .set_min_threads(0)
