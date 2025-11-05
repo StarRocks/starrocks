@@ -22,7 +22,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.StringLiteral;
-import com.starrocks.type.Type;
+import com.starrocks.type.StandardTypes;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -37,11 +37,11 @@ public class PartitionUtilsTest {
     @Test
     public void testConvertDateLiteralToDouble() throws Exception {
         Object result = PartitionUtils.convertDateLiteralToNumber(
-                new DateLiteral("2015-03-01", Type.DATE));
+                new DateLiteral("2015-03-01", StandardTypes.DATE));
         assertEquals(1031777L, result);
 
         result = PartitionUtils.convertDateLiteralToNumber(
-                new DateLiteral("2015-03-01 12:00:00", Type.DATETIME));
+                new DateLiteral("2015-03-01 12:00:00", StandardTypes.DATETIME));
         assertEquals(20150301120000L, result);
     }
 
@@ -50,7 +50,7 @@ public class PartitionUtilsTest {
         List<Partition> partitions = Lists.newArrayList();
         MaterializedIndex materializedIndex = new MaterializedIndex();
         HashDistributionInfo distributionInfo =
-                new HashDistributionInfo(1, Lists.newArrayList(new Column("id", Type.BIGINT)));
+                new HashDistributionInfo(1, Lists.newArrayList(new Column("id", StandardTypes.BIGINT)));
 
         Partition p1 = new Partition(10001L, 10002L, "p1", materializedIndex, distributionInfo);
         partitions.add(p1);
@@ -67,8 +67,8 @@ public class PartitionUtilsTest {
         {
             List<List<LiteralExpr>> multiLiteralExprs = new ArrayList<>();
             multiLiteralExprs.add(Lists.newArrayList(
-                    DateLiteral.create("2024-10-09", Type.DATE),
-                    DateLiteral.create("2024-10-10", Type.DATE)
+                    DateLiteral.create("2024-10-09", StandardTypes.DATE),
+                    DateLiteral.create("2024-10-10", StandardTypes.DATE)
             ));
             multiLiteralExprs.add(Lists.newArrayList(
                     StringLiteral.create("hangzhou"),
@@ -83,8 +83,8 @@ public class PartitionUtilsTest {
 
         {
             List<LiteralExpr> literalExprs = Lists.newArrayList(
-                    DateLiteral.create("2024-10-09", Type.DATE),
-                    DateLiteral.create("2024-10-10", Type.DATE)
+                    DateLiteral.create("2024-10-09", StandardTypes.DATE),
+                    DateLiteral.create("2024-10-10", StandardTypes.DATE)
             );
 
             List<List<Object>> partitionKeys = PartitionUtils.calListPartitionKeys(null, literalExprs);

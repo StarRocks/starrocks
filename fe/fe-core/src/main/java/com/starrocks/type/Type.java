@@ -85,135 +85,55 @@ public abstract class Type implements Cloneable {
     // performance tests.
     public static int MAX_NESTING_DEPTH = 15;
 
-
-
-    // Static constant types for scalar types that don't require additional information.
-    public static final ScalarType INVALID = new ScalarType(PrimitiveType.INVALID_TYPE);
-    public static final ScalarType NULL = new ScalarType(PrimitiveType.NULL_TYPE);
-    public static final ScalarType BOOLEAN = new ScalarType(PrimitiveType.BOOLEAN);
-    public static final ScalarType TINYINT = new ScalarType(PrimitiveType.TINYINT);
-    public static final ScalarType SMALLINT = new ScalarType(PrimitiveType.SMALLINT);
-    public static final ScalarType INT = new ScalarType(PrimitiveType.INT);
-    public static final ScalarType BIGINT = new ScalarType(PrimitiveType.BIGINT);
-    public static final ScalarType LARGEINT = new ScalarType(PrimitiveType.LARGEINT);
-    public static final ScalarType FLOAT = new ScalarType(PrimitiveType.FLOAT);
-    public static final ScalarType DOUBLE = new ScalarType(PrimitiveType.DOUBLE);
-    public static final ScalarType DATE = new ScalarType(PrimitiveType.DATE);
-    public static final ScalarType DATETIME = new ScalarType(PrimitiveType.DATETIME);
-    public static final ScalarType TIME = new ScalarType(PrimitiveType.TIME);
-    public static final ScalarType DEFAULT_DECIMALV2 = TypeFactory.createDecimalV2Type(ScalarType.DEFAULT_PRECISION,
-            ScalarType.DEFAULT_SCALE);
-    public static final ScalarType DEFAULT_DECIMAL32 =
-            TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL32, 9, 3);
-    public static final ScalarType DEFAULT_DECIMAL64 =
-            TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 6);
-    public static final ScalarType DEFAULT_DECIMAL128 =
-            TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 9);
-    public static final ScalarType DEFAULT_DECIMAL256 =
-            TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL256, 76, 12);
-
-    public static final ScalarType DECIMALV2 = DEFAULT_DECIMALV2;
-
-    public static final ScalarType DECIMAL32 = TypeFactory.createWildcardDecimalV3Type(PrimitiveType.DECIMAL32);
-    public static final ScalarType DECIMAL64 = TypeFactory.createWildcardDecimalV3Type(PrimitiveType.DECIMAL64);
-    public static final ScalarType DECIMAL128 = TypeFactory.createWildcardDecimalV3Type(PrimitiveType.DECIMAL128);
-    public static final ScalarType DECIMAL256 = TypeFactory.createWildcardDecimalV3Type(PrimitiveType.DECIMAL256);
-
-    // DECIMAL64_INT and DECIMAL128_INT for integer casting to decimal
-    public static final ScalarType DECIMAL_ZERO =
-            TypeFactory.createDecimalV3TypeForZero(0);
-    public static final ScalarType DECIMAL32_INT =
-            TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 9, 0);
-    public static final ScalarType DECIMAL64_INT =
-            TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 0);
-    public static final ScalarType DECIMAL128_INT =
-            TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 0);
-
-    public static final ScalarType VARCHAR = TypeFactory.createVarcharType(-1);
-    public static final ScalarType STRING = TypeFactory.createVarcharType(TypeFactory.getOlapMaxVarcharLength());
-    public static final ScalarType DEFAULT_STRING = TypeFactory.createDefaultString();
-    public static final ScalarType HLL = TypeFactory.createHllType();
-    public static final ScalarType CHAR = TypeFactory.createCharType(-1);
-    public static final ScalarType BITMAP = new ScalarType(PrimitiveType.BITMAP);
-    public static final ScalarType PERCENTILE = new ScalarType(PrimitiveType.PERCENTILE);
-    public static final ScalarType JSON = new ScalarType(PrimitiveType.JSON);
-    public static final ScalarType VARIANT = new ScalarType(PrimitiveType.VARIANT);
-    public static final ScalarType UNKNOWN_TYPE = TypeFactory.createUnknownType();
-    public static final ScalarType FUNCTION = new ScalarType(PrimitiveType.FUNCTION);
-    public static final ScalarType VARBINARY = new ScalarType(PrimitiveType.VARBINARY);
-
-    public static final PseudoType ANY_ELEMENT = PseudoType.ANY_ELEMENT;
-    public static final PseudoType ANY_ARRAY = PseudoType.ANY_ARRAY;
-    public static final PseudoType ANY_MAP = PseudoType.ANY_MAP;
-    public static final PseudoType ANY_STRUCT = PseudoType.ANY_STRUCT;
-
-    public static final Type ARRAY_NULL = new ArrayType(Type.NULL);
-    public static final Type ARRAY_BOOLEAN = new ArrayType(Type.BOOLEAN);
-    public static final Type ARRAY_TINYINT = new ArrayType(Type.TINYINT);
-    public static final Type ARRAY_SMALLINT = new ArrayType(Type.SMALLINT);
-    public static final Type ARRAY_INT = new ArrayType(Type.INT);
-    public static final Type ARRAY_BIGINT = new ArrayType(Type.BIGINT);
-    public static final Type ARRAY_LARGEINT = new ArrayType(Type.LARGEINT);
-    public static final Type ARRAY_FLOAT = new ArrayType(Type.FLOAT);
-    public static final Type ARRAY_DOUBLE = new ArrayType(Type.DOUBLE);
-    public static final Type ARRAY_DECIMALV2 = new ArrayType(Type.DECIMALV2);
-    public static final Type ARRAY_DATE = new ArrayType(Type.DATE);
-    public static final Type ARRAY_DATETIME = new ArrayType(Type.DATETIME);
-    public static final Type ARRAY_VARCHAR = new ArrayType(Type.VARCHAR);
-    public static final Type ARRAY_JSON = new ArrayType(Type.JSON);
-    public static final Type ARRAY_DECIMAL32 = new ArrayType(Type.DECIMAL32);
-    public static final Type ARRAY_DECIMAL64 = new ArrayType(Type.DECIMAL64);
-    public static final Type ARRAY_DECIMAL128 = new ArrayType(Type.DECIMAL128);
-
-    public static final Type MAP_VARCHAR_VARCHAR = new MapType(Type.VARCHAR, Type.VARCHAR);
-
     public static final ImmutableList<ScalarType> INTEGER_TYPES =
-            ImmutableList.of(BOOLEAN, TINYINT, SMALLINT, INT, BIGINT, LARGEINT);
+            ImmutableList.of(StandardTypes.BOOLEAN, StandardTypes.TINYINT, StandardTypes.SMALLINT,
+                    StandardTypes.INT, StandardTypes.BIGINT, StandardTypes.LARGEINT);
 
     // TODO(lism): DOUBLE type should be the first because `registerBuiltinSumAggFunction` replies
     // the order to implicitly cast.
     public static final ImmutableList<ScalarType> FLOAT_TYPES =
-            ImmutableList.of(DOUBLE, FLOAT);
+            ImmutableList.of(StandardTypes.DOUBLE, StandardTypes.FLOAT);
 
     // NOTE: DECIMAL_TYPES not contain DECIMALV2
     public static final ImmutableList<ScalarType> DECIMAL_TYPES =
-            ImmutableList.of(DECIMAL32, DECIMAL64, DECIMAL128, DECIMAL256);
+            ImmutableList.of(StandardTypes.DECIMAL32, StandardTypes.DECIMAL64, StandardTypes.DECIMAL128,
+                    StandardTypes.DECIMAL256);
 
     public static final ImmutableList<ScalarType> DATE_TYPES =
-            ImmutableList.of(Type.DATE, Type.DATETIME);
+            ImmutableList.of(StandardTypes.DATE, StandardTypes.DATETIME);
     public static final ImmutableList<ScalarType> STRING_TYPES =
-            ImmutableList.of(Type.CHAR, Type.VARCHAR);
+            ImmutableList.of(StandardTypes.CHAR, StandardTypes.VARCHAR);
     private static final ImmutableList<ScalarType> NUMERIC_TYPES =
             ImmutableList.<ScalarType>builder()
                     .addAll(INTEGER_TYPES)
                     .addAll(FLOAT_TYPES)
-                    .add(DECIMALV2)
+                    .add(StandardTypes.DECIMALV2)
                     .addAll(DECIMAL_TYPES)
                     .build();
 
     protected static final ImmutableList<Type> SUPPORTED_TYPES =
             ImmutableList.<Type>builder()
-                    .add(NULL)
+                    .add(StandardTypes.NULL)
                     .addAll(INTEGER_TYPES)
                     .addAll(FLOAT_TYPES)
                     .addAll(DECIMAL_TYPES)
-                    .add(VARCHAR)
-                    .add(HLL)
-                    .add(BITMAP)
-                    .add(PERCENTILE)
-                    .add(CHAR)
-                    .add(DATE)
-                    .add(DATETIME)
-                    .add(DECIMALV2)
-                    .add(TIME)
-                    .add(ANY_ARRAY)
-                    .add(ANY_MAP)
-                    .add(ANY_STRUCT)
-                    .add(JSON)
-                    .add(VARIANT)
-                    .add(FUNCTION)
-                    .add(VARBINARY)
-                    .add(UNKNOWN_TYPE)
+                    .add(StandardTypes.VARCHAR)
+                    .add(StandardTypes.HLL)
+                    .add(StandardTypes.BITMAP)
+                    .add(StandardTypes.PERCENTILE)
+                    .add(StandardTypes.CHAR)
+                    .add(StandardTypes.DATE)
+                    .add(StandardTypes.DATETIME)
+                    .add(StandardTypes.DECIMALV2)
+                    .add(StandardTypes.TIME)
+                    .add(StandardTypes.ANY_ARRAY)
+                    .add(StandardTypes.ANY_MAP)
+                    .add(StandardTypes.ANY_STRUCT)
+                    .add(StandardTypes.JSON)
+                    .add(StandardTypes.VARIANT)
+                    .add(StandardTypes.FUNCTION)
+                    .add(StandardTypes.VARBINARY)
+                    .add(StandardTypes.UNKNOWN_TYPE)
                     .build();
 
     protected static final ImmutableList<Type> SUPPORT_SCALAR_TYPE_LIST =
@@ -221,10 +141,10 @@ public abstract class Type implements Cloneable {
 
     protected static final ImmutableSortedMap<String, ScalarType> STATIC_TYPE_MAP =
             ImmutableSortedMap.<String, ScalarType>orderedBy(String.CASE_INSENSITIVE_ORDER)
-                    .put("DECIMAL", Type.DEFAULT_DECIMALV2) // generic name for decimal
-                    .put("STRING", Type.DEFAULT_STRING)
-                    .put("INTEGER", Type.INT)
-                    .put("UNSIGNED", Type.INT)
+                    .put("DECIMAL", StandardTypes.DEFAULT_DECIMALV2) // generic name for decimal
+                    .put("STRING", StandardTypes.DEFAULT_STRING)
+                    .put("INTEGER", StandardTypes.INT)
+                    .put("UNSIGNED", StandardTypes.INT)
                     .putAll(SUPPORT_SCALAR_TYPE_LIST.stream()
                             .collect(Collectors.toMap(x -> x.getPrimitiveType().toString(), x -> (ScalarType) x)))
                     .build();
@@ -233,7 +153,7 @@ public abstract class Type implements Cloneable {
             ImmutableMap.<PrimitiveType, ScalarType>builder()
                     .putAll(SUPPORT_SCALAR_TYPE_LIST.stream()
                             .collect(Collectors.toMap(Type::getPrimitiveType, x -> (ScalarType) x)))
-                    .put(INVALID.getPrimitiveType(), INVALID)
+                    .put(StandardTypes.INVALID.getPrimitiveType(), StandardTypes.INVALID)
                     .build();
 
     public static List<ScalarType> getIntegerTypes() {
@@ -388,53 +308,53 @@ public abstract class Type implements Cloneable {
     public static Type fromPrimitiveType(PrimitiveType type) {
         switch (type) {
             case BOOLEAN:
-                return Type.BOOLEAN;
+                return StandardTypes.BOOLEAN;
             case TINYINT:
-                return Type.TINYINT;
+                return StandardTypes.TINYINT;
             case SMALLINT:
-                return Type.SMALLINT;
+                return StandardTypes.SMALLINT;
             case INT:
-                return Type.INT;
+                return StandardTypes.INT;
             case BIGINT:
-                return Type.BIGINT;
+                return StandardTypes.BIGINT;
             case LARGEINT:
-                return Type.LARGEINT;
+                return StandardTypes.LARGEINT;
             case FLOAT:
-                return Type.FLOAT;
+                return StandardTypes.FLOAT;
             case DOUBLE:
-                return Type.DOUBLE;
+                return StandardTypes.DOUBLE;
             case DATE:
-                return Type.DATE;
+                return StandardTypes.DATE;
             case DATETIME:
-                return Type.DATETIME;
+                return StandardTypes.DATETIME;
             case TIME:
-                return Type.TIME;
+                return StandardTypes.TIME;
             case DECIMALV2:
-                return Type.DECIMALV2;
+                return StandardTypes.DECIMALV2;
             case CHAR:
-                return Type.CHAR;
+                return StandardTypes.CHAR;
             case VARCHAR:
-                return Type.VARCHAR;
+                return StandardTypes.VARCHAR;
             case HLL:
-                return Type.HLL;
+                return StandardTypes.HLL;
             case BITMAP:
-                return Type.BITMAP;
+                return StandardTypes.BITMAP;
             case PERCENTILE:
-                return Type.PERCENTILE;
+                return StandardTypes.PERCENTILE;
             case DECIMAL32:
-                return Type.DECIMAL32;
+                return StandardTypes.DECIMAL32;
             case DECIMAL64:
-                return Type.DECIMAL64;
+                return StandardTypes.DECIMAL64;
             case DECIMAL128:
-                return Type.DECIMAL128;
+                return StandardTypes.DECIMAL128;
             case DECIMAL256:
-                return Type.DECIMAL256;
+                return StandardTypes.DECIMAL256;
             case JSON:
-                return Type.JSON;
+                return StandardTypes.JSON;
             case FUNCTION:
-                return Type.FUNCTION;
+                return StandardTypes.FUNCTION;
             case VARBINARY:
-                return Type.VARBINARY;
+                return StandardTypes.VARBINARY;
             default:
                 return null;
         }
@@ -825,7 +745,7 @@ public abstract class Type implements Cloneable {
             return true;
         } else if (from.isJsonType() && to.isMapType()) {
             MapType map = (MapType) to;
-            return canCastTo(Type.VARCHAR, map.getKeyType()) && canCastTo(Type.JSON, map.getValueType());
+            return canCastTo(StandardTypes.VARCHAR, map.getKeyType()) && canCastTo(StandardTypes.JSON, map.getValueType());
         } else if (from.isBoolean() && to.isComplexType()) {
             // for mock nest type with NULL value, the cast must return NULL
             // like cast(map{1: NULL} as MAP<int, int>)
@@ -846,7 +766,7 @@ public abstract class Type implements Cloneable {
         if (t1.isScalarType() && t2.isScalarType()) {
             return ScalarType.getAssignmentCompatibleType((ScalarType) t1, (ScalarType) t2, strict);
         }
-        return ScalarType.INVALID;
+        return StandardTypes.INVALID;
     }
 
     /**
@@ -997,12 +917,12 @@ public abstract class Type implements Cloneable {
             case SMALLINT:
             case INT:
             case BIGINT:
-                return BIGINT;
+                return StandardTypes.BIGINT;
             case LARGEINT:
-                return LARGEINT;
+                return StandardTypes.LARGEINT;
             case FLOAT:
             case DOUBLE:
-                return DOUBLE;
+                return StandardTypes.DOUBLE;
             case DATE:
             case DATETIME:
             case TIME:
@@ -1012,18 +932,18 @@ public abstract class Type implements Cloneable {
             case BITMAP:
             case PERCENTILE:
             case JSON:
-                return VARCHAR;
+                return StandardTypes.VARCHAR;
             case DECIMALV2:
-                return DECIMALV2;
+                return StandardTypes.DECIMALV2;
             case DECIMAL32:
             case DECIMAL64:
             case DECIMAL128:
             case DECIMAL256:
                 return this;
             case FUNCTION:
-                return FUNCTION;
+                return StandardTypes.FUNCTION;
             default:
-                return INVALID;
+                return StandardTypes.INVALID;
 
         }
     }
@@ -1054,7 +974,7 @@ public abstract class Type implements Cloneable {
         if (t1.isNull() || t2.isNull()) {
             return t1.isNull() ? t2 : t1;
         }
-        return Type.INVALID;
+        return StandardTypes.INVALID;
     }
 
     public static Type getCommonType(Type[] argTypes, int fromIndex, int toIndex) {
@@ -1071,15 +991,15 @@ public abstract class Type implements Cloneable {
         switch (getPrimitiveType()) {
             case BOOLEAN:
             case TINYINT:
-                return Type.TINYINT;
+                return StandardTypes.TINYINT;
             case SMALLINT:
-                return Type.SMALLINT;
+                return StandardTypes.SMALLINT;
             case INT:
-                return Type.INT;
+                return StandardTypes.INT;
             case BIGINT:
-                return Type.BIGINT;
+                return StandardTypes.BIGINT;
             case LARGEINT:
-                return Type.LARGEINT;
+                return StandardTypes.LARGEINT;
             case FLOAT:
             case DOUBLE:
             case DATE:
@@ -1087,16 +1007,16 @@ public abstract class Type implements Cloneable {
             case TIME:
             case CHAR:
             case VARCHAR:
-                return Type.DOUBLE;
+                return StandardTypes.DOUBLE;
             case DECIMALV2:
-                return Type.DECIMALV2;
+                return StandardTypes.DECIMALV2;
             case DECIMAL32:
             case DECIMAL64:
             case DECIMAL128:
             case DECIMAL256:
                 return this;
             default:
-                return Type.INVALID;
+                return StandardTypes.INVALID;
 
         }
     }

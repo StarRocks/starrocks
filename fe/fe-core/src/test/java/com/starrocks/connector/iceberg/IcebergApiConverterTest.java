@@ -30,6 +30,7 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.MapType;
 import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
@@ -248,23 +249,23 @@ public class IcebergApiConverterTest {
     @Test
     public void testToIcebergApiSchema() {
         List<Column> columns = Lists.newArrayList();
-        columns.add(new Column("c1", Type.BOOLEAN));
-        columns.add(new Column("c2", Type.INT));
-        columns.add(new Column("c3", Type.BIGINT));
-        columns.add(new Column("c4", Type.FLOAT));
-        columns.add(new Column("c5", Type.DOUBLE));
-        columns.add(new Column("c6", Type.DATE));
-        columns.add(new Column("c7", Type.DATETIME));
-        columns.add(new Column("c8", Type.VARCHAR));
-        columns.add(new Column("c9", Type.CHAR));
-        columns.add(new Column("c10", Type.DECIMAL32));
-        columns.add(new Column("c11", Type.DECIMAL64));
-        columns.add(new Column("c12", Type.DECIMAL128));
-        columns.add(new Column("c13", new ArrayType(Type.INT)));
-        columns.add(new Column("c14", new MapType(Type.INT, Type.INT)));
-        columns.add(new Column("c15", new StructType(ImmutableList.of(Type.INT))));
-        columns.add(new Column("c16", Type.TIME));
-        columns.add(new Column("c17", Type.VARIANT));
+        columns.add(new Column("c1", StandardTypes.BOOLEAN));
+        columns.add(new Column("c2", StandardTypes.INT));
+        columns.add(new Column("c3", StandardTypes.BIGINT));
+        columns.add(new Column("c4", StandardTypes.FLOAT));
+        columns.add(new Column("c5", StandardTypes.DOUBLE));
+        columns.add(new Column("c6", StandardTypes.DATE));
+        columns.add(new Column("c7", StandardTypes.DATETIME));
+        columns.add(new Column("c8", StandardTypes.VARCHAR));
+        columns.add(new Column("c9", StandardTypes.CHAR));
+        columns.add(new Column("c10", StandardTypes.DECIMAL32));
+        columns.add(new Column("c11", StandardTypes.DECIMAL64));
+        columns.add(new Column("c12", StandardTypes.DECIMAL128));
+        columns.add(new Column("c13", new ArrayType(StandardTypes.INT)));
+        columns.add(new Column("c14", new MapType(StandardTypes.INT, StandardTypes.INT)));
+        columns.add(new Column("c15", new StructType(ImmutableList.of(StandardTypes.INT))));
+        columns.add(new Column("c16", StandardTypes.TIME));
+        columns.add(new Column("c17", StandardTypes.VARIANT));
 
         Schema schema = IcebergApiConverter.toIcebergApiSchema(columns);
         assertEquals("table {\n" +
@@ -362,18 +363,18 @@ public class IcebergApiConverterTest {
     @Test
     public void testToIcebergApiSchema2() {
         List<Column> columns = Lists.newArrayList();
-        columns.add(new Column("c1", Type.BOOLEAN));
-        columns.add(new Column("c2", Type.INT));
-        columns.add(new Column("c3", Type.BIGINT));
-        columns.add(new Column("c4", Type.FLOAT));
-        columns.add(new Column("c5", Type.DOUBLE));
-        columns.add(new Column("c6", Type.DATE));
-        columns.add(new Column("c7", Type.DATETIME));
-        columns.add(new Column("c8", Type.VARCHAR));
-        columns.add(new Column("c9", Type.CHAR));
-        columns.add(new Column("c10", Type.DECIMAL32));
-        columns.add(new Column("c11", Type.DECIMAL64));
-        columns.add(new Column("c12", Type.DECIMAL128));
+        columns.add(new Column("c1", StandardTypes.BOOLEAN));
+        columns.add(new Column("c2", StandardTypes.INT));
+        columns.add(new Column("c3", StandardTypes.BIGINT));
+        columns.add(new Column("c4", StandardTypes.FLOAT));
+        columns.add(new Column("c5", StandardTypes.DOUBLE));
+        columns.add(new Column("c6", StandardTypes.DATE));
+        columns.add(new Column("c7", StandardTypes.DATETIME));
+        columns.add(new Column("c8", StandardTypes.VARCHAR));
+        columns.add(new Column("c9", StandardTypes.CHAR));
+        columns.add(new Column("c10", StandardTypes.DECIMAL32));
+        columns.add(new Column("c11", StandardTypes.DECIMAL64));
+        columns.add(new Column("c12", StandardTypes.DECIMAL128));
 
         Schema schema = IcebergApiConverter.toIcebergApiSchema(columns);
 
@@ -404,18 +405,18 @@ public class IcebergApiConverterTest {
     @Test
     public void testToIcebergApiSchema3() {
         List<Column> columns = Lists.newArrayList();
-        columns.add(new Column("c1", Type.BOOLEAN));
-        columns.add(new Column("c2", Type.INT));
-        columns.add(new Column("c3", Type.BIGINT));
-        columns.add(new Column("c4", Type.FLOAT));
-        columns.add(new Column("c5", Type.DOUBLE));
-        columns.add(new Column("c6", Type.DATE));
-        columns.add(new Column("c7", Type.DATETIME));
-        columns.add(new Column("c8", Type.VARCHAR));
-        columns.add(new Column("c9", Type.CHAR));
-        columns.add(new Column("c10", Type.DECIMAL32));
-        columns.add(new Column("c11", Type.DECIMAL64));
-        columns.add(new Column("c12", Type.DECIMAL128));
+        columns.add(new Column("c1", StandardTypes.BOOLEAN));
+        columns.add(new Column("c2", StandardTypes.INT));
+        columns.add(new Column("c3", StandardTypes.BIGINT));
+        columns.add(new Column("c4", StandardTypes.FLOAT));
+        columns.add(new Column("c5", StandardTypes.DOUBLE));
+        columns.add(new Column("c6", StandardTypes.DATE));
+        columns.add(new Column("c7", StandardTypes.DATETIME));
+        columns.add(new Column("c8", StandardTypes.VARCHAR));
+        columns.add(new Column("c9", StandardTypes.CHAR));
+        columns.add(new Column("c10", StandardTypes.DECIMAL32));
+        columns.add(new Column("c11", StandardTypes.DECIMAL64));
+        columns.add(new Column("c12", StandardTypes.DECIMAL128));
 
         Schema schema = IcebergApiConverter.toIcebergApiSchema(columns);
 
@@ -438,8 +439,8 @@ public class IcebergApiConverterTest {
     @Test
     public void testToIcebergApiSchema4() {
         List<Column> columns = Lists.newArrayList();
-        columns.add(new Column("c1", Type.BOOLEAN));
-        columns.add(new Column("c2", Type.INT));
+        columns.add(new Column("c1", StandardTypes.BOOLEAN));
+        columns.add(new Column("c2", StandardTypes.INT));
 
         Schema schema = IcebergApiConverter.toIcebergApiSchema(columns);
 
@@ -462,8 +463,8 @@ public class IcebergApiConverterTest {
     @Test
     public void testToIcebergApiSchema5() {
         List<Column> columns = Lists.newArrayList();
-        columns.add(new Column("c6", Type.DATE));
-        columns.add(new Column("c7", Type.DATETIME));
+        columns.add(new Column("c6", StandardTypes.DATE));
+        columns.add(new Column("c7", StandardTypes.DATETIME));
 
         Schema schema = IcebergApiConverter.toIcebergApiSchema(columns);
 
@@ -489,8 +490,8 @@ public class IcebergApiConverterTest {
     @Test
     public void testToIcebergApiSchema6() {
         List<Column> columns = Lists.newArrayList();
-        columns.add(new Column("c6", Type.DATE));
-        columns.add(new Column("c7", Type.DATETIME));
+        columns.add(new Column("c6", StandardTypes.DATE));
+        columns.add(new Column("c7", StandardTypes.DATETIME));
 
         Schema schema = IcebergApiConverter.toIcebergApiSchema(columns);
 
@@ -515,8 +516,8 @@ public class IcebergApiConverterTest {
     @Test
     public void testToIcebergApiSchema7() {
         List<Column> columns = Lists.newArrayList();
-        columns.add(new Column("c6", Type.DATE));
-        columns.add(new Column("c7", Type.DATETIME));
+        columns.add(new Column("c6", StandardTypes.DATE));
+        columns.add(new Column("c7", StandardTypes.DATETIME));
 
         Schema schema = IcebergApiConverter.toIcebergApiSchema(columns);
 

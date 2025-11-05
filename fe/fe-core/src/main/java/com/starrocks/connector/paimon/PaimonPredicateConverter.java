@@ -29,7 +29,7 @@ import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.Type;
+import com.starrocks.type.StandardTypes;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.paimon.data.BinaryString;
@@ -299,31 +299,31 @@ public class PaimonPredicateConverter extends ScalarOperatorVisitor<Predicate, V
         private ConstantOperator tryCastToResultType(ConstantOperator operator, DataType dataType) {
             Optional<ConstantOperator> res = Optional.empty();
             if (dataType instanceof BooleanType) {
-                res = operator.castTo(Type.BOOLEAN);
+                res = operator.castTo(StandardTypes.BOOLEAN);
             } else if (dataType instanceof DateType) {
-                res = operator.castTo(Type.DATE);
+                res = operator.castTo(StandardTypes.DATE);
             } else if (dataType instanceof TimestampType) {
-                res = operator.castTo(Type.DATETIME);
+                res = operator.castTo(StandardTypes.DATETIME);
             } else if (dataType instanceof VarCharType) {
-                res = operator.castTo(Type.STRING);
+                res = operator.castTo(StandardTypes.STRING);
             } else if (dataType instanceof CharType) {
-                res = operator.castTo(Type.CHAR);
+                res = operator.castTo(StandardTypes.CHAR);
             } else if (dataType instanceof BinaryType) {
-                res = operator.castTo(Type.VARBINARY);
+                res = operator.castTo(StandardTypes.VARBINARY);
             } else if (dataType instanceof IntType) {
-                res = operator.castTo(Type.INT);
+                res = operator.castTo(StandardTypes.INT);
             } else if (dataType instanceof BigIntType) {
-                res = operator.castTo(Type.BIGINT);
+                res = operator.castTo(StandardTypes.BIGINT);
             } else if (dataType instanceof TinyIntType) {
-                res = operator.castTo(Type.TINYINT);
+                res = operator.castTo(StandardTypes.TINYINT);
             } else if (dataType instanceof SmallIntType) {
-                res = operator.castTo(Type.SMALLINT);
+                res = operator.castTo(StandardTypes.SMALLINT);
             } else if (dataType instanceof FloatType) {
-                res = operator.castTo(Type.FLOAT);
+                res = operator.castTo(StandardTypes.FLOAT);
             } else if (dataType instanceof DoubleType) {
-                res = operator.castTo(Type.DOUBLE);
+                res = operator.castTo(StandardTypes.DOUBLE);
             } else if (dataType instanceof DecimalType) {
-                res = operator.castTo(Type.DEFAULT_DECIMAL128);
+                res = operator.castTo(StandardTypes.DEFAULT_DECIMAL128);
             }
             return res.orElse(operator);
         }

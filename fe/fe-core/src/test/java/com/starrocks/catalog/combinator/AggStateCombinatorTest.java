@@ -42,6 +42,7 @@ import com.starrocks.type.AnyMapType;
 import com.starrocks.type.AnyStructType;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.MapType;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
@@ -121,13 +122,13 @@ public class AggStateCombinatorTest extends MVTestBase {
         } else if (type.isVarchar()) {
             return TypeFactory.createVarcharType(100);
         } else if (type instanceof AnyElementType) {
-            return Type.STRING;
+            return StandardTypes.STRING;
         } else if (type instanceof AnyArrayType) {
-            return Type.ARRAY_BIGINT;
+            return StandardTypes.ARRAY_BIGINT;
         } else if (type instanceof AnyMapType) {
-            return new MapType(Type.STRING, Type.STRING);
+            return new MapType(StandardTypes.STRING, StandardTypes.STRING);
         } else if (type instanceof AnyStructType) {
-            Type[] argsTypes = { Type.STRING };
+            Type[] argsTypes = { StandardTypes.STRING };
             ArrayList<Type> structTypes = new ArrayList<>();
             for (Type t : argsTypes) {
                 structTypes.add(new ArrayType(t));
@@ -155,7 +156,7 @@ public class AggStateCombinatorTest extends MVTestBase {
 
     private Function getAggStateIfFunc(AggregateFunction aggFunc) {
         List<Type> argTypes = Stream.of(aggFunc.getArgs()).map(this::mockType).collect(Collectors.toList());
-        argTypes.add(Type.BOOLEAN);
+        argTypes.add(StandardTypes.BOOLEAN);
         String aggStateFuncName = FunctionSet.getAggStateIfName(aggFunc.functionName());
         Type[] argumentTypes = argTypes.toArray(Type[]::new);
         FunctionParams params = new FunctionParams(false, null);

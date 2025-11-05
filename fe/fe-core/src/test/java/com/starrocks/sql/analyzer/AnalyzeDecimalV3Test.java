@@ -33,6 +33,7 @@ import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
 import com.starrocks.utframe.StarRocksAssert;
@@ -127,7 +128,7 @@ public class AnalyzeDecimalV3Test {
 
         Assertions.assertTrue(items.size() == 2 && items.get(1) != null);
         Type type = items.get(1).getType();
-        Assertions.assertEquals(type, ScalarType.DOUBLE);
+        Assertions.assertEquals(type, StandardTypes.DOUBLE);
     }
 
     @Test
@@ -259,7 +260,7 @@ public class AnalyzeDecimalV3Test {
             if (fn.functionName().equalsIgnoreCase(FunctionSet.SUM)) {
                 Assertions.assertEquals(serdeType, null);
             } else {
-                Assertions.assertEquals(serdeType, Type.VARBINARY);
+                Assertions.assertEquals(serdeType, StandardTypes.VARBINARY);
             }
             Assertions.assertEquals(returnType, expectReturnType);
         }
@@ -517,7 +518,7 @@ public class AnalyzeDecimalV3Test {
     public void testDoubleDivDecimal32p9s2() throws Exception {
         testDecimalArithmeticHelper(
                 "cast('3.14' as double)/col0_decimal_p9s2",
-                ScalarType.DOUBLE);
+                StandardTypes.DOUBLE);
     }
 
     @Test
@@ -596,7 +597,7 @@ public class AnalyzeDecimalV3Test {
     public void testDoubleModDecimal32p9s2() throws Exception {
         testDecimalArithmeticHelper(
                 "cast('3.14' as double)%col0_decimal_p9s2",
-                ScalarType.DOUBLE);
+                StandardTypes.DOUBLE);
     }
 
     @Test
@@ -666,7 +667,7 @@ public class AnalyzeDecimalV3Test {
         {
             SelectRelation queryRelation = (SelectRelation) analyzeSuccess(sql);
             Expr expr = queryRelation.getOutputExpression().get(0);
-            Assertions.assertEquals(expr.getType(), Type.BOOLEAN);
+            Assertions.assertEquals(expr.getType(), StandardTypes.BOOLEAN);
 
             ColumnRefFactory columnRefFactory = new ColumnRefFactory();
             LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, ctx).transform(queryRelation);
@@ -674,8 +675,8 @@ public class AnalyzeDecimalV3Test {
                     ((LogicalProjectOperator) logicalPlan.getRoot().getOp()).getColumnRefMap()
                             .get(logicalPlan.getOutputColumn().get(0));
 
-            Assertions.assertEquals(op.getChild(0).getType(), ScalarType.DOUBLE);
-            Assertions.assertEquals(op.getChild(1).getType(), ScalarType.DOUBLE);
+            Assertions.assertEquals(op.getChild(0).getType(), StandardTypes.DOUBLE);
+            Assertions.assertEquals(op.getChild(1).getType(), StandardTypes.DOUBLE);
         }
     }
 
@@ -690,7 +691,7 @@ public class AnalyzeDecimalV3Test {
         {
             SelectRelation queryRelation = (SelectRelation) analyzeSuccess(sql);
             Expr expr = queryRelation.getOutputExpression().get(0);
-            Assertions.assertEquals(expr.getType(), Type.BOOLEAN);
+            Assertions.assertEquals(expr.getType(), StandardTypes.BOOLEAN);
 
             ColumnRefFactory columnRefFactory = new ColumnRefFactory();
             LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, ctx).transform(queryRelation);
@@ -806,11 +807,11 @@ public class AnalyzeDecimalV3Test {
             Assertions.assertEquals(items.size(), 24);
             for (int i = 0; i < items.size(); ++i) {
                 Expr expr = items.get(i);
-                Assertions.assertEquals(expr.getType(), Type.DOUBLE);
-                Assertions.assertEquals(((FunctionCallExpr) expr).getFn().getArgs()[0], Type.DOUBLE);
-                Assertions.assertEquals(((FunctionCallExpr) expr).getFn().getReturnType(), Type.DOUBLE);
+                Assertions.assertEquals(expr.getType(), StandardTypes.DOUBLE);
+                Assertions.assertEquals(((FunctionCallExpr) expr).getFn().getArgs()[0], StandardTypes.DOUBLE);
+                Assertions.assertEquals(((FunctionCallExpr) expr).getFn().getReturnType(), StandardTypes.DOUBLE);
                 Assertions.assertEquals(((AggregateFunction) ((FunctionCallExpr) expr).getFn()).getIntermediateType(),
-                        Type.VARBINARY);
+                        StandardTypes.VARBINARY);
             }
         }
     }
@@ -853,7 +854,7 @@ public class AnalyzeDecimalV3Test {
         {
             SelectRelation queryRelation = (SelectRelation) analyzeSuccess(sql);
             List<Expr> items = ((SelectRelation) queryRelation).getOutputExpression();
-            Assertions.assertEquals(items.get(0).getType(), Type.BIGINT);
+            Assertions.assertEquals(items.get(0).getType(), StandardTypes.BIGINT);
         }
     }
 
@@ -875,7 +876,7 @@ public class AnalyzeDecimalV3Test {
             Assertions.assertEquals(items.get(0).getType(), TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 10, 9));
             Assertions.assertEquals(items.get(1).getType(),
                     TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 15, 10));
-            Assertions.assertEquals(items.get(2).getType(), ScalarType.DOUBLE);
+            Assertions.assertEquals(items.get(2).getType(), StandardTypes.DOUBLE);
             Assertions.assertEquals(items.get(3).getType(),
                     TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 30));
         }
@@ -896,10 +897,10 @@ public class AnalyzeDecimalV3Test {
         {
             QueryRelation queryRelation = analyzeSuccess(sql);
             List<Expr> items = queryRelation.getOutputExpression();
-            Assertions.assertEquals(items.get(0).getType(), ScalarType.DOUBLE);
+            Assertions.assertEquals(items.get(0).getType(), StandardTypes.DOUBLE);
             Assertions.assertEquals(items.get(1).getType(),
                     TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 0));
-            Assertions.assertEquals(items.get(2).getType(), ScalarType.FLOAT);
+            Assertions.assertEquals(items.get(2).getType(), StandardTypes.FLOAT);
             Assertions.assertEquals(items.get(3).getType(), TypeFactory.createDecimalV3NarrowestType(3, 2));
             Assertions.assertEquals(items.get(4).getType(), TypeFactory.createDecimalV3TypeForZero(1));
         }

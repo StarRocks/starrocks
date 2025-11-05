@@ -31,6 +31,7 @@ import com.starrocks.type.AnyMapType;
 import com.starrocks.type.AnyStructType;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.MapType;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
@@ -408,8 +409,8 @@ public class PolymorphicFunctionAnalyzer {
             typeArray = new ArrayType(commonType);
             typeElement = commonType;
         } else {
-            typeElement = Type.BOOLEAN;
-            typeArray = new ArrayType(Type.BOOLEAN);
+            typeElement = StandardTypes.BOOLEAN;
+            typeArray = new ArrayType(StandardTypes.BOOLEAN);
         }
 
         if (retType instanceof AnyArrayType) {

@@ -40,11 +40,11 @@ import java.util.List;
 import java.util.Map;
 
 import static com.starrocks.server.ExternalTableFactory.RESOURCE;
-import static com.starrocks.type.Type.ARRAY_BIGINT;
-import static com.starrocks.type.Type.DATETIME;
-import static com.starrocks.type.Type.INT;
-import static com.starrocks.type.Type.STRING;
-import static com.starrocks.type.Type.VARCHAR;
+import static com.starrocks.type.StandardTypes.ARRAY_BIGINT;
+import static com.starrocks.type.StandardTypes.DATETIME;
+import static com.starrocks.type.StandardTypes.INT;
+import static com.starrocks.type.StandardTypes.STRING;
+import static com.starrocks.type.StandardTypes.VARCHAR;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class IcebergTableTest extends TableTestBase {

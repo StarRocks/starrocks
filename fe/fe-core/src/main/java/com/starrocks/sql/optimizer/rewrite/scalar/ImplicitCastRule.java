@@ -42,6 +42,7 @@ import com.starrocks.sql.optimizer.operator.scalar.MultiInPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
 import com.starrocks.type.MapType;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.Type;
 
 import java.util.Arrays;
@@ -236,8 +237,8 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
         for (int i = 0; i < predicate.getChildren().size(); i++) {
             ScalarOperator child = predicate.getChild(i);
 
-            if (!Type.BOOLEAN.matchesType(child.getType())) {
-                addCastChild(Type.BOOLEAN, predicate, i);
+            if (!StandardTypes.BOOLEAN.matchesType(child.getType())) {
+                addCastChild(StandardTypes.BOOLEAN, predicate, i);
             }
         }
 
@@ -267,11 +268,11 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
         Type type2 = predicate.getChild(1).getType();
 
         if (!type1.isStringType()) {
-            addCastChild(Type.VARCHAR, predicate, 0);
+            addCastChild(StandardTypes.VARCHAR, predicate, 0);
         }
 
         if (!type2.isStringType()) {
-            addCastChild(Type.VARCHAR, predicate, 1);
+            addCastChild(StandardTypes.VARCHAR, predicate, 1);
         }
 
         return predicate;
@@ -289,7 +290,7 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
             }
         }
 
-        Type compatibleType = Type.BOOLEAN;
+        Type compatibleType = StandardTypes.BOOLEAN;
         if (operator.hasCase()) {
             List<Type> whenTypes = Lists.newArrayList();
             whenTypes.add(operator.getCaseClause().getType());

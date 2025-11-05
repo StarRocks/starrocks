@@ -46,6 +46,7 @@ import com.starrocks.statistic.base.TabletSampler;
 import com.starrocks.statistic.sample.SampleInfo;
 import com.starrocks.statistic.sample.TabletStats;
 import com.starrocks.type.ArrayType;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.Type;
 import com.starrocks.utframe.StarRocksAssert;
 import mockit.Mock;
@@ -130,7 +131,8 @@ public class HyperJobTest extends DistributedEnvPlanTestBase {
     @Test
     public void generateSubFieldTypeColumnTask() {
         List<String> columnNames = Lists.newArrayList("c1", "c4.b", "c6.c.b");
-        List<Type> columnTypes = Lists.newArrayList(Type.DATE, new ArrayType(Type.ANY_STRUCT), Type.INT);
+        List<Type> columnTypes = Lists.newArrayList(StandardTypes.DATE,
+                new ArrayType(StandardTypes.ANY_STRUCT), StandardTypes.INT);
 
         ColumnClassifier cc = ColumnClassifier.of(columnNames, columnTypes, table, false);
         List<ColumnStats> columnStat = cc.getColumnStats().stream().filter(c -> c instanceof SubFieldColumnStats)
@@ -242,7 +244,7 @@ public class HyperJobTest extends DistributedEnvPlanTestBase {
     @Test
     public void testSubfieldSampleJobs() {
         List<String> columnNames = Lists.newArrayList("c4.b", "c6.c.b");
-        List<Type> columnTypes = Lists.newArrayList(new ArrayType(Type.ANY_STRUCT), Type.INT);
+        List<Type> columnTypes = Lists.newArrayList(new ArrayType(StandardTypes.ANY_STRUCT), StandardTypes.INT);
 
         new MockUp<SampleInfo>() {
             @Mock

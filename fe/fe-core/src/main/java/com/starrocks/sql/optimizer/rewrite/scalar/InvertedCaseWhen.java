@@ -32,6 +32,7 @@ import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorUtil;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.Type;
 
 import java.util.Collection;
@@ -287,9 +288,10 @@ public class InvertedCaseWhen {
     }
 
     private static ScalarOperator buildIfThen(ScalarOperator p, ConstantOperator first, ConstantOperator second) {
-        Function ifFunc = ExprUtils.getBuiltinFunction(FunctionSet.IF, new Type[] {Type.BOOLEAN, Type.BOOLEAN, Type.BOOLEAN},
+        Function ifFunc = ExprUtils.getBuiltinFunction(FunctionSet.IF,
+                new Type[] {StandardTypes.BOOLEAN, StandardTypes.BOOLEAN, StandardTypes.BOOLEAN},
                 Function.CompareMode.IS_IDENTICAL);
-        return new CallOperator(FunctionSet.IF, Type.BOOLEAN,
+        return new CallOperator(FunctionSet.IF, StandardTypes.BOOLEAN,
                 Lists.newArrayList(p, first, second), ifFunc);
     }
 

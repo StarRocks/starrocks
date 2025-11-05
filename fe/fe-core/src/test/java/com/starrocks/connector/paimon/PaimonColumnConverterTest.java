@@ -15,6 +15,7 @@
 package com.starrocks.connector.paimon;
 
 import com.starrocks.connector.ColumnTypeConverter;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
@@ -49,14 +50,14 @@ public class PaimonColumnConverterTest {
     public void testConvertBinary() {
         BinaryType paimonType = new BinaryType();
         Type result = ColumnTypeConverter.fromPaimonType(paimonType);
-        Assertions.assertEquals(result, Type.VARBINARY);
+        Assertions.assertEquals(result, StandardTypes.VARBINARY);
     }
 
     @Test
     public void testConvertVarBinary() {
         VarBinaryType paimonType = new VarBinaryType();
         Type result = ColumnTypeConverter.fromPaimonType(paimonType);
-        Assertions.assertEquals(result, Type.VARBINARY);
+        Assertions.assertEquals(result, StandardTypes.VARBINARY);
     }
 
     @Test
@@ -79,7 +80,7 @@ public class PaimonColumnConverterTest {
     public void testConvertBool() {
         BooleanType paimonType = new BooleanType();
         Type result = ColumnTypeConverter.fromPaimonType(paimonType);
-        Assertions.assertEquals(result, Type.BOOLEAN);
+        Assertions.assertEquals(result, StandardTypes.BOOLEAN);
     }
 
     @Test
@@ -96,63 +97,63 @@ public class PaimonColumnConverterTest {
     public void testConvertTinyInt() {
         TinyIntType paimonType = new TinyIntType();
         Type result = ColumnTypeConverter.fromPaimonType(paimonType);
-        Assertions.assertEquals(result, Type.TINYINT);
+        Assertions.assertEquals(result, StandardTypes.TINYINT);
     }
 
     @Test
     public void testConvertSmallint() {
         SmallIntType paimonType = new SmallIntType();
         Type result = ColumnTypeConverter.fromPaimonType(paimonType);
-        Assertions.assertEquals(result, Type.SMALLINT);
+        Assertions.assertEquals(result, StandardTypes.SMALLINT);
     }
 
     @Test
     public void testConvertInt() {
         IntType paimonType = new IntType();
         Type result = ColumnTypeConverter.fromPaimonType(paimonType);
-        Assertions.assertEquals(result, Type.INT);
+        Assertions.assertEquals(result, StandardTypes.INT);
     }
 
     @Test
     public void testConvertBigint() {
         BigIntType paimonType = new BigIntType();
         Type result = ColumnTypeConverter.fromPaimonType(paimonType);
-        Assertions.assertEquals(result, Type.BIGINT);
+        Assertions.assertEquals(result, StandardTypes.BIGINT);
     }
 
     @Test
     public void testConvertFlout() {
         FloatType paimonType = new FloatType();
         Type result = ColumnTypeConverter.fromPaimonType(paimonType);
-        Assertions.assertEquals(result, Type.FLOAT);
+        Assertions.assertEquals(result, StandardTypes.FLOAT);
     }
 
     @Test
     public void testConvertDouble() {
         DoubleType paimonType = new DoubleType();
         Type result = ColumnTypeConverter.fromPaimonType(paimonType);
-        Assertions.assertEquals(result, Type.DOUBLE);
+        Assertions.assertEquals(result, StandardTypes.DOUBLE);
     }
 
     @Test
     public void testConvertDate() {
         DateType paimonType = new DateType();
         Type result = ColumnTypeConverter.fromPaimonType(paimonType);
-        Assertions.assertEquals(result, Type.DATE);
+        Assertions.assertEquals(result, StandardTypes.DATE);
     }
 
     @Test
     public void testConvertDatetime() {
         TimestampType paimonType = new TimestampType();
         Type result = ColumnTypeConverter.fromPaimonType(paimonType);
-        Assertions.assertEquals(result, Type.DATETIME);
+        Assertions.assertEquals(result, StandardTypes.DATETIME);
     }
 
     @Test
     public void testConvertLocalZonedDatetime() {
         LocalZonedTimestampType paimonType = new LocalZonedTimestampType();
         Type result = ColumnTypeConverter.fromPaimonType(paimonType);
-        Assertions.assertEquals(result, Type.DATETIME);
+        Assertions.assertEquals(result, StandardTypes.DATETIME);
     }
 
     @Test
@@ -161,7 +162,7 @@ public class PaimonColumnConverterTest {
         Type result = ColumnTypeConverter.fromPaimonType(paimonType);
         Assertions.assertTrue(result instanceof com.starrocks.type.ArrayType);
         com.starrocks.type.ArrayType srType = (com.starrocks.type.ArrayType) result;
-        Assertions.assertEquals(Type.SMALLINT, srType.getItemType());
+        Assertions.assertEquals(StandardTypes.SMALLINT, srType.getItemType());
     }
 
     @Test
@@ -171,7 +172,7 @@ public class PaimonColumnConverterTest {
         Assertions.assertTrue(result instanceof com.starrocks.type.MapType);
         com.starrocks.type.MapType srType = (com.starrocks.type.MapType) result;
         Assertions.assertEquals(TypeFactory.createDefaultCatalogString(), srType.getKeyType());
-        Assertions.assertEquals(Type.DATETIME, srType.getValueType());
+        Assertions.assertEquals(StandardTypes.DATETIME, srType.getValueType());
     }
 
     @Test
@@ -186,8 +187,8 @@ public class PaimonColumnConverterTest {
         Assertions.assertTrue(result instanceof StructType);
         StructType srType = (StructType) result;
         Assertions.assertEquals(3, srType.getFields().size());
-        Assertions.assertEquals(Type.VARBINARY, srType.getField("f0").getType());
-        Assertions.assertEquals(Type.BIGINT, srType.getField("f1").getType());
-        Assertions.assertEquals(Type.FLOAT, srType.getField("f2").getType());
+        Assertions.assertEquals(StandardTypes.VARBINARY, srType.getField("f0").getType());
+        Assertions.assertEquals(StandardTypes.BIGINT, srType.getField("f1").getType());
+        Assertions.assertEquals(StandardTypes.FLOAT, srType.getField("f2").getType());
     }
 }

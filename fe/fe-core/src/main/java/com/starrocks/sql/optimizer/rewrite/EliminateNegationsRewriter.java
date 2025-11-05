@@ -26,7 +26,7 @@ import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
-import com.starrocks.type.Type;
+import com.starrocks.type.StandardTypes;
 
 import java.util.List;
 
@@ -63,7 +63,7 @@ public class EliminateNegationsRewriter extends ScalarOperatorVisitor<ScalarOper
     @Override
     public ScalarOperator visitConstant(ConstantOperator literal, Void context) {
         if (literal.isNull()) {
-            return ConstantOperator.createNull(Type.BOOLEAN);
+            return ConstantOperator.createNull(StandardTypes.BOOLEAN);
         }
 
         return ConstantOperator.createBoolean(!literal.getBoolean());

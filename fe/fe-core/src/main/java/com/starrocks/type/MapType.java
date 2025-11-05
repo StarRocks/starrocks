@@ -73,10 +73,10 @@ public class MapType extends Type {
     public void pruneUnusedSubfields() {
         // We set pruned subfield to NULL in map
         if (!selectedFields[0]) {
-            keyType = ScalarType.UNKNOWN_TYPE;
+            keyType = StandardTypes.UNKNOWN_TYPE;
         }
         if (!selectedFields[1]) {
-            valueType = ScalarType.UNKNOWN_TYPE;
+            valueType = StandardTypes.UNKNOWN_TYPE;
         }
         Preconditions.checkArgument(!keyType.isUnknown() || !valueType.isUnknown());
     }

@@ -29,7 +29,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.tree.DefaultPredicateSelectivityEstimator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
-import com.starrocks.type.Type;
+import com.starrocks.type.StandardTypes;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -57,15 +57,15 @@ public class DefaultPredicateSelectivityEstimatorTest {
     @BeforeAll
     public static void beforeClass() throws Exception {
         columnRefFactory = new ColumnRefFactory();
-        v1 = columnRefFactory.create("v1", Type.INT, true);
-        v2 = columnRefFactory.create("v2", Type.DOUBLE, true);
-        v3 = columnRefFactory.create("v3", Type.DECIMALV2, true);
-        v4 = columnRefFactory.create("v4", Type.BOOLEAN, true);
-        v5 = columnRefFactory.create("v5", Type.BOOLEAN, false);
-        v6 = columnRefFactory.create("v6", Type.BOOLEAN, false);
-        v7 = columnRefFactory.create("v7", Type.DATETIME, false);
-        v8 = columnRefFactory.create("v8", Type.VARCHAR, false);
-        v9 = columnRefFactory.create("v8", Type.INT, false);
+        v1 = columnRefFactory.create("v1", StandardTypes.INT, true);
+        v2 = columnRefFactory.create("v2", StandardTypes.DOUBLE, true);
+        v3 = columnRefFactory.create("v3", StandardTypes.DECIMALV2, true);
+        v4 = columnRefFactory.create("v4", StandardTypes.BOOLEAN, true);
+        v5 = columnRefFactory.create("v5", StandardTypes.BOOLEAN, false);
+        v6 = columnRefFactory.create("v6", StandardTypes.BOOLEAN, false);
+        v7 = columnRefFactory.create("v7", StandardTypes.DATETIME, false);
+        v8 = columnRefFactory.create("v8", StandardTypes.VARCHAR, false);
+        v9 = columnRefFactory.create("v8", StandardTypes.INT, false);
 
         Statistics.Builder builder = Statistics.builder();
         builder.setOutputRowCount(10000);
@@ -209,7 +209,7 @@ public class DefaultPredicateSelectivityEstimatorTest {
         BinaryPredicateOperator intEfn4 = new BinaryPredicateOperator(BinaryType.EQ_FOR_NULL,
                 v1, constantOperatorInt4);
         BinaryPredicateOperator intEfn5 = new BinaryPredicateOperator(BinaryType.EQ_FOR_NULL,
-                v1, ConstantOperator.createNull(Type.NULL));
+                v1, ConstantOperator.createNull(StandardTypes.NULL));
 
         assertEquals(defaultPredicateSelectivityEstimator.estimate(intEfn0, statistics), 0.0, 0.0);
         assertEquals(defaultPredicateSelectivityEstimator.estimate(intEfn1, statistics), 0.02, 0.0);
@@ -241,7 +241,7 @@ public class DefaultPredicateSelectivityEstimatorTest {
         BinaryPredicateOperator dtEfn4 = new BinaryPredicateOperator(BinaryType.EQ_FOR_NULL,
                 v7, constantOperatorDt4);
         BinaryPredicateOperator dtEfn5 = new BinaryPredicateOperator(BinaryType.EQ_FOR_NULL,
-                v7, ConstantOperator.createNull(Type.NULL));
+                v7, ConstantOperator.createNull(StandardTypes.NULL));
 
         assertEquals(defaultPredicateSelectivityEstimator.estimate(dtEfn0, statistics), 0.0, 0.0);
         assertEquals(defaultPredicateSelectivityEstimator.estimate(dtEfn1, statistics), 0.005, 0.0);
@@ -373,11 +373,11 @@ public class DefaultPredicateSelectivityEstimatorTest {
         assertEquals(defaultPredicateSelectivityEstimator.estimate(doubleGe4, statistics), 0.0, 0.0);
 
         //test ColumnRefOperator compare with ConstantOperator which type is Decimal
-        ConstantOperator constantOperatorDec0 = ConstantOperator.createDecimal(new BigDecimal(14.11), Type.DECIMALV2);
-        ConstantOperator constantOperatorDec1 = ConstantOperator.createDecimal(new BigDecimal(15.23), Type.DECIMALV2);
-        ConstantOperator constantOperatorDec2 = ConstantOperator.createDecimal(new BigDecimal(20.0), Type.DECIMALV2);
-        ConstantOperator constantOperatorDec3 = ConstantOperator.createDecimal(new BigDecimal(300.12), Type.DECIMALV2);
-        ConstantOperator constantOperatorDec4 = ConstantOperator.createDecimal(new BigDecimal(301.0), Type.DECIMALV2);
+        ConstantOperator constantOperatorDec0 = ConstantOperator.createDecimal(new BigDecimal(14.11), StandardTypes.DECIMALV2);
+        ConstantOperator constantOperatorDec1 = ConstantOperator.createDecimal(new BigDecimal(15.23), StandardTypes.DECIMALV2);
+        ConstantOperator constantOperatorDec2 = ConstantOperator.createDecimal(new BigDecimal(20.0), StandardTypes.DECIMALV2);
+        ConstantOperator constantOperatorDec3 = ConstantOperator.createDecimal(new BigDecimal(300.12), StandardTypes.DECIMALV2);
+        ConstantOperator constantOperatorDec4 = ConstantOperator.createDecimal(new BigDecimal(301.0), StandardTypes.DECIMALV2);
         //e.g. v3 < 14.11
         BinaryPredicateOperator decLt0 = BinaryPredicateOperator.lt(v3, constantOperatorDec0);
         BinaryPredicateOperator decLt1 = BinaryPredicateOperator.lt(v3, constantOperatorDec1);
@@ -612,7 +612,7 @@ public class DefaultPredicateSelectivityEstimatorTest {
     public void testExpressionBinaryPredicate() {
         DefaultPredicateSelectivityEstimator defaultPredicateSelectivityEstimator =
                 new DefaultPredicateSelectivityEstimator();
-        CallOperator callOperator = new CallOperator(FunctionSet.MAX, Type.INT, Lists.newArrayList(v1));
+        CallOperator callOperator = new CallOperator(FunctionSet.MAX, StandardTypes.INT, Lists.newArrayList(v1));
 
         ConstantOperator constantOperatorInt0 = ConstantOperator.createInt(-1);
         ConstantOperator constantOperatorInt1 = ConstantOperator.createInt(0);

@@ -16,6 +16,7 @@ package com.starrocks.connector.kudu;
 
 import com.starrocks.connector.ColumnTypeConverter;
 import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
 import org.apache.kudu.ColumnSchema;
@@ -32,63 +33,63 @@ public class KuduColumnConverterTest {
     public void testConvertBoolean() {
         ColumnSchema columnSchema = genColumnSchema("test", org.apache.kudu.Type.BOOL);
         Type result = ColumnTypeConverter.fromKuduType(columnSchema);
-        Assertions.assertEquals(result, Type.BOOLEAN);
+        Assertions.assertEquals(result, StandardTypes.BOOLEAN);
     }
 
     @Test
     public void testConvertTinyint() {
         ColumnSchema columnSchema = genColumnSchema("test", org.apache.kudu.Type.INT8);
         Type result = ColumnTypeConverter.fromKuduType(columnSchema);
-        Assertions.assertEquals(result, Type.TINYINT);
+        Assertions.assertEquals(result, StandardTypes.TINYINT);
     }
 
     @Test
     public void testConvertSmallint() {
         ColumnSchema columnSchema = genColumnSchema("test", org.apache.kudu.Type.INT16);
         Type result = ColumnTypeConverter.fromKuduType(columnSchema);
-        Assertions.assertEquals(result, Type.SMALLINT);
+        Assertions.assertEquals(result, StandardTypes.SMALLINT);
     }
 
     @Test
     public void testConvertInt() {
         ColumnSchema columnSchema = genColumnSchema("test", org.apache.kudu.Type.INT32);
         Type result = ColumnTypeConverter.fromKuduType(columnSchema);
-        Assertions.assertEquals(result, Type.INT);
+        Assertions.assertEquals(result, StandardTypes.INT);
     }
 
     @Test
     public void testConvertBigint() {
         ColumnSchema columnSchema = genColumnSchema("test", org.apache.kudu.Type.INT64);
         Type result = ColumnTypeConverter.fromKuduType(columnSchema);
-        Assertions.assertEquals(result, Type.BIGINT);
+        Assertions.assertEquals(result, StandardTypes.BIGINT);
     }
 
     @Test
     public void testConvertFloat() {
         ColumnSchema columnSchema = genColumnSchema("test", org.apache.kudu.Type.FLOAT);
         Type result = ColumnTypeConverter.fromKuduType(columnSchema);
-        Assertions.assertEquals(result, Type.FLOAT);
+        Assertions.assertEquals(result, StandardTypes.FLOAT);
     }
 
     @Test
     public void testConvertDouble() {
         ColumnSchema columnSchema = genColumnSchema("test", org.apache.kudu.Type.DOUBLE);
         Type result = ColumnTypeConverter.fromKuduType(columnSchema);
-        Assertions.assertEquals(result, Type.DOUBLE);
+        Assertions.assertEquals(result, StandardTypes.DOUBLE);
     }
 
     @Test
     public void testConvertDate() {
         ColumnSchema columnSchema = genColumnSchema("test", org.apache.kudu.Type.DATE);
         Type result = ColumnTypeConverter.fromKuduType(columnSchema);
-        Assertions.assertEquals(result, Type.DATE);
+        Assertions.assertEquals(result, StandardTypes.DATE);
     }
 
     @Test
     public void testConvertDatetime() {
         ColumnSchema columnSchema = genColumnSchema("test", org.apache.kudu.Type.UNIXTIME_MICROS);
         Type result = ColumnTypeConverter.fromKuduType(columnSchema);
-        Assertions.assertEquals(result, Type.DATETIME);
+        Assertions.assertEquals(result, StandardTypes.DATETIME);
     }
 
     @Test
@@ -112,7 +113,7 @@ public class KuduColumnConverterTest {
     public void testConvertBinary() {
         ColumnSchema columnSchema = genColumnSchema("test", org.apache.kudu.Type.BINARY);
         Type result = ColumnTypeConverter.fromKuduType(columnSchema);
-        Assertions.assertEquals(result, Type.VARBINARY);
+        Assertions.assertEquals(result, StandardTypes.VARBINARY);
     }
 
     @Test

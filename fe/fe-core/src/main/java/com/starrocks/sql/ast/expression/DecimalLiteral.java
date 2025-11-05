@@ -46,6 +46,7 @@ import com.starrocks.sql.optimizer.validate.ValidateException;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
 import org.apache.logging.log4j.LogManager;
@@ -147,7 +148,7 @@ public class DecimalLiteral extends LiteralExpr {
         this.value = new BigDecimal(value.toPlainString());
 
         if (!Config.enable_decimal_v3) {
-            type = ScalarType.DECIMALV2;
+            type = StandardTypes.DECIMALV2;
         } else {
             int precision = getRealPrecision(this.value);
             int scale = getRealScale(this.value);
@@ -344,7 +345,7 @@ public class DecimalLiteral extends LiteralExpr {
                     BigDecimal scaledValue = value.multiply(SCALE_FACTOR[scale]);
                     try {
                         LargeIntLiteral largeIntLiteral = new LargeIntLiteral(scaledValue.toBigInteger().toString());
-                        return largeIntLiteral.getHashValue(Type.LARGEINT);
+                        return largeIntLiteral.getHashValue(StandardTypes.LARGEINT);
                     } catch (AnalysisException e) {
                         throw new InternalError(e.getMessage());
                     }

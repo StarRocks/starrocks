@@ -37,6 +37,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorUtil;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.rewrite.scalar.ReduceCastRule;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.Type;
 
 import java.util.Arrays;
@@ -68,12 +69,12 @@ public class GroupByCountDistinctDataSkewEliminateRule extends TransformationRul
     // choose just wide enough type to keep bucket number.
     private Type pickBucketType(int bucketNum) {
         Preconditions.checkArgument(0 < bucketNum && bucketNum <= 65536);
-        return (bucketNum <= 256) ? Type.TINYINT : Type.SMALLINT;
+        return (bucketNum <= 256) ? StandardTypes.TINYINT : StandardTypes.SMALLINT;
     }
 
     private ScalarOperator createBucketColumn(ColumnRefOperator distinctColumn, int bucketNum) {
-        CastOperator stringCol = new CastOperator(Type.VARCHAR, distinctColumn, true);
-        Function hashFunc = ExprUtils.getBuiltinFunction(FunctionSet.MURMUR_HASH3_32, new Type[] {Type.VARCHAR},
+        CastOperator stringCol = new CastOperator(StandardTypes.VARCHAR, distinctColumn, true);
+        Function hashFunc = ExprUtils.getBuiltinFunction(FunctionSet.MURMUR_HASH3_32, new Type[] {StandardTypes.VARCHAR},
                 Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         Type type = pickBucketType(bucketNum);
         CallOperator callHashFuncOp =
@@ -84,12 +85,12 @@ public class GroupByCountDistinctDataSkewEliminateRule extends TransformationRul
         // sign of remainder keeps consistency with that of dividend, so divisor should be half of bucketNum.
         // for an example, when bucketNum=8; the remainder will be
         // -3, -2, -1, 0, 1, 2, 3, 4, NULL
-        ConstantOperator bucketConstOp = new ConstantOperator(bucketNum / 2, Type.INT);
+        ConstantOperator bucketConstOp = new ConstantOperator(bucketNum / 2, StandardTypes.INT);
         Function modFunc = ExprUtils.getBuiltinFunction(FunctionSet.MOD,
                 new Type[] {callHashFuncOp.getType(), bucketConstOp.getType()},
                 Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         CallOperator modBucketOp =
-                new CallOperator(FunctionSet.MOD, Type.INT, Arrays.asList(callHashFuncOp, bucketConstOp), modFunc);
+                new CallOperator(FunctionSet.MOD, StandardTypes.INT, Arrays.asList(callHashFuncOp, bucketConstOp), modFunc);
         ScalarOperator op = new CastOperator(type, modBucketOp, true);
         ScalarOperatorRewriter rewriter = new ScalarOperatorRewriter();
         return rewriter.rewrite(op, Collections.singletonList(new ReduceCastRule()));

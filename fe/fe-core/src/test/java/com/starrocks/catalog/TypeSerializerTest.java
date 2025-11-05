@@ -24,6 +24,7 @@ import com.starrocks.type.MapType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.PseudoType;
 import com.starrocks.type.ScalarType;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
@@ -308,7 +309,7 @@ public class TypeSerializerTest {
         TTypeDesc container = new TTypeDesc();
         container.types = new ArrayList<>();
 
-        ArrayType arrayType = new ArrayType(Type.INT);
+        ArrayType arrayType = new ArrayType(StandardTypes.INT);
         TypeSerializer.toThrift(arrayType, container);
 
         Assertions.assertEquals(2, container.types.size());
@@ -348,7 +349,7 @@ public class TypeSerializerTest {
         container.types = new ArrayList<>();
 
         // ARRAY<ARRAY<INT>>
-        ArrayType innerArray = new ArrayType(Type.INT);
+        ArrayType innerArray = new ArrayType(StandardTypes.INT);
         ArrayType outerArray = new ArrayType(innerArray);
         TypeSerializer.toThrift(outerArray, container);
 
@@ -365,7 +366,7 @@ public class TypeSerializerTest {
         TTypeDesc container = new TTypeDesc();
         container.types = new ArrayList<>();
 
-        MapType mapType = new MapType(Type.INT, TypeFactory.createVarcharType(255));
+        MapType mapType = new MapType(StandardTypes.INT, TypeFactory.createVarcharType(255));
         TypeSerializer.toThrift(mapType, container);
 
         Assertions.assertEquals(3, container.types.size());
@@ -379,7 +380,7 @@ public class TypeSerializerTest {
         TTypeDesc container = new TTypeDesc();
         container.types = new ArrayList<>();
 
-        MapType mapType = new MapType(TypeFactory.createVarcharType(50), Type.DOUBLE);
+        MapType mapType = new MapType(TypeFactory.createVarcharType(50), StandardTypes.DOUBLE);
         TypeSerializer.toThrift(mapType, container);
 
         Assertions.assertEquals(3, container.types.size());
@@ -411,7 +412,7 @@ public class TypeSerializerTest {
         container.types = new ArrayList<>();
 
         // ARRAY<MAP<INT, VARCHAR>>
-        MapType mapType = new MapType(Type.INT, TypeFactory.createVarcharType(100));
+        MapType mapType = new MapType(StandardTypes.INT, TypeFactory.createVarcharType(100));
         ArrayType arrayType = new ArrayType(mapType);
         TypeSerializer.toThrift(arrayType, container);
 
@@ -430,7 +431,7 @@ public class TypeSerializerTest {
         container.types = new ArrayList<>();
 
         StructType structType = new StructType(Lists.newArrayList(
-                new StructField("field1", Type.INT),
+                new StructField("field1", StandardTypes.INT),
                 new StructField("field2", TypeFactory.createVarcharType(50))
         ));
         TypeSerializer.toThrift(structType, container);
@@ -456,9 +457,9 @@ public class TypeSerializerTest {
         container.types = new ArrayList<>();
 
         StructType structType = new StructType(Lists.newArrayList(
-                new StructField("id", Type.BIGINT, "User ID"),
+                new StructField("id", StandardTypes.BIGINT, "User ID"),
                 new StructField("name", TypeFactory.createVarcharType(100), "User name"),
-                new StructField("score", Type.DOUBLE)
+                new StructField("score", StandardTypes.DOUBLE)
         ));
         TypeSerializer.toThrift(structType, container);
 
@@ -506,8 +507,8 @@ public class TypeSerializerTest {
         container.types = new ArrayList<>();
 
         StructType structType = new StructType(Lists.newArrayList(
-                new StructField("x", Type.INT),
-                new StructField("y", Type.INT)
+                new StructField("x", StandardTypes.INT),
+                new StructField("y", StandardTypes.INT)
         ), true); // Named struct
         TypeSerializer.toThrift(structType, container);
 
@@ -524,8 +525,8 @@ public class TypeSerializerTest {
         container.types = new ArrayList<>();
 
         StructType structType = new StructType(Lists.newArrayList(
-                new StructField("x", Type.INT),
-                new StructField("y", Type.INT)
+                new StructField("x", StandardTypes.INT),
+                new StructField("y", StandardTypes.INT)
         ), false); // Unnamed struct
         TypeSerializer.toThrift(structType, container);
 
@@ -542,7 +543,7 @@ public class TypeSerializerTest {
         container.types = new ArrayList<>();
 
         // Use constructor with fieldId parameter
-        StructField field1 = new StructField("id", 1, Type.INT, null);
+        StructField field1 = new StructField("id", 1, StandardTypes.INT, null);
         StructField field2 = new StructField("name", 2, TypeFactory.createVarcharType(100), null);
 
         StructType structType = new StructType(Lists.newArrayList(field1, field2));
@@ -561,7 +562,7 @@ public class TypeSerializerTest {
         container.types = new ArrayList<>();
 
         // Use constructor with fieldPhysicalName parameter
-        StructField field = new StructField("logical_name", -1, "physical_name", Type.INT, null);
+        StructField field = new StructField("logical_name", -1, "physical_name", StandardTypes.INT, null);
 
         StructType structType = new StructType(Lists.newArrayList(field));
         TypeSerializer.toThrift(structType, container);
@@ -580,13 +581,13 @@ public class TypeSerializerTest {
 
         // Inner struct: STRUCT<x:INT, y:INT>
         StructType innerStruct = new StructType(Lists.newArrayList(
-                new StructField("x", Type.INT),
-                new StructField("y", Type.INT)
+                new StructField("x", StandardTypes.INT),
+                new StructField("y", StandardTypes.INT)
         ));
 
         // Outer struct: STRUCT<id:BIGINT, point:STRUCT<x:INT, y:INT>>
         StructType outerStruct = new StructType(Lists.newArrayList(
-                new StructField("id", Type.BIGINT),
+                new StructField("id", StandardTypes.BIGINT),
                 new StructField("point", innerStruct)
         ));
 
@@ -619,8 +620,8 @@ public class TypeSerializerTest {
 
         // ARRAY<MAP<VARCHAR, STRUCT<id:INT, value:DOUBLE>>>
         StructType structType = new StructType(Lists.newArrayList(
-                new StructField("id", Type.INT),
-                new StructField("value", Type.DOUBLE)
+                new StructField("id", StandardTypes.INT),
+                new StructField("value", StandardTypes.DOUBLE)
         ));
 
         MapType mapType = new MapType(TypeFactory.createVarcharType(50), structType);
@@ -646,14 +647,14 @@ public class TypeSerializerTest {
         // STRUCT<users:ARRAY<STRUCT<name:VARCHAR, age:INT>>, count:BIGINT>
         StructType userStruct = new StructType(Lists.newArrayList(
                 new StructField("name", TypeFactory.createVarcharType(100)),
-                new StructField("age", Type.INT)
+                new StructField("age", StandardTypes.INT)
         ));
 
         ArrayType usersArray = new ArrayType(userStruct);
 
         StructType outerStruct = new StructType(Lists.newArrayList(
                 new StructField("users", usersArray),
-                new StructField("count", Type.BIGINT)
+                new StructField("count", StandardTypes.BIGINT)
         ));
 
         TypeSerializer.toThrift(outerStruct, container);
@@ -676,7 +677,7 @@ public class TypeSerializerTest {
 
         // MAP<INT, ARRAY<VARCHAR>>
         ArrayType arrayType = new ArrayType(TypeFactory.createVarcharType(200));
-        MapType mapType = new MapType(Type.INT, arrayType);
+        MapType mapType = new MapType(StandardTypes.INT, arrayType);
 
         TypeSerializer.toThrift(mapType, container);
 
@@ -693,7 +694,7 @@ public class TypeSerializerTest {
         container.types = new ArrayList<>();
 
         // ARRAY<MAP<VARCHAR, BIGINT>>
-        MapType mapType = new MapType(TypeFactory.createVarcharType(50), Type.BIGINT);
+        MapType mapType = new MapType(TypeFactory.createVarcharType(50), StandardTypes.BIGINT);
         ArrayType arrayType = new ArrayType(mapType);
 
         TypeSerializer.toThrift(arrayType, container);
@@ -711,7 +712,7 @@ public class TypeSerializerTest {
         container.types = new ArrayList<>();
 
         // ARRAY<ARRAY<ARRAY<INT>>>
-        ArrayType level1 = new ArrayType(Type.INT);
+        ArrayType level1 = new ArrayType(StandardTypes.INT);
         ArrayType level2 = new ArrayType(level1);
         ArrayType level3 = new ArrayType(level2);
 
@@ -731,7 +732,7 @@ public class TypeSerializerTest {
         TTypeDesc container = new TTypeDesc();
         container.types = new ArrayList<>();
 
-        PseudoType pseudoType = Type.ANY_ELEMENT;
+        PseudoType pseudoType = StandardTypes.ANY_ELEMENT;
 
         // Should throw IllegalArgumentException
         Assertions.assertThrows(IllegalArgumentException.class, () -> {
@@ -755,16 +756,16 @@ public class TypeSerializerTest {
     @Test
     public void testSerializeDeserializeRoundTrip() {
         Type[] testTypes = {
-                Type.BOOLEAN,
-                Type.TINYINT,
-                Type.SMALLINT,
-                Type.INT,
-                Type.BIGINT,
-                Type.LARGEINT,
-                Type.FLOAT,
-                Type.DOUBLE,
-                Type.DATE,
-                Type.DATETIME,
+                StandardTypes.BOOLEAN,
+                StandardTypes.TINYINT,
+                StandardTypes.SMALLINT,
+                StandardTypes.INT,
+                StandardTypes.BIGINT,
+                StandardTypes.LARGEINT,
+                StandardTypes.FLOAT,
+                StandardTypes.DOUBLE,
+                StandardTypes.DATE,
+                StandardTypes.DATETIME,
                 TypeFactory.createCharType(10),
                 TypeFactory.createVarcharType(255),
                 TypeFactory.createVarbinary(1024),
@@ -773,11 +774,11 @@ public class TypeSerializerTest {
                 TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL32, 9, 2),
                 TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 6),
                 TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 10),
-                new ArrayType(Type.INT),
+                new ArrayType(StandardTypes.INT),
                 new ArrayType(TypeFactory.createVarcharType(100)),
-                new MapType(Type.INT, TypeFactory.createVarcharType(200)),
+                new MapType(StandardTypes.INT, TypeFactory.createVarcharType(200)),
                 new StructType(Lists.newArrayList(
-                        new StructField("f1", Type.INT),
+                        new StructField("f1", StandardTypes.INT),
                         new StructField("f2", TypeFactory.createVarcharType(50), "comment")
                 ))
         };
@@ -801,8 +802,8 @@ public class TypeSerializerTest {
     public void testSerializeDeserializeComplexNestedTypes() {
         // Test complex nested type round-trip
         StructType innerStruct = new StructType(Lists.newArrayList(
-                new StructField("x", Type.INT),
-                new StructField("y", Type.DOUBLE)
+                new StructField("x", StandardTypes.INT),
+                new StructField("y", StandardTypes.DOUBLE)
         ));
 
         MapType mapType = new MapType(TypeFactory.createVarcharType(50), innerStruct);
@@ -810,7 +811,7 @@ public class TypeSerializerTest {
 
         StructType outerStruct = new StructType(Lists.newArrayList(
                 new StructField("data", arrayType),
-                new StructField("count", Type.BIGINT)
+                new StructField("count", StandardTypes.BIGINT)
         ));
 
         // Serialize
@@ -840,7 +841,7 @@ public class TypeSerializerTest {
         container.types.add(existingNode);
 
         // Serialize a new type - should append
-        TypeSerializer.toThrift(Type.INT, container);
+        TypeSerializer.toThrift(StandardTypes.INT, container);
 
         Assertions.assertEquals(2, container.types.size());
         Assertions.assertEquals(TTypeNodeType.SCALAR, container.types.get(0).getType());
@@ -853,9 +854,9 @@ public class TypeSerializerTest {
         container.types = new ArrayList<>();
 
         // Serialize multiple types to the same container
-        TypeSerializer.toThrift(Type.INT, container);
-        TypeSerializer.toThrift(Type.VARCHAR, container);
-        TypeSerializer.toThrift(Type.DOUBLE, container);
+        TypeSerializer.toThrift(StandardTypes.INT, container);
+        TypeSerializer.toThrift(StandardTypes.VARCHAR, container);
+        TypeSerializer.toThrift(StandardTypes.DOUBLE, container);
 
         Assertions.assertEquals(3, container.types.size());
         assertScalarTypeNode(container.types.get(0), TPrimitiveType.INT);

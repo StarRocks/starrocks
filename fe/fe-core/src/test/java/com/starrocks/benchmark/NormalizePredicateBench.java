@@ -26,6 +26,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.Type;
 import org.apache.commons.lang3.NotImplementedException;
 import org.apache.commons.lang3.RandomStringUtils;
@@ -94,7 +95,7 @@ public class NormalizePredicateBench {
         final List<String> columns = IntStream.range(1, 10)
                 .mapToObj(x -> RandomStringUtils.randomAlphabetic(2))
                 .collect(Collectors.toList());
-        final List<Type> types = ImmutableList.of(Type.INT, Type.VARCHAR, Type.DATETIME);
+        final List<Type> types = ImmutableList.of(StandardTypes.INT, StandardTypes.VARCHAR, StandardTypes.DATETIME);
         int x = ThreadLocalRandom.current().nextInt(columns.size());
         String name = columns.get(x);
         x = ThreadLocalRandom.current().nextInt(types.size());
@@ -104,11 +105,11 @@ public class NormalizePredicateBench {
 
     private ConstantOperator randomConstant(Type type) {
         int x = ThreadLocalRandom.current().nextInt(1024);
-        if (type.equals(Type.INT)) {
+        if (type.equals(StandardTypes.INT)) {
             return ConstantOperator.createInt(x);
-        } else if (type.equals(Type.DATETIME)) {
+        } else if (type.equals(StandardTypes.DATETIME)) {
             return ConstantOperator.createDatetime(LocalDateTime.now().plusDays(x));
-        } else if (type.equals(Type.VARCHAR)) {
+        } else if (type.equals(StandardTypes.VARCHAR)) {
             return ConstantOperator.createVarchar(RandomStringUtils.randomAlphabetic(10));
         }
         throw new NotImplementedException("not supported");

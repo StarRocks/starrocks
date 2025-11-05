@@ -21,6 +21,7 @@ import com.starrocks.common.Config;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.TypeFactory;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -117,7 +118,7 @@ public class ScalarTypeTest {
                 {
                         TypeFactory.createDecimalV3NarrowestType(38, 4),
                         TypeFactory.createDecimalV3NarrowestType(18, 10),
-                        ScalarType.DOUBLE,
+                        StandardTypes.DOUBLE,
                 },
                 {
                         TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 7, 4),
@@ -163,11 +164,11 @@ public class ScalarTypeTest {
     @Test
     public void testIsFullyCompatible() {
         List<ScalarType> integerTypes = Lists.newArrayList(
-                ScalarType.TINYINT,
-                ScalarType.SMALLINT,
-                ScalarType.INT,
-                ScalarType.BIGINT,
-                ScalarType.LARGEINT
+                StandardTypes.TINYINT,
+                StandardTypes.SMALLINT,
+                StandardTypes.INT,
+                StandardTypes.BIGINT,
+                StandardTypes.LARGEINT
         );
         List<ScalarType> stringTypes = Lists.newArrayList(
                 TypeFactory.createCharType(-1),
@@ -204,8 +205,8 @@ public class ScalarTypeTest {
         }
         // decimal to float
         for (int i = 0; i < decimalTypes.size(); i++) {
-            Assertions.assertTrue(decimalTypes.get(i).isFullyCompatible(ScalarType.FLOAT));
-            Assertions.assertTrue(decimalTypes.get(i).isFullyCompatible(ScalarType.DOUBLE));
+            Assertions.assertTrue(decimalTypes.get(i).isFullyCompatible(StandardTypes.FLOAT));
+            Assertions.assertTrue(decimalTypes.get(i).isFullyCompatible(StandardTypes.DOUBLE));
         }
         // decimal to string
         for (int i = 0; i < decimalTypes.size(); i++) {
@@ -221,7 +222,7 @@ public class ScalarTypeTest {
         }
 
         // complex types
-        Assertions.assertFalse(ScalarType.JSON.isFullyCompatible(ScalarType.INT));
-        Assertions.assertFalse(ScalarType.JSON.isFullyCompatible(ScalarType.VARCHAR));
+        Assertions.assertFalse(StandardTypes.JSON.isFullyCompatible(StandardTypes.INT));
+        Assertions.assertFalse(StandardTypes.JSON.isFullyCompatible(StandardTypes.VARCHAR));
     }
 }

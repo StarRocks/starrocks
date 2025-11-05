@@ -21,6 +21,7 @@ import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.Type;
 
 import java.util.Map;
@@ -28,17 +29,17 @@ import java.util.Map;
 public class ShowBaselinePlanStmt extends ShowStmt {
 
     public static final Map<String, Type> BASELINE_FIELD_META = ImmutableMap.<String, Type>builder()
-            .put("id", Type.BIGINT)
-            .put("global", Type.BOOLEAN)
-            .put("enable", Type.BOOLEAN)
-            .put("bindsqldigest", Type.VARCHAR)
-            .put("bindsqlhash", Type.BIGINT)
-            .put("bindsql", Type.VARCHAR)
-            .put("plansql", Type.VARCHAR)
-            .put("costs", Type.DOUBLE)
-            .put("queryms", Type.DOUBLE)
-            .put("source", Type.VARCHAR)
-            .put("updatetime", Type.VARCHAR)
+            .put("id", StandardTypes.BIGINT)
+            .put("global", StandardTypes.BOOLEAN)
+            .put("enable", StandardTypes.BOOLEAN)
+            .put("bindsqldigest", StandardTypes.VARCHAR)
+            .put("bindsqlhash", StandardTypes.BIGINT)
+            .put("bindsql", StandardTypes.VARCHAR)
+            .put("plansql", StandardTypes.VARCHAR)
+            .put("costs", StandardTypes.DOUBLE)
+            .put("queryms", StandardTypes.DOUBLE)
+            .put("source", StandardTypes.VARCHAR)
+            .put("updatetime", StandardTypes.VARCHAR)
             .build();
 
     // save where clause

@@ -108,7 +108,7 @@ public class ScalarType extends Type implements Cloneable {
         boolean hasDecimal256 = lhs.isDecimal256() || rhs.isDecimal256();
         // TODO(stephen): support auto scale up decimal precision
         if ((precision > 38 && !hasDecimal256) || (precision > 76)) {
-            return ScalarType.DOUBLE;
+            return StandardTypes.DOUBLE;
         } else {
             // the common type's PrimitiveType of two decimal types should wide enough, i.e
             // the common type of (DECIMAL32, DECIMAL64) should be DECIMAL64
@@ -173,9 +173,9 @@ public class ScalarType extends Type implements Cloneable {
             case DATETIME:
             case TIME:
             case JSON:
-                return DOUBLE;
+                return StandardTypes.DOUBLE;
             default:
-                return INVALID;
+                return StandardTypes.INVALID;
         }
     }
 
@@ -187,10 +187,10 @@ public class ScalarType extends Type implements Cloneable {
      */
     public static ScalarType getAssignmentCompatibleType(ScalarType t1, ScalarType t2, boolean strict) {
         if (!t1.isValid() || !t2.isValid()) {
-            return INVALID;
+            return StandardTypes.INVALID;
         }
         if (t1.isUnknown() || t2.isUnknown()) {
-            return UNKNOWN_TYPE;
+            return StandardTypes.UNKNOWN_TYPE;
         }
         if (t1.equals(t2)) {
             return t1;
@@ -208,7 +208,7 @@ public class ScalarType extends Type implements Cloneable {
             if (t1IsHLL && t2IsHLL) {
                 return TypeFactory.createHllType();
             }
-            return INVALID;
+            return StandardTypes.INVALID;
         }
 
         if (t1.isStringType() || t2.isStringType()) {
@@ -224,15 +224,15 @@ public class ScalarType extends Type implements Cloneable {
         }
 
         if (t1.isDecimalOfAnyVersion() && t2.isDate() || t1.isDate() && t2.isDecimalOfAnyVersion()) {
-            return INVALID;
+            return StandardTypes.INVALID;
         }
 
         if (t1.isDecimalV2() || t2.isDecimalV2()) {
-            return DECIMALV2;
+            return StandardTypes.DECIMALV2;
         }
 
         if (t1.isFunctionType() || t2.isFunctionType()) {
-            return INVALID;
+            return StandardTypes.INVALID;
         }
 
         PrimitiveType smallerType =

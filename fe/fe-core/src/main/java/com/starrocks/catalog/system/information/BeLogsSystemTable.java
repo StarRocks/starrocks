@@ -32,10 +32,10 @@ public class BeLogsSystemTable {
                 Table.TableType.SCHEMA,
                 builder()
                         .column("BE_ID", TypeFactory.createType(PrimitiveType.BIGINT))
-                        .column("LEVEL", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("LEVEL", TypeFactory.createVarcharType(NAME_CHAR_LEN))
                         .column("TIMESTAMP", TypeFactory.createType(PrimitiveType.BIGINT))
                         .column("TID", TypeFactory.createType(PrimitiveType.BIGINT))
-                        .column("LOG", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("LOG", TypeFactory.createVarcharType(NAME_CHAR_LEN))
                         .build(), TSchemaTableType.SCH_BE_LOGS);
     }
 }

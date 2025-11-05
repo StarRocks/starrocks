@@ -27,6 +27,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalRawValuesOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LargeInPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.Type;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -334,14 +335,14 @@ public class LargeInPredicateToJoinTest extends PlanTestBase {
     @Test
     public void testRawValuesOperatorMethods() {
         List<ColumnRefOperator> columnRefs1 = Lists.newArrayList(
-                new ColumnRefOperator(1, Type.BIGINT, "const_value", true)
+                new ColumnRefOperator(1, StandardTypes.BIGINT, "const_value", true)
         );
         List<ColumnRefOperator> columnRefs2 = Lists.newArrayList(
-                new ColumnRefOperator(2, Type.BIGINT, "const_value", true)
+                new ColumnRefOperator(2, StandardTypes.BIGINT, "const_value", true)
         );
         
-        Type intType = Type.BIGINT;
-        Type stringType = Type.VARCHAR;
+        Type intType = StandardTypes.BIGINT;
+        Type stringType = StandardTypes.VARCHAR;
         String rawText1 = "1, 2, 3, 4";
         String rawText2 = "5, 6, 7, 8";
         String longRawText = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25";
@@ -427,8 +428,8 @@ public class LargeInPredicateToJoinTest extends PlanTestBase {
     @Test
     public void testLargeInPredicateMethods() {
 
-        Type intType = Type.BIGINT;
-        Type stringType = Type.VARCHAR;
+        Type intType = StandardTypes.BIGINT;
+        Type stringType = StandardTypes.VARCHAR;
         String rawText1 = "1, 2, 3, 4";
         String rawText2 = "5, 6, 7, 8";
         List<Object> rawConstants1 = Lists.newArrayList(1L, 2L, 3L, 4L);
@@ -437,8 +438,8 @@ public class LargeInPredicateToJoinTest extends PlanTestBase {
         
         SlotRef slotRef1 = new SlotRef(null, "v1");
         SlotRef slotRef2 = new SlotRef(null, "v2");
-        List<Expr> inList1 = Lists.newArrayList(new IntLiteral(1L, Type.BIGINT));
-        List<Expr> inList2 = Lists.newArrayList(new IntLiteral(2L, Type.BIGINT));
+        List<Expr> inList1 = Lists.newArrayList(new IntLiteral(1L, StandardTypes.BIGINT));
+        List<Expr> inList2 = Lists.newArrayList(new IntLiteral(2L, StandardTypes.BIGINT));
         List<Expr> stringInList = Lists.newArrayList(new StringLiteral("a"));
 
         LargeInPredicate largeIn1 = new LargeInPredicate(slotRef1, rawText1, rawConstants1, 4, false, inList1, null);
@@ -469,8 +470,8 @@ public class LargeInPredicateToJoinTest extends PlanTestBase {
         assertEquals(4, largeIn1.getInElementNum());
 
         // Test LargeInPredicateOperator by directly creating instances
-        ColumnRefOperator columnRef1 = new ColumnRefOperator(1, Type.BIGINT, "v1", true);
-        ColumnRefOperator columnRef2 = new ColumnRefOperator(2, Type.BIGINT, "v2", true);
+        ColumnRefOperator columnRef1 = new ColumnRefOperator(1, StandardTypes.BIGINT, "v1", true);
+        ColumnRefOperator columnRef2 = new ColumnRefOperator(2, StandardTypes.BIGINT, "v2", true);
         
         List<ScalarOperator> children1 = Lists.newArrayList(columnRef1);
         List<ScalarOperator> children2 = Lists.newArrayList(columnRef2);

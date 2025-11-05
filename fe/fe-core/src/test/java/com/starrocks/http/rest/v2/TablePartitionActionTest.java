@@ -56,7 +56,7 @@ import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.Type;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.TypeFactory;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Expectations;
@@ -121,9 +121,9 @@ public class TablePartitionActionTest extends StarRocksHttpTestCase {
     private static OlapTable newUnpartitionedOlapTable(Long tableId, String tableName) {
         GlobalStateMgr.getCurrentState().getTabletInvertedIndex().clear();
 
-        Column c0 = new Column("c0", Type.BIGINT, true, null, null, false, null, "cc0", 1);
-        Column c1 = new Column("c1", Type.DATETIME, true, null, null, false, null, "cc1", 2);
-        Column c2 = new Column("c2", Type.VARCHAR, true, null, null, false, null, "cc2", 3);
+        Column c0 = new Column("c0", StandardTypes.BIGINT, true, null, null, false, null, "cc0", 1);
+        Column c1 = new Column("c1", StandardTypes.DATETIME, true, null, null, false, null, "cc1", 2);
+        Column c2 = new Column("c2", StandardTypes.VARCHAR, true, null, null, false, null, "cc2", 3);
         Column c3 = new Column("c3",
                 TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 8),
                 false, null, null, true, new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), "cc3", 4
@@ -163,9 +163,9 @@ public class TablePartitionActionTest extends StarRocksHttpTestCase {
     private static LakeTable newRangePartitionLakeTable(Long tableId, String tableName, int partitionSize) throws Exception {
         GlobalStateMgr.getCurrentState().getTabletInvertedIndex().clear();
 
-        Column c0 = new Column("c0", Type.BIGINT, true, null, null, false, null, "cc0", 1);
-        Column c1 = new Column("c1", Type.DATETIME, true, null, null, false, null, "cc1", 2);
-        Column c2 = new Column("c2", Type.VARCHAR, true, null, null, false, null, "cc2", 3);
+        Column c0 = new Column("c0", StandardTypes.BIGINT, true, null, null, false, null, "cc0", 1);
+        Column c1 = new Column("c1", StandardTypes.DATETIME, true, null, null, false, null, "cc1", 2);
+        Column c2 = new Column("c2", StandardTypes.VARCHAR, true, null, null, false, null, "cc2", 3);
         Column c3 = new Column("c3",
                 TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 8),
                 false, null, null, true, new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), "cc3", 4
@@ -327,9 +327,9 @@ public class TablePartitionActionTest extends StarRocksHttpTestCase {
         GlobalStateMgr.getCurrentState().getTabletInvertedIndex().clear();
 
         Map<ColumnId, Column> idToColumn = new HashMap<>();
-        Column c0 = new Column("c0", Type.BIGINT, true, null, null, false, null, "cc0", 1);
-        Column c1 = new Column("c1", Type.DATETIME, true, null, null, false, null, "cc1", 2);
-        Column c2 = new Column("c2", Type.VARCHAR, true, null, null, false, null, "cc2", 3);
+        Column c0 = new Column("c0", StandardTypes.BIGINT, true, null, null, false, null, "cc0", 1);
+        Column c1 = new Column("c1", StandardTypes.DATETIME, true, null, null, false, null, "cc1", 2);
+        Column c2 = new Column("c2", StandardTypes.VARCHAR, true, null, null, false, null, "cc2", 3);
         Column c3 = new Column("c3",
                 TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 8),
                 false, null, null, true, new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), "cc3", 4

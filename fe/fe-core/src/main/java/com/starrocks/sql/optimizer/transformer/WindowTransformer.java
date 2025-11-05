@@ -38,6 +38,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.Type;
 import org.apache.commons.collections.CollectionUtils;
 
@@ -105,7 +106,7 @@ public class WindowTransformer {
             windowFrame = AnalyticWindow.DEFAULT_ROWS_WINDOW;
 
             try {
-                callExpr.uncheckedCastChild(Type.BIGINT, 0);
+                callExpr.uncheckedCastChild(StandardTypes.BIGINT, 0);
             } catch (AnalysisException e) {
                 throw new SemanticException(e.getMessage());
             }
@@ -124,7 +125,7 @@ public class WindowTransformer {
                 }
 
                 if (callExpr.getChildren().size() == 1) {
-                    callExpr.addChild(new IntLiteral("1", Type.BIGINT));
+                    callExpr.addChild(new IntLiteral("1", StandardTypes.BIGINT));
                     callExpr.addChild(NullLiteral.create(firstType));
                 } else if (callExpr.getChildren().size() == 2) {
                     callExpr.addChild(NullLiteral.create(firstType));
@@ -132,7 +133,7 @@ public class WindowTransformer {
 
                 AnalyticExpr.checkDefaultValue(callExpr);
                 // check the value whether out of range
-                callExpr.uncheckedCastChild(Type.BIGINT, 1);
+                callExpr.uncheckedCastChild(StandardTypes.BIGINT, 1);
 
                 AnalyticWindow.BoundaryType rightBoundaryType = AnalyticWindow.BoundaryType.FOLLOWING;
                 if (callExpr.getFnName().getFunction().equalsIgnoreCase(AnalyticExpr.LAG)) {

@@ -61,6 +61,7 @@ import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TPrimitiveType;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
 import com.starrocks.utframe.UtFrameUtils;
@@ -152,9 +153,9 @@ public class LoadPlannerTest {
                                      @Injectable Database db, @Injectable OlapTable table) throws StarRocksException {
         // table schema
         List<Column> columns = Lists.newArrayList();
-        Column c1 = new Column("c1", Type.BIGINT, true);
+        Column c1 = new Column("c1", StandardTypes.BIGINT, true);
         columns.add(c1);
-        Column c2 = new Column("c2", Type.BIGINT, true);
+        Column c2 = new Column("c2", StandardTypes.BIGINT, true);
         columns.add(c2);
         List<String> columnNames = Lists.newArrayList("c1", "c2");
 
@@ -244,15 +245,16 @@ public class LoadPlannerTest {
                                    @Injectable Database db, @Injectable OlapTable table) throws Exception {
         // table schema
         List<Column> columns = Lists.newArrayList();
-        columns.add(new Column("k1", Type.TINYINT, true, null, true, null, ""));
-        columns.add(new Column("k2", Type.INT, true, null, false, null, ""));
-        columns.add(new Column("k3", TypeFactory.createVarchar(50), true, null, true, null, ""));
-        columns.add(new Column("v", Type.BIGINT, false, AggregateType.SUM, false, null, ""));
+        columns.add(new Column("k1", StandardTypes.TINYINT, true, null, true, null, ""));
+        columns.add(new Column("k2", StandardTypes.INT, true, null, false, null, ""));
+        columns.add(new Column("k3", TypeFactory.createVarcharType(50), true, null, true, null, ""));
+        columns.add(new Column("v", StandardTypes.BIGINT, false, AggregateType.SUM, false, null, ""));
 
-        Function f1 = new Function(new FunctionName(FunctionSet.SUBSTR), new Type[] {Type.VARCHAR, Type.INT, Type.INT},
-                Type.VARCHAR, true);
-        Function f2 = new Function(new FunctionName("casttoint"), new Type[] {Type.VARCHAR},
-                Type.INT, true);
+        Function f1 = new Function(new FunctionName(FunctionSet.SUBSTR),
+                new Type[] {StandardTypes.VARCHAR, StandardTypes.INT, StandardTypes.INT},
+                StandardTypes.VARCHAR, true);
+        Function f2 = new Function(new FunctionName("casttoint"), new Type[] {StandardTypes.VARCHAR},
+                StandardTypes.INT, true);
         new Expectations() {
             {
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
@@ -378,15 +380,16 @@ public class LoadPlannerTest {
                                       @Injectable Database db, @Injectable OlapTable table) throws Exception {
         // table schema
         List<Column> columns = Lists.newArrayList();
-        columns.add(new Column("k1", Type.TINYINT, true, null, true, null, ""));
-        columns.add(new Column("k2", Type.INT, true, null, false, null, ""));
-        columns.add(new Column("k3", TypeFactory.createVarchar(50), true, null, true, null, ""));
-        columns.add(new Column("v", Type.BIGINT, false, AggregateType.SUM, false, null, ""));
+        columns.add(new Column("k1", StandardTypes.TINYINT, true, null, true, null, ""));
+        columns.add(new Column("k2", StandardTypes.INT, true, null, false, null, ""));
+        columns.add(new Column("k3", TypeFactory.createVarcharType(50), true, null, true, null, ""));
+        columns.add(new Column("v", StandardTypes.BIGINT, false, AggregateType.SUM, false, null, ""));
 
-        Function f1 = new Function(new FunctionName(FunctionSet.SUBSTR), new Type[] {Type.VARCHAR, Type.INT, Type.INT},
-                Type.VARCHAR, true);
-        Function f2 = new Function(new FunctionName("casttoint"), new Type[] {Type.VARCHAR},
-                Type.INT, true);
+        Function f1 = new Function(new FunctionName(FunctionSet.SUBSTR),
+                new Type[] {StandardTypes.VARCHAR, StandardTypes.INT, StandardTypes.INT},
+                StandardTypes.VARCHAR, true);
+        Function f2 = new Function(new FunctionName("casttoint"), new Type[] {StandardTypes.VARCHAR},
+                StandardTypes.INT, true);
         new Expectations() {
             {
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
@@ -536,9 +539,9 @@ public class LoadPlannerTest {
                                             @Injectable Database db, @Injectable OlapTable table) throws Exception {
         // table schema
         List<Column> columns = Lists.newArrayList();
-        columns.add(new Column("pk", Type.BIGINT, true, null, false, null, ""));
-        columns.add(new Column("v1", Type.INT, false, null, false, null, ""));
-        columns.add(new Column("v2", TypeFactory.createVarchar(50), false, null, true, null, ""));
+        columns.add(new Column("pk", StandardTypes.BIGINT, true, null, false, null, ""));
+        columns.add(new Column("v1", StandardTypes.INT, false, null, false, null, ""));
+        columns.add(new Column("v2", TypeFactory.createVarcharType(50), false, null, true, null, ""));
 
         new Expectations() {
             {
@@ -625,9 +628,9 @@ public class LoadPlannerTest {
                                            @Injectable Database db, @Injectable OlapTable table) throws Exception {
         // table schema
         List<Column> columns = Lists.newArrayList();
-        columns.add(new Column("pk", Type.BIGINT, true, null, false, null, ""));
-        columns.add(new Column("v1", Type.INT, false, null, false, null, ""));
-        columns.add(new Column("v2", TypeFactory.createVarchar(50), false, null, true, null, ""));
+        columns.add(new Column("pk", StandardTypes.BIGINT, true, null, false, null, ""));
+        columns.add(new Column("v1", StandardTypes.INT, false, null, false, null, ""));
+        columns.add(new Column("v2", TypeFactory.createVarcharType(50), false, null, true, null, ""));
 
         new Expectations() {
             {
@@ -716,16 +719,16 @@ public class LoadPlannerTest {
                                          @Injectable Database db, @Injectable OlapTable table) throws Exception {
         // table schema
         List<Column> columns = Lists.newArrayList();
-        columns.add(new Column("pk", Type.BIGINT, true, null, false, null, ""));
-        columns.add(new Column("v1", Type.INT, false, null, false, null, ""));
-        columns.add(new Column("v2", TypeFactory.createVarchar(50), false, null, true, null, ""));
+        columns.add(new Column("pk", StandardTypes.BIGINT, true, null, false, null, ""));
+        columns.add(new Column("v1", StandardTypes.INT, false, null, false, null, ""));
+        columns.add(new Column("v2", TypeFactory.createVarcharType(50), false, null, true, null, ""));
 
-        Function f1 = new Function(new FunctionName("casttobigint"), new Type[] {Type.VARCHAR},
-                Type.BIGINT, true);
-        Function f2 = new Function(new FunctionName("casttoint"), new Type[] {Type.VARCHAR},
-                Type.INT, true);
-        Function f3 = new Function(new FunctionName("casttotinyint"), new Type[] {Type.VARCHAR},
-                Type.TINYINT, true);
+        Function f1 = new Function(new FunctionName("casttobigint"), new Type[] {StandardTypes.VARCHAR},
+                StandardTypes.BIGINT, true);
+        Function f2 = new Function(new FunctionName("casttoint"), new Type[] {StandardTypes.VARCHAR},
+                StandardTypes.INT, true);
+        Function f3 = new Function(new FunctionName("casttotinyint"), new Type[] {StandardTypes.VARCHAR},
+                StandardTypes.TINYINT, true);
 
         new Expectations() {
             {
@@ -825,19 +828,19 @@ public class LoadPlannerTest {
                                           @Injectable Database db, @Injectable OlapTable table) throws Exception {
         // table schema
         List<Column> columns = Lists.newArrayList();
-        columns.add(new Column("pk", Type.BIGINT, true, null, false,
+        columns.add(new Column("pk", StandardTypes.BIGINT, true, null, false,
                 new ColumnDef.DefaultValueDef(true, new StringLiteral("123")), ""));
-        columns.add(new Column("v1", Type.INT, false, null, false,
+        columns.add(new Column("v1", StandardTypes.INT, false, null, false,
                 new ColumnDef.DefaultValueDef(true, new StringLiteral("231")), ""));
-        columns.add(new Column("v2", TypeFactory.createVarchar(50), false, null, true,
+        columns.add(new Column("v2", TypeFactory.createVarcharType(50), false, null, true,
                 new ColumnDef.DefaultValueDef(true, new StringLiteral("asdf")), ""));
 
-        Function f1 = new Function(new FunctionName("casttobigint"), new Type[] {Type.VARCHAR},
-                Type.BIGINT, true);
-        Function f2 = new Function(new FunctionName("casttoint"), new Type[] {Type.VARCHAR},
-                Type.INT, true);
-        Function f3 = new Function(new FunctionName("casttotinyint"), new Type[] {Type.VARCHAR},
-                Type.TINYINT, true);
+        Function f1 = new Function(new FunctionName("casttobigint"), new Type[] {StandardTypes.VARCHAR},
+                StandardTypes.BIGINT, true);
+        Function f2 = new Function(new FunctionName("casttoint"), new Type[] {StandardTypes.VARCHAR},
+                StandardTypes.INT, true);
+        Function f3 = new Function(new FunctionName("casttotinyint"), new Type[] {StandardTypes.VARCHAR},
+                StandardTypes.TINYINT, true);
 
         new Expectations() {
             {
@@ -922,20 +925,21 @@ public class LoadPlannerTest {
                             @Injectable Database db, @Injectable OlapTable table) throws Exception {
         // table schema
         List<Column> columns = Lists.newArrayList();
-        columns.add(new Column("k1", Type.TINYINT, true, null, true, null, ""));
-        columns.add(new Column("k2", Type.INT, true, null, false, null, ""));
-        columns.add(new Column("k3", TypeFactory.createVarchar(50), true, null, true, null, ""));
-        columns.add(new Column("v", Type.BIGINT, false, AggregateType.SUM, false, null, ""));
+        columns.add(new Column("k1", StandardTypes.TINYINT, true, null, true, null, ""));
+        columns.add(new Column("k2", StandardTypes.INT, true, null, false, null, ""));
+        columns.add(new Column("k3", TypeFactory.createVarcharType(50), true, null, true, null, ""));
+        columns.add(new Column("v", StandardTypes.BIGINT, false, AggregateType.SUM, false, null, ""));
 
         List<Column> keyColumns = Lists.newArrayList();
         keyColumns.add(columns.get(0));
         keyColumns.add(columns.get(1));
         keyColumns.add(columns.get(2));
 
-        Function f1 = new Function(new FunctionName(FunctionSet.SUBSTR), new Type[] {Type.VARCHAR, Type.INT, Type.INT},
-                Type.VARCHAR, true);
-        Function f2 = new Function(new FunctionName("casttoint"), new Type[] {Type.VARCHAR},
-                Type.INT, true);
+        Function f1 = new Function(new FunctionName(FunctionSet.SUBSTR),
+                new Type[] {StandardTypes.VARCHAR, StandardTypes.INT, StandardTypes.INT},
+                StandardTypes.VARCHAR, true);
+        Function f2 = new Function(new FunctionName("casttoint"), new Type[] {StandardTypes.VARCHAR},
+                StandardTypes.INT, true);
         new Expectations() {
             {
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
@@ -1036,10 +1040,10 @@ public class LoadPlannerTest {
                                @Injectable Database db, @Injectable OlapTable table) throws Exception {
         // table schema
         List<Column> columns = Lists.newArrayList();
-        columns.add(new Column("k1", Type.TINYINT, true, null, true, null, ""));
-        columns.add(new Column("k2", Type.INT, true, null, false, null, ""));
-        columns.add(new Column("k3", TypeFactory.createVarchar(50), true, null, true, null, ""));
-        columns.add(new Column("v", Type.BIGINT, false, AggregateType.REPLACE, false, null, ""));
+        columns.add(new Column("k1", StandardTypes.TINYINT, true, null, true, null, ""));
+        columns.add(new Column("k2", StandardTypes.INT, true, null, false, null, ""));
+        columns.add(new Column("k3", TypeFactory.createVarcharType(50), true, null, true, null, ""));
+        columns.add(new Column("v", StandardTypes.BIGINT, false, AggregateType.REPLACE, false, null, ""));
 
         List<Column> keyColumns = Lists.newArrayList();
         keyColumns.add(columns.get(0));
@@ -1049,10 +1053,11 @@ public class LoadPlannerTest {
         Map<Long, List<Column>> indexSchema = Maps.newHashMap();
         indexSchema.put((long) 1, columns);
 
-        Function f1 = new Function(new FunctionName(FunctionSet.SUBSTR), new Type[] {Type.VARCHAR, Type.INT, Type.INT},
-                Type.VARCHAR, true);
-        Function f2 = new Function(new FunctionName("casttoint"), new Type[] {Type.VARCHAR},
-                Type.INT, true);
+        Function f1 = new Function(new FunctionName(FunctionSet.SUBSTR),
+                new Type[] {StandardTypes.VARCHAR, StandardTypes.INT, StandardTypes.INT},
+                StandardTypes.VARCHAR, true);
+        Function f2 = new Function(new FunctionName("casttoint"), new Type[] {StandardTypes.VARCHAR},
+                StandardTypes.INT, true);
         new Expectations() {
             {
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
@@ -1181,9 +1186,9 @@ public class LoadPlannerTest {
                                   @Injectable Database db, @Injectable OlapTable table) throws StarRocksException {
         // table schema
         List<Column> columns = Lists.newArrayList();
-        Column c1 = new Column("c1", Type.BIGINT, true);
+        Column c1 = new Column("c1", StandardTypes.BIGINT, true);
         columns.add(c1);
-        Column c2 = new Column("c2", Type.BIGINT, true);
+        Column c2 = new Column("c2", StandardTypes.BIGINT, true);
         columns.add(c2);
         List<String> columnNames = Lists.newArrayList("c1", "c2");
 

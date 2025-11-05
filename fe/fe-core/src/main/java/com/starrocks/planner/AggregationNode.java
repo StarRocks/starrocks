@@ -63,7 +63,7 @@ import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TRuntimeFilterDescription;
 import com.starrocks.thrift.TStreamingPreaggregationMode;
-import com.starrocks.type.ScalarType;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.Type;
 import org.apache.commons.collections.CollectionUtils;
 
@@ -452,7 +452,7 @@ public class AggregationNode extends PlanNode implements RuntimeFilterBuildNode 
         // is unacceptable.
         List<ColumnStatistic> stringColumnStatistics = slotRefs.stream()
                 .map(slot -> columnStatistics.get(new ColumnRefOperator(slot.getSlotId().asInt(),
-                        ScalarType.UNKNOWN_TYPE, "key", false)))
+                        StandardTypes.UNKNOWN_TYPE, "key", false)))
                 .filter(stat -> stat != null && !stat.isUnknown() &&
                         stat.getAverageRowSize() * stat.getDistinctValuesCount() > 24 * cardinalityLimit)
                 .collect(Collectors.toList());

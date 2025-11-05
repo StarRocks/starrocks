@@ -58,6 +58,7 @@ import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.spm.SPMFunctions;
 import com.starrocks.type.ArrayType;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
@@ -220,7 +221,7 @@ public class FunctionAnalyzer {
             // Validate that the condition parameter (last parameter) is boolean type or can be cast to boolean
             if (!params.exprs().isEmpty()) {
                 Expr conditionExpr = params.exprs().get(params.exprs().size() - 1);
-                if (!Type.canCastTo(conditionExpr.getType(), Type.BOOLEAN)) {
+                if (!Type.canCastTo(conditionExpr.getType(), StandardTypes.BOOLEAN)) {
                     throw new SemanticException(String.format(
                         "The condition expression in %s function must be boolean type or castable to boolean, but got %s",
                         fnName.getFunction(), conditionExpr.getType().toSql()), functionCallExpr.getPos());
@@ -823,8 +824,8 @@ public class FunctionAnalyzer {
             // stored in the parameter of the function, so that the StringLiteral can be obtained in the
             // subsequent rule rewriting, and then the typeof can be replaced.
             Type originType = argumentTypes[0];
-            argumentTypes[0] = Type.STRING;
-            fn = new Function(new FunctionName("typeof_internal"), argumentTypes, Type.STRING, false);
+            argumentTypes[0] = StandardTypes.STRING;
+            fn = new Function(new FunctionName("typeof_internal"), argumentTypes, StandardTypes.STRING, false);
             Expr newChildExpr = new StringLiteral(originType.toTypeString());
             node.getParams().exprs().set(0, newChildExpr);
             node.setChild(0, newChildExpr);
@@ -914,9 +915,9 @@ public class FunctionAnalyzer {
             }
         } else if (FunctionSet.FIELD.equalsIgnoreCase(fnName)) {
             Type targetType = argumentTypes[0];
-            Type returnType = Type.INT;
+            Type returnType = StandardTypes.INT;
             if (targetType.isNull()) {
-                targetType = Type.INT;
+                targetType = StandardTypes.INT;
             } else {
                 for (int i = 1; i < argumentTypes.length; i++) {
                     if (argumentTypes[i].isNull()) {
@@ -928,7 +929,7 @@ public class FunctionAnalyzer {
                             throw new SemanticException("Parameter's type is invalid");
                         }
                     } else {
-                        targetType = Type.DOUBLE;
+                        targetType = StandardTypes.DOUBLE;
                     }
                 }
             }
@@ -954,14 +955,14 @@ public class FunctionAnalyzer {
             Preconditions.checkState(argumentTypes.length == 2);
             if (argumentTypes[1].isNull() &&
                     argumentTypes[0].isArrayType() && ((ArrayType) argumentTypes[0]).getItemType().isNull()) {
-                argumentTypes[0] = Type.ARRAY_BOOLEAN;
-                argumentTypes[1] = Type.BOOLEAN;
+                argumentTypes[0] = StandardTypes.ARRAY_BOOLEAN;
+                argumentTypes[1] = StandardTypes.BOOLEAN;
                 fn = ExprUtils.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_IDENTICAL);
             }
         } else if (FunctionSet.ICEBERG_TRANSFORM_BUCKET.equalsIgnoreCase(fnName) ||
                 FunctionSet.ICEBERG_TRANSFORM_TRUNCATE.equalsIgnoreCase(fnName)) {
             Preconditions.checkState(argumentTypes.length == 2);
-            Type[] args = new Type[] {argumentTypes[0], Type.INT};
+            Type[] args = new Type[] {argumentTypes[0], StandardTypes.INT};
             fn = ExprUtils.getBuiltinFunction(fnName, args, Function.CompareMode.IS_IDENTICAL);
             if (args[0].isDecimalV3()) {
                 fn.setArgsType(args);
@@ -969,7 +970,7 @@ public class FunctionAnalyzer {
             if (FunctionSet.ICEBERG_TRANSFORM_TRUNCATE.equalsIgnoreCase(fnName)) {
                 fn.setRetType(args[0]);
             } else {
-                fn.setRetType(Type.INT);
+                fn.setRetType(StandardTypes.INT);
             }
         }
         // add new argument types
@@ -1059,9 +1060,9 @@ public class FunctionAnalyzer {
                                                                             List<Boolean> isAscOrder) {
         Type[] argsTypes = new Type[argumentTypes.length];
         for (int i = 0; i < argumentTypes.length; ++i) {
-            argsTypes[i] = argumentTypes[i] == Type.NULL ? Type.BOOLEAN : argumentTypes[i];
+            argsTypes[i] = argumentTypes[i] == StandardTypes.NULL ? StandardTypes.BOOLEAN : argumentTypes[i];
             if (fnName.equals(FunctionSet.GROUP_CONCAT) && i < argumentTypes.length - isAscOrder.size()) {
-                argsTypes[i] = Type.VARCHAR;
+                argsTypes[i] = StandardTypes.VARCHAR;
             }
         }
         ArrayList<Type> structTypes = new ArrayList<>(argsTypes.length);
@@ -1134,7 +1135,7 @@ public class FunctionAnalyzer {
                 fn.setRetType(new ArrayType(argsTypes[0]));     // return null if scalar agg with empty input
                 outputConst = argumentIsConstants[0];
             } else {
-                fn.setRetType(Type.VARCHAR);
+                fn.setRetType(StandardTypes.VARCHAR);
                 for (int i = 0; i < argSize - isAscOrder.size() - 1; i++) {
                     if (!argumentIsConstants[i]) {
                         outputConst = false;
@@ -1145,7 +1146,7 @@ public class FunctionAnalyzer {
             // need to distinct output columns in finalize phase
             ((AggregateFunction) fn).setIsDistinct(isDistinct && (!isAscOrder.isEmpty() || outputConst));
         } else if (FunctionSet.PERCENTILE_DISC.equals(fnName) || FunctionSet.LC_PERCENTILE_DISC.equals(fnName)) {
-            argumentTypes[1] = Type.DOUBLE;
+            argumentTypes[1] = StandardTypes.DOUBLE;
             fn = ExprUtils.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_IDENTICAL);
             // correct decimal's precision and scale
             if (fn.getArgs()[0].isDecimalV3()) {
@@ -1221,7 +1222,7 @@ public class FunctionAnalyzer {
             fn = DecimalV3FunctionAnalyzer.getDecimalV3Function(session, fnName, params, argumentTypes, pos);
         } else if (DecimalV3FunctionAnalyzer.argumentTypeContainDecimalV2(fnName, argumentTypes)) {
             fn = DecimalV3FunctionAnalyzer.getDecimalV2Function(fnName, argumentTypes);
-        } else if (Arrays.stream(argumentTypes).anyMatch(arg -> arg.matchesType(Type.TIME))) {
+        } else if (Arrays.stream(argumentTypes).anyMatch(arg -> arg.matchesType(StandardTypes.TIME))) {
             fn = ExprUtils.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             if (fn instanceof AggregateFunction) {
                 throw new SemanticException("Time Type can not used in " + fnName + " function", pos);

@@ -33,6 +33,7 @@ import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
 
@@ -112,7 +113,7 @@ public class DecimalV3FunctionAnalyzer {
             }
             Type commonType = Type.getCommonType(argTypes, commonTypeStartIdx, argTypes.length);
             Type[] newArgType = new Type[argTypes.length];
-            newArgType[0] = isIfFunc ? Type.BOOLEAN : argTypes[0];
+            newArgType[0] = isIfFunc ? StandardTypes.BOOLEAN : argTypes[0];
             Arrays.fill(newArgType, commonTypeStartIdx, argTypes.length, commonType);
             return newArgType;
         }
@@ -206,7 +207,8 @@ public class DecimalV3FunctionAnalyzer {
             returnScale = originalScale;
             returnType = TypeFactory.createType(returnPrimitiveType, -1, returnPrecision, returnScale);
         } else {
-            return ExprUtils.getBuiltinFunction(fn.getFunctionName().getFunction(), new Type[] {Type.DOUBLE, Type.INT},
+            return ExprUtils.getBuiltinFunction(fn.getFunctionName().getFunction(),
+                    new Type[] {StandardTypes.DOUBLE, StandardTypes.INT},
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         }
 
@@ -384,7 +386,7 @@ public class DecimalV3FunctionAnalyzer {
         if (FunctionSet.ARRAY_SLICE.equals(fnName)) {
             Type[] clone = Arrays.copyOf(argumentTypes, argumentTypes.length);
             for (int i = 1; i < clone.length; i++) {
-                clone[i] = Type.BIGINT;
+                clone[i] = StandardTypes.BIGINT;
             }
 
             argumentTypes = clone;
@@ -413,7 +415,7 @@ public class DecimalV3FunctionAnalyzer {
             // can not work. Because of this reason, stddev and variance on very small decimal numbers always
             // yields a zero, so we use double instead of decimal128(38,9) to compute stddev and variance of
             // decimal types.
-            Type[] doubleArgTypes = Stream.of(argumentTypes).map(t -> Type.DOUBLE).toArray(Type[]::new);
+            Type[] doubleArgTypes = Stream.of(argumentTypes).map(t -> StandardTypes.DOUBLE).toArray(Type[]::new);
             return ExprUtils.getBuiltinFunction(fnName, doubleArgTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         }
 
@@ -434,9 +436,9 @@ public class DecimalV3FunctionAnalyzer {
 
         Function newFn = fn;
         if (DECIMAL_AGG_FUNCTION_SAME_TYPE.contains(fnName) || DECIMAL_AGG_FUNCTION_WIDER_TYPE.contains(fnName)) {
-            Type commonType = Type.INVALID;
+            Type commonType = StandardTypes.INVALID;
             if (FunctionSet.HISTOGRAM.equals(fnName)) {
-                commonType = Type.VARCHAR;
+                commonType = StandardTypes.VARCHAR;
             } else if (DECIMAL_AGG_FUNCTION_SAME_TYPE.contains(fnName)) {
                 commonType = argumentTypes[0];
             } else if (DECIMAL_AGG_FUNCTION_WIDER_TYPE.contains(fnName) && argumentTypes[0].isDecimalV3()) {
@@ -470,7 +472,7 @@ public class DecimalV3FunctionAnalyzer {
             newFn = fn.copy();
             newFn.setArgsType(argTypes);
             newFn.setRetType(returnType);
-            ((AggregateFunction) newFn).setIntermediateType(Type.VARBINARY);
+            ((AggregateFunction) newFn).setIntermediateType(StandardTypes.VARBINARY);
         } else if (DECIMAL_UNARY_FUNCTION_SET.contains(fnName)) {
             Type commonType = argumentTypes[0];
             Type returnType = fn.getReturnType();
@@ -501,7 +503,7 @@ public class DecimalV3FunctionAnalyzer {
             // And we need to downgrade to double version if second param is neither int literal nor SlotRef expression
             Type commonType = argumentTypes[0].isDecimalV3() ?
                     TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, argumentTypes[0].getPrecision(),
-                            ((ScalarType) argumentTypes[0]).getScalarScale()) : Type.DEFAULT_DECIMAL128;
+                            ((ScalarType) argumentTypes[0]).getScalarScale()) : StandardTypes.DEFAULT_DECIMAL128;
             List<Type> argTypes = Arrays.stream(fn.getArgs()).map(t -> t.isDecimalV3() ? commonType : t)
                     .collect(Collectors.toList());
             newFn = getFunctionOfRound(params, fn, argTypes);

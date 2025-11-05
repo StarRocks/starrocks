@@ -18,6 +18,7 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.MapType;
 import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
@@ -95,7 +96,7 @@ public class TrinoViewColumnTypeConverter {
                 return TypeFactory.createCharType(getCharLength(trinoType));
             case "BINARY":
             case "VARBINARY":
-                return Type.VARBINARY;
+                return StandardTypes.VARBINARY;
             case "BOOLEAN":
                 primitiveType = PrimitiveType.BOOLEAN;
                 break;
@@ -104,21 +105,21 @@ public class TrinoViewColumnTypeConverter {
                 if (type.isArrayType()) {
                     return type;
                 } else {
-                    return Type.UNKNOWN_TYPE;
+                    return StandardTypes.UNKNOWN_TYPE;
                 }
             case "MAP":
                 Type mapType = fromTrinoTypeToMapType(trinoType);
                 if (mapType.isMapType()) {
                     return mapType;
                 } else {
-                    return Type.UNKNOWN_TYPE;
+                    return StandardTypes.UNKNOWN_TYPE;
                 }
             case "ROW":
                 Type structType = fromTrinoTypeToStructType(trinoType);
                 if (structType.isStructType()) {
                     return structType;
                 } else {
-                    return Type.UNKNOWN_TYPE;
+                    return StandardTypes.UNKNOWN_TYPE;
                 }
             default:
                 primitiveType = PrimitiveType.UNKNOWN_TYPE;
@@ -136,13 +137,13 @@ public class TrinoViewColumnTypeConverter {
     // Array string like "Array(Integer)"
     public static Type fromTrinoTypeToArrayType(String typeStr) {
         if (UNSUPPORTED_TYPES.stream().anyMatch(typeStr.toUpperCase()::contains)) {
-            return Type.UNKNOWN_TYPE;
+            return StandardTypes.UNKNOWN_TYPE;
         }
         Matcher matcher = Pattern.compile(ARRAY_PATTERN).matcher(typeStr.toLowerCase(Locale.ROOT));
         Type itemType;
         if (matcher.find()) {
-            if (fromTrinoTypeToArrayType(matcher.group(1)).equals(Type.UNKNOWN_TYPE)) {
-                itemType = Type.UNKNOWN_TYPE;
+            if (fromTrinoTypeToArrayType(matcher.group(1)).equals(StandardTypes.UNKNOWN_TYPE)) {
+                itemType = StandardTypes.UNKNOWN_TYPE;
             } else {
                 itemType = new ArrayType(fromTrinoTypeToArrayType(matcher.group(1)));
             }

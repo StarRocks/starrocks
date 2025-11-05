@@ -30,7 +30,7 @@ import com.starrocks.sql.common.PRangeCell;
 import com.starrocks.sql.common.PartitionMapping;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.Type;
+import com.starrocks.type.StandardTypes;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -88,7 +88,7 @@ public class MVEagerRangePartitionMapper extends MVRangePartitionMapper {
     private static LocalDateTime toLocalDateTime(LiteralExpr literal) {
         DateLiteral dateLiteral;
         if (literal instanceof MaxLiteral) {
-            dateLiteral = new DateLiteral(Type.DATE, true);
+            dateLiteral = new DateLiteral(StandardTypes.DATE, true);
             return dateLiteral.toLocalDateTime();
         } else {
             dateLiteral = (DateLiteral) literal;

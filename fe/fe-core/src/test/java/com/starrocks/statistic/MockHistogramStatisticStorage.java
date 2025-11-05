@@ -30,6 +30,7 @@ import com.starrocks.sql.optimizer.statistics.Bucket;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Histogram;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.Type;
 import org.apache.commons.collections4.map.CaseInsensitiveMap;
 import org.junit.jupiter.api.Assertions;
@@ -265,23 +266,23 @@ public class MockHistogramStatisticStorage implements StatisticStorage {
     }
 
     private void mockTpchHistogramStatistics() {
-        addHistogramStatistis("c_mktsegment", Type.STRING, tpchScala);
-        addHistogramStatistis("c_acctbal", Type.STRING, tpchScala);
-        addHistogramStatistis("l_discount", Type.DECIMAL32, tpchScala);
-        addHistogramStatistis("l_quantity", Type.DECIMAL32, tpchScala);
-        addHistogramStatistis("l_receiptdate", Type.DATE, tpchScala);
-        addHistogramStatistis("l_shipdate", Type.DATE, tpchScala);
-        addHistogramStatistis("l_returnflag", Type.STRING, tpchScala);
-        addHistogramStatistis("l_shipinstruct", Type.STRING, tpchScala);
-        addHistogramStatistis("o_orderdate", Type.DATE, tpchScala);
-        addHistogramStatistis("o_orderstatus", Type.STRING, tpchScala);
-        addHistogramStatistis("p_type", Type.STRING, tpchScala);
-        addHistogramStatistis("p_size", Type.INT, tpchScala);
-        addHistogramStatistis("p_brand", Type.STRING, tpchScala);
-        addHistogramStatistis("p_container", Type.STRING, tpchScala);
-        addHistogramStatistis("r_name", Type.STRING, 1);
-        addHistogramStatistis("n_nationkey", Type.INT, 1);
-        addHistogramStatistis("n_name", Type.STRING, 1);
+        addHistogramStatistis("c_mktsegment", StandardTypes.STRING, tpchScala);
+        addHistogramStatistis("c_acctbal", StandardTypes.STRING, tpchScala);
+        addHistogramStatistis("l_discount", StandardTypes.DECIMAL32, tpchScala);
+        addHistogramStatistis("l_quantity", StandardTypes.DECIMAL32, tpchScala);
+        addHistogramStatistis("l_receiptdate", StandardTypes.DATE, tpchScala);
+        addHistogramStatistis("l_shipdate", StandardTypes.DATE, tpchScala);
+        addHistogramStatistis("l_returnflag", StandardTypes.STRING, tpchScala);
+        addHistogramStatistis("l_shipinstruct", StandardTypes.STRING, tpchScala);
+        addHistogramStatistis("o_orderdate", StandardTypes.DATE, tpchScala);
+        addHistogramStatistis("o_orderstatus", StandardTypes.STRING, tpchScala);
+        addHistogramStatistis("p_type", StandardTypes.STRING, tpchScala);
+        addHistogramStatistis("p_size", StandardTypes.INT, tpchScala);
+        addHistogramStatistis("p_brand", StandardTypes.STRING, tpchScala);
+        addHistogramStatistis("p_container", StandardTypes.STRING, tpchScala);
+        addHistogramStatistis("r_name", StandardTypes.STRING, 1);
+        addHistogramStatistis("n_nationkey", StandardTypes.INT, 1);
+        addHistogramStatistis("n_name", StandardTypes.STRING, 1);
     }
 
     private void mockSubfieldStatistics() {

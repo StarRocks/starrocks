@@ -18,6 +18,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.type.AnyMapType;
 import com.starrocks.type.MapType;
 import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
@@ -28,46 +29,46 @@ import org.junit.jupiter.api.Test;
 public class StructTypeTest {
     @Test
     public void testTypeMatch() {
-        Assertions.assertTrue(Type.ANY_STRUCT.matchesType(Type.ANY_STRUCT));
-        Assertions.assertTrue(Type.ANY_STRUCT.matchesType(Type.ANY_ELEMENT));
-        StructType structType = new StructType(Lists.newArrayList(Type.BIGINT, Type.DOUBLE));
-        Assertions.assertTrue(Type.ANY_STRUCT.matchesType(structType));
+        Assertions.assertTrue(StandardTypes.ANY_STRUCT.matchesType(StandardTypes.ANY_STRUCT));
+        Assertions.assertTrue(StandardTypes.ANY_STRUCT.matchesType(StandardTypes.ANY_ELEMENT));
+        StructType structType = new StructType(Lists.newArrayList(StandardTypes.BIGINT, StandardTypes.DOUBLE));
+        Assertions.assertTrue(StandardTypes.ANY_STRUCT.matchesType(structType));
     }
 
     @Test
     public void testUnnamedStruct() {
-        StructType type = new StructType(Lists.newArrayList(Type.INT, Type.DATETIME));
+        StructType type = new StructType(Lists.newArrayList(StandardTypes.INT, StandardTypes.DATETIME));
         Assertions.assertEquals("struct<col1 int(11), col2 datetime>", type.toSql());
     }
 
     @Test
     public void testStructEquals() {
         // test equals() for unnamed struct
-        StructType originType = new StructType(Lists.newArrayList(Type.INT, Type.VARCHAR));
-        StructType comparedType = new StructType(Lists.newArrayList(Type.INT, Type.VARCHAR));
+        StructType originType = new StructType(Lists.newArrayList(StandardTypes.INT, StandardTypes.VARCHAR));
+        StructType comparedType = new StructType(Lists.newArrayList(StandardTypes.INT, StandardTypes.VARCHAR));
         Assertions.assertEquals(originType, comparedType);
         Assertions.assertEquals(comparedType, originType);
 
-        comparedType = new StructType(Lists.newArrayList(Type.VARCHAR, Type.INT));
+        comparedType = new StructType(Lists.newArrayList(StandardTypes.VARCHAR, StandardTypes.INT));
         Assertions.assertNotEquals(originType, comparedType);
         Assertions.assertNotEquals(comparedType, originType);
 
         // test equals() for unnamed struct & named struct
-        StructField tmpField1 = new StructField("hello", Type.INT);
-        StructField tmpField2 = new StructField("world", Type.VARCHAR);
+        StructField tmpField1 = new StructField("hello", StandardTypes.INT);
+        StructField tmpField2 = new StructField("world", StandardTypes.VARCHAR);
         comparedType = new StructType(Lists.newArrayList(tmpField1, tmpField2));
         Assertions.assertNotEquals(originType, comparedType);
         Assertions.assertNotEquals(comparedType, originType);
 
         // test equals() for named struct & named struct
-        StructField tmpField3 = new StructField("hello", Type.INT);
-        StructField tmpField4 = new StructField("world", Type.VARCHAR);
+        StructField tmpField3 = new StructField("hello", StandardTypes.INT);
+        StructField tmpField4 = new StructField("world", StandardTypes.VARCHAR);
         originType = new StructType(Lists.newArrayList(tmpField1, tmpField2));
         comparedType = new StructType(Lists.newArrayList(tmpField3, tmpField4));
         Assertions.assertEquals(originType, comparedType);
         Assertions.assertEquals(comparedType, originType);
 
-        tmpField3 = new StructField("hello123", Type.INT);
+        tmpField3 = new StructField("hello123", StandardTypes.INT);
         comparedType = new StructType(Lists.newArrayList(tmpField3, tmpField4));
         Assertions.assertNotEquals(originType, comparedType);
         Assertions.assertNotEquals(comparedType, originType);

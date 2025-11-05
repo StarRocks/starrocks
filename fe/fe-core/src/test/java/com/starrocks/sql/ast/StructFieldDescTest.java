@@ -19,6 +19,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
@@ -29,13 +30,13 @@ import org.junit.jupiter.api.Test;
 public class StructFieldDescTest {
     @Test
     public void testAnalyze() {
-        StructField field1 = new StructField("v1", Type.INT);
-        StructField field2 = new StructField("v2", Type.VARCHAR);
-        StructField field3 = new StructField("v3", Type.INT);
+        StructField field1 = new StructField("v1", StandardTypes.INT);
+        StructField field2 = new StructField("v2", StandardTypes.VARCHAR);
+        StructField field3 = new StructField("v3", StandardTypes.INT);
 
         Assertions.assertEquals("StructField[name='v3', type=INT, position=0, fieldId=-1, fieldPhysicalName='']",
                 field3.toString());
-        StructField unnamedField = new StructField(null, Type.VARCHAR);
+        StructField unnamedField = new StructField(null, StandardTypes.VARCHAR);
         Assertions.assertEquals("StructField[name='', type=VARCHAR, position=0, fieldId=-1, fieldPhysicalName='']",
                 unnamedField.toString());
 

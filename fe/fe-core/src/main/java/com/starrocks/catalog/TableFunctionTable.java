@@ -58,6 +58,7 @@ import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableFunctionTable;
 import com.starrocks.thrift.TTableType;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeDeserializer;
 import com.starrocks.type.TypeFactory;
@@ -101,10 +102,10 @@ public class TableFunctionTable extends Table {
     }
 
     private static final List<Column> LIST_FILES_COLUMNS = new SchemaBuilder()
-            .column("PATH", Type.STRING)
-            .column("SIZE", Type.BIGINT)
-            .column("IS_DIR", Type.BOOLEAN)
-            .column("MODIFICATION_TIME", Type.DATETIME)
+            .column("PATH", StandardTypes.STRING)
+            .column("SIZE", StandardTypes.BIGINT)
+            .column("IS_DIR", StandardTypes.BOOLEAN)
+            .column("MODIFICATION_TIME", StandardTypes.DATETIME)
             .build();
 
     private static final int DEFAULT_AUTO_DETECT_SAMPLE_FILES = 2;
@@ -250,8 +251,8 @@ public class TableFunctionTable extends Table {
         // infer schema from files
         List<Column> columns = new ArrayList<>();
         if (path.startsWith(FAKE_PATH)) {
-            columns.add(new Column("col_int", Type.INT));
-            columns.add(new Column("col_string", Type.VARCHAR));
+            columns.add(new Column("col_int", StandardTypes.INT));
+            columns.add(new Column("col_string", StandardTypes.VARCHAR));
         } else {
             columns = getFileSchema();
         }

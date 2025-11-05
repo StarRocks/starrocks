@@ -46,6 +46,7 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.thrift.TSlotDescriptor;
 import com.starrocks.type.ScalarType;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
 import com.starrocks.type.TypeSerializer;
@@ -269,7 +270,7 @@ public class SlotDescriptor {
         if (originType != null) {
             tSlotDescriptor.setSlotType(TypeSerializer.toThrift(originType));
         } else {
-            type = type.isNull() ? ScalarType.BOOLEAN : type;
+            type = type.isNull() ? StandardTypes.BOOLEAN : type;
             tSlotDescriptor.setSlotType(TypeSerializer.toThrift(type));
             if (column != null) {
                 LOG.debug("column id:{}, column unique id:{}",

@@ -31,7 +31,7 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.parser.SqlParser;
-import com.starrocks.type.Type;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -158,11 +158,11 @@ public class AnalyzeInsertTest {
                 result = new Database();
 
                 icebergTable.getBaseSchema();
-                result = ImmutableList.of(new Column("c1", Type.INT));
+                result = ImmutableList.of(new Column("c1", StandardTypes.INT));
                 minTimes = 0;
 
                 icebergTable.getFullSchema();
-                result = ImmutableList.of(new Column("c1", Type.INT));
+                result = ImmutableList.of(new Column("c1", StandardTypes.INT));
                 minTimes = 0;
             }
         };
@@ -202,7 +202,7 @@ public class AnalyzeInsertTest {
                 minTimes = 0;
 
                 icebergTable.getColumn(anyString);
-                result = ImmutableList.of(new Column("p1", Type.ARRAY_DATE));
+                result = ImmutableList.of(new Column("p1", StandardTypes.ARRAY_DATE));
                 minTimes = 0;
 
                 icebergTable.isIcebergTable();
@@ -220,15 +220,17 @@ public class AnalyzeInsertTest {
         new Expectations() {
             {
                 icebergTable.getBaseSchema();
-                result = ImmutableList.of(new Column("c1", Type.INT), new Column("p1", Type.INT), new Column("p2", Type.INT));
+                result = ImmutableList.of(new Column("c1", StandardTypes.INT),
+                        new Column("p1", StandardTypes.INT), new Column("p2", StandardTypes.INT));
                 minTimes = 0;
 
                 icebergTable.getFullSchema();
-                result = ImmutableList.of(new Column("c1", Type.INT), new Column("p1", Type.INT), new Column("p2", Type.INT));
+                result = ImmutableList.of(new Column("c1", StandardTypes.INT),
+                        new Column("p1", StandardTypes.INT), new Column("p2", StandardTypes.INT));
                 minTimes = 0;
 
                 icebergTable.getColumn(anyString);
-                result = ImmutableList.of(new Column("p1", Type.INT), new Column("p2", Type.INT));
+                result = ImmutableList.of(new Column("p1", StandardTypes.INT), new Column("p2", StandardTypes.INT));
                 minTimes = 0;
 
                 icebergTable.getPartitionColumnNames();
@@ -243,17 +245,17 @@ public class AnalyzeInsertTest {
         new Expectations() {
             {
                 icebergTable.getBaseSchema();
-                result = ImmutableList.of(new Column("c1", Type.INT), new Column("p1", Type.DATETIME),
-                        new Column("p2", Type.INT));
+                result = ImmutableList.of(new Column("c1", StandardTypes.INT), new Column("p1", StandardTypes.DATETIME),
+                        new Column("p2", StandardTypes.INT));
                 minTimes = 0;
 
                 icebergTable.getFullSchema();
-                result = ImmutableList.of(new Column("c1", Type.INT), new Column("p1", Type.DATETIME),
-                        new Column("p2", Type.INT));
+                result = ImmutableList.of(new Column("c1", StandardTypes.INT), new Column("p1", StandardTypes.DATETIME),
+                        new Column("p2", StandardTypes.INT));
                 minTimes = 0;
 
                 icebergTable.getColumn(anyString);
-                result = ImmutableList.of(new Column("p1", Type.INT), new Column("p2", Type.DATETIME));
+                result = ImmutableList.of(new Column("p1", StandardTypes.INT), new Column("p2", StandardTypes.DATETIME));
                 minTimes = 0;
 
                 icebergTable.getPartitionColumnNames();

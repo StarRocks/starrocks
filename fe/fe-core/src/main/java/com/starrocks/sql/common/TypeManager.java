@@ -26,6 +26,7 @@ import com.starrocks.type.ArrayType;
 import com.starrocks.type.MapType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
@@ -67,7 +68,7 @@ public class TypeManager {
             return t1.isNull() ? t2 : t1;
         }
 
-        return Type.INVALID;
+        return StandardTypes.INVALID;
     }
 
     public static Type getCommonSuperType(List<Type> types) {
@@ -96,24 +97,24 @@ public class TypeManager {
     private static Type getCommonMapType(MapType t1, MapType t2) {
         Type keyCommon = getCommonSuperType(t1.getKeyType(), t2.getKeyType());
         if (!keyCommon.isValid()) {
-            return Type.INVALID;
+            return StandardTypes.INVALID;
         }
         Type valueCommon = getCommonSuperType(t1.getValueType(), t2.getValueType());
         if (!valueCommon.isValid()) {
-            return Type.INVALID;
+            return StandardTypes.INVALID;
         }
         return new MapType(keyCommon, valueCommon);
     }
 
     private static Type getCommonStructType(StructType t1, StructType t2) {
         if (t1.getFields().size() != t2.getFields().size()) {
-            return Type.INVALID;
+            return StandardTypes.INVALID;
         }
         ArrayList<StructField> fields = Lists.newArrayList();
         for (int i = 0; i < t1.getFields().size(); ++i) {
             Type fieldCommon = getCommonSuperType(t1.getField(i).getType(), t2.getField(i).getType());
             if (!fieldCommon.isValid()) {
-                return Type.INVALID;
+                return StandardTypes.INVALID;
             }
 
             // default t1's field name
@@ -146,7 +147,7 @@ public class TypeManager {
             compatibleType = getCompatibleTypeForBetweenAndIn(compatibleType, types.get(i), isBetween);
         }
 
-        if (Type.VARCHAR.equals(compatibleType)) {
+        if (StandardTypes.VARCHAR.equals(compatibleType)) {
             if (types.get(0).isDateType()) {
                 return types.get(0);
             }
@@ -187,7 +188,7 @@ public class TypeManager {
         }
 
         if (t1.isJsonType() || t2.isJsonType()) {
-            return Type.JSON;
+            return StandardTypes.JSON;
         }
 
 
@@ -195,7 +196,7 @@ public class TypeManager {
         PrimitiveType t2ResultType = t2.getResultType().getPrimitiveType();
         // Following logical is compatible with MySQL.
         if ((t1ResultType == PrimitiveType.VARCHAR && t2ResultType == PrimitiveType.VARCHAR)) {
-            return Type.VARCHAR;
+            return StandardTypes.VARCHAR;
         }
         if (t1ResultType == PrimitiveType.BIGINT && t2ResultType == PrimitiveType.BIGINT) {
             return Type.getAssignmentCompatibleType(t1, t2, false);
@@ -205,15 +206,15 @@ public class TypeManager {
                 || t1ResultType == PrimitiveType.DECIMALV2)
                 && (t2ResultType == PrimitiveType.BIGINT
                 || t2ResultType == PrimitiveType.DECIMALV2)) {
-            return Type.DECIMALV2;
+            return StandardTypes.DECIMALV2;
         }
         if ((t1ResultType == PrimitiveType.BIGINT
                 || t1ResultType == PrimitiveType.LARGEINT)
                 && (t2ResultType == PrimitiveType.BIGINT
                 || t2ResultType == PrimitiveType.LARGEINT)) {
-            return Type.LARGEINT;
+            return StandardTypes.LARGEINT;
         }
-        return Type.DOUBLE;
+        return StandardTypes.DOUBLE;
     }
 
     public static Type getCompatibleTypeForBinary(boolean isRangeCompare, Type type1, Type type2) {
@@ -238,7 +239,7 @@ public class TypeManager {
         }
         if (type1.isComplexType() || type2.isComplexType() || type1.isOnlyMetricType() || type2.isOnlyMetricType()) {
             // We don't support complex type (map/struct) for GT/LT predicate.
-            return Type.INVALID;
+            return StandardTypes.INVALID;
         }
 
         if (type1.equals(type2)) {
@@ -250,7 +251,7 @@ public class TypeManager {
         }
 
         if (type1.isJsonType() || type2.isJsonType()) {
-            return Type.JSON;
+            return StandardTypes.JSON;
         }
 
         if (type1.isDecimalV3() || type2.isDecimalV3()) {
@@ -263,7 +264,7 @@ public class TypeManager {
         BiFunction<Type, Type, Boolean> isDataAndString =
                 (a, b) -> a.isDateType() && (b.isStringType() || b.isDateType());
         if (isDataAndString.apply(type1, type2) || isDataAndString.apply(type2, type1)) {
-            return Type.DATETIME;
+            return StandardTypes.DATETIME;
         }
 
         // number type
@@ -279,17 +280,17 @@ public class TypeManager {
             return type1;
         }
 
-        return Type.DOUBLE;
+        return StandardTypes.DOUBLE;
     }
 
     private static Type getEquivalenceBaseType(Type type1, Type type2) {
-        Type baseType = Type.STRING;
+        Type baseType = StandardTypes.STRING;
         if (ConnectContext.get() != null && SessionVariableConstants.DECIMAL.equalsIgnoreCase(ConnectContext.get()
                 .getSessionVariable().getCboEqBaseType())) {
-            baseType = Type.DEFAULT_DECIMAL128;
+            baseType = StandardTypes.DEFAULT_DECIMAL128;
             // TODO(stephen): support auto scale up decimal precision
             if (type1.isDecimal256() || type2.isDecimal256()) {
-                baseType = Type.DEFAULT_DECIMAL256;
+                baseType = StandardTypes.DEFAULT_DECIMAL256;
             }
             if (type1.isDecimalOfAnyVersion() || type2.isDecimalOfAnyVersion()) {
                 baseType = type1.isDecimalOfAnyVersion() ? type1 : type2;
@@ -297,7 +298,7 @@ public class TypeManager {
         }
         if (ConnectContext.get() != null && SessionVariableConstants.DOUBLE.equalsIgnoreCase(ConnectContext.get()
                 .getSessionVariable().getCboEqBaseType())) {
-            baseType = Type.DOUBLE;
+            baseType = StandardTypes.DOUBLE;
         }
         return baseType;
     }

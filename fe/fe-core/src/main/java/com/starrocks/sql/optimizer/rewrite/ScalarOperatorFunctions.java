@@ -47,7 +47,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.expression.DecimalLiteral;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
-import com.starrocks.type.ScalarType;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
 import net.openhft.hashing.LongHashFunction;
@@ -252,7 +252,7 @@ public class ScalarOperatorFunctions {
         long hashValue = HashFunctions.XX_HASH3_64_SEED;
         for (ConstantOperator constantOperator : input) {
             if (constantOperator.isNull()) {
-                return ConstantOperator.createNull(Type.BIGINT);
+                return ConstantOperator.createNull(StandardTypes.BIGINT);
             }
             hashValue = HashFunctions.hash64(constantOperator.getVarchar(), hashValue);
         }
@@ -432,7 +432,7 @@ public class ScalarOperatorFunctions {
     public static ConstantOperator dateFormat(ConstantOperator date, ConstantOperator fmtLiteral) {
         String format = fmtLiteral.getVarchar();
         if (format.isEmpty()) {
-            return ConstantOperator.createNull(Type.VARCHAR);
+            return ConstantOperator.createNull(StandardTypes.VARCHAR);
         }
         // unix style
         if (!SUPPORT_JAVA_STYLE_DATETIME_FORMATTER.contains(format.trim())) {
@@ -453,7 +453,7 @@ public class ScalarOperatorFunctions {
     public static ConstantOperator jodatimeFormat(ConstantOperator date, ConstantOperator fmtLiteral) {
         String format = fmtLiteral.getVarchar();
         if (format.isEmpty()) {
-            return ConstantOperator.createNull(Type.VARCHAR);
+            return ConstantOperator.createNull(StandardTypes.VARCHAR);
         }
         org.joda.time.format.DateTimeFormatter formatter = DateTimeFormat.forPattern(format);
         DateTime jodaDateTime = new DateTime(date.getDatetime()
@@ -546,7 +546,7 @@ public class ScalarOperatorFunctions {
         DateTimeFormatterBuilder builder = DateUtils.unixDatetimeFormatBuilder(fmtLiteral.getVarchar(), false);
         LocalDate ld = LocalDate.from(builder.toFormatter().withResolverStyle(ResolverStyle.STRICT).parse(
                 StringUtils.strip(date.getVarchar(), "\r\n\t ")));
-        return ConstantOperator.createDatetime(ld.atTime(0, 0, 0), Type.DATE);
+        return ConstantOperator.createDatetime(ld.atTime(0, 0, 0), StandardTypes.DATE);
     }
 
     @ConstantFunction(name = "to_date", argTypes = {DATETIME}, returnType = DATE, isMonotonic = true)
@@ -995,24 +995,24 @@ public class ScalarOperatorFunctions {
     @ConstantFunction(name = "makedate", argTypes = {INT, INT}, returnType = DATETIME)
     public static ConstantOperator makeDate(ConstantOperator year, ConstantOperator dayOfYear) {
         if (year.isNull() || dayOfYear.isNull()) {
-            return ConstantOperator.createNull(Type.DATE);
+            return ConstantOperator.createNull(StandardTypes.DATE);
         }
 
         int yearInt = year.getInt();
         if (yearInt < YEAR_MIN || yearInt > YEAR_MAX) {
-            return ConstantOperator.createNull(Type.DATE);
+            return ConstantOperator.createNull(StandardTypes.DATE);
         }
 
         int dayOfYearInt = dayOfYear.getInt();
         if (dayOfYearInt < DAY_OF_YEAR_MIN || dayOfYearInt > DAY_OF_YEAR_MAX) {
-            return ConstantOperator.createNull(Type.DATE);
+            return ConstantOperator.createNull(StandardTypes.DATE);
         }
 
         LocalDate ld = LocalDate.of(yearInt, 1, 1)
                 .plusDays(dayOfYearInt - 1);
 
         if (ld.getYear() != year.getInt()) {
-            return ConstantOperator.createNull(Type.DATE);
+            return ConstantOperator.createNull(StandardTypes.DATE);
         }
 
         return ConstantOperator.createDateOrNull(ld.atTime(0, 0, 0));
@@ -1184,7 +1184,7 @@ public class ScalarOperatorFunctions {
     @ConstantFunction(name = "divide", argTypes = {DOUBLE, DOUBLE}, returnType = DOUBLE)
     public static ConstantOperator divideDouble(ConstantOperator first, ConstantOperator second) {
         if (second.getDouble() == 0.0) {
-            return ConstantOperator.createNull(Type.DOUBLE);
+            return ConstantOperator.createNull(StandardTypes.DOUBLE);
         }
         return ConstantOperator.createDouble(first.getDouble() / second.getDouble());
     }
@@ -1231,7 +1231,7 @@ public class ScalarOperatorFunctions {
     @ConstantFunction(name = "mod", argTypes = {TINYINT, TINYINT}, returnType = TINYINT)
     public static ConstantOperator modTinyInt(ConstantOperator first, ConstantOperator second) {
         if (second.getTinyInt() == 0) {
-            return ConstantOperator.createNull(Type.TINYINT);
+            return ConstantOperator.createNull(StandardTypes.TINYINT);
         }
         return ConstantOperator.createTinyInt((byte) (first.getTinyInt() % second.getTinyInt()));
     }
@@ -1239,7 +1239,7 @@ public class ScalarOperatorFunctions {
     @ConstantFunction(name = "mod", argTypes = {SMALLINT, SMALLINT}, returnType = SMALLINT)
     public static ConstantOperator modSMALLINT(ConstantOperator first, ConstantOperator second) {
         if (second.getSmallint() == 0) {
-            return ConstantOperator.createNull(Type.SMALLINT);
+            return ConstantOperator.createNull(StandardTypes.SMALLINT);
         }
         return ConstantOperator.createSmallInt((short) (first.getSmallint() % second.getSmallint()));
     }
@@ -1247,7 +1247,7 @@ public class ScalarOperatorFunctions {
     @ConstantFunction(name = "mod", argTypes = {INT, INT}, returnType = INT)
     public static ConstantOperator modInt(ConstantOperator first, ConstantOperator second) {
         if (second.getInt() == 0) {
-            return ConstantOperator.createNull(Type.INT);
+            return ConstantOperator.createNull(StandardTypes.INT);
         }
         return ConstantOperator.createInt(first.getInt() % second.getInt());
     }
@@ -1255,7 +1255,7 @@ public class ScalarOperatorFunctions {
     @ConstantFunction(name = "mod", argTypes = {BIGINT, BIGINT}, returnType = BIGINT)
     public static ConstantOperator modBigInt(ConstantOperator first, ConstantOperator second) {
         if (second.getBigint() == 0) {
-            return ConstantOperator.createNull(Type.BIGINT);
+            return ConstantOperator.createNull(StandardTypes.BIGINT);
         }
         return ConstantOperator.createBigint(first.getBigint() % second.getBigint());
     }
@@ -1263,7 +1263,7 @@ public class ScalarOperatorFunctions {
     @ConstantFunction(name = "mod", argTypes = {LARGEINT, LARGEINT}, returnType = LARGEINT)
     public static ConstantOperator modLargeInt(ConstantOperator first, ConstantOperator second) {
         if (second.getLargeInt().equals(new BigInteger("0"))) {
-            return ConstantOperator.createNull(Type.LARGEINT);
+            return ConstantOperator.createNull(StandardTypes.LARGEINT);
         }
         return ConstantOperator.createLargeInt(first.getLargeInt().remainder(second.getLargeInt()));
     }
@@ -1455,7 +1455,7 @@ public class ScalarOperatorFunctions {
     public static ConstantOperator concat_ws(ConstantOperator split, ConstantOperator... values) {
         Preconditions.checkArgument(values.length > 0);
         if (split.isNull()) {
-            return ConstantOperator.createNull(Type.VARCHAR);
+            return ConstantOperator.createNull(StandardTypes.VARCHAR);
         }
         String separator = split.getVarchar();
         return ConstantOperator.createVarchar(
@@ -1515,7 +1515,7 @@ public class ScalarOperatorFunctions {
     private static ConstantOperator createDecimalConstant(BigDecimal result) {
         Type type;
         if (!Config.enable_decimal_v3) {
-            type = ScalarType.DECIMALV2;
+            type = StandardTypes.DECIMALV2;
         } else {
             int precision = DecimalLiteral.getRealPrecision(result);
             int scale = DecimalLiteral.getRealScale(result);
@@ -1583,9 +1583,9 @@ public class ScalarOperatorFunctions {
                 }
             }
         } catch (URISyntaxException e) {
-            return ConstantOperator.createNull(Type.VARCHAR);
+            return ConstantOperator.createNull(StandardTypes.VARCHAR);
         }
-        return ConstantOperator.createNull(Type.VARCHAR);
+        return ConstantOperator.createNull(StandardTypes.VARCHAR);
     }
 
     @ConstantFunction(name = "is_role_in_session", argTypes = {VARCHAR}, returnType = BOOLEAN)

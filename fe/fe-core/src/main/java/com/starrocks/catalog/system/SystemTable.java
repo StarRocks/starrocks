@@ -47,6 +47,7 @@ import com.starrocks.thrift.TSchemaTableType;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import com.starrocks.type.ScalarType;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
 import org.apache.commons.collections.CollectionUtils;
@@ -90,11 +91,11 @@ public class SystemTable extends Table {
 
     private static final ImmutableMap<Byte, Type> THRIFT_TO_SCALAR_TYPE_MAPPING =
             ImmutableMap.<Byte, Type>builder()
-                    .put(TType.I16, Type.SMALLINT)
-                    .put(TType.I32, Type.INT)
-                    .put(TType.I64, Type.BIGINT)
-                    .put(TType.STRING, Type.STRING)
-                    .put(TType.BOOL, Type.BOOLEAN)
+                    .put(TType.I16, StandardTypes.SMALLINT)
+                    .put(TType.I32, StandardTypes.INT)
+                    .put(TType.I64, StandardTypes.BIGINT)
+                    .put(TType.STRING, StandardTypes.STRING)
+                    .put(TType.BOOL, StandardTypes.BOOLEAN)
                     .build();
 
     private final TSchemaTableType schemaTableType;
@@ -279,6 +280,6 @@ public class SystemTable extends Table {
     }
 
     public static ScalarType createNameType() {
-        return TypeFactory.createVarchar(NAME_CHAR_LEN);
+        return TypeFactory.createVarcharType(NAME_CHAR_LEN);
     }
 }

@@ -22,7 +22,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorEvaluator;
 import com.starrocks.type.ScalarType;
-import com.starrocks.type.Type;
+import com.starrocks.type.StandardTypes;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
 import org.openjdk.jmh.annotations.Fork;
@@ -64,11 +64,11 @@ public class FunctionEvaluateBench {
 
 
     private Function function = ExprUtils.getBuiltinFunction(FunctionSet.SUBDATE,
-            new ScalarType[] {Type.DATETIME, Type.INT}, IS_IDENTICAL);
+            new ScalarType[] {StandardTypes.DATETIME, StandardTypes.INT}, IS_IDENTICAL);
 
     @Benchmark
     public void test() {
-        CallOperator call = new CallOperator("subdate", Type.DATETIME, Lists.newArrayList(date, number), function);
+        CallOperator call = new CallOperator("subdate", StandardTypes.DATETIME, Lists.newArrayList(date, number), function);
         for (int i = 0; i < 10000; i++) {
             ScalarOperatorEvaluator.INSTANCE.evaluation(call);
         }

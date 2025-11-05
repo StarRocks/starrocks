@@ -29,8 +29,8 @@ import com.starrocks.type.PrimitiveType;
 import java.util.List;
 
 import static com.starrocks.connector.metadata.TableMetaMetadata.METADATA_DB_NAME;
-import static com.starrocks.type.Type.ARRAY_BIGINT;
-import static com.starrocks.type.Type.ARRAY_INT;
+import static com.starrocks.type.StandardTypes.ARRAY_BIGINT;
+import static com.starrocks.type.StandardTypes.ARRAY_INT;
 import static com.starrocks.type.TypeFactory.createType;
 import static com.starrocks.type.TypeFactory.createVarcharType;
 

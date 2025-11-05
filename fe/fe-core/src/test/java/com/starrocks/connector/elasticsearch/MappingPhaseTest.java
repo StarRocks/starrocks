@@ -40,7 +40,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.connector.exception.StarRocksConnectorException;
-import com.starrocks.type.Type;
+import com.starrocks.type.StandardTypes;
 import mockit.Expectations;
 import mockit.Injectable;
 import org.junit.jupiter.api.Assertions;
@@ -64,9 +64,9 @@ public class MappingPhaseTest extends EsTestCase {
 
     @BeforeEach
     public void setUp() {
-        Column k1 = new Column("k1", Type.BIGINT);
-        Column k2 = new Column("k2", Type.VARCHAR);
-        Column k3 = new Column("k3", Type.VARCHAR);
+        Column k1 = new Column("k1", StandardTypes.BIGINT);
+        Column k2 = new Column("k2", StandardTypes.VARCHAR);
+        Column k3 = new Column("k3", StandardTypes.VARCHAR);
         columns.add(k1);
         columns.add(k2);
         columns.add(k3);
@@ -173,7 +173,7 @@ public class MappingPhaseTest extends EsTestCase {
         List<Column> columns = EsUtil.convertColumnSchema(client, "xxx");
         for (Column c : columns) {
             if (c.getName().equals("contactData")) {
-                assertEquals(c.getType(), Type.JSON);
+                assertEquals(c.getType(), StandardTypes.JSON);
             }
         }
     }

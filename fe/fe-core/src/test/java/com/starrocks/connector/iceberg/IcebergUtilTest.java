@@ -17,7 +17,7 @@ package com.starrocks.connector.iceberg;
 import com.starrocks.catalog.Column;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.SlotId;
-import com.starrocks.type.Type;
+import com.starrocks.type.StandardTypes;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.types.Types;
 import org.junit.jupiter.api.Test;
@@ -46,11 +46,11 @@ public class IcebergUtilTest {
                 new Schema(required(3, "id", Types.IntegerType.get()),
                         required(5, "date", Types.StringType.get()));
         List<SlotDescriptor> slots = List.of(
-                new SlotDescriptor(new SlotId(3), "id", Type.INT, true),
-                new SlotDescriptor(new SlotId(5), "date", Type.STRING, true)
+                new SlotDescriptor(new SlotId(3), "id", StandardTypes.INT, true),
+                new SlotDescriptor(new SlotId(5), "date", StandardTypes.STRING, true)
         );
-        slots.get(0).setColumn(new Column("id", Type.INT, true));
-        slots.get(1).setColumn(new Column("date", Type.STRING, true));
+        slots.get(0).setColumn(new Column("id", StandardTypes.INT, true));
+        slots.get(1).setColumn(new Column("date", StandardTypes.STRING, true));
         var lowerBounds = Map.of(3, ByteBuffer.wrap(new byte[] {1, 0, 0, 0}),
                 5, ByteBuffer.wrap("2023-01-01".getBytes()));
         var upperBounds = Map.of(3, ByteBuffer.wrap(new byte[] {10, 0, 0, 0}),

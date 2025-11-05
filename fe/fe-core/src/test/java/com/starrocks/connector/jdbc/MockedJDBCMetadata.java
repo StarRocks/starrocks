@@ -23,7 +23,7 @@ import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.type.Type;
+import com.starrocks.type.StandardTypes;
 
 import java.util.Arrays;
 import java.util.HashMap;
@@ -107,14 +107,14 @@ public class MockedJDBCMetadata implements ConnectorMetadata {
         readLock();
         try {
             if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME0)) {
-                return Arrays.asList(new Column("a", Type.VARCHAR), new Column("b", Type.VARCHAR),
-                        new Column("c", Type.INT), new Column("d", Type.INT));
+                return Arrays.asList(new Column("a", StandardTypes.VARCHAR), new Column("b", StandardTypes.VARCHAR),
+                        new Column("c", StandardTypes.INT), new Column("d", StandardTypes.INT));
             } else if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME3)) {
-                return Arrays.asList(new Column("a", Type.VARCHAR), new Column("b", Type.VARCHAR),
-                        new Column("c", Type.INT), new Column("d", Type.CHAR));
+                return Arrays.asList(new Column("a", StandardTypes.VARCHAR), new Column("b", StandardTypes.VARCHAR),
+                        new Column("c", StandardTypes.INT), new Column("d", StandardTypes.CHAR));
             } else {
-                return Arrays.asList(new Column("a", Type.VARCHAR), new Column("b", Type.VARCHAR),
-                        new Column("c", Type.INT), new Column("d", Type.VARCHAR));
+                return Arrays.asList(new Column("a", StandardTypes.VARCHAR), new Column("b", StandardTypes.VARCHAR),
+                        new Column("c", StandardTypes.INT), new Column("d", StandardTypes.VARCHAR));
             }
         } finally {
             readUnlock();
@@ -125,12 +125,12 @@ public class MockedJDBCMetadata implements ConnectorMetadata {
         readLock();
         try {
             if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME0)) {
-                return Arrays.asList(new Column("d", Type.INT));
+                return Arrays.asList(new Column("d", StandardTypes.INT));
             }
             if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME3)) {
-                return Arrays.asList(new Column("d", Type.CHAR));
+                return Arrays.asList(new Column("d", StandardTypes.CHAR));
             } else {
-                return Arrays.asList(new Column("d", Type.VARCHAR));
+                return Arrays.asList(new Column("d", StandardTypes.VARCHAR));
             }
         } finally {
             readUnlock();

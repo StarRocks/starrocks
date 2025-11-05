@@ -25,14 +25,14 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.plan.PlanTestBase;
-import com.starrocks.type.Type;
+import com.starrocks.type.StandardTypes;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class SimplifiedPredicateRuleTest extends PlanTestBase {
-    private static final ConstantOperator OI_NULL = ConstantOperator.createNull(Type.INT);
+    private static final ConstantOperator OI_NULL = ConstantOperator.createNull(StandardTypes.INT);
     private static final ConstantOperator OI_100 = ConstantOperator.createInt(100);
     private static final ConstantOperator OI_200 = ConstantOperator.createInt(200);
     private static final ConstantOperator OI_300 = ConstantOperator.createInt(300);
@@ -58,33 +58,35 @@ public class SimplifiedPredicateRuleTest extends PlanTestBase {
 
     @Test
     public void applyCaseWhen() {
-        CaseWhenOperator cwo1 = new CaseWhenOperator(Type.INT, new ColumnRefOperator(1, Type.INT, "id", true), null,
+        CaseWhenOperator cwo1 = new CaseWhenOperator(StandardTypes.INT,
+                new ColumnRefOperator(1, StandardTypes.INT, "id", true), null,
                 Lists.newArrayList(ConstantOperator.createInt(1), ConstantOperator.createVarchar("test"),
                         ConstantOperator.createInt(2), ConstantOperator.createVarchar("test2")));
         assertEquals(cwo1, rule.apply(cwo1, null));
 
-        CaseWhenOperator cwo2 = new CaseWhenOperator(Type.INT, ConstantOperator.createNull(Type.BOOLEAN), null,
+        CaseWhenOperator cwo2 = new CaseWhenOperator(StandardTypes.INT, ConstantOperator.createNull(StandardTypes.BOOLEAN), null,
                 Lists.newArrayList(ConstantOperator.createInt(1), ConstantOperator.createVarchar("test")));
         assertEquals(OI_NULL, rule.apply(cwo2, null));
 
-        CaseWhenOperator cwo3 = new CaseWhenOperator(Type.INT, ConstantOperator.createNull(Type.BOOLEAN), OI_100,
+        CaseWhenOperator cwo3 = new CaseWhenOperator(StandardTypes.INT,
+                ConstantOperator.createNull(StandardTypes.BOOLEAN), OI_100,
                 Lists.newArrayList(ConstantOperator.createInt(1), ConstantOperator.createVarchar("test")));
         assertEquals(OI_100, rule.apply(cwo3, null));
 
-        CaseWhenOperator cwo4 = new CaseWhenOperator(Type.INT, null, null,
-                Lists.newArrayList(new ColumnRefOperator(1, Type.BOOLEAN, "id", true), OI_200,
-                        new ColumnRefOperator(2, Type.BOOLEAN, "id", true), OI_100));
+        CaseWhenOperator cwo4 = new CaseWhenOperator(StandardTypes.INT, null, null,
+                Lists.newArrayList(new ColumnRefOperator(1, StandardTypes.BOOLEAN, "id", true), OI_200,
+                        new ColumnRefOperator(2, StandardTypes.BOOLEAN, "id", true), OI_100));
         assertEquals(cwo4, rule.apply(cwo4, null));
 
-        CaseWhenOperator cwo5 = new CaseWhenOperator(Type.INT, null, null,
+        CaseWhenOperator cwo5 = new CaseWhenOperator(StandardTypes.INT, null, null,
                 Lists.newArrayList(OB_FALSE, OI_200, OB_TRUE, OI_300));
         assertEquals(OI_300, rule.apply(cwo5, null));
 
-        CaseWhenOperator cwo6 = new CaseWhenOperator(Type.INT, null, null,
+        CaseWhenOperator cwo6 = new CaseWhenOperator(StandardTypes.INT, null, null,
                 Lists.newArrayList(OB_FALSE, OI_200, OI_NULL, OI_300));
         assertEquals(OI_NULL, rule.apply(cwo6, null));
 
-        CaseWhenOperator cwo7 = new CaseWhenOperator(Type.INT, null, OI_100,
+        CaseWhenOperator cwo7 = new CaseWhenOperator(StandardTypes.INT, null, OI_100,
                 Lists.newArrayList(OB_FALSE, OI_200, OI_NULL, OI_300));
         assertEquals(OI_100, rule.apply(cwo7, null));
     }
@@ -93,7 +95,7 @@ public class SimplifiedPredicateRuleTest extends PlanTestBase {
     public void applyLike() {
         SimplifiedPredicateRule rule = new SimplifiedPredicateRule();
 
-        ScalarOperator operator = new LikePredicateOperator(new ColumnRefOperator(1, Type.VARCHAR, "name", true),
+        ScalarOperator operator = new LikePredicateOperator(new ColumnRefOperator(1, StandardTypes.VARCHAR, "name", true),
                 ConstantOperator.createVarchar("zxcv"));
         ScalarOperator result = rule.apply(operator, null);
 
@@ -101,18 +103,18 @@ public class SimplifiedPredicateRuleTest extends PlanTestBase {
         assertEquals(BinaryType.EQ, ((BinaryPredicateOperator) result).getBinaryType());
         assertEquals(ConstantOperator.createVarchar("zxcv"), result.getChild(1));
 
-        operator = new LikePredicateOperator(new ColumnRefOperator(1, Type.VARCHAR, "name", true),
+        operator = new LikePredicateOperator(new ColumnRefOperator(1, StandardTypes.VARCHAR, "name", true),
                 ConstantOperator.createVarchar("%zxcv"));
         result = rule.apply(operator, null);
         assertEquals(OperatorType.LIKE, result.getOpType());
 
-        operator = new LikePredicateOperator(new ColumnRefOperator(1, Type.VARCHAR, "name", true),
+        operator = new LikePredicateOperator(new ColumnRefOperator(1, StandardTypes.VARCHAR, "name", true),
                 ConstantOperator.createVarchar("_zxcv"));
         result = rule.apply(operator, null);
         assertEquals(OperatorType.LIKE, result.getOpType());
 
         // test for none-string right child
-        operator = new LikePredicateOperator(new ColumnRefOperator(1, Type.VARCHAR, "name", true),
+        operator = new LikePredicateOperator(new ColumnRefOperator(1, StandardTypes.VARCHAR, "name", true),
                 ConstantOperator.createBoolean(false));
         result = rule.apply(operator, null);
         assertEquals(OperatorType.LIKE, result.getOpType());

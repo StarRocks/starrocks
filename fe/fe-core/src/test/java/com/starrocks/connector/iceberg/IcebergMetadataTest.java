@@ -102,7 +102,7 @@ import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.thrift.TSinkCommitInfo;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.Type;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -155,11 +155,11 @@ import static com.starrocks.connector.iceberg.IcebergMetadata.COMPRESSION_CODEC;
 import static com.starrocks.connector.iceberg.IcebergMetadata.FILE_FORMAT;
 import static com.starrocks.connector.iceberg.IcebergMetadata.LOCATION_PROPERTY;
 import static com.starrocks.connector.iceberg.IcebergTableOperation.REMOVE_ORPHAN_FILES;
-import static com.starrocks.type.Type.DATE;
-import static com.starrocks.type.Type.DATETIME;
-import static com.starrocks.type.Type.INT;
-import static com.starrocks.type.Type.STRING;
-import static com.starrocks.type.Type.VARCHAR;
+import static com.starrocks.type.StandardTypes.DATE;
+import static com.starrocks.type.StandardTypes.DATETIME;
+import static com.starrocks.type.StandardTypes.INT;
+import static com.starrocks.type.StandardTypes.STRING;
+import static com.starrocks.type.StandardTypes.VARCHAR;
 import static org.apache.iceberg.types.Types.NestedField.required;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -320,12 +320,12 @@ public class IcebergMetadataTest extends TableTestBase {
         new MockUp<Table>() {
             @Mock
             public List<Column> getFullSchema() {
-                return ImmutableList.of(new Column("c1", Type.INT), new Column("c2", STRING));
+                return ImmutableList.of(new Column("c1", StandardTypes.INT), new Column("c2", STRING));
             }
 
             @Mock
             public List<Column> getFullVisibleSchema() {
-                return ImmutableList.of(new Column("c1", Type.INT), new Column("c2", STRING));
+                return ImmutableList.of(new Column("c1", StandardTypes.INT), new Column("c2", STRING));
             }
 
             @Mock
@@ -1139,10 +1139,10 @@ public class IcebergMetadataTest extends TableTestBase {
         IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "db_name",
                 "table_name", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
         Map<ColumnRefOperator, Column> colRefToColumnMetaMap = new HashMap<ColumnRefOperator, Column>();
-        ColumnRefOperator columnRefOperator1 = new ColumnRefOperator(3, Type.INT, "id", true);
-        ColumnRefOperator columnRefOperator2 = new ColumnRefOperator(4, Type.STRING, "data", true);
-        colRefToColumnMetaMap.put(columnRefOperator1, new Column("id", Type.INT));
-        colRefToColumnMetaMap.put(columnRefOperator2, new Column("data", Type.STRING));
+        ColumnRefOperator columnRefOperator1 = new ColumnRefOperator(3, StandardTypes.INT, "id", true);
+        ColumnRefOperator columnRefOperator2 = new ColumnRefOperator(4, StandardTypes.STRING, "data", true);
+        colRefToColumnMetaMap.put(columnRefOperator1, new Column("id", StandardTypes.INT));
+        colRefToColumnMetaMap.put(columnRefOperator2, new Column("data", StandardTypes.STRING));
         OptimizerContext context = OptimizerFactory.mockContext(new ColumnRefFactory());
         Assertions.assertFalse(context.getSessionVariable().enableIcebergColumnStatistics());
         Assertions.assertTrue(context.getSessionVariable().enableReadIcebergPuffinNdv());
@@ -1170,10 +1170,10 @@ public class IcebergMetadataTest extends TableTestBase {
         IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "db_name",
                 "table_name", "", columns, mockedNativeTableB, Maps.newHashMap());
         Map<ColumnRefOperator, Column> colRefToColumnMetaMap = new HashMap<ColumnRefOperator, Column>();
-        ColumnRefOperator columnRefOperator1 = new ColumnRefOperator(3, Type.INT, "k1", true);
+        ColumnRefOperator columnRefOperator1 = new ColumnRefOperator(3, StandardTypes.INT, "k1", true);
         ColumnRefOperator columnRefOperator2 = new ColumnRefOperator(4, INT, "k2", true);
-        colRefToColumnMetaMap.put(columnRefOperator1, new Column("k1", Type.INT));
-        colRefToColumnMetaMap.put(columnRefOperator2, new Column("k2", Type.INT));
+        colRefToColumnMetaMap.put(columnRefOperator1, new Column("k1", StandardTypes.INT));
+        colRefToColumnMetaMap.put(columnRefOperator2, new Column("k2", StandardTypes.INT));
         new ConnectContext().setThreadLocalInfo();
         ConnectContext.get().getSessionVariable().setEnableIcebergColumnStatistics(true);
         TvrVersionRange versionRange = TvrTableSnapshot.of(Optional.of(
@@ -1202,10 +1202,10 @@ public class IcebergMetadataTest extends TableTestBase {
         IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "db_name",
                 "table_name", "", columns, mockedNativeTableA, Maps.newHashMap());
         Map<ColumnRefOperator, Column> colRefToColumnMetaMap = new HashMap<ColumnRefOperator, Column>();
-        ColumnRefOperator columnRefOperator1 = new ColumnRefOperator(3, Type.INT, "id", true);
-        ColumnRefOperator columnRefOperator2 = new ColumnRefOperator(4, Type.STRING, "data", true);
-        colRefToColumnMetaMap.put(columnRefOperator1, new Column("id", Type.INT));
-        colRefToColumnMetaMap.put(columnRefOperator2, new Column("data", Type.STRING));
+        ColumnRefOperator columnRefOperator1 = new ColumnRefOperator(3, StandardTypes.INT, "id", true);
+        ColumnRefOperator columnRefOperator2 = new ColumnRefOperator(4, StandardTypes.STRING, "data", true);
+        colRefToColumnMetaMap.put(columnRefOperator1, new Column("id", StandardTypes.INT));
+        colRefToColumnMetaMap.put(columnRefOperator2, new Column("data", StandardTypes.STRING));
         new ConnectContext().setThreadLocalInfo();
 
         TvrVersionRange version = TvrTableSnapshot.of(Optional.of(
@@ -1280,10 +1280,10 @@ public class IcebergMetadataTest extends TableTestBase {
                 new ConnectorProperties(ConnectorType.ICEBERG,
                         Map.of(ConnectorProperties.ENABLE_GET_STATS_FROM_EXTERNAL_METADATA, "true")), null);
         Map<ColumnRefOperator, Column> colRefToColumnMetaMap = new HashMap<ColumnRefOperator, Column>();
-        ColumnRefOperator columnRefOperator1 = new ColumnRefOperator(3, Type.INT, "id", true);
-        ColumnRefOperator columnRefOperator2 = new ColumnRefOperator(4, Type.STRING, "data", true);
-        colRefToColumnMetaMap.put(columnRefOperator1, new Column("id", Type.INT));
-        colRefToColumnMetaMap.put(columnRefOperator2, new Column("data", Type.STRING));
+        ColumnRefOperator columnRefOperator1 = new ColumnRefOperator(3, StandardTypes.INT, "id", true);
+        ColumnRefOperator columnRefOperator2 = new ColumnRefOperator(4, StandardTypes.STRING, "data", true);
+        colRefToColumnMetaMap.put(columnRefOperator1, new Column("id", StandardTypes.INT));
+        colRefToColumnMetaMap.put(columnRefOperator2, new Column("data", StandardTypes.STRING));
         mockedNativeTableA.newFastAppend().appendFile(FILE_A).commit();
         mockedNativeTableA.newFastAppend().appendFile(FILE_A).commit();
         mockedNativeTableA.refresh();
@@ -1380,13 +1380,13 @@ public class IcebergMetadataTest extends TableTestBase {
     public void testIcebergFilter() {
         List<ScalarOperator> arguments = new ArrayList<>(2);
         arguments.add(ConstantOperator.createVarchar("day"));
-        arguments.add(new ColumnRefOperator(2, Type.INT, "date_col", true));
-        ScalarOperator callOperator = new CallOperator("date_trunc", Type.DATE, arguments);
+        arguments.add(new ColumnRefOperator(2, StandardTypes.INT, "date_col", true));
+        ScalarOperator callOperator = new CallOperator("date_trunc", StandardTypes.DATE, arguments);
 
         List<ScalarOperator> newArguments = new ArrayList<>(2);
         newArguments.add(ConstantOperator.createVarchar("day"));
-        newArguments.add(new ColumnRefOperator(22, Type.INT, "date_col", true));
-        ScalarOperator newCallOperator = new CallOperator("date_trunc", Type.DATE, newArguments);
+        newArguments.add(new ColumnRefOperator(22, StandardTypes.INT, "date_col", true));
+        ScalarOperator newCallOperator = new CallOperator("date_trunc", StandardTypes.DATE, newArguments);
 
         GetRemoteFilesParams callParams = GetRemoteFilesParams.newBuilder()
                 .setTableVersionRange(TvrTableSnapshot.of(Optional.of(1L)))

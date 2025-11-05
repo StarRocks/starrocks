@@ -45,6 +45,7 @@ import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.ast.expression.UserVariableExpr;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.Type;
 import org.apache.commons.collections4.CollectionUtils;
 
@@ -455,8 +456,9 @@ public class SelectAnalyzer {
 
         if (predicate.getType().isBoolean() || predicate.getType().isNull()) {
             // do nothing
-        } else if (!session.getSessionVariable().isEnableStrictType() && Type.canCastTo(predicate.getType(), Type.BOOLEAN)) {
-            predicate = new CastExpr(Type.BOOLEAN, predicate);
+        } else if (!session.getSessionVariable().isEnableStrictType()
+                && Type.canCastTo(predicate.getType(), StandardTypes.BOOLEAN)) {
+            predicate = new CastExpr(StandardTypes.BOOLEAN, predicate);
         } else {
             throw new SemanticException("WHERE clause %s can not be converted to boolean type", ExprToSql.toSql(predicate));
         }
@@ -607,7 +609,7 @@ public class SelectAnalyzer {
             AnalyzerUtils.verifyNoGroupingFunctions(predicate, "HAVING");
             analyzeExpression(predicate, analyzeState, sourceScope);
 
-            if (!predicate.getType().matchesType(Type.BOOLEAN) && !predicate.getType().matchesType(Type.NULL)) {
+            if (!predicate.getType().matchesType(StandardTypes.BOOLEAN) && !predicate.getType().matchesType(StandardTypes.NULL)) {
                 throw new SemanticException("HAVING clause must evaluate to a boolean: actual type %s",
                         predicate.getType());
             }

@@ -75,7 +75,7 @@ public class TypeDef implements ParseNode {
     }
 
     public static TypeDef createVarchar(int len) {
-        return new TypeDef(TypeFactory.createVarchar(len));
+        return new TypeDef(TypeFactory.createVarcharType(len));
     }
 
     public static TypeDef createChar(int len) {

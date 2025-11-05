@@ -25,6 +25,7 @@ import com.aliyun.odps.type.VarcharTypeInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.MapType;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
@@ -38,15 +39,15 @@ public class EntityConvertUtils {
     public static Type convertType(TypeInfo typeInfo) {
         switch (typeInfo.getOdpsType()) {
             case BIGINT:
-                return Type.BIGINT;
+                return StandardTypes.BIGINT;
             case INT:
-                return Type.INT;
+                return StandardTypes.INT;
             case SMALLINT:
-                return Type.SMALLINT;
+                return StandardTypes.SMALLINT;
             case TINYINT:
-                return Type.TINYINT;
+                return StandardTypes.TINYINT;
             case FLOAT:
-                return Type.FLOAT;
+                return StandardTypes.FLOAT;
             case DECIMAL:
                 DecimalTypeInfo decimalTypeInfo = (DecimalTypeInfo) typeInfo;
                 //In odps 2.0, the maximum length of decimal is 38, while in 1.0 it is 54. You need to convert it to String type for processing.
@@ -56,7 +57,7 @@ public class EntityConvertUtils {
                 }
                 return TypeFactory.createUnifiedDecimalType(decimalTypeInfo.getPrecision(), decimalTypeInfo.getScale());
             case DOUBLE:
-                return Type.DOUBLE;
+                return StandardTypes.DOUBLE;
             case CHAR:
                 CharTypeInfo charTypeInfo = (CharTypeInfo) typeInfo;
                 return TypeFactory.createCharType(charTypeInfo.getLength());
@@ -67,14 +68,14 @@ public class EntityConvertUtils {
             case JSON:
                 return TypeFactory.createDefaultCatalogString();
             case BINARY:
-                return Type.VARBINARY;
+                return StandardTypes.VARBINARY;
             case BOOLEAN:
-                return Type.BOOLEAN;
+                return StandardTypes.BOOLEAN;
             case DATE:
-                return Type.DATE;
+                return StandardTypes.DATE;
             case TIMESTAMP:
             case DATETIME:
-                return Type.DATETIME;
+                return StandardTypes.DATETIME;
             case MAP:
                 MapTypeInfo mapTypeInfo = (MapTypeInfo) typeInfo;
                 return new MapType(convertType(mapTypeInfo.getKeyTypeInfo()),
@@ -89,7 +90,7 @@ public class EntityConvertUtils {
                                 .collect(Collectors.toList());
                 return new StructType(fieldTypeList);
             default:
-                return Type.VARCHAR;
+                return StandardTypes.VARCHAR;
         }
     }
 

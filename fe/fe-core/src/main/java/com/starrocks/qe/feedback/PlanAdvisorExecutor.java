@@ -26,7 +26,7 @@ import com.starrocks.sql.ast.feedback.AddPlanAdvisorStmt;
 import com.starrocks.sql.ast.feedback.ClearPlanAdvisorStmt;
 import com.starrocks.sql.ast.feedback.DelPlanAdvisorStmt;
 import com.starrocks.sql.ast.feedback.ShowPlanAdvisorStmt;
-import com.starrocks.type.Type;
+import com.starrocks.type.StandardTypes;
 
 import java.util.List;
 import java.util.UUID;
@@ -36,17 +36,17 @@ public class PlanAdvisorExecutor {
     private static final PlanAdvisorExecutorVisitor INSTANCE = new PlanAdvisorExecutorVisitor();
 
     private static final ShowResultSetMetaData COLUMN_META =
-            ShowResultSetMetaData.builder().addColumn(new Column("message", Type.STRING)).build();
+            ShowResultSetMetaData.builder().addColumn(new Column("message", StandardTypes.STRING)).build();
 
     private static final ShowResultSetMetaData SHOW_RESULT_COLUMN_META =
-            ShowResultSetMetaData.builder().addColumn(new Column("query_id", Type.STRING))
-                    .addColumn(new Column("query", Type.STRING))
-                    .addColumn(new Column("query_time", Type.STRING))
-                    .addColumn(new Column("tuning_guides", Type.STRING))
-                    .addColumn(new Column("avg_tuned_query_time", Type.STRING))
-                    .addColumn(new Column("optimized_query_count", Type.STRING))
-                    .addColumn(new Column("is_useful", Type.STRING))
-                    .addColumn(new Column("fe_node", Type.STRING))
+            ShowResultSetMetaData.builder().addColumn(new Column("query_id", StandardTypes.STRING))
+                    .addColumn(new Column("query", StandardTypes.STRING))
+                    .addColumn(new Column("query_time", StandardTypes.STRING))
+                    .addColumn(new Column("tuning_guides", StandardTypes.STRING))
+                    .addColumn(new Column("avg_tuned_query_time", StandardTypes.STRING))
+                    .addColumn(new Column("optimized_query_count", StandardTypes.STRING))
+                    .addColumn(new Column("is_useful", StandardTypes.STRING))
+                    .addColumn(new Column("fe_node", StandardTypes.STRING))
                     .build();
 
 

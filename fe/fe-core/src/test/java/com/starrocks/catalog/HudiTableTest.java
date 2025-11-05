@@ -36,7 +36,7 @@ import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.MapType;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.Type;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.TypeFactory;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -82,13 +82,13 @@ public class HudiTableTest {
     public void testCreateExternalTable(@Mocked MetadataMgr metadataMgr) {
         assertThrows(HoodieIOException.class, () -> {
             List<Column> columns = Lists.newArrayList();
-            columns.add(new Column("col1", Type.INT, true));
-            columns.add(new Column("col2", Type.INT, true));
-            columns.add(new Column("_hoodie_commit_time", Type.STRING, true));
-            columns.add(new Column("_hoodie_commit_seqno", Type.STRING, true));
-            columns.add(new Column("_hoodie_record_key", Type.STRING, true));
-            columns.add(new Column("_hoodie_partition_path", Type.STRING, true));
-            columns.add(new Column("_hoodie_file_name", Type.STRING, true));
+            columns.add(new Column("col1", StandardTypes.INT, true));
+            columns.add(new Column("col2", StandardTypes.INT, true));
+            columns.add(new Column("_hoodie_commit_time", StandardTypes.STRING, true));
+            columns.add(new Column("_hoodie_commit_seqno", StandardTypes.STRING, true));
+            columns.add(new Column("_hoodie_record_key", StandardTypes.STRING, true));
+            columns.add(new Column("_hoodie_partition_path", StandardTypes.STRING, true));
+            columns.add(new Column("_hoodie_file_name", StandardTypes.STRING, true));
             long createTime = System.currentTimeMillis();
             List<String> dataColumns = Lists.newArrayList("col2", "_hoodie_commit_time", "_hoodie_commit_seqno",
                     "_hoodie_record_key", "_hoodie_partition_path", "_hoodie_file_name");
@@ -111,7 +111,7 @@ public class HudiTableTest {
 
             Assertions.assertEquals("db0", oTable.getCatalogDBName());
             Assertions.assertEquals("table0", oTable.getCatalogTableName());
-            Assertions.assertEquals(new Column("col1", Type.INT, true), oTable.getColumn("col1"));
+            Assertions.assertEquals(new Column("col1", StandardTypes.INT, true), oTable.getColumn("col1"));
             Assertions.assertEquals("table0:" + createTime, oTable.getTableIdentifier());
             Assertions.assertTrue(oTable.toString().contains("HudiTable{resourceName='catalog', catalogName='catalog', " +
                     "hiveDbName='db0', hiveTableName='table0', id=2, name='table0', type=HUDI"));
@@ -250,8 +250,8 @@ public class HudiTableTest {
         };
 
         List<Column> columns = Lists.newArrayList();
-        columns.add(new Column("col1", Type.INT, true));
-        columns.add(new Column("col2", Type.INT, true));
+        columns.add(new Column("col1", StandardTypes.INT, true));
+        columns.add(new Column("col2", StandardTypes.INT, true));
         long createTime = System.currentTimeMillis();
 
         Map<String, String> properties = Maps.newHashMap();

@@ -39,6 +39,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.Type;
 
 import java.nio.ByteBuffer;
@@ -49,7 +50,7 @@ public class NullLiteral extends LiteralExpr {
 
     static {
         try {
-            INT_EXPR = new IntLiteral("0", Type.INT);
+            INT_EXPR = new IntLiteral("0", StandardTypes.INT);
         } catch (AnalysisException e) {
             throw new RuntimeException(e);
         }
@@ -61,7 +62,7 @@ public class NullLiteral extends LiteralExpr {
 
     public NullLiteral(NodePosition pos) {
         super(pos);
-        type = Type.NULL;
+        type = StandardTypes.NULL;
     }
 
     public static NullLiteral create(Type type) {
@@ -131,7 +132,7 @@ public class NullLiteral extends LiteralExpr {
     // CHAR VARCHAR: ""
     @Override
     public ByteBuffer getHashValue(Type type) {
-        return INT_EXPR.getHashValue(Type.INT);
+        return INT_EXPR.getHashValue(StandardTypes.INT);
     }
 
     @Override

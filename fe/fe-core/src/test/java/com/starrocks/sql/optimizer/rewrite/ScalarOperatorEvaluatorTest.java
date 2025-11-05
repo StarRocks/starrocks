@@ -23,6 +23,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.Type;
 import mockit.Expectations;
 import org.junit.jupiter.api.Assertions;
@@ -37,8 +38,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 public class ScalarOperatorEvaluatorTest {
     @Test
     public void evaluationNotConstant() {
-        CallOperator operator = new CallOperator(FunctionSet.IFNULL, Type.INT,
-                Lists.newArrayList(new ColumnRefOperator(1, Type.INT, "test", true), ConstantOperator.createInt(2)));
+        CallOperator operator = new CallOperator(FunctionSet.IFNULL, StandardTypes.INT,
+                Lists.newArrayList(new ColumnRefOperator(1, StandardTypes.INT, "test", true), ConstantOperator.createInt(2)));
 
         ScalarOperator result = ScalarOperatorEvaluator.INSTANCE.evaluation(operator);
 
@@ -47,11 +48,12 @@ public class ScalarOperatorEvaluatorTest {
 
     @Test
     public void evaluationNull() {
-        CallOperator operator = new CallOperator(FunctionSet.CONCAT, Type.VARCHAR,
-                Lists.newArrayList(ConstantOperator.createVarchar("test"), ConstantOperator.createNull(Type.VARCHAR)));
+        CallOperator operator = new CallOperator(FunctionSet.CONCAT, StandardTypes.VARCHAR,
+                Lists.newArrayList(ConstantOperator.createVarchar("test"), ConstantOperator.createNull(StandardTypes.VARCHAR)));
 
         Function fn =
-                new Function(new FunctionName(FunctionSet.CONCAT), new Type[] {Type.VARCHAR}, Type.VARCHAR, false);
+                new Function(new FunctionName(FunctionSet.CONCAT),
+                        new Type[] {StandardTypes.VARCHAR}, StandardTypes.VARCHAR, false);
 
         new Expectations(operator) {
             {
@@ -68,11 +70,12 @@ public class ScalarOperatorEvaluatorTest {
 
     @Test
     public void evaluationArrayArgs() {
-        CallOperator operator = new CallOperator(FunctionSet.CONCAT, Type.VARCHAR,
+        CallOperator operator = new CallOperator(FunctionSet.CONCAT, StandardTypes.VARCHAR,
                 Lists.newArrayList(ConstantOperator.createVarchar("test"), ConstantOperator.createVarchar("123")));
 
         Function fn =
-                new Function(new FunctionName(FunctionSet.CONCAT), new Type[] {Type.VARCHAR}, Type.VARCHAR, false);
+                new Function(new FunctionName(FunctionSet.CONCAT),
+                        new Type[] {StandardTypes.VARCHAR}, StandardTypes.VARCHAR, false);
 
         new Expectations(operator) {
             {
@@ -89,15 +92,15 @@ public class ScalarOperatorEvaluatorTest {
 
     @Test
     public void evaluationFromUtc() {
-        CallOperator operator = new CallOperator(FunctionSet.STR_TO_DATE, Type.VARCHAR, Lists.newArrayList(
+        CallOperator operator = new CallOperator(FunctionSet.STR_TO_DATE, StandardTypes.VARCHAR, Lists.newArrayList(
                 ConstantOperator.createVarchar("2003-10-11 23:56:25"),
                 ConstantOperator.createVarchar("%Y-%m-%d %H:%i:%s")
         ));
 
         Function fn =
-                new Function(new FunctionName(FunctionSet.STR_TO_DATE), new Type[] {Type.VARCHAR, Type.VARCHAR},
-                        Type.DATETIME,
-                        false);
+                new Function(new FunctionName(FunctionSet.STR_TO_DATE),
+                        new Type[] {StandardTypes.VARCHAR, StandardTypes.VARCHAR},
+                        StandardTypes.DATETIME, false);
 
         new Expectations(operator) {
             {
@@ -112,11 +115,12 @@ public class ScalarOperatorEvaluatorTest {
 
     @Test
     public void evaluationNonNullableFunc() {
-        CallOperator operator = new CallOperator(FunctionSet.BITMAP_COUNT, Type.BIGINT,
-                Lists.newArrayList(ConstantOperator.createNull(Type.BITMAP)));
+        CallOperator operator = new CallOperator(FunctionSet.BITMAP_COUNT, StandardTypes.BIGINT,
+                Lists.newArrayList(ConstantOperator.createNull(StandardTypes.BITMAP)));
 
         Function fn =
-                new Function(new FunctionName(FunctionSet.BITMAP_COUNT), new Type[] {Type.BITMAP}, Type.BIGINT, false);
+                new Function(new FunctionName(FunctionSet.BITMAP_COUNT),
+                        new Type[] {StandardTypes.BITMAP}, StandardTypes.BIGINT, false);
         new Expectations(operator) {
             {
                 operator.getFunction();
@@ -131,15 +135,15 @@ public class ScalarOperatorEvaluatorTest {
 
     @Test
     public void testCreateConstantValue() {
-        ConstantOperator tinyInt = ConstantOperator.createExampleValueByType(Type.TINYINT);
+        ConstantOperator tinyInt = ConstantOperator.createExampleValueByType(StandardTypes.TINYINT);
         Assertions.assertTrue(tinyInt.getTinyInt() == 1);
-        ConstantOperator smallInt = ConstantOperator.createExampleValueByType(Type.SMALLINT);
+        ConstantOperator smallInt = ConstantOperator.createExampleValueByType(StandardTypes.SMALLINT);
         Assertions.assertTrue(smallInt.getSmallint() == 1);
-        ConstantOperator intValue = ConstantOperator.createExampleValueByType(Type.INT);
+        ConstantOperator intValue = ConstantOperator.createExampleValueByType(StandardTypes.INT);
         Assertions.assertTrue(intValue.getInt() == 1);
-        ConstantOperator bigInt = ConstantOperator.createExampleValueByType(Type.BIGINT);
+        ConstantOperator bigInt = ConstantOperator.createExampleValueByType(StandardTypes.BIGINT);
         Assertions.assertTrue(bigInt.getBigint() == 1L);
-        ConstantOperator largeInt = ConstantOperator.createExampleValueByType(Type.LARGEINT);
+        ConstantOperator largeInt = ConstantOperator.createExampleValueByType(StandardTypes.LARGEINT);
         Assertions.assertTrue(largeInt.getLargeInt().equals(new BigInteger("1")));
     }
 

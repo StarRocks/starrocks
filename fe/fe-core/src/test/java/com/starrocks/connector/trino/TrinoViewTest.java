@@ -19,7 +19,7 @@ import com.starrocks.catalog.HiveView;
 import com.starrocks.connector.hive.HiveMetastoreApiConverter;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.type.MapType;
-import com.starrocks.type.ScalarType;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
 import com.starrocks.type.TypeFactory;
@@ -85,9 +85,9 @@ public class TrinoViewTest {
                 ") \n");
         Assertions.assertEquals(hiveView.getFullSchema().size(), 4);
         Assertions.assertEquals(hiveView.getFullSchema().get(0).getName(), "empid");
-        Assertions.assertEquals(hiveView.getFullSchema().get(0).getType(), ScalarType.INT);
+        Assertions.assertEquals(hiveView.getFullSchema().get(0).getType(), StandardTypes.INT);
         Assertions.assertEquals(hiveView.getFullSchema().get(2).getName(), "salary");
-        Assertions.assertEquals(hiveView.getFullSchema().get(2).getType(), ScalarType.DOUBLE);
+        Assertions.assertEquals(hiveView.getFullSchema().get(2).getType(), StandardTypes.DOUBLE);
         Assertions.assertEquals(hiveView.getFullSchema().get(3).getName(), "new_col");
         Assertions.assertEquals(hiveView.getFullSchema().get(3).getType(), TypeFactory.createDefaultCatalogString());
     }
@@ -126,25 +126,25 @@ public class TrinoViewTest {
                 ") \n");
         Assertions.assertEquals(hiveView.getFullSchema().size(), 17);
         Assertions.assertEquals(hiveView.getFullSchema().get(0).getName(), "id");
-        Assertions.assertEquals(hiveView.getFullSchema().get(0).getType(), ScalarType.INT);
+        Assertions.assertEquals(hiveView.getFullSchema().get(0).getType(), StandardTypes.INT);
         Assertions.assertEquals(hiveView.getFullSchema().get(4).getName(), "float_col");
-        Assertions.assertEquals(hiveView.getFullSchema().get(4).getType(), ScalarType.FLOAT);
+        Assertions.assertEquals(hiveView.getFullSchema().get(4).getType(), StandardTypes.FLOAT);
         Assertions.assertEquals(hiveView.getFullSchema().get(5).getName(), "double_col");
-        Assertions.assertEquals(hiveView.getFullSchema().get(5).getType(), ScalarType.DOUBLE);
+        Assertions.assertEquals(hiveView.getFullSchema().get(5).getType(), StandardTypes.DOUBLE);
         Assertions.assertEquals(hiveView.getFullSchema().get(9).getName(), "varchar_col");
         Assertions.assertEquals(hiveView.getFullSchema().get(9).getType(), TypeFactory.createVarcharType(20));
         Assertions.assertEquals(hiveView.getFullSchema().get(10).getName(), "binary_col");
-        Assertions.assertEquals(hiveView.getFullSchema().get(10).getType(), ScalarType.VARBINARY);
+        Assertions.assertEquals(hiveView.getFullSchema().get(10).getType(), StandardTypes.VARBINARY);
         Assertions.assertEquals(hiveView.getFullSchema().get(13).getName(), "timestamp_col");
-        Assertions.assertEquals(hiveView.getFullSchema().get(13).getType(), ScalarType.DATETIME);
+        Assertions.assertEquals(hiveView.getFullSchema().get(13).getType(), StandardTypes.DATETIME);
         Assertions.assertEquals(hiveView.getFullSchema().get(14).getName(), "array_col");
-        Assertions.assertEquals(hiveView.getFullSchema().get(14).getType(), ScalarType.ARRAY_INT);
+        Assertions.assertEquals(hiveView.getFullSchema().get(14).getType(), StandardTypes.ARRAY_INT);
         Assertions.assertEquals(hiveView.getFullSchema().get(15).getName(), "map_col");
         Assertions.assertEquals(hiveView.getFullSchema().get(15).getType(),
-                new MapType(TypeFactory.createDefaultCatalogString(), ScalarType.INT));
+                new MapType(TypeFactory.createDefaultCatalogString(), StandardTypes.INT));
         Assertions.assertEquals(hiveView.getFullSchema().get(16).getName(), "struct_col");
         ArrayList<StructField> structFields = new ArrayList<>();
-        structFields.add(new StructField("field1", ScalarType.INT));
+        structFields.add(new StructField("field1", StandardTypes.INT));
         structFields.add(new StructField("field2", TypeFactory.createDefaultCatalogString()));
         Assertions.assertEquals(hiveView.getFullSchema().get(16).getType(), new StructType(structFields));
     }
@@ -172,23 +172,23 @@ public class TrinoViewTest {
 
         List<Column> columnList = HiveMetastoreApiConverter.toFullSchemasForTrinoView(table, trinoViewDefinition);
         Assertions.assertEquals(columnList.size(), 15);
-        Assertions.assertEquals(columnList.get(0).getType(), ScalarType.TINYINT);
-        Assertions.assertEquals(columnList.get(1).getType(), ScalarType.SMALLINT);
-        Assertions.assertEquals(columnList.get(2).getType(), ScalarType.INT);
-        Assertions.assertEquals(columnList.get(3).getType(), ScalarType.BIGINT);
-        Assertions.assertEquals(columnList.get(4).getType(), ScalarType.FLOAT);
-        Assertions.assertEquals(columnList.get(5).getType(), ScalarType.DOUBLE);
+        Assertions.assertEquals(columnList.get(0).getType(), StandardTypes.TINYINT);
+        Assertions.assertEquals(columnList.get(1).getType(), StandardTypes.SMALLINT);
+        Assertions.assertEquals(columnList.get(2).getType(), StandardTypes.INT);
+        Assertions.assertEquals(columnList.get(3).getType(), StandardTypes.BIGINT);
+        Assertions.assertEquals(columnList.get(4).getType(), StandardTypes.FLOAT);
+        Assertions.assertEquals(columnList.get(5).getType(), StandardTypes.DOUBLE);
         Assertions.assertEquals(columnList.get(6).getType(), TypeFactory.createDecimalV3NarrowestType(10, 2));
         Assertions.assertEquals(columnList.get(7).getType(), TypeFactory.createVarcharType(20));
         Assertions.assertEquals(columnList.get(8).getType(), TypeFactory.createCharType(10));
         Assertions.assertEquals(columnList.get(9).getType(), TypeFactory.createDefaultCatalogString());
-        Assertions.assertEquals(columnList.get(10).getType(), ScalarType.BOOLEAN);
-        Assertions.assertEquals(columnList.get(11).getType(), ScalarType.DATETIME);
-        Assertions.assertEquals(columnList.get(12).getType(), ScalarType.ARRAY_INT);
+        Assertions.assertEquals(columnList.get(10).getType(), StandardTypes.BOOLEAN);
+        Assertions.assertEquals(columnList.get(11).getType(), StandardTypes.DATETIME);
+        Assertions.assertEquals(columnList.get(12).getType(), StandardTypes.ARRAY_INT);
         Assertions.assertEquals(columnList.get(13).getType(),
-                new MapType(TypeFactory.createDefaultCatalogString(), ScalarType.INT));
+                new MapType(TypeFactory.createDefaultCatalogString(), StandardTypes.INT));
         ArrayList<StructField> structFields = new ArrayList<>();
-        structFields.add(new StructField("field1", ScalarType.INT));
+        structFields.add(new StructField("field1", StandardTypes.INT));
         structFields.add(new StructField("field2", TypeFactory.createDefaultCatalogString()));
         Assertions.assertEquals(columnList.get(14).getType(), new StructType(structFields));
     }

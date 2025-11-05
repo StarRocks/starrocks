@@ -51,7 +51,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.Type;
+import com.starrocks.type.StandardTypes;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.commons.collections4.map.CaseInsensitiveMap;
@@ -751,7 +751,7 @@ public class MockedHiveMetadata implements ConnectorMetadata {
                 ImmutableList.of(new FieldSchema("o_orderdate", "Date", null)), Maps.newHashMap(),
                 null, null, "EXTERNAL_TABLE");
 
-        Column partitionColumn = new Column("o_orderdate", Type.DATE);
+        Column partitionColumn = new Column("o_orderdate", StandardTypes.DATE);
 
         List<PartitionKey> partitionKeyList = Lists.newArrayList();
         List<String> partitionNames = Lists.newArrayList();
@@ -820,7 +820,7 @@ public class MockedHiveMetadata implements ConnectorMetadata {
                 ImmutableList.of(new FieldSchema("l_shipdate", "Date", null)), Maps.newHashMap(),
                 null, null, "EXTERNAL_TABLE");
 
-        Column partitionColumn = new Column("l_shipdate", Type.DATE);
+        Column partitionColumn = new Column("l_shipdate", StandardTypes.DATE);
 
         List<PartitionKey> lineitemPartitionKeyList = Lists.newArrayList();
         lineitemPartitionKeyList.add(
@@ -892,8 +892,8 @@ public class MockedHiveMetadata implements ConnectorMetadata {
                         new FieldSchema("l_orderkey", "int", null)), Maps.newHashMap(),
                 null, null, "EXTERNAL_TABLE");
 
-        Column partitionColumn1 = new Column("l_shipdate", Type.DATE);
-        Column partitionColumn2 = new Column("l_orderkey", Type.INT);
+        Column partitionColumn1 = new Column("l_shipdate", StandardTypes.DATE);
+        Column partitionColumn2 = new Column("l_orderkey", StandardTypes.INT);
 
         List<PartitionKey> lineitemPartitionKeyList = Lists.newArrayList();
         lineitemPartitionKeyList.add(new PartitionKey(ImmutableList.of(new DateLiteral(1998, 1, 1), new IntLiteral(1)),
@@ -974,8 +974,8 @@ public class MockedHiveMetadata implements ConnectorMetadata {
                         new FieldSchema("l_returnflag", "string", null)),
                 Maps.newHashMap(), null, null, "EXTERNAL_TABLE");
 
-        Column partitionColumn1 = new Column("l_shipdate", Type.DATE);
-        Column partitionColumn2 = new Column("l_returnflag", Type.VARCHAR);
+        Column partitionColumn1 = new Column("l_shipdate", StandardTypes.DATE);
+        Column partitionColumn2 = new Column("l_returnflag", StandardTypes.VARCHAR);
 
         List<PartitionKey> lineitemPartitionKeyList = Lists.newArrayList();
         lineitemPartitionKeyList.add(
@@ -1065,8 +1065,8 @@ public class MockedHiveMetadata implements ConnectorMetadata {
                         new FieldSchema("l_orderkey", "int", null)), Maps.newHashMap(),
                 null, null, "EXTERNAL_TABLE");
 
-        Column partitionColumn1 = new Column("l_shipdate", Type.VARCHAR);
-        Column partitionColumn2 = new Column("l_orderkey", Type.INT);
+        Column partitionColumn1 = new Column("l_shipdate", StandardTypes.VARCHAR);
+        Column partitionColumn2 = new Column("l_orderkey", StandardTypes.INT);
 
         List<PartitionKey> lineitemPartitionKeyList = Lists.newArrayList();
         lineitemPartitionKeyList.add(
@@ -1159,7 +1159,7 @@ public class MockedHiveMetadata implements ConnectorMetadata {
                 new PartitionKey(ImmutableList.of(new IntLiteral(1)), ImmutableList.of(PrimitiveType.INT)));
         partitionKeyList.add(
                 new PartitionKey(ImmutableList.of(new IntLiteral(2)), ImmutableList.of(PrimitiveType.INT)));
-        Column partitionColumn = new Column("par_col", Type.INT);
+        Column partitionColumn = new Column("par_col", StandardTypes.INT);
         List<String> partitionColumnNames = ImmutableList.of("par_col");
         ColumnStatistic partitionColumnStats =
                 getPartitionColumnStatistic(partitionColumn, partitionKeyList, partitionColumnNames,
@@ -1214,8 +1214,8 @@ public class MockedHiveMetadata implements ConnectorMetadata {
                         new FieldSchema("l_orderkey", "int", null)), Maps.newHashMap(),
                 null, null, "EXTERNAL_TABLE");
 
-        Column partitionColumn1 = new Column("l_shipdate", Type.DATE);
-        Column partitionColumn2 = new Column("l_orderkey", Type.INT);
+        Column partitionColumn1 = new Column("l_shipdate", StandardTypes.DATE);
+        Column partitionColumn2 = new Column("l_orderkey", StandardTypes.INT);
 
         List<PartitionKey> lineitemPartitionKeyList = Lists.newArrayList();
         lineitemPartitionKeyList.add(new PartitionKey(ImmutableList.of(new DateLiteral(1998, 1, 1), new IntLiteral(1)),
@@ -1283,7 +1283,7 @@ public class MockedHiveMetadata implements ConnectorMetadata {
                 ImmutableList.of(new FieldSchema("l_shipdate", "string", null)), Maps.newHashMap(),
                 null, null, "EXTERNAL_TABLE");
 
-        Column partitionColumn1 = new Column("l_shipdate", Type.DATE);
+        Column partitionColumn1 = new Column("l_shipdate", StandardTypes.DATE);
 
         List<PartitionKey> lineitemPartitionKeyList = Lists.newArrayList();
         lineitemPartitionKeyList.add(new PartitionKey(ImmutableList.of(new DateLiteral(1998, 1, 1)),
@@ -1411,8 +1411,8 @@ public class MockedHiveMetadata implements ConnectorMetadata {
         partitionKeyList.add(new PartitionKey(ImmutableList.of(new IntLiteral(3), new DateLiteral(2020, 1, 4)),
                 ImmutableList.of(PrimitiveType.INT, PrimitiveType.DATE)));
 
-        Column partitionColumn1 = new Column("par_col", Type.INT);
-        Column partitionColumn2 = new Column("par_date", Type.DATE);
+        Column partitionColumn1 = new Column("par_col", StandardTypes.INT);
+        Column partitionColumn2 = new Column("par_date", StandardTypes.DATE);
 
         List<String> partitionColumnNames = ImmutableList.of("par_col", "par_date");
         ColumnStatistic partitionColumnStats1 =
@@ -1495,8 +1495,8 @@ public class MockedHiveMetadata implements ConnectorMetadata {
         double rowCount = 100;
 
         List<PartitionKey> partitionKeyList = Lists.newArrayList();
-        Column partitionColumn1 = new Column("par_col", Type.INT);
-        Column partitionColumn2 = new Column("par_date", Type.DATE);
+        Column partitionColumn1 = new Column("par_col", StandardTypes.INT);
+        Column partitionColumn2 = new Column("par_date", StandardTypes.DATE);
         List<Column> partitionColumns = ImmutableList.of(partitionColumn1, partitionColumn2);
         try {
             partitionKeyList.add(
@@ -1579,8 +1579,8 @@ public class MockedHiveMetadata implements ConnectorMetadata {
         partitionKeyList.add(new PartitionKey(ImmutableList.of(new IntLiteral(3), new DateLiteral(2020, 1, 4)),
                 ImmutableList.of(PrimitiveType.INT, PrimitiveType.DATE)));
 
-        Column partitionColumn1 = new Column("par_col", Type.INT);
-        Column partitionColumn2 = new Column("par_date", Type.DATE);
+        Column partitionColumn1 = new Column("par_col", StandardTypes.INT);
+        Column partitionColumn2 = new Column("par_date", StandardTypes.DATE);
 
         List<String> partitionColumnNames = ImmutableList.of("par_col", "par_date");
         ColumnStatistic partitionColumnStats1 = getPartitionColumnStatistic(partitionColumn1, partitionKeyList,
@@ -1639,7 +1639,7 @@ public class MockedHiveMetadata implements ConnectorMetadata {
             partitionKeyList.add(new PartitionKey(ImmutableList.of(new DateLiteral(2020, 1, 4)),
                     ImmutableList.of(PrimitiveType.DATE)));
 
-            Column partitionCol = new Column("par_date", Type.DATE);
+            Column partitionCol = new Column("par_date", StandardTypes.DATE);
 
             List<String> partitionColumnNames = ImmutableList.of("par_date");
             ColumnStatistic partitionColStats = getPartitionColumnStatistic(partitionCol, partitionKeyList,
@@ -1693,7 +1693,7 @@ public class MockedHiveMetadata implements ConnectorMetadata {
             partitionKeyList.add(new PartitionKey(ImmutableList.of(new DateLiteral(2020, 1, 4)),
                     ImmutableList.of(PrimitiveType.DATE)));
 
-            Column partitionCol = new Column("par_date", Type.DATE);
+            Column partitionCol = new Column("par_date", StandardTypes.DATE);
 
             List<String> partitionColumnNames = ImmutableList.of("par_date");
             ColumnStatistic partitionColStats = getPartitionColumnStatistic(partitionCol, partitionKeyList,

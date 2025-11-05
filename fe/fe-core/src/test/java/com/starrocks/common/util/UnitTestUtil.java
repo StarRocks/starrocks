@@ -60,7 +60,7 @@ import com.starrocks.system.Backend;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletType;
-import com.starrocks.type.Type;
+import com.starrocks.type.StandardTypes;
 import org.junit.jupiter.api.Assertions;
 
 import java.lang.reflect.Method;
@@ -132,19 +132,19 @@ public class UnitTestUtil {
 
         // columns
         List<Column> columns = new ArrayList<Column>();
-        Column temp = new Column("k1", Type.INT);
+        Column temp = new Column("k1", StandardTypes.INT);
         temp.setIsKey(true);
         columns.add(temp);
-        temp = new Column("k2", Type.INT);
+        temp = new Column("k2", StandardTypes.INT);
         temp.setIsKey(true);
         columns.add(temp);
-        columns.add(new Column("v", Type.DOUBLE, false, AggregateType.SUM, "0", ""));
+        columns.add(new Column("v", StandardTypes.DOUBLE, false, AggregateType.SUM, "0", ""));
 
         List<Column> keysColumn = new ArrayList<Column>();
-        temp = new Column("k1", Type.INT);
+        temp = new Column("k1", StandardTypes.INT);
         temp.setIsKey(true);
         keysColumn.add(temp);
-        temp = new Column("k2", Type.INT);
+        temp = new Column("k2", StandardTypes.INT);
         temp.setIsKey(true);
         keysColumn.add(temp);
 
@@ -209,19 +209,19 @@ public class UnitTestUtil {
 
         // columns
         List<Column> columns = new ArrayList<Column>();
-        Column temp = new Column("k1", Type.INT);
+        Column temp = new Column("k1", StandardTypes.INT);
         temp.setIsKey(true);
         columns.add(temp);
-        temp = new Column("k2", Type.INT);
+        temp = new Column("k2", StandardTypes.INT);
         temp.setIsKey(true);
         columns.add(temp);
-        columns.add(new Column("v", Type.DOUBLE, false, AggregateType.SUM, "0", ""));
+        columns.add(new Column("v", StandardTypes.DOUBLE, false, AggregateType.SUM, "0", ""));
 
         List<Column> keysColumn = new ArrayList<Column>();
-        temp = new Column("k1", Type.INT);
+        temp = new Column("k1", StandardTypes.INT);
         temp.setIsKey(true);
         keysColumn.add(temp);
-        temp = new Column("k2", Type.INT);
+        temp = new Column("k2", StandardTypes.INT);
         temp.setIsKey(true);
         keysColumn.add(temp);
 
@@ -323,10 +323,10 @@ public class UnitTestUtil {
 
     public static View createTestView(long tableId) {
         List<Column> columns = new ArrayList<Column>();
-        Column temp = new Column("k1", Type.INT);
+        Column temp = new Column("k1", StandardTypes.INT);
         temp.setIsKey(false);
         columns.add(temp);
-        temp = new Column("k2", Type.INT);
+        temp = new Column("k2", StandardTypes.INT);
         temp.setIsKey(false);
         columns.add(temp);
 

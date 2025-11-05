@@ -58,6 +58,7 @@ import com.starrocks.sql.common.RangePartitionDiffer;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.Type;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.common.FileUtils;
@@ -444,7 +445,7 @@ public class PartitionUtil {
     // partition column is (ts timestamp), table could partition by year(ts), month(ts), day(ts), hour(ts)
     // this function could get the dateInterval from partition transform
     public static DateTimeInterval getDateTimeInterval(Table table, Column partitionColumn) {
-        if (partitionColumn.getType() != Type.DATE && partitionColumn.getType() != Type.DATETIME) {
+        if (partitionColumn.getType() != StandardTypes.DATE && partitionColumn.getType() != StandardTypes.DATETIME) {
             return DateTimeInterval.NONE;
         }
         if (table.isIcebergTable()) {
@@ -462,7 +463,7 @@ public class PartitionUtil {
             if (partitionColumn.getPrimitiveType().isIntegerType()) {
                 partitionName = IntLiteral.createMaxValue(partitionColumn.getType()).getStringValue();
             } else {
-                partitionName = DateLiteral.createMaxValue(Type.DATE).getStringValue();
+                partitionName = DateLiteral.createMaxValue(StandardTypes.DATE).getStringValue();
             }
         }
         return partitionName;
@@ -663,12 +664,12 @@ public class PartitionUtil {
             return null;
         }
         if (stringLiteral.isConstantNull()) {
-            return NullLiteral.create(Type.DATE);
+            return NullLiteral.create(StandardTypes.DATE);
         }
         try {
             String dateLiteral = stringLiteral.getStringValue();
             LocalDateTime dateValue = DateUtils.parseStrictDateTime(dateLiteral);
-            return new DateLiteral(dateValue, Type.DATE);
+            return new DateLiteral(dateValue, StandardTypes.DATE);
         } catch (Exception e) {
             throw new SemanticException("create string to date literal failed:" +  stringLiteral.getStringValue(), e);
         }

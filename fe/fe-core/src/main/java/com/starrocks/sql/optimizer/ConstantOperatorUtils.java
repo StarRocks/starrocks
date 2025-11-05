@@ -16,7 +16,7 @@
 package com.starrocks.sql.optimizer;
 
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
-import com.starrocks.type.Type;
+import com.starrocks.type.StandardTypes;
 
 import java.util.OptionalDouble;
 
@@ -57,27 +57,27 @@ public class ConstantOperatorUtils {
     }
 
     public static OptionalDouble doubleValueFromConstant(ConstantOperator constantOperator) {
-        if (Type.BOOLEAN.equals(constantOperator.getType())) {
+        if (StandardTypes.BOOLEAN.equals(constantOperator.getType())) {
             return OptionalDouble.of(constantOperator.getBoolean() ? 1.0 : 0.0);
-        } else if (Type.TINYINT.equals(constantOperator.getType())) {
+        } else if (StandardTypes.TINYINT.equals(constantOperator.getType())) {
             return OptionalDouble.of(constantOperator.getTinyInt());
-        } else if (Type.SMALLINT.equals(constantOperator.getType())) {
+        } else if (StandardTypes.SMALLINT.equals(constantOperator.getType())) {
             return OptionalDouble.of(constantOperator.getSmallint());
-        } else if (Type.INT.equals(constantOperator.getType())) {
+        } else if (StandardTypes.INT.equals(constantOperator.getType())) {
             return OptionalDouble.of(constantOperator.getInt());
-        } else if (Type.BIGINT.equals(constantOperator.getType())) {
+        } else if (StandardTypes.BIGINT.equals(constantOperator.getType())) {
             return OptionalDouble.of(constantOperator.getBigint());
-        } else if (Type.LARGEINT.equals(constantOperator.getType())) {
+        } else if (StandardTypes.LARGEINT.equals(constantOperator.getType())) {
             return OptionalDouble.of(constantOperator.getLargeInt().doubleValue());
-        } else if (Type.FLOAT.equals(constantOperator.getType())) {
+        } else if (StandardTypes.FLOAT.equals(constantOperator.getType())) {
             return OptionalDouble.of(constantOperator.getFloat());
-        } else if (Type.DOUBLE.equals(constantOperator.getType())) {
+        } else if (StandardTypes.DOUBLE.equals(constantOperator.getType())) {
             return OptionalDouble.of(constantOperator.getDouble());
-        } else if (Type.DATE.equals(constantOperator.getType())) {
+        } else if (StandardTypes.DATE.equals(constantOperator.getType())) {
             return OptionalDouble.of(getLongFromDateTime(constantOperator.getDate()));
-        } else if (Type.DATETIME.equals(constantOperator.getType())) {
+        } else if (StandardTypes.DATETIME.equals(constantOperator.getType())) {
             return OptionalDouble.of(getLongFromDateTime(constantOperator.getDatetime()));
-        } else if (Type.TIME.equals(constantOperator.getType())) {
+        } else if (StandardTypes.TIME.equals(constantOperator.getType())) {
             return OptionalDouble.of(constantOperator.getTime());
         } else if (constantOperator.getType().isDecimalOfAnyVersion()) {
             return OptionalDouble.of(constantOperator.getDecimal().doubleValue());

@@ -26,6 +26,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.thrift.TAccessPathType;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.Type;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.text.StrTokenizer;
@@ -49,7 +50,7 @@ public class SubfieldAccessPathNormalizer {
 
     private static class AccessPath {
         private final ScalarOperator root;
-        private Type valueType = Type.INVALID;
+        private Type valueType = StandardTypes.INVALID;
         private final List<String> paths = Lists.newArrayList();
         private final List<TAccessPathType> pathTypes = Lists.newArrayList();
 
@@ -87,7 +88,7 @@ public class SubfieldAccessPathNormalizer {
                 .sorted((o1, o2) -> Integer.compare(o2.paths.size(), o1.paths.size()))
                 .collect(Collectors.toList());
 
-        ColumnAccessPath rootPath = new ColumnAccessPath(TAccessPathType.ROOT, columnName, Type.INVALID);
+        ColumnAccessPath rootPath = new ColumnAccessPath(TAccessPathType.ROOT, columnName, StandardTypes.INVALID);
         for (AccessPath accessPath : paths) {
             ColumnAccessPath parentPath = rootPath;
             for (int i = 0; i < accessPath.paths.size(); i++) {
@@ -128,8 +129,8 @@ public class SubfieldAccessPathNormalizer {
      */
     private Type deriverCompatibleJsonType(Type first, Type second) {
         // only json type used, other semi-type are explicit types, so we set INVALID
-        if (first == Type.INVALID || second == Type.INVALID) {
-            return Type.INVALID;
+        if (first == StandardTypes.INVALID || second == StandardTypes.INVALID) {
+            return StandardTypes.INVALID;
         }
 
         if (first.getPrimitiveType() == second.getPrimitiveType()) {
@@ -140,7 +141,7 @@ public class SubfieldAccessPathNormalizer {
         // the be can't promise cast(cast(xx as IntermediateType) as TargetType) is same as cast(xx as TargetType)
         // e.g: cast(cast("1.1" as double) as int) is different with cast("1.1" as int)
         // so we use JSON as the compatible type
-        return Type.JSON;
+        return StandardTypes.JSON;
     }
 
     public boolean hasPath(ColumnRefOperator root) {
@@ -216,7 +217,7 @@ public class SubfieldAccessPathNormalizer {
                     if (isOverflown || FunctionSet.JSON_LENGTH.equals(call.getFnName())
                             || FunctionSet.GET_JSON_BOOL.equals(call.getFnName())
                             || FunctionSet.JSON_EXISTS.equals(call.getFnName())) {
-                        p.setValueType(Type.JSON);
+                        p.setValueType(StandardTypes.JSON);
                     } else {
                         p.setValueType(call.getType());
                     }

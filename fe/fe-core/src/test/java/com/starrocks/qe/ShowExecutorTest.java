@@ -82,7 +82,7 @@ import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageType;
-import com.starrocks.type.Type;
+import com.starrocks.type.StandardTypes;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -121,8 +121,8 @@ public class ShowExecutorTest {
         ctx = new ConnectContext(null);
         ctx.setCommand(MysqlCommand.COM_SLEEP);
 
-        Column column1 = new Column("col1", Type.BIGINT);
-        Column column2 = new Column("col2", Type.DOUBLE);
+        Column column1 = new Column("col1", StandardTypes.BIGINT);
+        Column column2 = new Column("col2", StandardTypes.DOUBLE);
         column1.setIsKey(true);
         column2.setIsKey(true);
         Map<ColumnId, Column> idToColumn = Maps.newTreeMap(ColumnId.CASE_INSENSITIVE_ORDER);

@@ -61,7 +61,7 @@ import com.starrocks.thrift.TStorageType;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
-import com.starrocks.type.Type;
+import com.starrocks.type.StandardTypes;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -113,11 +113,11 @@ public class DeleteTest {
     private Database createDb() {
         // Schema
         List<Column> columns = Lists.newArrayList();
-        Column k1 = new Column("k1", Type.INT, true, null, "", "");
+        Column k1 = new Column("k1", StandardTypes.INT, true, null, "", "");
         columns.add(k1);
-        columns.add(new Column("k2", Type.BIGINT, true, null, "", ""));
-        columns.add(new Column("v", Type.BIGINT, false, null, "0", ""));
-        columns.add(new Column("v1", Type.ARRAY_BIGINT, false, null, "0", ""));
+        columns.add(new Column("k2", StandardTypes.BIGINT, true, null, "", ""));
+        columns.add(new Column("v", StandardTypes.BIGINT, false, null, "0", ""));
+        columns.add(new Column("v1", StandardTypes.ARRAY_BIGINT, false, null, "0", ""));
 
         // Tablet
         Tablet tablet1 = new LakeTablet(tablet1Id);

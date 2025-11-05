@@ -29,6 +29,7 @@ import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.type.ArrayType;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.Type;
 import com.starrocks.utframe.StarRocksAssert;
 import org.junit.jupiter.api.AfterAll;
@@ -111,7 +112,8 @@ public class SampleInfoTest extends PlanTestBase {
     public void generateSubFieldTypeColumnTask() {
         SampleInfo sampleInfo = tabletSampleManager.generateSampleInfo();
         List<String> columnNames = Lists.newArrayList("c1", "c4.b", "c6.c.b");
-        List<Type> columnTypes = Lists.newArrayList(Type.DATE, new ArrayType(Type.ANY_STRUCT), Type.INT);
+        List<Type> columnTypes = Lists.newArrayList(StandardTypes.DATE,
+                new ArrayType(StandardTypes.ANY_STRUCT), StandardTypes.INT);
         ColumnSampleManager columnSampleManager = ColumnSampleManager.init(columnNames, columnTypes, table,
                 sampleInfo);
         List<List<ColumnStats>> columnStatsBatch = columnSampleManager.splitPrimitiveTypeStats();

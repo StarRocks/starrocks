@@ -30,8 +30,8 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 import static com.starrocks.connector.metadata.TableMetaMetadata.METADATA_DB_NAME;
-import static com.starrocks.type.Type.ARRAY_BIGINT;
-import static com.starrocks.type.Type.ARRAY_INT;
+import static com.starrocks.type.StandardTypes.ARRAY_BIGINT;
+import static com.starrocks.type.StandardTypes.ARRAY_INT;
 
 public class LogicalIcebergMetadataTable extends MetadataTable {
     public static final String TABLE_NAME = "starrocks_connector_iceberg_logical_metadata_table";

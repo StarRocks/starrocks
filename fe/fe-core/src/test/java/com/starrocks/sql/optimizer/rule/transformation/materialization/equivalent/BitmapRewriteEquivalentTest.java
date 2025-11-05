@@ -20,6 +20,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.Type;
 import mockit.Injectable;
 import mockit.Mocked;
@@ -44,44 +45,44 @@ public class BitmapRewriteEquivalentTest {
     }
 
     private ScalarOperator createBitmapHashFunc(ScalarOperator arg0) {
-        CallOperator op = new CallOperator(FunctionSet.BITMAP_HASH, Type.BITMAP, new ArrayList<>(),
-                ExprUtils.getBuiltinFunction(FunctionSet.BITMAP_HASH, new Type[] {Type.BIGINT}, IS_IDENTICAL));
+        CallOperator op = new CallOperator(FunctionSet.BITMAP_HASH, StandardTypes.BITMAP, new ArrayList<>(),
+                ExprUtils.getBuiltinFunction(FunctionSet.BITMAP_HASH, new Type[] {StandardTypes.BIGINT}, IS_IDENTICAL));
         return createCallOperatorBase(op, arg0);
     }
 
     private ScalarOperator createBitmapHash64Func(ScalarOperator arg0) {
-        CallOperator op = new CallOperator(FunctionSet.BITMAP_HASH64, Type.BITMAP, new ArrayList<>(),
-                ExprUtils.getBuiltinFunction(FunctionSet.BITMAP_HASH64, new Type[] {Type.BIGINT}, IS_IDENTICAL));
+        CallOperator op = new CallOperator(FunctionSet.BITMAP_HASH64, StandardTypes.BITMAP, new ArrayList<>(),
+                ExprUtils.getBuiltinFunction(FunctionSet.BITMAP_HASH64, new Type[] {StandardTypes.BIGINT}, IS_IDENTICAL));
         return createCallOperatorBase(op, arg0);
     }
 
     private ScalarOperator createToBitmapFunc(ScalarOperator arg0) {
-        CallOperator op = new CallOperator(FunctionSet.TO_BITMAP, Type.BITMAP, new ArrayList<>(),
-                ExprUtils.getBuiltinFunction(FunctionSet.TO_BITMAP, new Type[] {Type.BIGINT}, IS_IDENTICAL));
+        CallOperator op = new CallOperator(FunctionSet.TO_BITMAP, StandardTypes.BITMAP, new ArrayList<>(),
+                ExprUtils.getBuiltinFunction(FunctionSet.TO_BITMAP, new Type[] {StandardTypes.BIGINT}, IS_IDENTICAL));
         return createCallOperatorBase(op, arg0);
     }
 
     private ScalarOperator createBitmapFromString(ScalarOperator arg0) {
-        CallOperator op = new CallOperator(FunctionSet.BITMAP_FROM_STRING, Type.BITMAP, new ArrayList<>(),
-                ExprUtils.getBuiltinFunction(FunctionSet.BITMAP_FROM_STRING, new Type[] {Type.STRING}, IS_IDENTICAL));
+        CallOperator op = new CallOperator(FunctionSet.BITMAP_FROM_STRING, StandardTypes.BITMAP, new ArrayList<>(),
+                ExprUtils.getBuiltinFunction(FunctionSet.BITMAP_FROM_STRING, new Type[] {StandardTypes.STRING}, IS_IDENTICAL));
         return createCallOperatorBase(op, arg0);
     }
 
     private ScalarOperator createBitmapUnionFunc(ScalarOperator arg0) {
-        CallOperator op = new CallOperator(FunctionSet.BITMAP_UNION, Type.BITMAP, new ArrayList<>(),
-                ExprUtils.getBuiltinFunction(FunctionSet.BITMAP_UNION, new Type[] {Type.BITMAP}, IS_IDENTICAL));
+        CallOperator op = new CallOperator(FunctionSet.BITMAP_UNION, StandardTypes.BITMAP, new ArrayList<>(),
+                ExprUtils.getBuiltinFunction(FunctionSet.BITMAP_UNION, new Type[] {StandardTypes.BITMAP}, IS_IDENTICAL));
         return createCallOperatorBase(op, arg0);
     }
 
     private ScalarOperator createBitmapUnionCountFunc(ScalarOperator arg0) {
-        CallOperator op = new CallOperator(FunctionSet.BITMAP_UNION_COUNT, Type.BITMAP, new ArrayList<>(),
-                ExprUtils.getBuiltinFunction(FunctionSet.BITMAP_UNION_COUNT, new Type[] {Type.BITMAP}, IS_IDENTICAL));
+        CallOperator op = new CallOperator(FunctionSet.BITMAP_UNION_COUNT, StandardTypes.BITMAP, new ArrayList<>(),
+                ExprUtils.getBuiltinFunction(FunctionSet.BITMAP_UNION_COUNT, new Type[] {StandardTypes.BITMAP}, IS_IDENTICAL));
         return createCallOperatorBase(op, arg0);
     }
 
     private CallOperator createBitmapAggFunc(ScalarOperator arg0) {
-        CallOperator op = new CallOperator(FunctionSet.BITMAP_AGG, Type.BITMAP, new ArrayList<>(),
-                ExprUtils.getBuiltinFunction(FunctionSet.BITMAP_AGG, new Type[] {Type.BITMAP}, IS_IDENTICAL));
+        CallOperator op = new CallOperator(FunctionSet.BITMAP_AGG, StandardTypes.BITMAP, new ArrayList<>(),
+                ExprUtils.getBuiltinFunction(FunctionSet.BITMAP_AGG, new Type[] {StandardTypes.BITMAP}, IS_IDENTICAL));
         return createCallOperatorBase(op, arg0);
     }
 
@@ -90,15 +91,16 @@ public class BitmapRewriteEquivalentTest {
         BitmapRewriteEquivalent bitmapRewriteEquivalent = new BitmapRewriteEquivalent();
 
         assertNull(bitmapRewriteEquivalent.prepare(null));
-        assertNull(bitmapRewriteEquivalent.prepare(createConstantOperator("hello", Type.STRING)));
-        assertNull(bitmapRewriteEquivalent.prepare(createBitmapHashFunc(createConstantOperator("hello", Type.STRING))));
-        assertNull(bitmapRewriteEquivalent.prepare(createBitmapHash64Func(createConstantOperator("hello", Type.STRING))));
+        assertNull(bitmapRewriteEquivalent.prepare(createConstantOperator("hello", StandardTypes.STRING)));
+        assertNull(bitmapRewriteEquivalent.prepare(createBitmapHashFunc(createConstantOperator("hello", StandardTypes.STRING))));
+        assertNull(bitmapRewriteEquivalent.prepare(
+                createBitmapHash64Func(createConstantOperator("hello", StandardTypes.STRING))));
         assertNull(bitmapRewriteEquivalent.prepare(createBitmapUnionFunc(null)));
-        assertNull(bitmapRewriteEquivalent.prepare(createBitmapUnionFunc(createConstantOperator("hello", Type.STRING))));
+        assertNull(bitmapRewriteEquivalent.prepare(createBitmapUnionFunc(createConstantOperator("hello", StandardTypes.STRING))));
         assertNull(bitmapRewriteEquivalent.prepare(createBitmapAggFunc(null)));
 
         {
-            ScalarOperator constant = createConstantOperator("hello", Type.STRING);
+            ScalarOperator constant = createConstantOperator("hello", StandardTypes.STRING);
             ScalarOperator toBitmap = createToBitmapFunc(constant);
             ScalarOperator bitmapUnion = createBitmapUnionFunc(toBitmap);
             IRewriteEquivalent.RewriteEquivalentContext context = bitmapRewriteEquivalent.prepare(bitmapUnion);
@@ -108,7 +110,7 @@ public class BitmapRewriteEquivalentTest {
         }
 
         {
-            ScalarOperator constant = createConstantOperator("hello", Type.STRING);
+            ScalarOperator constant = createConstantOperator("hello", StandardTypes.STRING);
             ScalarOperator bitmapHash = createBitmapHashFunc(constant);
             ScalarOperator bitmapUnion = createBitmapUnionFunc(bitmapHash);
             IRewriteEquivalent.RewriteEquivalentContext context = bitmapRewriteEquivalent.prepare(bitmapUnion);
@@ -118,7 +120,7 @@ public class BitmapRewriteEquivalentTest {
         }
 
         {
-            ScalarOperator constant = createConstantOperator("hello", Type.STRING);
+            ScalarOperator constant = createConstantOperator("hello", StandardTypes.STRING);
             ScalarOperator bitmapHash64 = createBitmapHash64Func(constant);
             ScalarOperator bitmapUnion = createBitmapUnionFunc(bitmapHash64);
             IRewriteEquivalent.RewriteEquivalentContext context = bitmapRewriteEquivalent.prepare(bitmapUnion);
@@ -128,7 +130,7 @@ public class BitmapRewriteEquivalentTest {
         }
 
         {
-            ScalarOperator constant = createConstantOperator("hello", Type.STRING);
+            ScalarOperator constant = createConstantOperator("hello", StandardTypes.STRING);
             ScalarOperator bitmapFromString = createBitmapFromString(constant);
             ScalarOperator bitmapUnion = createBitmapUnionFunc(bitmapFromString);
             // bitmap_union(bitmap_from_string()) cannot be rewrite.
@@ -136,7 +138,7 @@ public class BitmapRewriteEquivalentTest {
         }
 
         {
-            ScalarOperator constant = createConstantOperator("mocked", Type.BITMAP);
+            ScalarOperator constant = createConstantOperator("mocked", StandardTypes.BITMAP);
             ScalarOperator bitmapUnion = createBitmapUnionFunc(constant);
             IRewriteEquivalent.RewriteEquivalentContext context = bitmapRewriteEquivalent.prepare(bitmapUnion);
             assertNotNull(context);
@@ -145,7 +147,7 @@ public class BitmapRewriteEquivalentTest {
         }
 
         {
-            ScalarOperator constant = createConstantOperator("hello", Type.STRING);
+            ScalarOperator constant = createConstantOperator("hello", StandardTypes.STRING);
             ScalarOperator bitmapUnion = createBitmapUnionFunc(constant);
             ScalarOperator bitmapAgg = createBitmapAggFunc(bitmapUnion);
             IRewriteEquivalent.RewriteEquivalentContext context = bitmapRewriteEquivalent.prepare(bitmapAgg);
@@ -160,7 +162,7 @@ public class BitmapRewriteEquivalentTest {
                                                    @Injectable ColumnRefOperator columnRefOperator) {
         BitmapRewriteEquivalent bitmapRewriteEquivalent = new BitmapRewriteEquivalent();
 
-        ScalarOperator constant = createConstantOperator("hello", Type.STRING);
+        ScalarOperator constant = createConstantOperator("hello", StandardTypes.STRING);
         ScalarOperator bitmapHash64 = createBitmapHash64Func(constant);
         ScalarOperator bitmapUnion = createBitmapUnionFunc(bitmapHash64);
         IRewriteEquivalent.RewriteEquivalentContext context = bitmapRewriteEquivalent.prepare(bitmapUnion);

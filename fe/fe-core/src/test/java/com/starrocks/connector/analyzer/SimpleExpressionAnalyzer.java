@@ -69,6 +69,7 @@ import com.starrocks.sql.common.TypeManager;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.MapType;
 import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
@@ -119,7 +120,7 @@ public class SimpleExpressionAnalyzer {
             // array_filter(lambda_func_expr, arr1...) -> array_filter(arr1, array_map(lambda_func_expr, arr1...))
             FunctionCallExpr arrayMap = new FunctionCallExpr(FunctionSet.ARRAY_MAP,
                     Lists.newArrayList(functionCallExpr.getChildren()));
-            arrayMap.setType(Type.BOOLEAN);
+            arrayMap.setType(StandardTypes.BOOLEAN);
             Expr arr1 = functionCallExpr.getChild(1);
             functionCallExpr.clearChildren();
             functionCallExpr.addChild(arr1);
@@ -148,15 +149,15 @@ public class SimpleExpressionAnalyzer {
             Expr expr = expression.getChild(i);
             bottomUpAnalyze(visitor, expr);
             if (expr instanceof NullLiteral) {
-                expr.setType(Type.ARRAY_INT); // Let it have item type.
+                expr.setType(StandardTypes.ARRAY_INT); // Let it have item type.
             }
             if (!expr.getType().isArrayType()) {
                 throw new SemanticException("Lambda inputs should be arrays.");
             }
             Type itemType = ((ArrayType) expr.getType()).getItemType();
-            if (itemType == Type.NULL) { // Since slot_ref with Type.NULL is rewritten to Literal in toThrift(),
+            if (itemType == StandardTypes.NULL) { // Since slot_ref with Type.NULL is rewritten to Literal in toThrift(),
                 // rather than a common columnRef, so change its type here.
-                itemType = Type.BOOLEAN;
+                itemType = StandardTypes.BOOLEAN;
             }
         }
         // visit LambdaFunction
@@ -222,7 +223,7 @@ public class SimpleExpressionAnalyzer {
         @Override
         public Void visitSlot(SlotRef node, Scope scope) {
             // Do not know the slot type, use string as default
-            node.setType(Type.STRING);
+            node.setType(StandardTypes.STRING);
             return null;
         }
 
@@ -256,7 +257,7 @@ public class SimpleExpressionAnalyzer {
                     throw new SemanticException(e.getMessage());
                 }
             } else {
-                node.setType(Type.ARRAY_NULL);
+                node.setType(StandardTypes.ARRAY_NULL);
             }
             return null;
         }
@@ -275,7 +276,7 @@ public class SimpleExpressionAnalyzer {
                 }
                 try {
                     if (subscript.getType().getPrimitiveType() != PrimitiveType.INT) {
-                        node.castChild(Type.INT, 1);
+                        node.castChild(StandardTypes.INT, 1);
                     }
                     node.setType(((ArrayType) expr.getType()).getItemType());
                 } catch (AnalysisException e) {
@@ -317,7 +318,7 @@ public class SimpleExpressionAnalyzer {
                 throw new SemanticException(
                         "-> operator could only be used for json column, but got " + item.getType());
             }
-            node.setType(Type.JSON);
+            node.setType(StandardTypes.JSON);
             return null;
         }
 
@@ -346,7 +347,7 @@ public class SimpleExpressionAnalyzer {
 
             // construct a new scope to analyze the lambda function
             SimpleExpressionAnalyzer.analyzeExpression(node.getChild(0), this.analyzeState);
-            node.setType(Type.FUNCTION);
+            node.setType(StandardTypes.FUNCTION);
             scope.clearLambdaInputs();
             return null;
         }
@@ -362,7 +363,7 @@ public class SimpleExpressionAnalyzer {
                 }
             }
 
-            node.setType(Type.BOOLEAN);
+            node.setType(StandardTypes.BOOLEAN);
             return null;
         }
 
@@ -400,7 +401,7 @@ public class SimpleExpressionAnalyzer {
                 throw new SemanticException(String.format(ERROR_MSG, type1.toSql()));
             }
 
-            node.setType(Type.BOOLEAN);
+            node.setType(StandardTypes.BOOLEAN);
             return null;
         }
 
@@ -446,7 +447,7 @@ public class SimpleExpressionAnalyzer {
                     case DIVIDE:
                         commonType = ArithmeticExpr.getCommonType(t1, t2);
                         if (commonType.isFixedPointType()) {
-                            commonType = Type.DOUBLE;
+                            commonType = StandardTypes.DOUBLE;
                         }
                         break;
                     case INT_DIVIDE:
@@ -455,7 +456,7 @@ public class SimpleExpressionAnalyzer {
                     case BITXOR:
                         commonType = ArithmeticExpr.getCommonType(t1, t2);
                         if (!commonType.isFixedPointType()) {
-                            commonType = Type.BIGINT;
+                            commonType = StandardTypes.BIGINT;
                         }
                         break;
                     case BIT_SHIFT_LEFT:
@@ -468,17 +469,18 @@ public class SimpleExpressionAnalyzer {
                         throw unsupportedException("Unknown arithmetic operation " + op + " in: " + node);
                 }
 
-                if (node.getChild(0).getType().equals(Type.NULL) && node.getChild(1).getType().equals(Type.NULL)) {
-                    commonType = Type.NULL;
+                if (node.getChild(0).getType().equals(StandardTypes.NULL)
+                        && node.getChild(1).getType().equals(StandardTypes.NULL)) {
+                    commonType = StandardTypes.NULL;
                 }
 
-                if (!Type.NULL.equals(node.getChild(0).getType()) && !Type.canCastTo(t1, commonType)) {
+                if (!StandardTypes.NULL.equals(node.getChild(0).getType()) && !Type.canCastTo(t1, commonType)) {
                     throw new SemanticException(
                             "cast type " + node.getChild(0).getType().toSql() + " with type " + commonType.toSql()
                                     + " is invalid.");
                 }
 
-                if (!Type.NULL.equals(node.getChild(1).getType()) && !Type.canCastTo(t2, commonType)) {
+                if (!StandardTypes.NULL.equals(node.getChild(1).getType()) && !Type.canCastTo(t2, commonType)) {
                     throw new SemanticException(
                             "cast type " + node.getChild(1).getType().toSql() + " with type " + commonType.toSql()
                                     + " is invalid.");
@@ -497,9 +499,9 @@ public class SimpleExpressionAnalyzer {
             } else if (node.getOp().getPos() == ArithmeticExpr.OperatorPosition.UNARY_PREFIX) {
 
                 Function fn = ExprUtils.getBuiltinFunction(
-                        node.getOp().getName(), new Type[] {Type.BIGINT}, Function.CompareMode.IS_SUPERTYPE_OF);
+                        node.getOp().getName(), new Type[] {StandardTypes.BIGINT}, Function.CompareMode.IS_SUPERTYPE_OF);
 
-                node.setType(Type.BIGINT);
+                node.setType(StandardTypes.BIGINT);
                 node.setFn(fn);
             } else if (node.getOp().getPos() == ArithmeticExpr.OperatorPosition.UNARY_POSTFIX) {
                 throw unsupportedException("not yet implemented: expression analyzer for " + node.getClass().getName());
@@ -517,7 +519,7 @@ public class SimpleExpressionAnalyzer {
 
         @Override
         public Void visitTimestampArithmeticExpr(TimestampArithmeticExpr node, Scope scope) {
-            node.setChild(0, TypeManager.addCastExpr(node.getChild(0), Type.DATETIME));
+            node.setChild(0, TypeManager.addCastExpr(node.getChild(0), StandardTypes.DATETIME));
 
             String funcOpName;
             if (node.getFuncName() != null) {
@@ -526,7 +528,7 @@ public class SimpleExpressionAnalyzer {
                 } else if (subDateFunctions.contains(node.getFuncName())) {
                     funcOpName = String.format("%sS_%s", node.getTimeUnitIdent(), "sub");
                 } else {
-                    node.setChild(1, TypeManager.addCastExpr(node.getChild(1), Type.DATETIME));
+                    node.setChild(1, TypeManager.addCastExpr(node.getChild(1), StandardTypes.DATETIME));
                     funcOpName = String.format("%sS_%s", node.getTimeUnitIdent(), "diff");
                 }
             } else {
@@ -628,7 +630,7 @@ public class SimpleExpressionAnalyzer {
         // 1. set type = Type.BOOLEAN
         // 2. check child type is metric
         private void predicateBaseAndCheck(Predicate node) {
-            node.setType(Type.BOOLEAN);
+            node.setType(StandardTypes.BOOLEAN);
 
             for (Expr expr : node.getChildren()) {
                 if (expr.getType().isOnlyMetricType() ||
@@ -664,7 +666,7 @@ public class SimpleExpressionAnalyzer {
             }
 
             Type[] childTypes = new Type[1];
-            childTypes[0] = Type.BIGINT;
+            childTypes[0] = StandardTypes.BIGINT;
             Function fn = ExprUtils.getBuiltinFunction(node.getFnName().getFunction(),
                     childTypes, Function.CompareMode.IS_IDENTICAL);
 
@@ -707,7 +709,7 @@ public class SimpleExpressionAnalyzer {
                 whenTypes.add(node.getChild(i).getType());
             }
 
-            Type compatibleType = Type.NULL;
+            Type compatibleType = StandardTypes.NULL;
             if (null != caseExpr) {
                 compatibleType = TypeManager.getCompatibleTypeForCaseWhen(whenTypes);
             }
@@ -730,7 +732,7 @@ public class SimpleExpressionAnalyzer {
                 thenTypes.add(elseExpr.getType());
             }
 
-            Type returnType = thenTypes.stream().allMatch(Type.NULL::equals) ? Type.BOOLEAN :
+            Type returnType = thenTypes.stream().allMatch(StandardTypes.NULL::equals) ? StandardTypes.BOOLEAN :
                     TypeManager.getCompatibleTypeForCaseWhen(thenTypes);
             for (Type type : thenTypes) {
                 if (!Type.canCastTo(type, returnType)) {
@@ -748,7 +750,7 @@ public class SimpleExpressionAnalyzer {
             SimpleQueryAnalyzer queryAnalyzer = new SimpleQueryAnalyzer();
             queryAnalyzer.analyze(node.getQueryStatement());
             // Do not know the subquery type, use string as default
-            node.setType(Type.STRING);
+            node.setType(StandardTypes.STRING);
             return null;
         }
 
@@ -774,7 +776,7 @@ public class SimpleExpressionAnalyzer {
 
         @Override
         public Void visitDefaultValueExpr(DefaultValueExpr node, Scope context) {
-            node.setType(Type.VARCHAR);
+            node.setType(StandardTypes.VARCHAR);
             return null;
         }
 

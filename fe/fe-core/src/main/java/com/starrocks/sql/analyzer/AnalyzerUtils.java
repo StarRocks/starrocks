@@ -123,6 +123,7 @@ import com.starrocks.type.ArrayType;
 import com.starrocks.type.MapType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
@@ -228,7 +229,7 @@ public class AnalyzerUtils {
             return null;
         }
 
-        Function search = new Function(fnName, argTypes, Type.INVALID, false);
+        Function search = new Function(fnName, argTypes, StandardTypes.INVALID, false);
         Function fn = db.getFunction(search, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
 
         if (fn != null) {
@@ -246,7 +247,7 @@ public class AnalyzerUtils {
     }
 
     private static Function getGlobalUdfFunction(ConnectContext context, FunctionName fnName, Type[] argTypes) {
-        Function search = new Function(fnName, argTypes, Type.INVALID, false);
+        Function search = new Function(fnName, argTypes, StandardTypes.INVALID, false);
         Function fn = context.getGlobalStateMgr().getGlobalFunctionMgr()
                 .getFunction(search, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         if (fn != null) {
@@ -1699,7 +1700,7 @@ public class AnalyzerUtils {
 
     public static Type replaceNullType2Boolean(Type type) {
         if (type.isNull()) {
-            return Type.BOOLEAN;
+            return StandardTypes.BOOLEAN;
         } else if (type.isArrayType()) {
             Type childType = ((ArrayType) type).getItemType();
             Type newType = replaceNullType2Boolean(childType);
@@ -1930,7 +1931,7 @@ public class AnalyzerUtils {
             if (partitionDef == null) {
                 throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(ExprToSql.toSql(expr), "PARTITION BY"), pos);
             }
-            if (partitionDef.getType() != Type.DATETIME) {
+            if (partitionDef.getType() != StandardTypes.DATETIME) {
                 throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfoAndExplain(ExprToSql.toSql(expr),
                         "PARTITION BY", "The hour/minute parameter only supports datetime type"), pos);
             }

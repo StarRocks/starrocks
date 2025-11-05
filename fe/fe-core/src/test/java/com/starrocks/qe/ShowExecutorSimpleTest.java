@@ -115,7 +115,7 @@ import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TDataCacheMetrics;
 import com.starrocks.thrift.TDataCacheStatus;
 import com.starrocks.thrift.TStorageType;
-import com.starrocks.type.Type;
+import com.starrocks.type.StandardTypes;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -156,8 +156,8 @@ public class ShowExecutorSimpleTest {
     public static void beforeClass() {
         FeConstants.runningUnitTest = true;
 
-        Column column1 = new Column("col1", Type.BIGINT);
-        Column column2 = new Column("col2", Type.DOUBLE);
+        Column column1 = new Column("col1", StandardTypes.BIGINT);
+        Column column2 = new Column("col2", StandardTypes.DOUBLE);
         column1.setIsKey(true);
         column2.setIsKey(true);
         Map<ColumnId, Column> idToColumn = Maps.newTreeMap(ColumnId.CASE_INSENSITIVE_ORDER);
@@ -809,11 +809,11 @@ public class ShowExecutorSimpleTest {
             @Mock
             public Table getTable(ConnectContext context, String catalogName, String dbName, String tblName) {
                 List<Column> fullSchema = new ArrayList<>();
-                Column columnId = new Column("id", Type.INT, true);
+                Column columnId = new Column("id", StandardTypes.INT, true);
                 columnId.setComment("id");
-                Column columnName = new Column("name", Type.VARCHAR);
-                Column columnYear = new Column("year", Type.INT);
-                Column columnDt = new Column("dt", Type.INT);
+                Column columnName = new Column("name", StandardTypes.VARCHAR);
+                Column columnYear = new Column("year", StandardTypes.INT);
+                Column columnDt = new Column("dt", StandardTypes.INT);
                 fullSchema.add(columnId);
                 fullSchema.add(columnName);
                 fullSchema.add(columnYear);
@@ -863,11 +863,11 @@ public class ShowExecutorSimpleTest {
             @Mock
             public Table getTable(ConnectContext context, String catalogName, String dbName, String tblName) {
                 List<Column> fullSchema = new ArrayList<>();
-                Column columnId = new Column("id", Type.INT, true);
+                Column columnId = new Column("id", StandardTypes.INT, true);
                 columnId.setComment("id");
-                Column columnName = new Column("name", Type.VARCHAR);
-                Column columnYear = new Column("year", Type.INT);
-                Column columnDt = new Column("dt", Type.INT);
+                Column columnName = new Column("name", StandardTypes.VARCHAR);
+                Column columnYear = new Column("year", StandardTypes.INT);
+                Column columnDt = new Column("dt", StandardTypes.INT);
                 fullSchema.add(columnId);
                 fullSchema.add(columnName);
                 fullSchema.add(columnYear);

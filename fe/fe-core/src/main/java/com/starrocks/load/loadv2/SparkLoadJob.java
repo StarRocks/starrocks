@@ -119,6 +119,7 @@ import com.starrocks.transaction.TransactionState.LoadJobSourceType;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
 import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
 import com.starrocks.warehouse.WarehouseIdleChecker;
@@ -1044,7 +1045,7 @@ public class SparkLoadJob extends BulkLoadJob {
                 if (type.isLargeIntType() || type.isBoolean() || type.isBitmapType() || type.isHllType()) {
                     // largeint, boolean, bitmap, hll type using varchar in spark dpp parquet file
                     srcSlotDesc.setType(TypeFactory.createType(PrimitiveType.VARCHAR));
-                    srcSlotDesc.setColumn(new Column(column.getName(), Type.VARCHAR));
+                    srcSlotDesc.setColumn(new Column(column.getName(), StandardTypes.VARCHAR));
                 } else {
                     srcSlotDesc.setType(type);
                     srcSlotDesc.setColumn(new Column(column.getName(), type));
@@ -1090,7 +1091,7 @@ public class SparkLoadJob extends BulkLoadJob {
             if (dstType.isBoolean() && srcType.isVarchar()) {
                 // there is no cast VARCHAR to BOOLEAN function
                 // so we cast VARCHAR to TINYINT first, then cast TINYINT to BOOLEAN
-                return new CastExpr(Type.BOOLEAN, new CastExpr(Type.TINYINT, expr));
+                return new CastExpr(StandardTypes.BOOLEAN, new CastExpr(StandardTypes.TINYINT, expr));
             } else if (dstType.isScalarType()) {
                 if ((dstType.isBitmapType() || dstType.isHllType()) && srcType.isVarchar()) {
                     // there is no cast VARCHAR to BITMAP|HLL function,

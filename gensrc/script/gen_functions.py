@@ -55,7 +55,7 @@ ${license}
 package com.starrocks.builtins;
 
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.type.Type;
+import com.starrocks.type.StandardTypes;
 
 public class VectorizedBuiltinFunctions {
     public static void initBuiltins(FunctionSet functionSet) {
@@ -132,13 +132,13 @@ def add_function(fn_data):
 
 def generate_fe(path):
     fn_template = Template(
-        'functionSet.addVectorizedScalarBuiltin(${id}, "${name}", ${has_vargs}, Type.${ret}${args_types});'
+        'functionSet.addVectorizedScalarBuiltin(${id}, "${name}", ${has_vargs}, StandardTypes.${ret}${args_types});'
     )
 
     def gen_fe_fn(fnm):
         fnm["args_types"] = ", " if len(fnm["args"]) > 0 else ""
         fnm["args_types"] = fnm["args_types"] + ", ".join(
-            ["Type." + i for i in fnm["args"] if i != "..."]
+            ["StandardTypes." + i for i in fnm["args"] if i != "..."]
         )
         fnm["has_vargs"] = "true" if "..." in fnm["args"] else "false"
 

@@ -30,7 +30,7 @@ import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.ScalarType;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
 import org.junit.jupiter.api.Assertions;
@@ -51,8 +51,8 @@ public class DecimalV3FunctionAnalyzerTest {
         FunctionCallExpr node = new FunctionCallExpr(FunctionSet.TRUNCATE, params);
 
         List<Type> paramTypes = Lists.newArrayList();
-        paramTypes.add(ScalarType.DOUBLE);
-        paramTypes.add(Type.TINYINT);
+        paramTypes.add(StandardTypes.DOUBLE);
+        paramTypes.add(StandardTypes.TINYINT);
 
         Function function = ExprUtils.getBuiltinFunction(FunctionSet.TRUNCATE, paramTypes.toArray(new Type[0]),
                 Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
@@ -71,7 +71,7 @@ public class DecimalV3FunctionAnalyzerTest {
 
         List<Type> paramTypes = Lists.newArrayList();
         paramTypes.add(TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL32, 7, 2));
-        paramTypes.add(Type.TINYINT);
+        paramTypes.add(StandardTypes.TINYINT);
 
         Function function = ExprUtils.getBuiltinFunction(FunctionSet.TRUNCATE, paramTypes.toArray(new Type[0]),
                 Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
@@ -93,7 +93,7 @@ public class DecimalV3FunctionAnalyzerTest {
 
         List<Type> paramTypes = Lists.newArrayList();
         paramTypes.add(TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL32, 7, 2));
-        paramTypes.add(Type.TINYINT);
+        paramTypes.add(StandardTypes.TINYINT);
 
         Function function = ExprUtils.getBuiltinFunction(FunctionSet.TRUNCATE, paramTypes.toArray(new Type[0]),
                 Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
@@ -113,7 +113,7 @@ public class DecimalV3FunctionAnalyzerTest {
 
         List<Type> paramTypes = Lists.newArrayList();
         paramTypes.add(TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL32, 7, 2));
-        paramTypes.add(Type.TINYINT);
+        paramTypes.add(StandardTypes.TINYINT);
 
         Function function = ExprUtils.getBuiltinFunction(FunctionSet.TRUNCATE, paramTypes.toArray(new Type[0]),
                 Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
@@ -132,7 +132,7 @@ public class DecimalV3FunctionAnalyzerTest {
         params.add(new DecimalLiteral(new BigDecimal(new BigInteger("1845076"), 2)));
 
         List<Type> paramTypes = Lists.newArrayList();
-        paramTypes.add(ScalarType.DECIMAL128);
+        paramTypes.add(StandardTypes.DECIMAL128);
 
         List<String> stdFunctions =
                 Arrays.asList(FunctionSet.STD, FunctionSet.STDDEV, FunctionSet.VARIANCE, FunctionSet.VARIANCE_POP,
@@ -144,7 +144,7 @@ public class DecimalV3FunctionAnalyzerTest {
                             Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             Assertions.assertNotNull(function);
             Type argType = TypeFactory.createWildcardDecimalV3Type(PrimitiveType.DECIMAL128);
-            Type retType = Type.DOUBLE;
+            Type retType = StandardTypes.DOUBLE;
             AggregateFunction aggFunc =
                     DecimalV3FunctionAnalyzer.rectifyAggregationFunction(function, argType, retType);
             Type returnType = aggFunc.getReturnType();

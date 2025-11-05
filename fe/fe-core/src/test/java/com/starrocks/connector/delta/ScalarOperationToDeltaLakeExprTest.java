@@ -22,7 +22,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.type.Type;
+import com.starrocks.type.StandardTypes;
 import io.delta.kernel.expressions.AlwaysTrue;
 import io.delta.kernel.expressions.And;
 import io.delta.kernel.expressions.Column;
@@ -60,18 +60,18 @@ import java.util.Set;
 public class ScalarOperationToDeltaLakeExprTest {
     private StructType schema;
     private Set<String> partitionColumns;
-    ColumnRefOperator cBoolCol = new ColumnRefOperator(1, Type.BOOLEAN, "c_bool", true, false);
-    ColumnRefOperator cShortCol = new ColumnRefOperator(1, Type.SMALLINT, "c_short", true, false);
-    ColumnRefOperator cIntCol = new ColumnRefOperator(1, Type.INT, "c_int", true, false);
-    ColumnRefOperator cLongCol = new ColumnRefOperator(1, Type.BIGINT, "c_long", true, false);
-    ColumnRefOperator cFloatCol = new ColumnRefOperator(1, Type.FLOAT, "c_float", true, false);
-    ColumnRefOperator cDoubleCol = new ColumnRefOperator(1, Type.DOUBLE, "c_double", true, false);
-    ColumnRefOperator cDateCol = new ColumnRefOperator(1, Type.DATE, "c_date", true, false);
-    ColumnRefOperator cTimestampCol = new ColumnRefOperator(1, Type.DATETIME, "c_timestamp", true, false);
-    ColumnRefOperator cTimestampNTZCol = new ColumnRefOperator(1, Type.DATETIME, "c_timestamp_ntz", true, false);
-    ColumnRefOperator cCharCol = new ColumnRefOperator(1, Type.CHAR, "c_string", true, false);
-    ColumnRefOperator cVarcharCol = new ColumnRefOperator(1, Type.VARCHAR, "c_string", true, false);
-    ColumnRefOperator cHLLCol = new ColumnRefOperator(1, Type.VARCHAR, "c_string", true, false);
+    ColumnRefOperator cBoolCol = new ColumnRefOperator(1, StandardTypes.BOOLEAN, "c_bool", true, false);
+    ColumnRefOperator cShortCol = new ColumnRefOperator(1, StandardTypes.SMALLINT, "c_short", true, false);
+    ColumnRefOperator cIntCol = new ColumnRefOperator(1, StandardTypes.INT, "c_int", true, false);
+    ColumnRefOperator cLongCol = new ColumnRefOperator(1, StandardTypes.BIGINT, "c_long", true, false);
+    ColumnRefOperator cFloatCol = new ColumnRefOperator(1, StandardTypes.FLOAT, "c_float", true, false);
+    ColumnRefOperator cDoubleCol = new ColumnRefOperator(1, StandardTypes.DOUBLE, "c_double", true, false);
+    ColumnRefOperator cDateCol = new ColumnRefOperator(1, StandardTypes.DATE, "c_date", true, false);
+    ColumnRefOperator cTimestampCol = new ColumnRefOperator(1, StandardTypes.DATETIME, "c_timestamp", true, false);
+    ColumnRefOperator cTimestampNTZCol = new ColumnRefOperator(1, StandardTypes.DATETIME, "c_timestamp_ntz", true, false);
+    ColumnRefOperator cCharCol = new ColumnRefOperator(1, StandardTypes.CHAR, "c_string", true, false);
+    ColumnRefOperator cVarcharCol = new ColumnRefOperator(1, StandardTypes.VARCHAR, "c_string", true, false);
+    ColumnRefOperator cHLLCol = new ColumnRefOperator(1, StandardTypes.VARCHAR, "c_string", true, false);
 
     Column cDeltaBoolCol = new Column("c_bool");
     Column cDeltaShortCol = new Column("c_short");
@@ -384,7 +384,7 @@ public class ScalarOperationToDeltaLakeExprTest {
         Assertions.assertEquals(convertExpr.toString(), expectedExpr.toString());
 
         // hll
-        value = ConstantOperator.createObject("12345", Type.HLL);
+        value = ConstantOperator.createObject("12345", StandardTypes.HLL);
         operator = new BinaryPredicateOperator(BinaryType.LT, cHLLCol, value);
         operators = new ArrayList<>(List.of(operator));
         convertExpr = converter.convert(operators, context);

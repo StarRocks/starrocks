@@ -24,6 +24,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
 import com.starrocks.sql.spm.SPMFunctions;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.Type;
 
 import java.time.LocalDateTime;
@@ -164,7 +165,7 @@ public class ReduceCastRule extends TopDownScalarOperatorRewriteRule {
 
         Type childCompatibleType = Type.getAssignmentCompatibleType(grandChild, child, true);
         Type parentCompatibleType = Type.getAssignmentCompatibleType(child, parent, true);
-        return childCompatibleType != Type.INVALID && parentCompatibleType != Type.INVALID;
+        return childCompatibleType != StandardTypes.INVALID && parentCompatibleType != StandardTypes.INVALID;
     }
 
     private ScalarOperator reduceDateToDatetimeCast(BinaryPredicateOperator operator) {

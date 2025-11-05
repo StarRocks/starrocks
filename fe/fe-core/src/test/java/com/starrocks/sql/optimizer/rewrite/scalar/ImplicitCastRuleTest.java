@@ -31,6 +31,7 @@ import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.Type;
 import mockit.Expectations;
 import org.junit.jupiter.api.Test;
@@ -46,9 +47,10 @@ public class ImplicitCastRuleTest {
 
     @Test
     public void testCall() {
-        Function fn = new Function(new FunctionName("add"), new Type[] {Type.BIGINT, Type.BIGINT}, Type.BIGINT, true);
+        Function fn = new Function(new FunctionName("add"), new Type[] {
+                StandardTypes.BIGINT, StandardTypes.BIGINT}, StandardTypes.BIGINT, true);
 
-        CallOperator op = new CallOperator("add", Type.BIGINT, Lists.newArrayList(
+        CallOperator op = new CallOperator("add", StandardTypes.BIGINT, Lists.newArrayList(
                 ConstantOperator.createVarchar("1"),
                 ConstantOperator.createBoolean(true),
                 ConstantOperator.createBigint(1),
@@ -72,14 +74,14 @@ public class ImplicitCastRuleTest {
         assertFalse(result.getChild(2) instanceof CastOperator);
         assertTrue(result.getChild(3) instanceof CastOperator);
 
-        assertEquals(Type.BIGINT, result.getChild(0).getType());
-        assertEquals(Type.BIGINT, result.getChild(1).getType());
-        assertEquals(Type.BIGINT, result.getChild(2).getType());
-        assertEquals(Type.BIGINT, result.getChild(3).getType());
+        assertEquals(StandardTypes.BIGINT, result.getChild(0).getType());
+        assertEquals(StandardTypes.BIGINT, result.getChild(1).getType());
+        assertEquals(StandardTypes.BIGINT, result.getChild(2).getType());
+        assertEquals(StandardTypes.BIGINT, result.getChild(3).getType());
 
-        assertEquals(Type.VARCHAR, result.getChild(0).getChild(0).getType());
-        assertEquals(Type.BOOLEAN, result.getChild(1).getChild(0).getType());
-        assertEquals(Type.INT, result.getChild(3).getChild(0).getType());
+        assertEquals(StandardTypes.VARCHAR, result.getChild(0).getChild(0).getType());
+        assertEquals(StandardTypes.BOOLEAN, result.getChild(1).getChild(0).getType());
+        assertEquals(StandardTypes.INT, result.getChild(3).getChild(0).getType());
     }
 
     @Test
@@ -94,12 +96,12 @@ public class ImplicitCastRuleTest {
         assertTrue(result.getChild(1) instanceof CastOperator);
         assertTrue(result.getChild(2) instanceof CastOperator);
 
-        assertEquals(Type.DOUBLE, result.getChild(0).getType());
-        assertEquals(Type.DOUBLE, result.getChild(1).getType());
-        assertEquals(Type.DOUBLE, result.getChild(2).getType());
+        assertEquals(StandardTypes.DOUBLE, result.getChild(0).getType());
+        assertEquals(StandardTypes.DOUBLE, result.getChild(1).getType());
+        assertEquals(StandardTypes.DOUBLE, result.getChild(2).getType());
 
-        assertEquals(Type.VARCHAR, result.getChild(1).getChild(0).getType());
-        assertEquals(Type.DATE, result.getChild(2).getChild(0).getType());
+        assertEquals(StandardTypes.VARCHAR, result.getChild(1).getChild(0).getType());
+        assertEquals(StandardTypes.DATE, result.getChild(2).getChild(0).getType());
     }
 
     @Test
@@ -125,9 +127,9 @@ public class ImplicitCastRuleTest {
         BinaryPredicateOperator[] ops = new BinaryPredicateOperator[] {
                 new BinaryPredicateOperator(BinaryType.EQ_FOR_NULL,
                         ConstantOperator.createVarchar("a"),
-                        ConstantOperator.createNull(Type.DOUBLE)),
+                        ConstantOperator.createNull(StandardTypes.DOUBLE)),
                 new BinaryPredicateOperator(BinaryType.EQ_FOR_NULL,
-                        ConstantOperator.createNull(Type.DOUBLE),
+                        ConstantOperator.createNull(StandardTypes.DOUBLE),
                         ConstantOperator.createVarchar("a")),
         };
         for (BinaryPredicateOperator op : ops) {
@@ -147,18 +149,18 @@ public class ImplicitCastRuleTest {
         BinaryPredicateOperator[] ops = new BinaryPredicateOperator[] {
                 new BinaryPredicateOperator(BinaryType.EQ_FOR_NULL,
                         ConstantOperator.createDate(LocalDateTime.of(2022, Month.JANUARY, 01, 0, 0, 0)),
-                        new ColumnRefOperator(1, Type.DATE, "date_col", true)
+                        new ColumnRefOperator(1, StandardTypes.DATE, "date_col", true)
                 ),
                 new BinaryPredicateOperator(BinaryType.EQ_FOR_NULL,
-                        new ColumnRefOperator(1, Type.DATE, "date_col", true),
+                        new ColumnRefOperator(1, StandardTypes.DATE, "date_col", true),
                         ConstantOperator.createInt(20220111)
                 ),
                 new BinaryPredicateOperator(BinaryType.EQ_FOR_NULL,
                         ConstantOperator.createVarchar("2022-01-01"),
-                        new ColumnRefOperator(1, Type.DATE, "date_col", true)
+                        new ColumnRefOperator(1, StandardTypes.DATE, "date_col", true)
                 ),
                 new BinaryPredicateOperator(BinaryType.EQ_FOR_NULL,
-                        new ColumnRefOperator(1, Type.DATE, "date_col", true),
+                        new ColumnRefOperator(1, StandardTypes.DATE, "date_col", true),
                         ConstantOperator.createVarchar("2022-01-01")
                 ),
         };
@@ -202,9 +204,9 @@ public class ImplicitCastRuleTest {
         assertTrue(result.getChild(1) instanceof ConstantOperator);
         assertTrue(result.getChild(2) instanceof CastOperator);
 
-        assertEquals(Type.VARCHAR, result.getChild(0).getType());
-        assertEquals(Type.VARCHAR, result.getChild(1).getType());
-        assertEquals(Type.VARCHAR, result.getChild(2).getType());
+        assertEquals(StandardTypes.VARCHAR, result.getChild(0).getType());
+        assertEquals(StandardTypes.VARCHAR, result.getChild(1).getType());
+        assertEquals(StandardTypes.VARCHAR, result.getChild(2).getType());
 
         assertTrue(result.getChild(0).getChild(0).getType().isBigint());
         assertTrue(result.getChild(2).getChild(0).getType().isDate());

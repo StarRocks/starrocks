@@ -46,7 +46,7 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.MVColumnItem;
-import com.starrocks.type.Type;
+import com.starrocks.type.StandardTypes;
 import mockit.Expectations;
 import mockit.Injectable;
 import org.junit.jupiter.api.Assertions;
@@ -194,8 +194,8 @@ public class MaterializedViewHandlerTest {
                                          @Injectable OlapTable olapTable, @Injectable Database db) {
         final String mvName = "mv1";
         final String mvColumName = "mv_sum_k1";
-        MVColumnItem mvColumnItem = new MVColumnItem(mvColumName, Type.BIGINT, AggregateType.SUM, null, false, null, true,
-                Sets.newHashSet());
+        MVColumnItem mvColumnItem = new MVColumnItem(mvColumName, StandardTypes.BIGINT,
+                AggregateType.SUM, null, false, null, true, Sets.newHashSet());
         mvColumnItem.setIsKey(true);
         mvColumnItem.setAggregationType(null, false);
         new Expectations() {
@@ -249,8 +249,8 @@ public class MaterializedViewHandlerTest {
                                    @Injectable OlapTable olapTable, @Injectable Database db) {
         final String mvName = "mv1";
         final String columnName1 = "k1";
-        Column baseColumn1 = new Column(columnName1, Type.VARCHAR, false, AggregateType.NONE, "", "");
-        MVColumnItem mvColumnItem = new MVColumnItem(columnName1, Type.VARCHAR, AggregateType.NONE, null,
+        Column baseColumn1 = new Column(columnName1, StandardTypes.VARCHAR, false, AggregateType.NONE, "", "");
+        MVColumnItem mvColumnItem = new MVColumnItem(columnName1, StandardTypes.VARCHAR, AggregateType.NONE, null,
                 false, null, true, Sets.newHashSet());
 
         mvColumnItem.setIsKey(true);
@@ -291,7 +291,7 @@ public class MaterializedViewHandlerTest {
                                            @Injectable OlapTable olapTable, @Injectable Database db) {
         final String mvName = "mv1";
         final String columnName1 = "k1";
-        MVColumnItem mvColumnItem = new MVColumnItem(columnName1, Type.BIGINT, null, null,
+        MVColumnItem mvColumnItem = new MVColumnItem(columnName1, StandardTypes.BIGINT, null, null,
                 false, null, true, Sets.newHashSet());
         mvColumnItem.setIsKey(false);
         mvColumnItem.setAggregationType(AggregateType.SUM, false);

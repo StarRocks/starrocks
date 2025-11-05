@@ -34,7 +34,7 @@ import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.PlanTestNoneDBBase;
-import com.starrocks.type.Type;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
@@ -314,7 +314,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "struct_a");
         List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
                 new NativeAnalyzeJob(db.getId(), table.getId(), ImmutableList.of("b.a", "b.c", "d.c.a"),
-                        ImmutableList.of(Type.INT, Type.INT, Type.INT),
+                        ImmutableList.of(StandardTypes.INT, StandardTypes.INT, StandardTypes.INT),
                         StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
                         Maps.newHashMap(),
                         StatsConstants.ScheduleStatus.PENDING,
@@ -331,7 +331,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
                 new NativeAnalyzeJob(db.getId(), t0StatsTableId, Lists.newArrayList("v2"),
-                        Lists.newArrayList(Type.BIGINT),
+                        Lists.newArrayList(StandardTypes.BIGINT),
                         StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
                         Maps.newHashMap(),
                         StatsConstants.ScheduleStatus.PENDING,
@@ -347,7 +347,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
                 new NativeAnalyzeJob(db.getId(), t0StatsTableId, Lists.newArrayList("v2"),
-                        Lists.newArrayList(Type.BIGINT),
+                        Lists.newArrayList(StandardTypes.BIGINT),
                         StatsConstants.AnalyzeType.SAMPLE, StatsConstants.ScheduleType.SCHEDULE,
                         Maps.newHashMap(),
                         StatsConstants.ScheduleStatus.PENDING,
@@ -372,7 +372,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
         List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
                 new NativeAnalyzeJob(db.getId(), olapTable.getId(), Lists.newArrayList("v2"),
-                        Lists.newArrayList(Type.BIGINT),
+                        Lists.newArrayList(StandardTypes.BIGINT),
                         StatsConstants.AnalyzeType.SAMPLE, StatsConstants.ScheduleType.SCHEDULE,
                         Maps.newHashMap(),
                         StatsConstants.ScheduleStatus.PENDING,
@@ -381,7 +381,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
         jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
                 new NativeAnalyzeJob(db.getId(), olapTable.getId(), Lists.newArrayList("v2"),
-                        Lists.newArrayList(Type.BIGINT),
+                        Lists.newArrayList(StandardTypes.BIGINT),
                         StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
                         Maps.newHashMap(),
                         StatsConstants.ScheduleStatus.PENDING,
@@ -396,7 +396,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
         List<StatisticsCollectJob> jobs2 = StatisticsCollectJobFactory.buildStatisticsCollectJob(
                 new NativeAnalyzeJob(db.getId(), olapTable.getId(), Lists.newArrayList("v2"),
-                        Lists.newArrayList(Type.BIGINT),
+                        Lists.newArrayList(StandardTypes.BIGINT),
                         StatsConstants.AnalyzeType.SAMPLE, StatsConstants.ScheduleType.SCHEDULE,
                         Maps.newHashMap(),
                         StatsConstants.ScheduleStatus.PENDING,
@@ -411,7 +411,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
         List<StatisticsCollectJob> job3 = StatisticsCollectJobFactory.buildStatisticsCollectJob(
                 new NativeAnalyzeJob(db.getId(), olapTable.getId(), Lists.newArrayList("v2"),
-                        Lists.newArrayList(Type.BIGINT),
+                        Lists.newArrayList(StandardTypes.BIGINT),
                         StatsConstants.AnalyzeType.SAMPLE, StatsConstants.ScheduleType.SCHEDULE,
                         Maps.newHashMap(),
                         StatsConstants.ScheduleStatus.PENDING,
@@ -433,13 +433,13 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         properties.put(StatsConstants.HISTOGRAM_BUCKET_NUM, "64");
         properties.put(StatsConstants.HISTOGRAM_MCV_SIZE, "100");
         HistogramStatisticsCollectJob histogramStatisticsCollectJob = new HistogramStatisticsCollectJob(
-                db, olapTable, Lists.newArrayList("v2"), Lists.newArrayList(Type.BIGINT),
+                db, olapTable, Lists.newArrayList("v2"), Lists.newArrayList(StandardTypes.BIGINT),
                 StatsConstants.ScheduleType.ONCE, properties);
 
         Config.enable_use_table_sample_collect_statistics = false;
         Function<String, String> normalize = str -> str.replaceAll(" +", " ").toLowerCase();
         String sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
-                db, olapTable, 0.1, 64L, Maps.newHashMap(), "v2", Type.BIGINT);
+                db, olapTable, 0.1, 64L, Maps.newHashMap(), "v2", StandardTypes.BIGINT);
         Assertions.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics(" +
                         "table_id, column_name, db_id, table_name, buckets, mcv, update_time) SELECT %s, 'v2', %d, " +
                         "'test.t0_stats', histogram(`column_key`, cast(64 as int), cast(0.1 as double)),  " +
@@ -451,7 +451,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         mostCommonValues.put("1", "10");
         mostCommonValues.put("2", "20");
         sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
-                db, olapTable, 0.1, 64L, mostCommonValues, "v2", Type.BIGINT);
+                db, olapTable, 0.1, 64L, mostCommonValues, "v2", StandardTypes.BIGINT);
         Assertions.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics(" +
                 "table_id, column_name, db_id, table_name, buckets, mcv, update_time) SELECT %d, 'v2', %d, " +
                 "'test" +
@@ -467,7 +467,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         mostCommonValues.put("0000-01-01", "10");
         mostCommonValues.put("1991-01-01", "20");
         sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
-                db, olapTable, 0.1, 64L, mostCommonValues, "v4", Type.DATE);
+                db, olapTable, 0.1, 64L, mostCommonValues, "v4", StandardTypes.DATE);
         Assertions.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics(" +
                                 "table_id, column_name, db_id, table_name, buckets, mcv, update_time) SELECT %d, 'v4', %d, " +
                                 "'test" +
@@ -485,7 +485,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         mostCommonValues.put("0000-01-01 00:00:00", "10");
         mostCommonValues.put("1991-01-01 00:00:00", "20");
         sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
-                db, olapTable, 0.1, 64L, mostCommonValues, "v5", Type.DATETIME);
+                db, olapTable, 0.1, 64L, mostCommonValues, "v5", StandardTypes.DATETIME);
         Assertions.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics(" +
                         "table_id, column_name, db_id, table_name, buckets, mcv, update_time) SELECT %d, 'v5', %d, " +
                         "'test.t0_stats', " +
@@ -498,7 +498,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
         Config.enable_use_table_sample_collect_statistics = true;
         sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
-                db, olapTable, 0.1, 64L, mostCommonValues, "v5", Type.DATETIME);
+                db, olapTable, 0.1, 64L, mostCommonValues, "v5", StandardTypes.DATETIME);
         Assertions.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics(" +
                         "table_id, column_name, db_id, table_name, buckets, mcv, update_time) SELECT %d, 'v5', %d, " +
                         "'test.t0_stats', " +
@@ -1427,7 +1427,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 Maps.newHashMap()
         );
         String sql = Deencapsulation.invoke(fullStatisticsCollectJob, "buildBatchCollectFullStatisticSQL",
-                olapTable, olapTable.getPartition("tcount"), "count", Type.INT);
+                olapTable, olapTable.getPartition("tcount"), "count", StandardTypes.INT);
         assertContains(sql, "`stats`.`tcount` partition `tcount`");
         UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sql, connectContext);
     }

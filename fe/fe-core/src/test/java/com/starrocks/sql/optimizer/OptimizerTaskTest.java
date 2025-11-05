@@ -59,6 +59,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.transformation.SplitTwoPhaseAggRule;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.Type;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -98,7 +99,7 @@ public class OptimizerTaskTest {
         ctx.getSessionVariable().setJoinImplementationMode("auto");
         ctx.getSessionVariable().setCboPushDownAggregateMode(-1);
         ctx.setDumpInfo(new MockDumpInfo());
-        call = new CallOperator(FunctionSet.SUM, Type.BIGINT, Lists.newArrayList(ConstantOperator.createBigint(1)));
+        call = new CallOperator(FunctionSet.SUM, StandardTypes.BIGINT, Lists.newArrayList(ConstantOperator.createBigint(1)));
         new Expectations(call) {
             {
                 call.getUsedColumns();
@@ -108,17 +109,18 @@ public class OptimizerTaskTest {
                 call.getFunction();
                 minTimes = 0;
                 result = AggregateFunction.createBuiltin(FunctionSet.SUM,
-                        Lists.<Type>newArrayList(Type.INT), Type.BIGINT, Type.BIGINT, false, true, false);
+                        Lists.<Type>newArrayList(StandardTypes.INT), StandardTypes.BIGINT,
+                        StandardTypes.BIGINT, false, true, false);
             }
         };
 
         columnRefFactory = new ColumnRefFactory();
-        column1 = columnRefFactory.create("t1", Type.INT, true);
-        column2 = columnRefFactory.create("t2", Type.INT, true);
-        column3 = columnRefFactory.create("t3", Type.INT, true);
-        column4 = columnRefFactory.create("t4", Type.INT, true);
-        column5 = columnRefFactory.create("t5", Type.INT, true);
-        column6 = columnRefFactory.create("t6", Type.INT, true);
+        column1 = columnRefFactory.create("t1", StandardTypes.INT, true);
+        column2 = columnRefFactory.create("t2", StandardTypes.INT, true);
+        column3 = columnRefFactory.create("t3", StandardTypes.INT, true);
+        column4 = columnRefFactory.create("t4", StandardTypes.INT, true);
+        column5 = columnRefFactory.create("t5", StandardTypes.INT, true);
+        column6 = columnRefFactory.create("t6", StandardTypes.INT, true);
 
         FeConstants.enablePruneEmptyOutputScan = false;
     }
@@ -144,8 +146,8 @@ public class OptimizerTaskTest {
         };
 
         Map<ColumnRefOperator, Column> scan1ColumnMap = Maps.newHashMap();
-        scan1ColumnMap.put(column1, new Column("t1", Type.INT, true));
-        scan1ColumnMap.put(column2, new Column("t2", Type.INT, true));
+        scan1ColumnMap.put(column1, new Column("t1", StandardTypes.INT, true));
+        scan1ColumnMap.put(column2, new Column("t2", StandardTypes.INT, true));
 
         OptExpression logicOperatorTree = OptExpression.create(new LogicalJoinOperator(),
                 OptExpression.create(new LogicalOlapScanOperator(olapTable1,
@@ -221,7 +223,7 @@ public class OptimizerTaskTest {
         };
 
         Map<ColumnRefOperator, Column> scanColumnMap = Maps.newHashMap();
-        scanColumnMap.put(column1, new Column("t1", Type.INT, true));
+        scanColumnMap.put(column1, new Column("t1", StandardTypes.INT, true));
 
         OptExpression bottomJoin = OptExpression.create(new LogicalJoinOperator(),
                 OptExpression.create(new LogicalOlapScanOperator(olapTable1,
@@ -323,13 +325,13 @@ public class OptimizerTaskTest {
         };
 
         Map<ColumnRefOperator, Column> scan1ColumnMap = Maps.newHashMap();
-        scan1ColumnMap.put(column1, new Column("t1", Type.INT, true));
+        scan1ColumnMap.put(column1, new Column("t1", StandardTypes.INT, true));
         Map<ColumnRefOperator, Column> scan2ColumnMap = Maps.newHashMap();
-        scan2ColumnMap.put(column2, new Column("t2", Type.INT, true));
+        scan2ColumnMap.put(column2, new Column("t2", StandardTypes.INT, true));
         Map<ColumnRefOperator, Column> scan3ColumnMap = Maps.newHashMap();
-        scan3ColumnMap.put(column3, new Column("t3", Type.INT, true));
+        scan3ColumnMap.put(column3, new Column("t3", StandardTypes.INT, true));
         Map<ColumnRefOperator, Column> scan4ColumnMap = Maps.newHashMap();
-        scan4ColumnMap.put(column4, new Column("t4", Type.INT, true));
+        scan4ColumnMap.put(column4, new Column("t4", StandardTypes.INT, true));
 
         new Expectations() {
             {
@@ -410,7 +412,7 @@ public class OptimizerTaskTest {
         };
 
         Map<ColumnRefOperator, Column> scanColumnMap = Maps.newHashMap();
-        scanColumnMap.put(column1, new Column("t1", Type.INT, true));
+        scanColumnMap.put(column1, new Column("t1", StandardTypes.INT, true));
 
         OptExpression bottomJoin = OptExpression.create(new LogicalJoinOperator(),
                 OptExpression.create(
@@ -520,7 +522,7 @@ public class OptimizerTaskTest {
         };
 
         Map<ColumnRefOperator, Column> scanColumnMap = Maps.newHashMap();
-        scanColumnMap.put(column1, new Column("t1", Type.INT, true));
+        scanColumnMap.put(column1, new Column("t1", StandardTypes.INT, true));
 
         OptExpression bottomJoin = OptExpression.create(new LogicalJoinOperator(),
                 OptExpression.create(
@@ -639,16 +641,16 @@ public class OptimizerTaskTest {
         outputColumns1.add(column1);
         outputColumns1.add(column2);
         Map<ColumnRefOperator, Column> scanColumnMap1 = Maps.newHashMap();
-        scanColumnMap1.put(column1, new Column("t1", Type.INT, true));
-        scanColumnMap1.put(column2, new Column("t2", Type.INT, true));
+        scanColumnMap1.put(column1, new Column("t1", StandardTypes.INT, true));
+        scanColumnMap1.put(column2, new Column("t2", StandardTypes.INT, true));
 
         List<ColumnRefOperator> outputColumns2 = Lists.newArrayList();
         outputColumns2.add(column3);
         outputColumns2.add(column4);
 
         Map<ColumnRefOperator, Column> scanColumnMap2 = Maps.newHashMap();
-        scanColumnMap2.put(column3, new Column("t3", Type.INT, true));
-        scanColumnMap2.put(column4, new Column("t4", Type.INT, true));
+        scanColumnMap2.put(column3, new Column("t3", StandardTypes.INT, true));
+        scanColumnMap2.put(column4, new Column("t4", StandardTypes.INT, true));
 
         OptExpression logicOperatorTree = OptExpression.create(new LogicalJoinOperator(),
                 OptExpression.create(
@@ -693,7 +695,7 @@ public class OptimizerTaskTest {
         };
 
         Map<ColumnRefOperator, Column> scanColumnMap = Maps.newHashMap();
-        scanColumnMap.put(column1, new Column("t1", Type.INT, true));
+        scanColumnMap.put(column1, new Column("t1", StandardTypes.INT, true));
 
         OptExpression bottomJoin = OptExpression.create(new LogicalJoinOperator(),
                 OptExpression.create(
@@ -728,9 +730,9 @@ public class OptimizerTaskTest {
             }
         };
 
-        ColumnRefOperator column1 = columnRefFactory.create("column1", Type.DATE, false);
+        ColumnRefOperator column1 = columnRefFactory.create("column1", StandardTypes.DATE, false);
         Map<ColumnRefOperator, Column> scanColumnMap = com.google.common.collect.Maps.newHashMap();
-        scanColumnMap.put(column1, new Column("column1", Type.DATE, false));
+        scanColumnMap.put(column1, new Column("column1", StandardTypes.DATE, false));
 
         OptExpression expression = OptExpression.create(LogicalLimitOperator.init(1),
                 OptExpression.create(new LogicalOlapScanOperator(olapTable1,
@@ -770,9 +772,9 @@ public class OptimizerTaskTest {
         columnRefMap1.put(column4, column1);
 
         Map<ColumnRefOperator, Column> scanColumnMap = Maps.newHashMap();
-        scanColumnMap.put(column1, new Column("t1", Type.INT, true));
-        scanColumnMap.put(column2, new Column("t2", Type.INT, true));
-        scanColumnMap.put(column3, new Column("t3", Type.INT, true));
+        scanColumnMap.put(column1, new Column("t1", StandardTypes.INT, true));
+        scanColumnMap.put(column2, new Column("t2", StandardTypes.INT, true));
+        scanColumnMap.put(column3, new Column("t3", StandardTypes.INT, true));
 
         OptExpression expression = OptExpression.create(new LogicalProjectOperator(columnRefMap1),
                 OptExpression.create(
@@ -808,9 +810,9 @@ public class OptimizerTaskTest {
         columnRefMap1.put(column4, ConstantOperator.createInt(1));
 
         Map<ColumnRefOperator, Column> scanColumnMap = Maps.newHashMap();
-        scanColumnMap.put(column1, new Column("t1", Type.INT, true));
-        scanColumnMap.put(column2, new Column("t2", Type.INT, true));
-        scanColumnMap.put(column3, new Column("t3", Type.INT, true));
+        scanColumnMap.put(column1, new Column("t1", StandardTypes.INT, true));
+        scanColumnMap.put(column2, new Column("t2", StandardTypes.INT, true));
+        scanColumnMap.put(column3, new Column("t3", StandardTypes.INT, true));
 
         OptExpression expression = OptExpression.create(new LogicalProjectOperator(columnRefMap1),
                 OptExpression.create(
@@ -859,13 +861,14 @@ public class OptimizerTaskTest {
         };
 
         CallOperator call =
-                new CallOperator(FunctionSet.SUM, Type.BIGINT, Lists.newArrayList(ConstantOperator.createBigint(1)));
+                new CallOperator(FunctionSet.SUM, StandardTypes.BIGINT, Lists.newArrayList(ConstantOperator.createBigint(1)));
         new Expectations(call) {
             {
                 call.getFunction();
                 minTimes = 0;
                 result = AggregateFunction.createBuiltin(FunctionSet.SUM,
-                        Lists.<Type>newArrayList(Type.INT), Type.BIGINT, Type.BIGINT, false, true, false);
+                        Lists.<Type>newArrayList(StandardTypes.INT), StandardTypes.BIGINT,
+                        StandardTypes.BIGINT, false, true, false);
             }
         };
 
@@ -879,10 +882,10 @@ public class OptimizerTaskTest {
         scanColumns.add(column4);
 
         Map<ColumnRefOperator, Column> scanColumnMap = Maps.newHashMap();
-        scanColumnMap.put(column1, new Column("t1", Type.INT, true));
-        scanColumnMap.put(column2, new Column("t2", Type.INT, true));
-        scanColumnMap.put(column3, new Column("t3", Type.INT, true));
-        scanColumnMap.put(column4, new Column("t4", Type.INT, true));
+        scanColumnMap.put(column1, new Column("t1", StandardTypes.INT, true));
+        scanColumnMap.put(column2, new Column("t2", StandardTypes.INT, true));
+        scanColumnMap.put(column3, new Column("t3", StandardTypes.INT, true));
+        scanColumnMap.put(column4, new Column("t4", StandardTypes.INT, true));
 
         Map<ColumnRefOperator, CallOperator> map = Maps.newHashMap();
         map.put(column2, call);
@@ -920,8 +923,8 @@ public class OptimizerTaskTest {
             OptExpression expression1 = optimizer.optimize(expression, outputColumns);
             Map<ColumnRefOperator, CallOperator> aggs =
                     ((PhysicalHashAggregateOperator) expression1.getOp()).getAggregations();
-            assertEquals(Type.INT, column2.getType());
-            assertEquals(Type.BIGINT, aggs.get(column2).getType());
+            assertEquals(StandardTypes.INT, column2.getType());
+            assertEquals(StandardTypes.BIGINT, aggs.get(column2).getType());
         } catch (Exception e) {
             fail("sql should execute normally");
         }
@@ -942,7 +945,7 @@ public class OptimizerTaskTest {
             }
         };
 
-        CallOperator call = new CallOperator(FunctionSet.COUNT, Type.BIGINT, Lists.newArrayList());
+        CallOperator call = new CallOperator(FunctionSet.COUNT, StandardTypes.BIGINT, Lists.newArrayList());
         new Expectations(call) {
             {
                 call.getUsedColumns();
@@ -966,10 +969,10 @@ public class OptimizerTaskTest {
         scanColumns.add(column4);
 
         Map<ColumnRefOperator, Column> scanColumnMap = Maps.newHashMap();
-        scanColumnMap.put(column1, new Column("t1", Type.INT, true));
-        scanColumnMap.put(column2, new Column("t2", Type.INT, true));
-        scanColumnMap.put(column3, new Column("t3", Type.INT, true));
-        scanColumnMap.put(column4, new Column("t4", Type.INT, true));
+        scanColumnMap.put(column1, new Column("t1", StandardTypes.INT, true));
+        scanColumnMap.put(column2, new Column("t2", StandardTypes.INT, true));
+        scanColumnMap.put(column3, new Column("t3", StandardTypes.INT, true));
+        scanColumnMap.put(column4, new Column("t4", StandardTypes.INT, true));
 
         new Expectations() {
             {
@@ -1022,8 +1025,8 @@ public class OptimizerTaskTest {
         scanColumns.add(column2);
 
         Map<ColumnRefOperator, Column> scanColumnMap = Maps.newHashMap();
-        scanColumnMap.put(column1, new Column("t1", Type.INT, true));
-        scanColumnMap.put(column2, new Column("t2", Type.INT, true));
+        scanColumnMap.put(column1, new Column("t1", StandardTypes.INT, true));
+        scanColumnMap.put(column2, new Column("t2", StandardTypes.INT, true));
 
         Map<ColumnRefOperator, CallOperator> map = Maps.newHashMap();
         map.put(column3, call);
@@ -1078,8 +1081,8 @@ public class OptimizerTaskTest {
         scanColumns.add(column2);
 
         Map<ColumnRefOperator, Column> scanColumnMap = Maps.newHashMap();
-        scanColumnMap.put(column1, new Column("t1", Type.INT, true));
-        scanColumnMap.put(column2, new Column("t2", Type.INT, true));
+        scanColumnMap.put(column1, new Column("t1", StandardTypes.INT, true));
+        scanColumnMap.put(column2, new Column("t2", StandardTypes.INT, true));
 
         Map<ColumnRefOperator, CallOperator> map = Maps.newHashMap();
         map.put(column3, call);
@@ -1141,10 +1144,10 @@ public class OptimizerTaskTest {
         scanColumns.add(column4);
 
         Map<ColumnRefOperator, Column> scanColumnMap = Maps.newHashMap();
-        scanColumnMap.put(column1, new Column("t1", Type.INT, true));
-        scanColumnMap.put(column2, new Column("t2", Type.INT, true));
-        scanColumnMap.put(column3, new Column("t3", Type.INT, true));
-        scanColumnMap.put(column4, new Column("t4", Type.INT, true));
+        scanColumnMap.put(column1, new Column("t1", StandardTypes.INT, true));
+        scanColumnMap.put(column2, new Column("t2", StandardTypes.INT, true));
+        scanColumnMap.put(column3, new Column("t3", StandardTypes.INT, true));
+        scanColumnMap.put(column4, new Column("t4", StandardTypes.INT, true));
 
         LogicalTopNOperator sortOperator = new LogicalTopNOperator(
                 Lists.newArrayList(new Ordering(column1, false, false)));
@@ -1195,12 +1198,12 @@ public class OptimizerTaskTest {
             }
         };
 
-        ColumnRefOperator column1 = columnRefFactory.create("t1", Type.INT, true);
+        ColumnRefOperator column1 = columnRefFactory.create("t1", StandardTypes.INT, true);
 
         List<ColumnRefOperator> scanColumns = Lists.newArrayList(column1);
 
         Map<ColumnRefOperator, Column> scanColumnMap = Maps.newHashMap();
-        scanColumnMap.put(column1, new Column("k1", Type.INT));
+        scanColumnMap.put(column1, new Column("k1", StandardTypes.INT));
 
         Map<ColumnRefOperator, CallOperator> map = Maps.newHashMap();
         LogicalAggregationOperator aggregationOperator =
@@ -1263,8 +1266,8 @@ public class OptimizerTaskTest {
         };
 
         Map<ColumnRefOperator, Column> scanColumnMap = Maps.newHashMap();
-        scanColumnMap.put(column1, new Column("t1", Type.INT, true));
-        scanColumnMap.put(column2, new Column("t2", Type.INT, true));
+        scanColumnMap.put(column1, new Column("t1", StandardTypes.INT, true));
+        scanColumnMap.put(column2, new Column("t2", StandardTypes.INT, true));
 
         Map<ColumnRefOperator, CallOperator> map = Maps.newHashMap();
         map.put(column3, call);
@@ -1313,7 +1316,7 @@ public class OptimizerTaskTest {
         };
 
         CallOperator call =
-                new CallOperator(FunctionSet.SUM, Type.BIGINT, Lists.newArrayList(ConstantOperator.createInt(1)),
+                new CallOperator(FunctionSet.SUM, StandardTypes.BIGINT, Lists.newArrayList(ConstantOperator.createInt(1)),
                         null, true);
 
         new Expectations(call) {
@@ -1324,7 +1327,8 @@ public class OptimizerTaskTest {
 
                 call.getFunction();
                 result = AggregateFunction.createBuiltin(FunctionSet.SUM,
-                        Lists.<Type>newArrayList(Type.INT), Type.BIGINT, Type.BIGINT, false, true, false);
+                        Lists.<Type>newArrayList(StandardTypes.INT), StandardTypes.BIGINT,
+                        StandardTypes.BIGINT, false, true, false);
                 minTimes = 0;
             }
         };
@@ -1332,8 +1336,8 @@ public class OptimizerTaskTest {
         List<ColumnRefOperator> scanColumns = Lists.newArrayList(column1, column2);
 
         Map<ColumnRefOperator, Column> scanColumnMap = Maps.newHashMap();
-        scanColumnMap.put(column1, new Column("t1", Type.INT, true));
-        scanColumnMap.put(column2, new Column("t2", Type.INT, true));
+        scanColumnMap.put(column1, new Column("t1", StandardTypes.INT, true));
+        scanColumnMap.put(column2, new Column("t2", StandardTypes.INT, true));
 
         Map<ColumnRefOperator, CallOperator> map = Maps.newHashMap();
         map.put(column3, call);
@@ -1375,7 +1379,7 @@ public class OptimizerTaskTest {
         };
 
         CallOperator call =
-                new CallOperator(FunctionSet.COUNT, Type.BIGINT, Lists.newArrayList(ConstantOperator.createInt(1)),
+                new CallOperator(FunctionSet.COUNT, StandardTypes.BIGINT, Lists.newArrayList(ConstantOperator.createInt(1)),
                         null, true);
 
         new Expectations(call) {
@@ -1386,7 +1390,8 @@ public class OptimizerTaskTest {
 
                 call.getFunction();
                 result = AggregateFunction.createBuiltin(FunctionSet.COUNT,
-                        Lists.<Type>newArrayList(Type.INT), Type.BIGINT, Type.BIGINT, false, true, false);
+                        Lists.<Type>newArrayList(StandardTypes.INT), StandardTypes.BIGINT,
+                        StandardTypes.BIGINT, false, true, false);
                 minTimes = 0;
             }
         };
@@ -1394,8 +1399,8 @@ public class OptimizerTaskTest {
         List<ColumnRefOperator> scanColumns = Lists.newArrayList(column1, column2);
 
         Map<ColumnRefOperator, Column> scanColumnMap = Maps.newHashMap();
-        scanColumnMap.put(column1, new Column("t1", Type.INT, true));
-        scanColumnMap.put(column2, new Column("t2", Type.INT, true));
+        scanColumnMap.put(column1, new Column("t1", StandardTypes.INT, true));
+        scanColumnMap.put(column2, new Column("t2", StandardTypes.INT, true));
 
         Map<ColumnRefOperator, CallOperator> map = Maps.newHashMap();
         map.put(column3, call);
@@ -1442,7 +1447,7 @@ public class OptimizerTaskTest {
 
         List<ColumnRefOperator> scanColumns = Lists.newArrayList(column1);
         Map<ColumnRefOperator, Column> scanColumnMap = Maps.newHashMap();
-        scanColumnMap.put(column1, new Column("k1", Type.INT));
+        scanColumnMap.put(column1, new Column("k1", StandardTypes.INT));
 
         Map<ColumnRefOperator, ScalarOperator> projectColumnMap = Maps.newHashMap();
         projectColumnMap.put(column1, column1);
@@ -1499,8 +1504,8 @@ public class OptimizerTaskTest {
         List<ColumnRefOperator> scanColumns = Lists.newArrayList(column1, column2);
 
         Map<ColumnRefOperator, Column> scanColumnMap = Maps.newHashMap();
-        scanColumnMap.put(column1, new Column("t1", Type.INT, true));
-        scanColumnMap.put(column2, new Column("t2", Type.INT, true));
+        scanColumnMap.put(column1, new Column("t1", StandardTypes.INT, true));
+        scanColumnMap.put(column2, new Column("t2", StandardTypes.INT, true));
 
         Map<ColumnRefOperator, ScalarOperator> projectColumnMap1 = Maps.newHashMap();
         projectColumnMap1.put(column3, column1);
@@ -1563,7 +1568,7 @@ public class OptimizerTaskTest {
         List<ColumnRefOperator> scanColumns = Lists.newArrayList(column1, column2);
 
         Map<ColumnRefOperator, Column> scanColumnMap = Maps.newHashMap();
-        scanColumnMap.put(column1, new Column("k1", Type.INT));
+        scanColumnMap.put(column1, new Column("k1", StandardTypes.INT));
 
         Map<ColumnRefOperator, ScalarOperator> projectColumnMap1 = Maps.newHashMap();
         projectColumnMap1.put(column3, column1);
@@ -1628,9 +1633,9 @@ public class OptimizerTaskTest {
         scanColumns.add(column3);
 
         Map<ColumnRefOperator, Column> scanColumnMap = Maps.newHashMap();
-        scanColumnMap.put(column1, new Column("t1", Type.INT, true));
-        scanColumnMap.put(column2, new Column("t2", Type.INT, true));
-        scanColumnMap.put(column3, new Column("t3", Type.INT, true));
+        scanColumnMap.put(column1, new Column("t1", StandardTypes.INT, true));
+        scanColumnMap.put(column2, new Column("t2", StandardTypes.INT, true));
+        scanColumnMap.put(column3, new Column("t3", StandardTypes.INT, true));
 
         BinaryPredicateOperator predicate = new BinaryPredicateOperator(BinaryType.EQ,
                 column2,
@@ -1675,8 +1680,8 @@ public class OptimizerTaskTest {
         List<ColumnRefOperator> scanColumns = Lists.newArrayList(column1, column2);
 
         Map<ColumnRefOperator, Column> scanColumnMap = Maps.newHashMap();
-        scanColumnMap.put(column1, new Column("t1", Type.INT, true));
-        scanColumnMap.put(column2, new Column("t2", Type.INT, true));
+        scanColumnMap.put(column1, new Column("t1", StandardTypes.INT, true));
+        scanColumnMap.put(column2, new Column("t2", StandardTypes.INT, true));
 
         BinaryPredicateOperator predicate = new BinaryPredicateOperator(BinaryType.EQ,
                 column2,
@@ -1719,21 +1724,23 @@ public class OptimizerTaskTest {
 
         List<ColumnRefOperator> outputColumns = Lists.newArrayList(column4, column5);
 
-        CallOperator add1 = new CallOperator("add", Type.INT,
+        CallOperator add1 = new CallOperator("add", StandardTypes.INT,
                 Lists.newArrayList(column1, ConstantOperator.createInt(2)));
 
-        CallOperator add2 = new CallOperator("add", Type.INT,
+        CallOperator add2 = new CallOperator("add", StandardTypes.INT,
                 Lists.newArrayList(add1, ConstantOperator.createInt(3)));
 
         new Expectations(add1, add2) {
             {
                 add1.getFunction();
                 minTimes = 0;
-                result = new Function(new FunctionName("add"), new Type[] {Type.INT, Type.INT}, Type.INT, false);
+                result = new Function(new FunctionName("add"),
+                        new Type[] {StandardTypes.INT, StandardTypes.INT}, StandardTypes.INT, false);
 
                 add2.getFunction();
                 minTimes = 0;
-                result = new Function(new FunctionName("add"), new Type[] {Type.INT, Type.INT}, Type.INT, false);
+                result = new Function(new FunctionName("add"),
+                        new Type[] {StandardTypes.INT, StandardTypes.INT}, StandardTypes.INT, false);
             }
         };
 
@@ -1744,9 +1751,9 @@ public class OptimizerTaskTest {
         List<ColumnRefOperator> scanColumns = Lists.newArrayList(column1, column2, column3);
 
         Map<ColumnRefOperator, Column> scanColumnMap = Maps.newHashMap();
-        scanColumnMap.put(column1, new Column("t1", Type.INT, true));
-        scanColumnMap.put(column2, new Column("t2", Type.INT, true));
-        scanColumnMap.put(column3, new Column("t3", Type.INT, true));
+        scanColumnMap.put(column1, new Column("t1", StandardTypes.INT, true));
+        scanColumnMap.put(column2, new Column("t2", StandardTypes.INT, true));
+        scanColumnMap.put(column3, new Column("t3", StandardTypes.INT, true));
 
         OptExpression expression = OptExpression.create(new LogicalProjectOperator(projectMap),
                 OptExpression.create(
@@ -1780,12 +1787,12 @@ public class OptimizerTaskTest {
     public void testShuffleTwoJoin(@Mocked OlapTable olapTable1,
                                    @Mocked OlapTable olapTable2) {
         List<Column> columnList1 = new ArrayList<>();
-        Column column2 = new Column(this.column2.getName(), Type.INT);
+        Column column2 = new Column(this.column2.getName(), StandardTypes.INT);
         columnList1.add(column2);
         HashDistributionInfo hashDistributionInfo1 = new HashDistributionInfo(3, columnList1);
 
         List<Column> columnList2 = new ArrayList<>();
-        Column column4 = new Column(this.column4.getName(), Type.INT);
+        Column column4 = new Column(this.column4.getName(), StandardTypes.INT);
         columnList2.add(column4);
         HashDistributionInfo hashDistributionInfo2 = new HashDistributionInfo(3, columnList2);
         new Expectations() {
@@ -1816,12 +1823,12 @@ public class OptimizerTaskTest {
         List<ColumnRefOperator> scan2Columns = Lists.newArrayList(column3, this.column4);
 
         Map<ColumnRefOperator, Column> scan1ColumnMap = Maps.newHashMap();
-        scan1ColumnMap.put(column1, new Column("t1", Type.INT, true));
-        scan1ColumnMap.put(this.column2, new Column("t2", Type.INT, true));
+        scan1ColumnMap.put(column1, new Column("t1", StandardTypes.INT, true));
+        scan1ColumnMap.put(this.column2, new Column("t2", StandardTypes.INT, true));
 
         Map<ColumnRefOperator, Column> scan2ColumnMap = Maps.newHashMap();
-        scan2ColumnMap.put(column3, new Column("t3", Type.INT, true));
-        scan2ColumnMap.put(this.column4, new Column("t4", Type.INT, true));
+        scan2ColumnMap.put(column3, new Column("t3", StandardTypes.INT, true));
+        scan2ColumnMap.put(this.column4, new Column("t4", StandardTypes.INT, true));
 
         BinaryPredicateOperator predicate = new BinaryPredicateOperator(BinaryType.EQ,
                 column1,
@@ -1848,17 +1855,17 @@ public class OptimizerTaskTest {
                                      @Mocked OlapTable olapTable2,
                                      @Mocked OlapTable olapTable3) {
         List<Column> columnList1 = new ArrayList<>();
-        Column column2 = new Column(this.column2.getName(), Type.INT);
+        Column column2 = new Column(this.column2.getName(), StandardTypes.INT);
         columnList1.add(column2);
         HashDistributionInfo hashDistributionInfo1 = new HashDistributionInfo(3, columnList1);
 
         List<Column> columnList2 = new ArrayList<>();
-        Column column4 = new Column(this.column4.getName(), Type.INT);
+        Column column4 = new Column(this.column4.getName(), StandardTypes.INT);
         columnList2.add(column4);
         HashDistributionInfo hashDistributionInfo2 = new HashDistributionInfo(3, columnList2);
 
         List<Column> columnList3 = new ArrayList<>();
-        Column column6 = new Column(this.column6.getName(), Type.INT);
+        Column column6 = new Column(this.column6.getName(), StandardTypes.INT);
         columnList3.add(column6);
         HashDistributionInfo hashDistributionInfo3 = new HashDistributionInfo(3, columnList3);
         new Expectations() {
@@ -1900,16 +1907,16 @@ public class OptimizerTaskTest {
         List<ColumnRefOperator> scan3Columns = Lists.newArrayList(column5, this.column6);
 
         Map<ColumnRefOperator, Column> scan1ColumnMap = Maps.newHashMap();
-        scan1ColumnMap.put(column1, new Column("t1", Type.INT, true));
-        scan1ColumnMap.put(this.column2, new Column("t2", Type.INT, true));
+        scan1ColumnMap.put(column1, new Column("t1", StandardTypes.INT, true));
+        scan1ColumnMap.put(this.column2, new Column("t2", StandardTypes.INT, true));
 
         Map<ColumnRefOperator, Column> scan2ColumnMap = Maps.newHashMap();
-        scan2ColumnMap.put(column3, new Column("t3", Type.INT, true));
-        scan2ColumnMap.put(this.column4, new Column("t4", Type.INT, true));
+        scan2ColumnMap.put(column3, new Column("t3", StandardTypes.INT, true));
+        scan2ColumnMap.put(this.column4, new Column("t4", StandardTypes.INT, true));
 
         Map<ColumnRefOperator, Column> scan3ColumnMap = Maps.newHashMap();
-        scan3ColumnMap.put(column5, new Column("t5", Type.INT, true));
-        scan3ColumnMap.put(this.column6, new Column("t6", Type.INT, true));
+        scan3ColumnMap.put(column5, new Column("t5", StandardTypes.INT, true));
+        scan3ColumnMap.put(this.column6, new Column("t6", StandardTypes.INT, true));
 
         BinaryPredicateOperator predicate = new BinaryPredicateOperator(BinaryType.EQ,
                 column1,
@@ -1944,12 +1951,12 @@ public class OptimizerTaskTest {
     public void testBroadcastExceedRowLimitWithHugeGapInRowCount(@Mocked OlapTable olapTable1,
                                                                  @Mocked OlapTable olapTable2) throws Exception {
         List<Column> columnList1 = new ArrayList<>();
-        Column column2 = new Column(this.column2.getName(), Type.INT);
+        Column column2 = new Column(this.column2.getName(), StandardTypes.INT);
         columnList1.add(column2);
         HashDistributionInfo hashDistributionInfo1 = new HashDistributionInfo(3, columnList1);
 
         List<Column> columnList2 = new ArrayList<>();
-        Column column4 = new Column(this.column4.getName(), Type.INT);
+        Column column4 = new Column(this.column4.getName(), StandardTypes.INT);
         columnList2.add(column4);
         HashDistributionInfo hashDistributionInfo2 = new HashDistributionInfo(3, columnList2);
 
@@ -2012,12 +2019,12 @@ public class OptimizerTaskTest {
         List<ColumnRefOperator> scan2Columns = Lists.newArrayList(column3, this.column4);
 
         Map<ColumnRefOperator, Column> scan1ColumnMap = Maps.newHashMap();
-        scan1ColumnMap.put(column1, new Column("t1", Type.INT, true));
-        scan1ColumnMap.put(this.column2, new Column("t2", Type.INT, true));
+        scan1ColumnMap.put(column1, new Column("t1", StandardTypes.INT, true));
+        scan1ColumnMap.put(this.column2, new Column("t2", StandardTypes.INT, true));
 
         Map<ColumnRefOperator, Column> scan2ColumnMap = Maps.newHashMap();
-        scan2ColumnMap.put(column3, new Column("t3", Type.INT, true));
-        scan2ColumnMap.put(this.column4, new Column("t4", Type.INT, true));
+        scan2ColumnMap.put(column3, new Column("t3", StandardTypes.INT, true));
+        scan2ColumnMap.put(this.column4, new Column("t4", StandardTypes.INT, true));
 
         BinaryPredicateOperator predicate = new BinaryPredicateOperator(BinaryType.EQ,
                 column1,
@@ -2049,12 +2056,12 @@ public class OptimizerTaskTest {
                                                                     @Mocked OlapTable olapTable2) throws Exception {
         FeConstants.runningUnitTest = true;
         List<Column> columnList1 = new ArrayList<>();
-        Column column2 = new Column(this.column2.getName(), Type.INT);
+        Column column2 = new Column(this.column2.getName(), StandardTypes.INT);
         columnList1.add(column2);
         HashDistributionInfo hashDistributionInfo1 = new HashDistributionInfo(3, columnList1);
 
         List<Column> columnList2 = new ArrayList<>();
-        Column column4 = new Column(this.column4.getName(), Type.INT);
+        Column column4 = new Column(this.column4.getName(), StandardTypes.INT);
         columnList2.add(column4);
         HashDistributionInfo hashDistributionInfo2 = new HashDistributionInfo(3, columnList2);
 
@@ -2130,12 +2137,12 @@ public class OptimizerTaskTest {
         List<ColumnRefOperator> scan2Columns = Lists.newArrayList(column3, this.column4);
 
         Map<ColumnRefOperator, Column> scan1ColumnMap = Maps.newHashMap();
-        scan1ColumnMap.put(column1, new Column("t1", Type.INT, true));
-        scan1ColumnMap.put(this.column2, new Column("t2", Type.INT, true));
+        scan1ColumnMap.put(column1, new Column("t1", StandardTypes.INT, true));
+        scan1ColumnMap.put(this.column2, new Column("t2", StandardTypes.INT, true));
 
         Map<ColumnRefOperator, Column> scan2ColumnMap = Maps.newHashMap();
-        scan2ColumnMap.put(column3, new Column("t3", Type.INT, true));
-        scan2ColumnMap.put(this.column4, new Column("t4", Type.INT, true));
+        scan2ColumnMap.put(column3, new Column("t3", StandardTypes.INT, true));
+        scan2ColumnMap.put(this.column4, new Column("t4", StandardTypes.INT, true));
 
         BinaryPredicateOperator predicate = new BinaryPredicateOperator(BinaryType.EQ,
                 column1,
@@ -2171,12 +2178,12 @@ public class OptimizerTaskTest {
                                                @Mocked OlapTable olapTable2) {
         FeConstants.runningUnitTest = true;
         List<Column> columnList1 = new ArrayList<>();
-        Column column2 = new Column(this.column2.getName(), Type.INT);
+        Column column2 = new Column(this.column2.getName(), StandardTypes.INT);
         columnList1.add(column2);
         HashDistributionInfo hashDistributionInfo1 = new HashDistributionInfo(3, columnList1);
 
         List<Column> columnList2 = new ArrayList<>();
-        Column column4 = new Column(this.column4.getName(), Type.INT);
+        Column column4 = new Column(this.column4.getName(), StandardTypes.INT);
         columnList2.add(column4);
         HashDistributionInfo hashDistributionInfo2 = new HashDistributionInfo(3, columnList2);
 
@@ -2256,12 +2263,12 @@ public class OptimizerTaskTest {
         List<ColumnRefOperator> scan2Columns = Lists.newArrayList(column3, this.column4);
 
         Map<ColumnRefOperator, Column> scan1ColumnMap = Maps.newHashMap();
-        scan1ColumnMap.put(column1, new Column("t1", Type.INT, true));
-        scan1ColumnMap.put(this.column2, new Column("t2", Type.INT, true));
+        scan1ColumnMap.put(column1, new Column("t1", StandardTypes.INT, true));
+        scan1ColumnMap.put(this.column2, new Column("t2", StandardTypes.INT, true));
 
         Map<ColumnRefOperator, Column> scan2ColumnMap = Maps.newHashMap();
-        scan2ColumnMap.put(column3, new Column("t3", Type.INT, true));
-        scan2ColumnMap.put(this.column4, new Column("t4", Type.INT, true));
+        scan2ColumnMap.put(column3, new Column("t3", StandardTypes.INT, true));
+        scan2ColumnMap.put(this.column4, new Column("t4", StandardTypes.INT, true));
 
         BinaryPredicateOperator predicate = new BinaryPredicateOperator(BinaryType.EQ,
                 column1,
@@ -2363,32 +2370,33 @@ public class OptimizerTaskTest {
     public void testSplitAggregateRuleConstantColumns(@Mocked OlapTable olapTable1) {
         ctx.getSessionVariable().setNewPlanerAggStage(2);
 
-        ColumnRefOperator column1 = columnRefFactory.create("t1", Type.INT, true);
-        ColumnRefOperator column2 = columnRefFactory.create("agg", Type.INT, true);
+        ColumnRefOperator column1 = columnRefFactory.create("t1", StandardTypes.INT, true);
+        ColumnRefOperator column2 = columnRefFactory.create("agg", StandardTypes.INT, true);
 
         Map<ColumnRefOperator, Column> scanColumnMap = Maps.newHashMap();
         scanColumnMap.put(column1, new Column());
 
         List<ScalarOperator> arguments = new ArrayList<>();
         arguments.add(column1);
-        arguments.add(new ConstantOperator("const_str", Type.VARCHAR));
+        arguments.add(new ConstantOperator("const_str", StandardTypes.VARCHAR));
 
         List<ScalarOperator> arrayValues = new ArrayList<>();
-        arrayValues.add(new ConstantOperator(1, Type.INT));
-        arrayValues.add(new ConstantOperator(2, Type.INT));
-        arguments.add(new ArrayOperator(Type.INT, false, arrayValues));
+        arrayValues.add(new ConstantOperator(1, StandardTypes.INT));
+        arrayValues.add(new ConstantOperator(2, StandardTypes.INT));
+        arguments.add(new ArrayOperator(StandardTypes.INT, false, arrayValues));
 
         List<ScalarOperator> functionArguments = new ArrayList<>();
-        CallOperator constFunction = new CallOperator("call", Type.INT, functionArguments);
+        CallOperator constFunction = new CallOperator("call", StandardTypes.INT, functionArguments);
         arguments.add(constFunction);
 
         List<Type> aggFnArguments = new ArrayList<>();
-        aggFnArguments.add(Type.INT);
-        aggFnArguments.add(Type.VARCHAR);
-        aggFnArguments.add(Type.ARRAY_INT);
-        aggFnArguments.add(Type.INT);
-        Function fn = new AggregateFunction(new FunctionName("agg_function"), aggFnArguments, Type.INT, Type.INT, false);
-        CallOperator aggFunction = new CallOperator("agg", Type.INT, arguments, fn);
+        aggFnArguments.add(StandardTypes.INT);
+        aggFnArguments.add(StandardTypes.VARCHAR);
+        aggFnArguments.add(StandardTypes.ARRAY_INT);
+        aggFnArguments.add(StandardTypes.INT);
+        Function fn = new AggregateFunction(new FunctionName("agg_function"), aggFnArguments,
+                StandardTypes.INT, StandardTypes.INT, false);
+        CallOperator aggFunction = new CallOperator("agg", StandardTypes.INT, arguments, fn);
         Map<ColumnRefOperator, CallOperator> map = Maps.newHashMap();
         map.put(column2, aggFunction);
         LogicalAggregationOperator aggregationOperator =

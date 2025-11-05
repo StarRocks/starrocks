@@ -22,7 +22,7 @@ import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.THdfsFileFormat;
 import com.starrocks.thrift.TScanRangeLocations;
-import com.starrocks.type.Type;
+import com.starrocks.type.StandardTypes;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.paimon.data.BinaryRow;
@@ -109,10 +109,10 @@ public class PaimonScanNodeTest {
 
         TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
         desc.setTable(table);
-        SlotDescriptor slot1 = new SlotDescriptor(new SlotId(1), "id", Type.INT, false);
-        slot1.setColumn(new Column("id", Type.INT));
-        SlotDescriptor slot2 = new SlotDescriptor(new SlotId(2), "name", Type.STRING, false);
-        slot2.setColumn(new Column("name", Type.STRING));
+        SlotDescriptor slot1 = new SlotDescriptor(new SlotId(1), "id", StandardTypes.INT, false);
+        slot1.setColumn(new Column("id", StandardTypes.INT));
+        SlotDescriptor slot2 = new SlotDescriptor(new SlotId(2), "name", StandardTypes.STRING, false);
+        slot2.setColumn(new Column("name", StandardTypes.STRING));
         desc.addSlot(slot1);
         desc.addSlot(slot2);
         PaimonScanNode scanNode = new PaimonScanNode(new PlanNodeId(0), desc, "XXX");

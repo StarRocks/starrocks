@@ -30,17 +30,17 @@ import java.util.stream.Collectors;
 public class ShowResourceGroupUsageStmt extends ShowStmt {
     private static final List<Pair<Column, Function<ShowItem, String>>> META_DATA =
             ImmutableList.of(
-                    Pair.create(new Column("Name", TypeFactory.createVarchar(64)),
+                    Pair.create(new Column("Name", TypeFactory.createVarcharType(64)),
                             item -> item.usage.getGroup().getName()),
-                    Pair.create(new Column("Id", TypeFactory.createVarchar(64)),
+                    Pair.create(new Column("Id", TypeFactory.createVarcharType(64)),
                             item -> Long.toString(item.usage.getGroup().getId())),
-                    Pair.create(new Column("Backend", TypeFactory.createVarchar(64)),
+                    Pair.create(new Column("Backend", TypeFactory.createVarcharType(64)),
                             item -> item.worker.getHost()),
-                    Pair.create(new Column("BEInUseCpuCores", TypeFactory.createVarchar(64)),
+                    Pair.create(new Column("BEInUseCpuCores", TypeFactory.createVarcharType(64)),
                             item -> Double.toString(item.usage.getCpuCoreUsagePermille() / 1000.0D)),
-                    Pair.create(new Column("BEInUseMemBytes", TypeFactory.createVarchar(64)),
+                    Pair.create(new Column("BEInUseMemBytes", TypeFactory.createVarcharType(64)),
                             item -> Long.toString(item.usage.getMemUsageBytes())),
-                    Pair.create(new Column("BERunningQueries", TypeFactory.createVarchar(64)),
+                    Pair.create(new Column("BERunningQueries", TypeFactory.createVarcharType(64)),
                             item -> Integer.toString(item.usage.getNumRunningQueries()))
             );
 

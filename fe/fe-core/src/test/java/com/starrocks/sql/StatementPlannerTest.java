@@ -37,7 +37,7 @@ import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TPartialUpdateMode;
-import com.starrocks.type.Type;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Test;
 
@@ -138,7 +138,7 @@ class StatementPlannerTest extends PlanTestBase {
             TableFunctionTable tableBefore = (TableFunctionTable) relation.getTable();
             assertNotNull(tableBefore);
             assertEquals(2, tableBefore.getFullSchema().size());
-            assertEquals(Type.INT, tableBefore.getFullSchema().get(0).getType());
+            assertEquals(StandardTypes.INT, tableBefore.getFullSchema().get(0).getType());
 
             AtomicBoolean pushDownApplied = new AtomicBoolean(false);
             relation.setPushDownSchemaFunc(table -> {
@@ -146,7 +146,7 @@ class StatementPlannerTest extends PlanTestBase {
                 List<Column> newSchema = table.getFullSchema().stream()
                         .map(Column::new)
                         .collect(Collectors.toList());
-                newSchema.forEach(column -> column.setType(Type.BIGINT));
+                newSchema.forEach(column -> column.setType(StandardTypes.BIGINT));
                 table.setNewFullSchema(newSchema);
             });
 
@@ -154,7 +154,7 @@ class StatementPlannerTest extends PlanTestBase {
 
             TableFunctionTable tableAfter = (TableFunctionTable) relation.getTable();
             assertTrue(pushDownApplied.get());
-            assertEquals(Type.BIGINT, tableAfter.getFullSchema().get(0).getType());
+            assertEquals(StandardTypes.BIGINT, tableAfter.getFullSchema().get(0).getType());
         } finally {
             FeConstants.runningUnitTest = originalRunningUnitTest;
         }

@@ -44,6 +44,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.RangePartitionDesc;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
 import org.json.JSONException;
@@ -118,7 +119,7 @@ public class EsUtil {
         for (String columnName : properties.keySet()) {
             JSONObject columnAttr = (JSONObject) properties.get(columnName);
             // default set json.
-            Type type = Type.JSON;
+            Type type = StandardTypes.JSON;
             if (columnAttr.has("type")) {
                 type = convertType(columnAttr.get("type").toString());
             }
@@ -134,31 +135,31 @@ public class EsUtil {
     public static Type convertType(String esType) {
         switch (esType) {
             case "null":
-                return Type.NULL;
+                return StandardTypes.NULL;
             case "boolean":
-                return Type.BOOLEAN;
+                return StandardTypes.BOOLEAN;
             case "byte":
-                return Type.TINYINT;
+                return StandardTypes.TINYINT;
             case "short":
-                return Type.SMALLINT;
+                return StandardTypes.SMALLINT;
             case "integer":
-                return Type.INT;
+                return StandardTypes.INT;
             case "long":
-                return Type.BIGINT;
+                return StandardTypes.BIGINT;
             case "unsigned_long":
-                return Type.LARGEINT;
+                return StandardTypes.LARGEINT;
             case "float":
             case "half_float":
-                return Type.FLOAT;
+                return StandardTypes.FLOAT;
             case "double":
             case "scaled_float":
-                return Type.DOUBLE;
+                return StandardTypes.DOUBLE;
             //TODO
             case "date":
-                return Type.DATETIME;
+                return StandardTypes.DATETIME;
             case "nested":
             case "object":
-                return Type.JSON;
+                return StandardTypes.JSON;
             case "keyword":
             case "text":
             case "ip":

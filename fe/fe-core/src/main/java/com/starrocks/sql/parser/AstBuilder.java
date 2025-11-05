@@ -532,6 +532,7 @@ import com.starrocks.type.ArrayType;
 import com.starrocks.type.MapType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
@@ -1197,7 +1198,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             } else if (defaultDescContext.CURRENT_TIMESTAMP() != null) {
                 List<Expr> expr = Lists.newArrayList();
                 if (defaultDescContext.INTEGER_VALUE() != null) {
-                    expr.add(new IntLiteral(Long.parseLong(defaultDescContext.INTEGER_VALUE().getText()), Type.INT));
+                    expr.add(new IntLiteral(Long.parseLong(defaultDescContext.INTEGER_VALUE().getText()), StandardTypes.INT));
                 }
                 defaultValueDef = new ColumnDef.DefaultValueDef(true, (expr.size() == 1),
                         new FunctionCallExpr("current_timestamp", expr));
@@ -7470,7 +7471,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
             if (!shouldFallbackToNormal) {
                 String rawText = extractRawText(context.integerList());
-                List<Expr> firstElementList = List.of(new IntLiteral((Long) rawValueList.get(0), Type.BIGINT));
+                List<Expr> firstElementList = List.of(new IntLiteral((Long) rawValueList.get(0), StandardTypes.BIGINT));
                 return new LargeInPredicate(compareExpr, rawText, rawValueList, literalCount,
                         isNotIn, firstElementList, createPos(context));
             }
@@ -7679,7 +7680,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         // but time_slice only support INT type when executed in BE
         try {
             if (value instanceof IntLiteral) {
-                exprs.add(new IntLiteral(((IntLiteral) value).getValue(), Type.INT));
+                exprs.add(new IntLiteral(((IntLiteral) value).getValue(), StandardTypes.INT));
             } else {
                 exprs.add(value);
             }
@@ -7845,7 +7846,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             } else {
                 exprs = Collections.emptyList();
             }
-            return new MapExpr(Type.ANY_MAP, exprs, pos);
+            return new MapExpr(StandardTypes.ANY_MAP, exprs, pos);
         }
 
         if (functionName.equals(FunctionSet.SUBSTR) || functionName.equals(FunctionSet.SUBSTRING)) {
@@ -8084,7 +8085,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             com.starrocks.sql.parser.StarRocksParser.SpecialDateTimeExpressionContext context) {
         List<Expr> expr = Lists.newArrayList();
         if (context.INTEGER_VALUE() != null) {
-            expr.add(new IntLiteral(Long.parseLong(context.INTEGER_VALUE().getText()), Type.INT));
+            expr.add(new IntLiteral(Long.parseLong(context.INTEGER_VALUE().getText()), StandardTypes.INT));
         }
         return new FunctionCallExpr(context.name.getText().toUpperCase(), new FunctionParams(false, expr));
     }
@@ -8231,9 +8232,9 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         String value = ((StringLiteral) visit(context.string())).getValue();
         try {
             if (context.DATE() != null) {
-                return new DateLiteral(value, Type.DATE);
+                return new DateLiteral(value, StandardTypes.DATE);
             } else {
-                return new DateLiteral(value, Type.DATETIME);
+                return new DateLiteral(value, StandardTypes.DATETIME);
             }
         } catch (AnalysisException e) {
             throw new ParsingException(PARSER_ERROR_MSG.invalidDateFormat(value), pos);
@@ -8341,7 +8342,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     @Override
     public ParseNode visitMapConstructor(com.starrocks.sql.parser.StarRocksParser.MapConstructorContext context) {
         NodePosition pos = createPos(context);
-        Type type = Type.ANY_MAP;
+        Type type = StandardTypes.ANY_MAP;
         if (context.mapType() != null) {
             type = getMapType(context.mapType());
         }
@@ -8496,7 +8497,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                 throw new IllegalArgumentException("The right part of map lambda functions can accept at most 2 " +
                         "expressions, but there are " + exprs.size());
             }
-            expr = new MapExpr(Type.ANY_MAP, exprs); // key expr, value expr.
+            expr = new MapExpr(StandardTypes.ANY_MAP, exprs); // key expr, value expr.
         }
         arguments.add(expr); // put lambda body to the first argument
         for (int i = 0; i < names.size(); ++i) {
@@ -9410,7 +9411,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             ScalarType type = TypeFactory.createCharType(length);
             return type;
         } else if (context.SIGNED() != null) {
-            return Type.INT;
+            return StandardTypes.INT;
         } else if (context.HLL() != null) {
             ScalarType type = TypeFactory.createHllType();
             return type;

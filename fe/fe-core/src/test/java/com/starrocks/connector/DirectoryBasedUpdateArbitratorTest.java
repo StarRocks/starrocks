@@ -41,7 +41,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
-import com.starrocks.type.Type;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -172,11 +172,11 @@ public class DirectoryBasedUpdateArbitratorTest {
 
     private HiveTable createHiveTable(String location) {
         List<Column> fullSchema = new ArrayList<>();
-        Column columnId = new Column("id", Type.INT, true);
+        Column columnId = new Column("id", StandardTypes.INT, true);
         columnId.setComment("id");
-        Column columnName = new Column("name", Type.VARCHAR);
-        Column columnYear = new Column("year", Type.INT);
-        Column columnDt = new Column("dt", Type.INT);
+        Column columnName = new Column("name", StandardTypes.VARCHAR);
+        Column columnYear = new Column("year", StandardTypes.INT);
+        Column columnDt = new Column("dt", StandardTypes.INT);
         fullSchema.add(columnId);
         fullSchema.add(columnName);
         fullSchema.add(columnYear);

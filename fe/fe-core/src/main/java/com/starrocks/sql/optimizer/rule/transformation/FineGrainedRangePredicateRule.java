@@ -44,6 +44,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.OptExpressionDuplicator;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.Type;
 import org.apache.commons.lang3.tuple.Triple;
 
@@ -434,13 +435,13 @@ public class FineGrainedRangePredicateRule extends TransformationRule {
     private static CallOperator buildDateTrunc(ScalarOperator arg1, ScalarOperator arg2) {
         Type type;
         if (arg2.getType().isDatetime()) {
-            type = Type.DATETIME;
+            type = StandardTypes.DATETIME;
         } else {
-            type = Type.DATE;
+            type = StandardTypes.DATE;
         }
 
         Function searchDesc = new Function(new FunctionName(FunctionSet.DATE_TRUNC),
-                new Type[] {Type.VARCHAR, type}, type, false);
+                new Type[] {StandardTypes.VARCHAR, type}, type, false);
         Function fn = GlobalStateMgr.getCurrentState().getFunction(searchDesc, IS_NONSTRICT_SUPERTYPE_OF);
         CallOperator result = new CallOperator(FunctionSet.DATE_TRUNC, type, Lists.newArrayList(arg1, arg2), fn);
         return result;

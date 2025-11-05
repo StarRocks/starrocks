@@ -27,6 +27,7 @@ import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.thrift.TFunction;
 import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.thrift.TTableFunction;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeSerializer;
 
@@ -70,7 +71,7 @@ public class TableFunction extends Function {
     public TableFunction(FunctionName fnName, List<String> argNames, List<String> defaultColumnNames,
                          List<Type> argTypes, List<Type> tableFnReturnTypes, Vector<Pair<String, Expr>> defaultArgExpr,
                          boolean varArgs) {
-        super(fnName, argTypes, Type.INVALID, varArgs);
+        super(fnName, argTypes, StandardTypes.INVALID, varArgs);
         this.tableFnReturnTypes = tableFnReturnTypes;
         this.defaultColumnNames = defaultColumnNames;
         setArgNames(argNames);
@@ -80,7 +81,7 @@ public class TableFunction extends Function {
 
     public TableFunction(FunctionName fnName, List<String> defaultColumnNames, List<Type> argTypes,
                          List<Type> tableFnReturnTypes, boolean varArgs) {
-        super(fnName, argTypes, Type.INVALID, varArgs);
+        super(fnName, argTypes, StandardTypes.INVALID, varArgs);
         this.tableFnReturnTypes = tableFnReturnTypes;
         this.defaultColumnNames = defaultColumnNames;
         setBinaryType(TFunctionBinaryType.BUILTIN);
@@ -95,24 +96,27 @@ public class TableFunction extends Function {
 
     public static void initBuiltins(FunctionSet functionSet) {
         TableFunction unnest = new TableFunction(new FunctionName("unnest"), Lists.newArrayList("unnest"),
-                Lists.newArrayList(Type.ANY_ARRAY), Lists.newArrayList(Type.ANY_ELEMENT), true);
+                Lists.newArrayList(StandardTypes.ANY_ARRAY), Lists.newArrayList(StandardTypes.ANY_ELEMENT), true);
         functionSet.addBuiltin(unnest);
 
         TableFunction jsonEach = new TableFunction(new FunctionName("json_each"), Lists.newArrayList("key", "value"),
-                Lists.newArrayList(Type.JSON), Lists.newArrayList(Type.VARCHAR, Type.JSON));
+                Lists.newArrayList(StandardTypes.JSON), Lists.newArrayList(StandardTypes.VARCHAR, StandardTypes.JSON));
         functionSet.addBuiltin(jsonEach);
 
-        for (Type type : Lists.newArrayList(Type.TINYINT, Type.SMALLINT, Type.INT, Type.BIGINT, Type.LARGEINT)) {
+        for (Type type : Lists.newArrayList(StandardTypes.TINYINT, StandardTypes.SMALLINT,
+                StandardTypes.INT, StandardTypes.BIGINT, StandardTypes.LARGEINT)) {
             TableFunction func = new TableFunction(new FunctionName("subdivide_bitmap"), Lists.newArrayList("subdivide_bitmap"),
-                    Lists.newArrayList(Type.BITMAP, type), Lists.newArrayList(Type.BITMAP));
+                    Lists.newArrayList(StandardTypes.BITMAP, type), Lists.newArrayList(StandardTypes.BITMAP));
             functionSet.addBuiltin(func);
         }
 
         TableFunction funcUnnestBitmap = new TableFunction(new FunctionName(FunctionSet.UNNEST_BITMAP),
-                Lists.newArrayList(FunctionSet.UNNEST_BITMAP), Lists.newArrayList(Type.BITMAP), Lists.newArrayList(Type.BIGINT));
+                Lists.newArrayList(FunctionSet.UNNEST_BITMAP), Lists.newArrayList(StandardTypes.BITMAP), Lists.newArrayList(
+                StandardTypes.BIGINT));
         functionSet.addBuiltin(funcUnnestBitmap);
 
-        for (Type type : Lists.newArrayList(Type.TINYINT, Type.SMALLINT, Type.INT, Type.BIGINT, Type.LARGEINT)) {
+        for (Type type : Lists.newArrayList(StandardTypes.TINYINT, StandardTypes.SMALLINT,
+                StandardTypes.INT, StandardTypes.BIGINT, StandardTypes.LARGEINT)) {
             // set default arguments' const expressions in order
             Vector<Pair<String, Expr>> defaultArgs = new Vector<>();
             try {
@@ -130,8 +134,9 @@ public class TableFunction extends Function {
 
         TableFunction listRowsets = new TableFunction(new FunctionName("list_rowsets"),
                 Lists.newArrayList("id", "segments", "rows", "size", "overlapped", "delete_predicate"),
-                Lists.newArrayList(/*tablet_id*/Type.BIGINT, /*tablet_version*/Type.BIGINT),
-                Lists.newArrayList(Type.BIGINT, Type.BIGINT, Type.BIGINT, Type.BIGINT, Type.BOOLEAN, Type.STRING));
+                Lists.newArrayList(/*tablet_id*/StandardTypes.BIGINT, /*tablet_version*/StandardTypes.BIGINT),
+                Lists.newArrayList(StandardTypes.BIGINT, StandardTypes.BIGINT, StandardTypes.BIGINT,
+                        StandardTypes.BIGINT, StandardTypes.BOOLEAN, StandardTypes.STRING));
         functionSet.addBuiltin(listRowsets);
     }
 

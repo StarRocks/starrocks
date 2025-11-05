@@ -93,6 +93,7 @@ import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
@@ -983,7 +984,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     protected ParseNode visitGenericLiteral(GenericLiteral node, ParseTreeContext context) {
         if (node.getType().equalsIgnoreCase("date")) {
             try {
-                return new DateLiteral(node.getValue(), Type.DATE);
+                return new DateLiteral(node.getValue(), StandardTypes.DATE);
             } catch (AnalysisException e) {
                 throw new ParsingException(e.getMessage());
             }
@@ -1033,10 +1034,10 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
             String formattedValue = value.length() <= 10 ? value + " 00:00:00" : value;
             ZoneId zoneId = parseTimeZoneFromString(formattedValue);
             if (zoneId == null) {
-                return new DateLiteral(formattedValue, Type.DATETIME);
+                return new DateLiteral(formattedValue, StandardTypes.DATETIME);
             } else {
                 return new FunctionCallExpr("convert_tz", List.of(
-                        new DateLiteral(parseDateTimeFromString(formattedValue), Type.DATETIME),
+                        new DateLiteral(parseDateTimeFromString(formattedValue), StandardTypes.DATETIME),
                         new VariableExpr("time_zone"),
                         new com.starrocks.sql.ast.expression.StringLiteral(zoneId.toString())
                 ));

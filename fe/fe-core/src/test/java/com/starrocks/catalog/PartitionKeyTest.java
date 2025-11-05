@@ -39,7 +39,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.PartitionValue;
-import com.starrocks.type.Type;
+import com.starrocks.type.StandardTypes;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -72,13 +72,13 @@ public class PartitionKeyTest {
         TimeZone tz = TimeZone.getTimeZone("ETC/GMT-0");
         TimeZone.setDefault(tz);
 
-        tinyInt = new Column("tinyint", Type.TINYINT);
-        smallInt = new Column("smallint", Type.SMALLINT);
-        int32 = new Column("int32", Type.INT);
-        bigInt = new Column("bigint", Type.BIGINT);
-        largeInt = new Column("largeint", Type.LARGEINT);
-        date = new Column("date", Type.DATE);
-        datetime = new Column("datetime", Type.DATETIME);
+        tinyInt = new Column("tinyint", StandardTypes.TINYINT);
+        smallInt = new Column("smallint", StandardTypes.SMALLINT);
+        int32 = new Column("int32", StandardTypes.INT);
+        bigInt = new Column("bigint", StandardTypes.BIGINT);
+        largeInt = new Column("largeint", StandardTypes.LARGEINT);
+        date = new Column("date", StandardTypes.DATE);
+        datetime = new Column("datetime", StandardTypes.DATETIME);
 
         allColumns = Arrays.asList(tinyInt, smallInt, int32, bigInt, largeInt, date, datetime);
     }
@@ -185,17 +185,17 @@ public class PartitionKeyTest {
         List<PartitionValue> keys = new ArrayList<PartitionValue>();
         List<Column> columns = new ArrayList<Column>();
         keys.add(new PartitionValue("100"));
-        columns.add(new Column("column2", Type.TINYINT, true, null, "", ""));
+        columns.add(new Column("column2", StandardTypes.TINYINT, true, null, "", ""));
         keys.add(new PartitionValue("101"));
-        columns.add(new Column("column3", Type.SMALLINT, true, null, "", ""));
+        columns.add(new Column("column3", StandardTypes.SMALLINT, true, null, "", ""));
         keys.add(new PartitionValue("102"));
-        columns.add(new Column("column4", Type.INT, true, null, "", ""));
+        columns.add(new Column("column4", StandardTypes.INT, true, null, "", ""));
         keys.add(new PartitionValue("103"));
-        columns.add(new Column("column5", Type.BIGINT, true, null, "", ""));
+        columns.add(new Column("column5", StandardTypes.BIGINT, true, null, "", ""));
         keys.add(new PartitionValue("2014-12-26"));
-        columns.add(new Column("column10", Type.DATE, true, null, "", ""));
+        columns.add(new Column("column10", StandardTypes.DATE, true, null, "", ""));
         keys.add(new PartitionValue("2014-12-27 11:12:13"));
-        columns.add(new Column("column11", Type.DATETIME, true, null, "", ""));
+        columns.add(new Column("column11", StandardTypes.DATETIME, true, null, "", ""));
 
         PartitionKey key = PartitionKey.createPartitionKey(keys, columns);
         key.write(dos);

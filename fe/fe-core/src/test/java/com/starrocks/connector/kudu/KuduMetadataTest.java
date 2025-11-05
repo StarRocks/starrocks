@@ -23,7 +23,7 @@ import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.statistics.Statistics;
-import com.starrocks.type.ScalarType;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.TypeFactory;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -105,7 +105,7 @@ public class KuduMetadataTest {
         Assertions.assertEquals("tbl1", kuduTable.getCatalogTableName());
         Assertions.assertEquals(2, kuduTable.getColumns().size());
         Assertions.assertEquals(0, kuduTable.getPartitionColumnNames().size());
-        Assertions.assertEquals(ScalarType.INT, kuduTable.getColumns().get(0).getType());
+        Assertions.assertEquals(StandardTypes.INT, kuduTable.getColumns().get(0).getType());
         Assertions.assertTrue(kuduTable.getBaseSchema().get(0).isAllowNull());
         Assertions.assertEquals(TypeFactory.createVarcharType(CATALOG_MAX_VARCHAR_LENGTH),
                 kuduTable.getBaseSchema().get(1).getType());

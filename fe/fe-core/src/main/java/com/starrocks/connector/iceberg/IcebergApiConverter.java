@@ -43,6 +43,7 @@ import com.starrocks.type.ArrayType;
 import com.starrocks.type.MapType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
@@ -305,7 +306,7 @@ public class IcebergApiConverter {
             if (((BaseTable) table).operations().current().formatVersion() >= 3) {
                 boolean hasRowId = fullSchema.stream().anyMatch(column -> column.getName().equals(IcebergTable.ROW_ID));
                 if (!hasRowId) {
-                    Column column = new Column(IcebergTable.ROW_ID, Type.BIGINT, true);
+                    Column column = new Column(IcebergTable.ROW_ID, StandardTypes.BIGINT, true);
                     column.setIsHidden(true);
                     fullSchema.add(column);
                 }
@@ -329,7 +330,7 @@ public class IcebergApiConverter {
                 srType = fromIcebergType(field.type());
             } catch (InternalError | Exception e) {
                 LOG.error("Failed to convert iceberg type {}", field.type().toString(), e);
-                srType = Type.UNKNOWN_TYPE;
+                srType = StandardTypes.UNKNOWN_TYPE;
             }
             Column column = new Column(field.name(), srType, true);
             column.setComment(field.doc());

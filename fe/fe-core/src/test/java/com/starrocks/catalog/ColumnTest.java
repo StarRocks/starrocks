@@ -46,7 +46,7 @@ import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.Type;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.TypeFactory;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -215,12 +215,12 @@ public class ColumnTest {
                 new Column("user", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 15, 3), false, null, true,
                         new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), "");
 
-        Column varcharColumn1 = new Column("user", TypeFactory.createVarchar(50), false, null, true,
+        Column varcharColumn1 = new Column("user", TypeFactory.createVarcharType(50), false, null, true,
                 new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), "");
         varcharColumn1.checkSchemaChangeAllowed(decimalColumn);
         decimalColumn.checkSchemaChangeAllowed(varcharColumn1);
 
-        Column varcharColumn2 = new Column("user", TypeFactory.createVarchar(10), false, null, true,
+        Column varcharColumn2 = new Column("user", TypeFactory.createVarcharType(10), false, null, true,
                 new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), "");
         varcharColumn2.checkSchemaChangeAllowed(decimalColumn);
         try {
@@ -275,8 +275,8 @@ public class ColumnTest {
 
     @Test
     public void testLscColumn() {
-        Column f0 = new Column("f0", Type.INT, true, AggregateType.NONE, null, false,
-                new DefaultValueDef(true, NullLiteral.create(Type.INT)), "", 0);
+        Column f0 = new Column("f0", StandardTypes.INT, true, AggregateType.NONE, null, false,
+                new DefaultValueDef(true, NullLiteral.create(StandardTypes.INT)), "", 0);
 
         Index i0 = new Index("i0",
                 Collections.singletonList(ColumnId.create("f0")), IndexType.BITMAP, "");

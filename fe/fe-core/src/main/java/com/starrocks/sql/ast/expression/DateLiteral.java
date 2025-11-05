@@ -42,6 +42,7 @@ import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
 
@@ -116,7 +117,7 @@ public class DateLiteral extends LiteralExpr {
         this.minute = 0;
         this.second = 0;
         this.microsecond = 0;
-        this.type = Type.DATE;
+        this.type = StandardTypes.DATE;
     }
 
     public DateLiteral(long year, long month, long day, long hour, long minute, long second, long microsecond) {
@@ -127,7 +128,7 @@ public class DateLiteral extends LiteralExpr {
         this.minute = minute;
         this.second = second;
         this.microsecond = microsecond;
-        this.type = Type.DATETIME;
+        this.type = StandardTypes.DATETIME;
     }
 
     public DateLiteral(LocalDateTime dateTime, Type type) throws AnalysisException {
@@ -311,7 +312,7 @@ public class DateLiteral extends LiteralExpr {
     }
 
     public void castToDate() {
-        this.type = Type.DATE;
+        this.type = StandardTypes.DATE;
         hour = 0;
         minute = 0;
         second = 0;
@@ -359,7 +360,7 @@ public class DateLiteral extends LiteralExpr {
         hour = (hms >> 12);
         // set default date literal type to DATETIME
         // date literal read from meta will set type by flag bit;
-        this.type = Type.DATETIME;
+        this.type = StandardTypes.DATETIME;
     }
 
     public void readFields(DataInput in) throws IOException {
@@ -367,9 +368,9 @@ public class DateLiteral extends LiteralExpr {
         short dateLiteralType = in.readShort();
         fromPackedDatetime(in.readLong());
         if (dateLiteralType == DateLiteralType.DATETIME.value()) {
-            this.type = Type.DATETIME;
+            this.type = StandardTypes.DATETIME;
         } else if (dateLiteralType == DateLiteralType.DATE.value()) {
-            this.type = Type.DATE;
+            this.type = StandardTypes.DATE;
         } else {
             throw new IOException("Error date literal type : " + type);
         }

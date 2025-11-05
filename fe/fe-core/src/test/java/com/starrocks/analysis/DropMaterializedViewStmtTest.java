@@ -45,7 +45,7 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStorageType;
-import com.starrocks.type.Type;
+import com.starrocks.type.StandardTypes;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
@@ -65,8 +65,8 @@ public class DropMaterializedViewStmtTest {
         globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
         Database db = new Database(50000L, "test");
 
-        Column column1 = new Column("col1", Type.BIGINT);
-        Column column2 = new Column("col2", Type.DOUBLE);
+        Column column1 = new Column("col1", StandardTypes.BIGINT);
+        Column column2 = new Column("col2", StandardTypes.DOUBLE);
 
         List<Column> baseSchema = new LinkedList<>();
         baseSchema.add(column1);

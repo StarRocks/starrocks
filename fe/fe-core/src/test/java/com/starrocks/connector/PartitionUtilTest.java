@@ -36,6 +36,7 @@ import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.PRangeCell;
 import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
 import mockit.Expectations;
@@ -58,10 +59,10 @@ import static com.starrocks.connector.PartitionUtil.toPartitionValues;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class PartitionUtilTest {
-    private final List<Column> partColumns = Lists.newArrayList(new Column("k1", Type.INT),
+    private final List<Column> partColumns = Lists.newArrayList(new Column("k1", StandardTypes.INT),
             new Column("k2", TypeFactory.createVarcharType(10)),
-            new Column("k3", Type.DOUBLE),
-            new Column("k4", Type.INT));
+            new Column("k3", StandardTypes.DOUBLE),
+            new Column("k4", StandardTypes.INT));
 
     @Test
     public void testStringPartitionKeyConvertToDatePartitionKey() {
@@ -259,7 +260,7 @@ public class PartitionUtilTest {
 
     @Test
     public void testGetPartitionRange(@Mocked HiveTable table) throws StarRocksException {
-        Column partitionColumn = new Column("date", Type.DATE);
+        Column partitionColumn = new Column("date", StandardTypes.DATE);
         List<String> partitionNames = ImmutableList.of("date=2022-08-02", "date=2022-08-19", "date=2022-08-21",
                 "date=2022-09-01", "date=2022-10-01", "date=2022-12-02");
 

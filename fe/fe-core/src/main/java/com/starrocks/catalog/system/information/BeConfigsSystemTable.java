@@ -32,10 +32,10 @@ public class BeConfigsSystemTable {
                 Table.TableType.SCHEMA,
                 builder()
                         .column("BE_ID", TypeFactory.createType(PrimitiveType.BIGINT))
-                        .column("NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("VALUE", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("TYPE", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("DEFAULT", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("NAME", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("VALUE", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("TYPE", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("DEFAULT", TypeFactory.createVarcharType(NAME_CHAR_LEN))
                         .column("MUTABLE", TypeFactory.createType(PrimitiveType.BOOLEAN))
                         .build(), TSchemaTableType.SCH_BE_CONFIGS);
     }

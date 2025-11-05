@@ -32,6 +32,7 @@ import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.MapType;
 import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
 import org.junit.jupiter.api.Assertions;
@@ -176,7 +177,7 @@ public class ExpressionAnalyzerTest extends PlanTestBase {
         Function fnMapSize =
                 ExprUtils.getBuiltinFunction(mapSize, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         Assertions.assertEquals(fnMapSize.functionName(), "map_size");
-        Assertions.assertEquals(fnMapSize.getReturnType(), Type.INT);
+        Assertions.assertEquals(fnMapSize.getReturnType(), StandardTypes.INT);
 
         Type[] argumentTypesErrorNum = {mapType, keyType};
         Function fnKeysErrorNum = ExprUtils.getBuiltinFunction(mapKeys, argumentTypesErrorNum,
@@ -234,9 +235,9 @@ public class ExpressionAnalyzerTest extends PlanTestBase {
     @Test
     public void testLikePatternSyntaxException() {
         StringLiteral e1 = new StringLiteral("a");
-        e1.setType(Type.VARCHAR);
+        e1.setType(StandardTypes.VARCHAR);
         StringLiteral e2 = new StringLiteral("([A-Za-z0-9]+[\\u4e00-\\u9fa5]{2}[A-Za-z0-9]+)");
-        e2.setType(Type.VARCHAR);
+        e2.setType(StandardTypes.VARCHAR);
         LikePredicate likePredicate = new LikePredicate(LikePredicate.Operator.REGEXP, e1, e2);
         ExpressionAnalyzer.Visitor visitor = new ExpressionAnalyzer.Visitor(new AnalyzeState(), new ConnectContext());
         Assertions.assertThrows(SemanticException.class, () -> visitor.visitLikePredicate(likePredicate,

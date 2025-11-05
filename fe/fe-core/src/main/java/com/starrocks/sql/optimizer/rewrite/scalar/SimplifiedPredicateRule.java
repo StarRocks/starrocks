@@ -37,6 +37,7 @@ import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
 import com.starrocks.sql.optimizer.rewrite.EliminateNegationsRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
 import com.starrocks.sql.spm.SPMFunctions;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.Type;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.text.StrTokenizer;
@@ -271,7 +272,7 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
                 } else if (constantChildren.size() == 2) {
                     if (constantChildren.stream().anyMatch(ConstantOperator::isNull)) {
                         // (true and null) or (null and null)
-                        return ConstantOperator.createNull(Type.BOOLEAN);
+                        return ConstantOperator.createNull(StandardTypes.BOOLEAN);
                     }
                     // true and true
                     return ConstantOperator.createBoolean(true);
@@ -299,7 +300,7 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
                 } else if (constantChildren.size() == 2) {
                     if (constantChildren.stream().anyMatch(ConstantOperator::isNull)) {
                         // (false or null) or (null or null)
-                        return ConstantOperator.createNull(Type.BOOLEAN);
+                        return ConstantOperator.createNull(StandardTypes.BOOLEAN);
                     }
                     // false or false
                     return ConstantOperator.createBoolean(false);
@@ -422,7 +423,7 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
         }
 
         // make sure is string literal
-        if (rightOp.getType() != Type.VARCHAR && rightOp.getType() != Type.CHAR) {
+        if (rightOp.getType() != StandardTypes.VARCHAR && rightOp.getType() != StandardTypes.CHAR) {
             return predicate;
         }
 
@@ -439,7 +440,7 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
     private ScalarOperator simplifiedTimeFns(CallOperator call) {
         String fn = TIME_FNS.keySet().stream().filter(s -> call.getFnName().contains(s))
                 .findFirst().orElse("impossible");
-        if (!call.getChild(1).isConstantRef() || !Type.INT.equals(call.getChild(1).getType())) {
+        if (!call.getChild(1).isConstantRef() || !StandardTypes.INT.equals(call.getChild(1).getType())) {
             return call;
         }
         if (!(call.getChild(0) instanceof CallOperator)) {
@@ -450,7 +451,7 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
         if (!child.getFnName().contains(fn) || !TIME_FN_NAMES.contains(child.getFnName())) {
             return call;
         }
-        if (!child.getChild(1).isConstantRef() || !Type.INT.equals(child.getChild(1).getType())) {
+        if (!child.getChild(1).isConstantRef() || !StandardTypes.INT.equals(child.getChild(1).getType())) {
             return call;
         }
 
@@ -639,7 +640,7 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
                     return call;
                 }
                 ConstantOperator scale = (ConstantOperator) scaleOp;
-                if (!Type.INT.equals(scale.getType()) || scale.isNull()) {
+                if (!StandardTypes.INT.equals(scale.getType()) || scale.isNull()) {
                     return call;
                 }
                 int scaleVal = scale.getInt();
@@ -647,11 +648,11 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
                     unixtimeArgForHour = tsArg;
                 } else if (scaleVal == 3) {
                     // milliseconds -> seconds
-                    unixtimeArgForHour = new CallOperator(FunctionSet.DIVIDE, Type.BIGINT,
+                    unixtimeArgForHour = new CallOperator(FunctionSet.DIVIDE, StandardTypes.BIGINT,
                             Lists.newArrayList(tsArg, ConstantOperator.createInt(1000)), null);
                 } else if (scaleVal == 6) {
                     // microseconds -> seconds
-                    unixtimeArgForHour = new CallOperator(FunctionSet.DIVIDE, Type.BIGINT,
+                    unixtimeArgForHour = new CallOperator(FunctionSet.DIVIDE, StandardTypes.BIGINT,
                             Lists.newArrayList(tsArg, ConstantOperator.createInt(1_000_000)), null);
                 } else {
                     // Unsupported scale

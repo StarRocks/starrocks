@@ -43,6 +43,7 @@ import com.starrocks.sql.ast.expression.LargeIntLiteral;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
 import org.junit.jupiter.api.Assertions;
@@ -61,7 +62,7 @@ public class DecimalLiteralTest {
         BigDecimal decimal = new BigDecimal("-123456789123456789.123456789");
         DecimalLiteral literal = new DecimalLiteral(decimal);
 
-        ByteBuffer buffer = literal.getHashValue(Type.DECIMALV2);
+        ByteBuffer buffer = literal.getHashValue(StandardTypes.DECIMALV2);
         long longValue = buffer.getLong();
         int fracValue = buffer.getInt();
         System.out.println("long: " + longValue);
@@ -71,7 +72,7 @@ public class DecimalLiteralTest {
 
         // if DecimalLiteral need to cast to Decimal and Decimalv2, need to cast
         // to themselves
-        Assertions.assertEquals(literal, literal.uncheckedCastTo(Type.DECIMALV2));
+        Assertions.assertEquals(literal, literal.uncheckedCastTo(StandardTypes.DECIMALV2));
 
         Assertions.assertEquals(1, literal.compareLiteral(new NullLiteral()));
     }
@@ -95,7 +96,7 @@ public class DecimalLiteralTest {
         };
         for (String tc : testCases) {
             DecimalLiteral decimalLiteral = new DecimalLiteral(tc);
-            ByteBuffer a = decimalLiteral.getHashValue(Type.DECIMALV2);
+            ByteBuffer a = decimalLiteral.getHashValue(StandardTypes.DECIMALV2);
             ByteBuffer b = decimalLiteral.getHashValue(TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 27, 9));
             Assertions.assertEquals(a.limit(), 12);
             Assertions.assertEquals(a.limit(), b.limit());
@@ -126,7 +127,7 @@ public class DecimalLiteralTest {
             BigDecimal scaleFactor = new BigDecimal("1" + Strings.repeat("0", 10));
             BigInteger bigInt = decimalLiteral.getValue().multiply(scaleFactor).toBigInteger();
             LargeIntLiteral largeIntLiteral = new LargeIntLiteral(bigInt.toString());
-            ByteBuffer a = largeIntLiteral.getHashValue(Type.LARGEINT);
+            ByteBuffer a = largeIntLiteral.getHashValue(StandardTypes.LARGEINT);
             ByteBuffer b =
                     decimalLiteral.getHashValue(TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 30, 10));
             Assertions.assertEquals(a.limit(), 16);
@@ -158,7 +159,7 @@ public class DecimalLiteralTest {
             BigDecimal scaleFactor = new BigDecimal("1" + Strings.repeat("0", 5));
             long bigInt = decimalLiteral.getValue().multiply(scaleFactor).longValue();
             IntLiteral largeIntLiteral = new IntLiteral(bigInt);
-            ByteBuffer a = largeIntLiteral.getHashValue(Type.BIGINT);
+            ByteBuffer a = largeIntLiteral.getHashValue(StandardTypes.BIGINT);
             ByteBuffer b = decimalLiteral.getHashValue(TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 15, 5));
             Assertions.assertEquals(a.limit(), 8);
             Assertions.assertEquals(a.limit(), b.limit());
@@ -188,7 +189,7 @@ public class DecimalLiteralTest {
             BigDecimal scaleFactor = new BigDecimal("1" + Strings.repeat("0", 2));
             long bigInt = decimalLiteral.getValue().multiply(scaleFactor).intValue();
             IntLiteral intLiteral = new IntLiteral(bigInt);
-            ByteBuffer a = intLiteral.getHashValue(Type.INT);
+            ByteBuffer a = intLiteral.getHashValue(StandardTypes.INT);
             ByteBuffer b = decimalLiteral.getHashValue(TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL32, 7, 2));
             Assertions.assertEquals(a.limit(), 4);
             Assertions.assertEquals(a.limit(), b.limit());

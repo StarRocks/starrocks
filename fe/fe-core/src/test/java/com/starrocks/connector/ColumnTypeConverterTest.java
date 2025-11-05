@@ -23,6 +23,7 @@ import com.starrocks.type.ArrayType;
 import com.starrocks.type.MapType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
@@ -44,7 +45,7 @@ import static com.starrocks.connector.ColumnTypeConverter.fromPaimonType;
 import static com.starrocks.connector.ColumnTypeConverter.getPrecisionAndScale;
 import static com.starrocks.connector.ColumnTypeConverter.toHiveType;
 import static com.starrocks.type.ScalarType.CATALOG_MAX_VARCHAR_LENGTH;
-import static com.starrocks.type.Type.UNKNOWN_TYPE;
+import static com.starrocks.type.StandardTypes.UNKNOWN_TYPE;
 import static com.starrocks.type.TypeFactory.getOlapMaxVarcharLength;
 
 
@@ -310,10 +311,10 @@ public class ColumnTypeConverterTest {
         resType = ColumnTypeConverter.fromHiveType(typeStr);
         Assertions.assertEquals(resType, stringType);
 
-        Assertions.assertEquals("varchar(65535)", toHiveType(TypeFactory.createVarchar(HiveVarchar.MAX_VARCHAR_LENGTH)));
-        Assertions.assertEquals("varchar(65534)", toHiveType(TypeFactory.createVarchar(HiveVarchar.MAX_VARCHAR_LENGTH - 1)));
-        Assertions.assertEquals("string", toHiveType(TypeFactory.createVarchar(getOlapMaxVarcharLength())));
-        Assertions.assertEquals("string", toHiveType(TypeFactory.createVarchar(CATALOG_MAX_VARCHAR_LENGTH)));
+        Assertions.assertEquals("varchar(65535)", toHiveType(TypeFactory.createVarcharType(HiveVarchar.MAX_VARCHAR_LENGTH)));
+        Assertions.assertEquals("varchar(65534)", toHiveType(TypeFactory.createVarcharType(HiveVarchar.MAX_VARCHAR_LENGTH - 1)));
+        Assertions.assertEquals("string", toHiveType(TypeFactory.createVarcharType(getOlapMaxVarcharLength())));
+        Assertions.assertEquals("string", toHiveType(TypeFactory.createVarcharType(CATALOG_MAX_VARCHAR_LENGTH)));
     }
 
     @Test
@@ -398,16 +399,16 @@ public class ColumnTypeConverterTest {
 
     @Test
     public void testColumnEquals() {
-        Column base = new Column("k1", Type.INT, false);
-        Column other = new Column("k1", Type.INT, false);
+        Column base = new Column("k1", StandardTypes.INT, false);
+        Column other = new Column("k1", StandardTypes.INT, false);
 
         Assertions.assertTrue(columnEquals(base, base));
         Assertions.assertTrue(columnEquals(base, other));
 
-        other = new Column("k2", Type.INT, false);
+        other = new Column("k2", StandardTypes.INT, false);
         Assertions.assertFalse(columnEquals(base, other));
 
-        other = new Column("k1", Type.STRING, false);
+        other = new Column("k1", StandardTypes.STRING, false);
         Assertions.assertFalse(columnEquals(base, other));
 
         base = new Column("k1", TypeFactory.createCharType(5), false);
@@ -425,26 +426,26 @@ public class ColumnTypeConverterTest {
 
     @Test
     public void testSRTypeToHiveType() {
-        Assertions.assertEquals("tinyint", toHiveType(Type.TINYINT));
-        Assertions.assertEquals("smallint", toHiveType(Type.SMALLINT));
-        Assertions.assertEquals("int", toHiveType(Type.INT));
-        Assertions.assertEquals("bigint", toHiveType(Type.BIGINT));
-        Assertions.assertEquals("float", toHiveType(Type.FLOAT));
-        Assertions.assertEquals("double", toHiveType(Type.DOUBLE));
-        Assertions.assertEquals("boolean", toHiveType(Type.BOOLEAN));
-        Assertions.assertEquals("binary", toHiveType(Type.VARBINARY));
-        Assertions.assertEquals("date", toHiveType(Type.DATE));
-        Assertions.assertEquals("timestamp", toHiveType(Type.DATETIME));
+        Assertions.assertEquals("tinyint", toHiveType(StandardTypes.TINYINT));
+        Assertions.assertEquals("smallint", toHiveType(StandardTypes.SMALLINT));
+        Assertions.assertEquals("int", toHiveType(StandardTypes.INT));
+        Assertions.assertEquals("bigint", toHiveType(StandardTypes.BIGINT));
+        Assertions.assertEquals("float", toHiveType(StandardTypes.FLOAT));
+        Assertions.assertEquals("double", toHiveType(StandardTypes.DOUBLE));
+        Assertions.assertEquals("boolean", toHiveType(StandardTypes.BOOLEAN));
+        Assertions.assertEquals("binary", toHiveType(StandardTypes.VARBINARY));
+        Assertions.assertEquals("date", toHiveType(StandardTypes.DATE));
+        Assertions.assertEquals("timestamp", toHiveType(StandardTypes.DATETIME));
 
         Assertions.assertEquals("char(10)", toHiveType(TypeFactory.createCharType(10)));
         ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
                 "Unsupported Hive type: CHAR(10000). Supported CHAR types: CHAR(<=255)",
                 () -> toHiveType(TypeFactory.createCharType(10000)));
 
-        Assertions.assertEquals("varchar(100)", toHiveType(TypeFactory.createVarchar(100)));
+        Assertions.assertEquals("varchar(100)", toHiveType(TypeFactory.createVarcharType(100)));
         Assertions.assertEquals("string", toHiveType(TypeFactory.createVarcharType(200000)));
 
-        Assertions.assertEquals("string", toHiveType(TypeFactory.createVarchar(getOlapMaxVarcharLength())));
+        Assertions.assertEquals("string", toHiveType(TypeFactory.createVarcharType(getOlapMaxVarcharLength())));
 
         ScalarType itemType = TypeFactory.createType(PrimitiveType.DATE);
         ArrayType arrayType = new ArrayType(new ArrayType(itemType));

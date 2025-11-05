@@ -44,6 +44,7 @@ import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
 import com.starrocks.utframe.StarRocksAssert;
@@ -155,18 +156,18 @@ public class SetExecutorTest {
 
     @Test
     public void testUserDefineVariable() throws Exception {
-        testUserVariableImp(new IntLiteral(1, Type.TINYINT), Type.TINYINT);
-        testUserVariableImp(new IntLiteral(1, Type.TINYINT), Type.SMALLINT);
-        testUserVariableImp(new IntLiteral(1, Type.INT), Type.INT);
-        testUserVariableImp(new IntLiteral(1, Type.BIGINT), Type.BIGINT);
-        testUserVariableImp(new LargeIntLiteral("1"), Type.LARGEINT);
-        testUserVariableImp(new FloatLiteral(1D, Type.FLOAT), Type.FLOAT);
-        testUserVariableImp(new FloatLiteral(1D, Type.DOUBLE), Type.DOUBLE);
-        testUserVariableImp(new DateLiteral("2020-01-01", Type.DATE), Type.DATE);
-        testUserVariableImp(new DateLiteral("2020-01-01 00:00:00", Type.DATETIME), Type.DATETIME);
-        testUserVariableImp(new DecimalLiteral("1", Type.DECIMAL32_INT), Type.DECIMAL32_INT);
-        testUserVariableImp(new DecimalLiteral("1", Type.DECIMAL64_INT), Type.DECIMAL64_INT);
-        testUserVariableImp(new DecimalLiteral("1", Type.DECIMAL128_INT), Type.DECIMAL128_INT);
+        testUserVariableImp(new IntLiteral(1, StandardTypes.TINYINT), StandardTypes.TINYINT);
+        testUserVariableImp(new IntLiteral(1, StandardTypes.TINYINT), StandardTypes.SMALLINT);
+        testUserVariableImp(new IntLiteral(1, StandardTypes.INT), StandardTypes.INT);
+        testUserVariableImp(new IntLiteral(1, StandardTypes.BIGINT), StandardTypes.BIGINT);
+        testUserVariableImp(new LargeIntLiteral("1"), StandardTypes.LARGEINT);
+        testUserVariableImp(new FloatLiteral(1D, StandardTypes.FLOAT), StandardTypes.FLOAT);
+        testUserVariableImp(new FloatLiteral(1D, StandardTypes.DOUBLE), StandardTypes.DOUBLE);
+        testUserVariableImp(new DateLiteral("2020-01-01", StandardTypes.DATE), StandardTypes.DATE);
+        testUserVariableImp(new DateLiteral("2020-01-01 00:00:00", StandardTypes.DATETIME), StandardTypes.DATETIME);
+        testUserVariableImp(new DecimalLiteral("1", StandardTypes.DECIMAL32_INT), StandardTypes.DECIMAL32_INT);
+        testUserVariableImp(new DecimalLiteral("1", StandardTypes.DECIMAL64_INT), StandardTypes.DECIMAL64_INT);
+        testUserVariableImp(new DecimalLiteral("1", StandardTypes.DECIMAL128_INT), StandardTypes.DECIMAL128_INT);
         testUserVariableImp(new StringLiteral("xxx"), TypeFactory.createVarcharType(10));
     }
 
@@ -211,9 +212,9 @@ public class SetExecutorTest {
         UserVariable userVariableA = ctx.getUserVariable("aVar");
         UserVariable userVariableB = ctx.getUserVariable("bVar");
         UserVariable userVariableC = ctx.getUserVariable("cVar");
-        Assertions.assertTrue(userVariableA.getEvaluatedExpression().getType().matchesType(Type.TINYINT));
-        Assertions.assertTrue(userVariableB.getEvaluatedExpression().getType().matchesType(Type.SMALLINT));
-        Assertions.assertTrue(userVariableC.getEvaluatedExpression().getType().matchesType(Type.INT));
+        Assertions.assertTrue(userVariableA.getEvaluatedExpression().getType().matchesType(StandardTypes.TINYINT));
+        Assertions.assertTrue(userVariableB.getEvaluatedExpression().getType().matchesType(StandardTypes.SMALLINT));
+        Assertions.assertTrue(userVariableC.getEvaluatedExpression().getType().matchesType(StandardTypes.INT));
 
         LiteralExpr literalExprA = (LiteralExpr) userVariableA.getEvaluatedExpression();
         Assertions.assertEquals("5", literalExprA.getStringValue());
@@ -231,9 +232,9 @@ public class SetExecutorTest {
         userVariableA = ctx.getUserVariable("aVar");
         userVariableB = ctx.getUserVariable("bVar");
         userVariableC = ctx.getUserVariable("cVar");
-        Assertions.assertTrue(userVariableA.getEvaluatedExpression().getType().matchesType(Type.TINYINT));
-        Assertions.assertTrue(userVariableB.getEvaluatedExpression().getType().matchesType(Type.SMALLINT));
-        Assertions.assertTrue(userVariableC.getEvaluatedExpression().getType().matchesType(Type.INT));
+        Assertions.assertTrue(userVariableA.getEvaluatedExpression().getType().matchesType(StandardTypes.TINYINT));
+        Assertions.assertTrue(userVariableB.getEvaluatedExpression().getType().matchesType(StandardTypes.SMALLINT));
+        Assertions.assertTrue(userVariableC.getEvaluatedExpression().getType().matchesType(StandardTypes.INT));
         literalExprA = (LiteralExpr) userVariableA.getEvaluatedExpression();
         Assertions.assertEquals("6", literalExprA.getStringValue());
 
@@ -251,8 +252,8 @@ public class SetExecutorTest {
         userVariableA = ctx.getUserVariable("aVar");
         userVariableB = ctx.getUserVariable("bVar");
         userVariableC = ctx.getUserVariable("cVar");
-        Assertions.assertTrue(userVariableA.getEvaluatedExpression().getType().matchesType(Type.TINYINT));
-        Assertions.assertTrue(userVariableB.getEvaluatedExpression().getType().matchesType(Type.SMALLINT));
+        Assertions.assertTrue(userVariableA.getEvaluatedExpression().getType().matchesType(StandardTypes.TINYINT));
+        Assertions.assertTrue(userVariableB.getEvaluatedExpression().getType().matchesType(StandardTypes.SMALLINT));
         Assertions.assertTrue(userVariableC.getEvaluatedExpression() instanceof NullLiteral);
 
         literalExprA = (LiteralExpr) userVariableA.getEvaluatedExpression();
@@ -297,7 +298,7 @@ public class SetExecutorTest {
     @Test
     public void testJSONVariable() throws Exception {
         String json = "'{\"xxx\" : 1}'";
-        Type type = Type.JSON;
+        Type type = StandardTypes.JSON;
         String sql = String.format("set @var = cast(%s as %s)", json, type.toSql());
         UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
     }

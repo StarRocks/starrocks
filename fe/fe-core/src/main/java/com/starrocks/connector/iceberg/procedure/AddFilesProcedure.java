@@ -49,7 +49,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.OptExternalPartitionPruner;
 import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
-import com.starrocks.type.Type;
+import com.starrocks.type.StandardTypes;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -108,10 +108,10 @@ public class AddFilesProcedure extends IcebergTableProcedure {
         super(
                 PROCEDURE_NAME,
                 List.of(
-                        new NamedArgument(SOURCE_TABLE, Type.VARCHAR, false),
-                        new NamedArgument(LOCATION, Type.VARCHAR, false),
-                        new NamedArgument(FILE_FORMAT, Type.VARCHAR, false),
-                        new NamedArgument(RECURSIVE, Type.BOOLEAN, false)
+                        new NamedArgument(SOURCE_TABLE, StandardTypes.VARCHAR, false),
+                        new NamedArgument(LOCATION, StandardTypes.VARCHAR, false),
+                        new NamedArgument(FILE_FORMAT, StandardTypes.VARCHAR, false),
+                        new NamedArgument(RECURSIVE, StandardTypes.BOOLEAN, false)
                 ),
                 IcebergTableOperation.ADD_FILES
         );

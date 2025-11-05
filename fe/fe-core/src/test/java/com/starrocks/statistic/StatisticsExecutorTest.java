@@ -40,7 +40,7 @@ import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TStatisticData;
-import com.starrocks.type.Type;
+import com.starrocks.type.StandardTypes;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -238,7 +238,7 @@ public class StatisticsExecutorTest extends PlanTestBase {
         Table table = HiveTable.builder().setTableName("test_table").build();
         StatisticsCollectJob statisticsCollectJob = new ExternalFullStatisticsCollectJob("test_catalog",
                 database, table, List.of(), Lists.newArrayList("col1", "col2"),
-                Lists.newArrayList(Type.INT, Type.INT),
+                Lists.newArrayList(StandardTypes.INT, StandardTypes.INT),
                 StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.ONCE, Maps.newHashMap());
 
         new MockUp<ExternalFullStatisticsCollectJob>() {
@@ -263,7 +263,7 @@ public class StatisticsExecutorTest extends PlanTestBase {
                 StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), LocalDateTime.MIN);
         statisticsCollectJob = new ExternalFullStatisticsCollectJob("test_catalog",
                 database, table, List.of(), Lists.newArrayList("col1", "col3"),
-                Lists.newArrayList(Type.INT, Type.STRING),
+                Lists.newArrayList(StandardTypes.INT, StandardTypes.STRING),
                 StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.ONCE, Maps.newHashMap());
         statisticExecutor.collectStatistics(connectContext, statisticsCollectJob, status, false,
                 true /* resetWarehouse */);

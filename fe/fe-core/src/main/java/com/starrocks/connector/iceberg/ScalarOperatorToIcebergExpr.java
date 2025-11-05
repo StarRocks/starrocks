@@ -36,6 +36,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.TypeFactory;
 import org.apache.iceberg.exceptions.ValidationException;
 import org.apache.iceberg.expressions.Binder;
@@ -346,13 +347,13 @@ public class ScalarOperatorToIcebergExpr {
             Optional<ConstantOperator> res = Optional.empty();
             switch (resultTypeID) {
                 case BOOLEAN:
-                    res = operator.castTo(com.starrocks.type.Type.BOOLEAN);
+                    res = operator.castTo(StandardTypes.BOOLEAN);
                     break;
                 case DATE:
-                    res = operator.castTo(com.starrocks.type.Type.DATE);
+                    res = operator.castTo(StandardTypes.DATE);
                     break;
                 case TIMESTAMP:
-                    res = operator.castTo(com.starrocks.type.Type.DATETIME);
+                    res = operator.castTo(StandardTypes.DATETIME);
                     break;
                 case STRING:
                 case UUID:
@@ -360,11 +361,11 @@ public class ScalarOperatorToIcebergExpr {
                     if (operator.getType().isNumericType()) {
                         return null;
                     } else {
-                        res = operator.castTo(com.starrocks.type.Type.VARCHAR);
+                        res = operator.castTo(StandardTypes.VARCHAR);
                     }
                     break;
                 case BINARY:
-                    res = operator.castTo(com.starrocks.type.Type.VARBINARY);
+                    res = operator.castTo(StandardTypes.VARBINARY);
                     break;
                     // num usually don't need cast, and num and string has different comparator
                     // cast is dangerous.

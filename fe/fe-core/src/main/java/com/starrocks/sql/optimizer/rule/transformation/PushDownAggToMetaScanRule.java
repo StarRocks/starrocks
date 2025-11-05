@@ -36,6 +36,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.rule.tree.JsonPathRewriteRule;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.Type;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.MapUtils;
@@ -129,7 +130,7 @@ public class PushDownAggToMetaScanRule extends TransformationRule {
             // DictMerge meta aggregate function is special, need change the column type from
             // VARCHAR to ARRAY_VARCHAR
             if (aggCall.getFnName().equals(FunctionSet.DICT_MERGE)) {
-                columnType = Type.ARRAY_VARCHAR;
+                columnType = StandardTypes.ARRAY_VARCHAR;
             }
 
             ColumnRefOperator metaColumn = columnRefFactory.create(metaColumnName, columnType, true);
@@ -142,7 +143,7 @@ public class PushDownAggToMetaScanRule extends TransformationRule {
                     || aggCall.getFnName().equals(FunctionSet.COLUMN_COMPRESSED_SIZE)) {
                 // this variable is introduced to solve compatibility issues,
                 // see more details in the description of https://github.com/StarRocks/starrocks/pull/17619
-                copiedColumn.setType(Type.BIGINT);
+                copiedColumn.setType(StandardTypes.BIGINT);
             }
             copiedColumn.setIsAllowNull(true);
             newScanColumnRefs.put(metaColumn, copiedColumn);
@@ -151,7 +152,7 @@ public class PushDownAggToMetaScanRule extends TransformationRule {
             // VARCHAR to ARRAY_VARCHAR
             if (aggCall.getFnName().equals(FunctionSet.DICT_MERGE)) {
                 Function aggFunction = ExprUtils.getBuiltinFunction(aggCall.getFnName(),
-                        new Type[] {Type.ARRAY_VARCHAR, Type.INT}, Function.CompareMode.IS_IDENTICAL);
+                        new Type[] {StandardTypes.ARRAY_VARCHAR, StandardTypes.INT}, Function.CompareMode.IS_IDENTICAL);
 
                 newAggCalls.put(kv.getKey(),
                         new CallOperator(aggCall.getFnName(), aggCall.getType(),
@@ -160,10 +161,10 @@ public class PushDownAggToMetaScanRule extends TransformationRule {
                     || aggCall.getFnName().equals(FunctionSet.COLUMN_SIZE)
                     || aggCall.getFnName().equals(FunctionSet.COLUMN_COMPRESSED_SIZE)) {
                 // rewrite count to sum
-                Function aggFunction = ExprUtils.getBuiltinFunction(FunctionSet.SUM, new Type[] {Type.BIGINT},
+                Function aggFunction = ExprUtils.getBuiltinFunction(FunctionSet.SUM, new Type[] {StandardTypes.BIGINT},
                         Function.CompareMode.IS_IDENTICAL);
                 newAggCalls.put(kv.getKey(),
-                        new CallOperator(FunctionSet.SUM, Type.BIGINT, List.of(metaColumn), aggFunction));
+                        new CallOperator(FunctionSet.SUM, StandardTypes.BIGINT, List.of(metaColumn), aggFunction));
             } else {
                 newAggCalls.put(kv.getKey(),
                         new CallOperator(aggCall.getFnName(), aggCall.getType(), List.of(metaColumn),

@@ -67,7 +67,7 @@ import com.starrocks.thrift.TTabletLocation;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWriteQuorumType;
-import com.starrocks.type.Type;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.TypeFactory;
 import com.starrocks.utframe.MockedWarehouseManager;
 import com.starrocks.utframe.UtFrameUtils;
@@ -101,20 +101,20 @@ public class OlapTableSinkTest {
         TupleDescriptor tuple = descTable.createTupleDescriptor("DstTable");
         // k1
         SlotDescriptor k1 = descTable.addSlotDescriptor(tuple);
-        k1.setColumn(new Column("k1", Type.BIGINT));
+        k1.setColumn(new Column("k1", StandardTypes.BIGINT));
         k1.setIsMaterialized(true);
 
         // k2
         SlotDescriptor k2 = descTable.addSlotDescriptor(tuple);
-        k2.setColumn(new Column("k2", TypeFactory.createVarchar(25)));
+        k2.setColumn(new Column("k2", TypeFactory.createVarcharType(25)));
         k2.setIsMaterialized(true);
         // v1
         SlotDescriptor v1 = descTable.addSlotDescriptor(tuple);
-        v1.setColumn(new Column("v1", TypeFactory.createVarchar(25)));
+        v1.setColumn(new Column("v1", TypeFactory.createVarcharType(25)));
         v1.setIsMaterialized(true);
         // v2
         SlotDescriptor v2 = descTable.addSlotDescriptor(tuple);
-        v2.setColumn(new Column("v2", Type.BIGINT));
+        v2.setColumn(new Column("v2", StandardTypes.BIGINT));
         v2.setIsMaterialized(true);
 
         return tuple;
@@ -132,7 +132,7 @@ public class OlapTableSinkTest {
         partInfo.setReplicationNum(2, (short) 3);
         MaterializedIndex index = new MaterializedIndex(2, MaterializedIndex.IndexState.NORMAL);
         HashDistributionInfo distInfo = new HashDistributionInfo(
-                2, Lists.newArrayList(new Column("k1", Type.BIGINT)));
+                2, Lists.newArrayList(new Column("k1", StandardTypes.BIGINT)));
         Partition partition = new Partition(2, 22, "p1", index, distInfo);
 
         new Expectations() {
@@ -163,9 +163,9 @@ public class OlapTableSinkTest {
         TupleDescriptor tuple = getTuple();
 
         HashDistributionInfo distInfo = new HashDistributionInfo(
-                2, Lists.newArrayList(new Column("k1", Type.BIGINT)));
+                2, Lists.newArrayList(new Column("k1", StandardTypes.BIGINT)));
 
-        Column partKey = new Column("k2", Type.VARCHAR);
+        Column partKey = new Column("k2", StandardTypes.VARCHAR);
         PartitionKey key = PartitionKey
                 .createPartitionKey(Lists.newArrayList(new PartitionValue("123")), Lists.newArrayList(partKey));
         Partition p1 = new Partition(1, 21, "p1", index, distInfo);
@@ -238,10 +238,10 @@ public class OlapTableSinkTest {
 
         // Columns
         List<Column> columns = new ArrayList<Column>();
-        Column k1 = new Column("k1", Type.INT, true, null, "", "");
+        Column k1 = new Column("k1", StandardTypes.INT, true, null, "", "");
         columns.add(k1);
-        columns.add(new Column("k2", Type.BIGINT, true, null, "", ""));
-        columns.add(new Column("v", Type.BIGINT, false, AggregateType.SUM, "0", ""));
+        columns.add(new Column("k2", StandardTypes.BIGINT, true, null, "", ""));
+        columns.add(new Column("v", StandardTypes.BIGINT, false, AggregateType.SUM, "0", ""));
 
         // Replica
         Replica replica1 = new Replica(replicaId, backendId, Replica.ReplicaState.NORMAL, 1, 0);
@@ -342,10 +342,10 @@ public class OlapTableSinkTest {
 
         // Columns
         List<Column> columns = new ArrayList<Column>();
-        Column k1 = new Column("k1", Type.INT, true, null, "", "");
+        Column k1 = new Column("k1", StandardTypes.INT, true, null, "", "");
         columns.add(k1);
-        columns.add(new Column("k2", Type.BIGINT, true, null, "", ""));
-        columns.add(new Column("v", Type.BIGINT, false, AggregateType.SUM, "0", ""));
+        columns.add(new Column("k2", StandardTypes.BIGINT, true, null, "", ""));
+        columns.add(new Column("v", StandardTypes.BIGINT, false, AggregateType.SUM, "0", ""));
 
         MaterializedIndex index = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
 
@@ -427,16 +427,16 @@ public class OlapTableSinkTest {
     public void testSingleListPartition() throws StarRocksException {
         TupleDescriptor tuple = getTuple();
         ListPartitionInfo listPartitionInfo = new ListPartitionInfo(PartitionType.LIST,
-                Lists.newArrayList(new Column("province", Type.STRING)));
+                Lists.newArrayList(new Column("province", StandardTypes.STRING)));
         listPartitionInfo.setValues(1, Lists.newArrayList("beijing", "shanghai"));
         listPartitionInfo.setReplicationNum(1, (short) 3);
         MaterializedIndex index = new MaterializedIndex(1, MaterializedIndex.IndexState.NORMAL);
         HashDistributionInfo distInfo = new HashDistributionInfo(
-                3, Lists.newArrayList(new Column("id", Type.BIGINT)));
+                3, Lists.newArrayList(new Column("id", StandardTypes.BIGINT)));
         Partition partition = new Partition(1, 11, "p1", index, distInfo);
 
         Map<ColumnId, Column> idToColumn = Maps.newTreeMap(ColumnId.CASE_INSENSITIVE_ORDER);
-        idToColumn.put(ColumnId.create("province"), new Column("province", Type.STRING));
+        idToColumn.put(ColumnId.create("province"), new Column("province", StandardTypes.STRING));
 
         new Expectations() {
             {
@@ -703,7 +703,7 @@ public class OlapTableSinkTest {
 
         // Columns
         List<Column> columns = new ArrayList<Column>();
-        Column k1 = new Column("k1", Type.INT, true, null, "", "");
+        Column k1 = new Column("k1", StandardTypes.INT, true, null, "", "");
         columns.add(k1);
 
         LakeTablet tablet = new LakeTablet(tabletId);

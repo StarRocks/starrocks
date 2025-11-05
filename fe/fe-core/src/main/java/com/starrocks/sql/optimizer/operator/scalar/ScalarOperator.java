@@ -20,6 +20,7 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.Type;
 
 import java.util.Collections;
@@ -289,12 +290,12 @@ public abstract class ScalarOperator implements Cloneable {
     }
 
     public boolean isConstantFalse() {
-        return this instanceof ConstantOperator && this.getType() == Type.BOOLEAN &&
+        return this instanceof ConstantOperator && this.getType() == StandardTypes.BOOLEAN &&
                 !((ConstantOperator) this).getBoolean();
     }
 
     public boolean isConstantTrue() {
-        return this instanceof ConstantOperator && this.getType() == Type.BOOLEAN &&
+        return this instanceof ConstantOperator && this.getType() == StandardTypes.BOOLEAN &&
                 ((ConstantOperator) this).getBoolean();
     }
 

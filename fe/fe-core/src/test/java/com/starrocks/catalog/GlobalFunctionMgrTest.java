@@ -23,6 +23,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.expression.FunctionName;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.Type;
 import mockit.Mock;
 import mockit.MockUp;
@@ -52,8 +53,8 @@ public class GlobalFunctionMgrTest {
     public void testReplayAddAndDropFunction() {
         FunctionName name = new FunctionName(null, "addIntInt");
         name.setAsGlobalFunction();
-        final Type[] argTypes = {Type.INT, Type.INT};
-        Function f = new Function(name, argTypes, Type.INT, false);
+        final Type[] argTypes = {StandardTypes.INT, StandardTypes.INT};
+        Function f = new Function(name, argTypes, StandardTypes.INT, false);
 
         // add global udf function.
         globalFunctionMgr.replayAddFunction(f);
@@ -70,14 +71,14 @@ public class GlobalFunctionMgrTest {
         // User adds addIntInt UDF
         FunctionName name = new FunctionName(null, "addIntInt");
         name.setAsGlobalFunction();
-        final Type[] argTypes = {Type.INT, Type.INT};
-        Function f = new Function(name, argTypes, Type.INT, false);
+        final Type[] argTypes = {StandardTypes.INT, StandardTypes.INT};
+        Function f = new Function(name, argTypes, StandardTypes.INT, false);
         globalFunctionMgr.userAddFunction(f, false, false);
         // User adds addDoubleDouble UDF
         FunctionName name2 = new FunctionName(null, "addDoubleDouble");
         name2.setAsGlobalFunction();
-        final Type[] argTypes2 = {Type.DOUBLE, Type.DOUBLE};
-        Function f2 = new Function(name2, argTypes2, Type.DOUBLE, false);
+        final Type[] argTypes2 = {StandardTypes.DOUBLE, StandardTypes.DOUBLE};
+        Function f2 = new Function(name2, argTypes2, StandardTypes.DOUBLE, false);
         globalFunctionMgr.userAddFunction(f2, false, false);
     }
 
@@ -85,8 +86,8 @@ public class GlobalFunctionMgrTest {
     public void testUserAddFunctionGivenFunctionAlreadyExists() throws StarRocksException {
         FunctionName name = new FunctionName(null, "addIntInt");
         name.setAsGlobalFunction();
-        final Type[] argTypes = {Type.INT, Type.INT};
-        Function f = new Function(name, argTypes, Type.INT, false);
+        final Type[] argTypes = {StandardTypes.INT, StandardTypes.INT};
+        Function f = new Function(name, argTypes, StandardTypes.INT, false);
 
         // Add the UDF for the first time
         globalFunctionMgr.userAddFunction(f, false, false);
@@ -99,8 +100,8 @@ public class GlobalFunctionMgrTest {
     public void testUserAddFunctionGivenUdfAlreadyExistsAndAllowExisting() throws StarRocksException {
         FunctionName name = new FunctionName(null, "addIntInt");
         name.setAsGlobalFunction();
-        final Type[] argTypes = {Type.INT, Type.INT};
-        Function f = new Function(name, argTypes, Type.INT, false);
+        final Type[] argTypes = {StandardTypes.INT, StandardTypes.INT};
+        Function f = new Function(name, argTypes, StandardTypes.INT, false);
 
         // Add the UDF for the first time
         globalFunctionMgr.userAddFunction(f, true, false);
@@ -119,16 +120,16 @@ public class GlobalFunctionMgrTest {
         FunctionName name = new FunctionName(null, "process");
         name.setAsGlobalFunction();
 
-        final Type[] varcharArgs = {Type.VARCHAR};
-        Function varcharFunc = new Function(name, varcharArgs, Type.VARCHAR, false);
+        final Type[] varcharArgs = {StandardTypes.VARCHAR};
+        Function varcharFunc = new Function(name, varcharArgs, StandardTypes.VARCHAR, false);
         globalFunctionMgr.userAddFunction(varcharFunc, false, false);
 
-        final Type[] intArgs = {Type.INT};
-        Function intFunc = new Function(name, intArgs, Type.INT, false);
+        final Type[] intArgs = {StandardTypes.INT};
+        Function intFunc = new Function(name, intArgs, StandardTypes.INT, false);
         globalFunctionMgr.userAddFunction(intFunc, false, false);
 
-        final Type[] doubleArgs = {Type.DOUBLE};
-        Function doubleFunc = new Function(name, doubleArgs, Type.DOUBLE, false);
+        final Type[] doubleArgs = {StandardTypes.DOUBLE};
+        Function doubleFunc = new Function(name, doubleArgs, StandardTypes.DOUBLE, false);
         globalFunctionMgr.userAddFunction(doubleFunc, false, false);
 
         List<Function> functions = globalFunctionMgr.getFunctions();

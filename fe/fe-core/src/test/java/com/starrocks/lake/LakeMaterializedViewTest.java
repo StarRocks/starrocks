@@ -62,7 +62,7 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
-import com.starrocks.type.Type;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.StarRocksTestBase;
 import com.starrocks.utframe.UtFrameUtils;
@@ -136,10 +136,10 @@ public class LakeMaterializedViewTest extends StarRocksTestBase {
 
         // Schema
         List<Column> columns = Lists.newArrayList();
-        Column k1 = new Column("k1", Type.INT, true, null, "", "");
+        Column k1 = new Column("k1", StandardTypes.INT, true, null, "", "");
         columns.add(k1);
-        columns.add(new Column("k2", Type.BIGINT, true, null, "", ""));
-        columns.add(new Column("v", Type.BIGINT, false, AggregateType.SUM, "0", ""));
+        columns.add(new Column("k2", StandardTypes.BIGINT, true, null, "", ""));
+        columns.add(new Column("v", StandardTypes.BIGINT, false, AggregateType.SUM, "0", ""));
 
         // Tablet
         Tablet tablet1 = new LakeTablet(tablet1Id);
@@ -406,11 +406,11 @@ public class LakeMaterializedViewTest extends StarRocksTestBase {
 
         // schema
         List<Column> columns = Lists.newArrayList();
-        Column k1 = new Column("k1", Type.DATE, true, null, "", "");
+        Column k1 = new Column("k1", StandardTypes.DATE, true, null, "", "");
         columns.add(k1);
-        Column k2 = new Column("k2", Type.BIGINT, true, null, "", "");
+        Column k2 = new Column("k2", StandardTypes.BIGINT, true, null, "", "");
         columns.add(k2);
-        columns.add(new Column("v", Type.BIGINT, false, AggregateType.SUM, "0", ""));
+        columns.add(new Column("v", StandardTypes.BIGINT, false, AggregateType.SUM, "0", ""));
 
         DistributionInfo distributionInfo = new HashDistributionInfo(10, Lists.newArrayList(k2));
         RangePartitionInfo partitionInfo = new RangePartitionInfo(Lists.newArrayList(k1));

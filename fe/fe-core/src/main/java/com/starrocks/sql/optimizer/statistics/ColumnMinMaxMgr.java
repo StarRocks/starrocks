@@ -42,6 +42,7 @@ import com.starrocks.sql.optimizer.rule.tree.prunesubfield.SubfieldAccessPathNor
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.thrift.TResultBatch;
 import com.starrocks.thrift.TResultSinkType;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.Type;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -133,11 +134,11 @@ public class ColumnMinMaxMgr implements IMinMaxStatsMgr, MemoryTrackable {
             String path = pieces.stream().skip(1).collect(Collectors.joining("."));
             String jsonFunc;
             Type type = column.getType();
-            if (type.equals(Type.BIGINT)) {
+            if (type.equals(StandardTypes.BIGINT)) {
                 jsonFunc = "get_json_int";
             } else if (type.isStringType()) {
                 jsonFunc = "get_json_string";
-            } else if (type.equals(Type.DOUBLE)) {
+            } else if (type.equals(StandardTypes.DOUBLE)) {
                 jsonFunc = "get_json_double";
             } else {
                 throw new IllegalStateException("unsupported json field type: " + column.getType());

@@ -24,7 +24,7 @@ import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.type.Type;
+import com.starrocks.type.StandardTypes;
 import org.apache.kudu.Schema;
 import org.apache.kudu.client.KuduPredicate;
 import org.junit.jupiter.api.Assertions;
@@ -46,12 +46,12 @@ public class KuduPredicateConverterTest {
             genColumnSchema("f4", org.apache.kudu.Type.UNIXTIME_MICROS)
     ));
 
-    private static final ColumnRefOperator F0 = new ColumnRefOperator(0, Type.INT, "f0", true, false);
-    private static final ColumnRefOperator F1 = new ColumnRefOperator(0, Type.VARCHAR, "f1", true, false);
-    private static final ColumnRefOperator F3 = new ColumnRefOperator(0, Type.DATE, "f3", true, false);
-    private static final ColumnRefOperator F4 = new ColumnRefOperator(0, Type.DATETIME, "f4", true, false);
+    private static final ColumnRefOperator F0 = new ColumnRefOperator(0, StandardTypes.INT, "f0", true, false);
+    private static final ColumnRefOperator F1 = new ColumnRefOperator(0, StandardTypes.VARCHAR, "f1", true, false);
+    private static final ColumnRefOperator F3 = new ColumnRefOperator(0, StandardTypes.DATE, "f3", true, false);
+    private static final ColumnRefOperator F4 = new ColumnRefOperator(0, StandardTypes.DATETIME, "f4", true, false);
     private static final CastOperator F0_CAST = new CastOperator(
-            Type.VARCHAR, new ColumnRefOperator(0, Type.INT, "f0", true, false));
+            StandardTypes.VARCHAR, new ColumnRefOperator(0, StandardTypes.INT, "f0", true, false));
 
     private static final KuduPredicateConverter CONVERTER = new KuduPredicateConverter(SCHEMA);
 

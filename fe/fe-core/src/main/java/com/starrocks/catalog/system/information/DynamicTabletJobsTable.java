@@ -33,17 +33,17 @@ public class DynamicTabletJobsTable {
                 builder()
                         .column("JOB_ID", TypeFactory.createType(PrimitiveType.BIGINT))
                         .column("DB_ID", TypeFactory.createType(PrimitiveType.BIGINT))
-                        .column("DB_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("DB_NAME", TypeFactory.createVarcharType(NAME_CHAR_LEN))
                         .column("TABLE_ID", TypeFactory.createType(PrimitiveType.BIGINT))
-                        .column("TABLE_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("JOB_TYPE", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("JOB_STATE", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("TABLE_NAME", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("JOB_TYPE", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("JOB_STATE", TypeFactory.createVarcharType(NAME_CHAR_LEN))
                         .column("TRANSACTION_ID", TypeFactory.createType(PrimitiveType.BIGINT))
                         .column("PARALLEL_PARTITIONS", TypeFactory.createType(PrimitiveType.BIGINT))
                         .column("PARALLEL_TABLETS", TypeFactory.createType(PrimitiveType.BIGINT))
                         .column("CREATED_TIME", TypeFactory.createType(PrimitiveType.DATETIME))
                         .column("FINISHED_TIME", TypeFactory.createType(PrimitiveType.DATETIME))
-                        .column("ERROR_MESSAGE", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("ERROR_MESSAGE", TypeFactory.createVarcharType(NAME_CHAR_LEN))
                         .build(), TSchemaTableType.SCH_DYNAMIC_TABLET_JOBS);
     }
 }

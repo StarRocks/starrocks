@@ -30,7 +30,7 @@ import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.Type;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -71,15 +71,15 @@ public class ListPartitionDescTest {
     }
 
     private List<Column> findColumnList() {
-        Column id = new Column("id", Type.BIGINT);
+        Column id = new Column("id", StandardTypes.BIGINT);
         id.setAggregationType(AggregateType.NONE, false);
-        Column userId = new Column("user_id", Type.BIGINT);
+        Column userId = new Column("user_id", StandardTypes.BIGINT);
         userId.setAggregationType(AggregateType.NONE, false);
-        Column rechargeMoney = new Column("recharge_money", Type.DECIMAL32);
+        Column rechargeMoney = new Column("recharge_money", StandardTypes.DECIMAL32);
         rechargeMoney.setAggregationType(AggregateType.NONE, false);
-        Column province = new Column("province", Type.VARCHAR);
+        Column province = new Column("province", StandardTypes.VARCHAR);
         province.setAggregationType(AggregateType.NONE, false);
-        Column dt = new Column("dt", Type.DATE);
+        Column dt = new Column("dt", StandardTypes.DATE);
         dt.setAggregationType(AggregateType.NONE, false);
         return Lists.newArrayList(id, userId, rechargeMoney, province, dt);
     }

@@ -32,7 +32,7 @@ import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TDataSinkType;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.THiveTableSink;
-import com.starrocks.type.Type;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -68,7 +68,7 @@ public class HiveTableSinkTest {
                 .setHiveTableName("hive_table")
                 .setPartitionColumnNames(Lists.newArrayList("p1"))
                 .setDataColumnNames(Lists.newArrayList("c1"))
-                .setFullSchema(Lists.newArrayList(new Column("c1", Type.INT), new Column("p1", Type.INT)))
+                .setFullSchema(Lists.newArrayList(new Column("c1", StandardTypes.INT), new Column("p1", StandardTypes.INT)))
                 .setTableLocation("hdfs://hadoop01:9000/tableLocation")
                 .setProperties(new HashMap<>())
                 .setStorageFormat(HiveStorageFormat.PARQUET)

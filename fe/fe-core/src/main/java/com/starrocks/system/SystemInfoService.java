@@ -389,7 +389,7 @@ public class SystemInfoService implements GsonPostProcessable {
             opMessage = String.format(formatSb.toString(), willBeModifiedHost, backend.getHeartbeatPort(), fqdn);
         }
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
-        builder.addColumn(new Column("Message", TypeFactory.createVarchar(1024)));
+        builder.addColumn(new Column("Message", TypeFactory.createVarcharType(1024)));
         List<List<String>> messageResult = new ArrayList<>();
         messageResult.add(Collections.singletonList(opMessage));
         return new ShowResultSet(builder.build(), messageResult);
@@ -407,7 +407,7 @@ public class SystemInfoService implements GsonPostProcessable {
         }
 
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
-        builder.addColumn(new Column("Message", TypeFactory.createVarchar(1024)));
+        builder.addColumn(new Column("Message", TypeFactory.createVarcharType(1024)));
         List<List<String>> messageResult = new ArrayList<>();
 
         // update backend based on properties

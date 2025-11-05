@@ -32,7 +32,7 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.sql.ast.expression.IntLiteral;
-import com.starrocks.type.Type;
+import com.starrocks.type.StandardTypes;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import org.apache.logging.log4j.LogManager;
@@ -266,8 +266,8 @@ public class JDBCMetadata implements ConnectorMetadata {
                     }
                 });
 
-        String maxInt = IntLiteral.createMaxValue(Type.INT).getStringValue();
-        String maxDate = DateLiteral.createMaxValue(Type.DATE).getStringValue();
+        String maxInt = IntLiteral.createMaxValue(StandardTypes.INT).getStringValue();
+        String maxDate = DateLiteral.createMaxValue(StandardTypes.DATE).getStringValue();
 
         ImmutableList.Builder<PartitionInfo> list = ImmutableList.builder();
         if (partitions.isEmpty()) {

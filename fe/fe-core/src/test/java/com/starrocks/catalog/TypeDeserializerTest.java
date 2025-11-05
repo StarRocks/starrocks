@@ -29,6 +29,7 @@ import com.starrocks.type.ArrayType;
 import com.starrocks.type.MapType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
@@ -747,19 +748,19 @@ public class TypeDeserializerTest {
     public void testThriftSerializationRoundTrip() {
         // Test round trip for various types
         Type[] testTypes = {
-                Type.BOOLEAN,
-                Type.INT,
-                Type.BIGINT,
-                Type.DOUBLE,
+                StandardTypes.BOOLEAN,
+                StandardTypes.INT,
+                StandardTypes.BIGINT,
+                StandardTypes.DOUBLE,
                 TypeFactory.createVarcharType(255), // Use explicit length for VARCHAR
                 TypeFactory.createCharType(10),
                 TypeFactory.createVarcharType(255),
                 TypeFactory.createDecimalV2Type(10, 4),
                 TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 6),
-                new ArrayType(Type.INT),
-                new MapType(TypeFactory.createVarcharType(100), Type.BIGINT), // Use explicit length for VARCHAR key
+                new ArrayType(StandardTypes.INT),
+                new MapType(TypeFactory.createVarcharType(100), StandardTypes.BIGINT), // Use explicit length for VARCHAR key
                 new StructType(Lists.newArrayList(
-                        new StructField("f1", Type.INT),
+                        new StructField("f1", StandardTypes.INT),
                         new StructField("f2", TypeFactory.createVarcharType(200), "test comment") // Use explicit length
                 ))
         };

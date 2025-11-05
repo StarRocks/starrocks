@@ -38,7 +38,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
-import com.starrocks.type.Type;
+import com.starrocks.type.StandardTypes;
 import org.apache.commons.collections4.map.CaseInsensitiveMap;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DataFiles;
@@ -145,9 +145,9 @@ public class MockIcebergMetadata implements ConnectorMetadata {
         MOCK_TABLE_MAP.putIfAbsent(MOCKED_UNPARTITIONED_DB_NAME, new CaseInsensitiveMap<>());
         Map<String, IcebergTableInfo> icebergTableInfoMap = MOCK_TABLE_MAP.get(MOCKED_UNPARTITIONED_DB_NAME);
 
-        List<Column> schemas = ImmutableList.of(new Column("id", Type.INT, true),
-                new Column("data", Type.STRING, true),
-                new Column("date", Type.STRING, true));
+        List<Column> schemas = ImmutableList.of(new Column("id", StandardTypes.INT, true),
+                new Column("data", StandardTypes.STRING, true),
+                new Column("date", StandardTypes.STRING, true));
 
         Schema schema =
                 new Schema(required(3, "id", Types.IntegerType.get()),
@@ -220,23 +220,23 @@ public class MockIcebergMetadata implements ConnectorMetadata {
 
     private static List<Column> getPartitionedTableSchema(String tblName) {
         if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME1)) {
-            return ImmutableList.of(new Column("id", Type.INT, true),
-                    new Column("data", Type.STRING, true),
-                    new Column("date", Type.STRING, true));
+            return ImmutableList.of(new Column("id", StandardTypes.INT, true),
+                    new Column("data", StandardTypes.STRING, true),
+                    new Column("date", StandardTypes.STRING, true));
         } else if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME2)) {
-            return ImmutableList.of(new Column("id", Type.INT, true),
-                    new Column("data", Type.STRING, true),
-                    new Column("date", Type.DATE, true));
+            return ImmutableList.of(new Column("id", StandardTypes.INT, true),
+                    new Column("data", StandardTypes.STRING, true),
+                    new Column("date", StandardTypes.DATE, true));
         } else {
-            return Arrays.asList(new Column("a", Type.VARCHAR), new Column("b", Type.VARCHAR),
-                    new Column("c", Type.INT), new Column("d", Type.VARCHAR));
+            return Arrays.asList(new Column("a", StandardTypes.VARCHAR), new Column("b", StandardTypes.VARCHAR),
+                    new Column("c", StandardTypes.INT), new Column("d", StandardTypes.VARCHAR));
         }
     }
 
     private static List<Column> getPartitionedTransformTableSchema(String tblName) {
-        return ImmutableList.of(new Column("id", Type.INT, true),
-                new Column("data", Type.STRING, true),
-                new Column("ts", Type.DATETIME, true));
+        return ImmutableList.of(new Column("id", StandardTypes.INT, true),
+                new Column("data", StandardTypes.STRING, true),
+                new Column("ts", StandardTypes.DATETIME, true));
     }
 
     private static Schema getIcebergPartitionSchema(String tblName) {

@@ -32,8 +32,8 @@ public class BeMetricsSystemTable {
                 Table.TableType.SCHEMA,
                 builder()
                         .column("BE_ID", TypeFactory.createType(PrimitiveType.BIGINT))
-                        .column("NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("LABELS", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("NAME", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("LABELS", TypeFactory.createVarcharType(NAME_CHAR_LEN))
                         .column("VALUE", TypeFactory.createType(PrimitiveType.BIGINT))
                         .build(), TSchemaTableType.SCH_BE_METRICS);
     }

@@ -27,7 +27,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.tree.exprreuse.ScalarOperatorsReuse;
-import com.starrocks.type.Type;
+import com.starrocks.type.StandardTypes;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.jupiter.api.BeforeEach;
@@ -53,12 +53,12 @@ public class ScalarOperatorsReuseTest {
 
     @Test
     public void testTwoAdd() {
-        ColumnRefOperator column1 = columnRefFactory.create("t1", Type.INT, true);
+        ColumnRefOperator column1 = columnRefFactory.create("t1", StandardTypes.INT, true);
 
-        CallOperator add1 = new CallOperator("add", Type.INT,
+        CallOperator add1 = new CallOperator("add", StandardTypes.INT,
                 Lists.newArrayList(column1, ConstantOperator.createInt(2)));
 
-        CallOperator add2 = new CallOperator("add", Type.INT,
+        CallOperator add2 = new CallOperator("add", StandardTypes.INT,
                 Lists.newArrayList(add1, ConstantOperator.createInt(3)));
 
         List<ScalarOperator> oldOperators = Lists.newArrayList(add1, add2);
@@ -75,16 +75,16 @@ public class ScalarOperatorsReuseTest {
 
     @Test
     public void testThreeAdd() {
-        ColumnRefOperator column1 = columnRefFactory.create("t1", Type.INT, true);
-        ColumnRefOperator column2 = columnRefFactory.create("t2", Type.INT, true);
+        ColumnRefOperator column1 = columnRefFactory.create("t1", StandardTypes.INT, true);
+        ColumnRefOperator column2 = columnRefFactory.create("t2", StandardTypes.INT, true);
 
-        CallOperator add1 = new CallOperator("add", Type.INT,
+        CallOperator add1 = new CallOperator("add", StandardTypes.INT,
                 Lists.newArrayList(column1, column2));
 
-        CallOperator add2 = new CallOperator("add", Type.INT,
+        CallOperator add2 = new CallOperator("add", StandardTypes.INT,
                 Lists.newArrayList(add1, ConstantOperator.createInt(3)));
 
-        CallOperator add3 = new CallOperator("add", Type.INT,
+        CallOperator add3 = new CallOperator("add", StandardTypes.INT,
                 Lists.newArrayList(add2, ConstantOperator.createInt(1)));
 
         List<ScalarOperator> oldOperators = Lists.newArrayList(add1, add2, add3);
@@ -102,20 +102,20 @@ public class ScalarOperatorsReuseTest {
 
     @Test
     public void testNoRedundantCommonScalarOperators() {
-        ColumnRefOperator column1 = columnRefFactory.create("t1", Type.INT, true);
-        ColumnRefOperator column2 = columnRefFactory.create("t2", Type.INT, true);
-        ColumnRefOperator column3 = columnRefFactory.create("t3", Type.INT, true);
+        ColumnRefOperator column1 = columnRefFactory.create("t1", StandardTypes.INT, true);
+        ColumnRefOperator column2 = columnRefFactory.create("t2", StandardTypes.INT, true);
+        ColumnRefOperator column3 = columnRefFactory.create("t3", StandardTypes.INT, true);
 
-        CallOperator add1 = new CallOperator("add", Type.INT,
+        CallOperator add1 = new CallOperator("add", StandardTypes.INT,
                 Lists.newArrayList(column1, ConstantOperator.createInt(1)));
 
-        CallOperator add2 = new CallOperator("add", Type.INT,
+        CallOperator add2 = new CallOperator("add", StandardTypes.INT,
                 Lists.newArrayList(add1, column2));
 
-        CallOperator add3 = new CallOperator("add", Type.INT,
+        CallOperator add3 = new CallOperator("add", StandardTypes.INT,
                 Lists.newArrayList(add2, column3));
 
-        CallOperator multi = new CallOperator("multi", Type.INT,
+        CallOperator multi = new CallOperator("multi", StandardTypes.INT,
                 Lists.newArrayList(add3, ConstantOperator.createInt(2)));
 
         List<ScalarOperator> oldOperators = Lists.newArrayList(add1, add3, multi);
@@ -129,21 +129,21 @@ public class ScalarOperatorsReuseTest {
 
     @Test
     public void testCollectCommonScalarOperators() {
-        ColumnRefOperator column1 = columnRefFactory.create("a", Type.INT, true);
-        ColumnRefOperator column2 = columnRefFactory.create("b", Type.INT, true);
-        ColumnRefOperator column3 = columnRefFactory.create("c", Type.INT, true);
-        ColumnRefOperator column4 = columnRefFactory.create("d", Type.INT, true);
+        ColumnRefOperator column1 = columnRefFactory.create("a", StandardTypes.INT, true);
+        ColumnRefOperator column2 = columnRefFactory.create("b", StandardTypes.INT, true);
+        ColumnRefOperator column3 = columnRefFactory.create("c", StandardTypes.INT, true);
+        ColumnRefOperator column4 = columnRefFactory.create("d", StandardTypes.INT, true);
 
-        CallOperator addAB = new CallOperator("add", Type.INT,
+        CallOperator addAB = new CallOperator("add", StandardTypes.INT,
                 Lists.newArrayList(column1, column2));
 
-        CallOperator addABC = new CallOperator("add", Type.INT,
+        CallOperator addABC = new CallOperator("add", StandardTypes.INT,
                 Lists.newArrayList(addAB, column3));
 
-        CallOperator addBC = new CallOperator("add", Type.INT,
+        CallOperator addBC = new CallOperator("add", StandardTypes.INT,
                 Lists.newArrayList(column2, column3));
 
-        CallOperator addBCD = new CallOperator("add", Type.INT,
+        CallOperator addBCD = new CallOperator("add", StandardTypes.INT,
                 Lists.newArrayList(addBC, column4));
 
         List<ScalarOperator> oldOperators = Lists.newArrayList(addABC, addBCD);
@@ -157,20 +157,20 @@ public class ScalarOperatorsReuseTest {
 
     @Test
     public void testNonDeterministicFuncCommonUsed() {
-        ColumnRefOperator column1 = columnRefFactory.create("t1", Type.INT, true);
-        ColumnRefOperator column2 = columnRefFactory.create("t2", Type.INT, true);
-        ColumnRefOperator column3 = columnRefFactory.create("t3", Type.INT, true);
+        ColumnRefOperator column1 = columnRefFactory.create("t1", StandardTypes.INT, true);
+        ColumnRefOperator column2 = columnRefFactory.create("t2", StandardTypes.INT, true);
+        ColumnRefOperator column3 = columnRefFactory.create("t3", StandardTypes.INT, true);
 
-        CallOperator add1 = new CallOperator("add", Type.INT,
-                Lists.newArrayList(column1, new CallOperator(FunctionSet.RANDOM, Type.DOUBLE, Lists.newArrayList())));
+        CallOperator add1 = new CallOperator("add", StandardTypes.INT,
+                Lists.newArrayList(column1, new CallOperator(FunctionSet.RANDOM, StandardTypes.DOUBLE, Lists.newArrayList())));
 
-        CallOperator add2 = new CallOperator("add", Type.INT,
+        CallOperator add2 = new CallOperator("add", StandardTypes.INT,
                 Lists.newArrayList(add1, column2));
 
-        CallOperator add3 = new CallOperator("add", Type.INT,
+        CallOperator add3 = new CallOperator("add", StandardTypes.INT,
                 Lists.newArrayList(add2, column3));
 
-        CallOperator add4 = new CallOperator("add", Type.INT,
+        CallOperator add4 = new CallOperator("add", StandardTypes.INT,
                 Lists.newArrayList(add3, ConstantOperator.createInt(1)));
 
         Map<Integer, Map<ScalarOperator, ColumnRefOperator>> commonSubScalarOperators =
@@ -181,20 +181,20 @@ public class ScalarOperatorsReuseTest {
 
     @Test
     public void testNonDeterministicFuncNotCommonUsed() {
-        ColumnRefOperator column1 = columnRefFactory.create("t1", Type.INT, true);
-        ColumnRefOperator column2 = columnRefFactory.create("t2", Type.INT, true);
-        ColumnRefOperator column3 = columnRefFactory.create("t3", Type.INT, true);
+        ColumnRefOperator column1 = columnRefFactory.create("t1", StandardTypes.INT, true);
+        ColumnRefOperator column2 = columnRefFactory.create("t2", StandardTypes.INT, true);
+        ColumnRefOperator column3 = columnRefFactory.create("t3", StandardTypes.INT, true);
 
-        CallOperator add1 = new CallOperator("add", Type.INT,
+        CallOperator add1 = new CallOperator("add", StandardTypes.INT,
                 Lists.newArrayList(column1, ConstantOperator.createInt(1)));
 
-        CallOperator add2 = new CallOperator("add", Type.INT,
+        CallOperator add2 = new CallOperator("add", StandardTypes.INT,
                 Lists.newArrayList(add1, column2));
 
-        CallOperator add3 = new CallOperator("add", Type.INT,
-                Lists.newArrayList(add2, new CallOperator(FunctionSet.RANDOM, Type.DOUBLE, Lists.newArrayList())));
+        CallOperator add3 = new CallOperator("add", StandardTypes.INT,
+                Lists.newArrayList(add2, new CallOperator(FunctionSet.RANDOM, StandardTypes.DOUBLE, Lists.newArrayList())));
 
-        CallOperator add4 = new CallOperator("add", Type.INT,
+        CallOperator add4 = new CallOperator("add", StandardTypes.INT,
                 Lists.newArrayList(add3, column3));
 
         Map<Integer, Map<ScalarOperator, ColumnRefOperator>> commonSubScalarOperators =
@@ -205,20 +205,20 @@ public class ScalarOperatorsReuseTest {
 
     @Test
     public void testLambdaFunctionWithoutLambdaArguments() {
-        ColumnRefOperator column1 = columnRefFactory.create("t1", Type.INT, true);
-        ColumnRefOperator arg = columnRefFactory.create("x", Type.INT, true, true);
+        ColumnRefOperator column1 = columnRefFactory.create("t1", StandardTypes.INT, true);
+        ColumnRefOperator arg = columnRefFactory.create("x", StandardTypes.INT, true, true);
 
 
-        CallOperator multi = new CallOperator("multi", Type.INT,
+        CallOperator multi = new CallOperator("multi", StandardTypes.INT,
                 Lists.newArrayList(column1, ConstantOperator.createInt(2)));
 
-        CallOperator multi1 = new CallOperator("multi", Type.INT,
+        CallOperator multi1 = new CallOperator("multi", StandardTypes.INT,
                 Lists.newArrayList(column1, ConstantOperator.createInt(2)));
 
-        CallOperator add1 = new CallOperator("add", Type.INT,
+        CallOperator add1 = new CallOperator("add", StandardTypes.INT,
                 Lists.newArrayList(multi, multi1));
 
-        CallOperator add2 = new CallOperator("add", Type.INT,
+        CallOperator add2 = new CallOperator("add", StandardTypes.INT,
                 Lists.newArrayList(add1, arg));
         // x-> t1 * 2 + t1 *2 + x
         List<ScalarOperator> oldOperators = Lists.newArrayList(add2);
@@ -231,20 +231,20 @@ public class ScalarOperatorsReuseTest {
 
     @Test
     public void testLambdaFunctionScalarOperatorsWithLambdaArguments() {
-        ColumnRefOperator column1 = columnRefFactory.create("t1", Type.INT, true);
-        ColumnRefOperator arg = columnRefFactory.create("x", Type.INT, true, true);
+        ColumnRefOperator column1 = columnRefFactory.create("t1", StandardTypes.INT, true);
+        ColumnRefOperator arg = columnRefFactory.create("x", StandardTypes.INT, true, true);
 
 
-        CallOperator multi = new CallOperator("multi", Type.INT,
+        CallOperator multi = new CallOperator("multi", StandardTypes.INT,
                 Lists.newArrayList(arg, ConstantOperator.createInt(2)));
 
-        CallOperator multi1 = new CallOperator("multi", Type.INT,
+        CallOperator multi1 = new CallOperator("multi", StandardTypes.INT,
                 Lists.newArrayList(arg, ConstantOperator.createInt(2)));
 
-        CallOperator add1 = new CallOperator("add", Type.INT,
+        CallOperator add1 = new CallOperator("add", StandardTypes.INT,
                 Lists.newArrayList(multi, multi1));
 
-        CallOperator add2 = new CallOperator("add", Type.INT,
+        CallOperator add2 = new CallOperator("add", StandardTypes.INT,
                 Lists.newArrayList(add1, column1));
         // x-> x * 2 + x *2 + t1
         List<ScalarOperator> oldOperators = Lists.newArrayList(add2);
@@ -268,8 +268,8 @@ public class ScalarOperatorsReuseTest {
 
     @Test
     public void testScalarOperatorDepth() {
-        ColumnRefOperator column1 = columnRefFactory.create("t1", Type.INT, true);
-        ColumnRefOperator column2 = columnRefFactory.create("t2", Type.INT, true);
+        ColumnRefOperator column1 = columnRefFactory.create("t1", StandardTypes.INT, true);
+        ColumnRefOperator column2 = columnRefFactory.create("t2", StandardTypes.INT, true);
         ScalarOperator or1 = generateCompoundPredicateOperator(column1, Config.max_scalar_operator_optimize_depth - 1);
         ScalarOperator or2 = generateCompoundPredicateOperator(column2, Config.max_scalar_operator_optimize_depth - 1);
         assertEquals(0, column1.getDepth());
@@ -277,30 +277,30 @@ public class ScalarOperatorsReuseTest {
         assertEquals(Config.max_scalar_operator_optimize_depth - 1, or1.getDepth());
         assertEquals(Config.max_scalar_operator_optimize_depth - 1, or2.getDepth());
 
-        ColumnRefOperator arg = columnRefFactory.create("x", Type.INT, true, true);
+        ColumnRefOperator arg = columnRefFactory.create("x", StandardTypes.INT, true, true);
         assertEquals(0, arg.getDepth());
-        CallOperator multi = new CallOperator("multi", Type.INT,
+        CallOperator multi = new CallOperator("multi", StandardTypes.INT,
                 Lists.newArrayList(arg, ConstantOperator.createInt(2)));
         assertEquals(1, multi.getDepth());
 
-        CallOperator multi1 = new CallOperator("multi", Type.INT,
+        CallOperator multi1 = new CallOperator("multi", StandardTypes.INT,
                 Lists.newArrayList(arg, ConstantOperator.createInt(2)));
         assertEquals(1, multi1.getDepth());
-        CallOperator add1 = new CallOperator("add", Type.INT,
+        CallOperator add1 = new CallOperator("add", StandardTypes.INT,
                 Lists.newArrayList(multi, multi1));
         assertEquals(2, add1.getDepth());
 
-        CallOperator add3 = new CallOperator("add", Type.INT,
+        CallOperator add3 = new CallOperator("add", StandardTypes.INT,
                 Lists.newArrayList(multi, or1));
         assertEquals(Config.max_scalar_operator_optimize_depth, add3.getDepth());
     }
 
     @Test
     public void testScalarOperatorIncrDepth() {
-        ColumnRefOperator column1 = columnRefFactory.create("t1", Type.INT, true);
+        ColumnRefOperator column1 = columnRefFactory.create("t1", StandardTypes.INT, true);
         assertEquals(0, column1.getDepth());
 
-        ColumnRefOperator column2 = columnRefFactory.create("t2", Type.INT, true);
+        ColumnRefOperator column2 = columnRefFactory.create("t2", StandardTypes.INT, true);
         assertEquals(0, column1.getDepth());
 
         // mock construct
@@ -318,14 +318,14 @@ public class ScalarOperatorsReuseTest {
     public void testCaseWhenWithTooManyChildren1() {
         final int prev = Config.max_scalar_operator_flat_children;
         Config.max_scalar_operator_flat_children = 0;
-        ColumnRefOperator column1 = columnRefFactory.create("t1", Type.INT, true);
-        ColumnRefOperator column2 = columnRefFactory.create("t2", Type.INT, true);
+        ColumnRefOperator column1 = columnRefFactory.create("t1", StandardTypes.INT, true);
+        ColumnRefOperator column2 = columnRefFactory.create("t2", StandardTypes.INT, true);
         ScalarOperator or1 = generateCompoundPredicateOperator(column1, Config.max_scalar_operator_optimize_depth - 1);
         ScalarOperator or2 = generateCompoundPredicateOperator(column2, Config.max_scalar_operator_optimize_depth - 1);
 
-        CaseWhenOperator cwo1 = new CaseWhenOperator(Type.INT, or1, ConstantOperator.createInt(0),
+        CaseWhenOperator cwo1 = new CaseWhenOperator(StandardTypes.INT, or1, ConstantOperator.createInt(0),
                 Lists.newArrayList(or1, ConstantOperator.createInt(0), or2, ConstantOperator.createInt(1)));
-        CaseWhenOperator cwo2 = new CaseWhenOperator(Type.INT, or1, ConstantOperator.createInt(0),
+        CaseWhenOperator cwo2 = new CaseWhenOperator(StandardTypes.INT, or1, ConstantOperator.createInt(0),
                 Lists.newArrayList(or1, ConstantOperator.createInt(2), or2, ConstantOperator.createInt(3)));
 
         List<ScalarOperator> oldOperators = Lists.newArrayList(cwo1, cwo2);
@@ -342,14 +342,14 @@ public class ScalarOperatorsReuseTest {
     public void testCaseWhenWithTooManyChildren2() {
         final int prev = Config.max_scalar_operator_flat_children;
         Config.max_scalar_operator_flat_children = 0;
-        ColumnRefOperator column1 = columnRefFactory.create("t1", Type.INT, true);
-        ColumnRefOperator column2 = columnRefFactory.create("t2", Type.INT, true);
+        ColumnRefOperator column1 = columnRefFactory.create("t1", StandardTypes.INT, true);
+        ColumnRefOperator column2 = columnRefFactory.create("t2", StandardTypes.INT, true);
         ScalarOperator or1 = generateCompoundPredicateOperator(column1, 2000);
         ScalarOperator or2 = generateCompoundPredicateOperator(column2, 2000);
 
-        CaseWhenOperator cwo1 = new CaseWhenOperator(Type.INT, or1, ConstantOperator.createInt(0),
+        CaseWhenOperator cwo1 = new CaseWhenOperator(StandardTypes.INT, or1, ConstantOperator.createInt(0),
                 Lists.newArrayList(or1, ConstantOperator.createInt(0), or2, ConstantOperator.createInt(1)));
-        CaseWhenOperator cwo2 = new CaseWhenOperator(Type.INT, or1, ConstantOperator.createInt(0),
+        CaseWhenOperator cwo2 = new CaseWhenOperator(StandardTypes.INT, or1, ConstantOperator.createInt(0),
                 Lists.newArrayList(or1, ConstantOperator.createInt(2), or2, ConstantOperator.createInt(3)));
 
         List<ScalarOperator> oldOperators = Lists.newArrayList(cwo1, cwo2);

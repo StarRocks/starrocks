@@ -53,7 +53,7 @@ import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.thrift.TStorageMedium;
-import com.starrocks.type.Type;
+import com.starrocks.type.StandardTypes;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -852,10 +852,10 @@ public class SharedDataStorageVolumeMgrTest {
 
                 // Schema
                 List<Column> columns = Lists.newArrayList();
-                Column k1 = new Column("k1", Type.INT, true, null, "", "");
+                Column k1 = new Column("k1", StandardTypes.INT, true, null, "", "");
                 columns.add(k1);
-                columns.add(new Column("k2", Type.BIGINT, true, null, "", ""));
-                columns.add(new Column("v", Type.BIGINT, false, AggregateType.SUM, "0", ""));
+                columns.add(new Column("k2", StandardTypes.BIGINT, true, null, "", ""));
+                columns.add(new Column("v", StandardTypes.BIGINT, false, AggregateType.SUM, "0", ""));
 
                 // Tablet
                 Tablet tablet1 = new LakeTablet(tablet1Id);

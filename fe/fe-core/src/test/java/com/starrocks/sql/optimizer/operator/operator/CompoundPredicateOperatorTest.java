@@ -27,7 +27,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.type.Type;
+import com.starrocks.type.StandardTypes;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -54,19 +54,19 @@ public class CompoundPredicateOperatorTest {
     }
 
     private static Stream<Arguments> compareOperatorList() {
-        ConstantOperator constA = new ConstantOperator(1, Type.INT);
-        ConstantOperator constB = new ConstantOperator("abc", Type.STRING);
+        ConstantOperator constA = new ConstantOperator(1, StandardTypes.INT);
+        ConstantOperator constB = new ConstantOperator("abc", StandardTypes.STRING);
 
-        ColumnRefOperator col1 = new ColumnRefOperator(1, Type.INT, "c1", false);
-        ColumnRefOperator col2 = new ColumnRefOperator(2, Type.INT, "c2", false);
-        ColumnRefOperator col3 = new ColumnRefOperator(3, Type.INT, "c3", false);
-        ColumnRefOperator col4 = new ColumnRefOperator(4, Type.STRING, "c4", false);
-        ColumnRefOperator col5 = new ColumnRefOperator(5, Type.STRING, "c5", false);
-        ColumnRefOperator col6 = new ColumnRefOperator(6, Type.BOOLEAN, "c6", false);
+        ColumnRefOperator col1 = new ColumnRefOperator(1, StandardTypes.INT, "c1", false);
+        ColumnRefOperator col2 = new ColumnRefOperator(2, StandardTypes.INT, "c2", false);
+        ColumnRefOperator col3 = new ColumnRefOperator(3, StandardTypes.INT, "c3", false);
+        ColumnRefOperator col4 = new ColumnRefOperator(4, StandardTypes.STRING, "c4", false);
+        ColumnRefOperator col5 = new ColumnRefOperator(5, StandardTypes.STRING, "c5", false);
+        ColumnRefOperator col6 = new ColumnRefOperator(6, StandardTypes.BOOLEAN, "c6", false);
 
 
-        CallOperator call1 = new CallOperator(FunctionSet.SUM, Type.BIGINT, ImmutableList.of(constA));
-        CallOperator call2 = new CallOperator(FunctionSet.ADD, Type.BIGINT, ImmutableList.of(constA, constA));
+        CallOperator call1 = new CallOperator(FunctionSet.SUM, StandardTypes.BIGINT, ImmutableList.of(constA));
+        CallOperator call2 = new CallOperator(FunctionSet.ADD, StandardTypes.BIGINT, ImmutableList.of(constA, constA));
 
         BinaryPredicateOperator gt1 = new BinaryPredicateOperator(BinaryType.GT, col1, col2);
         BinaryPredicateOperator gt2 = new BinaryPredicateOperator(BinaryType.GT, col3, col4);

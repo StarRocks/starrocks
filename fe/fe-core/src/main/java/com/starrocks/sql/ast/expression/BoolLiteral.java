@@ -39,6 +39,7 @@ import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.Type;
 
 import java.nio.ByteBuffer;
@@ -58,7 +59,7 @@ public class BoolLiteral extends LiteralExpr {
     public BoolLiteral(boolean value, NodePosition pos) {
         super(pos);
         this.value = value;
-        type = Type.BOOLEAN;
+        type = StandardTypes.BOOLEAN;
     }
 
     public BoolLiteral(String value) throws AnalysisException {
@@ -67,7 +68,7 @@ public class BoolLiteral extends LiteralExpr {
 
     public BoolLiteral(String value, NodePosition pos) throws AnalysisException {
         super(pos);
-        this.type = Type.BOOLEAN;
+        this.type = StandardTypes.BOOLEAN;
         if (value.trim().equalsIgnoreCase("true") || value.trim().equals("1")) {
             this.value = true;
         } else if (value.trim().equalsIgnoreCase("false") || value.trim().equals("0")) {

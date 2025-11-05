@@ -33,7 +33,7 @@ import com.starrocks.sql.ast.IndexDef.IndexType;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TIndexType;
 import com.starrocks.thrift.TOlapTableIndex;
-import com.starrocks.type.Type;
+import com.starrocks.type.StandardTypes;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
@@ -67,27 +67,27 @@ public class VectorIndexTest extends PlanTestBase {
 
     @Test
     public void testCheckVectorIndex() {
-        Column c1 = new Column("f1", Type.INT, false, AggregateType.MAX, "", "");
+        Column c1 = new Column("f1", StandardTypes.INT, false, AggregateType.MAX, "", "");
 
         Assertions.assertThrows(
                 SemanticException.class,
                 () -> IndexAnalyzer.checkVectorIndexValid(c1, null, KeysType.AGG_KEYS),
                 "The vector index can only build on DUPLICATE or PRIMARY table");
 
-        Column c2 = new Column("f2", Type.VARCHAR, false);
+        Column c2 = new Column("f2", StandardTypes.VARCHAR, false);
 
         Assertions.assertThrows(
                 SemanticException.class,
                 () -> IndexAnalyzer.checkVectorIndexValid(c2, null, KeysType.DUP_KEYS),
                 "The vector index can only be build on column with type of array<float>.");
 
-        Column c3 = new Column("f3", Type.ARRAY_FLOAT, true);
+        Column c3 = new Column("f3", StandardTypes.ARRAY_FLOAT, true);
         Assertions.assertThrows(
                 SemanticException.class,
                 () -> IndexAnalyzer.checkVectorIndexValid(c3, Collections.emptyMap(), KeysType.DUP_KEYS),
                 "You should set index_type at least to add a vector index.");
 
-        Column c4 = new Column("f4", Type.ARRAY_FLOAT, false);
+        Column c4 = new Column("f4", StandardTypes.ARRAY_FLOAT, false);
         Assertions.assertThrows(
                 SemanticException.class,
                 () -> IndexAnalyzer.checkVectorIndexValid(c4, new HashMap<>() {{

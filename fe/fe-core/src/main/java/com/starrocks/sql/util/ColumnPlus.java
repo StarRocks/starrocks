@@ -20,6 +20,7 @@ import com.google.common.io.LittleEndianDataOutputStream;
 import com.google.gson.Gson;
 import com.starrocks.catalog.Column;
 import com.starrocks.thrift.TRowFormat;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.Type;
 import org.apache.commons.lang3.ObjectUtils;
 
@@ -56,39 +57,39 @@ public final class ColumnPlus {
 
     //TODO(by satanson): Other types such as TINYINT,SMALLINT,INT, LARGEINT and etc. should added
     public static final Map<String, Type> NAME_TO_TYPE_MAP = ImmutableMap.<String, Type>builder()
-            .put(BIGINT, Type.BIGINT)
-            .put(DATETIME, Type.DATETIME)
-            .put(VARBINARY, Type.VARBINARY)
-            .put(VARCHAR, Type.VARCHAR)
-            .put(JSON, Type.JSON)
+            .put(BIGINT, StandardTypes.BIGINT)
+            .put(DATETIME, StandardTypes.DATETIME)
+            .put(VARBINARY, StandardTypes.VARBINARY)
+            .put(VARCHAR, StandardTypes.VARCHAR)
+            .put(JSON, StandardTypes.JSON)
             .build();
     private static final DateFormat DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
     private static final Map<Type, Function<Object, PrettyPrinter>> TYPE_TO_SQL_MAP =
             ImmutableMap.<Type, Function<Object, PrettyPrinter>>builder()
-                    .put(Type.BIGINT, ColumnPlus::numberToString)
-                    .put(Type.DATETIME, ColumnPlus::dateToSql)
-                    .put(Type.VARBINARY, ColumnPlus::binaryToSql)
-                    .put(Type.VARCHAR, ColumnPlus::varcharToSql)
-                    .put(Type.CHAR, ColumnPlus::varcharToSql)
-                    .put(Type.JSON, ColumnPlus::jsonToSql)
+                    .put(StandardTypes.BIGINT, ColumnPlus::numberToString)
+                    .put(StandardTypes.DATETIME, ColumnPlus::dateToSql)
+                    .put(StandardTypes.VARBINARY, ColumnPlus::binaryToSql)
+                    .put(StandardTypes.VARCHAR, ColumnPlus::varcharToSql)
+                    .put(StandardTypes.CHAR, ColumnPlus::varcharToSql)
+                    .put(StandardTypes.JSON, ColumnPlus::jsonToSql)
                     .build();
     private static final Map<Type, Function<ByteBuffer, Object>> TYPE_TO_UNPACK_MAP =
             ImmutableMap.<Type, Function<ByteBuffer, Object>>builder()
-                    .put(Type.BIGINT, ByteBuffer::getLong)
-                    .put(Type.DATETIME, ColumnPlus::unpackDatetime)
-                    .put(Type.VARBINARY, ColumnPlus::unpackString)
-                    .put(Type.VARCHAR, ColumnPlus::unpackString)
-                    .put(Type.CHAR, ColumnPlus::unpackString)
-                    .put(Type.JSON, ColumnPlus::unpackString)
+                    .put(StandardTypes.BIGINT, ByteBuffer::getLong)
+                    .put(StandardTypes.DATETIME, ColumnPlus::unpackDatetime)
+                    .put(StandardTypes.VARBINARY, ColumnPlus::unpackString)
+                    .put(StandardTypes.VARCHAR, ColumnPlus::unpackString)
+                    .put(StandardTypes.CHAR, ColumnPlus::unpackString)
+                    .put(StandardTypes.JSON, ColumnPlus::unpackString)
                     .build();
     private static final Map<Type, BiFunction<DataOutput, Object, Void>> TYPE_TO_PACK_MAP =
             ImmutableMap.<Type, BiFunction<DataOutput, Object, Void>>builder()
-                    .put(Type.BIGINT, ColumnPlus::packBigInt)
-                    .put(Type.DATETIME, ColumnPlus::packDatetime)
-                    .put(Type.VARBINARY, ColumnPlus::packString)
-                    .put(Type.VARCHAR, ColumnPlus::packString)
-                    .put(Type.CHAR, ColumnPlus::packString)
-                    .put(Type.JSON, ColumnPlus::packJson)
+                    .put(StandardTypes.BIGINT, ColumnPlus::packBigInt)
+                    .put(StandardTypes.DATETIME, ColumnPlus::packDatetime)
+                    .put(StandardTypes.VARBINARY, ColumnPlus::packString)
+                    .put(StandardTypes.VARCHAR, ColumnPlus::packString)
+                    .put(StandardTypes.CHAR, ColumnPlus::packString)
+                    .put(StandardTypes.JSON, ColumnPlus::packJson)
                     .build();
     private final Column column;
     private final Field field;

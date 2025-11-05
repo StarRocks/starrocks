@@ -34,6 +34,7 @@ import com.starrocks.type.ArrayType;
 import com.starrocks.type.MapType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
 import org.junit.jupiter.api.Assertions;
@@ -92,19 +93,19 @@ public class ExprToThriftVisitorTest {
             List<ExprCase> cases = new ArrayList<>();
 
             // Literals
-            cases.add(nodeCase("IntLiteral", () -> withType(new IntLiteral(7), Type.INT), TExprNodeType.INT_LITERAL));
+            cases.add(nodeCase("IntLiteral", () -> withType(new IntLiteral(7), StandardTypes.INT), TExprNodeType.INT_LITERAL));
             cases.add(nodeCase("FloatLiteral", ExprCaseFactory::buildFloatLiteral,
                     TExprNodeType.FLOAT_LITERAL));
             cases.add(nodeCase("DecimalLiteral", ExprCaseFactory::buildDecimalLiteral,
                     TExprNodeType.DECIMAL_LITERAL));
             cases.add(nodeCase("StringLiteral", () -> withType(new StringLiteral("starrocks"),
-                    TypeFactory.createVarchar(16)), TExprNodeType.STRING_LITERAL));
-            cases.add(nodeCase("BoolLiteral", () -> withType(new BoolLiteral(true), Type.BOOLEAN),
+                    TypeFactory.createVarcharType(16)), TExprNodeType.STRING_LITERAL));
+            cases.add(nodeCase("BoolLiteral", () -> withType(new BoolLiteral(true), StandardTypes.BOOLEAN),
                     TExprNodeType.BOOL_LITERAL));
             cases.add(nodeCase("VarBinaryLiteral", () -> withType(new VarBinaryLiteral(new byte[] {1, 2}),
-                    Type.VARBINARY), TExprNodeType.BINARY_LITERAL));
+                    StandardTypes.VARBINARY), TExprNodeType.BINARY_LITERAL));
             cases.add(nodeCase("DateLiteral", ExprCaseFactory::buildDateLiteral, TExprNodeType.DATE_LITERAL));
-            cases.add(nodeCase("NullLiteral", () -> NullLiteral.create(Type.INT), TExprNodeType.NULL_LITERAL));
+            cases.add(nodeCase("NullLiteral", () -> NullLiteral.create(StandardTypes.INT), TExprNodeType.NULL_LITERAL));
             cases.add(nodeCase("LargeIntLiteral", ExprCaseFactory::buildLargeIntLiteral,
                     TExprNodeType.LARGE_INT_LITERAL));
             cases.add(nodeCase("MaxLiteral", ExprCaseFactory::buildMaxLiteral, null,
@@ -206,8 +207,8 @@ public class ExprToThriftVisitorTest {
         private static Expr buildFloatLiteral() {
             try {
                 FloatLiteral literal = new FloatLiteral(3.14);
-                literal.setType(Type.DOUBLE);
-                literal.setOriginType(Type.DOUBLE);
+                literal.setType(StandardTypes.DOUBLE);
+                literal.setOriginType(StandardTypes.DOUBLE);
                 return literal;
             } catch (AnalysisException e) {
                 throw new RuntimeException(e);
@@ -228,8 +229,8 @@ public class ExprToThriftVisitorTest {
 
         private static Expr buildDateLiteral() {
             try {
-                DateLiteral literal = new DateLiteral("2024-01-02", Type.DATE);
-                literal.setOriginType(Type.DATE);
+                DateLiteral literal = new DateLiteral("2024-01-02", StandardTypes.DATE);
+                literal.setOriginType(StandardTypes.DATE);
                 return literal;
             } catch (AnalysisException e) {
                 throw new RuntimeException(e);
@@ -238,19 +239,19 @@ public class ExprToThriftVisitorTest {
 
         private static Expr buildLargeIntLiteral() {
             LargeIntLiteral literal = LargeIntLiteral.createMaxValue();
-            literal.setOriginType(Type.LARGEINT);
+            literal.setOriginType(StandardTypes.LARGEINT);
             return literal;
         }
 
         private static Expr buildMaxLiteral() {
             MaxLiteral max = MaxLiteral.MAX_VALUE;
-            max.setType(Type.INT);
-            max.setOriginType(Type.INT);
+            max.setType(StandardTypes.INT);
+            max.setOriginType(StandardTypes.INT);
             return max;
         }
 
         private static Expr buildArrayExpr() {
-            ArrayExpr arrayExpr = new ArrayExpr(new ArrayType(Type.INT),
+            ArrayExpr arrayExpr = new ArrayExpr(new ArrayType(StandardTypes.INT),
                     Lists.newArrayList(new IntLiteral(1), new IntLiteral(2)));
             arrayExpr.setOriginType(arrayExpr.getType());
             return arrayExpr;
@@ -259,18 +260,18 @@ public class ExprToThriftVisitorTest {
         private static Expr buildArrayElementExpr() {
             ArrayExpr arrayExpr = (ArrayExpr) buildArrayExpr();
             CollectionElementExpr expr =
-                    new CollectionElementExpr(Type.INT, arrayExpr, new IntLiteral(0), false);
-            expr.setOriginType(Type.INT);
+                    new CollectionElementExpr(StandardTypes.INT, arrayExpr, new IntLiteral(0), false);
+            expr.setOriginType(StandardTypes.INT);
             return expr;
         }
 
         private static Expr buildMapExpr() {
             List<Expr> children = List.of(
-                    withType(new StringLiteral("k"), TypeFactory.createVarchar(8)),
-                    withType(new IntLiteral(1), Type.INT),
-                    withType(new StringLiteral("k2"), TypeFactory.createVarchar(8)),
-                    withType(new IntLiteral(2), Type.INT));
-            MapExpr mapExpr = new MapExpr(new MapType(TypeFactory.createVarchar(8), Type.INT), children);
+                    withType(new StringLiteral("k"), TypeFactory.createVarcharType(8)),
+                    withType(new IntLiteral(1), StandardTypes.INT),
+                    withType(new StringLiteral("k2"), TypeFactory.createVarcharType(8)),
+                    withType(new IntLiteral(2), StandardTypes.INT));
+            MapExpr mapExpr = new MapExpr(new MapType(TypeFactory.createVarcharType(8), StandardTypes.INT), children);
             mapExpr.setOriginType(mapExpr.getType());
             return mapExpr;
         }
@@ -278,9 +279,9 @@ public class ExprToThriftVisitorTest {
         private static Expr buildMapElementExpr() {
             MapExpr mapExpr = (MapExpr) buildMapExpr();
             CollectionElementExpr expr =
-                    new CollectionElementExpr(Type.INT, mapExpr, withType(new StringLiteral("k"),
-                            TypeFactory.createVarchar(8)), true);
-            expr.setOriginType(Type.INT);
+                    new CollectionElementExpr(StandardTypes.INT, mapExpr, withType(new StringLiteral("k"),
+                            TypeFactory.createVarcharType(8)), true);
+            expr.setOriginType(StandardTypes.INT);
             return expr;
         }
 
@@ -296,22 +297,22 @@ public class ExprToThriftVisitorTest {
         private static Expr buildSubfieldExpr() {
             SlotRef structRef = buildSlotRef();
             SubfieldExpr expr = new SubfieldExpr(structRef, List.of("f1", "f2"));
-            expr.setType(Type.INT);
-            expr.setOriginType(Type.INT);
+            expr.setType(StandardTypes.INT);
+            expr.setOriginType(StandardTypes.INT);
             return expr;
         }
 
         private static Expr buildCloneExpr() {
             CloneExpr expr = new CloneExpr(new IntLiteral(5));
-            expr.setType(Type.INT);
-            expr.setOriginType(Type.INT);
+            expr.setType(StandardTypes.INT);
+            expr.setOriginType(StandardTypes.INT);
             return expr;
         }
 
         private static Expr buildDictMappingExpr() {
             DictMappingExpr expr = new DictMappingExpr(buildSlotRef(), withType(new StringLiteral("expr"),
-                    TypeFactory.createVarchar(16)));
-            expr.setType(TypeFactory.createVarchar(16));
+                    TypeFactory.createVarcharType(16)));
+            expr.setType(TypeFactory.createVarcharType(16));
             expr.setOriginType(expr.getType());
             return expr;
         }
@@ -319,8 +320,8 @@ public class ExprToThriftVisitorTest {
         private static Expr buildArithmeticExpr() {
             ArithmeticExpr expr = new ArithmeticExpr(ArithmeticExpr.Operator.ADD,
                     new IntLiteral(1), new IntLiteral(2));
-            expr.setType(Type.INT);
-            expr.setOriginType(Type.INT);
+            expr.setType(StandardTypes.INT);
+            expr.setOriginType(StandardTypes.INT);
             return expr;
         }
 
@@ -328,60 +329,61 @@ public class ExprToThriftVisitorTest {
             CaseExpr expr = new CaseExpr(new IntLiteral(1),
                     List.of(new CaseWhenClause(new IntLiteral(1), new StringLiteral("x"))),
                     new StringLiteral("y"));
-            expr.setType(TypeFactory.createVarchar(8));
+            expr.setType(TypeFactory.createVarcharType(8));
             expr.setOriginType(expr.getType());
             return expr;
         }
 
         private static Expr buildScalarFunctionCall() {
             FunctionCallExpr call = new FunctionCallExpr("abs", List.of(new IntLiteral(-3)));
-            ScalarFunction fn = ScalarFunction.createBuiltinOperator("abs", Lists.newArrayList(Type.INT), Type.INT);
+            ScalarFunction fn = ScalarFunction.createBuiltinOperator("abs",
+                    Lists.newArrayList(StandardTypes.INT), StandardTypes.INT);
             call.setFn(fn);
-            call.setType(Type.INT);
-            call.setOriginType(Type.INT);
+            call.setType(StandardTypes.INT);
+            call.setOriginType(StandardTypes.INT);
             return call;
         }
 
         private static Expr buildAggregateFunctionCall() {
             FunctionCallExpr call = new FunctionCallExpr("sum", List.of(new IntLiteral(3)));
-            AggregateFunction fn = AggregateFunction.createBuiltin("sum", List.of(Type.INT), Type.INT, Type.INT,
-                    false, false, false, false);
+            AggregateFunction fn = AggregateFunction.createBuiltin("sum", List.of(StandardTypes.INT),
+                    StandardTypes.INT, StandardTypes.INT, false, false, false, false);
             call.setFn(fn);
-            call.setType(Type.INT);
-            call.setOriginType(Type.INT);
+            call.setType(StandardTypes.INT);
+            call.setOriginType(StandardTypes.INT);
             return call;
         }
 
         private static Expr buildAnalyticExpr() {
             FunctionCallExpr call = new FunctionCallExpr("row_number", Collections.emptyList());
             AggregateFunction fn = AggregateFunction.createBuiltin("row_number", Collections.emptyList(),
-                    Type.BIGINT, Type.BIGINT, false, false, true, true);
+                    StandardTypes.BIGINT, StandardTypes.BIGINT, false, false, true, true);
             call.setFn(fn);
-            call.setType(Type.BIGINT);
-            call.setOriginType(Type.BIGINT);
+            call.setType(StandardTypes.BIGINT);
+            call.setOriginType(StandardTypes.BIGINT);
             call.setIsAnalyticFnCall(true);
             AnalyticExpr analyticExpr = new AnalyticExpr(call, List.of(new IntLiteral(1)),
                     Collections.emptyList(), null, null);
-            analyticExpr.setType(Type.BIGINT);
-            analyticExpr.setOriginType(Type.BIGINT);
+            analyticExpr.setType(StandardTypes.BIGINT);
+            analyticExpr.setOriginType(StandardTypes.BIGINT);
             return analyticExpr;
         }
 
         private static Expr buildInformationFunction() {
             InformationFunction infoFunction = new InformationFunction("CURRENT_CATALOG", "cluster", 11);
-            infoFunction.setType(TypeFactory.createVarchar(16));
+            infoFunction.setType(TypeFactory.createVarcharType(16));
             infoFunction.setOriginType(infoFunction.getType());
             return infoFunction;
         }
 
         private static Expr buildTimestampArithmeticExpr() {
             try {
-                DateLiteral dateLiteral = new DateLiteral("2024-01-01", Type.DATE);
+                DateLiteral dateLiteral = new DateLiteral("2024-01-01", StandardTypes.DATE);
                 TimestampArithmeticExpr expr =
                         new TimestampArithmeticExpr(ArithmeticExpr.Operator.ADD, dateLiteral,
                                 new IntLiteral(1), "DAY", false);
-                expr.setType(Type.DATE);
-                expr.setOriginType(Type.DATE);
+                expr.setType(StandardTypes.DATE);
+                expr.setOriginType(StandardTypes.DATE);
                 return expr;
             } catch (AnalysisException e) {
                 throw new RuntimeException(e);
@@ -393,16 +395,16 @@ public class ExprToThriftVisitorTest {
             LambdaFunctionExpr lambda =
                     new LambdaFunctionExpr(List.of(new IntLiteral(1), argSlot),
                             Map.of(argSlot, new IntLiteral(2)));
-            lambda.setType(Type.INT);
-            lambda.setOriginType(Type.INT);
+            lambda.setType(StandardTypes.INT);
+            lambda.setOriginType(StandardTypes.INT);
             return lambda;
         }
 
         private static Expr buildBinaryPredicate() {
             BinaryPredicate predicate =
                     new BinaryPredicate(BinaryType.EQ, new IntLiteral(1), new IntLiteral(1));
-            predicate.setType(Type.BOOLEAN);
-            predicate.setOriginType(Type.BOOLEAN);
+            predicate.setType(StandardTypes.BOOLEAN);
+            predicate.setOriginType(StandardTypes.BOOLEAN);
             return predicate;
         }
 
@@ -410,16 +412,16 @@ public class ExprToThriftVisitorTest {
             CompoundPredicate predicate =
                     new CompoundPredicate(CompoundPredicate.Operator.AND, new BoolLiteral(true),
                             new BoolLiteral(false));
-            predicate.setType(Type.BOOLEAN);
-            predicate.setOriginType(Type.BOOLEAN);
+            predicate.setType(StandardTypes.BOOLEAN);
+            predicate.setOriginType(StandardTypes.BOOLEAN);
             return predicate;
         }
 
         private static Expr buildInPredicate() {
             InPredicate predicate =
                     new InPredicate(new IntLiteral(1), Lists.newArrayList(new IntLiteral(2), new IntLiteral(3)), false);
-            predicate.setType(Type.BOOLEAN);
-            predicate.setOriginType(Type.BOOLEAN);
+            predicate.setType(StandardTypes.BOOLEAN);
+            predicate.setOriginType(StandardTypes.BOOLEAN);
             return predicate;
         }
 
@@ -427,45 +429,45 @@ public class ExprToThriftVisitorTest {
             LikePredicate predicate =
                     new LikePredicate(LikePredicate.Operator.LIKE, new StringLiteral("abc"),
                             new StringLiteral("a%"));
-            predicate.setType(Type.BOOLEAN);
-            predicate.setOriginType(Type.BOOLEAN);
+            predicate.setType(StandardTypes.BOOLEAN);
+            predicate.setOriginType(StandardTypes.BOOLEAN);
             return predicate;
         }
 
         private static Expr buildMatchExpr() {
             MatchExpr expr = new MatchExpr(new StringLiteral("field"), new StringLiteral("value"));
-            expr.setType(Type.BOOLEAN);
-            expr.setOriginType(Type.BOOLEAN);
+            expr.setType(StandardTypes.BOOLEAN);
+            expr.setOriginType(StandardTypes.BOOLEAN);
             return expr;
         }
 
         private static Expr buildIsNullPredicate() {
             IsNullPredicate predicate = new IsNullPredicate(new IntLiteral(1), false);
-            predicate.setType(Type.BOOLEAN);
-            predicate.setOriginType(Type.BOOLEAN);
+            predicate.setType(StandardTypes.BOOLEAN);
+            predicate.setOriginType(StandardTypes.BOOLEAN);
             return predicate;
         }
 
         private static Expr buildBetweenPredicate() {
             BetweenPredicate predicate =
                     new BetweenPredicate(new IntLiteral(1), new IntLiteral(0), new IntLiteral(2), false);
-            predicate.setType(Type.BOOLEAN);
-            predicate.setOriginType(Type.BOOLEAN);
+            predicate.setType(StandardTypes.BOOLEAN);
+            predicate.setOriginType(StandardTypes.BOOLEAN);
             return predicate;
         }
 
         private static Expr buildExistsPredicate() {
             ExistsPredicate predicate = new ExistsPredicate(buildSubquery(), false);
-            predicate.setType(Type.BOOLEAN);
-            predicate.setOriginType(Type.BOOLEAN);
+            predicate.setType(StandardTypes.BOOLEAN);
+            predicate.setOriginType(StandardTypes.BOOLEAN);
             return predicate;
         }
 
         private static Expr buildLargeInPredicate() {
             LargeInPredicate predicate = new LargeInPredicate(new IntLiteral(1), "(1,2,3)",
                     List.of(1, 2, 3), 3, false, List.of(new IntLiteral(1)), NodePosition.ZERO);
-            predicate.setType(Type.BOOLEAN);
-            predicate.setOriginType(Type.BOOLEAN);
+            predicate.setType(StandardTypes.BOOLEAN);
+            predicate.setOriginType(StandardTypes.BOOLEAN);
             return predicate;
         }
 
@@ -475,51 +477,51 @@ public class ExprToThriftVisitorTest {
             expr.setDictionaryTxnId(100L);
             expr.setKeySize(10);
             expr.setNullIfNotExist(true);
-            expr.setType(Type.INT);
-            expr.setOriginType(Type.INT);
+            expr.setType(StandardTypes.INT);
+            expr.setOriginType(StandardTypes.INT);
             return expr;
         }
 
         private static Expr buildDictQueryExpr() {
             DictQueryExpr expr = new DictQueryExpr(List.of(new StringLiteral("dict")));
             expr.setDictQueryExpr(new com.starrocks.thrift.TDictQueryExpr());
-            expr.setType(Type.INT);
-            expr.setOriginType(Type.INT);
+            expr.setType(StandardTypes.INT);
+            expr.setOriginType(StandardTypes.INT);
             return expr;
         }
 
         private static SlotRef buildSlotRef() {
-            SlotDescriptor descriptor = new SlotDescriptor(new SlotId(3), "col", Type.INT, true);
+            SlotDescriptor descriptor = new SlotDescriptor(new SlotId(3), "col", StandardTypes.INT, true);
             SlotRef slotRef = new SlotRef(descriptor);
-            slotRef.setType(Type.INT);
-            slotRef.setOriginType(Type.INT);
+            slotRef.setType(StandardTypes.INT);
+            slotRef.setOriginType(StandardTypes.INT);
             slotRef.outputColumn = 9;
             return slotRef;
         }
 
         private static Expr buildPlaceHolderExpr() {
-            PlaceHolderExpr expr = new PlaceHolderExpr(5, true, Type.INT);
-            expr.setOriginType(Type.INT);
+            PlaceHolderExpr expr = new PlaceHolderExpr(5, true, StandardTypes.INT);
+            expr.setOriginType(StandardTypes.INT);
             return expr;
         }
 
         private static Expr buildFieldReference() {
             FieldReference ref = new FieldReference(1, new TableName("db", "tbl"));
-            ref.setType(Type.INT);
-            ref.setOriginType(Type.INT);
+            ref.setType(StandardTypes.INT);
+            ref.setOriginType(StandardTypes.INT);
             return ref;
         }
 
         private static Expr buildLambdaArgument() {
             LambdaArgument arg = new LambdaArgument("arg");
-            arg.setType(Type.INT);
-            arg.setOriginType(Type.INT);
+            arg.setType(StandardTypes.INT);
+            arg.setOriginType(StandardTypes.INT);
             return arg;
         }
 
         private static Expr buildArrowExpr() {
             ArrowExpr arrowExpr = new ArrowExpr(new StringLiteral("k"), new StringLiteral("v"));
-            ScalarType varchar = TypeFactory.createVarchar(8);
+            ScalarType varchar = TypeFactory.createVarcharType(8);
             arrowExpr.setType(varchar);
             arrowExpr.setOriginType(varchar);
             return arrowExpr;
@@ -529,22 +531,22 @@ public class ExprToThriftVisitorTest {
             DummyRelation relation = new DummyRelation();
             QueryStatement statement = new QueryStatement(relation);
             Subquery subquery = new Subquery(statement);
-            subquery.setType(Type.INT);
-            subquery.setOriginType(Type.INT);
+            subquery.setType(StandardTypes.INT);
+            subquery.setOriginType(StandardTypes.INT);
             return subquery;
         }
 
         private static Expr buildDefaultValueExpr() {
             DefaultValueExpr expr = new DefaultValueExpr(NodePosition.ZERO);
-            expr.setType(Type.INT);
-            expr.setOriginType(Type.INT);
+            expr.setType(StandardTypes.INT);
+            expr.setOriginType(StandardTypes.INT);
             return expr;
         }
 
         private static Expr buildIntervalLiteral() {
             IntervalLiteral intervalLiteral = new IntervalLiteral(new IntLiteral(1), new UnitIdentifier("DAY"));
-            intervalLiteral.setType(Type.INT);
-            intervalLiteral.setOriginType(Type.INT);
+            intervalLiteral.setType(StandardTypes.INT);
+            intervalLiteral.setOriginType(StandardTypes.INT);
             return intervalLiteral;
         }
 

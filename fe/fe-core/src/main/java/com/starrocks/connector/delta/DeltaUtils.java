@@ -24,6 +24,7 @@ import com.starrocks.connector.ColumnTypeConverter;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.RemoteFileInputFormat;
 import com.starrocks.sql.common.ErrorType;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.Type;
 import io.delta.kernel.data.ArrayValue;
 import io.delta.kernel.data.ColumnVector;
@@ -76,7 +77,7 @@ public class DeltaUtils {
                 type = ColumnTypeConverter.fromDeltaLakeType(dataType, columnMappingMode);
             } catch (InternalError | Exception e) {
                 LOG.error("Failed to convert delta type {} on {}.{}.{}", dataType.toString(), catalog, dbName, tblName, e);
-                type = Type.UNKNOWN_TYPE;
+                type = StandardTypes.UNKNOWN_TYPE;
             }
             Column column = buildColumnWithColumnMapping(field, type, columnMappingMode);
             fullSchema.add(column);

@@ -48,6 +48,7 @@ import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
 
@@ -123,28 +124,28 @@ public class ArithmeticExpr extends Expr {
         }
         functionSet.addBuiltin(ScalarFunction.createBuiltinOperator(
                 Operator.DIVIDE.getName(),
-                Lists.<Type>newArrayList(Type.DOUBLE, Type.DOUBLE),
-                Type.DOUBLE));
+                Lists.<Type>newArrayList(StandardTypes.DOUBLE, StandardTypes.DOUBLE),
+                StandardTypes.DOUBLE));
         functionSet.addBuiltin(ScalarFunction.createBuiltinOperator(
                 Operator.DIVIDE.getName(),
-                Lists.<Type>newArrayList(Type.DECIMALV2, Type.DECIMALV2),
-                Type.DECIMALV2));
+                Lists.<Type>newArrayList(StandardTypes.DECIMALV2, StandardTypes.DECIMALV2),
+                StandardTypes.DECIMALV2));
         functionSet.addBuiltin(ScalarFunction.createBuiltinOperator(
                 Operator.DIVIDE.getName(),
-                Lists.<Type>newArrayList(Type.DECIMAL32, Type.DECIMAL32),
-                Type.DECIMAL32));
+                Lists.<Type>newArrayList(StandardTypes.DECIMAL32, StandardTypes.DECIMAL32),
+                StandardTypes.DECIMAL32));
         functionSet.addBuiltin(ScalarFunction.createBuiltinOperator(
                 Operator.DIVIDE.getName(),
-                Lists.<Type>newArrayList(Type.DECIMAL64, Type.DECIMAL64),
-                Type.DECIMAL64));
+                Lists.<Type>newArrayList(StandardTypes.DECIMAL64, StandardTypes.DECIMAL64),
+                StandardTypes.DECIMAL64));
         functionSet.addBuiltin(ScalarFunction.createBuiltinOperator(
                 Operator.DIVIDE.getName(),
-                Lists.<Type>newArrayList(Type.DECIMAL128, Type.DECIMAL128),
-                Type.DECIMAL128));
+                Lists.<Type>newArrayList(StandardTypes.DECIMAL128, StandardTypes.DECIMAL128),
+                StandardTypes.DECIMAL128));
         functionSet.addBuiltin(ScalarFunction.createBuiltinOperator(
                 Operator.DIVIDE.getName(),
-                Lists.<Type>newArrayList(Type.DECIMAL256, Type.DECIMAL256),
-                Type.DECIMAL256));
+                Lists.<Type>newArrayList(StandardTypes.DECIMAL256, StandardTypes.DECIMAL256),
+                StandardTypes.DECIMAL256));
 
 
         // MOD(), FACTORIAL(), BITAND(), BITOR(), BITXOR(), and BITNOT() are registered as
@@ -153,21 +154,21 @@ public class ArithmeticExpr extends Expr {
             functionSet.addBuiltin(ScalarFunction.createBuiltinOperator(
                     Operator.INT_DIVIDE.getName(), Lists.newArrayList(t, t), t));
         }
-        for (Type t : Arrays.asList(Type.DECIMAL32, Type.DECIMAL64, Type.DECIMAL128)) {
+        for (Type t : Arrays.asList(StandardTypes.DECIMAL32, StandardTypes.DECIMAL64, StandardTypes.DECIMAL128)) {
             functionSet.addBuiltin(ScalarFunction.createBuiltinOperator(
-                    Operator.INT_DIVIDE.getName(), Lists.newArrayList(t, t), Type.BIGINT));
+                    Operator.INT_DIVIDE.getName(), Lists.newArrayList(t, t), StandardTypes.BIGINT));
         }
         for (Type t : Type.getIntegerTypes()) {
             functionSet.addBuiltin(ScalarFunction.createBuiltinOperator(
-                    Operator.BIT_SHIFT_LEFT.getName(), Lists.newArrayList(t, Type.BIGINT), t));
+                    Operator.BIT_SHIFT_LEFT.getName(), Lists.newArrayList(t, StandardTypes.BIGINT), t));
         }
         for (Type t : Type.getIntegerTypes()) {
             functionSet.addBuiltin(ScalarFunction.createBuiltinOperator(
-                    Operator.BIT_SHIFT_RIGHT.getName(), Lists.newArrayList(t, Type.BIGINT), t));
+                    Operator.BIT_SHIFT_RIGHT.getName(), Lists.newArrayList(t, StandardTypes.BIGINT), t));
         }
         for (Type t : Type.getIntegerTypes()) {
             functionSet.addBuiltin(ScalarFunction.createBuiltinOperator(
-                    Operator.BIT_SHIFT_RIGHT_LOGICAL.getName(), Lists.newArrayList(t, Type.BIGINT), t));
+                    Operator.BIT_SHIFT_RIGHT_LOGICAL.getName(), Lists.newArrayList(t, StandardTypes.BIGINT), t));
         }
     }
 
@@ -187,19 +188,19 @@ public class ArithmeticExpr extends Expr {
     private static Type nonDecimalToDecimal(Type type) {
         Preconditions.checkState(!type.isDecimalV3(), "Type of rhs may not be DecimalV3");
         if (type.isLargeIntType()) {
-            return Type.DECIMAL128_INT;
+            return StandardTypes.DECIMAL128_INT;
         } else if (type.isBigint()) {
-            return Type.DECIMAL64_INT;
+            return StandardTypes.DECIMAL64_INT;
         } else if (type.isIntegerType() || type.isBoolean()) {
-            return Type.DECIMAL32_INT;
+            return StandardTypes.DECIMAL32_INT;
         } else if (type.isDecimalV2()) {
-            return Type.DEFAULT_DECIMAL128;
+            return StandardTypes.DEFAULT_DECIMAL128;
         } else if (type.isNull() || type.isFloatingPointType() || type.isStringType()) {
-            return Type.DECIMAL_ZERO;
+            return StandardTypes.DECIMAL_ZERO;
         } else {
             Preconditions.checkState(false,
                     "Implicit casting for decimal arithmetic operations only support integer/float/boolean/null");
-            return Type.INVALID;
+            return StandardTypes.INVALID;
         }
     }
 
@@ -296,9 +297,9 @@ public class ArithmeticExpr extends Expr {
                     ConnectContext connectContext = ConnectContext.get();
                     if (connectContext != null && connectContext.getSessionVariable().isDecimalOverflowToDouble()) {
                         // Convert to double when precision overflow and session variable is enabled
-                        result.returnType = Type.DOUBLE;
-                        result.lhsTargetType = Type.DOUBLE;
-                        result.rhsTargetType = Type.DOUBLE;
+                        result.returnType = StandardTypes.DOUBLE;
+                        result.lhsTargetType = StandardTypes.DOUBLE;
+                        result.rhsTargetType = StandardTypes.DOUBLE;
                         return result;
                     }
                     // returnPrecision > maxDecimalPrecision(38 or 76) and returnScale <= maxDecimalPrecision,
@@ -356,14 +357,14 @@ public class ArithmeticExpr extends Expr {
             case BIT_SHIFT_LEFT:
             case BIT_SHIFT_RIGHT:
             case BIT_SHIFT_RIGHT_LOGICAL:
-                result.lhsTargetType = ScalarType.BIGINT;
-                result.rhsTargetType = ScalarType.BIGINT;
-                result.returnType = ScalarType.BIGINT;
+                result.lhsTargetType = StandardTypes.BIGINT;
+                result.rhsTargetType = StandardTypes.BIGINT;
+                result.returnType = StandardTypes.BIGINT;
                 return result;
             default:
                 Preconditions.checkState(false, "DecimalV3 only support operators: +-*/%&|^");
         }
-        result.returnType = op == Operator.INT_DIVIDE ? ScalarType.BIGINT :
+        result.returnType = op == Operator.INT_DIVIDE ? StandardTypes.BIGINT :
                 TypeFactory.createDecimalV3Type(widerType, maxPrecision, returnScale);
         return result;
     }
@@ -386,9 +387,9 @@ public class ArithmeticExpr extends Expr {
 
     private TypeTriple rewriteDecimalFloatingPointOperation() throws AnalysisException {
         TypeTriple typeTriple = new TypeTriple();
-        typeTriple.lhsTargetType = Type.DOUBLE;
-        typeTriple.rhsTargetType = Type.DOUBLE;
-        typeTriple.returnType = Type.DOUBLE;
+        typeTriple.lhsTargetType = StandardTypes.DOUBLE;
+        typeTriple.rhsTargetType = StandardTypes.DOUBLE;
+        typeTriple.returnType = StandardTypes.DOUBLE;
         return typeTriple;
     }
 
@@ -447,15 +448,15 @@ public class ArithmeticExpr extends Expr {
         PrimitiveType pt2 = t2.getNumResultType().getPrimitiveType();
 
         if (pt1 == PrimitiveType.DOUBLE || pt2 == PrimitiveType.DOUBLE) {
-            return Type.DOUBLE;
+            return StandardTypes.DOUBLE;
         } else if (pt1.isDecimalV3Type() || pt2.isDecimalV3Type()) {
             return ScalarType.getAssigmentCompatibleTypeOfDecimalV3((ScalarType) t1, (ScalarType) t2);
         } else if (pt1 == PrimitiveType.DECIMALV2 || pt2 == PrimitiveType.DECIMALV2) {
-            return Type.DECIMALV2;
+            return StandardTypes.DECIMALV2;
         } else if (pt1 == PrimitiveType.LARGEINT || pt2 == PrimitiveType.LARGEINT) {
-            return Type.LARGEINT;
+            return StandardTypes.LARGEINT;
         } else if (pt1 == PrimitiveType.BIGINT || pt2 == PrimitiveType.BIGINT) {
-            return Type.BIGINT;
+            return StandardTypes.BIGINT;
         } else if ((PrimitiveType.TINYINT.ordinal() <= pt1.ordinal() &&
                 pt1.ordinal() <= PrimitiveType.INT.ordinal()) &&
                 (PrimitiveType.TINYINT.ordinal() <= pt2.ordinal() &&
@@ -470,31 +471,31 @@ public class ArithmeticExpr extends Expr {
             // when t1 is INVALID TYPE:
             return t2;
         } else {
-            return Type.INVALID;
+            return StandardTypes.INVALID;
         }
     }
 
     public static Type getBiggerType(Type t) {
         switch (t.getNumResultType().getPrimitiveType()) {
             case TINYINT:
-                return Type.SMALLINT;
+                return StandardTypes.SMALLINT;
             case SMALLINT:
-                return Type.INT;
+                return StandardTypes.INT;
             case INT:
             case BIGINT:
-                return Type.BIGINT;
+                return StandardTypes.BIGINT;
             case LARGEINT:
-                return Type.LARGEINT;
+                return StandardTypes.LARGEINT;
             case DOUBLE:
-                return Type.DOUBLE;
+                return StandardTypes.DOUBLE;
             case DECIMALV2:
-                return Type.DECIMALV2;
+                return StandardTypes.DECIMALV2;
             case DECIMAL32:
             case DECIMAL64:
             case DECIMAL128:
                 return t;
             default:
-                return Type.INVALID;
+                return StandardTypes.INVALID;
         }
     }
 

@@ -51,6 +51,7 @@ import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.StandardTypes;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
 import org.junit.jupiter.api.Assertions;
@@ -74,7 +75,7 @@ public class ColumnDefTest {
         stringCol = new TypeDef(TypeFactory.createCharType(10));
         floatCol = new TypeDef(TypeFactory.createType(PrimitiveType.FLOAT));
         booleanCol = new TypeDef(TypeFactory.createType(PrimitiveType.BOOLEAN));
-        arrayIntCol = new TypeDef(new ArrayType(Type.INT));
+        arrayIntCol = new TypeDef(new ArrayType(StandardTypes.INT));
     }
 
     @Test
@@ -291,7 +292,7 @@ public class ColumnDefTest {
     public void testArrayHLL() {
         assertThrows(SemanticException.class, () -> {
             ColumnDef column =
-                    new ColumnDef("col", new TypeDef(new ArrayType(Type.HLL)), false, null, null,
+                    new ColumnDef("col", new TypeDef(new ArrayType(StandardTypes.HLL)), false, null, null,
                             true, DefaultValueDef.NOT_SET, "");
             ColumnDefAnalyzer.analyze(column, true);
         });
@@ -301,7 +302,7 @@ public class ColumnDefTest {
     public void testArrayBitmap() {
         assertThrows(SemanticException.class, () -> {
             ColumnDef column =
-                    new ColumnDef("col", new TypeDef(new ArrayType(Type.BITMAP)), false, null, null, true,
+                    new ColumnDef("col", new TypeDef(new ArrayType(StandardTypes.BITMAP)), false, null, null, true,
                             DefaultValueDef.NOT_SET,
                             "");
             ColumnDefAnalyzer.analyze(column, true);
@@ -311,7 +312,7 @@ public class ColumnDefTest {
     @Test
     public void testArrayPercentile() {
         assertThrows(SemanticException.class, () -> {
-            ColumnDef column = new ColumnDef("col", new TypeDef(new ArrayType(Type.PERCENTILE)), false, null, null, true,
+            ColumnDef column = new ColumnDef("col", new TypeDef(new ArrayType(StandardTypes.PERCENTILE)), false, null, null, true,
                     DefaultValueDef.NOT_SET, "");
             ColumnDefAnalyzer.analyze(column, true);
         });
@@ -320,7 +321,7 @@ public class ColumnDefTest {
     @Test
     public void testInvalidVarcharInsideArray() {
         assertThrows(SemanticException.class, () -> {
-            Type tooLongVarchar = TypeFactory.createVarchar(TypeFactory.getOlapMaxVarcharLength() + 1);
+            Type tooLongVarchar = TypeFactory.createVarcharType(TypeFactory.getOlapMaxVarcharLength() + 1);
             ColumnDef column = new ColumnDef("col", new TypeDef(new ArrayType(tooLongVarchar)), false, null, null, true,
                     DefaultValueDef.NOT_SET, "");
             ColumnDefAnalyzer.analyze(column, true);
@@ -340,7 +341,7 @@ public class ColumnDefTest {
     @Test
     public void testColumnWithAggStateDesc() throws AnalysisException {
         AggregateFunction sum = AggregateFunction.createBuiltin(FunctionSet.SUM,
-                Lists.<Type>newArrayList(Type.INT), Type.BIGINT, Type.BIGINT, false, true, false);
+                Lists.<Type>newArrayList(StandardTypes.INT), StandardTypes.BIGINT, StandardTypes.BIGINT, false, true, false);
         AggStateDesc aggStateDesc = new AggStateDesc(sum);
         ColumnDef column = new ColumnDef("col", BigIntCol, "utf8", false, AggregateType.AGG_STATE_UNION,
                 aggStateDesc, Boolean.FALSE, DefaultValueDef.NOT_SET, Boolean.TRUE, null, "");
