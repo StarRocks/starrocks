@@ -1,0 +1,28 @@
+From 553d2591090d6dc03706dc74b4baa47eedf6ba41 Mon Sep 17 00:00:00 2001
+From: Murphy <mofei@starrocks.com>
+Date: Wed, 5 Nov 2025 13:46:49 +0800
+Subject: [PATCH] avoid output to stderr
+
+Signed-off-by: Murphy <mofei@starrocks.com>
+---
+ src/profiledata.cc | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/profiledata.cc b/src/profiledata.cc
+index 2768b44..a4743a5 100644
+--- a/src/profiledata.cc
++++ b/src/profiledata.cc
+@@ -177,8 +177,8 @@ void ProfileData::Stop() {
+   tcmalloc::SaveProcSelfMapsToRawFD(static_cast<RawFD>(out_));
+ 
+   Reset();
+-  fprintf(stderr, "PROFILE: interrupts/evictions/bytes = %d/%d/%zu\n",
+-          count_, evictions_, total_bytes_);
++  // fprintf(stderr, "PROFILE: interrupts/evictions/bytes = %d/%d/%zu\n",
++  //        count_, evictions_, total_bytes_);
+ }
+ 
+ void ProfileData::Reset() {
+-- 
+2.34.1
+
