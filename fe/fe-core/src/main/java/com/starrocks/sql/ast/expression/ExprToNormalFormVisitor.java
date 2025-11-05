@@ -50,7 +50,6 @@ public class ExprToNormalFormVisitor extends ExprToThriftVisitor {
         } else {
             msg.slot_ref = new TSlotRef(0, 0);
         }
-        msg.setOutput_column(node.getOutputColumn());
         return null;
     }
 

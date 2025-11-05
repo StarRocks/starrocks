@@ -75,19 +75,6 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
 
     protected boolean isAnalyzed = false;  // true after analyze() has been called
 
-    // estimated probability of a predicate evaluating to true;
-    // set during analysis;
-    // between 0 and 1 if valid: invalid: -1
-    protected double selectivity;
-
-    // estimated number of distinct values produced by Expr; invalid: -1
-    // set during analysis
-    protected long numDistinctValues;
-
-    protected int outputScale = -1;
-
-    protected int outputColumn = -1;
-
     protected boolean isFilter = false;
 
     // The function to call. This can either be a scalar or aggregate function.
@@ -121,16 +108,12 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         pos = NodePosition.ZERO;
         type = Type.INVALID;
         originType = Type.INVALID;
-        selectivity = -1.0;
-        numDistinctValues = -1;
     }
 
     protected Expr(NodePosition pos) {
         this.pos = pos;
         type = Type.INVALID;
         originType = Type.INVALID;
-        selectivity = -1.0;
-        numDistinctValues = -1;
     }
 
     protected Expr(Expr other) {
@@ -139,8 +122,6 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         type = other.type;
         originType = other.type;
         isAnalyzed = other.isAnalyzed;
-        selectivity = other.selectivity;
-        numDistinctValues = other.numDistinctValues;
         isConstant = other.isConstant;
         fn = other.fn;
         printSqlInParens = other.printSqlInParens;
@@ -217,18 +198,6 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
 
     public void setOriginType(Type originType) {
         this.originType = originType;
-    }
-
-    public long getNumDistinctValues() {
-        return numDistinctValues;
-    }
-
-    public int getOutputScale() {
-        return outputScale;
-    }
-
-    public int getOutputColumn() {
-        return outputColumn;
     }
 
     public boolean isFilter() {
@@ -471,10 +440,6 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         return isConstantImpl();
     }
 
-    public final boolean isParameter() {
-        return this instanceof Parameter;
-    }
-
     /**
      * Implements isConstant() - computes the value without using 'isConstant_'.
      */
@@ -575,8 +540,7 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
 
     @Override
     public String toString() {
-        return MoreObjects.toStringHelper(this.getClass()).add("type", type).add("sel",
-                selectivity).add("#distinct", numDistinctValues).add("scale", outputScale).toString();
+        return MoreObjects.toStringHelper(this.getClass()).add("type", type).toString();
     }
 
     /**
