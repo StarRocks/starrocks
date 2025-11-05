@@ -518,9 +518,6 @@ Status ChunkAccumulator::push(ChunkPtr&& chunk) {
         size_t need_rows = 0;
         if (_tmp_chunk) {
             need_rows = std::min(_desired_size - _tmp_chunk->num_rows(), remain_rows);
-<<<<<<< HEAD
-            TRY_CATCH_BAD_ALLOC(_tmp_chunk->append(*chunk, start, need_rows));
-=======
             // Check JSON schema compatibility before appending
             if (!check_json_schema_compatibility(_tmp_chunk.get(), chunk.get())) {
                 // Schema mismatch, output current chunk and create a new one
@@ -531,7 +528,6 @@ Status ChunkAccumulator::push(ChunkPtr&& chunk) {
                 TRY_CATCH_BAD_ALLOC(_tmp_chunk->append(*chunk, start, need_rows));
             }
             RETURN_IF_ERROR(_tmp_chunk->capacity_limit_reached());
->>>>>>> 66846cd02f ([BugFix] Fix crash in ChunkAccumulator when appending chunks with incompatible JSON schemas (#64894))
         } else {
             need_rows = std::min(_desired_size, remain_rows);
             _tmp_chunk = chunk->clone_empty(_desired_size);
