@@ -83,6 +83,19 @@ arrow: select distinct k1, c_boolean, c_tinyint, c_smallint, c_int, c_bigint, c_
 9	False	9	9	9	9	9000000000000	9.0	9.0	9	9.1	9.1	9.1	2020-01-10	2020-01-01 09:00:00	varchar_9	char_9
 10	True	10	10	10	10	10000000000000	10.0	10.0	10	10.1	10.1	10.1	2020-01-11	2020-01-01 10:00:00	varchar_10	char_10
 -- !result
+arrow: select distinct k1, c_boolean, c_tinyint, c_smallint, c_int, c_bigint, c_largeint, c_float, c_double, c_decimalv2, c_decimal32, c_decimal64, c_decimal128, c_date, c_datetime, c_varchar, c_char from arrow_flight_${uuid0}.t1 order by k1 DESC limit 10;
+-- result:
+1610000	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None
+1609999	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None
+1609998	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None
+1609997	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None
+1609996	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None
+1609995	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None
+1609994	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None
+1609993	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None
+1609992	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None
+1609991	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None
+-- !result
 arrow: select distinct k1, c_boolean, c_tinyint, c_smallint, c_int, c_bigint, c_largeint, c_float, c_double, c_decimalv2, c_decimal32, c_decimal64, c_decimal128, c_date, c_datetime, c_varchar, c_char from arrow_flight_${uuid0}.t1 where false order by k1 limit 10;
 -- result:
 -- !result

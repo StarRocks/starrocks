@@ -27,6 +27,8 @@ arrow: select * from arrow_flight_${uuid0}.t1 where k1 < 0;
 
 arrow: select distinct k1, c_boolean, c_tinyint, c_smallint, c_int, c_bigint, c_largeint, c_float, c_double, c_decimalv2, c_decimal32, c_decimal64, c_decimal128, c_date, c_datetime, c_varchar, c_char from arrow_flight_${uuid0}.t1 order by k1 limit 10;
 
+arrow: select distinct k1, c_boolean, c_tinyint, c_smallint, c_int, c_bigint, c_largeint, c_float, c_double, c_decimalv2, c_decimal32, c_decimal64, c_decimal128, c_date, c_datetime, c_varchar, c_char from arrow_flight_${uuid0}.t1 order by k1 DESC limit 10;
+
 arrow: select distinct k1, c_boolean, c_tinyint, c_smallint, c_int, c_bigint, c_largeint, c_float, c_double, c_decimalv2, c_decimal32, c_decimal64, c_decimal128, c_date, c_datetime, c_varchar, c_char from arrow_flight_${uuid0}.t1 where false order by k1 limit 10;
 
 arrow: select distinct k1, c_boolean, c_tinyint, c_smallint, c_int, c_bigint, c_largeint, c_float, c_double, c_decimalv2, c_decimal32, c_decimal64, c_decimal128, c_date, c_datetime, c_varchar, c_char from arrow_flight_${uuid0}.t1 where k1 < 0 order by k1 limit 10;
