@@ -31,7 +31,7 @@ CLEANUP_SIZE=$DEFAULT_CLEANUP_SIZE
 DAEMON_MODE=false
 INTERVAL=$DEFAULT_INTERVAL
 PID_FILE=""
-LOG_FILE=""
+LOG_FILE="/tmp/collect_be_profile.log"  # Default log file, will be updated in read_config
 PROFILING_TYPE="cpu"  # Default profiling type
 BE_CONF_PATH=""      # Custom be.conf path
 
@@ -67,15 +67,42 @@ usage() {
 }
 
 log() {
-    echo -e "${GREEN}[$(date '+%Y-%m-%d %H:%M:%S')]${NC} $1"
+    local msg="[$(date '+%Y-%m-%d %H:%M:%S')] $1"
+    local log_file="${LOG_FILE:-/tmp/collect_be_profile.log}"
+    
+    # Always write to log file
+    echo -e "$msg" >> "$log_file" 2>&1
+    
+    # In non-daemon mode, also output to stdout
+    if [ "$DAEMON_MODE" != true ]; then
+        echo -e "${GREEN}$msg${NC}"
+    fi
 }
 
 log_warn() {
-    echo -e "${YELLOW}[$(date '+%Y-%m-%d %H:%M:%S')] WARNING:${NC} $1"
+    local msg="[$(date '+%Y-%m-%d %H:%M:%S')] WARNING: $1"
+    local log_file="${LOG_FILE:-/tmp/collect_be_profile.log}"
+    
+    # Always write to log file
+    echo -e "$msg" >> "$log_file" 2>&1
+    
+    # In non-daemon mode, also output to stdout
+    if [ "$DAEMON_MODE" != true ]; then
+        echo -e "${YELLOW}$msg${NC}"
+    fi
 }
 
 log_error() {
-    echo -e "${RED}[$(date '+%Y-%m-%d %H:%M:%S')] ERROR:${NC} $1"
+    local msg="[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: $1"
+    local log_file="${LOG_FILE:-/tmp/collect_be_profile.log}"
+    
+    # Always write to log file
+    echo -e "$msg" >> "$log_file" 2>&1
+    
+    # In non-daemon mode, also output to stdout
+    if [ "$DAEMON_MODE" != true ]; then
+        echo -e "${RED}$msg${NC}"
+    fi
 }
 
 # Read configuration from be.conf
@@ -118,6 +145,10 @@ read_config() {
     OUTPUT_DIR="$OUTPUT_DIR/proc_profile"
     PID_FILE="$STARROCKS_HOME/bin/collect_be_profile.pid"
     LOG_FILE="$OUTPUT_DIR/../collect_be_profile.log"
+    
+    # Create log directory and initialize log file
+    mkdir -p "$(dirname "$LOG_FILE")"
+    touch "$LOG_FILE"
     
     # Log configuration values
     log "BRPC_PORT: $BRPC_PORT"
@@ -388,12 +419,14 @@ main() {
     
     if [ "$DAEMON_MODE" = true ]; then
         if [ "$DAEMON_INTERNAL" = true ]; then
+            # In daemon internal mode, redirect all output to log file
+            exec >> "$LOG_FILE" 2>&1
             daemon_loop
         else
             start_daemon "$@"
         fi
     else
-        # Single collection mode
+        # Single collection mode - log messages go to both stdout and log file
         check_brpc_server
         
         if [ "$PROFILING_TYPE" = "cpu" ] || [ "$PROFILING_TYPE" = "both" ]; then
