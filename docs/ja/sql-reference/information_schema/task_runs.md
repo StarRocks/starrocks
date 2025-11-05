@@ -23,9 +23,6 @@ displayed_sidebar: docs
 | ERROR_MESSAGE | タスクのエラーメッセージ。                                   |
 | PROGRESS      | タスクの進捗。                                               |
 | EXTRA_MESSAGE | タスクの追加メッセージ。例えば、非同期マテリアライズドビュー作成タスクにおけるパーティション情報など。 |
-| PROPERTIES    | タスクのプロパティ。                                         |
-| JOB_ID        | タスクのジョブ ID。                                          |
-| PROCESS_TIME  | タスクの処理時間。                                           |
 
 タスク実行記録は、[SUBMIT TASK](../sql-statements/loading_unloading/ETL/SUBMIT_TASK.md) または [CREATE MATERIALIZED VIEW](../sql-statements/materialized_view/CREATE_MATERIALIZED_VIEW.md) によって生成されます。
 
