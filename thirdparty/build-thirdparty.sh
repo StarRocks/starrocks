@@ -537,7 +537,11 @@ build_glog() {
     check_if_source_exist $GLOG_SOURCE
     cd $TP_SOURCE_DIR/$GLOG_SOURCE
 
-    $CMAKE_CMD -G "${CMAKE_GENERATOR}" -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR -DBUILD_SHARED_LIBS=OFF -DCMAKE_POSITION_INDEPENDENT_CODE=ON -DCMAKE_INSTALL_LIBDIR=lib
+    $CMAKE_CMD -G "${CMAKE_GENERATOR}" \
+        -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
+        -DBUILD_SHARED_LIBS=OFF \
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+        -DCMAKE_INSTALL_LIBDIR=lib
 
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
@@ -694,8 +698,10 @@ build_curl() {
     cd $TP_SOURCE_DIR/$CURL_SOURCE
 
     LDFLAGS="-L${TP_LIB_DIR}" LIBS="-lssl -lcrypto -ldl" \
-    ./configure --prefix=$TP_INSTALL_DIR --disable-shared --enable-static \
-    --without-librtmp --with-ssl=${TP_INSTALL_DIR} --without-libidn2 --without-libgsasl --disable-ldap --enable-ipv6 --without-brotli
+    ./configure --prefix=$TP_INSTALL_DIR --disable-shared --enable-static  \
+                --without-librtmp --with-ssl=${TP_INSTALL_DIR} --without-libidn2 \
+                --without-libgsasl --disable-ldap --enable-ipv6 --without-brotli \
+                --disable-symbol-hiding
     make -j$PARALLEL
     make install
 }
@@ -1072,6 +1078,18 @@ build_fmt() {
     cd build
     $CMAKE_CMD -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} ../ \
             -DCMAKE_INSTALL_LIBDIR=lib64 -G "${CMAKE_GENERATOR}" -DFMT_TEST=OFF
+    ${BUILD_SYSTEM} -j$PARALLEL
+    ${BUILD_SYSTEM} install
+}
+
+build_fmt_shared() {
+    check_if_source_exist $FMT_SOURCE
+    cd $TP_SOURCE_DIR/$FMT_SOURCE
+    mkdir -p build
+    cd build
+    $CMAKE_CMD -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} ../ \
+            -DCMAKE_INSTALL_LIBDIR=lib64 -G "${CMAKE_GENERATOR}" -DFMT_TEST=OFF \
+            -DBUILD_SHARED_LIBS=ON 
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
 }
@@ -1708,6 +1726,7 @@ declare -a all_packages=(
     croaringbitmap
     cctz
     fmt
+    fmt_shared
     ryu
     hadoop
     jdk

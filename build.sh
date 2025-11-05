@@ -100,6 +100,7 @@ Usage: $0 <options>
      --with-gcov        build Backend with gcov, has an impact on performance
      --without-gcov     build Backend without gcov(default)
      --with-bench       build Backend with bench(default without bench)
+     --with-dynamic     build Backend with dynamic linking of individual StarRocks modules (developer option)
      --with-clang-tidy  build Backend with clang-tidy(default without clang-tidy)
      --without-java-ext build Backend without java-extensions(default with java-extensions)
      --without-starcache
@@ -164,6 +165,7 @@ OPTS=$(${GETOPT_BIN} \
   -l 'clean' \
   -l 'with-gcov' \
   -l 'with-bench' \
+  -l 'with-dynamic' \
   -l 'with-clang-tidy' \
   -l 'without-gcov' \
   -l 'without-java-ext' \
@@ -204,6 +206,7 @@ BUILD_JAVA_EXT=ON
 OUTPUT_COMPILE_TIME=OFF
 WITH_TENANN=ON
 WITH_RELATIVE_SRC_PATH=ON
+ENABLE_MULTI_DYNAMIC_LIBS=OFF
 
 # Default to OFF, turn it ON if current shell is non-interactive
 WITH_MAVEN_BATCH_MODE=OFF
@@ -304,6 +307,7 @@ else
             --without-gcov) WITH_GCOV=OFF; shift ;;
             --enable-shared-data|--use-staros) USE_STAROS=ON; shift ;;
             --with-bench) WITH_BENCH=ON; shift ;;
+            --with-dynamic) ENABLE_MULTI_DYNAMIC_LIBS=ON; shift ;;
             --with-clang-tidy) WITH_CLANG_TIDY=ON; shift ;;
             --without-java-ext) BUILD_JAVA_EXT=OFF; shift ;;
             --without-starcache) WITH_STARCACHE=OFF; shift ;;
@@ -375,6 +379,7 @@ echo "Get params:
     WITH_RELATIVE_SRC_PATH      -- $WITH_RELATIVE_SRC_PATH
     WITH_MAVEN_BATCH_MODE       -- $WITH_MAVEN_BATCH_MODE
     DISABLE_JAVA_CHECK_STYLE    -- $DISABLE_JAVA_CHECK_STYLE
+    ENABLE_MULTI_DYNAMIC_LIBS   -- $ENABLE_MULTI_DYNAMIC_LIBS
 "
 
 check_tool()
@@ -490,6 +495,7 @@ if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
                   -DUSE_SSE4_2=$USE_SSE4_2 -DUSE_BMI_2=$USE_BMI_2       \
                   -DENABLE_QUERY_DEBUG_TRACE=$ENABLE_QUERY_DEBUG_TRACE  \
                   -DWITH_BENCH=${WITH_BENCH}                            \
+                  -DENABLE_MULTI_DYNAMIC_LIBS=${ENABLE_MULTI_DYNAMIC_LIBS}\
                   -DWITH_CLANG_TIDY=${WITH_CLANG_TIDY}                  \
                   -DWITH_COMPRESS=${WITH_COMPRESS}                      \
                   -DWITH_STARCACHE=${WITH_STARCACHE}                    \
@@ -637,7 +643,8 @@ if [ ${BUILD_BE} -eq 1 ]; then
         cp -r -p ${STARROCKS_HOME}/be/output/conf/asan_suppressions.conf ${STARROCKS_OUTPUT}/be/conf/
     fi
     cp -r -p ${STARROCKS_HOME}/be/output/lib/starrocks_be ${STARROCKS_OUTPUT}/be/lib/
-    cp -r -p ${STARROCKS_HOME}/be/output/lib/libmockjvm.so ${STARROCKS_OUTPUT}/be/lib/libjvm.so
+    cp -r -p ${STARROCKS_HOME}/be/output/lib/*.so ${STARROCKS_OUTPUT}/be/lib/
+    mv ${STARROCKS_OUTPUT}/be/lib/libmockjvm.so ${STARROCKS_OUTPUT}/be/lib/libjvm.so
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/jemalloc/bin/jeprof ${STARROCKS_OUTPUT}/be/bin
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/jemalloc/lib-shared/libjemalloc.so.2 ${STARROCKS_OUTPUT}/be/lib/libjemalloc.so.2
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/jemalloc-debug/lib/libjemalloc.so.2 ${STARROCKS_OUTPUT}/be/lib/libjemalloc-dbg.so.2

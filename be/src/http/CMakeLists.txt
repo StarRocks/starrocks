@@ -60,7 +60,7 @@ if(STARROCKS_JIT_ENABLE)
     set(WEB_SERVER_FILES ${WEB_SERVER_FILES} action/jit_cache_action.cpp)
 endif()
 
-add_library(Webserver STATIC ${WEB_SERVER_FILES})
+ADD_BE_LIB(Webserver ${WEB_SERVER_FILES})
 
 # target_link_libraries(Webserver pthread dl Util)
 #ADD_BE_TEST(integer-array-test)

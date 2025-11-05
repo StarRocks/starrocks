@@ -43,6 +43,6 @@ if (NOT BUILD_FORMAT_LIB)
     list(APPEND EXEC_FILES fs_starlet.cpp)
 endif()
 
-add_library(FileSystem STATIC
+ADD_BE_LIB(FileSystem
     ${EXEC_FILES}
 )

@@ -14,7 +14,7 @@
 
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/formats")
 
-add_library(Formats STATIC
+ADD_BE_LIB(Formats
         csv/array_converter.cpp
         csv/array_reader.cpp
         csv/boolean_converter.cpp

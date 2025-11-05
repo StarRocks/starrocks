@@ -17,7 +17,7 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/agent")
 # where to put generated binaries
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/agent")
 
-add_library(Agent STATIC
+ADD_BE_LIB(Agent
         agent_server.cpp
         heartbeat_server.cpp
         task_worker_pool.cpp

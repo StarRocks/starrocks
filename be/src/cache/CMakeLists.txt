@@ -35,6 +35,6 @@ if (${WITH_STARCACHE} STREQUAL "ON")
     list(APPEND CACHE_FILES peer_cache_engine.cpp)
 endif()
 
-add_library(Cache STATIC
+ADD_BE_LIB(Cache
     ${CACHE_FILES}
 )

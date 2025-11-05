@@ -29,4 +29,4 @@ set(UDF_FILES
   udf_call_stub.cpp
 )
 
-add_library(Udf STATIC ${UDF_FILES})
+ADD_BE_LIB(Udf ${UDF_FILES})
