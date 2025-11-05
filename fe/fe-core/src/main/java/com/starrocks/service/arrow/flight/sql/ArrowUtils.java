@@ -54,7 +54,8 @@ public final class ArrowUtils {
             Field structField =
                     new Field("entries", FieldType.notNullable(new ArrowType.Struct()), Arrays.asList(keyField, valueField));
 
-            return new Field(colName, new FieldType(nullable, new ArrowType.Map(false), null),
+            return new Field(colName,
+                    new FieldType(nullable, new ArrowType.Map(false), null),
                     Collections.singletonList(structField));
         } else if (type.isStructType()) {
             StructType structType = (StructType) type;
