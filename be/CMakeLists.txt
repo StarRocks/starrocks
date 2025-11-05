@@ -685,6 +685,7 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "18.0.0")
         # ignore warning from apache-orc
         set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-switch-default")
+        set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-error=nrvo")
     endif ()
     # Add -rtlib=compiler-rt for ARM architecture to fix LLVM bug: https://bugs.llvm.org/show_bug.cgi?id=16404
     if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "aarch64")
