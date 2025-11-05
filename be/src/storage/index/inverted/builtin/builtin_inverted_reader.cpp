@@ -28,7 +28,7 @@ Status BuiltinInvertedReader::new_iterator(const std::shared_ptr<TabletIndex> in
     RETURN_IF_ERROR(_bitmap_index->new_iterator(index_opt, &iter));
     std::unique_ptr<BitmapIndexIterator> bitmap_itr;
     bitmap_itr.reset(iter);
-    *iterator = new BuiltinInvertedIndexIterator(index_meta, this, bitmap_itr);
+    *iterator = new BuiltinInvertedIndexIterator(index_meta, this, index_opt.stats, bitmap_itr);
     return Status::OK();
 }
 

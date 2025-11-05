@@ -23,8 +23,10 @@ class FunctionContext;
 class BuiltinInvertedIndexIterator final : public InvertedIndexIterator {
 public:
     BuiltinInvertedIndexIterator(const std::shared_ptr<TabletIndex>& index_meta, InvertedReader* reader,
-                                 std::unique_ptr<BitmapIndexIterator>& bitmap_itr) :
-            InvertedIndexIterator(index_meta, reader), _bitmap_itr(std::move(bitmap_itr)), _like_context(nullptr) {}
+                                 OlapReaderStatistics* stats, std::unique_ptr<BitmapIndexIterator>& bitmap_itr)
+            : InvertedIndexIterator(index_meta, reader, stats),
+              _bitmap_itr(std::move(bitmap_itr)),
+              _like_context(nullptr) {}
 
     ~BuiltinInvertedIndexIterator() override = default;
 
@@ -34,6 +36,7 @@ public:
     Status read_null(const std::string& column_name, roaring::Roaring* bit_map) override;
 
     Status close() override;
+
 private:
     Status _equal_query(const Slice* search_query, roaring::Roaring* bit_map);
 

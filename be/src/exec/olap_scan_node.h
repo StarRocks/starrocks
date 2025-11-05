@@ -248,6 +248,9 @@ private:
     RuntimeProfile::Counter* _bi_filter_timer = nullptr;
     RuntimeProfile::Counter* _gin_filtered_counter = nullptr;
     RuntimeProfile::Counter* _gin_filtered_timer = nullptr;
+    RuntimeProfile::Counter* _gin_prefix_filter_timer = nullptr;
+    RuntimeProfile::Counter* _gin_ngram_dict_filter_timer = nullptr;
+    RuntimeProfile::Counter* _gin_dict_filter_timer = nullptr;
     RuntimeProfile::Counter* _get_row_ranges_by_vector_index_timer = nullptr;
     RuntimeProfile::Counter* _vector_search_timer = nullptr;
     RuntimeProfile::Counter* _vector_index_filtered_counter = nullptr;
