@@ -309,7 +309,6 @@ private:
 
     // _zone_map_index_builder != NULL || _bitmap_index_builder != NULL || _bloom_filter_index_builder != NULL
     bool _has_index_builder = false;
-    bool _has_inverted_builder = false;
     int64_t _element_ordinal = 0;
     int64_t _previous_ordinal = 0;
 
