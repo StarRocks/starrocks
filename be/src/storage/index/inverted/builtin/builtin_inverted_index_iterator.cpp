@@ -145,7 +145,15 @@ Status BuiltinInvertedIndexIterator::_wildcard_query(const Slice* search_query, 
         const Slice sub_query_s(sub_query);
         roaring::Roaring tmp;
 
-        RETURN_IF_ERROR(_bitmap_itr->seek_dict_by_ngram(&sub_query_s, &tmp));
+        if (const auto st = _bitmap_itr->seek_dict_by_ngram(&sub_query_s, &tmp); !st.ok()) {
+            if (st.is_not_found()) {
+                // no words match ngram index, just return empty bitmap
+                VLOG(10) << "no words match ngram index for gram query " << sub_query;
+                return Status::OK();
+            }
+            return st;
+        }
+
         if (tmp.cardinality() <= 0) {
             // no words match ngram index, just return empty bitmap
             VLOG(10) << "no words match ngram index for gram query " << sub_query;
@@ -157,6 +165,12 @@ Status BuiltinInvertedIndexIterator::_wildcard_query(const Slice* search_query, 
             found_at_least_one = true;
         } else {
             filtered_key_words &= tmp;
+        }
+
+        if (filtered_key_words.cardinality() <= 0) {
+            // no words match ngram index, just return empty bitmap
+            VLOG(10) << "no words match ngram index for gram query " << sub_query;
+            return Status::OK();
         }
     }
 
