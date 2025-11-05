@@ -754,8 +754,39 @@ endif()
 set(CXX_GCC_FLAGS "${CXX_GCC_FLAGS} -g -Wno-unused-local-typedefs")
 
 if (WITH_GCOV)
-    # To generate flags to code coverage
-    set(CXX_GCC_FLAGS "${CXX_GCC_FLAGS} -fprofile-arcs -ftest-coverage")
+    # Handle incremental gcov
+    message(STATUS "Incremental gcov enabled")
+    if (GCOV_INCREMENTAL_FILES)
+        # Split the semicolon-separated list of files
+        string(REPLACE ";" " " GCOV_FILES_LIST "${GCOV_INCREMENTAL_FILES}")
+        message(STATUS "Files for incremental coverage: ${GCOV_FILES_LIST}")
+        
+        # Apply coverage flags to specific files only
+        set(INSTRUMENTED_COUNT 0)
+        foreach(file IN LISTS GCOV_FILES_LIST)
+            if (file)
+                # Strip leading/trailing whitespace from file path
+                string(STRIP "${file}" file)
+                
+                # Convert relative path to absolute path
+                set(ABSOLUTE_FILE "${CMAKE_CURRENT_SOURCE_DIR}/${file}")
+                
+                if (EXISTS "${ABSOLUTE_FILE}")
+                    set_source_files_properties("${ABSOLUTE_FILE}" PROPERTIES 
+                        COMPILE_FLAGS "-fprofile-arcs -ftest-coverage")
+                    message(STATUS "Added coverage flags to: ${file}")
+                    math(EXPR INSTRUMENTED_COUNT "${INSTRUMENTED_COUNT} + 1")
+                else()
+                    message(WARNING "File not found for incremental coverage: ${ABSOLUTE_FILE}")
+                endif()
+            endif()
+        endforeach()
+        message(STATUS "Total files instrumented for incremental coverage: ${INSTRUMENTED_COUNT}")
+    else()
+        message(WARNING "Incremental gcov enabled but no files specified, falling back to full coverage")
+        # Apply coverage flags to all files (full coverage mode)
+        set(CXX_GCC_FLAGS "${CXX_GCC_FLAGS} -fprofile-arcs -ftest-coverage")
+    endif()
 endif()
 
 if (WITH_COMPRESS)

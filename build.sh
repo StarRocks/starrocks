@@ -328,7 +328,7 @@ else
     done
 fi
 
-if [[ "${BUILD_TYPE}" == "ASAN" && "${WITH_GCOV}" == "ON" ]]; then
+if [[ "${BUILD_TYPE}" == "ASAN" && ("${WITH_GCOV}" == "ON") ]]; then
     echo "Error: ASAN and gcov cannot be enabled at the same time. Please disable one of them."
     exit 1
 fi
@@ -336,6 +336,14 @@ fi
 if [[ ${HELP} -eq 1 ]]; then
     usage
     exit
+fi
+
+# Handle incremental gcov: detect changed files
+GCOV_INCREMENTAL_FILES=""
+if [[ "${WITH_GCOV}" == "ON" ]]; then
+    # Source the common incremental file detection script
+    source ${STARROCKS_HOME}/build-support/detect_incremental_files.sh
+    detect_incremental_files "build"
 fi
 
 if [ ${CLEAN} -eq 1 ] && [ ${BUILD_BE} -eq 0 ] && [ ${BUILD_FORMAT_LIB} -eq 0 ] && [ ${BUILD_FE} -eq 0 ] && [ ${BUILD_SPARK_DPP} -eq 0 ] && [ ${BUILD_HIVE_UDF} -eq 0 ]; then
@@ -491,6 +499,7 @@ if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
                   -DCMAKE_CXX_COMPILER_LAUNCHER=${CXX_COMPILER_LAUNCHER} \
                   -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}                \
                   -DMAKE_TEST=OFF -DWITH_GCOV=${WITH_GCOV}              \
+                  -DGCOV_INCREMENTAL_FILES="${GCOV_INCREMENTAL_FILES}"  \
                   -DUSE_AVX2=$USE_AVX2 -DUSE_AVX512=$USE_AVX512         \
                   -DUSE_SSE4_2=$USE_SSE4_2 -DUSE_BMI_2=$USE_BMI_2       \
                   -DENABLE_QUERY_DEBUG_TRACE=$ENABLE_QUERY_DEBUG_TRACE  \
