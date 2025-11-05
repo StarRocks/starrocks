@@ -313,17 +313,11 @@ public class LakePublishBatchTest {
                 getTransactionState(transactionId6);
 
         // wait publish complete
-<<<<<<< HEAD
-        Thread.sleep(1000);
-        Assertions.assertEquals(transactionState1.getTransactionStatus(), TransactionStatus.ABORTED);
-        Assertions.assertEquals(transactionState2.getTransactionStatus(), TransactionStatus.ABORTED);
-=======
         waitTransactionDone(transactionState1);
         waitTransactionDone(transactionState2);
 
-        assertEquals(transactionState1.getTransactionStatus(), TransactionStatus.ABORTED);
-        assertEquals(transactionState2.getTransactionStatus(), TransactionStatus.ABORTED);
->>>>>>> a638c3c15c ([UT] Fix unstable lake batch publish ut (#64974))
+        Assertions.assertEquals(transactionState1.getTransactionStatus(), TransactionStatus.ABORTED);
+        Assertions.assertEquals(transactionState2.getTransactionStatus(), TransactionStatus.ABORTED);
     }
 
     @Test
@@ -373,18 +367,13 @@ public class LakePublishBatchTest {
                 getTransactionState(transactionId7);
         TransactionState transactionState2 = globalTransactionMgr.getDatabaseTransactionMgr(db.getId()).
                 getTransactionState(transactionId8);
-<<<<<<< HEAD
-        Assertions.assertEquals(transactionState1.getTransactionStatus(), TransactionStatus.VISIBLE);
-        Assertions.assertEquals(transactionState2.getTransactionStatus(), TransactionStatus.VISIBLE);
-=======
 
         // wait publish complete
         waitTransactionDone(transactionState1);
         waitTransactionDone(transactionState2);
 
-        assertEquals(transactionState1.getTransactionStatus(), TransactionStatus.VISIBLE);
-        assertEquals(transactionState2.getTransactionStatus(), TransactionStatus.VISIBLE);
->>>>>>> a638c3c15c ([UT] Fix unstable lake batch publish ut (#64974))
+        Assertions.assertEquals(transactionState1.getTransactionStatus(), TransactionStatus.VISIBLE);
+        Assertions.assertEquals(transactionState2.getTransactionStatus(), TransactionStatus.VISIBLE);
     }
 
     @Test
