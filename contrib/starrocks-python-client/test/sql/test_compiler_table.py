@@ -110,7 +110,7 @@ class TestCreateTableCompiler:
     def test_column_attributes(self):
         self.logger.info("Testing various column attributes")
         tbl = Table('col_attr_tbl', self.metadata,
-                    Column('k1', Integer, primary_key=True),
+                    Column('k1', Integer, primary_key=True, autoincrement=False),
                     Column('k2', BigInteger, autoincrement=True),
                     Column('k3', String(50), nullable=True),
                     starrocks_distributed_by='HASH(k1)',

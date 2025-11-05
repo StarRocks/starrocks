@@ -22,7 +22,7 @@ registry.register("starrocks", "starrocks.dialect", "StarRocksDialect")
 # It's just used to suppress a spurious warning from pytest.
 pytest.register_assert_rewrite("sqlalchemy.testing.assertions")
 
-from sqlalchemy.testing.plugin.pytestplugin import *  # noqa: E402,F403,I001
+# from sqlalchemy.testing.plugin.pytestplugin import *  # noqa: E402,F403,I001
 
 # Load StarRocks-specific test helpers and fixtures
-# pytest_plugins = ("test.conftest_sr",)
+pytest_plugins = ("test.conftest_sr",)
