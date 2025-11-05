@@ -274,6 +274,10 @@ public class ConnectScheduler {
                 (Predicate<ConnectContext>) c -> customQueryId.equals(c.getCustomQueryId())).findFirst().orElse(null);
     }
 
+    public int getConnectionNum() {
+        return numberConnection.get();
+    }
+
     public Map<String, AtomicInteger> getUserConnectionMap() {
         return connCountByUser;
     }
