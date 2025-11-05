@@ -852,13 +852,13 @@ struct EncodeColumnToDigest {
             } else if constexpr (sizeof(CppType) == 2) {
                 marker_type = RowFingerprintValueType::Int16;
             } else if constexpr (sizeof(CppType) == 4) {
-                marker_type = (LT == TYPE_FLOAT)
-                                      ? RowFingerprintValueType::Float
-                                      : lt_is_date<LT> ? RowFingerprintValueType::Date : RowFingerprintValueType::Int32;
+                marker_type = (LT == TYPE_FLOAT) ? RowFingerprintValueType::Float
+                              : lt_is_date<LT>   ? RowFingerprintValueType::Date
+                                                 : RowFingerprintValueType::Int32;
             } else if constexpr (sizeof(CppType) == 8) {
-                marker_type = (LT == TYPE_DOUBLE) ? RowFingerprintValueType::Double
-                                                  : lt_is_datetime<LT> ? RowFingerprintValueType::DateTime
-                                                                       : RowFingerprintValueType::Int64;
+                marker_type = (LT == TYPE_DOUBLE)  ? RowFingerprintValueType::Double
+                              : lt_is_datetime<LT> ? RowFingerprintValueType::DateTime
+                                                   : RowFingerprintValueType::Int64;
             } else if constexpr (sizeof(CppType) == 16) {
                 marker_type = lt_is_decimal<LT> ? RowFingerprintValueType::Decimal : RowFingerprintValueType::Int128;
             } else {
@@ -875,6 +875,11 @@ struct EncodeColumnToDigest {
                     digests[row].update(&marker, 1);
                     digests[row].update(&data[row], sizeof(CppType));
                 }
+            }
+        } else if (LT == TYPE_NULL) {
+            for (size_t row = 0; row < chunk_size; row++) {
+                uint8_t marker = static_cast<uint8_t>(RowFingerprintValueType::Null);
+                digests[row].update(&marker, 1);
             }
         } else {
             // Fallback for unsupported types (JSON, HLL, OBJECT, STRUCT, ARRAY, MAP, etc.)
@@ -905,12 +910,14 @@ StatusOr<ColumnPtr> EncryptionFunctions::encode_fingerprint_sha256(FunctionConte
     for (size_t col_idx = 0; col_idx < columns.size(); col_idx++) {
         const ColumnPtr& col = columns[col_idx];
         const Column* data_col = ColumnHelper::get_data_column(col.get());
-        const NullColumn* null_col =
-                col->is_nullable() ? down_cast<const NullableColumn*>(col.get())->null_column().get() : nullptr;
+        const NullColumn* null_col = ColumnHelper::get_null_column(col.get());
 
         // Get logical type from FunctionContext
         const auto* type_desc = ctx->get_arg_type(col_idx);
-        DCHECK(type_desc != nullptr) << "FunctionContext must have arg types initialized";
+        if (type_desc == nullptr) {
+            return Status::InternalError(fmt::format(
+                    "FunctionContext arg types not initialized for ENCODE_FINGERPRINT_SHA256 at index {}", col_idx));
+        }
         LogicalType type = type_desc->type;
 
         // Use type dispatch to call the appropriate template specialization
