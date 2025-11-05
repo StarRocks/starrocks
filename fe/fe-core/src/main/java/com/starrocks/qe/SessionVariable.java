@@ -2050,8 +2050,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_DROP_TABLE_CHECK_MV_DEPENDENCY)
     public boolean enableDropTableCheckMvDependency = false;
 
-<<<<<<< HEAD
-=======
     public boolean isEnableSplitTopNAgg() {
         return enableSplitTopNAgg;
     }
@@ -2060,18 +2058,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return splitTopNAggLimit;
     }
 
-    public boolean isEnableDesensitizeExplain() {
-        return enableDesensitizeExplain;
-    }
-
-    public void setEnableDesensitizeExplain(boolean enableDesensitizeExplain) {
-        this.enableDesensitizeExplain = enableDesensitizeExplain;
-    }
-
-    @VarAttr(name = ENABLE_FULL_SORT_USE_GERMAN_STRING)
-    private boolean enableFullSortUseGermanString = true;
-
->>>>>>> 4f3cf32ae5 ([Enhancement] support split topn agg (#64760))
     @VarAttr(name = ENABLE_INSERT_SELECT_EXTERNAL_AUTO_REFRESH)
     private boolean enableInsertSelectExternalAutoRefresh = true;
 
