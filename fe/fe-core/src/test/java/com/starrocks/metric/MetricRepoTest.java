@@ -68,7 +68,7 @@ public class MetricRepoTest extends PlanTestBase {
 
         // verify metric
         JsonMetricVisitor visitor = new JsonMetricVisitor("m");
-        MetricsAction.RequestParams params = new MetricsAction.RequestParams(true, true, true, true);
+        MetricsAction.RequestParams params = new MetricsAction.RequestParams(true, true, true, true, true);
         MetricRepo.getMetric(visitor, params);
         String json = visitor.build();
         Assertions.assertTrue(StringUtils.isNotEmpty(json));
