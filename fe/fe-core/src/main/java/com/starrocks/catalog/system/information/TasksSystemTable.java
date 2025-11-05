@@ -34,7 +34,7 @@ import com.starrocks.thrift.TGetTasksParams;
 import com.starrocks.thrift.TSchemaTableType;
 import com.starrocks.thrift.TTaskInfo;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.ScalarType;
+import com.starrocks.type.TypeFactory;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -53,15 +53,15 @@ public class TasksSystemTable {
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("TASK_NAME", ScalarType.createVarchar(64))
-                        .column("CREATE_TIME", ScalarType.createType(PrimitiveType.DATETIME))
-                        .column("SCHEDULE", ScalarType.createVarchar(64))
-                        .column("CATALOG", ScalarType.createVarchar(64))
-                        .column("DATABASE", ScalarType.createVarchar(64))
-                        .column("DEFINITION", ScalarType.createVarchar(MAX_FIELD_VARCHAR_LENGTH))
-                        .column("EXPIRE_TIME", ScalarType.createType(PrimitiveType.DATETIME))
-                        .column("PROPERTIES", ScalarType.createVarcharType(MAX_FIELD_VARCHAR_LENGTH))
-                        .column("CREATOR", ScalarType.createVarchar(64))
+                        .column("TASK_NAME", TypeFactory.createVarchar(64))
+                        .column("CREATE_TIME", TypeFactory.createType(PrimitiveType.DATETIME))
+                        .column("SCHEDULE", TypeFactory.createVarchar(64))
+                        .column("CATALOG", TypeFactory.createVarchar(64))
+                        .column("DATABASE", TypeFactory.createVarchar(64))
+                        .column("DEFINITION", TypeFactory.createVarchar(MAX_FIELD_VARCHAR_LENGTH))
+                        .column("EXPIRE_TIME", TypeFactory.createType(PrimitiveType.DATETIME))
+                        .column("PROPERTIES", TypeFactory.createVarcharType(MAX_FIELD_VARCHAR_LENGTH))
+                        .column("CREATOR", TypeFactory.createVarchar(64))
                         .build(), TSchemaTableType.SCH_TASKS);
     }
 

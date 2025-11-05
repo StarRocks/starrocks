@@ -26,6 +26,7 @@ import com.starrocks.type.ScalarType;
 import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import org.apache.avro.Schema;
 import org.apache.hadoop.hive.common.type.HiveVarchar;
 import org.junit.jupiter.api.Assertions;
@@ -43,8 +44,8 @@ import static com.starrocks.connector.ColumnTypeConverter.fromPaimonType;
 import static com.starrocks.connector.ColumnTypeConverter.getPrecisionAndScale;
 import static com.starrocks.connector.ColumnTypeConverter.toHiveType;
 import static com.starrocks.type.ScalarType.CATALOG_MAX_VARCHAR_LENGTH;
-import static com.starrocks.type.ScalarType.getOlapMaxVarcharLength;
 import static com.starrocks.type.Type.UNKNOWN_TYPE;
+import static com.starrocks.type.TypeFactory.getOlapMaxVarcharLength;
 
 
 public class ColumnTypeConverterTest {
@@ -109,101 +110,101 @@ public class ColumnTypeConverterTest {
 
     @Test
     public void testArrayString() {
-        ScalarType itemType = ScalarType.createType(PrimitiveType.DATE);
+        ScalarType itemType = TypeFactory.createType(PrimitiveType.DATE);
         ArrayType arrayType = new ArrayType(new ArrayType(itemType));
         String typeStr = "Array<Array<date>>";
         Type resType = fromHiveTypeToArrayType(typeStr);
         Assertions.assertEquals(arrayType, resType);
 
-        itemType = ScalarType.createDefaultCatalogString();
+        itemType = TypeFactory.createDefaultCatalogString();
         arrayType = new ArrayType(itemType);
         typeStr = "Array<string>";
         resType = fromHiveTypeToArrayType(typeStr);
         Assertions.assertEquals(arrayType, resType);
 
-        itemType = ScalarType.createType(PrimitiveType.INT);
+        itemType = TypeFactory.createType(PrimitiveType.INT);
         arrayType = new ArrayType(new ArrayType(new ArrayType(itemType)));
         typeStr = "array<Array<Array<int>>>";
         resType = fromHiveTypeToArrayType(typeStr);
         Assertions.assertEquals(arrayType, resType);
 
-        itemType = ScalarType.createType(PrimitiveType.BIGINT);
+        itemType = TypeFactory.createType(PrimitiveType.BIGINT);
         arrayType = new ArrayType(new ArrayType(new ArrayType(itemType)));
         typeStr = "array<Array<Array<bigint>>>";
         resType = fromHiveTypeToArrayType(typeStr);
         Assertions.assertEquals(arrayType, resType);
 
-        itemType = ScalarType.createUnifiedDecimalType(4, 2);
+        itemType = TypeFactory.createUnifiedDecimalType(4, 2);
         Assertions.assertEquals(new ArrayType(new ArrayType(itemType)),
                 fromHiveTypeToArrayType("array<Array<decimal(4, 2)>>"));
 
-        itemType = ScalarType.createType(PrimitiveType.VARBINARY);
+        itemType = TypeFactory.createType(PrimitiveType.VARBINARY);
         Assertions.assertEquals(new ArrayType(itemType),
                 fromHiveTypeToArrayType("array<BINARY>"));
     }
 
     @Test
     public void testMapString() {
-        ScalarType keyType = ScalarType.createType(PrimitiveType.TINYINT);
-        ScalarType valueType = ScalarType.createType(PrimitiveType.SMALLINT);
+        ScalarType keyType = TypeFactory.createType(PrimitiveType.TINYINT);
+        ScalarType valueType = TypeFactory.createType(PrimitiveType.SMALLINT);
         MapType mapType = new MapType(keyType, valueType);
         String typeStr = "map<tinyint,smallint>";
         Type resType = fromHiveTypeToMapType(typeStr);
         Assertions.assertEquals(mapType, resType);
 
-        keyType = ScalarType.createType(PrimitiveType.INT);
-        valueType = ScalarType.createType(PrimitiveType.INT);
+        keyType = TypeFactory.createType(PrimitiveType.INT);
+        valueType = TypeFactory.createType(PrimitiveType.INT);
         mapType = new MapType(keyType, valueType);
         typeStr = "Map<INT,INTEGER>";
         resType = fromHiveTypeToMapType(typeStr);
         Assertions.assertEquals(mapType, resType);
 
-        keyType = ScalarType.createType(PrimitiveType.FLOAT);
-        valueType = ScalarType.createType(PrimitiveType.DOUBLE);
+        keyType = TypeFactory.createType(PrimitiveType.FLOAT);
+        valueType = TypeFactory.createType(PrimitiveType.DOUBLE);
         mapType = new MapType(keyType, valueType);
         typeStr = "map<float,double>";
         resType = fromHiveTypeToMapType(typeStr);
         Assertions.assertEquals(mapType, resType);
 
-        keyType = ScalarType.createUnifiedDecimalType(10, 7);
-        valueType = ScalarType.createType(PrimitiveType.DATETIME);
+        keyType = TypeFactory.createUnifiedDecimalType(10, 7);
+        valueType = TypeFactory.createType(PrimitiveType.DATETIME);
         mapType = new MapType(keyType, valueType);
         typeStr = "map<decimal(10,7),timestamp>";
         resType = fromHiveTypeToMapType(typeStr);
         Assertions.assertEquals(mapType, resType);
 
-        keyType = ScalarType.createType(PrimitiveType.DATE);
-        valueType = ScalarType.createDefaultCatalogString();
+        keyType = TypeFactory.createType(PrimitiveType.DATE);
+        valueType = TypeFactory.createDefaultCatalogString();
         mapType = new MapType(keyType, valueType);
         typeStr = "map<date,string>";
         resType = fromHiveTypeToMapType(typeStr);
         Assertions.assertEquals(mapType, resType);
 
-        keyType = ScalarType.createVarcharType(10);
-        valueType = ScalarType.createCharType(5);
+        keyType = TypeFactory.createVarcharType(10);
+        valueType = TypeFactory.createCharType(5);
         mapType = new MapType(keyType, valueType);
         typeStr = "map<varchar(10),char(5)>";
         resType = fromHiveTypeToMapType(typeStr);
         Assertions.assertEquals(mapType, resType);
 
-        keyType = ScalarType.createType(PrimitiveType.BOOLEAN);
-        valueType = ScalarType.createVarcharType(10);
+        keyType = TypeFactory.createType(PrimitiveType.BOOLEAN);
+        valueType = TypeFactory.createVarcharType(10);
         mapType = new MapType(keyType, valueType);
         typeStr = "map<boolean,varchar(10)>";
         resType = fromHiveTypeToMapType(typeStr);
         Assertions.assertEquals(mapType, resType);
 
-        keyType = ScalarType.createCharType(10);
-        ScalarType itemType = ScalarType.createType(PrimitiveType.INT);
+        keyType = TypeFactory.createCharType(10);
+        ScalarType itemType = TypeFactory.createType(PrimitiveType.INT);
         ArrayType vType = new ArrayType(itemType);
         mapType = new MapType(keyType, vType);
         typeStr = "map<char(10),array<int>>";
         resType = fromHiveTypeToMapType(typeStr);
         Assertions.assertEquals(mapType, resType);
 
-        keyType = ScalarType.createCharType(10);
-        ScalarType inKeyType = ScalarType.createType(PrimitiveType.INT);
-        itemType = ScalarType.createType(PrimitiveType.DATETIME);
+        keyType = TypeFactory.createCharType(10);
+        ScalarType inKeyType = TypeFactory.createType(PrimitiveType.INT);
+        itemType = TypeFactory.createType(PrimitiveType.DATETIME);
         ArrayType inValueType = new ArrayType(itemType);
         MapType mValueType = new MapType(inKeyType, inValueType);
         mapType = new MapType(keyType, mValueType);
@@ -216,11 +217,11 @@ public class ColumnTypeConverterTest {
     public void testStructString() {
         {
             String typeStr = "struct<a:struct<aa:date>,b:int>";
-            StructField aa = new StructField("aa", ScalarType.createType(PrimitiveType.DATE));
+            StructField aa = new StructField("aa", TypeFactory.createType(PrimitiveType.DATE));
 
             StructType innerStruct = new StructType(Lists.newArrayList(aa));
             StructField a = new StructField("a", innerStruct);
-            StructField b = new StructField("b", ScalarType.createType(PrimitiveType.INT));
+            StructField b = new StructField("b", TypeFactory.createType(PrimitiveType.INT));
             StructType outerStruct = new StructType(Lists.newArrayList(a, b));
 
             Type resType = ColumnTypeConverter.fromHiveType(typeStr);
@@ -230,8 +231,8 @@ public class ColumnTypeConverterTest {
         {
             String typeStr = "array<struct<a:int,b:map<int,int>>>";
             MapType map =
-                    new MapType(ScalarType.createType(PrimitiveType.INT), ScalarType.createType(PrimitiveType.INT));
-            StructField a = new StructField("a", ScalarType.createType(PrimitiveType.INT));
+                    new MapType(TypeFactory.createType(PrimitiveType.INT), TypeFactory.createType(PrimitiveType.INT));
+            StructField a = new StructField("a", TypeFactory.createType(PrimitiveType.INT));
             StructField b = new StructField("b", map);
             StructType structType = new StructType(Lists.newArrayList(a, b));
             ArrayType arrayType = new ArrayType(structType);
@@ -243,11 +244,11 @@ public class ColumnTypeConverterTest {
         {
             String typeStr = "struct<struct_test:int,c1:struct<c1:int,cc1:string>>";
             StructType c1 = new StructType(Lists.newArrayList(
-                    new StructField("c1", ScalarType.createType(PrimitiveType.INT)),
-                    new StructField("cc1", ScalarType.createDefaultCatalogString())
+                    new StructField("c1", TypeFactory.createType(PrimitiveType.INT)),
+                    new StructField("cc1", TypeFactory.createDefaultCatalogString())
             ));
             StructType root = new StructType(Lists.newArrayList(
-                    new StructField("struct_test", ScalarType.createType(PrimitiveType.INT)),
+                    new StructField("struct_test", TypeFactory.createType(PrimitiveType.INT)),
                     new StructField("c1", c1)
             ));
 
@@ -278,7 +279,7 @@ public class ColumnTypeConverterTest {
 
     @Test
     public void testCharString() {
-        Type charType = ScalarType.createCharType(100);
+        Type charType = TypeFactory.createCharType(100);
         String typeStr = "char(100)";
         Type resType = ColumnTypeConverter.fromHiveType(typeStr);
         Assertions.assertEquals(resType, charType);
@@ -290,7 +291,7 @@ public class ColumnTypeConverterTest {
 
     @Test
     public void testVarcharString() {
-        Type varcharType = ScalarType.createVarcharType(100);
+        Type varcharType = TypeFactory.createVarcharType(100);
         String typeStr = "varchar(100)";
         Type resType = ColumnTypeConverter.fromHiveType(typeStr);
         Assertions.assertEquals(resType, varcharType);
@@ -299,20 +300,20 @@ public class ColumnTypeConverterTest {
         resType = ColumnTypeConverter.fromHiveType(typeStr);
         Assertions.assertNotEquals(resType, varcharType);
 
-        varcharType = ScalarType.createVarcharType();
+        varcharType = TypeFactory.createVarcharType();
         typeStr = "varchar(-1)";
         resType = ColumnTypeConverter.fromHiveType(typeStr);
         Assertions.assertEquals(resType, varcharType);
 
-        Type stringType = ScalarType.createDefaultCatalogString();
+        Type stringType = TypeFactory.createDefaultCatalogString();
         typeStr = "string";
         resType = ColumnTypeConverter.fromHiveType(typeStr);
         Assertions.assertEquals(resType, stringType);
 
-        Assertions.assertEquals("varchar(65535)", toHiveType(ScalarType.createVarchar(HiveVarchar.MAX_VARCHAR_LENGTH)));
-        Assertions.assertEquals("varchar(65534)", toHiveType(ScalarType.createVarchar(HiveVarchar.MAX_VARCHAR_LENGTH - 1)));
-        Assertions.assertEquals("string", toHiveType(ScalarType.createVarchar(getOlapMaxVarcharLength())));
-        Assertions.assertEquals("string", toHiveType(ScalarType.createVarchar(CATALOG_MAX_VARCHAR_LENGTH)));
+        Assertions.assertEquals("varchar(65535)", toHiveType(TypeFactory.createVarchar(HiveVarchar.MAX_VARCHAR_LENGTH)));
+        Assertions.assertEquals("varchar(65534)", toHiveType(TypeFactory.createVarchar(HiveVarchar.MAX_VARCHAR_LENGTH - 1)));
+        Assertions.assertEquals("string", toHiveType(TypeFactory.createVarchar(getOlapMaxVarcharLength())));
+        Assertions.assertEquals("string", toHiveType(TypeFactory.createVarchar(CATALOG_MAX_VARCHAR_LENGTH)));
     }
 
     @Test
@@ -321,30 +322,30 @@ public class ColumnTypeConverterTest {
         Schema arraySchema;
 
         unionSchema = Schema.createUnion(Schema.create(Schema.Type.INT));
-        Assertions.assertEquals(fromHudiType(unionSchema), ScalarType.createType(PrimitiveType.INT));
+        Assertions.assertEquals(fromHudiType(unionSchema), TypeFactory.createType(PrimitiveType.INT));
 
         unionSchema = Schema.createUnion(Schema.create(Schema.Type.INT));
         arraySchema = Schema.createArray(unionSchema);
         Schema.createArray(unionSchema);
-        Assertions.assertEquals(fromHudiType(arraySchema), new ArrayType(ScalarType.createType(PrimitiveType.INT)));
+        Assertions.assertEquals(fromHudiType(arraySchema), new ArrayType(TypeFactory.createType(PrimitiveType.INT)));
 
         unionSchema = Schema.createUnion(Schema.create(Schema.Type.BOOLEAN));
         arraySchema = Schema.createArray(unionSchema);
-        Assertions.assertEquals(fromHudiType(arraySchema), new ArrayType(ScalarType.createType(PrimitiveType.BOOLEAN)));
+        Assertions.assertEquals(fromHudiType(arraySchema), new ArrayType(TypeFactory.createType(PrimitiveType.BOOLEAN)));
 
         unionSchema = Schema.createUnion(Schema.create(Schema.Type.STRING));
         arraySchema = Schema.createArray(unionSchema);
-        Assertions.assertEquals(fromHudiType(arraySchema), new ArrayType(ScalarType.createDefaultCatalogString()));
+        Assertions.assertEquals(fromHudiType(arraySchema), new ArrayType(TypeFactory.createDefaultCatalogString()));
 
         unionSchema = Schema.createUnion(Schema.create(Schema.Type.BYTES));
         arraySchema = Schema.createArray(unionSchema);
-        Assertions.assertEquals(fromHudiType(arraySchema), new ArrayType(ScalarType.createType(PrimitiveType.VARCHAR)));
+        Assertions.assertEquals(fromHudiType(arraySchema), new ArrayType(TypeFactory.createType(PrimitiveType.VARCHAR)));
     }
 
     @Test
     public void testPaimonSchema() {
         org.apache.paimon.types.TimeType type = new org.apache.paimon.types.TimeType(3);
-        Assertions.assertEquals(ScalarType.createType(PrimitiveType.TIME), fromPaimonType(type));
+        Assertions.assertEquals(TypeFactory.createType(PrimitiveType.TIME), fromPaimonType(type));
     }
 
     @Test
@@ -356,8 +357,8 @@ public class ColumnTypeConverterTest {
         fields.add(field2);
         Schema structSchema = Schema.createRecord(fields);
 
-        StructField structField1 = new StructField("field1", ScalarType.createType(PrimitiveType.INT));
-        StructField structField2 = new StructField("field2", ScalarType.createDefaultCatalogString());
+        StructField structField1 = new StructField("field1", TypeFactory.createType(PrimitiveType.INT));
+        StructField structField2 = new StructField("field2", TypeFactory.createDefaultCatalogString());
         ArrayList<StructField> structFields = new ArrayList<>();
         structFields.add(structField1);
         structFields.add(structField2);
@@ -380,14 +381,14 @@ public class ColumnTypeConverterTest {
 
         Schema mapSchema = Schema.createMap(structSchema);
 
-        StructField structField1 = new StructField("field1", ScalarType.createType(PrimitiveType.INT));
-        StructField structField2 = new StructField("field2", ScalarType.createDefaultCatalogString());
+        StructField structField1 = new StructField("field1", TypeFactory.createType(PrimitiveType.INT));
+        StructField structField2 = new StructField("field2", TypeFactory.createDefaultCatalogString());
         ArrayList<StructField> structFields = new ArrayList<>();
         structFields.add(structField1);
         structFields.add(structField2);
         StructType structType = new StructType(structFields);
 
-        MapType mapType = new MapType(ScalarType.createDefaultCatalogString(), structType);
+        MapType mapType = new MapType(TypeFactory.createDefaultCatalogString(), structType);
 
         Assertions.assertEquals(mapType, fromHudiType(mapSchema));
 
@@ -409,16 +410,16 @@ public class ColumnTypeConverterTest {
         other = new Column("k1", Type.STRING, false);
         Assertions.assertFalse(columnEquals(base, other));
 
-        base = new Column("k1", ScalarType.createCharType(5), false);
-        other = new Column("k1", ScalarType.createCharType(10), false);
+        base = new Column("k1", TypeFactory.createCharType(5), false);
+        other = new Column("k1", TypeFactory.createCharType(10), false);
         Assertions.assertFalse(columnEquals(base, other));
 
-        base = new Column("k1", ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 5, 5), false);
-        other = new Column("k1", ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 6, 5), false);
+        base = new Column("k1", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 5, 5), false);
+        other = new Column("k1", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 6, 5), false);
         Assertions.assertFalse(columnEquals(base, other));
 
-        base = new Column("k1", ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 5, 5), false);
-        other = new Column("k1", ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 5, 4), false);
+        base = new Column("k1", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 5, 5), false);
+        other = new Column("k1", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 5, 4), false);
         Assertions.assertFalse(columnEquals(base, other));
     }
 
@@ -435,32 +436,32 @@ public class ColumnTypeConverterTest {
         Assertions.assertEquals("date", toHiveType(Type.DATE));
         Assertions.assertEquals("timestamp", toHiveType(Type.DATETIME));
 
-        Assertions.assertEquals("char(10)", toHiveType(ScalarType.createCharType(10)));
+        Assertions.assertEquals("char(10)", toHiveType(TypeFactory.createCharType(10)));
         ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
                 "Unsupported Hive type: CHAR(10000). Supported CHAR types: CHAR(<=255)",
-                () -> toHiveType(ScalarType.createCharType(10000)));
+                () -> toHiveType(TypeFactory.createCharType(10000)));
 
-        Assertions.assertEquals("varchar(100)", toHiveType(ScalarType.createVarchar(100)));
-        Assertions.assertEquals("string", toHiveType(ScalarType.createVarcharType(200000)));
+        Assertions.assertEquals("varchar(100)", toHiveType(TypeFactory.createVarchar(100)));
+        Assertions.assertEquals("string", toHiveType(TypeFactory.createVarcharType(200000)));
 
-        Assertions.assertEquals("string", toHiveType(ScalarType.createVarchar(getOlapMaxVarcharLength())));
+        Assertions.assertEquals("string", toHiveType(TypeFactory.createVarchar(getOlapMaxVarcharLength())));
 
-        ScalarType itemType = ScalarType.createType(PrimitiveType.DATE);
+        ScalarType itemType = TypeFactory.createType(PrimitiveType.DATE);
         ArrayType arrayType = new ArrayType(new ArrayType(itemType));
         Assertions.assertEquals("array<array<date>>", toHiveType(arrayType));
 
-        ScalarType keyType = ScalarType.createType(PrimitiveType.TINYINT);
-        ScalarType valueType = ScalarType.createType(PrimitiveType.SMALLINT);
+        ScalarType keyType = TypeFactory.createType(PrimitiveType.TINYINT);
+        ScalarType valueType = TypeFactory.createType(PrimitiveType.SMALLINT);
         MapType mapType = new MapType(keyType, valueType);
         String typeStr = "map<tinyint,smallint>";
         Assertions.assertEquals(typeStr, toHiveType(mapType));
 
         typeStr = "struct<a:struct<aa:date>,b:int>";
-        StructField aa = new StructField("aa", ScalarType.createType(PrimitiveType.DATE));
+        StructField aa = new StructField("aa", TypeFactory.createType(PrimitiveType.DATE));
 
         StructType innerStruct = new StructType(Lists.newArrayList(aa));
         StructField a = new StructField("a", innerStruct);
-        StructField b = new StructField("b", ScalarType.createType(PrimitiveType.INT));
+        StructField b = new StructField("b", TypeFactory.createType(PrimitiveType.INT));
         StructType outerStruct = new StructType(Lists.newArrayList(a, b));
         Assertions.assertEquals(typeStr, toHiveType(outerStruct));
     }

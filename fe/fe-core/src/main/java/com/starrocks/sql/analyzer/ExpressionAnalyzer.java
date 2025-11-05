@@ -104,10 +104,10 @@ import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.MapType;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.ScalarType;
 import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
@@ -1738,7 +1738,7 @@ public class ExpressionAnalyzer {
             List<Type> expectTypes = new ArrayList<>();
             expectTypes.add(Type.VARCHAR);
             for (Column keyColumn : keyColumns) {
-                expectTypes.add(ScalarType.createType(keyColumn.getType().getPrimitiveType()));
+                expectTypes.add(TypeFactory.createType(keyColumn.getType().getPrimitiveType()));
             }
             if (valueColumnIdx >= 0) {
                 expectTypes.add(Type.VARCHAR);
@@ -1748,7 +1748,7 @@ public class ExpressionAnalyzer {
             }
 
             List<Type> actualTypes = node.getChildren().stream()
-                    .map(expr -> ScalarType.createType(expr.getType().getPrimitiveType())).collect(Collectors.toList());
+                    .map(expr -> TypeFactory.createType(expr.getType().getPrimitiveType())).collect(Collectors.toList());
             if (!Objects.equals(expectTypes, actualTypes)) {
                 List<String> expectTypeNames = new ArrayList<>();
                 expectTypeNames.add("VARCHAR dict_table");
@@ -1777,7 +1777,7 @@ public class ExpressionAnalyzer {
                 }
             }
 
-            Type valueType = ScalarType.createType(valueColumn.getType().getPrimitiveType());
+            Type valueType = TypeFactory.createType(valueColumn.getType().getPrimitiveType());
 
             final TDictQueryExpr dictQueryExpr = new TDictQueryExpr();
             dictQueryExpr.setDb_name(tableName.getDb());

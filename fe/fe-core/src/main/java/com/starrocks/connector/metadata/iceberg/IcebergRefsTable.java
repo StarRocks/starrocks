@@ -24,7 +24,7 @@ import com.starrocks.thrift.THdfsTable;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.ScalarType;
+import com.starrocks.type.TypeFactory;
 
 import java.util.List;
 
@@ -44,12 +44,12 @@ public class IcebergRefsTable extends MetadataTable {
                 TABLE_NAME,
                 Table.TableType.METADATA,
                 builder()
-                        .column("name", ScalarType.createVarcharType())
-                        .column("type", ScalarType.createVarcharType())
-                        .column("snapshot_id", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("max_reference_age_in_ms", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("min_snapshots_to_keep", ScalarType.createType(PrimitiveType.INT))
-                        .column("max_snapshot_age_in_ms", ScalarType.createType(PrimitiveType.BIGINT))
+                        .column("name", TypeFactory.createVarcharType())
+                        .column("type", TypeFactory.createVarcharType())
+                        .column("snapshot_id", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("max_reference_age_in_ms", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("min_snapshots_to_keep", TypeFactory.createType(PrimitiveType.INT))
+                        .column("max_snapshot_age_in_ms", TypeFactory.createType(PrimitiveType.BIGINT))
                         .build(),
                 originDb,
                 originTable,

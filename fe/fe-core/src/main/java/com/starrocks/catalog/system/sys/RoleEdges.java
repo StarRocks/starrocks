@@ -25,7 +25,7 @@ import com.starrocks.thrift.TGetRoleEdgesItem;
 import com.starrocks.thrift.TGetRoleEdgesRequest;
 import com.starrocks.thrift.TGetRoleEdgesResponse;
 import com.starrocks.thrift.TSchemaTableType;
-import com.starrocks.type.ScalarType;
+import com.starrocks.type.TypeFactory;
 
 import java.util.List;
 import java.util.Set;
@@ -39,9 +39,9 @@ public class RoleEdges {
     public static SystemTable create() {
         return new SystemTable(SystemId.ROLE_EDGES_ID, NAME, Table.TableType.SCHEMA,
                 builder()
-                        .column("FROM_ROLE", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("TO_ROLE", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("TO_USER", ScalarType.createVarchar(NAME_CHAR_LEN))
+                        .column("FROM_ROLE", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("TO_ROLE", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("TO_USER", TypeFactory.createVarchar(NAME_CHAR_LEN))
                         .build(),
                 TSchemaTableType.STARROCKS_ROLE_EDGES);
     }

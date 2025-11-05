@@ -322,11 +322,11 @@ public class TypeCompatibilityMatrix {
 
         // JSON
         for (PrimitiveType type : PrimitiveType.JSON_COMPATIBLE_TYPE) {
-            ScalarType scalar = ScalarType.createType(type);
+            ScalarType scalar = TypeFactory.createType(type);
             COMPATIBILITY_MATRIX[scalar.ordinal()][Type.JSON.ordinal()] = type;
         }
         for (PrimitiveType type : PrimitiveType.JSON_UNCOMPATIBLE_TYPE) {
-            ScalarType scalar = ScalarType.createType(type);
+            ScalarType scalar = TypeFactory.createType(type);
             COMPATIBILITY_MATRIX[scalar.ordinal()][Type.JSON.ordinal()] = PrimitiveType.INVALID_TYPE;
         }
 
@@ -342,11 +342,11 @@ public class TypeCompatibilityMatrix {
 
         // VARIANT
         for (PrimitiveType type : PrimitiveType.VARIANT_COMPATIBLE_TYPE) {
-            ScalarType scalar = ScalarType.createType(type);
+            ScalarType scalar = TypeFactory.createType(type);
             COMPATIBILITY_MATRIX[scalar.ordinal()][Type.VARIANT.ordinal()] = PrimitiveType.VARIANT;
         }
         for (PrimitiveType type : PrimitiveType.VARIANT_INCOMPATIBLE_TYPES) {
-            ScalarType scalar = ScalarType.createType(type);
+            ScalarType scalar = TypeFactory.createType(type);
             COMPATIBILITY_MATRIX[scalar.ordinal()][Type.VARIANT.ordinal()] = PrimitiveType.INVALID_TYPE;
         }
         COMPATIBILITY_MATRIX[Type.VARIANT.ordinal()][Type.DATE.ordinal()] = PrimitiveType.INVALID_TYPE;
@@ -370,7 +370,7 @@ public class TypeCompatibilityMatrix {
 
         // binary type
         for (PrimitiveType type : PrimitiveType.BINARY_INCOMPATIBLE_TYPE_LIST) {
-            ScalarType scalar = ScalarType.createType(type);
+            ScalarType scalar = TypeFactory.createType(type);
             COMPATIBILITY_MATRIX[scalar.ordinal()][Type.VARBINARY.ordinal()] = PrimitiveType.INVALID_TYPE;
         }
 

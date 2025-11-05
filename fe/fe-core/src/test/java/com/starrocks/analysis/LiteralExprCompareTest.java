@@ -30,6 +30,7 @@ import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -274,10 +275,10 @@ public class LiteralExprCompareTest {
 
     @Test
     public void intTest() throws AnalysisException {
-        intTestInternal(ScalarType.createType(PrimitiveType.TINYINT));
-        intTestInternal(ScalarType.createType(PrimitiveType.SMALLINT));
-        intTestInternal(ScalarType.createType(PrimitiveType.INT));
-        intTestInternal(ScalarType.createType(PrimitiveType.BIGINT));
+        intTestInternal(TypeFactory.createType(PrimitiveType.TINYINT));
+        intTestInternal(TypeFactory.createType(PrimitiveType.SMALLINT));
+        intTestInternal(TypeFactory.createType(PrimitiveType.INT));
+        intTestInternal(TypeFactory.createType(PrimitiveType.BIGINT));
     }
 
     @Test

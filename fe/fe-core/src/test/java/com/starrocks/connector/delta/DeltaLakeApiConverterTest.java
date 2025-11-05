@@ -18,9 +18,9 @@ import com.google.common.collect.ImmutableList;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.MapType;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.ScalarType;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import io.delta.kernel.types.BinaryType;
 import io.delta.kernel.types.DataType;
 import io.delta.kernel.types.IntegerType;
@@ -43,7 +43,7 @@ public class DeltaLakeApiConverterTest {
         );
 
         Type srType = fromDeltaLakeType(deltaType, COLUMN_MAPPING_MODE_NONE);
-        Assertions.assertEquals(srType, new ArrayType(ScalarType.createType(PrimitiveType.INT)));
+        Assertions.assertEquals(srType, new ArrayType(TypeFactory.createType(PrimitiveType.INT)));
     }
 
     @Test
@@ -74,7 +74,7 @@ public class DeltaLakeApiConverterTest {
 
         Type srType = fromDeltaLakeType(deltaType, COLUMN_MAPPING_MODE_NONE);
         Assertions.assertEquals(srType,
-                new MapType(ScalarType.createType(PrimitiveType.INT), ScalarType.createType(PrimitiveType.VARBINARY)));
+                new MapType(TypeFactory.createType(PrimitiveType.INT), TypeFactory.createType(PrimitiveType.VARBINARY)));
     }
 
     @Test
@@ -87,7 +87,7 @@ public class DeltaLakeApiConverterTest {
 
         Type srType = fromDeltaLakeType(deltaType, COLUMN_MAPPING_MODE_NONE);
         Assertions.assertEquals(srType, new StructType(ImmutableList.of(
-                ScalarType.createType(PrimitiveType.INT),
-                ScalarType.createDefaultCatalogString())));
+                TypeFactory.createType(PrimitiveType.INT),
+                TypeFactory.createDefaultCatalogString())));
     }
 }

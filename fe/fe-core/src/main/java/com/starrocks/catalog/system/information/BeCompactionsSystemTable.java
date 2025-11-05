@@ -18,7 +18,7 @@ import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.thrift.TSchemaTableType;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.ScalarType;
+import com.starrocks.type.TypeFactory;
 
 import static com.starrocks.catalog.system.SystemTable.builder;
 
@@ -30,14 +30,14 @@ public class BeCompactionsSystemTable {
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("BE_ID", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("CANDIDATES_NUM", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("BASE_COMPACTION_CONCURRENCY", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("CUMULATIVE_COMPACTION_CONCURRENCY", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("LATEST_COMPACTION_SCORE", ScalarType.createType(PrimitiveType.DOUBLE))
-                        .column("CANDIDATE_MAX_SCORE", ScalarType.createType(PrimitiveType.DOUBLE))
-                        .column("MANUAL_COMPACTION_CONCURRENCY", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("MANUAL_COMPACTION_CANDIDATES_NUM", ScalarType.createType(PrimitiveType.BIGINT))
+                        .column("BE_ID", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("CANDIDATES_NUM", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("BASE_COMPACTION_CONCURRENCY", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("CUMULATIVE_COMPACTION_CONCURRENCY", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("LATEST_COMPACTION_SCORE", TypeFactory.createType(PrimitiveType.DOUBLE))
+                        .column("CANDIDATE_MAX_SCORE", TypeFactory.createType(PrimitiveType.DOUBLE))
+                        .column("MANUAL_COMPACTION_CONCURRENCY", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("MANUAL_COMPACTION_CANDIDATES_NUM", TypeFactory.createType(PrimitiveType.BIGINT))
                         .build(), TSchemaTableType.SCH_BE_COMPACTIONS);
     }
 }

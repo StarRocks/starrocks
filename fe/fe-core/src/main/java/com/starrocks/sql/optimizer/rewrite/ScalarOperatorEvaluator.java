@@ -35,8 +35,8 @@ import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.logging.log4j.LogManager;
@@ -99,10 +99,10 @@ public enum ScalarOperatorEvaluator {
                                   Method method, ConstantFunction annotation) {
         if (annotation != null) {
             String name = annotation.name().toUpperCase();
-            Type returnType = ScalarType.createType(annotation.returnType());
+            Type returnType = TypeFactory.createType(annotation.returnType());
             List<Type> argTypes = new ArrayList<>();
             for (PrimitiveType type : annotation.argTypes()) {
-                argTypes.add(ScalarType.createType(type));
+                argTypes.add(TypeFactory.createType(type));
             }
 
             FunctionSignature signature = new FunctionSignature(name, argTypes, returnType);

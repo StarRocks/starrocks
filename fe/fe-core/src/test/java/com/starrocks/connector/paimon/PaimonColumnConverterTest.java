@@ -15,9 +15,9 @@
 package com.starrocks.connector.paimon;
 
 import com.starrocks.connector.ColumnTypeConverter;
-import com.starrocks.type.ScalarType;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import org.apache.paimon.types.ArrayType;
 import org.apache.paimon.types.BigIntType;
 import org.apache.paimon.types.BinaryType;
@@ -63,7 +63,7 @@ public class PaimonColumnConverterTest {
     public void testConvertChar() {
         CharType paimonType = new CharType(10);
         Type result = ColumnTypeConverter.fromPaimonType(paimonType);
-        Type srType = ScalarType.createCharType(10);
+        Type srType = TypeFactory.createCharType(10);
         Assertions.assertEquals(result, srType);
     }
 
@@ -71,7 +71,7 @@ public class PaimonColumnConverterTest {
     public void testConvertVarchar() {
         VarCharType paimonType = new VarCharType();
         Type result = ColumnTypeConverter.fromPaimonType(paimonType);
-        Type srType = ScalarType.createDefaultCatalogString();
+        Type srType = TypeFactory.createDefaultCatalogString();
         Assertions.assertEquals(result, srType);
     }
 
@@ -88,7 +88,7 @@ public class PaimonColumnConverterTest {
         int scale = 5;
         DecimalType paimonType = new DecimalType(precision, scale);
         Type result = ColumnTypeConverter.fromPaimonType(paimonType);
-        Type srType = ScalarType.createUnifiedDecimalType(precision, scale);
+        Type srType = TypeFactory.createUnifiedDecimalType(precision, scale);
         Assertions.assertEquals(result, srType);
     }
 
@@ -170,7 +170,7 @@ public class PaimonColumnConverterTest {
         Type result = ColumnTypeConverter.fromPaimonType(paimonType);
         Assertions.assertTrue(result instanceof com.starrocks.type.MapType);
         com.starrocks.type.MapType srType = (com.starrocks.type.MapType) result;
-        Assertions.assertEquals(ScalarType.createDefaultCatalogString(), srType.getKeyType());
+        Assertions.assertEquals(TypeFactory.createDefaultCatalogString(), srType.getKeyType());
         Assertions.assertEquals(Type.DATETIME, srType.getValueType());
     }
 

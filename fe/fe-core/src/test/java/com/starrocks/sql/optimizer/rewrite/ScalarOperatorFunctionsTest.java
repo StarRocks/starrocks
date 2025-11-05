@@ -22,8 +22,8 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -99,17 +99,17 @@ public class ScalarOperatorFunctionsTest {
         O_LI_NEG_100 = ConstantOperator.createLargeInt(new BigInteger("-100"));
         O_DECIMAL_100 = ConstantOperator.createDecimal(new BigDecimal(100), Type.DECIMALV2);
         O_DECIMAL32P7S2_100 = ConstantOperator.createDecimal(new BigDecimal(100),
-                ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL32, 7, 2));
+                TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL32, 7, 2));
         O_DECIMAL32P9S0_100 = ConstantOperator.createDecimal(new BigDecimal(100),
-                ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL32, 9, 0));
+                TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL32, 9, 0));
         O_DECIMAL64P15S10_100 = ConstantOperator.createDecimal(new BigDecimal(100),
-                ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 15, 10));
+                TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 15, 10));
         O_DECIMAL64P18S15_100 = ConstantOperator.createDecimal(new BigDecimal(100),
-                ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 15));
+                TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 15));
         O_DECIMAL128P38S20_100 = ConstantOperator.createDecimal(new BigDecimal(100),
-                ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 20));
+                TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 20));
         O_DECIMAL128P30S2_100 = ConstantOperator.createDecimal(new BigDecimal(100),
-                ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 30, 2));
+                TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 30, 2));
     }
 
     @Test

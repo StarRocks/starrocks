@@ -72,8 +72,8 @@ import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.common.MetaUtils;
-import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mock;
@@ -244,7 +244,7 @@ public class SparkLoadPendingTaskTest {
         // c1 is partition column, c2 is distribution column
         List<Column> columns = Lists.newArrayList();
         columns.add(new Column("c1", Type.INT, true, null, false, null, ""));
-        columns.add(new Column("c2", ScalarType.createVarchar(10), true, null, false, null, ""));
+        columns.add(new Column("c2", TypeFactory.createVarchar(10), true, null, false, null, ""));
         columns.add(new Column("c3", Type.INT, false, AggregateType.SUM, false, null, ""));
 
         Map<ColumnId, Column> idToColumn = Maps.newTreeMap(ColumnId.CASE_INSENSITIVE_ORDER);

@@ -17,8 +17,8 @@ package com.starrocks.connector.jdbc;
 import com.google.common.collect.ImmutableSet;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 
 import java.sql.Connection;
 import java.sql.ResultSet;
@@ -118,7 +118,7 @@ public class ClickhouseSchemaResolver extends JDBCSchemaResolver {
                 primitiveType = PrimitiveType.BOOLEAN;
                 break;
             case Types.VARCHAR:
-                return ScalarType.createVarcharType(65533);
+                return TypeFactory.createVarcharType(65533);
             case Types.DATE:
                 primitiveType = PrimitiveType.DATE;
                 break;
@@ -141,13 +141,13 @@ public class ClickhouseSchemaResolver extends JDBCSchemaResolver {
                 } else {
                     int precision = Integer.parseInt(precisionAndScale[0]);
                     int scale = Integer.parseInt(precisionAndScale[1]);
-                    return ScalarType.createUnifiedDecimalType(precision, scale);
+                    return TypeFactory.createUnifiedDecimalType(precision, scale);
                 }
             default:
                 primitiveType = PrimitiveType.UNKNOWN_TYPE;
                 break;
         }
-        return ScalarType.createType(primitiveType);
+        return TypeFactory.createType(primitiveType);
     }
 
 

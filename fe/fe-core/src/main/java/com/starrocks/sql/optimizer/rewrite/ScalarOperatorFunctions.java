@@ -49,6 +49,7 @@ import com.starrocks.sql.ast.expression.DecimalLiteral;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import net.openhft.hashing.LongHashFunction;
 import org.apache.commons.lang.StringUtils;
 import org.apache.http.NameValuePair;
@@ -1518,7 +1519,7 @@ public class ScalarOperatorFunctions {
         } else {
             int precision = DecimalLiteral.getRealPrecision(result);
             int scale = DecimalLiteral.getRealScale(result);
-            type = ScalarType.createDecimalV3NarrowestType(precision, scale);
+            type = TypeFactory.createDecimalV3NarrowestType(precision, scale);
         }
 
         return ConstantOperator.createDecimal(result, type);

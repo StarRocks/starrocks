@@ -37,7 +37,7 @@ import org.apache.iceberg.PartitionField;
 import java.util.List;
 
 import static com.starrocks.connector.metadata.TableMetaMetadata.METADATA_DB_NAME;
-import static com.starrocks.type.ScalarType.createType;
+import static com.starrocks.type.TypeFactory.createType;
 
 public class IcebergPartitionsTable extends MetadataTable {
     public static final String TABLE_NAME = "iceberg_partitions_table";

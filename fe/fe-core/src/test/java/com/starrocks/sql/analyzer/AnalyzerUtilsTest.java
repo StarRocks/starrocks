@@ -31,6 +31,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
@@ -90,9 +91,9 @@ public class AnalyzerUtilsTest {
 
     @Test
     public void testConvertCatalogMaxStringToOlapMaxString() {
-        ScalarType catalogString = ScalarType.createDefaultCatalogString();
+        ScalarType catalogString = TypeFactory.createDefaultCatalogString();
         ScalarType convertedString = (ScalarType) AnalyzerUtils.transformTableColumnType(catalogString);
-        Assertions.assertEquals(ScalarType.getOlapMaxVarcharLength(), convertedString.getLength());
+        Assertions.assertEquals(TypeFactory.getOlapMaxVarcharLength(), convertedString.getLength());
     }
 
     @Test

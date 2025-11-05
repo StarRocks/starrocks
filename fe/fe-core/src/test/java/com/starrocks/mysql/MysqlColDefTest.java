@@ -24,7 +24,7 @@ public class MysqlColDefTest {
     @Test
     public void testCreate() {
         //        Expr expr = EasyMock.createMock(Expr.class);
-        //        EasyMock.expect(expr.getType()).andReturn(ScalarType.createType(PrimitiveType.BIGINT)).anyTimes();
+        //        EasyMock.expect(expr.getType()).andReturn(TypeFactory.createType(PrimitiveType.BIGINT)).anyTimes();
         //        EasyMock.replay(expr);
         //
         //        MysqlColDef def = MysqlColDef.fromExpr(expr, "col1");
@@ -50,7 +50,7 @@ public class MysqlColDefTest {
     @Test
     public void testCreateFromName() {
         //        Expr expr = EasyMock.createMock(Expr.class);
-        //        EasyMock.expect(expr.getType()).andReturn(ScalarType.createType(PrimitiveType.BIGINT)).anyTimes();
+        //        EasyMock.expect(expr.getType()).andReturn(TypeFactory.createType(PrimitiveType.BIGINT)).anyTimes();
         //        EasyMock.replay(expr);
         //
         //        MysqlColDef def = MysqlColDef.fromName("col1");

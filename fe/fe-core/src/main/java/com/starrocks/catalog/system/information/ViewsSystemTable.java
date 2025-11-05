@@ -48,8 +48,8 @@ import com.starrocks.thrift.TSchemaTableType;
 import com.starrocks.thrift.TTableStatus;
 import com.starrocks.thrift.TTableType;
 import com.starrocks.thrift.TUserIdentity;
-import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import org.apache.commons.lang3.NotImplementedException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -78,18 +78,18 @@ public class ViewsSystemTable extends SystemTable {
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("TABLE_CATALOG", ScalarType.createVarchar(512))
-                        .column("TABLE_SCHEMA", ScalarType.createVarchar(64))
-                        .column("TABLE_NAME", ScalarType.createVarchar(64))
+                        .column("TABLE_CATALOG", TypeFactory.createVarchar(512))
+                        .column("TABLE_SCHEMA", TypeFactory.createVarchar(64))
+                        .column("TABLE_NAME", TypeFactory.createVarchar(64))
                         // TODO: Type for EVENT_DEFINITION should be `longtext`, but `varchar(65535)` was set at this stage.
                         .column("VIEW_DEFINITION",
-                                ScalarType.createVarchar(MAX_FIELD_VARCHAR_LENGTH))
-                        .column("CHECK_OPTION", ScalarType.createVarchar(8))
-                        .column("IS_UPDATABLE", ScalarType.createVarchar(3))
-                        .column("DEFINER", ScalarType.createVarchar(77))
-                        .column("SECURITY_TYPE", ScalarType.createVarchar(7))
-                        .column("CHARACTER_SET_CLIENT", ScalarType.createVarchar(32))
-                        .column("COLLATION_CONNECTION", ScalarType.createVarchar(32))
+                                TypeFactory.createVarchar(MAX_FIELD_VARCHAR_LENGTH))
+                        .column("CHECK_OPTION", TypeFactory.createVarchar(8))
+                        .column("IS_UPDATABLE", TypeFactory.createVarchar(3))
+                        .column("DEFINER", TypeFactory.createVarchar(77))
+                        .column("SECURITY_TYPE", TypeFactory.createVarchar(7))
+                        .column("CHARACTER_SET_CLIENT", TypeFactory.createVarchar(32))
+                        .column("COLLATION_CONNECTION", TypeFactory.createVarchar(32))
                         .build(), TSchemaTableType.SCH_VIEWS);
     }
 

@@ -126,6 +126,7 @@ import com.starrocks.type.ScalarType;
 import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -1275,33 +1276,33 @@ public class AnalyzerUtils {
             if (PrimitiveType.VARCHAR == srcType.getPrimitiveType() ||
                     PrimitiveType.CHAR == srcType.getPrimitiveType() ||
                     PrimitiveType.NULL_TYPE == srcType.getPrimitiveType()) {
-                int len = ScalarType.getOlapMaxVarcharLength();
+                int len = TypeFactory.getOlapMaxVarcharLength();
                 if (srcType instanceof ScalarType) {
                     ScalarType scalarType = (ScalarType) srcType;
                     if (Config.transform_type_prefer_string_for_varchar) {
                         // always use max varchar length for varchar type if transform_type_prefer_string_for_varchar is set.
-                        len = ScalarType.getOlapMaxVarcharLength();
+                        len = TypeFactory.getOlapMaxVarcharLength();
                     } else {
                         if (scalarType.getLength() > 0) {
                             // Catalog's varchar length may larger than olap's max varchar length
-                            len = Integer.min(scalarType.getLength(), ScalarType.getOlapMaxVarcharLength());
+                            len = Integer.min(scalarType.getLength(), TypeFactory.getOlapMaxVarcharLength());
                         }
                     }
                 }
-                newType = ScalarType.createVarcharType(len);
+                newType = TypeFactory.createVarcharType(len);
             } else if (PrimitiveType.FLOAT == srcType.getPrimitiveType() ||
                     PrimitiveType.DOUBLE == srcType.getPrimitiveType()) {
                 if (convertDouble) {
-                    newType = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 9);
+                    newType = TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 9);
                 }
             } else if (PrimitiveType.DECIMAL256 == srcType.getPrimitiveType() ||
                     PrimitiveType.DECIMAL128 == srcType.getPrimitiveType() ||
                     PrimitiveType.DECIMAL64 == srcType.getPrimitiveType() ||
                     PrimitiveType.DECIMAL32 == srcType.getPrimitiveType()) {
-                newType = ScalarType.createDecimalV3Type(srcType.getPrimitiveType(),
+                newType = TypeFactory.createDecimalV3Type(srcType.getPrimitiveType(),
                         srcType.getPrecision(), srcType.getDecimalDigits());
             } else {
-                newType = ScalarType.createType(srcType.getPrimitiveType());
+                newType = TypeFactory.createType(srcType.getPrimitiveType());
             }
         } else if (srcType.isArrayType()) {
             newType = new ArrayType(transformTableColumnType(((ArrayType) srcType).getItemType(), convertDouble));

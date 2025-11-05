@@ -48,6 +48,7 @@ import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.NotImplementedException;
 import org.apache.thrift.protocol.TType;
@@ -278,6 +279,6 @@ public class SystemTable extends Table {
     }
 
     public static ScalarType createNameType() {
-        return ScalarType.createVarchar(NAME_CHAR_LEN);
+        return TypeFactory.createVarchar(NAME_CHAR_LEN);
     }
 }

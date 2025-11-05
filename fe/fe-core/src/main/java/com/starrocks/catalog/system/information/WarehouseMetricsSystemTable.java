@@ -29,7 +29,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.thrift.TSchemaTableType;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.ScalarType;
+import com.starrocks.type.TypeFactory;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.NotImplementedException;
@@ -50,18 +50,18 @@ public class WarehouseMetricsSystemTable extends SystemTable {
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("WAREHOUSE_ID", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("WAREHOUSE_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("QUEUE_PENDING_LENGTH", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("QUEUE_RUNNING_LENGTH", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("MAX_PENDING_LENGTH", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("MAX_PENDING_TIME_SECOND", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("EARLIEST_QUERY_WAIT_TIME", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("MAX_REQUIRED_SLOTS", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("SUM_REQUIRED_SLOTS", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("REMAIN_SLOTS", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("MAX_SLOTS", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("EXTRA_MESSAGE", ScalarType.createVarchar(NAME_CHAR_LEN))
+                        .column("WAREHOUSE_ID", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("WAREHOUSE_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("QUEUE_PENDING_LENGTH", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("QUEUE_RUNNING_LENGTH", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("MAX_PENDING_LENGTH", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("MAX_PENDING_TIME_SECOND", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("EARLIEST_QUERY_WAIT_TIME", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("MAX_REQUIRED_SLOTS", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("SUM_REQUIRED_SLOTS", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("REMAIN_SLOTS", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("MAX_SLOTS", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("EXTRA_MESSAGE", TypeFactory.createVarchar(NAME_CHAR_LEN))
                         .build(), TSchemaTableType.SCH_WAREHOUSE_METRICS);
     }
 

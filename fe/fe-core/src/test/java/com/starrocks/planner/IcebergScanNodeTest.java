@@ -47,6 +47,7 @@ import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TSinkCommitInfo;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.type.ScalarType;
+import com.starrocks.type.TypeFactory;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -346,7 +347,7 @@ public class IcebergScanNodeTest {
 
 
         List<Column> schemaColumns = new ArrayList<>();
-        schemaColumns.add(new Column("col1", ScalarType.createVarchar(20)));
+        schemaColumns.add(new Column("col1", TypeFactory.createVarchar(20)));
 
         IcebergTable icebergTable = new IcebergTable.Builder()
                 .setId(1234)

@@ -35,8 +35,8 @@ import com.starrocks.statistic.sample.SampleInfo;
 import com.starrocks.statistic.sample.TabletSampleManager;
 import com.starrocks.type.MapType;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -366,14 +366,14 @@ public class StatisticsSQLTest extends PlanTestBase {
 
         sql = StatisticSQLBuilder.buildQueryFullStatisticsSQL(2L,
                 Lists.newArrayList("col1", "col2", "col3", "col4", "col5", "col6", "col7"),
-                Lists.newArrayList(ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL32, 4, 3),
-                        ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL32, 4, 3),
-                        ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL32, 5, 2),
-                        ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 14, 3),
-                        ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 8, 3),
-                        ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 21, 6),
-                        ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 22, 7),
-                        ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 23, 8)));
+                Lists.newArrayList(TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL32, 4, 3),
+                        TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL32, 4, 3),
+                        TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL32, 5, 2),
+                        TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 14, 3),
+                        TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 8, 3),
+                        TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 21, 6),
+                        TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 22, 7),
+                        TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 23, 8)));
         assertContains(sql, "table_id = 2 and column_name in (\"col1\", \"col2\")");
         Assertions.assertEquals(5, StringUtils.countMatches(sql, "UNION ALL"));
     }
@@ -404,14 +404,14 @@ public class StatisticsSQLTest extends PlanTestBase {
 
         sql = StatisticSQLBuilder.buildQueryExternalFullStatisticsSQL("a",
                 Lists.newArrayList("col1", "col2", "col3", "col4", "col5", "col6", "col7"),
-                Lists.newArrayList(ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL32, 4, 3),
-                        ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL32, 4, 3),
-                        ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL32, 5, 2),
-                        ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 14, 3),
-                        ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 8, 3),
-                        ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 21, 6),
-                        ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 22, 7),
-                        ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 23, 8)));
+                Lists.newArrayList(TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL32, 4, 3),
+                        TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL32, 4, 3),
+                        TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL32, 5, 2),
+                        TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 14, 3),
+                        TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 8, 3),
+                        TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 21, 6),
+                        TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 22, 7),
+                        TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 23, 8)));
         assertContains(sql, "column_name in (\"col1\", \"col2\")");
         Assertions.assertEquals(5, StringUtils.countMatches(sql, "UNION ALL"));
     }

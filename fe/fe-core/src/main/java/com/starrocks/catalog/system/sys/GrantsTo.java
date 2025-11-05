@@ -55,7 +55,7 @@ import com.starrocks.thrift.TGetGrantsToRolesOrUserRequest;
 import com.starrocks.thrift.TGetGrantsToRolesOrUserResponse;
 import com.starrocks.thrift.TGrantsToType;
 import com.starrocks.thrift.TSchemaTableType;
-import com.starrocks.type.ScalarType;
+import com.starrocks.type.TypeFactory;
 import com.starrocks.warehouse.Warehouse;
 
 import java.util.ArrayList;
@@ -76,13 +76,13 @@ public class GrantsTo {
     public static SystemTable createGrantsToRoles() {
         return new SystemTable(SystemId.GRANTS_TO_ROLES_ID, GRANTS_TO_ROLES, Table.TableType.SCHEMA,
                 builder()
-                        .column("GRANTEE", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("OBJECT_CATALOG", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("OBJECT_DATABASE", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("OBJECT_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("OBJECT_TYPE", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("PRIVILEGE_TYPE", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("IS_GRANTABLE", ScalarType.createVarchar(NAME_CHAR_LEN))
+                        .column("GRANTEE", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("OBJECT_CATALOG", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("OBJECT_DATABASE", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("OBJECT_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("OBJECT_TYPE", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("PRIVILEGE_TYPE", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("IS_GRANTABLE", TypeFactory.createVarchar(NAME_CHAR_LEN))
                         .build(),
                 TSchemaTableType.STARROCKS_GRANT_TO_ROLES);
     }
@@ -90,13 +90,13 @@ public class GrantsTo {
     public static SystemTable createGrantsToUsers() {
         return new SystemTable(SystemId.GRANTS_TO_USERS_ID, GRANTS_TO_USERS, Table.TableType.SCHEMA,
                 builder()
-                        .column("GRANTEE", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("OBJECT_CATALOG", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("OBJECT_DATABASE", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("OBJECT_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("OBJECT_TYPE", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("PRIVILEGE_TYPE", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("IS_GRANTABLE", ScalarType.createVarchar(NAME_CHAR_LEN))
+                        .column("GRANTEE", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("OBJECT_CATALOG", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("OBJECT_DATABASE", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("OBJECT_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("OBJECT_TYPE", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("PRIVILEGE_TYPE", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("IS_GRANTABLE", TypeFactory.createVarchar(NAME_CHAR_LEN))
                         .build(),
                 TSchemaTableType.STARROCKS_GRANT_TO_USERS);
     }

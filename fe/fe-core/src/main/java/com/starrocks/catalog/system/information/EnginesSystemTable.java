@@ -17,7 +17,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.thrift.TSchemaTableType;
-import com.starrocks.type.ScalarType;
+import com.starrocks.type.TypeFactory;
 
 import static com.starrocks.catalog.system.SystemTable.builder;
 
@@ -31,12 +31,12 @@ public class EnginesSystemTable {
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("ENGINE", ScalarType.createVarchar(64))
-                        .column("SUPPORT", ScalarType.createVarchar(8))
-                        .column("COMMENT", ScalarType.createVarchar(80))
-                        .column("TRANSACTIONS", ScalarType.createVarchar(3))
-                        .column("XA", ScalarType.createVarchar(3))
-                        .column("SAVEPOINTS", ScalarType.createVarchar(3))
+                        .column("ENGINE", TypeFactory.createVarchar(64))
+                        .column("SUPPORT", TypeFactory.createVarchar(8))
+                        .column("COMMENT", TypeFactory.createVarchar(80))
+                        .column("TRANSACTIONS", TypeFactory.createVarchar(3))
+                        .column("XA", TypeFactory.createVarchar(3))
+                        .column("SAVEPOINTS", TypeFactory.createVarchar(3))
                         .build(), TSchemaTableType.SCH_ENGINES);
     }
 }

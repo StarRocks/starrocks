@@ -34,7 +34,7 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.ScalarType;
+import com.starrocks.type.TypeFactory;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mocked;
@@ -71,9 +71,9 @@ public class ChangeMaterializedViewRefreshSchemeLogTest {
         DataOutputStream out = new DataOutputStream(Files.newOutputStream(file.toPath()));
 
         List<Column> columns = new LinkedList<Column>();
-        columns.add(new Column("k1", ScalarType.createType(PrimitiveType.TINYINT), true, null, "", ""));
-        columns.add(new Column("k2", ScalarType.createType(PrimitiveType.SMALLINT), true, null, "", ""));
-        columns.add(new Column("v1", ScalarType.createType(PrimitiveType.INT), false, AggregateType.SUM, "", ""));
+        columns.add(new Column("k1", TypeFactory.createType(PrimitiveType.TINYINT), true, null, "", ""));
+        columns.add(new Column("k2", TypeFactory.createType(PrimitiveType.SMALLINT), true, null, "", ""));
+        columns.add(new Column("v1", TypeFactory.createType(PrimitiveType.INT), false, AggregateType.SUM, "", ""));
         RandomDistributionInfo distributionInfo = new RandomDistributionInfo(10);
         PartitionInfo partitionInfo = new SinglePartitionInfo();
         partitionInfo.setDataProperty(1, DataProperty.DEFAULT_DATA_PROPERTY);

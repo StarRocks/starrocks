@@ -16,6 +16,7 @@ package com.starrocks.sql.util;
 
 import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 
 import java.util.Objects;
 
@@ -58,7 +59,7 @@ public class TypePlus {
         if (rectifiedType == null) {
             if (type instanceof ScalarType) {
                 ScalarType scalarType = (ScalarType) type;
-                rectifiedType = ScalarType.createType(scalarType.getPrimitiveType(), len, precision, scale);
+                rectifiedType = TypeFactory.createType(scalarType.getPrimitiveType(), len, precision, scale);
             } else {
                 rectifiedType = type;
             }
@@ -70,7 +71,7 @@ public class TypePlus {
         if (decayedType == null) {
             if (type instanceof ScalarType) {
                 ScalarType scalarType = (ScalarType) type;
-                decayedType = ScalarType.createType(scalarType.getPrimitiveType());
+                decayedType = TypeFactory.createType(scalarType.getPrimitiveType());
             } else {
                 decayedType = type;
             }

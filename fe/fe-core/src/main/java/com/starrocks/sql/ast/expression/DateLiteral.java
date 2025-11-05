@@ -42,8 +42,8 @@ import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -478,7 +478,7 @@ public class DateLiteral extends LiteralExpr {
                 if (len > 7) {
                     microsecond = data.getInt();
                     // choose the highest scale to keep microsecond value
-                    type = ScalarType.createDecimalV2Type(6);
+                    type = TypeFactory.createDecimalV2Type(6);
                 }
             } else {
                 copy(MIN_DATETIME);

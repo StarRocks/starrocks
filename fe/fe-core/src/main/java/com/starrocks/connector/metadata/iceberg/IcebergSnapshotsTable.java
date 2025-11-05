@@ -25,7 +25,7 @@ import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import com.starrocks.type.MapType;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.ScalarType;
+import com.starrocks.type.TypeFactory;
 
 import java.util.List;
 
@@ -45,13 +45,13 @@ public class IcebergSnapshotsTable extends MetadataTable {
                 TABLE_NAME,
                 Table.TableType.METADATA,
                 builder()
-                        .column("committed_at", ScalarType.createType(PrimitiveType.DATETIME))
-                        .column("snapshot_id", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("parent_id", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("operation", ScalarType.createType(PrimitiveType.VARCHAR))
-                        .column("manifest_list", ScalarType.createType(PrimitiveType.VARCHAR))
+                        .column("committed_at", TypeFactory.createType(PrimitiveType.DATETIME))
+                        .column("snapshot_id", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("parent_id", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("operation", TypeFactory.createType(PrimitiveType.VARCHAR))
+                        .column("manifest_list", TypeFactory.createType(PrimitiveType.VARCHAR))
                         .column("summary", new MapType(
-                                ScalarType.createType(PrimitiveType.VARCHAR), ScalarType.createType(PrimitiveType.VARCHAR)))
+                                TypeFactory.createType(PrimitiveType.VARCHAR), TypeFactory.createType(PrimitiveType.VARCHAR)))
                         .build(),
                 originDb,
                 originTable,

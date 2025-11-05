@@ -25,6 +25,7 @@ import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 
 import java.util.stream.Stream;
 
@@ -73,7 +74,7 @@ public class ScalarOperatorUtil {
         Function newFn = sumFn.copy();
         if (argTypes[0].isDecimalV3()) {
             newFn.setArgsType(argTypes);
-            newFn.setRetType(ScalarType.createDecimalV3NarrowestType(38,
+            newFn.setRetType(TypeFactory.createDecimalV3NarrowestType(38,
                     ((ScalarType) argTypes[0]).getScalarScale()));
         }
         return newFn;
