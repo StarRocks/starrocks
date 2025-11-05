@@ -74,13 +74,11 @@ import com.staros.util.Constant;
 import com.staros.util.Utils;
 import com.staros.worker.Worker;
 import com.staros.worker.WorkerGroup;
-
 import com.staros.worker.WorkerManager;
 import mockit.Expectations;
 import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
-
 import mockit.Verifications;
 import org.apache.commons.lang3.reflect.FieldUtils;
 import org.apache.commons.lang3.tuple.Pair;
@@ -462,7 +460,7 @@ public class StarManagerTest {
         Assert.assertEquals(1L, info.getReplicaInfoCount());
         Assert.assertTrue(workerIds.contains(info.getReplicaInfo(0).getWorkerInfo().getWorkerId()));
 
-        {// directly pull all shard replica info from shard manager without filtering/scheduling
+        { // directly pull all shard replica info from shard manager without filtering/scheduling
             List<ShardInfo> shardInfo2 = starManager.getShardManager(serviceId).getShardInfo(Collections.singletonList(shardId));
             Assert.assertEquals(1L, shardInfo2.size());
             // still only have 1 replicas
@@ -603,7 +601,7 @@ public class StarManagerTest {
         ShardInfo shard1 = shardInfos.get(0);
         Assert.assertEquals(shard1.getServiceId(), serviceId);
         Assert.assertEquals(shard1.getGroupIdsList(), groupIds);
-        Assert.assertEquals(shard1.getShardId(), (long)shardIds.get(0));
+        Assert.assertEquals(shard1.getShardId(), (long) shardIds.get(0));
         Assert.assertEquals(1, shard1.getReplicaInfoList().size());
         Assert.assertFalse(shard1.getReplicaInfoList().get(0).getWorkerInfo().getIpPort().isEmpty());
         Assert.assertEquals(shard1.getReplicaInfoList().get(0).getReplicaRole(), ReplicaRole.PRIMARY);
@@ -612,7 +610,7 @@ public class StarManagerTest {
         ShardInfo shard2 = shardInfos.get(1);
         Assert.assertEquals(shard2.getServiceId(), serviceId);
         Assert.assertEquals(shard2.getGroupIdsList(), groupIds);
-        Assert.assertEquals(shard2.getShardId(), (long)shardIds.get(1));
+        Assert.assertEquals(shard2.getShardId(), (long) shardIds.get(1));
         Assert.assertEquals(shard2.getReplicaInfoList().size(), 1);
 
         // remove worker
@@ -741,7 +739,7 @@ public class StarManagerTest {
             Assert.assertEquals(1L, shardInfoList.size());
             Assert.assertEquals(1L, shardInfoList.get(0).size());
             ShardInfo info = shardInfoList.get(0).get(0);
-            Assert.assertEquals((long)shardIds.get(0), info.getShardId());
+            Assert.assertEquals((long) shardIds.get(0), info.getShardId());
             // no replica yet
             Assert.assertEquals(0L, info.getReplicaInfoCount());
         }
@@ -757,7 +755,7 @@ public class StarManagerTest {
             Assert.assertEquals(1L, shardInfoList1.size());
             Assert.assertEquals(1L, shardInfoList1.get(0).getShardInfosCount());
             ShardInfo info1 = shardInfoList1.get(0).getShardInfos(0);
-            Assert.assertEquals((long)shardIds.get(0), info1.getShardId());
+            Assert.assertEquals((long) shardIds.get(0), info1.getShardId());
             Assert.assertEquals(1L, info1.getReplicaInfoCount());
             Assert.assertEquals(workerId1, info1.getReplicaInfo(0).getWorkerInfo().getWorkerId());
 
@@ -767,7 +765,7 @@ public class StarManagerTest {
             Assert.assertEquals(1L, shardInfoList2.size());
             Assert.assertEquals(1L, shardInfoList2.get(0).getShardInfosCount());
             ShardInfo info2 = shardInfoList2.get(0).getShardInfos(0);
-            Assert.assertEquals((long)shardIds.get(0), info2.getShardId());
+            Assert.assertEquals((long) shardIds.get(0), info2.getShardId());
             // no replica in workerGroup2, because of no worker
             Assert.assertEquals(0L, info2.getReplicaInfoCount());
 
@@ -783,7 +781,7 @@ public class StarManagerTest {
             Assert.assertEquals(1L, shardInfoList1.size());
             Assert.assertEquals(1L, shardInfoList1.get(0).getShardInfosCount());
             ShardInfo info1 = shardInfoList1.get(0).getShardInfos(0);
-            Assert.assertEquals((long)shardIds.get(0), info1.getShardId());
+            Assert.assertEquals((long) shardIds.get(0), info1.getShardId());
             Assert.assertEquals(0L, info1.getReplicaInfoCount());
         }
 
@@ -1036,10 +1034,10 @@ public class StarManagerTest {
         FilePathInfo filePathInfo = starManager.allocateFilePath(serviceId, FileStoreType.S3, "123",
                 Constant.S3_FSKEY_FOR_CONFIG, "");
         Assert.assertEquals(String.format("s3://%s/%s/123", Config.S3_BUCKET, serviceId),
-            filePathInfo.getFullPath());
+                filePathInfo.getFullPath());
 
         try {
-            starManager.allocateFilePath(serviceId + "1",  FileStoreType.S3, "123", Constant.S3_FSKEY_FOR_CONFIG, "");
+            starManager.allocateFilePath(serviceId + "1", FileStoreType.S3, "123", Constant.S3_FSKEY_FOR_CONFIG, "");
         } catch (StarException e) {
             Assert.assertEquals(e.getExceptionCode(), ExceptionCode.NOT_EXIST);
         }

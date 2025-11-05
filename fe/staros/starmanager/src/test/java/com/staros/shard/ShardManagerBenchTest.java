@@ -15,6 +15,7 @@
 package com.staros.shard;
 
 import com.google.common.collect.Lists;
+import com.staros.common.HijackConfig;
 import com.staros.common.TestHelper;
 import com.staros.proto.JoinMetaGroupInfo;
 import com.staros.proto.MetaGroupInfo;
@@ -24,7 +25,6 @@ import com.staros.proto.UpdateMetaGroupInfo;
 import com.staros.schedule.ShardSchedulerV2;
 import com.staros.service.ServiceManager;
 import com.staros.starlet.StarletAgentFactory;
-import com.staros.common.HijackConfig;
 import com.staros.util.Config;
 import com.staros.worker.WorkerManager;
 import org.apache.logging.log4j.LogManager;
@@ -54,13 +54,13 @@ public class ShardManagerBenchTest {
     private TestHelper helper;
 
     @BeforeClass
-    public static void SetupForClass() {
+    public static void setupForClass() {
         // Turn On MockStarletAgent
         StarletAgentFactory.AGENT_TYPE = StarletAgentFactory.AgentType.MOCK_STARLET_AGENT;
     }
 
     @Before
-    public void Setup() {
+    public void setup() {
         Config.S3_BUCKET = "test-bucket";
         // disable auto schedule
         hijackTriggerScheduling = new HijackConfig("SCHEDULER_TRIGGER_SCHEDULE_WHEN_CREATE_SHARD", "false");
@@ -78,7 +78,7 @@ public class ShardManagerBenchTest {
     }
 
     @After
-    public void TearDown() {
+    public void tearDown() {
         scheduler.stop();
         hijackTriggerScheduling.reset();
         Config.S3_BUCKET = "";

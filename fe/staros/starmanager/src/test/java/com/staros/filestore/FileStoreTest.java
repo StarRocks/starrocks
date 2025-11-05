@@ -14,24 +14,24 @@
 
 package com.staros.filestore;
 
-import com.staros.credential.GSCredential;
-import com.staros.proto.GSFileStoreInfo;
 import com.staros.common.HijackConfig;
-import com.staros.credential.AwsDefaultCredential;
 import com.staros.credential.ADLS2Credential;
+import com.staros.credential.AwsDefaultCredential;
 import com.staros.credential.AzBlobCredential;
+import com.staros.credential.GSCredential;
 import com.staros.exception.InvalidArgumentStarException;
 import com.staros.exception.NotExistStarException;
-import com.staros.proto.AwsCredentialType;
-import com.staros.proto.AwsCredentialInfo;
-import com.staros.proto.AwsDefaultCredentialInfo;
 import com.staros.proto.ADLS2CredentialInfo;
 import com.staros.proto.ADLS2FileStoreInfo;
+import com.staros.proto.AwsCredentialInfo;
+import com.staros.proto.AwsCredentialType;
+import com.staros.proto.AwsDefaultCredentialInfo;
 import com.staros.proto.AzBlobCredentialInfo;
 import com.staros.proto.AzBlobFileStoreInfo;
 import com.staros.proto.FilePathInfo;
 import com.staros.proto.FileStoreInfo;
 import com.staros.proto.FileStoreType;
+import com.staros.proto.GSFileStoreInfo;
 import com.staros.proto.HDFSFileStoreInfo;
 import com.staros.proto.S3FileStoreInfo;
 import com.staros.util.Config;
@@ -724,7 +724,8 @@ public class FileStoreTest {
 
     @Test
     public void testGSFileStoreMergeFrom() {
-        GSFileStoreInfo gs = GSFileStoreInfo.newBuilder().setPath("path").setUseComputeEngineServiceAccount(true).setImpersonation("iuser").build();
+        GSFileStoreInfo gs = GSFileStoreInfo.newBuilder().setPath("path").setUseComputeEngineServiceAccount(true)
+                .setImpersonation("iuser").build();
         FileStoreInfo info = FileStoreInfo.newBuilder()
                 .setFsName("test-name")
                 .setGsFsInfo(gs)

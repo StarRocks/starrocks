@@ -28,7 +28,7 @@ public class TestUtils {
 
     public static long createWorkerGroupForTest(WorkerManager manager, String serviceId, int replicaNumber) {
         // create a worker group with no worker added
-        return manager.createWorkerGroup(serviceId,"commonUtilsForTest",
+        return manager.createWorkerGroup(serviceId, "commonUtilsForTest",
                 WorkerGroupSpec.newBuilder().setSize("x0").build(),
                 null, null, replicaNumber, ReplicationType.NO_REPLICATION, WarmupLevel.WARMUP_NOT_SET);
     }

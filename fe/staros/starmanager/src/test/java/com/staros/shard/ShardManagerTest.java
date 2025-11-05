@@ -118,7 +118,7 @@ public class ShardManagerTest {
     }
 
     @After
-    public void TearDown() {
+    public void tearDown() {
         // reset to default value
         hijackTriggerScheduling.reset();
     }
@@ -460,12 +460,12 @@ public class ShardManagerTest {
         ShardInfo shard = shardInfos.get(0);
         Assert.assertEquals(shard.getServiceId(), serviceId);
         Assert.assertEquals(shard.getGroupIdsList(), groupIds);
-        Assert.assertEquals(shard.getShardId(), (long)shardIds.get(0));
+        Assert.assertEquals(shard.getShardId(), (long) shardIds.get(0));
 
         shard = shardInfos.get(1);
         Assert.assertEquals(shard.getServiceId(), serviceId);
         Assert.assertEquals(shard.getGroupIdsList(), groupIds);
-        Assert.assertEquals(shard.getShardId(), (long)shardIds.get(1));
+        Assert.assertEquals(shard.getShardId(), (long) shardIds.get(1));
 
         // test shard not exist
         try {
@@ -499,12 +499,12 @@ public class ShardManagerTest {
         ShardInfo shard = shardInfos.get(0).get(0);
         Assert.assertEquals(shard.getServiceId(), serviceId);
         Assert.assertEquals(shard.getGroupIdsList(), groupIds);
-        Assert.assertEquals(shard.getShardId(), (long)shardIds.get(0));
+        Assert.assertEquals(shard.getShardId(), (long) shardIds.get(0));
 
         shard = shardInfos.get(0).get(1);
         Assert.assertEquals(shard.getServiceId(), serviceId);
         Assert.assertEquals(shard.getGroupIdsList(), groupIds);
-        Assert.assertEquals(shard.getShardId(), (long)shardIds.get(1));
+        Assert.assertEquals(shard.getShardId(), (long) shardIds.get(1));
 
         // test empty shard group
         try {
@@ -1219,7 +1219,8 @@ public class ShardManagerTest {
     }
 
     // meta group has 3 anonymous groups before delete
-    public static void verifyMetaGroupAfterDelete(ShardManager shardManager, List<Long> anonymousShardGroupIds, List<Long> shardGroupIds) {
+    public static void verifyMetaGroupAfterDelete(ShardManager shardManager, List<Long> anonymousShardGroupIds,
+                                                  List<Long> shardGroupIds) {
         // verify shard group
         ShardGroup asg1 = shardManager.getShardGroup(anonymousShardGroupIds.get(0));
         ShardGroup asg2 = shardManager.getShardGroup(anonymousShardGroupIds.get(1));
@@ -1260,9 +1261,9 @@ public class ShardManagerTest {
                 createShardInfos.add(CreateShardInfo.newBuilder().build());
             }
 
-            List<ShardInfo> shard_info = shardManager.createShard(createShardInfos, fsMgr);
-            Assert.assertEquals(shard_info.size(), shardCount);
-            shard_info.forEach(x -> {
+            List<ShardInfo> shardInfos = shardManager.createShard(createShardInfos, fsMgr);
+            Assert.assertEquals(shardInfos.size(), shardCount);
+            shardInfos.forEach(x -> {
                 Shard s = shardManager.getShard(x.getShardId());
                 Assert.assertTrue(s.getGroupIds().isEmpty()); // empty group id
                 shards.add(s);
@@ -1272,7 +1273,7 @@ public class ShardManagerTest {
         { // create shard groups
             List<CreateShardGroupInfo> createShardGroupInfos = new ArrayList<>();
             int shardGroupCount = 2;
-            for (int i=0 ; i<shardGroupCount; ++i) {
+            for (int i = 0; i < shardGroupCount; ++i) {
                 createShardGroupInfos.add(CreateShardGroupInfo.newBuilder().build());
             }
             List<ShardGroupInfo> shardGroupResult = shardManager.createShardGroup(createShardGroupInfos);
@@ -1284,8 +1285,10 @@ public class ShardManagerTest {
             });
         }
 
-        Shard shard0 = shards.get(0), shard1 = shards.get(1);
-        ShardGroup group0 = groups.get(0), group1 = groups.get(1);
+        Shard shard0 = shards.get(0);
+        Shard shard1 = shards.get(1);
+        ShardGroup group0 = groups.get(0);
+        ShardGroup group1 = groups.get(1);
         // group0: shard0, shard1
         group0.addShardId(shard0.getShardId());
         group0.addShardId(shard1.getShardId());
@@ -1298,7 +1301,7 @@ public class ShardManagerTest {
         shardManager.dumpMeta(os);
         ByteArrayInputStream in = new ByteArrayInputStream(os.toByteArray());
 
-        ShardManager shardMgr2 = new ShardManager(serviceId, new DummyJournalSystem(), new IdGenerator(null),null);
+        ShardManager shardMgr2 = new ShardManager(serviceId, new DummyJournalSystem(), new IdGenerator(null), null);
         shardMgr2.loadMeta(in);
 
         // now check shardMgr2 data
@@ -1313,7 +1316,7 @@ public class ShardManagerTest {
         Assert.assertTrue(fileStores.size() > 1);
 
         FileStore fs = fileStores.get(0);
-        for (int i = 1; i< fileStores.size(); ++i) {
+        for (int i = 1; i < fileStores.size(); ++i) {
             FileStore other = fileStores.get(i);
             Assert.assertSame(fs, other);
         }
@@ -1402,7 +1405,8 @@ public class ShardManagerTest {
             ByteArrayOutputStream os = new ByteArrayOutputStream();
             shardManager1.dumpMeta(os);
             ByteArrayInputStream in = new ByteArrayInputStream(os.toByteArray());
-            ShardManager shardManager2 = new ShardManager(serviceId + "aaa", new DummyJournalSystem(), new IdGenerator(null),null);
+            ShardManager shardManager2 =
+                    new ShardManager(serviceId + "aaa", new DummyJournalSystem(), new IdGenerator(null), null);
             shardManager2.loadMeta(in);
 
             gatherAndValidateMetrics(serviceId + "aaa", expectedNumShards, expectedNumShardGroups);

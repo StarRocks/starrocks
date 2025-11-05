@@ -53,7 +53,7 @@ public class ScheduleRequestContextTest {
     }
 
     @Test
-    public void TestScheduleRequestContextEquals() {
+    public void testScheduleRequestContextEquals() {
         { // different object equals
             ScheduleRequestContext ctx = new ScheduleRequestContext("1", 1, 1, null);
             Assert.assertEquals(ctx, ctx);

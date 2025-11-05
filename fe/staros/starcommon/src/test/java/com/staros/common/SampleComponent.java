@@ -34,7 +34,7 @@ import java.util.List;
 
 public class SampleComponent {
 
-    public static abstract class Component {
+    public abstract static class Component {
         public abstract void dump(OutputStream os) throws IOException;
 
         public abstract void restore(InputStream in) throws IOException;

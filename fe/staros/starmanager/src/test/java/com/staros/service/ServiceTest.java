@@ -18,7 +18,6 @@ package com.staros.service;
 import com.staros.proto.ServiceInfo;
 import com.staros.proto.ServiceState;
 import com.staros.shard.ShardManager;
-import com.staros.service.Service;
 import org.junit.Assert;
 import org.junit.Test;
 

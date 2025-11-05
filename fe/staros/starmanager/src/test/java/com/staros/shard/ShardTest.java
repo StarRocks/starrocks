@@ -17,6 +17,9 @@ package com.staros.shard;
 
 import com.google.common.collect.Lists;
 import com.staros.credential.AwsSimpleCredential;
+import com.staros.filecache.FileCache;
+import com.staros.filestore.FilePath;
+import com.staros.filestore.S3FileStore;
 import com.staros.proto.AddShardInfo;
 import com.staros.proto.AwsCredentialInfo;
 import com.staros.proto.AwsDefaultCredentialInfo;
@@ -25,13 +28,10 @@ import com.staros.proto.FileStoreType;
 import com.staros.proto.ReplicaInfo;
 import com.staros.proto.ReplicaRole;
 import com.staros.proto.ReplicaState;
+import com.staros.proto.S3FileStoreInfo;
 import com.staros.proto.ShardInfo;
 import com.staros.proto.ShardState;
-import com.staros.proto.S3FileStoreInfo;
 import com.staros.replica.Replica;
-import com.staros.filecache.FileCache;
-import com.staros.filestore.FilePath;
-import com.staros.filestore.S3FileStore;
 import com.staros.util.Constant;
 import org.junit.Assert;
 import org.junit.Test;
@@ -47,8 +47,9 @@ public class ShardTest {
     public static Shard getTestShard(String serviceId, long groupId, long shardId) {
         List<Long> groupIds = new ArrayList<>();
         groupIds.add(groupId);
-        S3FileStore fs = new S3FileStore(Constant.S3_FSKEY_FOR_CONFIG, Constant.S3_FSNAME_FOR_CONFIG, "bucket", "region", "endpoint",
-                new AwsSimpleCredential("ak", "sk"), "");
+        S3FileStore fs =
+                new S3FileStore(Constant.S3_FSKEY_FOR_CONFIG, Constant.S3_FSNAME_FOR_CONFIG, "bucket", "region",
+                        "endpoint", new AwsSimpleCredential("ak", "sk"), "");
         FilePath path = new FilePath(fs, "suffix");
         FileCache cache = new FileCache();
         Shard shard = new Shard(serviceId, groupIds, shardId, path, cache);

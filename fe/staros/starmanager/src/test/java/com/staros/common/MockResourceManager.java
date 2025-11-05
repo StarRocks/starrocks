@@ -35,13 +35,13 @@ import java.util.concurrent.TimeUnit;
 
 public class MockResourceManager implements ResourceManager {
     private static final Logger LOG = LogManager.getLogger(MockResourceManager.class);
-    private static final String resourceFile = "worker_group_spec_for_test.json";
 
     private boolean autoProvision = false;
     private final WorkerManager workerManager;
     private Map<String, Map<String, String>> specMap;
 
     public MockResourceManager(WorkerManager workerManager) {
+        String resourceFile = "worker_group_spec_for_test.json";
         this.workerManager = workerManager;
         try {
             String jsonString = Resources.toString(Resources.getResource(resourceFile), StandardCharsets.UTF_8);
@@ -62,7 +62,7 @@ public class MockResourceManager implements ResourceManager {
         }
         int nNodes = Integer.parseInt(specMap.get(spec.getSize()).get("num_of_nodes"));
         List<String> nodes = new ArrayList<>();
-        for (int i = 0; i<nNodes; ++i) {
+        for (int i = 0; i < nNodes; ++i) {
             nodes.add(TestHelper.generateMockWorkerIpAddress());
         }
         if (!nodes.isEmpty()) {

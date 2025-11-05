@@ -35,7 +35,7 @@ import java.util.List;
 import java.util.Map;
 
 public class WorkerGroupTest {
-    private static final String serviceId = WorkerGroupTest.class.getName() + "-serviceId";
+    private final String serviceId = WorkerGroupTest.class.getName() + "-serviceId";
 
     @BeforeClass
     public static void setMockStarletAgent() {

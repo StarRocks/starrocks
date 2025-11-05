@@ -15,13 +15,13 @@
 package com.staros.heartbeat;
 
 import com.staros.common.HijackConfig;
+import com.staros.common.MemoryJournalSystem;
+import com.staros.common.MockWorker;
 import com.staros.common.TestUtils;
+import com.staros.proto.OperationType;
 import com.staros.proto.StatusCode;
 import com.staros.proto.WorkerState;
 import com.staros.starlet.StarletAgentFactory;
-import com.staros.common.MockWorker;
-import com.staros.common.MemoryJournalSystem;
-import com.staros.proto.OperationType;
 import com.staros.util.Config;
 import com.staros.worker.Worker;
 import com.staros.worker.WorkerManager;

@@ -16,7 +16,6 @@ package com.staros.filestore;
 
 import com.staros.credential.AwsCredential;
 import com.staros.credential.AwsDefaultCredential;
-import com.staros.exception.ExceptionCode;
 import com.staros.exception.InvalidArgumentStarException;
 import com.staros.exception.NotExistStarException;
 import com.staros.proto.FileStoreInfo;
@@ -31,7 +30,6 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.file.Paths;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
@@ -77,8 +75,7 @@ public class FileStoreMgrTest {
         fs = new S3FileStore("test_fskey", "test_name", "bucket", "region", "endpoint", credential, "/");
         fsMgr.updateFileStore(fs);
         S3FileStore fileStore = (S3FileStore) fsMgr.getFileStore("test_fskey");
-        Assert.assertEquals("s3://" + Paths.get("bucket" ,"/"),
-                fileStore.rootPath());
+        Assert.assertEquals("s3://" + Paths.get("bucket", "/"), fileStore.rootPath());
 
         FileStore s3fs = fsMgr.loadS3FileStoreFromConfig();
         s3fs.setEnabled(false);
@@ -99,8 +96,7 @@ public class FileStoreMgrTest {
         fs = new S3FileStore("test_fskey", "test_name", "bucket", "region", "endpoint", credential, "/aaa");
         fsMgr.replaceFileStore(fs);
         S3FileStore fileStore = (S3FileStore) fsMgr.getFileStore("test_fskey");
-        Assert.assertEquals("s3://" + Paths.get("bucket" ,"/aaa"),
-                fileStore.rootPath());
+        Assert.assertEquals("s3://" + Paths.get("bucket", "/aaa"), fileStore.rootPath());
 
         FileStore s3fs = fsMgr.loadS3FileStoreFromConfig();
         s3fs.setEnabled(false);

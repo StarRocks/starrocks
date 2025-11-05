@@ -15,7 +15,6 @@
 
 package com.staros.common;
 
-import com.staros.filestore.FileStoreMgr;
 import com.staros.journal.DummyJournalSystem;
 import com.staros.journal.JournalSystem;
 import com.staros.manager.StarManager;
@@ -238,7 +237,7 @@ public class TestHelper {
     }
 
     public long createWorkerGroup(String serviceId, String size, int replicaNumber) {
-        return workerManager.createWorkerGroup(serviceId,"commonUtilsForTest",
+        return workerManager.createWorkerGroup(serviceId, "commonUtilsForTest",
                 WorkerGroupSpec.newBuilder().setSize(size).build(),
                 null, null, replicaNumber, ReplicationType.SYNC, WarmupLevel.WARMUP_NOT_SET);
     }

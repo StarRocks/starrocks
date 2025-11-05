@@ -51,8 +51,6 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.AtomicReference;
 
 public class WorkerManagerTest {
     private WorkerManager workerManager;
@@ -64,7 +62,7 @@ public class WorkerManagerTest {
     }
 
     @Before
-    public void SetUp() {
+    public void setUp() {
         workerManager = WorkerManager.createWorkerManagerForTest(null);
         serviceId = this.getClass().getName() + "-serviceId";
         workerManager.bootstrapService(serviceId);
@@ -105,7 +103,8 @@ public class WorkerManagerTest {
     public void testCreateWorkerGroupServiceNotExist() {
         // ServiceId not bootstrapped yet.
         String fakeServiceId = "fake-service-id";
-        Assert.assertThrows(NotExistStarException.class, () -> TestUtils.createWorkerGroupForTest(workerManager, fakeServiceId, 1));
+        Assert.assertThrows(NotExistStarException.class,
+                () -> TestUtils.createWorkerGroupForTest(workerManager, fakeServiceId, 1));
         Assert.assertThrows(NotExistStarException.class, () -> workerManager.getDefaultWorkerGroup(fakeServiceId));
         Assert.assertThrows(NotExistStarException.class, () -> workerManager.getWorkerGroup(fakeServiceId, 0));
 
@@ -134,13 +133,13 @@ public class WorkerManagerTest {
     @Test
     public void testGetWorkerGroupExceptions() {
         long group1 = TestUtils.createWorkerGroupForTest(workerManager, serviceId, 1);
-        long group2_not_exist = group1 + 1000;
+        long group2NotExist = group1 + 1000;
 
         Assert.assertNotNull(workerManager.getWorkerGroupNoException(serviceId, group1));
         Assert.assertNotNull(workerManager.getWorkerGroup(serviceId, group1));
 
-        Assert.assertNull(workerManager.getWorkerGroupNoException(serviceId, group2_not_exist));
-        Assert.assertThrows(NotExistStarException.class, () -> workerManager.getWorkerGroup(serviceId, group2_not_exist));
+        Assert.assertNull(workerManager.getWorkerGroupNoException(serviceId, group2NotExist));
+        Assert.assertThrows(NotExistStarException.class, () -> workerManager.getWorkerGroup(serviceId, group2NotExist));
 
         List<Long> groupIds = workerManager.getAllWorkerGroupIds(serviceId);
         Assert.assertEquals(1L, groupIds.size());
@@ -281,7 +280,8 @@ public class WorkerManagerTest {
         { // list all worker group with worker info
             List<WorkerGroupDetailInfo> info = workerManager.listWorkerGroups(serviceId, Collections.emptyMap(), true);
             Assert.assertEquals(2L, info.size());
-            WorkerGroupDetailInfo groupInfo1, groupInfo2;
+            WorkerGroupDetailInfo groupInfo1;
+            WorkerGroupDetailInfo groupInfo2;
             if (info.get(0).getGroupId() == groupId1) {
                 groupInfo1 = info.get(0);
                 groupInfo2 = info.get(1);
@@ -322,7 +322,8 @@ public class WorkerManagerTest {
         // nothing changed.
         workerManager.updateWorkerGroup(serviceId, workerGroupId, null, null, null, 0 /* replicaNumber */,
                 ReplicationType.NO_SET, WarmupLevel.WARMUP_NOT_SET);
-        Assert.assertEquals(expectedInfo.toString(), workerManager.getWorkerGroup(serviceId, workerGroupId).toProtobuf().toString());
+        Assert.assertEquals(expectedInfo.toString(),
+                workerManager.getWorkerGroup(serviceId, workerGroupId).toProtobuf().toString());
 
         { // update
             WorkerGroupSpec newSpec = WorkerGroupSpec.newBuilder().setSize("XXXXXL").build();
@@ -416,7 +417,8 @@ public class WorkerManagerTest {
     }
 
     private void testWorkerGroupDumpAndLoadCompatibility(boolean enableZeroWorkerGroup) {
-        HijackConfig configVar = new HijackConfig("ENABLE_ZERO_WORKER_GROUP_COMPATIBILITY", String.valueOf(enableZeroWorkerGroup));
+        HijackConfig configVar =
+                new HijackConfig("ENABLE_ZERO_WORKER_GROUP_COMPATIBILITY", String.valueOf(enableZeroWorkerGroup));
         // create 3 service worker group
         // service worker group 1 : empty
         // service worker group 2 : one worker group with empty worker
@@ -481,8 +483,8 @@ public class WorkerManagerTest {
             Map<String, String> labels = ImmutableMap.of("serviceId", serviceId);
             Map<String, String> props = ImmutableMap.of("P1", "P2");
             long workerGroup = workerManager.createWorkerGroup(serviceId, "myOwner",
-                WorkerGroupSpec.newBuilder().setSize("x0").build(), labels, props, 1 /* replicaNumber */,
-                ReplicationType.SYNC, WarmupLevel.WARMUP_NOT_SET);
+                    WorkerGroupSpec.newBuilder().setSize("x0").build(), labels, props, 1 /* replicaNumber */,
+                    ReplicationType.SYNC, WarmupLevel.WARMUP_NOT_SET);
             workerManager.addWorker(serviceId, workerGroup, TestHelper.generateMockWorkerIpAddress());
         }
         ByteArrayOutputStream out = new ByteArrayOutputStream();
@@ -491,7 +493,7 @@ public class WorkerManagerTest {
         } catch (Exception e) {
             Assert.fail();
         }
-        {// remove the last byte
+        { // remove the last byte
             byte[] data = out.toByteArray();
             ByteArrayInputStream in = new ByteArrayInputStream(data, 0, data.length - 1);
             WorkerManager newManager = WorkerManager.createWorkerManagerForTest(null);
@@ -613,7 +615,7 @@ public class WorkerManagerTest {
     public void testWorkerManagerGenericThreadPoolCalculateThreadPoolSize() {
         ThreadLocalRandom rand = ThreadLocalRandom.current();
         int loop = 4096;
-        for (int i = 0; i < loop; ++i) {// pending tasks <= numWorkers, scale-in or no change
+        for (int i = 0; i < loop; ++i) { // pending tasks <= numWorkers, scale-in or no change
             int numWorkers = rand.nextInt(0, 1024);
             int pendingTasks = rand.nextInt(-numWorkers - 1, numWorkers);
             int currentSize = rand.nextInt(1, 128);
@@ -626,7 +628,7 @@ public class WorkerManagerTest {
             }
         }
 
-        for (int i = 0; i < loop; ++i) {// pending tasks > numWorkers
+        for (int i = 0; i < loop; ++i) { // pending tasks > numWorkers
             int numWorkers = rand.nextInt(0, 1024);
             int pendingTasks = rand.nextInt(1, 65536) + numWorkers;
             int currentSize = rand.nextInt(1, 128);

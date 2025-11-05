@@ -21,8 +21,8 @@ import com.staros.exception.ExceptionCode;
 import com.staros.exception.InvalidArgumentStarException;
 import com.staros.proto.AddResourceNodeRequest;
 import com.staros.proto.AddResourceNodeResponse;
-import com.staros.proto.TestResourceManageServiceGrpc;
 import com.staros.proto.ReplicationType;
+import com.staros.proto.TestResourceManageServiceGrpc;
 import com.staros.proto.WarmupLevel;
 import com.staros.proto.WorkerGroupSpec;
 import com.staros.proto.WorkerGroupState;
@@ -62,20 +62,20 @@ public class DefaultResourceManagerTest {
     private String serviceId;
 
     @BeforeClass
-    public static void SetUpForClass() {
+    public static void setUpForClass() {
         StarletAgentFactory.AGENT_TYPE = StarletAgentFactory.AgentType.MOCK_STARLET_AGENT;
         startServer();
         hijackConfigVar = new HijackConfig("RESOURCE_PROVISIONER_ADDRESS", String.format("127.0.0.1:%d", serverPort));
     }
 
     @AfterClass
-    public static void TearDownForClass() {
+    public static void tearDownForClass() {
         hijackConfigVar.reset();
         stopServer();
     }
 
     @Before
-    public void SetUp() {
+    public void setUp() {
         workerManager = WorkerManager.createWorkerManagerForTest(null);
         workerManager.start();
         serviceId = this.getClass().getName() + "-serviceId";
@@ -87,7 +87,7 @@ public class DefaultResourceManagerTest {
     }
 
     @After
-    public void TearDown() {
+    public void tearDown() {
         channel.shutdownNow();
         workerManager.stop();
     }

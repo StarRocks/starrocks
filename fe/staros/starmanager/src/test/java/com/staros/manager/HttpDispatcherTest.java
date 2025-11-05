@@ -14,9 +14,6 @@
 
 package com.staros.manager;
 
-import com.staros.manager.StarManager;
-import com.staros.manager.HttpDispatcher;
-import com.staros.exception.ExceptionCode;
 import com.staros.exception.InvalidArgumentStarException;
 import com.staros.exception.NotExistStarException;
 import com.staros.exception.StarException;
@@ -24,10 +21,8 @@ import com.staros.proto.ShardGroupInfo;
 import com.staros.proto.ShardInfo;
 import com.staros.proto.WorkerGroupDetailInfo;
 import com.staros.proto.WorkerInfo;
-
 import mockit.Mock;
 import mockit.MockUp;
-
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -74,7 +69,8 @@ public class HttpDispatcherTest {
 
         new MockUp<StarManager>() {
             @Mock
-            Pair<List<ShardGroupInfo>, Long> listShardGroupInfo(String serviceId, boolean includeAnonymousGroup, long startGroupId) throws StarException {
+            Pair<List<ShardGroupInfo>, Long> listShardGroupInfo(String serviceId, boolean includeAnonymousGroup,
+                                                                long startGroupId) throws StarException {
                 List<ShardGroupInfo> shardGroupInfosList = new ArrayList<>();
                 return Pair.of(shardGroupInfosList, 1L);
             }

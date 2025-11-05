@@ -51,15 +51,19 @@ public class StarletAgentTest {
         starletAgent = StarletAgentFactory.newStarletAgent();
         starletAgent.setWorker(mockWorker);
 
-        new Expectations(starletAgent) {{
-            starletAgent.prepareBlockingStub();
-            result = mockStub;
-        }};
-        new Expectations(mockWorker) {{
-            mockWorker.getIpPort();
-            result = "127.0.0.1:8080";
+        new Expectations(starletAgent) {
+            {
+                starletAgent.prepareBlockingStub();
+                result = mockStub;
+            }
+        };
+        new Expectations(mockWorker) {
+            {
+                mockWorker.getIpPort();
+                result = "127.0.0.1:8080";
 
-        }};
+            }
+        };
     }
 
     @Test
@@ -68,10 +72,12 @@ public class StarletAgentTest {
         AddShardResponse response = AddShardResponse.newBuilder()
                 .setStatus(StarStatus.newBuilder().setStatusCode(StatusCode.OK).build())
                 .build();
-        new Expectations(mockStub) {{
-            mockStub.withDeadlineAfter(anyLong, (TimeUnit) any).addShard(request);
-            result = response;
-        }};
+        new Expectations(mockStub) {
+            {
+                mockStub.withDeadlineAfter(anyLong, (TimeUnit) any).addShard(request);
+                result = response;
+            }
+        };
 
         try {
             // the add shard request is succeed, with an OK status code
@@ -79,10 +85,12 @@ public class StarletAgentTest {
         } catch (Exception e) {
             Assert.fail("add shard should not throw exception");
         }
-        new Verifications() {{
-            mockStub.withDeadlineAfter(anyLong, (TimeUnit) any).addShard(request);
-            times = 1;
-        }};
+        new Verifications() {
+            {
+                mockStub.withDeadlineAfter(anyLong, (TimeUnit) any).addShard(request);
+                times = 1;
+            }
+        };
     }
 
     @Test
@@ -91,32 +99,40 @@ public class StarletAgentTest {
         AddShardResponse response = AddShardResponse.newBuilder()
                 .setStatus(StarStatus.newBuilder().setStatusCode(StatusCode.INTERNAL).build())
                 .build();
-        new Expectations(mockStub) {{
-            mockStub.withDeadlineAfter(anyLong, (TimeUnit) any).addShard(request);
-            result = response;
-        }};
+        new Expectations(mockStub) {
+            {
+                mockStub.withDeadlineAfter(anyLong, (TimeUnit) any).addShard(request);
+                result = response;
+            }
+        };
 
         // the add shard request is failed, with a non-OK status code
         Assert.assertThrows(WorkerNotHealthyStarException.class, () -> starletAgent.addShard(request));
-        new Verifications() {{
-            mockStub.withDeadlineAfter(anyLong, (TimeUnit) any).addShard(request);
-            times = 1;
-        }};
+        new Verifications() {
+            {
+                mockStub.withDeadlineAfter(anyLong, (TimeUnit) any).addShard(request);
+                times = 1;
+            }
+        };
     }
 
     @Test
     public void testAddShardRetryFailureWithNonRetryableError() {
         AddShardRequest request = AddShardRequest.newBuilder().build();
-        new Expectations(mockStub) {{
-            mockStub.withDeadlineAfter(anyLong, (TimeUnit) any).addShard(request);
-            result = new StatusRuntimeException(Status.Code.ABORTED.toStatus());
-        }};
+        new Expectations(mockStub) {
+            {
+                mockStub.withDeadlineAfter(anyLong, (TimeUnit) any).addShard(request);
+                result = new StatusRuntimeException(Status.Code.ABORTED.toStatus());
+            }
+        };
         // ABORTED is not a retryable GRPC exception, should fail fast
         Assert.assertThrows(WorkerNotHealthyStarException.class, () -> starletAgent.addShard(request));
-        new Verifications() {{
-            mockStub.withDeadlineAfter(anyLong, (TimeUnit) any).addShard(request);
-            times = 1;
-        }};
+        new Verifications() {
+            {
+                mockStub.withDeadlineAfter(anyLong, (TimeUnit) any).addShard(request);
+                times = 1;
+            }
+        };
     }
 
     @Test
@@ -124,28 +140,36 @@ public class StarletAgentTest {
         AddShardRequest request = AddShardRequest.newBuilder().build();
 
         // DEADLINE_EXCEEDED is a retryable GRPC exception
-        new Expectations(mockStub) {{
-            mockStub.withDeadlineAfter(anyLong, (TimeUnit) any).addShard(request);
-            result = new StatusRuntimeException(Status.Code.DEADLINE_EXCEEDED.toStatus());
-        }};
+        new Expectations(mockStub) {
+            {
+                mockStub.withDeadlineAfter(anyLong, (TimeUnit) any).addShard(request);
+                result = new StatusRuntimeException(Status.Code.DEADLINE_EXCEEDED.toStatus());
+            }
+        };
         // reached max retry times 3
         Assert.assertThrows(WorkerNotHealthyStarException.class, () -> starletAgent.addShard(request));
-        new Verifications() {{
-            mockStub.withDeadlineAfter(anyLong, (TimeUnit) any).addShard(request);
-            times = 3;
-        }};
+        new Verifications() {
+            {
+                mockStub.withDeadlineAfter(anyLong, (TimeUnit) any).addShard(request);
+                times = 3;
+            }
+        };
 
         // UNAVAILABLE is a retryable GRPC exception
-        new Expectations(mockStub) {{
-            mockStub.withDeadlineAfter(anyLong, (TimeUnit) any).addShard(request);
-            result = new StatusRuntimeException(Status.Code.UNAVAILABLE.toStatus());
-        }};
+        new Expectations(mockStub) {
+            {
+                mockStub.withDeadlineAfter(anyLong, (TimeUnit) any).addShard(request);
+                result = new StatusRuntimeException(Status.Code.UNAVAILABLE.toStatus());
+            }
+        };
         // reached max retry times 3
         Assert.assertThrows(WorkerNotHealthyStarException.class, () -> starletAgent.addShard(request));
-        new Verifications() {{
-            mockStub.withDeadlineAfter(anyLong, (TimeUnit) any).addShard(request);
-            times = 3;
-        }};
+        new Verifications() {
+            {
+                mockStub.withDeadlineAfter(anyLong, (TimeUnit) any).addShard(request);
+                times = 3;
+            }
+        };
     }
 
     @Test
@@ -154,20 +178,24 @@ public class StarletAgentTest {
         RemoveShardResponse response = RemoveShardResponse.newBuilder()
                 .setStatus(StarStatus.newBuilder().setStatusCode(StatusCode.OK).build())
                 .build();
-        new Expectations(mockStub) {{
-            mockStub.withDeadlineAfter(anyLong, (TimeUnit) any).removeShard(request);
-            result = response;
-        }};
+        new Expectations(mockStub) {
+            {
+                mockStub.withDeadlineAfter(anyLong, (TimeUnit) any).removeShard(request);
+                result = response;
+            }
+        };
         try {
             // the remove shard request is succeed, with an OK status code
             starletAgent.removeShard(request);
         } catch (Exception e) {
             Assert.fail("remove shard should not throw exception");
         }
-        new Verifications() {{
-            mockStub.withDeadlineAfter(anyLong, (TimeUnit) any).removeShard(request);
-            times = 1;
-        }};
+        new Verifications() {
+            {
+                mockStub.withDeadlineAfter(anyLong, (TimeUnit) any).removeShard(request);
+                times = 1;
+            }
+        };
     }
 
     @Test
@@ -176,61 +204,77 @@ public class StarletAgentTest {
         RemoveShardResponse response = RemoveShardResponse.newBuilder()
                 .setStatus(StarStatus.newBuilder().setStatusCode(StatusCode.INTERNAL).build())
                 .build();
-        new Expectations(mockStub) {{
-            starletAgent.prepareBlockingStub();
-            result = mockStub;
+        new Expectations(mockStub) {
+            {
+                starletAgent.prepareBlockingStub();
+                result = mockStub;
 
-            mockStub.withDeadlineAfter(anyLong, (TimeUnit) any).removeShard(request);
-            result = response;
-        }};
+                mockStub.withDeadlineAfter(anyLong, (TimeUnit) any).removeShard(request);
+                result = response;
+            }
+        };
         // the remove shard request is succeed, but with a non-OK status code
         Assert.assertThrows(WorkerNotHealthyStarException.class, () -> starletAgent.removeShard(request));
-        new Verifications() {{
-            mockStub.withDeadlineAfter(anyLong, (TimeUnit) any).removeShard(request);
-            times = 1;
-        }};
+        new Verifications() {
+            {
+                mockStub.withDeadlineAfter(anyLong, (TimeUnit) any).removeShard(request);
+                times = 1;
+            }
+        };
     }
 
     @Test
     public void testRemoveShardRetryFailureWithNonRetryableError() {
         RemoveShardRequest request = RemoveShardRequest.newBuilder().build();
-        new Expectations(mockStub) {{
-            mockStub.withDeadlineAfter(anyLong, (TimeUnit) any).removeShard(request);
-            result = new StatusRuntimeException(Status.Code.ABORTED.toStatus());
-        }};
+        new Expectations(mockStub) {
+            {
+                mockStub.withDeadlineAfter(anyLong, (TimeUnit) any).removeShard(request);
+                result = new StatusRuntimeException(Status.Code.ABORTED.toStatus());
+            }
+        };
         Assert.assertThrows(WorkerNotHealthyStarException.class, () -> starletAgent.removeShard(request));
         // ABORTED is not a retryable GRPC exception, should fail fast
-        new Verifications() {{
-            mockStub.withDeadlineAfter(anyLong, (TimeUnit) any).removeShard(request);
-            times = 1;
-        }};
+        new Verifications() {
+            {
+                mockStub.withDeadlineAfter(anyLong, (TimeUnit) any).removeShard(request);
+                times = 1;
+            }
+        };
     }
 
     @Test
     public void testRemoveShardRetryFailureAfterMaxRetryTimes() {
         // DEADLINE_EXCEEDED is a retryable GRPC exception
         RemoveShardRequest request = RemoveShardRequest.newBuilder().build();
-        new Expectations(mockStub) {{
-            mockStub.withDeadlineAfter(anyLong, (TimeUnit) any).removeShard(request);
-            result = new StatusRuntimeException(Status.Code.DEADLINE_EXCEEDED.toStatus());
-        }};
+        new Expectations(mockStub) {
+            {
+                mockStub.withDeadlineAfter(anyLong, (TimeUnit) any).removeShard(request);
+                result = new StatusRuntimeException(Status.Code.DEADLINE_EXCEEDED.toStatus());
+            }
+        };
         // reached max retry times 3
         Assert.assertThrows(WorkerNotHealthyStarException.class, () -> starletAgent.removeShard(request));
-        new Verifications() {{
-            mockStub.withDeadlineAfter(anyLong, (TimeUnit) any).removeShard(request);
-            times = 3;
-        }};
+        new Verifications() {
+            {
+                mockStub.withDeadlineAfter(anyLong, (TimeUnit) any).removeShard(request);
+                times = 3;
+            }
+        };
 
         // UNAVAILABLE is a retryable GRPC exception
-        new Expectations(mockStub) {{
-            mockStub.withDeadlineAfter(anyLong, (TimeUnit) any).removeShard(request);
-            result = new StatusRuntimeException(Status.Code.UNAVAILABLE.toStatus());
-        }};
+        new Expectations(mockStub) {
+            {
+                mockStub.withDeadlineAfter(anyLong, (TimeUnit) any).removeShard(request);
+                result = new StatusRuntimeException(Status.Code.UNAVAILABLE.toStatus());
+            }
+        };
         // reached max retry times 3
         Assert.assertThrows(WorkerNotHealthyStarException.class, () -> starletAgent.removeShard(request));
-        new Verifications() {{
-            mockStub.withDeadlineAfter(anyLong, (TimeUnit) any).removeShard(request);
-            times = 3;
-        }};
+        new Verifications() {
+            {
+                mockStub.withDeadlineAfter(anyLong, (TimeUnit) any).removeShard(request);
+                times = 3;
+            }
+        };
     }
 }

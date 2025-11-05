@@ -15,12 +15,10 @@
 
 package com.staros.worker;
 
-import com.google.common.base.Preconditions;
 import com.staros.exception.WorkerNotHealthyStarException;
 import com.staros.proto.AddShardInfo;
 import com.staros.proto.AddShardRequest;
 import com.staros.proto.RemoveShardRequest;
-import com.staros.proto.ReplicationType;
 import com.staros.proto.WorkerInfo;
 import com.staros.proto.WorkerState;
 import com.staros.starlet.StarletAgentFactory;

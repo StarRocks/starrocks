@@ -136,7 +136,7 @@ public class ShardManagerGrpcTest {
                     .setReplicaCount(1)
                     .setScheduleToWorkerGroup(workerGroupId)
                     .build();
-            starManager.createShard(serviceId,Collections.nCopies(numOfShards, createInfo));
+            starManager.createShard(serviceId, Collections.nCopies(numOfShards, createInfo));
             Assert.assertEquals(numOfShards, mockWorker.getShardCount());
 
             mockWorker.simulateRestart();

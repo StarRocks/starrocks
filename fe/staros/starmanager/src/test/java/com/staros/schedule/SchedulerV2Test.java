@@ -15,6 +15,7 @@
 package com.staros.schedule;
 
 import com.google.common.collect.Lists;
+import com.staros.common.HijackConfig;
 import com.staros.common.TestHelper;
 import com.staros.exception.ExceptionCode;
 import com.staros.exception.NoAliveWorkersException;
@@ -34,7 +35,6 @@ import com.staros.shard.ShardManager;
 import com.staros.starlet.MockStarletAgent;
 import com.staros.starlet.StarletAgent;
 import com.staros.starlet.StarletAgentFactory;
-import com.staros.common.HijackConfig;
 import com.staros.util.Config;
 import com.staros.worker.Worker;
 import com.staros.worker.WorkerGroup;
@@ -72,13 +72,13 @@ public class SchedulerV2Test {
     private TestHelper helper;
 
     @BeforeClass
-    public static void SetupForClass() {
+    public static void setupForClass() {
         // Turn On MockStarletAgent
         StarletAgentFactory.AGENT_TYPE = StarletAgentFactory.AgentType.MOCK_STARLET_AGENT;
     }
 
     @Before
-    public void Setup() {
+    public void setup() {
         Config.S3_BUCKET = "test-bucket";
         // disable auto schedule
         hijackTriggerScheduling = new HijackConfig("SCHEDULER_TRIGGER_SCHEDULE_WHEN_CREATE_SHARD", "false");
@@ -96,7 +96,7 @@ public class SchedulerV2Test {
     }
 
     @After
-    public void TearDown() {
+    public void tearDown() {
         scheduler.stop();
         hijackTriggerScheduling.reset();
         Config.S3_BUCKET = "";
@@ -317,7 +317,7 @@ public class SchedulerV2Test {
                 Assert.assertEquals(ReplicaState.REPLICA_SCALE_OUT, replica.getState());
             }
         }
-        {// shard: 3 replicas (2x SCALE_OUT + 1x SCALE_IN), workerGroup: 3 workers, can't add a new SCALE_OUT
+        { // shard: 3 replicas (2x SCALE_OUT + 1x SCALE_IN), workerGroup: 3 workers, can't add a new SCALE_OUT
             shard.getReplica().get(0).setReplicaState(ReplicaState.REPLICA_SCALE_IN);
             long firstReplicaWorkerId = shard.getReplica().get(0).getWorkerId();
             scheduler.scheduleAddToGroup(serviceId, shardId, workerGroupId);
@@ -334,7 +334,7 @@ public class SchedulerV2Test {
                 }
             }
         }
-        {// shard: 3 replicas (2x SCALE_OUT + 1x SCALE_IN), workerGroup: 4 workers, a new SCALE_OUT replica will be created
+        { // shard: 3 replicas (2x SCALE_OUT + 1x SCALE_IN), workerGroup: 4 workers, a new SCALE_OUT replica will be created
             workerIds.add(helper.createTestWorkerToWorkerGroup(workerGroupId));
             Assert.assertEquals(4, workerIds.size());
             shard.getReplica().get(0).setReplicaState(ReplicaState.REPLICA_SCALE_IN);
@@ -811,10 +811,10 @@ public class SchedulerV2Test {
         // schedule no wait
         scheduler.scheduleAsyncAddToWorker(serviceId, shardIds, workerId);
         Awaitility.await().atMost(3, TimeUnit.SECONDS).until(scheduler::isIdle);
-        Map<Long, Integer> result_stats = helper.collectShardReplicaDistributionStats(shardIds, workerGroupId);
-        Assert.assertEquals(1, result_stats.size());
-        Assert.assertTrue(result_stats.containsKey(workerId));
-        Assert.assertEquals((Integer) shardIds.size(), result_stats.get(workerId));
+        Map<Long, Integer> resultStats = helper.collectShardReplicaDistributionStats(shardIds, workerGroupId);
+        Assert.assertEquals(1, resultStats.size());
+        Assert.assertTrue(resultStats.containsKey(workerId));
+        Assert.assertEquals((Integer) shardIds.size(), resultStats.get(workerId));
     }
 
     @Test

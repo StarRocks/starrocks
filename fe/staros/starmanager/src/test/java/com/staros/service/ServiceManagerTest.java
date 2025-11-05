@@ -175,9 +175,11 @@ public class ServiceManagerTest {
 
         try (LockCloseable lock1 = new LockCloseable(serviceManager.readLock())) {
             try (LockCloseable lock2 = new LockCloseable(serviceManager.readLock())) {
+                // leave empty by intention
             }
         }
         try (LockCloseable lock = new LockCloseable(serviceManager.writeLock())) {
+            // leave empty by intention
         }
     }
 }

@@ -329,7 +329,7 @@ public class ShardCheckerTest {
         Assert.assertTrue(shard.hasReplica(worker.getWorkerId()));
         Assert.assertTrue(shard.hasReplica(workerIds.get(1)) || shard.hasReplica(workerIds.get(2)));
 
-        try(HijackConfig var = new HijackConfig("SHARD_DEAD_REPLICA_EXPIRE_SECS", "-1")) {
+        try (HijackConfig var = new HijackConfig("SHARD_DEAD_REPLICA_EXPIRE_SECS", "-1")) {
             // run again this time, the expiration is set to -1 second, the dead replica must be expired
             checker.runServiceHealthCheck(defaultServiceId);
             Awaitility.await().atMost(2, TimeUnit.SECONDS).until(realScheduler::isIdle);
@@ -1790,7 +1790,7 @@ public class ShardCheckerTest {
         {
             Map<Long, Integer> stats = helper.collectShardReplicaDistributionStats(shardIds, workerGroupId);
             Assert.assertEquals(nWorkers, stats.size());
-            List<Integer> distribution = Collections.nCopies(nWorkers, nShards/nWorkers);
+            List<Integer> distribution = Collections.nCopies(nWorkers, nShards / nWorkers);
             Assert.assertEquals(distribution, new ArrayList<>(stats.values()));
             // get the first worker
             worker0 = helper.getWorkerManager().getWorker(stats.keySet().iterator().next());
@@ -1854,7 +1854,7 @@ public class ShardCheckerTest {
             // No matter the dead replica is expired or not, after the worker is back online.
             // the distribution should be back to even
             Assert.assertEquals(nWorkers, stats.size());
-            List<Integer> distribution = Collections.nCopies(nWorkers, nShards/nWorkers);
+            List<Integer> distribution = Collections.nCopies(nWorkers, nShards / nWorkers);
             Assert.assertEquals(distribution, new ArrayList<>(stats.values()));
         }
 

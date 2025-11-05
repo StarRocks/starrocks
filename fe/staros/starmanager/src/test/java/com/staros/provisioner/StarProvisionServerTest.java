@@ -30,14 +30,14 @@ public class StarProvisionServerTest {
     private HijackConfig configDir;
 
     @Before
-    public void SetUp() throws IOException {
+    public void setUp() throws IOException {
         File tmpFileDir = Files.createTempDirectory("StarProvisionServerTest").toFile();
         tmpFileDir.deleteOnExit();
         configDir = new HijackConfig("BUILTIN_PROVISION_SERVER_DATA_DIR", tmpFileDir.getAbsolutePath());
     }
 
     @After
-    public void TearDown() {
+    public void tearDown() {
         configDir.reset();
     }
 

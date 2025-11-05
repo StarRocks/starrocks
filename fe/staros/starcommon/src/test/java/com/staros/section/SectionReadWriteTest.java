@@ -176,7 +176,9 @@ public class SectionReadWriteTest {
         // Not consume any data yet
         Assert.assertEquals(data.length, inStream.available());
 
-        SectionConsumer<Section> consumer = (Section section) -> { throw new IOException("InjectedIOException"); };
+        SectionConsumer<Section> consumer = (Section section) -> {
+            throw new IOException("InjectedIOException");
+        };
         Assert.assertThrows(IOException.class, () -> reader.forEach(consumer));
 
         // SectionHeader is processed
@@ -204,12 +206,13 @@ public class SectionReadWriteTest {
         // * PbComponent is deleted
         // * JsonComponent is added
         // Can take it as v1 upgrade to v2, or take it as v1 downgrade to v2
-        SampleComponent.ManualComponent manualVar = new SampleComponent.ManualComponent(false,"TEXT");
+        SampleComponent.ManualComponent manualVar = new SampleComponent.ManualComponent(false, "TEXT");
         SampleComponent.PbComponent pbVar = new SampleComponent.PbComponent("PROTOBUF", 123456789, "CLOUD NATIVE");
         SampleComponent.CompositeComponent compositeVar;
         {
-            SampleComponent.ManualComponent manualVarX = new SampleComponent.ManualComponent(true,"NESTED");
-            SampleComponent.PbComponent pbVarX = new SampleComponent.PbComponent("FLAT_Buffer", 987654321, "CLOUD NATIVE");
+            SampleComponent.ManualComponent manualVarX = new SampleComponent.ManualComponent(true, "NESTED");
+            SampleComponent.PbComponent pbVarX =
+                    new SampleComponent.PbComponent("FLAT_Buffer", 987654321, "CLOUD NATIVE");
             compositeVar = new SampleComponent.CompositeComponent(manualVarX, pbVarX);
         }
 

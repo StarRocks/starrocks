@@ -16,8 +16,6 @@
 package com.staros.journal;
 
 import com.google.common.collect.ImmutableMap;
-import com.staros.filestore.FileStoreMgr;
-import com.staros.filestore.S3FileStore;
 import com.staros.proto.CreateMetaGroupInfo;
 import com.staros.proto.CreateShardJournalInfo;
 import com.staros.proto.DeleteMetaGroupInfo;
@@ -378,7 +376,8 @@ public class StarMgrJournalTest {
             MetaGroupJournalInfo journalInfo2 = StarMgrJournal.parseLogCreateMetaGroup(j2);
             List<Long> groupIds2 = journalInfo2.getCreateInfo().getShardGroupIdsList();
             Assert.assertEquals(journalInfo2.getCreateInfo().getMetaGroupId(), metaGroupId);
-            Assert.assertEquals(journalInfo2.getCreateInfo().getPlacementPolicy(), journalInfo.getCreateInfo().getPlacementPolicy());
+            Assert.assertEquals(journalInfo2.getCreateInfo().getPlacementPolicy(),
+                    journalInfo.getCreateInfo().getPlacementPolicy());
             Assert.assertEquals(groupIds.size(), groupIds2.size());
             Assert.assertEquals(groupIds.get(0), groupIds2.get(0));
             Assert.assertEquals(groupIds.get(1), groupIds2.get(1));

@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.staros.client;
 
 import com.google.common.collect.ImmutableMap;
@@ -21,10 +20,10 @@ import com.staros.credential.AwsSimpleCredential;
 import com.staros.exception.StarException;
 import com.staros.manager.StarManager;
 import com.staros.manager.StarManagerServer;
-import com.staros.proto.AwsCredentialInfo;
-import com.staros.proto.AwsDefaultCredentialInfo;
 import com.staros.proto.ADLS2CredentialInfo;
 import com.staros.proto.ADLS2FileStoreInfo;
+import com.staros.proto.AwsCredentialInfo;
+import com.staros.proto.AwsDefaultCredentialInfo;
 import com.staros.proto.AzBlobCredentialInfo;
 import com.staros.proto.AzBlobFileStoreInfo;
 import com.staros.proto.CacheEnableState;
@@ -59,14 +58,14 @@ import com.staros.proto.WorkerInfo;
 import com.staros.starlet.StarletAgentFactory;
 import com.staros.util.Config;
 import com.staros.util.Constant;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
-import mockit.Mock;
-import mockit.MockUp;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -108,7 +107,7 @@ public class StarClientTest {
     }
 
     @AfterClass
-    public static void TearDown() {
+    public static void tearDown() {
         Config.ENABLE_ZERO_WORKER_GROUP_COMPATIBILITY = zeroGroupDefaultValue;
     }
 
@@ -178,7 +177,6 @@ public class StarClientTest {
         }
     }
 
-
     @Test
     public void testStarClientRegisterService() {
         try {
@@ -206,7 +204,7 @@ public class StarClientTest {
         try {
             client.deregisterService(serviceTemplateName);
         } catch (StarClientException e) {
-          Assert.assertEquals(e.getCode(), StatusCode.NOT_EXIST);
+            Assert.assertEquals(e.getCode(), StatusCode.NOT_EXIST);
         }
     }
 
@@ -315,7 +313,7 @@ public class StarClientTest {
             // valid hostname
             Assert.assertNotEquals(0L, client.addWorker(serviceId, "localhost:1345"));
             Assert.assertNotEquals(0L, client.addWorker(serviceId, "localhost.localdomain:1345"));
-        } catch(StarClientException e) {
+        } catch (StarClientException e) {
             Assert.fail(String.format("don't expect throw exceptions. Exception: %s", e.getMessage()));
         }
     }
@@ -462,13 +460,14 @@ public class StarClientTest {
                 Assert.assertEquals("s3://bucket/key", shardInfos.get(i).getFilePath().getFullPath());
 
                 Assert.assertEquals(shardInfos.get(i).getReplicaInfoList().size(), 1);
-                Assert.assertEquals(shardInfos.get(i).getReplicaInfoList().get(0).getWorkerInfo().getWorkerId(), workerId);
+                Assert.assertEquals(shardInfos.get(i).getReplicaInfoList().get(0).getWorkerInfo().getWorkerId(),
+                        workerId);
             }
 
             // test empty info
             Assert.assertThrows(StarClientException.class, () -> {
-                 createShardInfos.clear();
-                 client.createShard(serviceId, createShardInfos);
+                createShardInfos.clear();
+                client.createShard(serviceId, createShardInfos);
             });
         } catch (StarClientException e) {
             Assert.assertNull(e);
@@ -577,8 +576,8 @@ public class StarClientTest {
 
             // test empty id
             Assert.assertThrows(StarClientException.class, () -> {
-                 shardIds.clear();
-                 client.deleteShard(serviceId, shardIds);
+                shardIds.clear();
+                client.deleteShard(serviceId, shardIds);
             });
         } catch (StarClientException e) {
             Assert.assertNull(e);
@@ -743,8 +742,8 @@ public class StarClientTest {
 
             // test empty group id
             Assert.assertThrows(StarClientException.class, () -> {
-                 groupIds.clear();
-                 client.listShard(serviceId, groupIds);
+                groupIds.clear();
+                client.listShard(serviceId, groupIds);
             });
         } catch (StarClientException e) {
             Assert.assertNull(e);
@@ -764,7 +763,8 @@ public class StarClientTest {
         long workerGroupId = workerGroupInfo.getGroupId();
 
         // create a shard group
-        CreateShardGroupInfo shardGroupRequest = CreateShardGroupInfo.newBuilder().setPolicy(PlacementPolicy.SPREAD).build();
+        CreateShardGroupInfo shardGroupRequest =
+                CreateShardGroupInfo.newBuilder().setPolicy(PlacementPolicy.SPREAD).build();
         List<ShardGroupInfo> shardGroupResponse = client.createShardGroup(serviceId,
                 Collections.singletonList(shardGroupRequest));
         Assert.assertEquals(1L, shardGroupResponse.size());
@@ -784,7 +784,7 @@ public class StarClientTest {
         { // list shard info in workerGroupId, expect empty replica info
             List<List<ShardInfo>> shardInfoLists =
                     client.listShard(serviceId, Collections.singletonList(shardGroupId), workerGroupId,
-                                     false /* withoutReplicaInfo */);
+                            false /* withoutReplicaInfo */);
             Assert.assertEquals(1L, shardInfoLists.size());
             Assert.assertEquals(1L, shardInfoLists.get(0).size());
             ShardInfo info = shardInfoLists.get(0).get(0);
@@ -797,7 +797,7 @@ public class StarClientTest {
         { // list again, should have replica info on workerId
             List<List<ShardInfo>> shardInfoLists =
                     client.listShard(serviceId, Collections.singletonList(shardGroupId), workerGroupId,
-                                     false /* withoutReplicaInfo */);
+                            false /* withoutReplicaInfo */);
             Assert.assertEquals(1L, shardInfoLists.size());
             Assert.assertEquals(1L, shardInfoLists.get(0).size());
             ShardInfo info = shardInfoLists.get(0).get(0);
@@ -810,7 +810,7 @@ public class StarClientTest {
         { // list without worker info
             List<List<ShardInfo>> shardInfoLists =
                     client.listShard(serviceId, Collections.singletonList(shardGroupId), workerGroupId,
-                                     true /* withoutReplicaInfo */);
+                            true /* withoutReplicaInfo */);
             Assert.assertEquals(1L, shardInfoLists.size());
             Assert.assertEquals(1L, shardInfoLists.get(0).size());
             ShardInfo info = shardInfoLists.get(0).get(0);
@@ -909,7 +909,8 @@ public class StarClientTest {
             List<Long> groupIds = shardGroupInfos.stream().map(ShardGroupInfo::getGroupId).collect(Collectors.toList());
 
             List<ShardGroupInfo> shardGroupInfos2 = client.listShardGroup(serviceId);
-            List<Long> groupIds2 = shardGroupInfos2.stream().map(ShardGroupInfo::getGroupId).collect(Collectors.toList());
+            List<Long> groupIds2 =
+                    shardGroupInfos2.stream().map(ShardGroupInfo::getGroupId).collect(Collectors.toList());
 
             Assert.assertEquals(shardGroupInfos.size() + 1 /* plus default group */, shardGroupInfos2.size());
             for (Long gid : groupIds) {
@@ -1121,7 +1122,7 @@ public class StarClientTest {
         // serviceId not exist
         StarClientException exception = Assert.assertThrows(StarClientException.class,
                 () -> client.createWorkerGroup(serviceId + "xxx", owner, spec, labels, properties,
-                                               1 /* replicaNumber */, ReplicationType.SYNC));
+                        1 /* replicaNumber */, ReplicationType.SYNC));
         Assert.assertEquals(StatusCode.NOT_EXIST, exception.getCode());
 
         { // create worker group with a different warmup level
@@ -1212,7 +1213,8 @@ public class StarClientTest {
         {
             // matching single result
             try {
-                List<WorkerGroupDetailInfo> results = client.listWorkerGroup(serviceId, ImmutableMap.of("group", "developer"));
+                List<WorkerGroupDetailInfo> results =
+                        client.listWorkerGroup(serviceId, ImmutableMap.of("group", "developer"));
                 Assert.assertEquals(1L, results.size());
                 Assert.assertEquals(expectedResult.get(results.get(0).getGroupId()), results.get(0));
             } catch (StarClientException exception) {
@@ -1349,8 +1351,9 @@ public class StarClientTest {
             WorkerGroupDetailInfo updatedInfo = null;
             int updateReplicaNumber = 2;
             try {
-                updatedInfo = client.updateWorkerGroup(serviceId, groupId, Collections.emptyMap(), Collections.emptyMap(),
-                        updateReplicaNumber, ReplicationType.ASYNC);
+                updatedInfo =
+                        client.updateWorkerGroup(serviceId, groupId, Collections.emptyMap(), Collections.emptyMap(),
+                                updateReplicaNumber, ReplicationType.ASYNC);
             } catch (StarClientException exception) {
                 Assert.fail("Don't expect any exception throw");
             }
@@ -1364,8 +1367,9 @@ public class StarClientTest {
             // before update, the warmup level is WARMUP_NOTHING
             Assert.assertEquals(WarmupLevel.WARMUP_NOTHING, originGroup.getWarmupLevel());
             try {
-                updatedInfo = client.updateWorkerGroup(serviceId, groupId, Collections.emptyMap(), Collections.emptyMap(),
-                        0, ReplicationType.NO_SET, updateWarmupLevel);
+                updatedInfo =
+                        client.updateWorkerGroup(serviceId, groupId, Collections.emptyMap(), Collections.emptyMap(),
+                                0, ReplicationType.NO_SET, updateWarmupLevel);
             } catch (StarClientException exception) {
                 Assert.fail("Don't expect any exception throw");
             }
@@ -1389,8 +1393,9 @@ public class StarClientTest {
         WorkerGroupDetailInfo originGroup = null;
         { // create worker group
             try {
-                originGroup = client.createWorkerGroup(serviceId, owner, spec, labels, properties, 1 /* replicaNumber */,
-                        ReplicationType.SYNC);
+                originGroup =
+                        client.createWorkerGroup(serviceId, owner, spec, labels, properties, 1 /* replicaNumber */,
+                                ReplicationType.SYNC);
             } catch (StarClientException exception) {
                 Assert.fail("Don't expect any exception throw");
             }
@@ -1398,7 +1403,8 @@ public class StarClientTest {
         long groupId = originGroup.getGroupId();
         { // Can list the worker group correctly
             try {
-                List<WorkerGroupDetailInfo> results = client.listWorkerGroup(serviceId, Collections.singletonList(groupId), false);
+                List<WorkerGroupDetailInfo> results =
+                        client.listWorkerGroup(serviceId, Collections.singletonList(groupId), false);
                 Assert.assertEquals(1L, results.size());
                 Assert.assertEquals(originGroup, results.get(0));
             } catch (StarClientException exception) {
@@ -1438,7 +1444,8 @@ public class StarClientTest {
                 .addAllLocations(locations)
                 .putAllProperties(properties).build();
         { // Can not add file store
-            StarClientException ex = Assert.assertThrows(StarClientException.class, () -> client.addFileStore(info, "0"));
+            StarClientException ex =
+                    Assert.assertThrows(StarClientException.class, () -> client.addFileStore(info, "0"));
             Assert.assertEquals(StatusCode.NOT_EXIST, ex.getCode());
         }
 
@@ -1465,20 +1472,21 @@ public class StarClientTest {
             final FileStoreInfo missingFsNameInfo = FileStoreInfo.newBuilder()
                     .setFsType(FileStoreType.S3)
                     .setS3FsInfo(s3FileStoreInfo).build();
-            StarClientException ex = Assert.assertThrows(StarClientException.class, () -> client.addFileStore(missingFsNameInfo, "0"));
+            StarClientException ex =
+                    Assert.assertThrows(StarClientException.class, () -> client.addFileStore(missingFsNameInfo, "0"));
             Assert.assertEquals(StatusCode.INVALID_ARGUMENT, ex.getCode());
         }
 
         {
             // Can not add s3 file store which has empty bucket
             final S3FileStoreInfo s3FileStoreInfo1 = s3FileStoreInfo.toBuilder().setBucket("test-bucket").build();
-            final FileStoreInfo fsInfo1 =  FileStoreInfo.newBuilder()
+            final FileStoreInfo fsInfo1 = FileStoreInfo.newBuilder()
                     .setFsType(FileStoreType.S3)
                     .setS3FsInfo(s3FileStoreInfo).build();
-            StarClientException ex = Assert.assertThrows(StarClientException.class, () -> client.addFileStore(fsInfo1, "0"));
+            StarClientException ex =
+                    Assert.assertThrows(StarClientException.class, () -> client.addFileStore(fsInfo1, "0"));
             Assert.assertEquals(StatusCode.INVALID_ARGUMENT, ex.getCode());
         }
-
 
         String fsKey = null;
         { // Can add file store
@@ -1928,7 +1936,8 @@ public class StarClientTest {
 
                 @Mock
                 public List<ShardInfoList> listShardInfo(String serviceId, List<Long> groupIds, long workerGroupId,
-                        boolean withoutReplicaInfo) throws StarException, InterruptedException {
+                                                         boolean withoutReplicaInfo)
+                        throws StarException, InterruptedException {
                     Thread.sleep(2000);
                     return new ArrayList<ShardInfoList>();
                 }

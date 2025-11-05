@@ -22,7 +22,6 @@ import com.staros.proto.PlacementPolicy;
 import com.staros.proto.WorkerState;
 import com.staros.starlet.StarletAgentFactory;
 import com.staros.util.Config;
-
 import com.staros.util.Constant;
 import com.staros.util.Utils;
 import org.apache.logging.log4j.LogManager;
