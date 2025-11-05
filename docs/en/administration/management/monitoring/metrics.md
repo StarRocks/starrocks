@@ -651,7 +651,6 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Type: Instantaneous
 - Description: Indicates the highest Compaction Score on each BE node.
 
-
 ### update_compaction_outputs_total
 
 - Unit: Count
@@ -1794,3 +1793,128 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: ms
 - Type: Cumulative
 - Description: The total time for copy consumed by Clone tasks in the BE node, including both INTER_NODE and INTRA_NODE types.
+
+
+### FE system metrics
+
+These metrics monitor the CPU, memory, IO, and network of the physical machine where the FE is running. These metrics are collected only when you set the FE configuration item `enable_collect_system_metrics` to `true`. For information about how to configure this item, see [enable_collect_system_metrics](../FE_configuration.md#enable_collect_system_metrics).
+
+#### starrocks_fe_cpu
+
+- Unit: -
+- Type: Cumulative
+- Description: CPU time counters by mode, derived from the same kernel counters visualized by `top` (from `/proc/stat`). Labels: `mode` = `user` | `nice` | `system` | `idle` | `iowait` | `irq` | `softirq` | `steal`.
+
+#### starrocks_fe_memory
+
+- Unit: Bytes
+- Type: Instantaneous
+- Description: Physical and swap memory statistics derived from the OS (e.g., `/proc/meminfo`). Labels: `name` = `total` | `used` | `swap_total` | `swap_used`.
+
+#### starrocks_fe_disk_total_capacity
+
+- Unit: Bytes
+- Type: Instantaneous
+- Description: Total capacity of the disk for monitored StarRocks paths (such as `Config.meta_dir` and `Config.sys_log_dir`). Labels: `device` = underlying block device name (for example, `sda`, `nvme0n1`).
+
+#### starrocks_fe_disk_used_capacity
+
+- Unit: Bytes
+- Type: Instantaneous
+- Description: Used capacity of the disk for monitored StarRocks paths (such as `Config.meta_dir` and `Config.sys_log_dir`). Labels: `device` = underlying block device name (for example, `sda`, `nvme0n1`).
+
+#### starrocks_fe_disk_reads_completed
+
+- Unit: Count
+- Type: Cumulative
+- Description: Number of reads completed, derived from Linux disk statistics (`/proc/diskstats`). Labels: `device` = underlying block device name (for example, `sda`, `nvme0n1`).
+
+#### starrocks_fe_disk_bytes_read
+
+- Unit: Bytes
+- Type: Cumulative
+- Description: Total bytes read, from `/proc/diskstats`. Labels: `device` = underlying block device name (for example, `sda`, `nvme0n1`).
+
+#### starrocks_fe_disk_read_time_ms
+
+- Unit: milliseconds
+- Type: Cumulative
+- Description: Cumulative time spent reading, derived from `/proc/diskstats`. Labels: `device` = underlying block device name (for example, `sda`, `nvme0n1`).
+
+#### starrocks_fe_disk_writes_completed
+
+- Unit: Count
+- Type: Cumulative
+- Description: Number of writes completed, derived from Linux disk statistics (`/proc/diskstats`). Labels: `device` = underlying block device name (for example, `sda`, `nvme0n1`).
+
+#### starrocks_fe_disk_bytes_written
+
+- Unit: Bytes
+- Type: Cumulative
+- Description: Total bytes written, from `/proc/diskstats`. Labels: `device` = underlying block device name (for example, `sda`, `nvme0n1`).
+
+#### starrocks_fe_disk_write_time_ms
+
+- Unit: milliseconds
+- Type: Cumulative
+- Description: Cumulative time spent writing, derived from `/proc/diskstats`. Labels: `device` = underlying block device name (for example, `sda`, `nvme0n1`).
+
+#### starrocks_fe_disk_io_time_ms
+
+- Unit: milliseconds
+- Type: Cumulative
+- Description: Cumulative time spent on I/O, derived from `/proc/diskstats`. Labels: `device` = underlying block device name (for example, `sda`, `nvme0n1`).
+
+#### starrocks_fe_disk_io_time_weighted_ms
+
+- Unit: milliseconds
+- Type: Cumulative
+- Description: Weighted cumulative time spent on I/O, derived from `/proc/diskstats`. Labels: `device` = underlying block device name (for example, `sda`, `nvme0n1`).
+
+#### starrocks_fe_network_receive_bytes
+
+- Unit: Bytes
+- Type: Cumulative
+- Description: Total bytes received per network interface, derived from OS NIC statistics (for Linux, typically `/sys/class/net/*/statistics/`). Labels: `device` = network interface name (for example, `eth0`).
+
+#### starrocks_fe_network_receive_packets
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total packets received per network interface, derived from OS NIC statistics (for Linux, typically `/sys/class/net/*/statistics/`). Labels: `device` = network interface name (for example, `eth0`).
+
+#### starrocks_fe_network_receive_errors
+
+- Unit: Count
+- Type: Cumulative
+- Description: Receive errors per network interface, derived from OS NIC statistics (for Linux, typically `/sys/class/net/*/statistics/`). Labels: `device` = network interface name (for example, `eth0`).
+
+#### starrocks_fe_network_receive_dropped
+
+- Unit: Count
+- Type: Cumulative
+- Description: Dropped incoming packets per network interface, derived from OS NIC statistics (for Linux, typically `/sys/class/net/*/statistics/`). Labels: `device` = network interface name (for example, `eth0`).
+
+#### starrocks_fe_network_send_bytes
+
+- Unit: Bytes
+- Type: Cumulative
+- Description: Total bytes sent per network interface, derived from OS NIC statistics (for Linux, typically `/sys/class/net/*/statistics/`). Labels: `device` = network interface name (for example, `eth0`).
+
+#### starrocks_fe_network_send_packets
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total packets sent per network interface, derived from OS NIC statistics (for Linux, typically `/sys/class/net/*/statistics/`). Labels: `device` = network interface name (for example, `eth0`).
+
+#### starrocks_fe_network_send_errors
+
+- Unit: Count
+- Type: Cumulative
+- Description: Send errors per network interface, derived from OS NIC statistics (for Linux, typically `/sys/class/net/*/statistics/`). Labels: `device` = network interface name (for example, `eth0`).
+
+#### starrocks_fe_snmp
+
+- Unit: Count
+- Type: Mixed
+- Description: TCP stack statistics aggregated over IPv4/IPv6, derived from `/proc/net/snmp`. Labels: `name` = `active_opens`, `passive_opens`, `attempts_fails`, `estab_resets`, `curr_estab` (instantaneous), `tcp_in_segs`, `tcp_out_segs`, `tcp_retrans_segs`, `tcp_in_errs`, `tcp_out_rsts` (cumulative).

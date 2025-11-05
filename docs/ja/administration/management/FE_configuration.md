@@ -3299,4 +3299,13 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: マテリアライズドビューの作成とCTAS操作において、固定長のVARCHAR列に対してSTRING型を優先するかどうか。
 - 導入バージョン: v4.0.0
 
+##### enable_collect_system_metrics
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 動的に変更可能か: はい
+- 説明: FEのシステムメトリクス（CPU、メモリ、IO、ネットワークなど）を収集するかどうか。
+- 導入バージョン: v4.1.0
+
 <EditionSpecificFEItem />

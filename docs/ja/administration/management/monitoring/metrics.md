@@ -1788,3 +1788,127 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 - 単位: ms
 - タイプ: Cumulative
 - 説明: BE ノード内のクローンタスクがコピーに消費した合計時間（INTER_NODE タイプと INTRA_NODE タイプの両方を含む）。
+
+### FE システムメトリクス
+
+これらのメトリクスは、FEが実行されている物理マシンのCPU、メモリ、IO、およびネットワークを監視します。これらのメトリクスは、FEの設定項目 `enable_collect_system_metrics` を `true` に設定した場合にのみ収集されます。この項目の設定方法については、[enable_collect_system_metrics](../FE_configuration.md#enable_collect_system_metrics) を参照してください。
+
+#### starrocks_fe_cpu
+
+- 単位: -
+- タイプ: Cumulative
+- 説明: CPU モード別の時間カウンタ。`top` に表示されるカウンタと同一（`/proc/stat` 由来）。ラベル: `mode` = `user` | `nice` | `system` | `idle` | `iowait` | `irq` | `softirq` | `steal`。
+
+#### starrocks_fe_memory
+
+- 単位: Bytes
+- タイプ: Instantaneous
+- 説明: 物理メモリおよびスワップメモリの統計（`/proc/meminfo` 由来）。ラベル: `name` = `total` | `used` | `swap_total` | `swap_used`。
+
+#### starrocks_fe_disk_total_capacity
+
+- 単位: Bytes
+- タイプ: Instantaneous
+- 説明: 監視対象の StarRocks パス（例: `Config.meta_dir`、`Config.sys_log_dir`）が配置されているディスクの総容量。ラベル: `device` = 下位ブロックデバイス名（例: `sda`、`nvme0n1`）。
+
+#### starrocks_fe_disk_used_capacity
+
+- 単位: Bytes
+- タイプ: Instantaneous
+- 説明: 監視対象の StarRocks パス（例: `Config.meta_dir`、`Config.sys_log_dir`）が配置されているディスクの使用容量。ラベル: `device` = 下位ブロックデバイス名（例: `sda`、`nvme0n1`）。
+
+#### starrocks_fe_disk_reads_completed
+
+- 単位: Count
+- タイプ: Cumulative
+- 説明: 読み取り完了回数（`/proc/diskstats` 由来）。ラベル: `device` = 下位ブロックデバイス名（例: `sda`、`nvme0n1`）。
+
+#### starrocks_fe_disk_bytes_read
+
+- 単位: Bytes
+- タイプ: Cumulative
+- 説明: 読み取られた総バイト数（`/proc/diskstats` 由来）。ラベル: `device` = 下位ブロックデバイス名（例: `sda`、`nvme0n1`）。
+
+#### starrocks_fe_disk_read_time_ms
+
+- 単位: ミリ秒
+- タイプ: Cumulative
+- 説明: 読み取りに費やされた累積時間（`/proc/diskstats` 由来）。ラベル: `device` = 下位ブロックデバイス名（例: `sda`、`nvme0n1`）。
+
+#### starrocks_fe_disk_writes_completed
+
+- 単位: Count
+- タイプ: Cumulative
+- 説明: 書き込み完了回数（`/proc/diskstats` 由来）。ラベル: `device` = 下位ブロックデバイス名（例: `sda`、`nvme0n1`）。
+
+#### starrocks_fe_disk_bytes_written
+
+- 単位: Bytes
+- タイプ: Cumulative
+- 説明: 書き込まれた総バイト数（`/proc/diskstats` 由来）。ラベル: `device` = 下位ブロックデバイス名（例: `sda`、`nvme0n1`）。
+
+#### starrocks_fe_disk_write_time_ms
+
+- 単位: ミリ秒
+- タイプ: Cumulative
+- 説明: 書き込みに費やされた累積時間（`/proc/diskstats` 由来）。ラベル: `device` = 下位ブロックデバイス名（例: `sda`、`nvme0n1`）。
+
+#### starrocks_fe_disk_io_time_ms
+
+- 単位: ミリ秒
+- タイプ: Cumulative
+- 説明: I/O に費やされた累積時間（`/proc/diskstats` 由来）。ラベル: `device` = 下位ブロックデバイス名（例: `sda`、`nvme0n1`）。
+
+#### starrocks_fe_disk_io_time_weighted_ms
+
+- 単位: ミリ秒
+- タイプ: Cumulative
+- 説明: I/O に費やされた加重累積時間（`/proc/diskstats` 由来）。ラベル: `device` = 下位ブロックデバイス名（例: `sda`、`nvme0n1`）。
+
+#### starrocks_fe_network_receive_bytes
+
+- 単位: Bytes
+- タイプ: Cumulative
+- 説明: 各ネットワークインターフェースで受信した総バイト数（OS の NIC 統計。Linux は通常 `/sys/class/net/*/statistics/`）。ラベル: `device` = ネットワークインターフェース名（例: `eth0`）。
+
+#### starrocks_fe_network_receive_packets
+
+- 単位: Count
+- タイプ: Cumulative
+- 説明: 各ネットワークインターフェースで受信したパケット総数（OS の NIC 統計。Linux は通常 `/sys/class/net/*/statistics/`）。ラベル: `device` = ネットワークインターフェース名（例: `eth0`）。
+
+#### starrocks_fe_network_receive_errors
+
+- 単位: Count
+- タイプ: Cumulative
+- 説明: 各ネットワークインターフェースの受信エラー総数（OS の NIC 統計。Linux は通常 `/sys/class/net/*/statistics/`）。ラベル: `device` = ネットワークインターフェース名（例: `eth0`）。
+
+#### starrocks_fe_network_receive_dropped
+
+- 単位: Count
+- タイプ: Cumulative
+- 説明: 各ネットワークインターフェースの受信ドロップ総数（OS の NIC 統計。Linux は通常 `/sys/class/net/*/statistics/`）。ラベル: `device` = ネットワークインターフェース名（例: `eth0`）。
+
+#### starrocks_fe_network_send_bytes
+
+- 単位: Bytes
+- タイプ: Cumulative
+- 説明: 各ネットワークインターフェースで送信した総バイト数（OS の NIC 統計。Linux は通常 `/sys/class/net/*/statistics/`）。ラベル: `device` = ネットワークインターフェース名（例: `eth0`）。
+
+#### starrocks_fe_network_send_packets
+
+- 単位: Count
+- タイプ: Cumulative
+- 説明: 各ネットワークインターフェースで送信したパケット総数（OS の NIC 統計。Linux は通常 `/sys/class/net/*/statistics/`）。ラベル: `device` = ネットワークインターフェース名（例: `eth0`）。
+
+#### starrocks_fe_network_send_errors
+
+- 単位: Count
+- タイプ: Cumulative
+- 説明: 各ネットワークインターフェースの送信エラー総数（OS の NIC 統計。Linux は通常 `/sys/class/net/*/statistics/`）。ラベル: `device` = ネットワークインターフェース名（例: `eth0`）。
+
+#### starrocks_fe_snmp
+
+- 単位: Count
+- タイプ: Mixed
+- 説明: IPv4/IPv6 を集約した TCP スタック統計（`/proc/net/snmp` 由来）。ラベル: `name` = `active_opens`、`passive_opens`、`attempts_fails`、`estab_resets`、`curr_estab`（瞬時値）、`tcp_in_segs`、`tcp_out_segs`、`tcp_retrans_segs`、`tcp_in_errs`、`tcp_out_rsts`（累積値）。

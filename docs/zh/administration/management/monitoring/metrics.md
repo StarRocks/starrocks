@@ -1788,3 +1788,127 @@ displayed_sidebar: docs
 - 单位：毫秒
 - 类型：累积值
 - 描述：BE 中 Clone 任务拷贝的总耗时，包括 INTER_NODE 和 INTRA_NODE 两种类型。
+
+### FE 系统指标
+
+该部分监控指标用于监控 FE 节点所在物理机的 CPU、内存、IO 和网络。只有当 FE 参数 `enable_collect_system_metrics` 设置为 `true` 时，StarRocks 才会采集该部分指标。关于如何配置该参数，参见 [enable_collect_system_metrics](../FE_configuration.md#enable_collect_system_metrics)。
+
+#### starrocks_fe_cpu
+
+- 单位：-
+- 类型：累积值
+- 描述：按 CPU 模式统计的时间计数，来源与 `top` 显示一致（来自 `/proc/stat`）。标签：`mode` = `user` | `nice` | `system` | `idle` | `iowait` | `irq` | `softirq` | `steal`。
+
+#### starrocks_fe_memory
+
+- 单位：Byte
+- 类型：瞬时值
+- 描述：物理内存与交换区（swap）统计，来自 `/proc/meminfo`。标签：`name` = `total` | `used` | `swap_total` | `swap_used`。
+
+#### starrocks_fe_disk_total_capacity
+
+- 单位：Byte
+- 类型：瞬时值
+- 描述：与 StarRocks 相关目录（如 `Config.meta_dir`、`Config.sys_log_dir`）所在磁盘的总容量。标签：`device` = 底层块设备名（例如 `sda`、`nvme0n1`）。
+
+#### starrocks_fe_disk_used_capacity
+
+- 单位：Byte
+- 类型：瞬时值
+- 描述：与 StarRocks 相关目录（如 `Config.meta_dir`、`Config.sys_log_dir`）所在磁盘的已用容量。标签：`device` = 底层块设备名（例如 `sda`、`nvme0n1`）。
+
+#### starrocks_fe_disk_reads_completed
+
+- 单位：个
+- 类型：累积值
+- 描述：已完成的读操作次数，来源 `/proc/diskstats`。标签：`device` = 底层块设备名（例如 `sda`、`nvme0n1`）。
+
+#### starrocks_fe_disk_bytes_read
+
+- 单位：Byte
+- 类型：累积值
+- 描述：读取的总字节数，来源 `/proc/diskstats`。标签：`device` = 底层块设备名（例如 `sda`、`nvme0n1`）。
+
+#### starrocks_fe_disk_read_time_ms
+
+- 单位：毫秒
+- 类型：累积值
+- 描述：读取耗费的累计时间，来源 `/proc/diskstats`。标签：`device` = 底层块设备名（例如 `sda`、`nvme0n1`）。
+
+#### starrocks_fe_disk_writes_completed
+
+- 单位：个
+- 类型：累积值
+- 描述：已完成的写操作次数，来源 `/proc/diskstats`。标签：`device` = 底层块设备名（例如 `sda`、`nvme0n1`）。
+
+#### starrocks_fe_disk_bytes_written
+
+- 单位：Byte
+- 类型：累积值
+- 描述：写入的总字节数，来源 `/proc/diskstats`。标签：`device` = 底层块设备名（例如 `sda`、`nvme0n1`）。
+
+#### starrocks_fe_disk_write_time_ms
+
+- 单位：毫秒
+- 类型：累积值
+- 描述：写入耗费的累计时间，来源 `/proc/diskstats`。标签：`device` = 底层块设备名（例如 `sda`、`nvme0n1`）。
+
+#### starrocks_fe_disk_io_time_ms
+
+- 单位：毫秒
+- 类型：累积值
+- 描述：I/O 操作耗费的累计时间，来源 `/proc/diskstats`。标签：`device` = 底层块设备名（例如 `sda`、`nvme0n1`）。
+
+#### starrocks_fe_disk_io_time_weighted_ms
+
+- 单位：毫秒
+- 类型：累积值
+- 描述：I/O 操作耗费的加权累计时间，来源 `/proc/diskstats`。标签：`device` = 底层块设备名（例如 `sda`、`nvme0n1`）。
+
+#### starrocks_fe_network_receive_bytes
+
+- 单位：Byte
+- 类型：累积值
+- 描述：每个网络接口接收的总字节数，来源操作系统网卡统计（Linux 通常位于 `/sys/class/net/*/statistics/`）。标签：`device` = 网络接口名（例如 `eth0`）。
+
+#### starrocks_fe_network_receive_packets
+
+- 单位：个
+- 类型：累积值
+- 描述：每个网络接口接收的数据包总数，来源操作系统网卡统计（Linux 通常位于 `/sys/class/net/*/statistics/`）。标签：`device` = 网络接口名（例如 `eth0`）。
+
+#### starrocks_fe_network_receive_errors
+
+- 单位：个
+- 类型：累积值
+- 描述：每个网络接口接收错误的总次数，来源操作系统网卡统计（Linux 通常位于 `/sys/class/net/*/statistics/`）。标签：`device` = 网络接口名（例如 `eth0`）。
+
+#### starrocks_fe_network_receive_dropped
+
+- 单位：个
+- 类型：累积值
+- 描述：每个网络接口接收丢包的总次数，来源操作系统网卡统计（Linux 通常位于 `/sys/class/net/*/statistics/`）。标签：`device` = 网络接口名（例如 `eth0`）。
+
+#### starrocks_fe_network_send_bytes
+
+- 单位：Byte
+- 类型：累积值
+- 描述：每个网络接口发送的总字节数，来源操作系统网卡统计（Linux 通常位于 `/sys/class/net/*/statistics/`）。标签：`device` = 网络接口名（例如 `eth0`）。
+
+#### starrocks_fe_network_send_packets
+
+- 单位：个
+- 类型：累积值
+- 描述：每个网络接口发送的数据包总数，来源操作系统网卡统计（Linux 通常位于 `/sys/class/net/*/statistics/`）。标签：`device` = 网络接口名（例如 `eth0`）。
+
+#### starrocks_fe_network_send_errors
+
+- 单位：个
+- 类型：累积值
+- 描述：每个网络接口发送错误的总次数，来源操作系统网卡统计（Linux 通常位于 `/sys/class/net/*/statistics/`）。标签：`device` = 网络接口名（例如 `eth0`）。
+
+#### starrocks_fe_snmp
+
+- 单位：个
+- 类型：混合值
+- 描述：聚合 IPv4/IPv6 的 TCP 协议栈统计，来源 `/proc/net/snmp`。标签：`name` = `active_opens`、`passive_opens`、`attempts_fails`、`estab_resets`、`curr_estab`（瞬时值）、`tcp_in_segs`、`tcp_out_segs`、`tcp_retrans_segs`、`tcp_in_errs`、`tcp_out_rsts`（累积值）。

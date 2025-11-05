@@ -3969,4 +3969,7 @@ public class Config extends ConfigBase {
     public static int compound_predicate_flatten_threshold = 512;
 
     @ConfField public static int ui_queries_sql_statement_max_length = 128;
+
+    @ConfField(mutable = true, comment = "Whether to collect system metrics, such as CPU, Memory, IO, Network")
+    public static boolean enable_collect_system_metrics = false;
 }

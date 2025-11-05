@@ -653,63 +653,17 @@ public final class MetricRepo {
                 MetricRegistry.name("txn", "publish_total", "latency", "ms"));
 
         // init system metrics
-        initSystemMetrics();
+        SYSTEM_METRICS.init();
 
         // init clone metrics
         initCloneMetrics();
 
-        updateMetrics();
+
         hasInit = true;
 
         if (Config.enable_metric_calculator) {
             METRIC_TIMER.scheduleAtFixedRate(METRIC_CALCULATOR, 0, 15 * 1000L, TimeUnit.MILLISECONDS);
         }
-    }
-
-    private static void initSystemMetrics() {
-        // TCP retransSegs
-        GaugeMetric<Long> tcpRetransSegs = (GaugeMetric<Long>) new GaugeMetric<Long>(
-                "snmp", MetricUnit.NOUNIT, "All TCP packets retransmitted") {
-            @Override
-            public Long getValue() {
-                return SYSTEM_METRICS.tcpRetransSegs;
-            }
-        };
-        tcpRetransSegs.addLabel(new MetricLabel("name", "tcp_retrans_segs"));
-        STARROCKS_METRIC_REGISTER.addMetric(tcpRetransSegs);
-
-        // TCP inErrs
-        GaugeMetric<Long> tpcInErrs = (GaugeMetric<Long>) new GaugeMetric<Long>(
-                "snmp", MetricUnit.NOUNIT, "The number of all problematic TCP packets received") {
-            @Override
-            public Long getValue() {
-                return SYSTEM_METRICS.tcpInErrs;
-            }
-        };
-        tpcInErrs.addLabel(new MetricLabel("name", "tcp_in_errs"));
-        STARROCKS_METRIC_REGISTER.addMetric(tpcInErrs);
-
-        // TCP inSegs
-        GaugeMetric<Long> tpcInSegs = (GaugeMetric<Long>) new GaugeMetric<Long>(
-                "snmp", MetricUnit.NOUNIT, "The number of all TCP packets received") {
-            @Override
-            public Long getValue() {
-                return SYSTEM_METRICS.tcpInSegs;
-            }
-        };
-        tpcInSegs.addLabel(new MetricLabel("name", "tcp_in_segs"));
-        STARROCKS_METRIC_REGISTER.addMetric(tpcInSegs);
-
-        // TCP outSegs
-        GaugeMetric<Long> tpcOutSegs = (GaugeMetric<Long>) new GaugeMetric<Long>(
-                "snmp", MetricUnit.NOUNIT, "The number of all TCP packets send with RST") {
-            @Override
-            public Long getValue() {
-                return SYSTEM_METRICS.tcpOutSegs;
-            }
-        };
-        tpcOutSegs.addLabel(new MetricLabel("name", "tcp_out_segs"));
-        STARROCKS_METRIC_REGISTER.addMetric(tpcOutSegs);
     }
 
     private static void initCloneMetrics() {
@@ -978,13 +932,15 @@ public final class MetricRepo {
             return "";
         }
 
-        // update the metrics first
-        updateMetrics();
-
         // jvm
         JvmStatCollector jvmStatCollector = new JvmStatCollector();
         JvmStats jvmStats = jvmStatCollector.stats();
         visitor.visitJvm(jvmStats);
+
+        // system metrics
+        if (Config.enable_collect_system_metrics) {
+            SYSTEM_METRICS.collect(visitor);
+        }
 
         // starrocks metrics
         List<Metric> metrics = STARROCKS_METRIC_REGISTER.getMetrics();
@@ -1056,11 +1012,6 @@ public final class MetricRepo {
         // node info
         visitor.getNodeInfo();
         return visitor.build();
-    }
-
-    // update some metrics to make a ready to be visited
-    private static void updateMetrics() {
-        SYSTEM_METRICS.update();
     }
 
     // collect table-level metrics

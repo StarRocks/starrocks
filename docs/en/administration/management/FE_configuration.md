@@ -5619,4 +5619,13 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: Whether to prefer string type for fixed length varchar columns in materialized view creation and CTAS operations.
 - Introduced in: v4.0.0
 
+##### enable_collect_system_metrics
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to collect FE system metrics, such as CPU, Memory, IO, Network.
+- Introduced in: v4.1.0
+
 <EditionSpecificFEItem />

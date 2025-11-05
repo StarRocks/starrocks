@@ -5541,4 +5541,13 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 描述：在物化视图创建和 CTAS 操作中，是否优先对固定长度的 VARCHAR 列使用 STRING 类型。
 - 引入版本：v4.0.0
 
+##### enable_collect_system_metrics
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否可动态修改：是
+- 描述：是否采集 FE 的系统指标，例如 CPU、内存、IO、网络等。
+- 引入版本：v4.1.0
+
 <EditionSpecificFEItem />
