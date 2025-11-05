@@ -56,7 +56,7 @@
 #include "exec/pipeline/exchange/sink_buffer.h"
 #include "exec/pipeline/fragment_executor.h"
 #include "exec/pipeline/limit_operator.h"
-#include "exec/pipeline/sink/noop_sink_operator.h"
+#include "exec/pipeline/noop_sink_operator.h"
 #include "exec/pipeline/sink/olap_table_sink_operator.h"
 #include "exec/pipeline/sink/result_sink_operator.h"
 #include "exec/pipeline/sink/blackhole_table_sink_operator.h"
