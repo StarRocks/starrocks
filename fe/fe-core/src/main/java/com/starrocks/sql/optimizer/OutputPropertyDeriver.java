@@ -226,7 +226,7 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
         final SessionVariable sv = ConnectContext.get().getSessionVariable();
         // Spill partition join and partition join operations break ordering.
         // When these optimizations are enabled, we need to clear the property.
-        boolean needResetSortProperty = sv.isEnableSpill() || sv.enablePartitionHashJoin();
+        boolean needResetSortProperty = sv.isEnableSpill();
         if (needResetSortProperty) {
             propertySet =
                     new PhysicalPropertySet(propertySet.getDistributionProperty(), EmptySortProperty.INSTANCE,
