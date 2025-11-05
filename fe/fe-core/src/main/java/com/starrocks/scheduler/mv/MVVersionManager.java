@@ -25,6 +25,8 @@ import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
 import com.starrocks.scheduler.MvTaskRunContext;
 import com.starrocks.scheduler.mv.pct.PCTTableSnapshotInfo;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.common.PCellSortedSet;
+import com.starrocks.sql.common.PCellWithName;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -63,9 +65,9 @@ public class MVVersionManager {
      * @param tempMvTvrVersionRangeMap temporary tvr version range map for each base table which is used for ivm refresh
      */
     public void updateMVVersionInfo(Map<Long, BaseTableSnapshotInfo> snapshotBaseTables,
-                                    Set<String> mvRefreshedPartitions,
+                                    PCellSortedSet mvRefreshedPartitions,
                                     Set<Long> refBaseTableIds,
-                                    Map<BaseTableSnapshotInfo, Set<String>> refTableAndPartitionNames,
+                                    Map<BaseTableSnapshotInfo, PCellSortedSet> refTableAndPartitionNames,
                                     Map<BaseTableInfo, TvrVersionRange> tempMvTvrVersionRangeMap) {
         MaterializedView.MvRefreshScheme mvRefreshScheme = mv.getRefreshScheme();
         MaterializedView.AsyncRefreshContext refreshContext = mvRefreshScheme.getAsyncRefreshContext();
@@ -256,9 +258,9 @@ public class MVVersionManager {
      * partitions rather than the whole table.
      */
     private void updateAssociatedPartitionMeta(MaterializedView.AsyncRefreshContext refreshContext,
-                                               Set<String> mvRefreshedPartitions,
-                                               Map<BaseTableSnapshotInfo, Set<String>> refTableAndPartitionNames) {
-        Map<String, Map<Table, Set<String>>> mvToBaseNameRefs = mvTaskRunContext.getMvRefBaseTableIntersectedPartitions();
+                                               PCellSortedSet mvRefreshedPartitions,
+                                               Map<BaseTableSnapshotInfo, PCellSortedSet> refTableAndPartitionNames) {
+        Map<String, Map<Table, PCellSortedSet>> mvToBaseNameRefs = mvTaskRunContext.getMvRefBaseTableIntersectedPartitions();
         if (Objects.isNull(mvToBaseNameRefs) || Objects.isNull(refTableAndPartitionNames) ||
                 refTableAndPartitionNames.isEmpty()) {
             return;
@@ -267,15 +269,17 @@ public class MVVersionManager {
         try {
             Map<String, Set<String>> mvPartitionNameRefBaseTablePartitionMap =
                     refreshContext.getMvPartitionNameRefBaseTablePartitionMap();
-            for (String mvRefreshedPartition : mvRefreshedPartitions) {
-                Map<Table, Set<String>> mvToBaseNameRef = mvToBaseNameRefs.get(mvRefreshedPartition);
+            for (PCellWithName mvPCellWithName : mvRefreshedPartitions.getPartitions()) {
+                String mvRefreshedPartition = mvPCellWithName.name();
+                Map<Table, PCellSortedSet> mvToBaseNameRef = mvToBaseNameRefs.get(mvRefreshedPartition);
                 for (BaseTableSnapshotInfo snapshotInfo : refTableAndPartitionNames.keySet()) {
                     Table refBaseTable = snapshotInfo.getBaseTable();
                     if (!mvToBaseNameRef.containsKey(refBaseTable)) {
                         continue;
                     }
                     Set<String> realBaseTableAssociatedPartitions = Sets.newHashSet();
-                    for (String refBaseTableAssociatedPartition : mvToBaseNameRef.get(refBaseTable)) {
+                    for (PCellWithName basePCellWithName : mvToBaseNameRef.get(refBaseTable).getPartitions()) {
+                        String refBaseTableAssociatedPartition = basePCellWithName.name();
                         realBaseTableAssociatedPartitions.addAll(
                                 mvTaskRunContext.getExternalTableRealPartitionName(refBaseTable,
                                         refBaseTableAssociatedPartition));

@@ -146,6 +146,41 @@ public class PCellSortedSet {
     }
 
     /**
+     * Check if all partitions with the given names exist.
+     * @param partitionNames the names of the partitions
+     * @return true if all partitions exist, false otherwise
+     */
+    public boolean containsAllNames(Collection<String> partitionNames) {
+        for (String partitionName : partitionNames) {
+            if (!nameToPCell.containsKey(partitionName)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Retain only the partitions with the given names.
+     * @param partitionNames the names of the partitions to retain
+     * @return true if the set was modified, false otherwise
+     */
+    public boolean retainAllNames(Collection<String> partitionNames) {
+        boolean modified = false;
+        // use a case-insensitive set for name lookup
+        Set<String> namesToRetain = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+        namesToRetain.addAll(partitionNames);
+        Iterator<PCellWithName> iterator = iterator();
+        while (iterator.hasNext()) {
+            PCellWithName partition = iterator.next();
+            if (!namesToRetain.contains(partition.name())) {
+                iterator.remove();
+                modified = true;
+            }
+        }
+        return modified;
+    }
+
+    /**
      * Get partition PCellWithName by name.
      * @param partitionName the name of the partition
      * @return the PCellWithName of the partition, or null if not found
@@ -194,6 +229,15 @@ public class PCellSortedSet {
      */
     public NavigableSet<PCellWithName> getPartitions() {
         return pCellWithNames;
+    }
+
+    /**
+     * Get a set of distinct PCells in the partitions.
+     */
+    public Set<PCell> getPCells() {
+        return pCellWithNames.stream()
+                .map(PCellWithName::cell)
+                .collect(Collectors.toSet());
     }
 
     /**
@@ -324,6 +368,15 @@ public class PCellSortedSet {
             return;
         }
         for (PCellWithName partition : other.pCellWithNames) {
+            add(partition);
+        }
+    }
+
+    public void addAll(Collection<PCellWithName> other) {
+        if (other == null || other.isEmpty()) {
+            return;
+        }
+        for (PCellWithName partition : other) {
             add(partition);
         }
     }

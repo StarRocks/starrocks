@@ -14,18 +14,15 @@
 
 package com.starrocks.catalog;
 
-import com.google.common.collect.Sets;
 import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.PRangeCell;
-
-import java.util.Set;
 
 /**
  * Store the update information of base table for MV
  */
 public class MvBaseTableUpdateInfo {
     // The partition names of base table that have been updated
-    private final Set<String> toRefreshPartitionNames = Sets.newHashSet();
+    private final PCellSortedSet toRefreshPartitionNames = PCellSortedSet.of();
     // The mapping of partition name to partition range
     private final PCellSortedSet partitionToCells = PCellSortedSet.of();
 
@@ -43,7 +40,7 @@ public class MvBaseTableUpdateInfo {
         mvPartitionNameToCellMap.addAll(partitionNameToRangeMap);
     }
 
-    public Set<String> getToRefreshPartitionNames() {
+    public PCellSortedSet getToRefreshPartitionNames() {
         return toRefreshPartitionNames;
     }
 
@@ -55,7 +52,7 @@ public class MvBaseTableUpdateInfo {
      * Add partition names that base table needs to be refreshed
      * @param toRefreshPartitionNames the partition names that need to be refreshed
      */
-    public void addToRefreshPartitionNames(Set<String> toRefreshPartitionNames) {
+    public void addToRefreshPartitionNames(PCellSortedSet toRefreshPartitionNames) {
         this.toRefreshPartitionNames.addAll(toRefreshPartitionNames);
     }
 
