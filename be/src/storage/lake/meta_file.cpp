@@ -325,7 +325,7 @@ Status MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compa
     }
     if (deleted_input_rowset_cnt != op_compaction.input_rowsets_size()) {
         LOG(ERROR) << fmt::format(
-                "MetaFileBuilder apply_opcompaction failed to find all input rowsets, tablet_id:{} "
+                "MetaFileBuilder apply_opcompaction failed to find all input rowsets, tablet_id : {} "
                 "expected_input_rowsets : {} "
                 "deleted_input_rowsets : {} "
                 "op_compaction : {} "
