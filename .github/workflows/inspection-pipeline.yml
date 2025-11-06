@@ -188,19 +188,19 @@ jobs:
     needs: info
     name: Generate Documentation
     steps:
-      - uses: dorny/paths-filter@v3
-        id: path-filter
-        with:
-          filters: |
-            be-config:
-              - 'be/src/common/config.h'
-            fe-config:
-              - 'fe/fe-core/src/main/java/com/starrocks/common/Config.java'
-            variable:
-              - 'fe/fe-core/src/main/java/com/starrocks/qe/GlobalVariable.java'
-              - 'fe/fe-core/src/main/java/com/starrocks/qe/SessionVariable.java'
-            function:
-              - 'gensrc/script/functions.py'
+      # - uses: dorny/paths-filter@v3
+      #   id: path-filter
+      #   with:
+      #     filters: |
+      #       be-config:
+      #         - 'be/src/common/config.h'
+      #       fe-config:
+      #         - 'fe/fe-core/src/main/java/com/starrocks/common/Config.java'
+      #       variable:
+      #         - 'fe/fe-core/src/main/java/com/starrocks/qe/GlobalVariable.java'
+      #         - 'fe/fe-core/src/main/java/com/starrocks/qe/SessionVariable.java'
+      #       function:
+      #         - 'gensrc/script/functions.py'
 
       - name: init doc-agent
         id: init-doc-agent
