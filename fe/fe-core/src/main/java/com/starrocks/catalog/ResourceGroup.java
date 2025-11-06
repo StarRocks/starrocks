@@ -125,10 +125,10 @@ public class ResourceGroup {
                     new Column(GROUP_TYPE, TypeFactory.createVarchar(200)),
                     (rg, classifier) -> rg.getResourceGroupType().name().substring("WG_".length()), false),
             new ColumnMeta(
-                    new Column("classifiers", ScalarType.createVarchar(1024)),
+                    new Column("classifiers", TypeFactory.createVarchar(1024)),
                     (rg, classifier) -> classifier.toString()),
             new ColumnMeta(
-                    new Column(MEM_POOL, ScalarType.createVarchar(200)),
+                    new Column(MEM_POOL, TypeFactory.createVarchar(200)),
                     (rg, classifier) -> rg.getMemPool(), false)
     );
 
