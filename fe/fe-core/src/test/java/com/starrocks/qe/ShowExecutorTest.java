@@ -57,7 +57,6 @@ import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.TableProperty;
-import com.starrocks.catalog.Type;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.catalog.system.information.MaterializedViewsSystemTable;
 import com.starrocks.common.AnalysisException;
@@ -83,6 +82,7 @@ import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageType;
+import com.starrocks.type.Type;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -226,7 +226,7 @@ public class ShowExecutorTest {
                 minTimes = 0;
                 result = Lists.newArrayList(column1, column2);
 
-                mv.getOrderedOutputColumns();
+                mv.getOrderedOutputColumns(anyBoolean);
                 minTimes = 0;
                 result = Lists.newArrayList(column1, column2);
 

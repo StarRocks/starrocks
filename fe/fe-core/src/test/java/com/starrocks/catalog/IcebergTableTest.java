@@ -39,12 +39,12 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import static com.starrocks.catalog.Type.ARRAY_BIGINT;
-import static com.starrocks.catalog.Type.DATETIME;
-import static com.starrocks.catalog.Type.INT;
-import static com.starrocks.catalog.Type.STRING;
-import static com.starrocks.catalog.Type.VARCHAR;
 import static com.starrocks.server.ExternalTableFactory.RESOURCE;
+import static com.starrocks.type.Type.ARRAY_BIGINT;
+import static com.starrocks.type.Type.DATETIME;
+import static com.starrocks.type.Type.INT;
+import static com.starrocks.type.Type.STRING;
+import static com.starrocks.type.Type.VARCHAR;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class IcebergTableTest extends TableTestBase {

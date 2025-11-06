@@ -66,6 +66,7 @@
 #include "exec/pipeline/chunk_accumulate_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/project_node.h"
+#include "exec/raw_values_node.h"
 #include "exec/repeat_node.h"
 #include "exec/schema_scan_node.h"
 #include "exec/select_node.h"
@@ -465,6 +466,9 @@ Status ExecNode::create_vectorized_node(starrocks::RuntimeState* state, starrock
         return Status::OK();
     case TPlanNodeType::UNION_NODE:
         *node = pool->add(new UnionNode(pool, tnode, descs));
+        return Status::OK();
+    case TPlanNodeType::RAW_VALUES_NODE:
+        *node = pool->add(new RawValuesNode(pool, tnode, descs));
         return Status::OK();
     case TPlanNodeType::INTERSECT_NODE:
         *node = pool->add(new IntersectNode(pool, tnode, descs));

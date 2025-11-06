@@ -36,15 +36,12 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
-import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableIndexes;
 import com.starrocks.catalog.TabletMeta;
-import com.starrocks.catalog.Type;
 import com.starrocks.http.StarRocksHttpTestCase;
 import com.starrocks.http.rest.v2.RestBaseResultV2.PagedResult;
 import com.starrocks.http.rest.v2.vo.PartitionInfoView.PartitionView;
@@ -58,6 +55,9 @@ import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.thrift.TStorageMedium;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Expectations;
 import okhttp3.Request;
@@ -125,7 +125,7 @@ public class TablePartitionActionTest extends StarRocksHttpTestCase {
         Column c1 = new Column("c1", Type.DATETIME, true, null, null, false, null, "cc1", 2);
         Column c2 = new Column("c2", Type.VARCHAR, true, null, null, false, null, "cc2", 3);
         Column c3 = new Column("c3",
-                ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 8),
+                TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 8),
                 false, null, null, true, new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), "cc3", 4
         );
         List<Column> columns = Lists.newArrayList(c0, c1, c2, c3);
@@ -167,7 +167,7 @@ public class TablePartitionActionTest extends StarRocksHttpTestCase {
         Column c1 = new Column("c1", Type.DATETIME, true, null, null, false, null, "cc1", 2);
         Column c2 = new Column("c2", Type.VARCHAR, true, null, null, false, null, "cc2", 3);
         Column c3 = new Column("c3",
-                ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 8),
+                TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 8),
                 false, null, null, true, new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), "cc3", 4
         );
         List<Column> columns = Lists.newArrayList(c0, c1, c2, c3);
@@ -331,7 +331,7 @@ public class TablePartitionActionTest extends StarRocksHttpTestCase {
         Column c1 = new Column("c1", Type.DATETIME, true, null, null, false, null, "cc1", 2);
         Column c2 = new Column("c2", Type.VARCHAR, true, null, null, false, null, "cc2", 3);
         Column c3 = new Column("c3",
-                ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 8),
+                TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 8),
                 false, null, null, true, new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), "cc3", 4
         );
         List<Column> columns = Lists.newArrayList(c0, c1, c2, c3);

@@ -55,7 +55,7 @@ ${license}
 package com.starrocks.builtins;
 
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.Type;
+import com.starrocks.type.Type;
 
 public class VectorizedBuiltinFunctions {
     public static void initBuiltins(FunctionSet functionSet) {
@@ -210,6 +210,7 @@ def generate_cpp(path):
         "ArrayFunctions",
         "MapFunctions",
         "GinFunctions",
+        "AiFunctions",
     ]
 
     modules_contents = dict()

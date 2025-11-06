@@ -14,7 +14,7 @@
 
 package com.starrocks.connector.iceberg.procedure;
 
-import com.starrocks.catalog.Type;
+import com.starrocks.type.Type;
 
 public record NamedArgument(String name, Type type, boolean required) {
     public NamedArgument {

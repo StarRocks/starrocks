@@ -16,10 +16,8 @@ package com.starrocks.analysis;
 
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.connector.iceberg.procedure.CherryPickSnapshotProcedure;
 import com.starrocks.connector.iceberg.procedure.ExpireSnapshotsProcedure;
 import com.starrocks.connector.iceberg.procedure.FastForwardProcedure;
@@ -46,6 +44,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
+import com.starrocks.type.Type;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
@@ -68,8 +67,7 @@ public class AlterTableOperationStmtTest {
 
     @BeforeEach
     public void setUp(@Mocked MetadataMgr metadataMgr,
-                      @Mocked CatalogMgr catalogMgr,
-                      @Mocked Database database) throws Exception {
+                      @Mocked CatalogMgr catalogMgr) throws Exception {
         Table icebergTable = new IcebergTable(1, "test_table", "iceberg_catalog", "iceberg_catalog",
                 "iceberg_db", "test_table", "",
                 List.of(new Column("k1", Type.INT, true), new Column("partition_date", Type.DATE, true)),
@@ -83,10 +81,6 @@ public class AlterTableOperationStmtTest {
 
                 GlobalStateMgr.getCurrentState().getCatalogMgr();
                 result = catalogMgr;
-                minTimes = 0;
-
-                metadataMgr.getDb(anyLong);
-                result = database;
                 minTimes = 0;
 
                 metadataMgr.getTemporaryTable((UUID)any, anyString, anyLong, anyString);
@@ -353,7 +347,7 @@ public class AlterTableOperationStmtTest {
 
         RewriteDataFilesProcedure rewriteProc = RewriteDataFilesProcedure.getInstance();
         Assertions.assertEquals("rewrite_data_files", rewriteProc.getProcedureName());
-        Assertions.assertEquals(3, rewriteProc.getArguments().size());
+        Assertions.assertEquals(4, rewriteProc.getArguments().size());
 
         RollbackToSnapshotProcedure rollbackProc = RollbackToSnapshotProcedure.getInstance();
         Assertions.assertEquals("rollback_to_snapshot", rollbackProc.getProcedureName());

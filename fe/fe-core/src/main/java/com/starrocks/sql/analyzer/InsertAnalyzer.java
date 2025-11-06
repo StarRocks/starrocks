@@ -30,7 +30,6 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunctionTable;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -57,6 +56,7 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.type.Type;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.SnapshotRef;
 import org.apache.logging.log4j.LogManager;
@@ -288,7 +288,8 @@ public class InsertAnalyzer {
                         String missingKeyColumns = String.join(",", requiredKeyColumns);
                         ErrorReport.reportSemanticException(ErrorCode.ERR_MISSING_KEY_COLUMNS, missingKeyColumns);
                     }
-                    if (targetColumns.size() < olapTable.getBaseSchemaWithoutGeneratedColumn().size()) {
+                    if (targetColumns.size() < olapTable.getBaseSchemaWithoutGeneratedColumn().size() && 
+                            session.getSessionVariable().isEnableInsertPartialUpdate()) {
                         insertStmt.setUsePartialUpdate();
                         // mark if partial update for auto increment column if and only if:
                         // 1. There is auto increment defined in base schema

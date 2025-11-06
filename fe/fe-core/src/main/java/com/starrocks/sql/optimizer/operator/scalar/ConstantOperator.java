@@ -14,9 +14,6 @@
 
 package com.starrocks.sql.optimizer.operator.scalar;
 
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.qe.ConnectContext;
@@ -27,6 +24,9 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.Type;
 import org.apache.commons.lang3.StringUtils;
 
 import java.math.BigDecimal;
@@ -43,9 +43,9 @@ import java.util.Optional;
 import java.util.function.Function;
 import javax.validation.constraints.NotNull;
 
-import static com.starrocks.catalog.Type.DATE;
-import static com.starrocks.catalog.Type.DATETIME;
-import static com.starrocks.catalog.Type.TINYINT;
+import static com.starrocks.type.Type.DATE;
+import static com.starrocks.type.Type.DATETIME;
+import static com.starrocks.type.Type.TINYINT;
 import static java.util.Collections.emptyList;
 
 /**

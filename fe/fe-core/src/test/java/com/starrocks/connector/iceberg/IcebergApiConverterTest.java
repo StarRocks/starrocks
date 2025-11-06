@@ -18,13 +18,7 @@ package com.starrocks.connector.iceberg;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.MapType;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.StructType;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.RemoteFileInputFormat;
@@ -33,15 +27,27 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.MapType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.StructType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.PartitionSpec;
+import org.apache.iceberg.Partitioning;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.SortField;
 import org.apache.iceberg.SortOrder;
+import org.apache.iceberg.StructLike;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.types.Types;
+import org.apache.iceberg.util.StructProjection;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.mockito.MockedStatic;
+import org.mockito.Mockito;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -60,6 +66,8 @@ import static org.apache.iceberg.TableProperties.PARQUET_COMPRESSION;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 public class IcebergApiConverterTest {
 
@@ -77,16 +85,16 @@ public class IcebergApiConverterTest {
         int scale = 5;
         org.apache.iceberg.types.Type icebergType = Types.DecimalType.of(precision, scale);
         Type resType = fromIcebergType(icebergType);
-        assertEquals(resType, ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL32, 9, scale));
+        assertEquals(resType, TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL32, 9, scale));
         resType = fromIcebergType(Types.DecimalType.of(10, scale));
-        assertEquals(resType, ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 10, scale));
+        assertEquals(resType, TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 10, scale));
         resType = fromIcebergType(Types.DecimalType.of(19, scale));
-        assertEquals(resType, ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 19, scale));
+        assertEquals(resType, TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 19, scale));
     }
 
     @Test
     public void testString() {
-        Type stringType = ScalarType.createDefaultCatalogString();
+        Type stringType = TypeFactory.createDefaultCatalogString();
         org.apache.iceberg.types.Type icebergType = Types.StringType.get();
         Type resType = fromIcebergType(icebergType);
         assertEquals(resType, stringType);
@@ -102,10 +110,17 @@ public class IcebergApiConverterTest {
     @Test
     public void testArray() {
         assertEquals(fromIcebergType(Types.ListType.ofRequired(136, Types.IntegerType.get())),
-                new ArrayType(ScalarType.createType(PrimitiveType.INT)));
+                new ArrayType(TypeFactory.createType(PrimitiveType.INT)));
         assertEquals(fromIcebergType(Types.ListType.ofRequired(136,
                         Types.ListType.ofRequired(136, Types.IntegerType.get()))),
-                new ArrayType(new ArrayType(ScalarType.createType(PrimitiveType.INT))));
+                new ArrayType(new ArrayType(TypeFactory.createType(PrimitiveType.INT))));
+    }
+
+    @Test
+    public void testVariant() {
+        Type variantType = fromIcebergType(Types.VariantType.get());
+        Assertions.assertTrue(variantType.isVariantType());
+        Assertions.assertEquals(TypeFactory.createType(PrimitiveType.VARIANT), variantType);
     }
 
     @Test
@@ -139,7 +154,7 @@ public class IcebergApiConverterTest {
                 Types.StringType.get(), Types.IntegerType.get());
         Type resType = fromIcebergType(icebergType);
         assertEquals(resType,
-                new MapType(ScalarType.createDefaultCatalogString(), ScalarType.createType(PrimitiveType.INT)));
+                new MapType(TypeFactory.createDefaultCatalogString(), TypeFactory.createType(PrimitiveType.INT)));
     }
 
     @Test
@@ -153,7 +168,7 @@ public class IcebergApiConverterTest {
     }
 
     @Test
-    public void testIdentityPartitionNames() {
+    public void testIdentityPartitionNames() throws Exception {
         List<Types.NestedField> fields = Lists.newArrayList();
         fields.add(Types.NestedField.optional(1, "id", new Types.IntegerType()));
         fields.add(Types.NestedField.optional(2, "dt", new Types.DateType()));
@@ -162,19 +177,36 @@ public class IcebergApiConverterTest {
         Schema schema = new Schema(fields);
         PartitionSpec.Builder builder = PartitionSpec.builderFor(schema);
         PartitionSpec partitionSpec = builder.identity("dt").build();
-        String partitionName = convertIcebergPartitionToPartitionName(partitionSpec, DataFiles.data(partitionSpec,
-                "dt=2022-08-01"));
-        assertEquals("dt=2022-08-01", partitionName);
+        org.apache.iceberg.Table table = mock(org.apache.iceberg.Table.class);
+        when(table.spec()).thenReturn(partitionSpec);
+        when(table.schema()).thenReturn(schema);
+        try (MockedStatic<Partitioning> mockedStatic = Mockito.mockStatic(Partitioning.class)) {
+            mockedStatic.when(() -> Partitioning.partitionType(table)).thenReturn(partitionSpec.partitionType());
 
+            StructLike partitionData = DataFiles.data(partitionSpec, "dt=2022-08-01");
+            StructProjection partition = StructProjection.create(schema, schema);
+            partition.wrap(partitionData);
+            String partitionName = convertIcebergPartitionToPartitionName(table, partitionSpec, partition);
+            assertEquals("dt=2022-08-01", partitionName);
+        }
+
+        // Second test case
         builder = PartitionSpec.builderFor(schema);
         partitionSpec = builder.identity("id").identity("dt").build();
-        partitionName = convertIcebergPartitionToPartitionName(partitionSpec, DataFiles.data(partitionSpec,
-                "id=1/dt=2022-08-01"));
-        assertEquals("id=1/dt=2022-08-01", partitionName);
+        when(table.spec()).thenReturn(partitionSpec);
+        try (MockedStatic<Partitioning> mockedStatic = Mockito.mockStatic(Partitioning.class)) {
+            mockedStatic.when(() -> Partitioning.partitionType(table)).thenReturn(partitionSpec.partitionType());
+
+            StructLike partitionData = DataFiles.data(partitionSpec, "id=1/dt=2022-08-01");
+            StructProjection partition = StructProjection.create(schema, schema);
+            partition.wrap(partitionData);
+            String partitionName = convertIcebergPartitionToPartitionName(table, partitionSpec, partition);
+            assertEquals("id=1/dt=2022-08-01", partitionName);
+        }
     }
 
     @Test
-    public void testNonIdentityPartitionNames() {
+    public void testNonIdentityPartitionNames() throws Exception {
         List<Types.NestedField> fields = Lists.newArrayList();
         fields.add(Types.NestedField.optional(1, "id", new Types.IntegerType()));
         fields.add(Types.NestedField.optional(2, "ts", Types.TimestampType.withoutZone()));
@@ -183,15 +215,34 @@ public class IcebergApiConverterTest {
         Schema schema = new Schema(fields);
         PartitionSpec.Builder builder = PartitionSpec.builderFor(schema);
         PartitionSpec partitionSpec = builder.hour("ts").build();
-        String partitionName = convertIcebergPartitionToPartitionName(partitionSpec, DataFiles.data(partitionSpec,
-                "ts_hour=62255"));
-        assertEquals("ts_hour=1977-02-06-23", partitionName);
+        org.apache.iceberg.Table table = mock(org.apache.iceberg.Table.class);
+        when(table.spec()).thenReturn(partitionSpec);
+        when(table.schema()).thenReturn(schema);
 
+        try (MockedStatic<Partitioning> mockedStatic = Mockito.mockStatic(Partitioning.class)) {
+            mockedStatic.when(() -> Partitioning.partitionType(table)).thenReturn(partitionSpec.partitionType());
+
+            StructLike partitionData = DataFiles.data(partitionSpec, "ts_hour=62255");
+            StructProjection partition = StructProjection.create(schema, schema);
+            partition.wrap(partitionData);
+            String partitionName = convertIcebergPartitionToPartitionName(table, partitionSpec, partition);
+            assertEquals("ts_hour=1977-02-06-23", partitionName);
+        }
+
+        // Second test case
         builder = PartitionSpec.builderFor(schema);
         partitionSpec = builder.hour("ts").truncate("data", 2).build();
-        partitionName = convertIcebergPartitionToPartitionName(partitionSpec, DataFiles.data(partitionSpec,
-                "ts_hour=365/data_trunc=xy"));
-        assertEquals("ts_hour=1970-01-16-05/data_trunc=xy", partitionName);
+        when(table.spec()).thenReturn(partitionSpec);
+
+        try (MockedStatic<Partitioning> mockedStatic = Mockito.mockStatic(Partitioning.class)) {
+            mockedStatic.when(() -> Partitioning.partitionType(table)).thenReturn(partitionSpec.partitionType());
+
+            StructLike partitionData = DataFiles.data(partitionSpec, "ts_hour=365/data_trunc=xy");
+            StructProjection partition = StructProjection.create(schema, schema);
+            partition.wrap(partitionData);
+            String partitionName = convertIcebergPartitionToPartitionName(table, partitionSpec, partition);
+            assertEquals("ts_hour=1970-01-16-05/data_trunc=xy", partitionName);
+        }
     }
 
     @Test
@@ -213,6 +264,7 @@ public class IcebergApiConverterTest {
         columns.add(new Column("c14", new MapType(Type.INT, Type.INT)));
         columns.add(new Column("c15", new StructType(ImmutableList.of(Type.INT))));
         columns.add(new Column("c16", Type.TIME));
+        columns.add(new Column("c17", Type.VARIANT));
 
         Schema schema = IcebergApiConverter.toIcebergApiSchema(columns);
         assertEquals("table {\n" +
@@ -230,8 +282,9 @@ public class IcebergApiConverterTest {
                 "  12: c12: required decimal(-1, -1)\n" +
                 "  13: c13: required list<int>\n" +
                 "  14: c14: required map<int, int>\n" +
-                "  15: c15: required struct<20: col1: optional int>\n" +
+                "  15: c15: required struct<21: col1: optional int>\n" +
                 "  16: c16: required time\n" +
+                "  17: c17: required variant\n" +
                 "}", schema.toString());
         ListPartitionDesc partDesc = new ListPartitionDesc(Lists.newArrayList("c1"), null);
         PartitionSpec spec = IcebergApiConverter.parsePartitionFields(schema, partDesc);
@@ -273,7 +326,7 @@ public class IcebergApiConverterTest {
 
     @Test
     public void testTime() {
-        Type timeType = ScalarType.createType(PrimitiveType.TIME);
+        Type timeType = TypeFactory.createType(PrimitiveType.TIME);
         org.apache.iceberg.types.Type icebergType = Types.TimeType.get();
         Type resType = fromIcebergType(icebergType);
         assertEquals(resType, timeType);
@@ -489,29 +542,29 @@ public class IcebergApiConverterTest {
     @Test
     public void testIcebergColumnType() {
         org.apache.iceberg.types.Type type;
-        type = IcebergApiConverter.toIcebergColumnType(ScalarType.createType(PrimitiveType.INT));
+        type = IcebergApiConverter.toIcebergColumnType(TypeFactory.createType(PrimitiveType.INT));
         assertEquals(org.apache.iceberg.types.Type.TypeID.INTEGER, type.typeId());
-        type = IcebergApiConverter.toIcebergColumnType(ScalarType.createType(PrimitiveType.BOOLEAN));
+        type = IcebergApiConverter.toIcebergColumnType(TypeFactory.createType(PrimitiveType.BOOLEAN));
         assertEquals(org.apache.iceberg.types.Type.TypeID.BOOLEAN, type.typeId());
-        type = IcebergApiConverter.toIcebergColumnType(ScalarType.createType(PrimitiveType.TINYINT));
+        type = IcebergApiConverter.toIcebergColumnType(TypeFactory.createType(PrimitiveType.TINYINT));
         assertEquals(org.apache.iceberg.types.Type.TypeID.INTEGER, type.typeId());
-        type = IcebergApiConverter.toIcebergColumnType(ScalarType.createType(PrimitiveType.DECIMAL64));
+        type = IcebergApiConverter.toIcebergColumnType(TypeFactory.createType(PrimitiveType.DECIMAL64));
         assertEquals(org.apache.iceberg.types.Type.TypeID.DECIMAL, type.typeId());
-        type = IcebergApiConverter.toIcebergColumnType(ScalarType.createType(PrimitiveType.BIGINT));
+        type = IcebergApiConverter.toIcebergColumnType(TypeFactory.createType(PrimitiveType.BIGINT));
         assertEquals(org.apache.iceberg.types.Type.TypeID.LONG, type.typeId());
-        type = IcebergApiConverter.toIcebergColumnType(ScalarType.createType(PrimitiveType.DOUBLE));
+        type = IcebergApiConverter.toIcebergColumnType(TypeFactory.createType(PrimitiveType.DOUBLE));
         assertEquals(org.apache.iceberg.types.Type.TypeID.DOUBLE, type.typeId());
-        type = IcebergApiConverter.toIcebergColumnType(ScalarType.createType(PrimitiveType.FLOAT));
+        type = IcebergApiConverter.toIcebergColumnType(TypeFactory.createType(PrimitiveType.FLOAT));
         assertEquals(org.apache.iceberg.types.Type.TypeID.FLOAT, type.typeId());
-        type = IcebergApiConverter.toIcebergColumnType(ScalarType.createType(PrimitiveType.DATE));
+        type = IcebergApiConverter.toIcebergColumnType(TypeFactory.createType(PrimitiveType.DATE));
         assertEquals(org.apache.iceberg.types.Type.TypeID.DATE, type.typeId());
-        type = IcebergApiConverter.toIcebergColumnType(ScalarType.createType(PrimitiveType.DATETIME));
+        type = IcebergApiConverter.toIcebergColumnType(TypeFactory.createType(PrimitiveType.DATETIME));
         assertEquals(org.apache.iceberg.types.Type.TypeID.TIMESTAMP, type.typeId());
-        type = IcebergApiConverter.toIcebergColumnType(ScalarType.createType(PrimitiveType.TIME));
+        type = IcebergApiConverter.toIcebergColumnType(TypeFactory.createType(PrimitiveType.TIME));
         assertEquals(org.apache.iceberg.types.Type.TypeID.TIME, type.typeId());
-        type = IcebergApiConverter.toIcebergColumnType(ScalarType.createType(PrimitiveType.VARCHAR));
+        type = IcebergApiConverter.toIcebergColumnType(TypeFactory.createType(PrimitiveType.VARCHAR));
         assertEquals(org.apache.iceberg.types.Type.TypeID.STRING, type.typeId());
-        type = IcebergApiConverter.toIcebergColumnType(ScalarType.createType(PrimitiveType.VARBINARY));
+        type = IcebergApiConverter.toIcebergColumnType(TypeFactory.createType(PrimitiveType.VARBINARY));
         assertEquals(org.apache.iceberg.types.Type.TypeID.BINARY, type.typeId());
     }
 

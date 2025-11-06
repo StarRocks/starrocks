@@ -41,6 +41,7 @@
 #ifdef __APPLE__
 #include <sys/mount.h>
 #include <sys/param.h>
+#include <sys/sysctl.h>
 #ifndef TMPFS_MAGIC
 #define TMPFS_MAGIC 0x01021994
 #endif
@@ -72,6 +73,18 @@ int64_t MemInfo::_s_physical_mem = -1;
 void MemInfo::init() {
     set_memlimit_if_container();
 
+#ifdef __APPLE__
+    // On macOS, use sysctl to get physical memory
+    int64_t mem_size = 0;
+    size_t len = sizeof(mem_size);
+    if (sysctlbyname("hw.memsize", &mem_size, &len, nullptr, 0) == 0) {
+        if (_s_physical_mem <= 0 || _s_physical_mem > mem_size) {
+            _s_physical_mem = mem_size;
+        }
+    } else {
+        LOG(WARNING) << "Failed to get physical memory via sysctl: " << errno_to_string(errno);
+    }
+#else
     // Read from /proc/meminfo
     std::ifstream meminfo("/proc/meminfo", std::ios::in);
     std::string line;
@@ -105,6 +118,7 @@ void MemInfo::init() {
     if (meminfo.is_open()) {
         meminfo.close();
     }
+#endif
 
     if (_s_physical_mem <= 0) {
         LOG(WARNING) << "Could not determine amount of physical memory on this machine.";

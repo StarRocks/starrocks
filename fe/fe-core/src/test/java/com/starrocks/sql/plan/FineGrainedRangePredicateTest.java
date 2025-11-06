@@ -16,7 +16,6 @@ package com.starrocks.sql.plan;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.FeConstants;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -24,6 +23,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.transformation.FineGrainedRangePredicateRule;
+import com.starrocks.type.Type;
 import org.apache.commons.lang3.tuple.Triple;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;

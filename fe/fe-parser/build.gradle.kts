@@ -62,12 +62,3 @@ tasks.withType<Checkstyle>().configureEach {
     // Avoid circular dependency: Checkstyle should not depend on compiled classes
     classpath = files()
 }
-
-// Bind checkstyle to run before compilation
-tasks.compileJava {
-    dependsOn(tasks.checkstyleMain)
-}
-
-tasks.compileTestJava {
-    dependsOn(tasks.checkstyleTest)
-}

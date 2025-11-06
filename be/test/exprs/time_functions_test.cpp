@@ -4802,4 +4802,11 @@ TEST_F(TimeFunctionsTest, secToTimeTest) {
     }
 }
 
+TEST_F(TimeFunctionsTest, currentTimezoneTest) {
+    ColumnPtr result = TimeFunctions::current_timezone(_utils->get_fn_ctx(), Columns()).value();
+    ASSERT_TRUE(result->is_constant());
+    auto v = ColumnHelper::get_const_value<TYPE_VARCHAR>(result);
+    ASSERT_EQ("America/Los_Angeles", v);
+}
+
 } // namespace starrocks

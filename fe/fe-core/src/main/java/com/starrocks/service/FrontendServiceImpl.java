@@ -370,6 +370,7 @@ import com.starrocks.transaction.TransactionNotFoundException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStateSnapshot;
 import com.starrocks.transaction.TxnCommitAttachment;
+import com.starrocks.type.TypeSerializer;
 import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.WarehouseInfo;
 import com.starrocks.warehouse.cngroup.CRAcquireContext;
@@ -888,7 +889,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         for (Column column : table.getBaseSchema()) {
             final TColumnDesc desc =
-                    new TColumnDesc(column.getName(), column.getPrimitiveType().toThrift());
+                    new TColumnDesc(column.getName(), TypeSerializer.toThrift(column.getPrimitiveType()));
             final Integer precision = column.getType().getPrecision();
             if (precision != null) {
                 desc.setColumnPrecision(precision);
@@ -1996,14 +1997,16 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             if (range.hasLowerBound() && !range.lowerEndpoint().isMinValue()) {
                 for (int i = 0; i < partColNum; i++) {
                     tPartition.addToStart_keys(
-                            range.lowerEndpoint().getKeys().get(i).treeToThrift().getNodes().get(0));
+                            com.starrocks.sql.ast.expression.ExprToThriftVisitor
+                                    .treeToThrift(range.lowerEndpoint().getKeys().get(i)).getNodes().get(0));
                 }
             }
             // set end keys
             if (range.hasUpperBound() && !range.upperEndpoint().isMaxValue()) {
                 for (int i = 0; i < partColNum; i++) {
                     tPartition.addToEnd_keys(
-                            range.upperEndpoint().getKeys().get(i).treeToThrift().getNodes().get(0));
+                            com.starrocks.sql.ast.expression.ExprToThriftVisitor
+                                    .treeToThrift(range.upperEndpoint().getKeys().get(i)).getNodes().get(0));
                 }
             }
         } else if (partitionInfo instanceof ListPartitionInfo) {
@@ -2015,7 +2018,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             if (multiValues != null && !multiValues.isEmpty()) {
                 inKeysExprNodes = multiValues.stream()
                         .map(values -> values.stream()
-                                .map(value -> value.treeToThrift().getNodes().get(0))
+                                .map(value -> com.starrocks.sql.ast.expression.ExprToThriftVisitor
+                                        .treeToThrift(value).getNodes().get(0))
                                 .collect(Collectors.toList()))
                         .collect(Collectors.toList());
                 tPartition.setIn_keys(inKeysExprNodes);
@@ -2025,7 +2029,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             if (values != null && !values.isEmpty()) {
                 inKeysExprNodes = values.stream()
                         .map(value -> Lists.newArrayList(value).stream()
-                                .map(value1 -> value1.treeToThrift().getNodes().get(0))
+                                .map(value1 -> com.starrocks.sql.ast.expression.ExprToThriftVisitor
+                                        .treeToThrift(value1).getNodes().get(0))
                                 .collect(Collectors.toList()))
                         .collect(Collectors.toList());
             }
@@ -2035,8 +2040,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             }
         }
         for (MaterializedIndex index : physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
-            TOlapTableIndexTablets tIndex = new TOlapTableIndexTablets(index.getId(), index.getTabletIds());
-            tIndex.setVirtual_buckets(Lists.newArrayList(index.getVirtualBuckets()));
+            TOlapTableIndexTablets tIndex = new TOlapTableIndexTablets(index.getId(), index.getTabletIdsInOrder());
             tPartition.addToIndexes(tIndex);
         }
         partitions.add(tPartition);
@@ -2402,7 +2406,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
     private static List<TExprNode> literalExprsToTExprNodes(List<LiteralExpr> values) {
         return values.stream()
-                .map(value -> value.treeToThrift().getNodes().get(0))
+                .map(value -> com.starrocks.sql.ast.expression.ExprToThriftVisitor
+                        .treeToThrift(value).getNodes().get(0))
                 .collect(Collectors.toList());
     }
 
@@ -2417,14 +2422,16 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             if (range.hasLowerBound() && !range.lowerEndpoint().isMinValue()) {
                 for (int i = 0; i < partColNum; i++) {
                     tPartition.addToStart_keys(
-                            range.lowerEndpoint().getKeys().get(i).treeToThrift().getNodes().get(0));
+                            com.starrocks.sql.ast.expression.ExprToThriftVisitor
+                                    .treeToThrift(range.lowerEndpoint().getKeys().get(i)).getNodes().get(0));
                 }
             }
             // set end keys
             if (range.hasUpperBound() && !range.upperEndpoint().isMaxValue()) {
                 for (int i = 0; i < partColNum; i++) {
                     tPartition.addToEnd_keys(
-                            range.upperEndpoint().getKeys().get(i).treeToThrift().getNodes().get(0));
+                            com.starrocks.sql.ast.expression.ExprToThriftVisitor
+                                    .treeToThrift(range.upperEndpoint().getKeys().get(i)).getNodes().get(0));
                 }
             }
         } else if (partitionInfo instanceof ListPartitionInfo) {
@@ -2435,7 +2442,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             if (multiValues != null && !multiValues.isEmpty()) {
                 inKeysExprNodes = multiValues.stream()
                         .map(values -> values.stream()
-                                .map(value -> value.treeToThrift().getNodes().get(0))
+                                .map(value -> com.starrocks.sql.ast.expression.ExprToThriftVisitor
+                                        .treeToThrift(value).getNodes().get(0))
                                 .collect(Collectors.toList()))
                         .collect(Collectors.toList());
                 tPartition.setIn_keys(inKeysExprNodes);
@@ -2445,7 +2453,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             if (values != null && !values.isEmpty()) {
                 inKeysExprNodes = values.stream()
                         .map(value -> Lists.newArrayList(value).stream()
-                                .map(value1 -> value1.treeToThrift().getNodes().get(0))
+                                .map(value1 -> com.starrocks.sql.ast.expression.ExprToThriftVisitor
+                                        .treeToThrift(value1).getNodes().get(0))
                                 .collect(Collectors.toList()))
                         .collect(Collectors.toList());
             }
@@ -2456,8 +2465,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         for (MaterializedIndex index : partition.getDefaultPhysicalPartition()
                 .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
-            TOlapTableIndexTablets tIndex = new TOlapTableIndexTablets(index.getId(), index.getTabletIds());
-            tIndex.setVirtual_buckets(Lists.newArrayList(index.getVirtualBuckets()));
+            TOlapTableIndexTablets tIndex = new TOlapTableIndexTablets(index.getId(), index.getTabletIdsInOrder());
             tPartition.addToIndexes(tIndex);
         }
         partitions.add(tPartition);

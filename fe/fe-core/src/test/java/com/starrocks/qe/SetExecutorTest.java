@@ -19,8 +19,6 @@ package com.starrocks.qe;
 
 import com.google.common.collect.Lists;
 import com.starrocks.authentication.AuthenticationMgr;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.Type;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.StarRocksException;
@@ -37,6 +35,7 @@ import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.ast.expression.BoolLiteral;
 import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.sql.ast.expression.DecimalLiteral;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.FloatLiteral;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.LargeIntLiteral;
@@ -45,6 +44,8 @@ import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
@@ -131,13 +132,15 @@ public class SetExecutorTest {
         executor = new SetExecutor(ctx, stmt);
         executor.execute();
         Assertions.assertEquals(2, ctx.getModifiedSessionVariables().getSetListItems().size());
-        Assertions.assertEquals("10", ctx.getModifiedSessionVariables().getSetListItems().get(1).toSql());
+
+        UserVariable userVariable = (UserVariable) ctx.getModifiedSessionVariables().getSetListItems().get(1);
+        Assertions.assertEquals("10", userVariable.toSql());
         ctx.getUserVariables().remove("test_b");
     }
 
     public void testUserVariableImp(LiteralExpr value, Type type) throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
-        String sql = String.format("set @var = cast(%s as %s)", value.toSql(), type.toSql());
+        String sql = String.format("set @var = cast(%s as %s)", ExprToSql.toSql(value), type.toSql());
         SetStmt stmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         SetExecutor executor = new SetExecutor(ctx, stmt);
         executor.execute();
@@ -164,7 +167,7 @@ public class SetExecutorTest {
         testUserVariableImp(new DecimalLiteral("1", Type.DECIMAL32_INT), Type.DECIMAL32_INT);
         testUserVariableImp(new DecimalLiteral("1", Type.DECIMAL64_INT), Type.DECIMAL64_INT);
         testUserVariableImp(new DecimalLiteral("1", Type.DECIMAL128_INT), Type.DECIMAL128_INT);
-        testUserVariableImp(new StringLiteral("xxx"), ScalarType.createVarcharType(10));
+        testUserVariableImp(new StringLiteral("xxx"), TypeFactory.createVarcharType(10));
     }
 
     @Test

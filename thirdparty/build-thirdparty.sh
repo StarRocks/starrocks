@@ -537,7 +537,11 @@ build_glog() {
     check_if_source_exist $GLOG_SOURCE
     cd $TP_SOURCE_DIR/$GLOG_SOURCE
 
-    $CMAKE_CMD -G "${CMAKE_GENERATOR}" -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR -DBUILD_SHARED_LIBS=OFF -DCMAKE_POSITION_INDEPENDENT_CODE=ON -DCMAKE_INSTALL_LIBDIR=lib
+    $CMAKE_CMD -G "${CMAKE_GENERATOR}" \
+        -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
+        -DBUILD_SHARED_LIBS=OFF \
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+        -DCMAKE_INSTALL_LIBDIR=lib
 
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
@@ -573,7 +577,7 @@ build_simdjson() {
     #ref: https://github.com/simdjson/simdjson/blob/master/HACKING.md
     mkdir -p $BUILD_DIR
     cd $BUILD_DIR
-    $CMAKE_CMD -G "${CMAKE_GENERATOR}" -DCMAKE_CXX_FLAGS="-O3 -fPIC" -DCMAKE_C_FLAGS="-O3 -fPIC" -DCMAKE_POSITION_INDEPENDENT_CODE=True -DSIMDJSON_AVX512_ALLOWED=OFF ..
+    $CMAKE_CMD -G "${CMAKE_GENERATOR}" -DCMAKE_CXX_FLAGS="-O3 -fPIC" -DCMAKE_C_FLAGS="-O3 -fPIC" -DCMAKE_POSITION_INDEPENDENT_CODE=True -DSIMDJSON_AVX512_ALLOWED=OFF -DSIMDJSON_SKIPUTF8VALIDATION=ON ..
     $CMAKE_CMD --build .
     mkdir -p $TP_INSTALL_DIR/lib
 
@@ -694,8 +698,10 @@ build_curl() {
     cd $TP_SOURCE_DIR/$CURL_SOURCE
 
     LDFLAGS="-L${TP_LIB_DIR}" LIBS="-lssl -lcrypto -ldl" \
-    ./configure --prefix=$TP_INSTALL_DIR --disable-shared --enable-static \
-    --without-librtmp --with-ssl=${TP_INSTALL_DIR} --without-libidn2 --without-libgsasl --disable-ldap --enable-ipv6 --without-brotli
+    ./configure --prefix=$TP_INSTALL_DIR --disable-shared --enable-static  \
+                --without-librtmp --with-ssl=${TP_INSTALL_DIR} --without-libidn2 \
+                --without-libgsasl --disable-ldap --enable-ipv6 --without-brotli \
+                --disable-symbol-hiding
     make -j$PARALLEL
     make install
 }
@@ -778,7 +784,7 @@ build_kerberos() {
 build_sasl() {
     check_if_source_exist $SASL_SOURCE
     cd $TP_SOURCE_DIR/$SASL_SOURCE
-    CFLAGS="-fPIC" LDFLAGS="-L$TP_INSTALL_DIR/lib -lresolv -pthread -ldl" ./autogen.sh --prefix=$TP_INSTALL_DIR --enable-gssapi=yes --enable-static --disable-shared --with-openssl=$TP_INSTALL_DIR --with-gss_impl=mit
+    CFLAGS="-fPIC" LDFLAGS="-L$TP_INSTALL_DIR/lib -lresolv -pthread -ldl" ./autogen.sh --prefix=$TP_INSTALL_DIR --enable-gssapi=yes --enable-static --disable-shared --with-openssl=$TP_INSTALL_DIR --with-gss_impl=mit --with-dblib=none
     make -j$PARALLEL
     make install
 }
@@ -1072,6 +1078,18 @@ build_fmt() {
     cd build
     $CMAKE_CMD -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} ../ \
             -DCMAKE_INSTALL_LIBDIR=lib64 -G "${CMAKE_GENERATOR}" -DFMT_TEST=OFF
+    ${BUILD_SYSTEM} -j$PARALLEL
+    ${BUILD_SYSTEM} install
+}
+
+build_fmt_shared() {
+    check_if_source_exist $FMT_SOURCE
+    cd $TP_SOURCE_DIR/$FMT_SOURCE
+    mkdir -p build
+    cd build
+    $CMAKE_CMD -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} ../ \
+            -DCMAKE_INSTALL_LIBDIR=lib64 -G "${CMAKE_GENERATOR}" -DFMT_TEST=OFF \
+            -DBUILD_SHARED_LIBS=ON 
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
 }
@@ -1405,14 +1423,6 @@ build_datasketches() {
     cp -r $TP_SOURCE_DIR/$DATASKETCHES_SOURCE/tuple/include/* $TP_INSTALL_DIR/include/datasketches/
 }
 
-# async-profiler
-build_async_profiler() {
-    check_if_source_exist $ASYNC_PROFILER_SOURCE
-    mkdir -p $TP_INSTALL_DIR/async-profiler
-    cp -r $TP_SOURCE_DIR/$ASYNC_PROFILER_SOURCE/bin $TP_INSTALL_DIR/async-profiler
-    cp -r $TP_SOURCE_DIR/$ASYNC_PROFILER_SOURCE/lib $TP_INSTALL_DIR/async-profiler
-}
-
 # fiu
 build_fiu() {
     check_if_source_exist $FIU_SOURCE
@@ -1539,11 +1549,9 @@ build_simdutf() {
 build_tenann() {
     check_if_source_exist $TENANN_SOURCE
     rm -rf $TP_INSTALL_DIR/include/tenann
-    rm -rf $TP_INSTALL_DIR/lib/libtenann-bundle.a
-    rm -rf $TP_INSTALL_DIR/lib/libtenann-bundle-avx2.a
-    cp -r $TP_SOURCE_DIR/$TENANN_SOURCE/include/tenann $TP_INSTALL_DIR/include/tenann
-    cp -r $TP_SOURCE_DIR/$TENANN_SOURCE/lib/libtenann-bundle.a $TP_INSTALL_DIR/lib/
-    cp -r $TP_SOURCE_DIR/$TENANN_SOURCE/lib/libtenann-bundle-avx2.a $TP_INSTALL_DIR/lib/
+    rm -rf $TP_INSTALL_DIR/lib/libtenann-bundl*.a
+    cp -r $TP_SOURCE_DIR/$TENANN_SOURCE/include/tenann $TP_INSTALL_DIR/include/
+    cp -r $TP_SOURCE_DIR/$TENANN_SOURCE/lib/libtenann-bundl*.a $TP_INSTALL_DIR/lib/
 }
 
 build_icu() {
@@ -1630,6 +1638,24 @@ build_libdivide() {
     cp libdivide.h $TP_INSTALL_DIR/include/
 }
 
+# pprof
+build_pprof() {
+    check_if_archieve_exist $PPROF_SOURCE
+    mkdir -p $TP_INSTALL_DIR/flamegraph
+    cp $TP_SOURCE_DIR/$PPROF_SOURCE $TP_INSTALL_DIR/flamegraph/
+    chmod +x $TP_INSTALL_DIR/flamegraph/pprof
+}
+
+# flamegraph
+build_flamegraph() {
+    check_if_source_exist $FLAMEGRAPH_SOURCE
+    mkdir -p $TP_INSTALL_DIR/flamegraph
+    cp -r $TP_SOURCE_DIR/$FLAMEGRAPH_SOURCE/stackcollapse-perf.pl $TP_INSTALL_DIR/flamegraph/
+    cp -r $TP_SOURCE_DIR/$FLAMEGRAPH_SOURCE/stackcollapse-go.pl $TP_INSTALL_DIR/flamegraph/
+    cp -r $TP_SOURCE_DIR/$FLAMEGRAPH_SOURCE/flamegraph.pl $TP_INSTALL_DIR/flamegraph/
+    chmod +x $TP_INSTALL_DIR/flamegraph/*.pl
+}
+
 # restore cxxflags/cppflags/cflags to default one
 restore_compile_flags() {
     # c preprocessor flags
@@ -1700,6 +1726,7 @@ declare -a all_packages=(
     croaringbitmap
     cctz
     fmt
+    fmt_shared
     ryu
     hadoop
     jdk
@@ -1720,7 +1747,6 @@ declare -a all_packages=(
     avro_cpp
     serdes
     datasketches
-    async_profiler
     fiu
     llvm
     clucene
@@ -1731,11 +1757,13 @@ declare -a all_packages=(
     libxml2
     azure
     libdivide
+    flamegraph
+    tenann
 )
 
 # Machine specific packages
 if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
-    all_packages+=(breakpad libdeflate tenann)
+    all_packages+=(breakpad libdeflate pprof)
 fi
 
 # Initialize packages array - if none specified, build all

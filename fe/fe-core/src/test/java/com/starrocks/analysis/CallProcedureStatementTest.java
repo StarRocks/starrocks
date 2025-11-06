@@ -21,7 +21,9 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.CallProcedureStatement;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.type.Type;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -29,7 +31,6 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import com.starrocks.sql.ast.StatementBase;
 
 import java.util.Arrays;
 import java.util.Map;
@@ -60,8 +61,8 @@ public class CallProcedureStatementTest {
     private Procedure mockProcedure() {
         return new Procedure("test_db", "test_proc",
                 Arrays.asList(
-                        new NamedArgument("a", com.starrocks.catalog.Type.INT, true),
-                        new NamedArgument("b", com.starrocks.catalog.Type.VARCHAR, true)
+                        new NamedArgument("a", Type.INT, true),
+                        new NamedArgument("b", Type.VARCHAR, true)
                 )) {
             @Override
             public void execute(ConnectContext context, Map<String, ConstantOperator> args) {

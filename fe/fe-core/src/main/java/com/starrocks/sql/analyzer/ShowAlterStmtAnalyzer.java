@@ -18,7 +18,6 @@ package com.starrocks.sql.analyzer;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -36,6 +35,7 @@ import com.starrocks.sql.ast.expression.CompoundPredicate;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.type.Type;
 
 import java.util.ArrayList;
 import java.util.HashMap;

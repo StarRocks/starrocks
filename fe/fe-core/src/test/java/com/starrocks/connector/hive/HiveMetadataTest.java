@@ -20,9 +20,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.PartitionKey;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -60,6 +58,7 @@ import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.thrift.THiveFileInfo;
 import com.starrocks.thrift.TSinkCommitInfo;
+import com.starrocks.type.Type;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -185,8 +184,8 @@ public class HiveMetadataTest {
         Assertions.assertEquals(Lists.newArrayList("col1"), hiveTable.getPartitionColumnNames());
         Assertions.assertEquals(Lists.newArrayList("col2"), hiveTable.getDataColumnNames());
         Assertions.assertEquals("hdfs://127.0.0.1:10000/hive", hiveTable.getTableLocation());
-        Assertions.assertEquals(ScalarType.INT, hiveTable.getPartitionColumns().get(0).getType());
-        Assertions.assertEquals(ScalarType.INT, hiveTable.getBaseSchema().get(0).getType());
+        Assertions.assertEquals(Type.INT, hiveTable.getPartitionColumns().get(0).getType());
+        Assertions.assertEquals(Type.INT, hiveTable.getBaseSchema().get(0).getType());
         Assertions.assertEquals("hive_catalog", hiveTable.getCatalogName());
     }
 

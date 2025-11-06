@@ -21,9 +21,8 @@ import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -42,6 +41,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import com.starrocks.type.Type;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -131,7 +131,7 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
 
             CallOperator sumCall = new CallOperator(FunctionSet.SUM, Type.BIGINT,
                     Collections.singletonList(placeholderColumn),
-                    Expr.getBuiltinFunction(FunctionSet.SUM, new Type[] {Type.BIGINT}, Function.CompareMode.IS_IDENTICAL));
+                    ExprUtils.getBuiltinFunction(FunctionSet.SUM, new Type[] {Type.BIGINT}, Function.CompareMode.IS_IDENTICAL));
             newAggCalls.put(sumOutputColumnRef, sumCall);
         }
 
@@ -172,7 +172,7 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
         // ifnull(sum(__count__)), 0) to avoid null result
         CallOperator ifNullCall = new CallOperator(FunctionSet.IFNULL, Type.BIGINT,
                 Lists.newArrayList(sumOutputColumnRef, ConstantOperator.createBigint(0)),
-                Expr.getBuiltinFunction(FunctionSet.IFNULL, new Type[] {Type.BIGINT, Type.BIGINT},
+                ExprUtils.getBuiltinFunction(FunctionSet.IFNULL, new Type[] {Type.BIGINT, Type.BIGINT},
                         Function.CompareMode.IS_IDENTICAL));
         Map<ColumnRefOperator, ScalarOperator> newProjectMap = Maps.newHashMap();
         newProjectMap.putAll(newAggOperator.getColumnRefMap());

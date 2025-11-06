@@ -101,12 +101,14 @@ option(WITH_TENANN "Build with TENANN" OFF)
 
 option(WITH_RELATIVE_SRC_PATH "Build source file with relative path" ON)
 
-# Only support tenann on x86
-if (${WITH_TENANN} STREQUAL "ON" AND NOT "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "aarch64")
+if (${WITH_TENANN} STREQUAL "ON")
     add_definitions(-DWITH_TENANN)
-else()
-    set(WITH_TENANN "OFF")
 endif()
+
+# The StarRocks module enables dynamic linking. This is a developer option.
+# If only certain modules are modified without altering the ABI,
+# subsequent linking stages may be skipped.
+option(ENABLE_MULTI_DYNAMIC_LIBS "Enable dynamic linking of individual StarRocks modules (developer option)" OFF)
 
 message(STATUS "WITH TENANN is: ${WITH_TENANN}")
 
@@ -123,6 +125,13 @@ endif()
 set(CMAKE_SKIP_RPATH TRUE)
 set(Boost_USE_STATIC_LIBS ON)
 set(Boost_USE_STATIC_RUNTIME ON)
+
+set(ALL_BE_LIBS "" CACHE INTERNAL "All BE libraries")
+
+FUNCTION(FINALIZE_BE_LIBS)
+    LIST(SORT ALL_BE_LIBS)
+    MESSAGE(STATUS "ALL BE LIBS (SORTED): ${ALL_BE_LIBS}") 
+ENDFUNCTION()
 
 # Compile generated source if necessary
 message(STATUS "build gensrc if necessary")
@@ -348,8 +357,14 @@ set_target_properties(benchmark PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/l
 add_library(benchmark_main STATIC IMPORTED)
 set_target_properties(benchmark_main PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libbenchmark_main.a)
 
-add_library(fmt STATIC IMPORTED)
-set_target_properties(fmt PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libfmt.a)
+if (ENABLE_MULTI_DYNAMIC_LIBS)
+    add_library(fmt SHARED IMPORTED)
+    set_target_properties(fmt PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libfmt.so)
+    install(TARGETS ${LIB_NAME} DESTINATION ${OUTPUT_DIR}/lib)
+else()
+    add_library(fmt STATIC IMPORTED)
+    set_target_properties(fmt PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libfmt.a)
+endif()
 
 add_library(ryu STATIC IMPORTED)
 set_target_properties(ryu PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libryu.a)
@@ -670,6 +685,7 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "18.0.0")
         # ignore warning from apache-orc
         set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-switch-default")
+        set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-error=nrvo")
     endif ()
     # Add -rtlib=compiler-rt for ARM architecture to fix LLVM bug: https://bugs.llvm.org/show_bug.cgi?id=16404
     if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "aarch64")
@@ -1025,12 +1041,15 @@ endif()
 
 # Add all external dependencies. They should come after the starrocks libs.
 
-set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS}
-    ${STARROCKS_DEPENDENCIES}
-    hdfs
-    jvm
-)
+set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} ${STARROCKS_DEPENDENCIES})
+
+IF( NOT ENABLE_MULTI_DYNAMIC_LIBS)
+    set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} hdfs)
+ENDIF()
+set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} jvm)
+
 set(BUILD_FOR_SANITIZE "OFF")
+set(DEP_SANITIZE_LIBS "")
 
 # Add sanitize static link flags or jemalloc
 if ("${CMAKE_BUILD_TYPE}" STREQUAL "DEBUG" OR "${CMAKE_BUILD_TYPE}" STREQUAL "RELEASE")
@@ -1039,23 +1058,46 @@ if ("${CMAKE_BUILD_TYPE}" STREQUAL "DEBUG" OR "${CMAKE_BUILD_TYPE}" STREQUAL "RE
 elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "ASAN")
     if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
         set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libsan)
+        set(DEP_SANITIZE_LIBS -static-libsan)
     else()
         set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libasan)
+        set(DEP_SANITIZE_LIBS -static-libasan)
     endif()
     set(BUILD_FOR_SANITIZE "ON")
 elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "LSAN")
     set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-liblsan)
+    set(DEP_SANITIZE_LIBS -static-liblsan)
     set(BUILD_FOR_SANITIZE "ON")
 elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "UBSAN")
     message("use jemalloc")
     set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libubsan jemalloc)
+    set(DEP_SANITIZE_LIBS -static-libubsan)
     set(BUILD_FOR_SANITIZE "ON")
 elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "TSAN")
     set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libtsan)
+    set(DEP_SANITIZE_LIBS -static-libtsan)
     set(BUILD_FOR_SANITIZE "ON")
 else()
     message(FATAL_ERROR "Unknown build type: ${CMAKE_BUILD_TYPE}")
 endif()
+
+set(WRAP_LINKER_FLAGS "-Wl,-wrap,__cxa_throw -Wl,-wrap,__floattidf")
+
+FUNCTION(ADD_BE_LIB LIB_NAME)
+    IF(ENABLE_MULTI_DYNAMIC_LIBS)
+        # support build and install component 
+        # ${CMAKE_CMD} -DCOMPONENT=$LIB_NAME -P cmake_install.cmake
+        ADD_LIBRARY(${LIB_NAME} SHARED ${ARGN})
+        target_link_libraries(${LIB_NAME} PRIVATE -Wl,--allow-shlib-undefined ${WRAP_LINKER_FLAGS} ${DEP_SANITIZE_LIBS})
+        install(TARGETS ${LIB_NAME}
+            LIBRARY DESTINATION ${OUTPUT_DIR}/lib COMPONENT ${LIB_NAME} 
+            ARCHIVE DESTINATION ${OUTPUT_DIR}/lib COMPONENT ${LIB_NAME} 
+        )
+    ELSE()
+        ADD_LIBRARY(${LIB_NAME} STATIC ${ARGN})
+    ENDIF()
+    set(ALL_BE_LIBS "${ALL_BE_LIBS};${LIB_NAME}" CACHE INTERNAL "All BE libraries")
+ENDFUNCTION()
 
 if (NOT ("${MAKE_TEST}" STREQUAL "ON" AND "${BUILD_FOR_SANITIZE}" STREQUAL "ON"))
     # In other words, turn to dynamic link when MAKE_TEST and BUILD_TYPE == *SAN
@@ -1064,7 +1106,7 @@ if (NOT ("${MAKE_TEST}" STREQUAL "ON" AND "${BUILD_FOR_SANITIZE}" STREQUAL "ON")
 endif()
 
 set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS}
-    ${WL_LINK_STATIC} -lbfd
+    ${WL_LINK_STATIC} -lgomp -lbfd
     ${WL_LINK_DYNAMIC} -lresolv -liberty -lc -lm -ldl -rdynamic -pthread -Wl,-wrap,__cxa_throw -Wl,-wrap,__floattidf
 )
 
@@ -1211,6 +1253,7 @@ install(FILES
     ${BASE_DIR}/../bin/stop_cn.sh
     ${BASE_DIR}/../bin/show_be_version.sh
     ${BASE_DIR}/../bin/meta_tool.sh
+    ${BASE_DIR}/../bin/collect_be_profile.sh
     PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE
     GROUP_READ GROUP_WRITE GROUP_EXECUTE
     WORLD_READ WORLD_EXECUTE
@@ -1236,3 +1279,4 @@ install(DIRECTORY
     ${BASE_DIR}/../webroot/be/
     DESTINATION ${OUTPUT_DIR}/www)
 
+FINALIZE_BE_LIBS()

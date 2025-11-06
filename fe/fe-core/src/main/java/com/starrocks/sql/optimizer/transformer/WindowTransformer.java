@@ -19,7 +19,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
@@ -29,6 +28,7 @@ import com.starrocks.sql.ast.expression.AnalyticExpr;
 import com.starrocks.sql.ast.expression.AnalyticWindow;
 import com.starrocks.sql.ast.expression.DecimalLiteral;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.NullLiteral;
@@ -38,6 +38,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.type.Type;
 import org.apache.commons.collections.CollectionUtils;
 
 import java.math.BigDecimal;
@@ -144,7 +145,7 @@ public class WindowTransformer {
                 } else {
                     rightBoundary = new DecimalLiteral(BigDecimal.valueOf(1));
                 }
-                BigDecimal offsetValue = BigDecimal.valueOf(Expr.getConstFromExpr(rightBoundary));
+                BigDecimal offsetValue = BigDecimal.valueOf(ExprUtils.getConstFromExpr(rightBoundary));
 
                 windowFrame = new AnalyticWindow(AnalyticWindow.Type.ROWS,
                         new AnalyticWindow.Boundary(AnalyticWindow.BoundaryType.UNBOUNDED_PRECEDING, null),
@@ -179,7 +180,7 @@ public class WindowTransformer {
 
             if (reversedFnName != null) {
                 callExpr.resetFnName("", reversedFnName);
-                Function reversedFn = Expr.getBuiltinFunction(reversedFnName,
+                Function reversedFn = ExprUtils.getBuiltinFunction(reversedFnName,
                         callExpr.getFn().getArgs(), Function.CompareMode.IS_IDENTICAL);
                 callExpr.setFn(reversedFn);
             }

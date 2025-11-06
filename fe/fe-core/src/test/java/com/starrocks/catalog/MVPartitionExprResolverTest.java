@@ -24,7 +24,7 @@ import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskRun;
 import com.starrocks.scheduler.TaskRunBuilder;
-import com.starrocks.scheduler.mv.MVPCTBasedRefreshProcessor;
+import com.starrocks.scheduler.mv.pct.MVPCTBasedRefreshProcessor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.expression.Expr;
@@ -34,6 +34,7 @@ import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.type.Type;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -324,9 +325,7 @@ public class MVPartitionExprResolverTest extends MVTestBase {
                         "as select a.k1, b.k2 from test.tbl15 as a join test.tbl16 as b " +
                         "on a.k1 = date_trunc('month', b.k1);", () -> {
 
-                    MaterializedView materializedView =
-                            ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                                    .getTable(testDb.getFullName(), "mv_join_predicate"));
+                    MaterializedView materializedView = getMv(testDb.getFullName(), "mv_join_predicate");
                     Assertions.assertEquals(2, materializedView.getPartitionExprMaps().size());
 
                     Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());

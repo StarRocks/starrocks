@@ -48,6 +48,7 @@ import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.PCell;
+import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.PListCell;
 import com.starrocks.sql.common.PRangeCell;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -68,6 +69,7 @@ import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.Snapshot;
 
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -248,21 +250,30 @@ public final class ExternalTableCompensation extends TableCompensation {
             if (range.lowerEndpoint().equals(range.upperEndpoint())) {
                 partitions.add(getPartitionKeyString(range.lowerEndpoint()));
             } else {
-                sb.append(getPartitionKeyString(key.getRange().lowerEndpoint()))
-                        .append(" - ")
-                        .append(getPartitionKeyString(key.getRange().upperEndpoint()));
+                partitions.add(getPartitionKeyString(key.getRange().lowerEndpoint())
+                        + "-" + getPartitionKeyString(key.getRange().upperEndpoint()));
             }
         }
-        sb.append(Joiner.on(",").join(partitions));
+        Collections.sort(partitions);
+        if (size < compensations.size()) {
+            // output the fist half of partitions
+            int half = size / 2;
+            sb.append(Joiner.on(",").join(partitions.subList(0, half)));
+            sb.append(",...");
+            sb.append(",").append(partitions.subList(half, size));
+        } else {
+            sb.append(Joiner.on(",").join(partitions));
+        }
         sb.append("]");
         return sb.toString();
     }
+
     private String getPartitionKeyString(PartitionKey key) {
         List<String> keys = key.getKeys()
                 .stream()
                 .map(LiteralExpr::getStringValue)
                 .collect(Collectors.toList());
-        return "(" + Joiner.on(",").join(keys) + ")";
+        return Joiner.on(",").join(keys);
     }
 
     public static TableCompensation build(Table refBaseTable,
@@ -319,7 +330,7 @@ public final class ExternalTableCompensation extends TableCompensation {
             return null;
         }
         // use update info's partition to cells since it's accurate.
-        Map<String, PCell> nameToPartitionKeys = baseTableUpdateInfo.getPartitionToCells();
+        PCellSortedSet nameToPartitionKeys = baseTableUpdateInfo.getPartitionToCells();
         MaterializedView mv = mvUpdateInfo.getMv();
         Map<Table, List<Column>> refBaseTablePartitionColumns = mv.getRefBaseTablePartitionColumns();
         if (!refBaseTablePartitionColumns.containsKey(refBaseTable)) {
@@ -328,10 +339,10 @@ public final class ExternalTableCompensation extends TableCompensation {
         List<Column> partitionColumns = refBaseTablePartitionColumns.get(refBaseTable);
         try {
             for (String partitionName : toRefreshPartitionNames) {
-                if (!nameToPartitionKeys.containsKey(partitionName)) {
+                if (!nameToPartitionKeys.containsName(partitionName)) {
                     return null;
                 }
-                PCell pCell = nameToPartitionKeys.get(partitionName);
+                PCell pCell = nameToPartitionKeys.getPCell(partitionName);
                 if (pCell instanceof PRangeCell) {
                     toRefreshPartitionKeys.add(((PRangeCell) pCell));
                 } else if (pCell instanceof PListCell) {

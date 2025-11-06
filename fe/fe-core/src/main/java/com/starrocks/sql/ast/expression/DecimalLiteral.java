@@ -36,9 +36,6 @@ package com.starrocks.sql.ast.expression;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.NotImplementedException;
@@ -47,9 +44,10 @@ import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.optimizer.validate.ValidateException;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.thrift.TDecimalLiteral;
-import com.starrocks.thrift.TExprNode;
-import com.starrocks.thrift.TExprNodeType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -166,7 +164,7 @@ public class DecimalLiteral extends LiteralExpr {
             scale = Math.min(maxIntegerPartWidth - integerPartWidth, scale);
             precision = integerPartWidth + scale;
             this.value = this.value.setScale(scale, RoundingMode.HALF_UP);
-            type = ScalarType.createDecimalV3NarrowestType(precision, scale);
+            type = TypeFactory.createDecimalV3NarrowestType(precision, scale);
         }
     }
 
@@ -192,7 +190,7 @@ public class DecimalLiteral extends LiteralExpr {
             realPrecision = realIntegerPartWidth + realScale;
             // round
             this.value = this.value.setScale(realScale, RoundingMode.HALF_UP);
-            this.type = ScalarType.createDecimalV3NarrowestType(realPrecision, realScale);
+            this.type = TypeFactory.createDecimalV3NarrowestType(realPrecision, realScale);
         } else {
             this.type = type;
         }
@@ -396,15 +394,6 @@ public class DecimalLiteral extends LiteralExpr {
         return value.doubleValue();
     }
 
-    @Override
-    protected void toThrift(TExprNode msg) {
-        // TODO(hujie01) deal with loss information
-        msg.setNode_type(TExprNodeType.DECIMAL_LITERAL);
-        TDecimalLiteral decimalLiteral = new TDecimalLiteral();
-        decimalLiteral.setValue(value.toPlainString());
-        decimalLiteral.setInteger_value(packDecimal());
-        msg.setDecimal_literal(decimalLiteral);
-    }
 
     @Override
     public void swapSign() throws NotImplementedException {

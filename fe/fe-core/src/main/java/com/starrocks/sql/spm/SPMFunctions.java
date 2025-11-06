@@ -17,16 +17,15 @@ package com.starrocks.sql.spm;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.ScalarFunction;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.BetweenPredicate;
-import com.starrocks.sql.ast.expression.CompoundPredicate;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.sql.ast.expression.InPredicate;
 import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
@@ -35,6 +34,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
+import com.starrocks.type.Type;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.Comparator;
@@ -92,7 +92,7 @@ public class SPMFunctions {
             if (argsTypes.size() != 3) {
                 throw new SemanticException("spm function _spm_const_range must have three parameters");
             }
-            if (!ScalarType.canCastTo(argsTypes.get(1), argsTypes.get(2))) {
+            if (!TypeManager.canCastTo(argsTypes.get(1), argsTypes.get(2))) {
                 throw new SemanticException("spm function _spm_const_range min/max type must be same");
             }
         } else if (CONST_ENUM_FUNC.equalsIgnoreCase(fnName)) {
@@ -101,7 +101,7 @@ public class SPMFunctions {
             }
             Type type1 = argsTypes.get(1);
             for (int i = 2; i < argsTypes.size(); i++) {
-                if (!ScalarType.canCastTo(argsTypes.get(i), type1)) {
+                if (!TypeManager.canCastTo(argsTypes.get(i), type1)) {
                     throw new SemanticException("spm function _spm_const_enum enum type must be same");
                 }
             }
@@ -231,12 +231,12 @@ public class SPMFunctions {
                 Expr max = spmExpr.getChild(2);
                 List<Expr> values = checkParameters.stream()
                         .map(p -> (Expr) new BetweenPredicate(p, min, max, false)).toList();
-                checkExpr = CompoundPredicate.compoundAnd(values);
+                checkExpr = ExprUtils.compoundAnd(values);
             } else if (CONST_ENUM_FUNC.equalsIgnoreCase(fn)) {
                 List<Expr> values = spmExpr.getChildren().stream().skip(1).toList();
                 List<Expr> inPredicates = checkParameters.stream()
                         .map(p -> (Expr) new InPredicate(p, values, false)).toList();
-                checkExpr = CompoundPredicate.compoundAnd(inPredicates);
+                checkExpr = ExprUtils.compoundAnd(inPredicates);
             } else {
                 return false;
             }

@@ -1,4 +1,4 @@
--- name: test_asof_join_hash_tables
+-- name: test_asof_join_hash_tables @slow
 DROP DATABASE IF EXISTS test_asof_join_hash_tables;
 -- result:
 -- !result

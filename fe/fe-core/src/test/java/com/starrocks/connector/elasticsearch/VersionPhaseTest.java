@@ -36,8 +36,8 @@ package com.starrocks.connector.elasticsearch;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.EsTable;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.ExceptionChecker;
+import com.starrocks.type.Type;
 import mockit.Expectations;
 import mockit.Injectable;
 import org.junit.jupiter.api.Test;

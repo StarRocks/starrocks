@@ -95,12 +95,17 @@ StatusOr<TFetchDataResultPtr> MetadataResultWriter::_process_chunk(Chunk* chunk)
     }
 
     if (_sink_type == TResultSinkType::METADATA_ICEBERG) {
+#ifdef __APPLE__
+        return Status::NotSupported("Iceberg metadata result sink is disabled on macOS");
+#else
         RETURN_IF_ERROR(_fill_iceberg_metadata(result_columns, chunk, result.get()));
+#endif
     }
 
     return result;
 }
 
+#ifndef __APPLE__
 // Columns is fixed in the first version of logical iceberg metadata table.
 // In principle, there will be no changes in the future.
 // Only new columns are allowed if necessary. The newly added columns need to check if nullable.
@@ -201,4 +206,5 @@ Status MetadataResultWriter::_fill_iceberg_metadata(const Columns& columns, cons
 
     return Status::OK();
 }
+#endif // __APPLE__
 } // namespace starrocks

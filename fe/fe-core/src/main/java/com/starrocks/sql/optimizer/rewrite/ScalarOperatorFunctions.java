@@ -38,8 +38,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.starrocks.authorization.AuthorizationMgr;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
@@ -49,6 +47,9 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.expression.DecimalLiteral;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import net.openhft.hashing.LongHashFunction;
 import org.apache.commons.lang.StringUtils;
 import org.apache.http.NameValuePair;
@@ -86,28 +87,28 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static com.starrocks.catalog.PrimitiveType.BIGINT;
-import static com.starrocks.catalog.PrimitiveType.BITMAP;
-import static com.starrocks.catalog.PrimitiveType.BOOLEAN;
-import static com.starrocks.catalog.PrimitiveType.DATE;
-import static com.starrocks.catalog.PrimitiveType.DATETIME;
-import static com.starrocks.catalog.PrimitiveType.DECIMAL128;
-import static com.starrocks.catalog.PrimitiveType.DECIMAL256;
-import static com.starrocks.catalog.PrimitiveType.DECIMAL32;
-import static com.starrocks.catalog.PrimitiveType.DECIMAL64;
-import static com.starrocks.catalog.PrimitiveType.DECIMALV2;
-import static com.starrocks.catalog.PrimitiveType.DOUBLE;
-import static com.starrocks.catalog.PrimitiveType.FLOAT;
-import static com.starrocks.catalog.PrimitiveType.HLL;
-import static com.starrocks.catalog.PrimitiveType.INT;
-import static com.starrocks.catalog.PrimitiveType.JSON;
-import static com.starrocks.catalog.PrimitiveType.LARGEINT;
-import static com.starrocks.catalog.PrimitiveType.PERCENTILE;
-import static com.starrocks.catalog.PrimitiveType.SMALLINT;
-import static com.starrocks.catalog.PrimitiveType.TIME;
-import static com.starrocks.catalog.PrimitiveType.TINYINT;
-import static com.starrocks.catalog.PrimitiveType.VARCHAR;
 import static com.starrocks.sql.analyzer.FunctionAnalyzer.HAS_TIME_PART;
+import static com.starrocks.type.PrimitiveType.BIGINT;
+import static com.starrocks.type.PrimitiveType.BITMAP;
+import static com.starrocks.type.PrimitiveType.BOOLEAN;
+import static com.starrocks.type.PrimitiveType.DATE;
+import static com.starrocks.type.PrimitiveType.DATETIME;
+import static com.starrocks.type.PrimitiveType.DECIMAL128;
+import static com.starrocks.type.PrimitiveType.DECIMAL256;
+import static com.starrocks.type.PrimitiveType.DECIMAL32;
+import static com.starrocks.type.PrimitiveType.DECIMAL64;
+import static com.starrocks.type.PrimitiveType.DECIMALV2;
+import static com.starrocks.type.PrimitiveType.DOUBLE;
+import static com.starrocks.type.PrimitiveType.FLOAT;
+import static com.starrocks.type.PrimitiveType.HLL;
+import static com.starrocks.type.PrimitiveType.INT;
+import static com.starrocks.type.PrimitiveType.JSON;
+import static com.starrocks.type.PrimitiveType.LARGEINT;
+import static com.starrocks.type.PrimitiveType.PERCENTILE;
+import static com.starrocks.type.PrimitiveType.SMALLINT;
+import static com.starrocks.type.PrimitiveType.TIME;
+import static com.starrocks.type.PrimitiveType.TINYINT;
+import static com.starrocks.type.PrimitiveType.VARCHAR;
 
 /**
  * Constant Functions List
@@ -693,6 +694,11 @@ public class ScalarOperatorFunctions {
         ZoneId newZone = ZoneId.of(toTz.getVarchar());
         LocalDateTime newDateTime = dt.atZone(oldZone).withZoneSameInstant(newZone).toLocalDateTime();
         return ConstantOperator.createDatetime(newDateTime);
+    }
+
+    @ConstantFunction(name = "current_timezone", argTypes = {}, returnType = VARCHAR)
+    public static ConstantOperator current_timezone() {
+        return ConstantOperator.createVarchar(TimeUtils.getTimeZone().getID());
     }
 
     @ConstantFunction(name = "unix_timestamp", argTypes = {}, returnType = BIGINT)
@@ -1513,7 +1519,7 @@ public class ScalarOperatorFunctions {
         } else {
             int precision = DecimalLiteral.getRealPrecision(result);
             int scale = DecimalLiteral.getRealScale(result);
-            type = ScalarType.createDecimalV3NarrowestType(precision, scale);
+            type = TypeFactory.createDecimalV3NarrowestType(precision, scale);
         }
 
         return ConstantOperator.createDecimal(result, type);

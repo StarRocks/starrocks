@@ -130,7 +130,11 @@ std::unique_ptr<UDFCallStub> ArrowFunctionCallExpr::_build_stub(int32_t driver_i
         py_func_desc.content = _fn.content;
         return build_py_call_stub(context, py_func_desc);
     }
+#ifndef __APPLE__
     return create_error_call_stub(Status::NotFound(fmt::format("unsupported function type:{}", binary_type)));
+#else
+    return nullptr;
+#endif
 }
 
 } // namespace starrocks

@@ -40,9 +40,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.CsvFormat;
@@ -55,6 +53,8 @@ import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.expression.ArithmeticExpr;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.NullLiteral;
@@ -74,6 +74,9 @@ import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TUniqueId;
+
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.Type;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -353,11 +356,11 @@ public class StreamLoadScanNode extends LoadScanNode {
 
             if (negative && dstSlotDesc.getColumn().getAggregationType() == AggregateType.SUM) {
                 expr = new ArithmeticExpr(ArithmeticExpr.Operator.MULTIPLY, expr, new IntLiteral(-1));
-                expr = Expr.analyzeAndCastFold(expr);
+                expr = ExprUtils.analyzeAndCastFold(expr);
             }
             expr = castToSlot(dstSlotDesc, expr);
 
-            paramCreateContext.params.putToExpr_of_dest_slot(dstSlotDesc.getId().asInt(), expr.treeToThrift());
+            paramCreateContext.params.putToExpr_of_dest_slot(dstSlotDesc.getId().asInt(), ExprToThriftVisitor.treeToThrift(expr));
         }
         paramCreateContext.params.setDest_sid_to_src_sid_without_trans(destSidToSrcSidWithoutTrans);
         paramCreateContext.params.setSrc_tuple_id(paramCreateContext.tupleDescriptor.getId().asInt());

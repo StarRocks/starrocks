@@ -765,6 +765,7 @@ public class EditLog {
                 case OperationType.OP_MODIFY_BINLOG_AVAILABLE_VERSION:
                 case OperationType.OP_MODIFY_BINLOG_CONFIG:
                 case OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX:
+                case OperationType.OP_MODIFY_DEFAULT_BUCKET_NUM:
                 case OperationType.OP_MODIFY_PRIMARY_INDEX_CACHE_EXPIRE_SEC:
                 case OperationType.OP_ALTER_TABLE_PROPERTIES:
                 case OperationType.OP_MODIFY_FLAT_JSON_CONFIG:
@@ -1858,6 +1859,10 @@ public class EditLog {
 
     public void logModifyMutableBucketNum(ModifyTablePropertyOperationLog info) {
         logJsonObject(OperationType.OP_MODIFY_MUTABLE_BUCKET_NUM, info);
+    }
+
+    public void logModifyDefaultBucketNum(ModifyTablePropertyOperationLog info) {
+        logJsonObject(OperationType.OP_MODIFY_DEFAULT_BUCKET_NUM, info);
     }
 
     public void logModifyEnableLoadProfile(ModifyTablePropertyOperationLog info) {

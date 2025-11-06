@@ -26,6 +26,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LargeInPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.spm.SPMFunctions;
@@ -118,6 +119,11 @@ public class PredicateStatisticsCalculator {
             } catch (Exception e) {
                 return visit(variable, context);
             }
+        }
+
+        @Override
+        public Statistics visitLargeInPredicate(LargeInPredicateOperator predicate, Void context) {
+            throw new UnsupportedOperationException("not support large in predicate in the PredicateStatisticsCalculator");
         }
 
         @Override

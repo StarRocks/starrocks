@@ -211,6 +211,8 @@ public class Config extends ConfigBase {
     public static String internal_log_roll_interval = "DAY";
     @ConfField
     public static String internal_log_delete_age = "7d";
+    @ConfField
+    public static boolean internal_log_json_format = false;
 
     /**
      * dump_log_dir:
@@ -963,6 +965,9 @@ public class Config extends ConfigBase {
     @ConfField
     public static boolean mysql_service_nio_enable_keep_alive = true;
 
+    @ConfField
+    public static boolean mysql_service_kill_after_disconnect = true;
+
     /**
      * max num of thread to handle task in mysql.
      */
@@ -1134,6 +1139,8 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int prepared_transaction_default_timeout_second = 86400; // 1day
 
+    @ConfField(mutable = true)
+    public static int finish_transaction_default_lock_timeout_ms = 1000; // 1000ms
     /**
      * Max load timeout applicable to all type of load except for stream load and lake compaction
      */
@@ -1504,6 +1511,12 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true, comment = "The number of bytes to retain profile files")
     public static long proc_profile_file_retained_size_bytes = 2L * 1024 * 1024 * 1024;
+
+    /**
+     * Maximum Java stack depth for proc profile collection
+     */
+    @ConfField(mutable = true, comment = "Maximum Java stack depth for proc profile collection, default is 128")
+    public static int proc_profile_jstack_depth = 128;
 
     /**
      * If batch creation of partitions is allowed to create half of the partitions, it is easy to generate holes.
@@ -2188,6 +2201,15 @@ public class Config extends ConfigBase {
 
     @ConfField
     public static int dict_collect_thread_pool_size = 16;
+
+    @ConfField
+    public static int dict_collect_queue_size = 4096;
+
+    // Dictionary Collection Rejection Policy
+    // ignore: ignore the task and print the log.
+    // queue: Queue until the task is consumed. The maximum length is dict_collect_queue_size.
+    @ConfField
+    public static String dict_collect_reject_policy = "ignore";
 
     @ConfField
     public static int dict_collect_thread_pool_for_lake_size = 4;
@@ -3266,8 +3288,7 @@ public class Config extends ConfigBase {
     @ConfField
     public static double flat_json_null_factor = 0.3;
 
-    @ConfField
-    public static double flat_json_sparsity_factory = 0.9;
+    @ConfField public static double flat_json_sparsity_factory = 0.3;
 
     @ConfField
     public static int flat_json_column_max = 100;
@@ -3478,6 +3499,9 @@ public class Config extends ConfigBase {
             " If one base mv has done reload, no need to do it again while other mv that related to it is reloading ")
     public static boolean enable_mv_post_image_reload_cache = true;
 
+    @ConfField(mutable = true, comment = "The timeout for waiting async mv reload done, 3 min by default")
+    public static int mv_async_reload_wait_timeout_second = 3 * 60; // 3 min
+
     /**
      * Whether analyze the mv after refresh in async mode.
      */
@@ -3525,7 +3549,7 @@ public class Config extends ConfigBase {
     public static long mv_plan_cache_expire_interval_sec = 24L * 60L * 60L;
 
     @ConfField(mutable = true, comment = "The default thread pool size of mv plan cache")
-    public static int mv_plan_cache_thread_pool_size = 3;
+    public static int mv_plan_cache_thread_pool_size = 8;
 
     /**
      * mv plan cache expire interval in seconds
@@ -3875,7 +3899,7 @@ public class Config extends ConfigBase {
     public static long max_graceful_exit_time_second = 60;
 
     @ConfField(mutable = true)
-    public static long default_statistics_output_row_count = 1L * 1000 * 1000 * 1000;
+    public static long default_statistics_output_row_count = 1L;
 
     /**
      * Whether enable dynamic tablet.
@@ -3943,4 +3967,6 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "The threshold to flatten compound predicate from deep tree to a balanced tree to " +
             "avoid stack over flow")
     public static int compound_predicate_flatten_threshold = 512;
+
+    @ConfField public static int ui_queries_sql_statement_max_length = 128;
 }
