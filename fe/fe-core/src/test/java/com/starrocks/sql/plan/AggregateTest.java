@@ -3193,28 +3193,6 @@ public class AggregateTest extends PlanTestBase {
             FeConstants.runningUnitTest = false;
         }
     }
-<<<<<<< HEAD
-=======
-
-    @Test
-    public void testSplitTopNAgg() throws Exception {
-        FeConstants.runningUnitTest = true;
-        try {
-            String plan = getFragmentPlan("SELECT L_ORDERKEY, L_PARTKEY, COUNT(*) AS c, SUM(L_EXTENDEDPRICE), AVG(L_QUANTITY) "
-                    + "FROM lineitem_partition "
-                    + "WHERE L_LINENUMBER <> 123 "
-                    + "GROUP BY L_ORDERKEY, L_PARTKEY "
-                    + "ORDER BY c DESC LIMIT 10;");
-
-            assertContains(plan, "HASH JOIN\n"
-                    + "  |  join op: INNER JOIN (BROADCAST)\n"
-                    + "  |  colocate: false, reason: \n"
-                    + "  |  equal join conjunct: 1: L_ORDERKEY = 21: L_ORDERKEY\n"
-                    + "  |  equal join conjunct: 2: L_PARTKEY = 22: L_PARTKEY");
-        } finally {
-            FeConstants.runningUnitTest = false;
-        }
-    }
 
     @Test
     public void testAvoidMergeNonGroupByAgg() throws Exception {
@@ -3228,5 +3206,4 @@ public class AggregateTest extends PlanTestBase {
                 "  |  output: count(*)\n" +
                 "  |  group by: ");
     }
->>>>>>> 93cf0cab97 ([BugFix] Avoid merging two-phase non-group-by aggregation (#65047))
 }
