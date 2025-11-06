@@ -427,42 +427,6 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     return Status::OK();
 }
 
-StatusOr<MutableColumnPtr> UpdateManager::_load_segment_pk_column(const TxnLogPB_OpWrite& op_write,
-                                                                  const TabletSchemaCSPtr& tschema, Tablet* tablet,
-                                                                  const std::shared_ptr<FileSystem>& fs, uint32_t seg,
-                                                                  const Schema& pkey_schema) {
-    // Create a temporary rowset to get the segment iterator
-    auto rowset_meta_ptr = std::make_unique<const RowsetMetadata>(op_write.rowset());
-    Rowset rowset(tablet->tablet_mgr(), tablet->id(), rowset_meta_ptr.get(), -1 /*unused*/, tschema);
-
-    OlapReaderStatistics stats;
-    ASSIGN_OR_RETURN(auto segment_iters, rowset.get_each_segment_iterator(pkey_schema, false, &stats));
-
-    if (seg >= segment_iters.size() || segment_iters[seg] == nullptr) {
-        return Status::InternalError(fmt::format("Failed to get segment iterator for segment {}", seg));
-    }
-
-    MutableColumnPtr pk_column;
-    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
-
-    auto chunk = ChunkHelper::new_chunk(pkey_schema, 4096);
-    auto iter = segment_iters[seg].get();
-    while (true) {
-        chunk->reset();
-        auto st = iter->get_next(chunk.get());
-        if (st.is_end_of_file()) {
-            break;
-        } else if (!st.ok()) {
-            return st;
-        } else {
-            TRY_CATCH_BAD_ALLOC(PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get()));
-        }
-    }
-    iter->close();
-
-    return pk_column;
-}
-
 Status UpdateManager::_read_chunk_for_upsert(const TxnLogPB_OpWrite& op_write, const TabletSchemaCSPtr& tschema,
                                              Tablet* tablet, const std::shared_ptr<FileSystem>& fs, uint32_t seg,
                                              const std::vector<uint32_t>& insert_rowids,
@@ -577,12 +541,14 @@ Status UpdateManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_writ
     uint64_t total_rows = 0;
     std::map<uint32_t, size_t> segment_id_to_add_dels_new_acc;
 
+    DCHECK_EQ(insert_rowids_by_segment.size(), op_write.rowset().segments_size());
+
     for (uint32_t seg = 0; seg < op_write.rowset().segments_size(); ++seg) {
         // Reuse insert_rowids computed by ColumnModePartialUpdateHandler
-        if (seg >= insert_rowids_by_segment.size() || insert_rowids_by_segment[seg].empty()) {
+        const auto& insert_rowids = insert_rowids_by_segment[seg];
+        if (insert_rowids.empty()) {
             continue;
         }
-        const auto& insert_rowids = insert_rowids_by_segment[seg];
         const size_t batch_size = std::max<size_t>(1, config::column_mode_partial_update_batch_size);
 
         SegmentWriterOptions wopts;

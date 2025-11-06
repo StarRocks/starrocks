@@ -91,11 +91,6 @@ public:
                                       const TabletMetadataPtr& metadata, Tablet* tablet, IndexEntry* index_entry,
                                       MetaFileBuilder* builder, int64_t base_version, bool batch_apply = false);
 
-    StatusOr<MutableColumnPtr> _load_segment_pk_column(const TxnLogPB_OpWrite& op_write,
-                                                       const TabletSchemaCSPtr& tschema, Tablet* tablet,
-                                                       const std::shared_ptr<FileSystem>& fs, uint32_t seg,
-                                                       const Schema& pkey_schema);
-
     Status _read_chunk_for_upsert(const TxnLogPB_OpWrite& op_write, const TabletSchemaCSPtr& tschema, Tablet* tablet,
                                   const std::shared_ptr<FileSystem>& fs, uint32_t seg,
                                   const std::vector<uint32_t>& insert_rowids, const std::vector<uint32_t>& update_cids,
