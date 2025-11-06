@@ -291,14 +291,10 @@ template <LogicalType Type>
 Status BinaryDictPageDecoder<Type>::next_batch_with_filter(
         Column* column, const SparseRange<>& range, const std::vector<const ColumnPredicate*>& compound_and_predicates,
         const uint8_t* null_data, uint8_t* selection, uint16_t* selected_idx, bool* data_filtered) {
+    DCHECK(Type != TYPE_CHAR);
     if (_encoding_type == PLAIN_ENCODING) {
         return _data_page_decoder->next_batch_with_filter(column, range, compound_and_predicates, null_data, selection,
                                                           selected_idx, data_filtered);
-    }
-
-    if constexpr (Type == TYPE_CHAR) {
-        *data_filtered = false;
-        return next_batch(range, column);
     }
 
     DCHECK(_parsed);

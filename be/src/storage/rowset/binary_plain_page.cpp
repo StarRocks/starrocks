@@ -202,47 +202,29 @@ Status BinaryPlainPageDecoder<Type>::next_batch_with_filter(
         return Status::OK();
     }
 
-    if constexpr (Type != TYPE_VARCHAR) {
-        *data_filtered = false;
-        return next_batch(range, column);
-    } else {
-        // If there is only one predicate and it is != "", we can skip the filter here
-        // since it won't filter any byte
-        // if (compound_and_predicates.size() == 1) {
-        //     const ColumnPredicate* predicate = compound_and_predicates[0];
-        //     if (predicate->type() == PredicateType::kNE) {
-        //         const Slice& value_slice = predicate->value().get_slice();
-        //         if (value_slice.empty() || value_slice.size == 0) {
-        //             *data_filtered = false;
-        //             return next_batch(range, column);
-        //         }
-        //     }
-        // }
+    *data_filtered = true;
 
-        *data_filtered = true;
-
-        size_t to_read = std::min(range.span_size(), _num_elems - _cur_idx);
-        SparseRangeIterator<> iter = range.new_iterator();
-        bool append_status = true;
-        size_t index = 0;
-        while (to_read > 0) {
-            _cur_idx = iter.begin();
-            Range<> r = iter.next(to_read);
-            size_t length = r.span_size();
-            size_t end = _cur_idx + length;
-            append_status &= next_range_with_filter(_cur_idx, end, column, compound_and_predicates,
-                                                    null_data != nullptr ? null_data + index : nullptr,
-                                                    selection + index, selected_idx + index);
-            index += length;
-            to_read -= length;
-            _cur_idx = end;
-        }
-        if (append_status) {
-            return Status::OK();
-        } else {
-            return Status::InternalError("BinaryPlainPageDecoder::next_batch_with_filter error!");
-        }
+    size_t to_read = std::min(range.span_size(), _num_elems - _cur_idx);
+    SparseRangeIterator<> iter = range.new_iterator();
+    bool append_status = true;
+    size_t index = 0;
+    while (to_read > 0) {
+        _cur_idx = iter.begin();
+        Range<> r = iter.next(to_read);
+        size_t length = r.span_size();
+        size_t end = _cur_idx + length;
+        append_status &= next_range_with_filter(_cur_idx, end, column, compound_and_predicates,
+                                                null_data != nullptr ? null_data + index : nullptr, selection + index,
+                                                selected_idx + index);
+        index += length;
+        to_read -= length;
+        _cur_idx = end;
     }
+    if (append_status) {
+        return Status::OK();
+    }
+
+    return Status::InternalError("BinaryPlainPageDecoder::next_batch_with_filter error!");
 }
 
 template <LogicalType Type>

@@ -256,11 +256,16 @@ public:
                                           const std::vector<const ColumnPredicate*>& compound_and_predicates,
                                           Buffer<uint8_t>* selection, Buffer<uint16_t>* selected_idx,
                                           bool* data_filtered, size_t* processed_rows) {
-        *data_filtered = false;
-        return next_batch(range, dst);
+        return Status::NotSupported("ColumnIterator Doesn't Support next_batch_with_filter");
     }
 
     virtual void reserve_col(size_t n, Column* column) { column->reserve(n); }
+
+    // Check if this column iterator supports push down predicate with given compound_and_predicates
+    // This is used to determine if next_batch_with_filter can be called for late materialization optimization
+    virtual bool support_push_down_predicate(const std::vector<const ColumnPredicate*>& compound_and_predicates) {
+        return false;
+    }
 
 protected:
     ColumnIteratorOptions _opts;
