@@ -48,6 +48,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
+import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TCacheParam;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TExplainLevel;
@@ -421,7 +422,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     /**
      * Finalize plan tree and create stream sink, if needed.
      */
-    public void createDataSink(TResultSinkType resultSinkType) {
+    public void createDataSink(TResultSinkType resultSinkType, ExecPlan execPlan) {
         if (sink != null) {
             return;
         }
@@ -440,8 +441,17 @@ public class PlanFragment extends TreeNode<PlanFragment> {
             }
             // add ResultSink
             // we're streaming to an result sink
-            sink = new ResultSink(planRoot.getId(), resultSinkType);
+
+            if (resultSinkType == TResultSinkType.ARROW_FLIGHT_PROTOCAL) {
+                sink = new ResultSink(planRoot.getId(), resultSinkType, execPlan.getColNames());
+            } else {
+                sink = new ResultSink(planRoot.getId(), resultSinkType);
+            }
         }
+    }
+
+    public void createDataSink(TResultSinkType resultSinkType) {
+        createDataSink(resultSinkType, null);
     }
 
     public int getParallelExecNum() {
@@ -744,7 +754,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         if (!(root instanceof ExchangeNode)) {
             root.getChildren().forEach(child -> collectNodesImpl(child, nodes));
         }
-        
+
         if (root instanceof HashJoinNode) {
             HashJoinNode hashJoinNode = (HashJoinNode) root;
             if (hashJoinNode.isSkewBroadJoin()) {
