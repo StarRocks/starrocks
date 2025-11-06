@@ -93,15 +93,22 @@ public:
     }
 
     // given a set of ranges in page, apply compound and predicates on it, and only return filtered data
-    // since null data is separate from actually data page, we need pass the null column by caller if this is a nullable column
+    // since null data is separate from actually data page, we need pass the null data by caller if this is a nullable column
+    // null_data is a uint8_t array where null_data[i] indicates whether the i-th row is null (1 for null, 0 for not null)
+    // callee is responsible to handle null column and append null data into dst column if selected
     virtual Status next_batch_with_filter(Column* column, const SparseRange<>& range,
                                           const std::vector<const ColumnPredicate*>& compound_and_predicates,
-                                          NullColumn* null, uint8_t* selection, uint16_t* selected_idx,
+                                          const uint8_t* null_data, uint8_t* selection, uint16_t* selected_idx,
                                           bool* data_filtered) {
         *data_filtered = false;
         return next_batch(range, column);
     }
 
+    /**
+     * rowids and count represent a rowId vector
+     * read_by_rowids read selected rows in rowId vector
+     *  and return row numbers it read by 'count'
+     */
     virtual Status read_by_rowids(const ordinal_t first_ordinal_in_page, const rowid_t* rowids, size_t* count,
                                   Column* column) {
         return Status::NotSupported("PageDecoder Not Support");

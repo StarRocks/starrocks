@@ -195,9 +195,8 @@ void BinaryPlainPageDecoder<Type>::batch_string_at_index(Slice* dst, const int32
 template <LogicalType Type>
 Status BinaryPlainPageDecoder<Type>::next_batch_with_filter(
         Column* column, const SparseRange<>& range, const std::vector<const ColumnPredicate*>& compound_and_predicates,
-        NullColumn* null, uint8_t* selection, uint16_t* selected_idx, bool* data_filtered) {
-    // don't support nullable column right now
-    DCHECK(null == nullptr);
+        const uint8_t* null_data, uint8_t* selection, uint16_t* selected_idx, bool* data_filtered) {
+    DCHECK(null_data == nullptr || column->is_nullable());
     DCHECK(_parsed);
     if (PREDICT_FALSE(_cur_idx >= _num_elems)) {
         return Status::OK();
@@ -207,6 +206,19 @@ Status BinaryPlainPageDecoder<Type>::next_batch_with_filter(
         *data_filtered = false;
         return next_batch(range, column);
     } else {
+        // If there is only one predicate and it is != "", we can skip the filter here
+        // since it won't filter any byte
+        // if (compound_and_predicates.size() == 1) {
+        //     const ColumnPredicate* predicate = compound_and_predicates[0];
+        //     if (predicate->type() == PredicateType::kNE) {
+        //         const Slice& value_slice = predicate->value().get_slice();
+        //         if (value_slice.empty() || value_slice.size == 0) {
+        //             *data_filtered = false;
+        //             return next_batch(range, column);
+        //         }
+        //     }
+        // }
+
         *data_filtered = true;
 
         size_t to_read = std::min(range.span_size(), _num_elems - _cur_idx);
@@ -219,7 +231,7 @@ Status BinaryPlainPageDecoder<Type>::next_batch_with_filter(
             size_t length = r.span_size();
             size_t end = _cur_idx + length;
             append_status &= next_range_with_filter(_cur_idx, end, column, compound_and_predicates,
-                                                    null != nullptr ? null->get_data().data() + index : nullptr,
+                                                    null_data != nullptr ? null_data + index : nullptr,
                                                     selection + index, selected_idx + index);
             index += length;
             to_read -= length;
@@ -236,8 +248,7 @@ Status BinaryPlainPageDecoder<Type>::next_batch_with_filter(
 template <LogicalType Type>
 bool BinaryPlainPageDecoder<Type>::next_range_with_filter(
         uint32_t idx, uint32_t end, Column* dst, const std::vector<const ColumnPredicate*>& compound_and_predicates,
-        uint8_t* null, uint8_t* selection, uint16_t* selected_idx) {
-    DCHECK(null == nullptr);
+        const uint8_t* null, uint8_t* selection, uint16_t* selected_idx) {
     if constexpr (Type == TYPE_VARCHAR) {
         uint32_t num_rows = end - idx;
         if (num_rows == 0) {
@@ -270,39 +281,39 @@ bool BinaryPlainPageDecoder<Type>::next_range_with_filter(
         size_t data_length = temp_offsets.back();
         const void* data_ptr = _data.get_data() + page_data_offset;
 
-        // todo: merge null column if necessary
-        // Create a heap-allocated BinaryColumn to avoid stack object lifetime issues
-        auto temp_column = BinaryColumn::create(data_ptr, data_length, std::move(temp_offsets));
+        auto temp_data_column = BinaryColumn::create(data_ptr, data_length, std::move(temp_offsets));
 
-        Status predicate_result = compound_and_predicates_evaluate(compound_and_predicates, temp_column.get(),
+        // Create temporary column for predicate evaluation
+        ColumnPtr temp_eval_column;
+        if (null != nullptr) {
+            // If null data is provided, create a NullableColumn for predicate evaluation
+            auto temp_null_column = NullColumn::create();
+            temp_null_column->append_numbers(null, num_rows);
+            temp_eval_column = NullableColumn::create(temp_data_column, temp_null_column);
+        } else {
+            // No null data, use data column directly
+            temp_eval_column = temp_data_column;
+        }
+
+        // Evaluate predicates on the temporary column
+        Status predicate_result = compound_and_predicates_evaluate(compound_and_predicates, temp_eval_column.get(),
                                                                    selection, selected_idx, 0, num_rows);
-        auto data_column = ColumnHelper::get_data_column(dst);
-        auto& bytes = down_cast<BinaryColumn*>(data_column)->get_bytes();
-        auto& offsets = down_cast<BinaryColumn*>(data_column)->get_offset();
-        DCHECK_GE(offsets.size(), 1);
-
-        uint32_t begin_offset = offsets.back();
-        size_t original_offset_size = offsets.size();
 
         uint32_t selected_count = SIMD::count_nonzero(selection, num_rows);
-
         if (selected_count == 0) {
             return true;
         }
 
-        auto& temp_offset_in_column = temp_column->get_offset();
+        // Append selected data to output column using append_with_filter
+        auto data_column = ColumnHelper::get_data_column(dst);
+        data_column->append_with_filter(*temp_data_column, selection, num_rows);
 
-        uint32_t current_offset = begin_offset;
-        for (uint32_t i = 0; i < num_rows; i++) {
-            if (selection[i]) {
-                uint32_t row_start = page_data_offset + temp_offset_in_column[i];
-                uint32_t row_end = page_data_offset + temp_offset_in_column[i + 1];
-                uint32_t row_length = temp_offset_in_column[i + 1] - temp_offset_in_column[i];
-
-                bytes.insert(bytes.end(), _data.get_data() + row_start, _data.get_data() + row_end);
-                current_offset += row_length;
-                offsets.push_back(current_offset);
-            }
+        // Append null flags for selected rows if null_data is provided
+        if (null != nullptr) {
+            auto* nullable_column = down_cast<NullableColumn*>(dst);
+            auto* temp_nullable = down_cast<NullableColumn*>(temp_eval_column.get());
+            nullable_column->null_column()->append_with_filter(*temp_nullable->null_column(), selection, num_rows);
+            nullable_column->update_has_null();
         }
 
 #ifndef NDEBUG

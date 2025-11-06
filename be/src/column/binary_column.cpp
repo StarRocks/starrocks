@@ -151,6 +151,62 @@ void BinaryColumnBase<T>::append_selective(const Column& src, const uint32_t* in
 }
 
 template <typename T>
+void BinaryColumnBase<T>::append_with_filter(const Column& src, const uint8_t* filter, size_t count) {
+    if (src.is_binary_view()) {
+        // For binary view, fall back to row-by-row append
+        for (size_t i = 0; i < count; i++) {
+            if (filter[i]) {
+                append(src, i, 1);
+            }
+        }
+        return;
+    }
+
+    const auto& src_column = down_cast<const BinaryColumnBase<T>&>(src);
+    const auto* __restrict src_offsets = src_column.get_offset().data();
+    const auto* __restrict src_bytes = src_column.continuous_data();
+
+    // First pass: count selected rows and calculate total bytes needed
+    size_t selected_count = 0;
+    size_t total_bytes = 0;
+    for (size_t i = 0; i < count; i++) {
+        if (filter[i]) {
+            selected_count++;
+            total_bytes += src_offsets[i + 1] - src_offsets[i];
+        }
+    }
+
+    if (selected_count == 0) {
+        return;
+    }
+
+    // Reserve space
+    const size_t old_size = _offsets.size() - 1;
+    const size_t old_bytes_size = _bytes.size();
+    _offsets.resize(old_size + selected_count + 1);
+    _bytes.resize(old_bytes_size + total_bytes);
+
+    auto* __restrict dest_offsets = _offsets.data() + old_size + 1;
+    auto* __restrict dest_bytes = _bytes.data() + old_bytes_size;
+
+    // Second pass: copy selected data
+    T current_offset = old_bytes_size;
+    for (size_t i = 0; i < count; i++) {
+        if (filter[i]) {
+            const T start = src_offsets[i];
+            const T end = src_offsets[i + 1];
+            const T length = end - start;
+            
+            strings::memcpy_inlined(dest_bytes + (current_offset - old_bytes_size), src_bytes + start, length);
+            current_offset += length;
+            *dest_offsets++ = current_offset;
+        }
+    }
+
+    invalidate_slice_cache();
+}
+
+template <typename T>
 void BinaryColumnBase<T>::append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) {
     auto& src_column = down_cast<const BinaryColumnBase<T>&>(src);
     auto& src_offsets = src_column.get_offset();

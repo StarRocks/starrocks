@@ -218,6 +218,21 @@ public:
         return append_selective(src, indexes.data(), 0, static_cast<uint32_t>(indexes.size()));
     }
 
+    // This function will append data from src according to the input filter array.
+    // Only rows where filter[i] != 0 will be appended.
+    // For example:
+    //      src: ['a', 'b', 'c', 'd', 'e']
+    //      filter: [1, 0, 1, 0, 1]
+    // After calling append_with_filter, this column will append ['a', 'c', 'e']
+    // Default implementation: row-by-row append (can be overridden for optimization)
+    virtual void append_with_filter(const Column& src, const uint8_t* filter, size_t count) {
+        for (size_t i = 0; i < count; i++) {
+            if (filter[i]) {
+                append(src, i, 1);
+            }
+        }
+    }
+
     // This function will get row through 'from' index from src, and copy size elements to this column.
     // Currently only `ObjectColumn<BitmapValue>` support shallow copy
     virtual void append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) = 0;

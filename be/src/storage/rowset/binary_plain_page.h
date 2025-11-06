@@ -238,8 +238,9 @@ public:
                           Column* column) override;
 
     Status next_batch_with_filter(Column* column, const SparseRange<>& range,
-                                  const std::vector<const ColumnPredicate*>& compound_and_predicates, NullColumn* null,
-                                  uint8_t* selection, uint16_t* selected_idx, bool* data_filtered) override;
+                                  const std::vector<const ColumnPredicate*>& compound_and_predicates,
+                                  const uint8_t* null_data, uint8_t* selection, uint16_t* selected_idx,
+                                  bool* data_filtered) override;
 
     uint32_t count() const override {
         DCHECK(_parsed);
@@ -338,7 +339,7 @@ private:
     }
 
     bool next_range_with_filter(uint32_t idx, uint32_t end, Column* dst,
-                                const std::vector<const ColumnPredicate*>& compound_and_predicates, uint8_t* null,
+                                const std::vector<const ColumnPredicate*>& compound_and_predicates, const uint8_t* null,
                                 uint8_t* selection, uint16_t* selected_idx);
 
     void reserve_col(size_t n, Column* column) override {

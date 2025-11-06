@@ -289,9 +289,9 @@ private:
     StatusOr<uint16_t> _filter_by_record_predicate(Chunk* chunk, vector<rowid_t>* rowid);
 
     StatusOr<uint16_t> _filter_by_compound_and_predicates(Chunk* chunk, vector<rowid_t>* rowid, uint16_t from,
-                                                          uint16_t to,
+                                                          uint16_t to, ColumnId column_id,
                                                           const std::vector<const ColumnPredicate*>& and_predicates,
-                                                          Columns& current_cols);
+                                                          Columns& current_cols, bool apply_runtime_filter = true);
 
     uint16_t _filter_chunk_by_selection(Chunk* chunk, vector<rowid_t>* rowid, uint16_t from, uint16_t to);
 
@@ -417,6 +417,8 @@ private:
     PredicateTree _non_expr_pred_tree;
     PredicateTree _expr_pred_tree;
     RuntimeFilterPredicates _runtime_filter_preds;
+    // Runtime filter predicates organized by column id for late materialization
+    std::unordered_map<ColumnId, RuntimeFilterPredicates> _column_to_runtime_filters_map;
 
     // _selection is used to accelerate
     Buffer<uint8_t> _selection;
@@ -1213,6 +1215,42 @@ void SegmentIterator::_init_compound_and_predicates_for_predicate_col_late_mater
         }
     }
 
+    // Build column-specific RuntimeFilterPredicates for late materialization
+    // Group runtime filter predicates by ColumnId
+    if (!_runtime_filter_preds.empty() && _opts.enable_join_runtime_filter_pushdown) {
+        // First, collect predicates by column id
+        std::unordered_map<ColumnId, std::vector<RuntimeFilterPredicate*>> column_rf_map;
+        for (auto* rf_pred : _runtime_filter_preds.rf_predicates()) {
+            ColumnId cid = rf_pred->get_column_id();
+            column_rf_map[cid].push_back(rf_pred);
+        }
+
+        // Create a RuntimeFilterPredicates object for each column
+        for (const auto& [cid, rf_pred_list] : column_rf_map) {
+            RuntimeFilterPredicates rf_preds(_runtime_filter_preds.driver_sequence());
+            for (auto* rf_pred : rf_pred_list) {
+                rf_preds.add_predicate(rf_pred);
+            }
+            _column_to_runtime_filters_map.emplace(cid, std::move(rf_preds));
+        }
+    }
+
+    // Ensure columns with only runtime filters are also added to predicate_order and _column_predicate_map
+    // These columns may not have regular predicates but have runtime filters
+    if (_opts.enable_join_runtime_filter_pushdown) {
+        for (const auto& [cid, rf_preds] : _column_to_runtime_filters_map) {
+            // If this column is not in column_predicate_map, add it with empty predicates
+            if (!_context->_column_predicate_map.contains(cid)) {
+                // Check if the column has a column iterator
+                DCHECK(_context->_column_ids_to_column_iterators.contains(cid));
+                if (_context->_column_ids_to_column_iterators.contains(cid)) {
+                    _context->_predicate_order.emplace_back(cid);
+                    _context->_column_predicate_map.emplace(cid, std::vector<const ColumnPredicate*>());
+                }
+            }
+        }
+    }
+
     // all predicate columns + rowId column == _column_iterators size
     DCHECK(_context->_predicate_order.size() + 1 == _context->_column_iterators.size());
 
@@ -1229,7 +1267,9 @@ void SegmentIterator::_init_compound_and_predicates_for_predicate_col_late_mater
 
 StatusOr<size_t> SegmentIterator::trigger_sample_if_necessary(vector<rowid_t>* rowid) {
     // Check every 32 chunks if we should trigger sampling based on selectivity
-    const bool should_check_selectivity = (_context->_evaluated_chunk_nums++ & 31) == 0;
+    // if only have one predicate column, do not sample
+    const bool should_check_selectivity =
+            (_context->_evaluated_chunk_nums++ & 31) == 0 && (!(_context->_predicate_order.size() == 1));
     if (should_check_selectivity && _context->_enable_predicate_col_late_materialize &&
         _context->_first_column_total_rows_read > 0) {
         // Calculate accumulated selectivity
@@ -1995,10 +2035,10 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
 }
 
 StatusOr<size_t> SegmentIterator::_predicate_evaluate(vector<rowid_t>* rowid) {
-    if (!_context->_late_materialize || !_enable_predicate_col_late_materialize) {
-        return _predicate_evaluate_without_late_materialize(rowid);
-    } else {
+    if (_context->_late_materialize && _enable_predicate_col_late_materialize) {
         return _predicate_evaluate_late_materialize(rowid);
+    } else {
+        return _predicate_evaluate_without_late_materialize(rowid);
     }
 }
 
@@ -2046,7 +2086,7 @@ StatusOr<size_t> SegmentIterator::_predicate_evaluate_late_materialize(vector<ro
             // This will filter rowid_column, removing rows that don't match the predicate
             // column-expr-predicate doesn't support [begin, end] interface
             ASSIGN_OR_RETURN(next_start, _filter_by_compound_and_predicates(
-                                                 chunk, rowid, chunk_start, next_start,
+                                                 chunk, rowid, chunk_start, next_start, first_column_id,
                                                  non_expr_column_predicate_map.at(first_column_id), current_columns));
             // chunk->check_or_die();
         }
@@ -2067,9 +2107,10 @@ StatusOr<size_t> SegmentIterator::_predicate_evaluate_late_materialize(vector<ro
     size_t chunk_size = first_col->size();
 
     if (expr_column_predicate_map.contains(first_column_id) && !_context->_is_filtered) {
-        ASSIGN_OR_RETURN(chunk_size, _filter_by_compound_and_predicates(chunk, rowid, 0, chunk_size,
+        // Don't apply runtime filter here because it was already applied in non_expr predicate filtering
+        ASSIGN_OR_RETURN(chunk_size, _filter_by_compound_and_predicates(chunk, rowid, 0, chunk_size, first_column_id,
                                                                         expr_column_predicate_map.at(first_column_id),
-                                                                        current_columns));
+                                                                        current_columns, false));
     }
 
     if (!_context->_is_filtered) {
@@ -2109,7 +2150,7 @@ StatusOr<size_t> SegmentIterator::_predicate_evaluate_late_materialize(vector<ro
 
         // evaluate predicate on this column, including expr and non-expr predicates
         ASSIGN_OR_RETURN(chunk_size, _filter_by_compound_and_predicates(
-                                             chunk, rowid, 0, chunk_size,
+                                             chunk, rowid, 0, chunk_size, current_column_id,
                                              _context->_column_predicate_map.at(current_column_id), current_columns));
     }
 
@@ -2236,23 +2277,56 @@ Status SegmentIterator::_switch_context(ScanContext* to) {
 }
 
 StatusOr<uint16_t> SegmentIterator::_filter_by_compound_and_predicates(
-        Chunk* chunk, vector<rowid_t>* rowid, uint16_t from, uint16_t to,
-        const std::vector<const ColumnPredicate*>& and_predicates, Columns& current_cols) {
-    if (and_predicates.size() == 0 || from == to) {
+        Chunk* chunk, vector<rowid_t>* rowid, uint16_t from, uint16_t to, ColumnId column_id,
+        const std::vector<const ColumnPredicate*>& and_predicates, Columns& current_cols, bool apply_runtime_filter) {
+    if (from == to) {
+        return to;
+    }
+
+    // Check if we need to process this column at all
+    bool has_compound_predicates = and_predicates.size() > 0;
+    bool has_runtime_filters = apply_runtime_filter && _opts.enable_join_runtime_filter_pushdown &&
+                               _column_to_runtime_filters_map.contains(column_id);
+
+    if (!has_compound_predicates && !has_runtime_filters) {
         return to;
     }
 
     SCOPED_RAW_TIMER(&_opts.stats->vec_cond_ns);
-
-    {
+    Column* col = chunk->get_column_by_id(column_id).get();
+    // Evaluate compound predicates
+    if (has_compound_predicates) {
         SCOPED_RAW_TIMER(&_opts.stats->vec_cond_evaluate_ns);
-        Column* col = chunk->get_column_by_id(and_predicates[0]->column_id()).get();
         if (col->empty()) {
             DCHECK(from == to);
             return to;
         }
         RETURN_IF_ERROR(compound_and_predicates_evaluate(and_predicates, col, _selection.data(), _selected_idx.data(),
                                                          from, to));
+    } else {
+        // If no compound predicates but have runtime filters, initialize selection to all true
+        std::fill(&_selection[from], &_selection[to], 1);
+    }
+
+    // Evaluate runtime filters for this column
+    if (has_runtime_filters) {
+        SCOPED_RAW_TIMER(&_opts.stats->rf_cond_evaluate_ns);
+        size_t input_count = SIMD::count_nonzero(&_selection[from], to - from);
+
+        // RuntimeFilterPredicates::evaluate will AND with existing selection
+        auto iter = _column_to_runtime_filters_map.find(column_id);
+
+        Chunk chunk;
+        // `column` is owned by storage layer
+        // we don't have ownership
+        ColumnPtr bits = col->as_mutable_ptr();
+        chunk.append_column(bits, column_id, true);
+
+        RETURN_IF_ERROR(iter->second.evaluate(&chunk, _selection.data(), from, to));
+
+        size_t output_count = SIMD::count_nonzero(&_selection[from], to - from);
+        _opts.stats->rf_cond_input_rows += input_count;
+        _opts.stats->rf_cond_output_rows += output_count;
     }
 
     SCOPED_RAW_TIMER(&_opts.stats->vec_cond_chunk_copy_ns);
