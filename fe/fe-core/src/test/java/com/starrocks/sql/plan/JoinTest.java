@@ -3334,5 +3334,4 @@ public class JoinTest extends PlanTestBase {
                 "  |    \n" +
                 "  2:EXCHANGE");
     }
-
 }
