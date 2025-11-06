@@ -14,10 +14,7 @@
 
 #include "segment_iterator.h"
 
-#include <gmock/gmock-matchers.h>
-
 #include <algorithm>
-#include <boost/function_types/components.hpp>
 #include <memory>
 #include <unordered_map>
 #include <utility>
@@ -1267,6 +1264,12 @@ void SegmentIterator::_init_compound_and_predicates_for_predicate_col_late_mater
     _context->_column_iterators_for_predicate_late_materialize.emplace_back(
             _context->_column_ids_to_column_iterators[first_column_id]);
     _context->_column_id_for_predicate_late_materialize.emplace_back(first_column_id);
+
+    // if only one predicate, and only need read this column, we do not need to use rowid Column
+    // but we may need to push down predicate into page level
+    if (_context->_predicate_order.size() == 1 && _schema.num_fields() == 1) {
+        return;
+    }
     // add row id iterator
     _context->_column_iterators_for_predicate_late_materialize.emplace_back(_context->_column_iterators.back());
     _context->_column_id_for_predicate_late_materialize.emplace_back(_context->_row_id_column_id);
@@ -2106,9 +2109,9 @@ StatusOr<size_t> SegmentIterator::_predicate_evaluate_late_materialize(vector<ro
         }
 
         // if has topn filter, storage engine should send data to topn as soon as possible
-        if (_has_topn_filter) {
-            break;
-        }
+        // if (_has_topn_filter) {
+        //     break;
+        // }
     }
 
     size_t chunk_size = first_col->size();
