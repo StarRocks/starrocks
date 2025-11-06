@@ -702,8 +702,6 @@ TEST_F(FlatJsonColumnRWTest, testHyperFlatJson) {
     EXPECT_EQ(R"({b.b4.b5: NULL, b.b2.b3: "sdf", a: 5, ff.f1: NULL, gg.g1: NULL})", read_col->debug_item(4));
 }
 
-<<<<<<< HEAD
-=======
 TEST_F(FlatJsonColumnRWTest, testHyperFlatJsonWithConfig) {
     FlatJsonConfig config;
     config.set_flat_json_null_factor(0.4);
@@ -769,7 +767,6 @@ TEST_F(FlatJsonColumnRWTest, testHyperFlatJsonWithConfig) {
     EXPECT_EQ(R"({b.b4.b5: NULL, b.b2.b3: "sdf", a: 5, ff.f1: NULL, gg.g1: NULL})", read_col->debug_item(4));
 }
 
->>>>>>> 4bb14fe539 ([UT] Fix flat JSON path derivation for type conflict nodes (#65084))
 TEST_F(FlatJsonColumnRWTest, testMergeRemainJson) {
     ColumnPtr write_col = JsonColumn::create();
     auto* json_col = down_cast<JsonColumn*>(write_col.get());
