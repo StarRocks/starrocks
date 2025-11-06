@@ -1,9 +1,6 @@
 ---
 sidebar_position: 100
 ---
-import AuthCompare from '../_assets/best_practices/_auth_comparison.mdx'
-import GroupProviderExample from '../_assets/best_practices/_auth_group_provider_example.mdx'
-import Solution3 from '../_assets/best_practices/_auth_solution_3.mdx'
 
 # 认证与授权
 

@@ -1,7 +1,6 @@
 ---
 sidebar_position: 100
 ---
-import Solution3 from '../_assets/best_practices/_auth_solution_3.mdx'
 
 # Authentication and Authorization
 
