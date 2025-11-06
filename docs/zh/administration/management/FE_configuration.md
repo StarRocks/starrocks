@@ -1806,7 +1806,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型：Long
 - 单位：Seconds
 - 是否动态：是
-- 描述：通过insert overwrite、MV刷新等方式替换旧分区后将旧分区的元数据移动到回收站中。该参数控制旧分区元数据在回收站中保留的时长。注意，这些元数据不支持通过[RECOVER](../../sql-reference/sql-statements/backup_restore/RECOVER.md) 语句恢复。
+- 描述：因 INSERT OVERWRITE 或物化视图刷新操作而被删除的分区的元数据保留时间。请注意，此类元数据无法通过执行 [RECOVER](../../sql-reference/sql-statements/backup_restore/RECOVER.md) 命令恢复。
 - 引入版本：-
 
 ##### check_consistency_default_timeout_second
