@@ -546,7 +546,8 @@ Status UpdateManager::_read_chunk_for_upsert(const TxnLogPB_OpWrite& op_write, c
 Status UpdateManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
                                                  const TabletMetadataPtr& metadata, Tablet* tablet,
                                                  LakePrimaryIndex& index, MetaFileBuilder* builder,
-                                                 int64_t base_version, uint32_t rowset_id) {
+                                                 int64_t base_version, uint32_t rowset_id,
+                                                 const std::vector<std::vector<uint32_t>>& insert_rowids_by_segment) {
     if (op_write.txn_meta().partial_update_mode() != PartialUpdateMode::COLUMN_UPSERT_MODE) {
         return Status::OK();
     }
@@ -577,23 +578,11 @@ Status UpdateManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_writ
     std::map<uint32_t, size_t> segment_id_to_add_dels_new_acc;
 
     for (uint32_t seg = 0; seg < op_write.rowset().segments_size(); ++seg) {
-        ASSIGN_OR_RETURN(auto pk_column, _load_segment_pk_column(op_write, tschema, tablet, fs, seg, pkey_schema));
-
-        std::vector<uint64_t> src_rss_rowids(pk_column->size());
-        RETURN_IF_ERROR(get_rowids_from_pkindex(tablet->id(), base_version, pk_column, &src_rss_rowids, false));
-
-        std::vector<uint32_t> insert_rowids;
-        insert_rowids.reserve(src_rss_rowids.size());
-        for (uint32_t i = 0; i < src_rss_rowids.size(); ++i) {
-            if (src_rss_rowids[i] == UINT64_MAX) {
-                insert_rowids.push_back(i);
-            }
-        }
-
-        if (insert_rowids.empty()) {
+        // Reuse insert_rowids computed by ColumnModePartialUpdateHandler
+        if (seg >= insert_rowids_by_segment.size() || insert_rowids_by_segment[seg].empty()) {
             continue;
         }
-
+        const auto& insert_rowids = insert_rowids_by_segment[seg];
         const size_t batch_size = std::max<size_t>(1, config::column_mode_partial_update_batch_size);
 
         SegmentWriterOptions wopts;
@@ -681,6 +670,10 @@ Status UpdateManager::_handle_delete_files(const TxnLogPB_OpWrite& op_write, int
                                            const TabletMetadataPtr& metadata, Tablet* tablet, LakePrimaryIndex& index,
                                            IndexEntry* index_entry, MetaFileBuilder* builder, int64_t base_version,
                                            uint32_t del_rebuild_rssid, const RowsetUpdateStateParams& params) {
+    if (op_write.dels_size() == 0) {
+        return Status::OK();
+    }
+
     PrimaryIndex::DeletesMap new_deletes;
     RowsetUpdateState state;
     auto state_entry = _update_state_cache.get_or_create(cache_key(tablet->id(), txn_id));
@@ -728,6 +721,7 @@ Status UpdateManager::publish_column_mode_partial_update(const TxnLogPB_OpWrite&
     auto tablet_schema = std::make_shared<TabletSchema>(metadata->schema());
     RssidFileInfoContainer rssid_fileinfo_container;
     rssid_fileinfo_container.add_rssid_to_file(*metadata);
+    std::vector<std::vector<uint32_t>> insert_rowids_by_segment;
 
     RowsetUpdateStateParams params{
             .op_write = op_write,
@@ -739,7 +733,7 @@ Status UpdateManager::publish_column_mode_partial_update(const TxnLogPB_OpWrite&
 
     {
         ColumnModePartialUpdateHandler handler(base_version, txn_id, _update_mem_tracker);
-        RETURN_IF_ERROR(handler.execute(params, builder));
+        RETURN_IF_ERROR(handler.execute(params, builder, &insert_rowids_by_segment));
     }
 
     const uint32_t rowset_id = metadata->next_rowset_id();
@@ -748,8 +742,8 @@ Status UpdateManager::publish_column_mode_partial_update(const TxnLogPB_OpWrite&
     auto& index = dynamic_cast<LakePrimaryIndex&>(index_entry->value());
 
     // 1. handle inserted rows: for COLUMN_UPSERT_MODE, build full segments with only inserted rows and append to meta
-    RETURN_IF_ERROR(
-            _handle_column_upsert_mode(op_write, txn_id, metadata, tablet, index, builder, base_version, rowset_id));
+    RETURN_IF_ERROR(_handle_column_upsert_mode(op_write, txn_id, metadata, tablet, index, builder, base_version,
+                                               rowset_id, insert_rowids_by_segment));
 
     // 2. handle delete files and generate delvecs for existing rssids only
     RETURN_IF_ERROR(_handle_delete_files(op_write, txn_id, metadata, tablet, index, index_entry, builder, base_version,
