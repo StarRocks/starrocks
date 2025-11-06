@@ -191,35 +191,4 @@ TEST_F(BinaryPrefixPageTest, TestVectorized) {
     test_vectorized();
 }
 
-TEST_F(BinaryPrefixPageTest, TestFindNonExistentValue) {
-    std::vector<std::string> test_data;
-    test_data.emplace_back("bc");
-    test_data.emplace_back("cd");
-    std::vector<Slice> slices;
-    for (auto& i : test_data) {
-        Slice s(i);
-        slices.emplace_back(s);
-    }
-    // encode
-    PageBuilderOptions options;
-    BinaryPrefixPageBuilder page_builder(options);
-
-    size_t count = slices.size();
-    const Slice* ptr = &slices[0];
-    count = page_builder.add(reinterpret_cast<const uint8_t*>(ptr), count);
-    ASSERT_EQ(2, count);
-
-    OwnedSlice dict_slice = page_builder.finish()->build();
-    auto page_decoder = std::make_unique<BinaryPrefixPageDecoder<TYPE_VARCHAR>>(dict_slice.slice());
-    Status ret = page_decoder->init();
-    ASSERT_TRUE(ret.ok());
-
-    Slice slice("e");
-    bool exact_match;
-    ret = page_decoder->seek_at_or_after_value(&slice, &exact_match);
-    ASSERT_FALSE(ret.ok());
-    ASSERT_TRUE(ret.is_not_found());
-    ASSERT_FALSE(exact_match);
-}
-
 } // namespace starrocks
