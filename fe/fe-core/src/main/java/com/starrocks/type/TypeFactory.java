@@ -32,11 +32,11 @@ public class TypeFactory {
 
     /**
      * Create a scalar type with specified parameters.
-     * 
-     * @param type the primitive type
-     * @param len length for CHAR/VARCHAR types
+     *
+     * @param type      the primitive type
+     * @param len       length for CHAR/VARCHAR types
      * @param precision precision for DECIMAL types
-     * @param scale scale for DECIMAL types
+     * @param scale     scale for DECIMAL types
      * @return the created ScalarType
      */
     public static ScalarType createType(PrimitiveType type, int len, int precision, int scale) {
@@ -61,7 +61,7 @@ public class TypeFactory {
 
     /**
      * Create a scalar type from a primitive type.
-     * 
+     *
      * @param type the primitive type
      * @return the created ScalarType
      */
@@ -73,7 +73,7 @@ public class TypeFactory {
 
     /**
      * Create a scalar type from a string type name.
-     * 
+     *
      * @param type the type name
      * @return the created ScalarType
      */
@@ -85,7 +85,7 @@ public class TypeFactory {
 
     /**
      * Create a CHAR type with specified length.
-     * 
+     *
      * @param len the length of the CHAR type
      * @return the created CHAR type
      */
@@ -103,7 +103,7 @@ public class TypeFactory {
      * Create a unified decimal type with default precision and scale.
      * Unified decimal is used for parser, which creating default decimal from name.
      * For mysql compatibility, uses precision=10, scale=0 as default.
-     * 
+     *
      * @return the created decimal type
      */
     public static ScalarType createUnifiedDecimalType() {
@@ -114,7 +114,7 @@ public class TypeFactory {
     /**
      * Create a unified decimal type with specified precision.
      * For mysql compatibility, uses scale=0 as default.
-     * 
+     *
      * @param precision the precision
      * @return the created decimal type
      */
@@ -126,9 +126,9 @@ public class TypeFactory {
     /**
      * Create a unified decimal type with specified precision and scale.
      * Automatically chooses between DecimalV2 and DecimalV3 based on configuration.
-     * 
+     *
      * @param precision the precision
-     * @param scale the scale
+     * @param scale     the scale
      * @return the created decimal type
      */
     public static ScalarType createUnifiedDecimalType(int precision, int scale) {
@@ -152,17 +152,8 @@ public class TypeFactory {
     }
 
     /**
-     * Create a DecimalV2 type with default precision and scale.
-     * 
-     * @return the default DecimalV2 type
-     */
-    public static ScalarType createDecimalV2Type() {
-        return Type.DEFAULT_DECIMALV2;
-    }
-
-    /**
      * Create a DecimalV2 type with specified precision and default scale.
-     * 
+     *
      * @param precision the precision
      * @return the created DecimalV2 type
      */
@@ -172,9 +163,9 @@ public class TypeFactory {
 
     /**
      * Create a DecimalV2 type with specified precision and scale.
-     * 
+     *
      * @param precision the precision
-     * @param scale the scale
+     * @param scale     the scale
      * @return the created DecimalV2 type
      */
     public static ScalarType createDecimalV2Type(int precision, int scale) {
@@ -186,10 +177,10 @@ public class TypeFactory {
 
     /**
      * Create a DecimalV3 type with specified primitive type, precision and scale.
-     * 
-     * @param type the decimal primitive type (DECIMAL32/64/128/256)
+     *
+     * @param type      the decimal primitive type (DECIMAL32/64/128/256)
      * @param precision the precision
-     * @param scale the scale
+     * @param scale     the scale
      * @return the created DecimalV3 type
      */
     public static ScalarType createDecimalV3Type(PrimitiveType type, int precision, int scale) {
@@ -209,7 +200,7 @@ public class TypeFactory {
         if (precision > maxPrecision) {
             String underlyingType = ConnectContext.get().getSessionVariable().getLargeDecimalUnderlyingType();
             if (underlyingType.equals(SessionVariableConstants.DOUBLE)) {
-                return Type.DOUBLE;
+                return new ScalarType(PrimitiveType.DOUBLE);
             } else {
                 precision = maxPrecision;
                 type = PrimitiveType.DECIMAL256;
@@ -224,7 +215,7 @@ public class TypeFactory {
     /**
      * Create a DecimalV3 type for representing zero with specified scale.
      * The precision is set equal to the scale.
-     * 
+     *
      * @param scale the scale
      * @return the created DecimalV3 type
      */
@@ -248,7 +239,7 @@ public class TypeFactory {
     /**
      * Create a wildcard DecimalV3 type for function matching.
      * Wildcard decimal uses precision=-1 and scale=-1.
-     * 
+     *
      * @param type the decimal primitive type (DECIMAL32/64/128/256)
      * @return the created wildcard DecimalV3 type
      */
@@ -263,8 +254,8 @@ public class TypeFactory {
     /**
      * Create a DecimalV3 type with specified primitive type and precision.
      * Scale is set to the minimum of precision and the default scale for the type.
-     * 
-     * @param type the decimal primitive type (DECIMAL32/64/128/256)
+     *
+     * @param type      the decimal primitive type (DECIMAL32/64/128/256)
      * @param precision the precision
      * @return the created DecimalV3 type
      */
@@ -276,7 +267,7 @@ public class TypeFactory {
     /**
      * Create a DecimalV3 type with specified primitive type.
      * Uses the maximum precision and default scale for the type.
-     * 
+     *
      * @param type the decimal primitive type (DECIMAL32/64/128/256)
      * @return the created DecimalV3 type
      */
@@ -290,9 +281,9 @@ public class TypeFactory {
      * Create the narrowest DecimalV3 type that can hold the specified precision and scale.
      * Chooses the smallest DecimalV3 type (DECIMAL32 -> DECIMAL64 -> DECIMAL128 -> DECIMAL256)
      * that can accommodate the given precision.
-     * 
+     *
      * @param precision the precision
-     * @param scale the scale
+     * @param scale     the scale
      * @return the created narrowest DecimalV3 type
      */
     public static ScalarType createDecimalV3NarrowestType(int precision, int scale) {
@@ -312,15 +303,14 @@ public class TypeFactory {
         } else if (decimal128MaxPrecision < precision && precision <= decimal256MaxPrecision) {
             return createDecimalV3Type(PrimitiveType.DECIMAL256, precision, scale);
         } else {
-            Preconditions.checkState(false,
-                    "Illegal decimal precision(1 to 76): precision=" + precision);
-            return Type.INVALID;
+            Preconditions.checkState(false, "Illegal decimal precision(1 to 76): precision=" + precision);
+            return new ScalarType(PrimitiveType.INVALID_TYPE);
         }
     }
 
     /**
      * Get the maximum varchar length for OLAP tables.
-     * 
+     *
      * @return the maximum varchar length
      */
     public static int getOlapMaxVarcharLength() {
@@ -330,7 +320,7 @@ public class TypeFactory {
     /**
      * Create a default string type.
      * Uses default string length.
-     * 
+     *
      * @return the created string type
      */
     public static ScalarType createDefaultString() {
@@ -341,7 +331,7 @@ public class TypeFactory {
     /**
      * Create a default catalog string type.
      * Uses maximum catalog varchar length for external catalogs like Hive.
-     * 
+     *
      * @return the created catalog string type
      */
     public static ScalarType createDefaultCatalogString() {
@@ -350,7 +340,7 @@ public class TypeFactory {
 
     /**
      * Create a VARCHAR type with maximum OLAP varchar length.
-     * 
+     *
      * @return the created VARCHAR type
      */
     public static ScalarType createOlapMaxVarcharType() {
@@ -360,7 +350,7 @@ public class TypeFactory {
 
     /**
      * Create a VARCHAR type with specified length.
-     * 
+     *
      * @param len the length of the VARCHAR type
      * @return the created VARCHAR type
      */
@@ -374,7 +364,7 @@ public class TypeFactory {
     /**
      * Create a VARCHAR type with specified length.
      * Alias for createVarcharType(int).
-     * 
+     *
      * @param len the length of the VARCHAR type
      * @return the created VARCHAR type
      */
@@ -387,7 +377,7 @@ public class TypeFactory {
 
     /**
      * Create a VARBINARY type with specified length.
-     * 
+     *
      * @param len the length of the VARBINARY type
      * @return the created VARBINARY type
      */
@@ -398,18 +388,9 @@ public class TypeFactory {
     }
 
     /**
-     * Create a VARCHAR type with wildcard length.
-     * 
-     * @return the VARCHAR type with wildcard length
-     */
-    public static ScalarType createVarcharType() {
-        return Type.VARCHAR;
-    }
-
-    /**
      * Create an HLL type.
      * HLL is used for HyperLogLog approximate counting.
-     * 
+     *
      * @return the created HLL type
      */
     public static ScalarType createHllType() {
@@ -421,7 +402,7 @@ public class TypeFactory {
     /**
      * Create an UNKNOWN type.
      * Used for unresolved type references.
-     * 
+     *
      * @return the created UNKNOWN type
      */
     public static ScalarType createUnknownType() {
@@ -430,10 +411,11 @@ public class TypeFactory {
 
     /**
      * Create a JSON type.
-     * 
+     *
      * @return the created JSON type
      */
     public static ScalarType createJsonType() {
         return new ScalarType(PrimitiveType.JSON);
     }
+
 }
