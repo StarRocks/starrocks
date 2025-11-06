@@ -2,17 +2,13 @@
 displayed_sidebar: docs
 ---
 
-import Experimental from '../_assets/commonMarkdown/_experimental.mdx'
-
 # dbt
 
 `dbt-starrocks` enables the use of `dbt` to transform data in StarRocks using dbt's modeling patterns and best practices.
 
 `dbt-starrocks` [GitHub repo](https://github.com/StarRocks/dbt-starrocks).
 
-<Experimental />
-
-## Supported features
+This is an Experimental feature.
 
 ## Supported features
 
