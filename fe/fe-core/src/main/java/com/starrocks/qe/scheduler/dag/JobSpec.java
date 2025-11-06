@@ -32,6 +32,7 @@ import com.starrocks.qe.scheduler.slot.SlotProvider;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.LoadPlanner;
+import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TExecPlanFragmentParams;
@@ -59,6 +60,7 @@ public class JobSpec {
 
     private TUniqueId queryId;
 
+    private ExecPlan execPlan = null;
     private List<PlanFragment> fragments;
     private List<ScanNode> scanNodes;
     /**
@@ -107,7 +109,8 @@ public class JobSpec {
                                             List<PlanFragment> fragments,
                                             List<ScanNode> scanNodes,
                                             TDescriptorTable descTable,
-                                            TQueryType queryType) {
+                                            TQueryType queryType,
+                                            ExecPlan execPlan) {
             TQueryOptions queryOptions = context.getSessionVariable().toThrift();
             queryOptions.setQuery_type(queryType);
             queryOptions.setQuery_timeout(context.getExecTimeout());
@@ -123,6 +126,7 @@ public class JobSpec {
                     .queryId(context.getExecutionId())
                     .fragments(fragments)
                     .scanNodes(scanNodes)
+                    .execPlan(execPlan)
                     .descTable(descTable)
                     .enableStreamPipeline(false)
                     .isBlockQuery(false)
@@ -139,7 +143,8 @@ public class JobSpec {
         public static JobSpec fromMVMaintenanceJobSpec(ConnectContext context,
                                                        List<PlanFragment> fragments,
                                                        List<ScanNode> scanNodes,
-                                                       TDescriptorTable descTable) {
+                                                       TDescriptorTable descTable,
+                                                       ExecPlan execPlan) {
             TQueryOptions queryOptions = context.getSessionVariable().toThrift();
 
             TQueryGlobals queryGlobals = genQueryGlobals(context.getStartTimeInstant(),
@@ -153,6 +158,7 @@ public class JobSpec {
                     .queryId(context.getExecutionId())
                     .fragments(fragments)
                     .scanNodes(scanNodes)
+                    .execPlan(execPlan)
                     .descTable(descTable)
                     .enableStreamPipeline(true)
                     .isBlockQuery(false)
@@ -179,6 +185,7 @@ public class JobSpec {
                     .queryId(loadPlanner.getLoadId())
                     .fragments(loadPlanner.getFragments())
                     .scanNodes(loadPlanner.getScanNodes())
+                    .execPlan(loadPlanner.getExecPlan())
                     .descTable(loadPlanner.getDescTable().toThrift())
                     .enableStreamPipeline(false)
                     .isBlockQuery(true)
@@ -215,6 +222,7 @@ public class JobSpec {
                     .queryId(queryId)
                     .fragments(fragments)
                     .scanNodes(scanNodes)
+                    .execPlan(null)
                     .descTable(descTable.toThrift())
                     .enableStreamPipeline(false)
                     .isBlockQuery(true)
@@ -230,7 +238,8 @@ public class JobSpec {
                                                              TUniqueId queryId,
                                                              DescriptorTable descTable,
                                                              List<PlanFragment> fragments,
-                                                             List<ScanNode> scanNodes) {
+                                                             List<ScanNode> scanNodes,
+                                                             ExecPlan execPlan) {
             TQueryOptions queryOptions = context.getSessionVariable().toThrift();
             TQueryGlobals queryGlobals = genQueryGlobals(context.getStartTimeInstant(),
                     context.getSessionVariable().getTimeZone());
@@ -239,6 +248,7 @@ public class JobSpec {
                     .queryId(queryId)
                     .fragments(fragments)
                     .scanNodes(scanNodes)
+                    .execPlan(execPlan)
                     .descTable(descTable.toThrift())
                     .enableStreamPipeline(false)
                     .isBlockQuery(false)
@@ -246,47 +256,6 @@ public class JobSpec {
                     .queryGlobals(queryGlobals)
                     .queryOptions(queryOptions)
                     .commonProperties(context)
-                    .build();
-        }
-
-        public static JobSpec fromNonPipelineBrokerLoadJobSpec(ConnectContext context,
-                                                               Long loadJobId, TUniqueId queryId,
-                                                               DescriptorTable descTable,
-                                                               List<PlanFragment> fragments,
-                                                               List<ScanNode> scanNodes,
-                                                               String timezone,
-                                                               long startTime,
-                                                               Map<String, String> sessionVariables,
-                                                               long execMemLimit,
-                                                               long warehouseId) {
-            TQueryOptions queryOptions = new TQueryOptions();
-            setSessionVariablesToLoadQueryOptions(queryOptions, sessionVariables);
-            queryOptions.setQuery_type(TQueryType.LOAD);
-            /*
-             * For broker load job, user only need to set mem limit by 'exec_mem_limit' property.
-             * And the variable 'load_mem_limit' does not make any effect.
-             * However, in order to ensure the consistency of semantics when executing on the BE side,
-             * and to prevent subsequent modification from incorrectly setting the load_mem_limit,
-             * here we use exec_mem_limit to directly override the load_mem_limit property.
-             */
-            queryOptions.setMem_limit(execMemLimit);
-            queryOptions.setLoad_mem_limit(execMemLimit);
-
-            TQueryGlobals queryGlobals = genQueryGlobals(Instant.ofEpochMilli(startTime), timezone);
-
-            return new Builder()
-                    .loadJobId(loadJobId)
-                    .queryId(queryId)
-                    .fragments(fragments)
-                    .scanNodes(scanNodes)
-                    .descTable(descTable.toThrift())
-                    .enableStreamPipeline(false)
-                    .isBlockQuery(true)
-                    .needReport(true)
-                    .queryGlobals(queryGlobals)
-                    .queryOptions(queryOptions)
-                    .commonProperties(context)
-                    .computeResource(context.getCurrentComputeResource())
                     .build();
         }
 
@@ -303,6 +272,7 @@ public class JobSpec {
                     .queryId(queryId)
                     .fragments(Collections.emptyList())
                     .scanNodes(null)
+                    .execPlan(null)
                     .descTable(null)
                     .enableStreamPipeline(false)
                     .isBlockQuery(true)
@@ -331,6 +301,7 @@ public class JobSpec {
                     .queryId(context.getExecutionId())
                     .fragments(fragments)
                     .scanNodes(scanNodes)
+                    .execPlan(null)
                     .descTable(null)
                     .enableStreamPipeline(false)
                     .isBlockQuery(false)
@@ -433,6 +404,10 @@ public class JobSpec {
 
     public List<ScanNode> getScanNodes() {
         return scanNodes;
+    }
+
+    public ExecPlan getExecPlan() {
+        return execPlan;
     }
 
     public TDescriptorTable getDescTable() {
@@ -645,6 +620,11 @@ public class JobSpec {
 
         private Builder setSyncStreamLoad() {
             instance.isSyncStreamLoad = true;
+            return this;
+        }
+
+        private Builder execPlan(ExecPlan execPlan) {
+            instance.execPlan = execPlan;
             return this;
         }
 

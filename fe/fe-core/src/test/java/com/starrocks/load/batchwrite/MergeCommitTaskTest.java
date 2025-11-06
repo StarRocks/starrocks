@@ -35,6 +35,7 @@ import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.schema.MTable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.LoadPlanner;
+import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.task.LoadEtlTask;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TNetworkAddress;
@@ -389,13 +390,13 @@ public class MergeCommitTaskTest extends BatchWriteTestBase {
         
         @Override
         public Coordinator createQueryScheduler(ConnectContext context, List<PlanFragment> fragments,
-                                                List<ScanNode> scanNodes, TDescriptorTable descTable) {
+                                                List<ScanNode> scanNodes, TDescriptorTable descTable, ExecPlan execPlan) {
             return coordinator;
         }
 
         @Override
         public Coordinator createInsertScheduler(ConnectContext context, List<PlanFragment> fragments,
-                                                 List<ScanNode> scanNodes, TDescriptorTable descTable) {
+                                                 List<ScanNode> scanNodes, TDescriptorTable descTable, ExecPlan execPlan) {
             return coordinator;
         }
 
@@ -407,16 +408,6 @@ public class MergeCommitTaskTest extends BatchWriteTestBase {
 
         @Override
         public Coordinator createSyncStreamLoadScheduler(StreamLoadPlanner planner, TNetworkAddress address) {
-            return coordinator;
-        }
-
-        @Override
-        public Coordinator createNonPipelineBrokerLoadScheduler(Long jobId, TUniqueId queryId,
-                                                                DescriptorTable descTable, List<PlanFragment> fragments,
-                                                                List<ScanNode> scanNodes, String timezone,
-                                                                long startTime, Map<String, String> sessionVariables,
-                                                                ConnectContext context, long execMemLimit,
-                                                                long warehouseId) {
             return coordinator;
         }
 
@@ -433,7 +424,7 @@ public class MergeCommitTaskTest extends BatchWriteTestBase {
         public Coordinator createRefreshDictionaryCacheScheduler(ConnectContext context, TUniqueId queryId,
                                                                  DescriptorTable descTable,
                                                                  List<PlanFragment> fragments,
-                                                                 List<ScanNode> scanNodes) {
+                                                                 List<ScanNode> scanNodes, ExecPlan execPlan) {
             return coordinator;
         }
     }

@@ -63,7 +63,8 @@ Status convert_to_arrow_field(const TypeDescriptor& desc, const std::string& col
 Status convert_to_arrow_schema(const RowDescriptor& row_desc,
                                const std::unordered_map<int64_t, std::string>& id_to_col_name,
                                std::shared_ptr<arrow::Schema>* result,
-                               const std::vector<ExprContext*>& output_expr_ctxs);
+                               const std::vector<ExprContext*>& output_expr_ctxs,
+                               const std::vector<std::string>* output_column_names = nullptr);
 
 Status serialize_record_batch(const arrow::RecordBatch& record_batch, std::string* result);
 
