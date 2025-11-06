@@ -25,6 +25,7 @@ import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -142,8 +143,11 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
                     Collections.singletonList(metaColumn), aggFunction);
             newAggCalls.put(kv.getKey(), newAggCall);
         }
+        PartitionNames partitionNames = scanOperator.getPartitionNames();
         LogicalMetaScanOperator newMetaScan = LogicalMetaScanOperator.builder()
                 .setTable(scanOperator.getTable())
+                .setSelectPartitionNames(partitionNames == null ?
+                        Collections.emptyList() : partitionNames.getPartitionNames())
                 .setColRefToColumnMetaMap(newScanColumnRefs)
                 .setAggColumnIdToNames(aggColumnIdToNames).build();
         LogicalAggregationOperator newAggOperator = new LogicalAggregationOperator(aggregationOperator.getType(),
@@ -246,6 +250,9 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
     public Optional<OptExpression> tryReplaceByMetaData(OptExpression input, ColumnRefFactory factory) {
         LogicalAggregationOperator aggregationOperator = input.getOp().cast();
         LogicalOlapScanOperator scanOperator = input.inputAt(0).inputAt(0).getOp().cast();
+        if (!scanOperator.getSelectedPartitionId().isEmpty()) {
+            return Optional.empty();
+        }
 
         OlapTable table = (OlapTable) scanOperator.getTable();
         LocalDateTime lastUpdateTime = StatisticUtils.getTableLastUpdateTime(table);
