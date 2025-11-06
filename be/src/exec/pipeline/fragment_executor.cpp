@@ -178,7 +178,11 @@ Status FragmentExecutor::_prepare_fragment_ctx(const UnifiedExecPlanFragmentPara
 
     if (request.common().__isset.pred_tree_params) {
         const auto& tpred_tree_params = request.common().pred_tree_params;
-        _fragment_ctx->set_pred_tree_params({tpred_tree_params.enable_or, tpred_tree_params.enable_show_in_profile});
+        const int32_t max_pushdown_or_predicates = tpred_tree_params.__isset.max_pushdown_or_predicates
+                                                           ? tpred_tree_params.max_pushdown_or_predicates
+                                                           : PredicateTreeParams::DEFAULT_MAX_PUSHDOWN_OR_PREDICATES;
+        _fragment_ctx->set_pred_tree_params(
+                {tpred_tree_params.enable_or, tpred_tree_params.enable_show_in_profile, max_pushdown_or_predicates});
     }
 
     return Status::OK();
