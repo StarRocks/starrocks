@@ -60,7 +60,6 @@ public class DecimalTypeTest extends PlanTestBase {
                 "AGGREGATE KEY (c_2_0) " +
                 "DISTRIBUTED BY HASH (c_2_0) " +
                 "properties(\"replication_num\"=\"1\") ;");
-        starRocksAssert.getCtx().getSessionVariable().setEnableRewriteSimpleAggToMetaScan(false);
     }
 
     @Test

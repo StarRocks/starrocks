@@ -80,7 +80,6 @@ public class MvRewriteTest extends MVTestBase {
         starRocksAssert.withTable(cluster, "test11");
 
         starRocksAssert.getCtx().getSessionVariable().setEnableJSONV2Rewrite(false);
-        starRocksAssert.getCtx().getSessionVariable().setEnableRewriteSimpleAggToMetaScan(false);
         prepareDatas();
     }
 
