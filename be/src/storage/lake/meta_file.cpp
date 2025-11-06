@@ -24,6 +24,7 @@
 #include "storage/lake/update_manager.h"
 #include "storage/protobuf_file.h"
 #include "util/coding.h"
+#include "util/crc32c.h"
 #include "util/defer_op.h"
 #include "util/raw_container.h"
 #include "util/starrocks_metrics.h"
@@ -50,6 +51,7 @@ void MetaFileBuilder::append_delvec(const DelVectorPtr& delvec, uint32_t segment
         const uint64_t size = _buf.size() - offset;
         _delvecs[segment_id].set_offset(offset);
         _delvecs[segment_id].set_size(size);
+        _delvecs[segment_id].set_crc32c(crc32c::Mask(crc32c::Value(delvec_str.data(), delvec_str.size())));
         _segmentid_to_delvec[segment_id] = delvec;
     }
 }
@@ -323,11 +325,11 @@ Status MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compa
     }
     if (deleted_input_rowset_cnt != op_compaction.input_rowsets_size()) {
         LOG(ERROR) << fmt::format(
-                "MetaFileBuilder apply_opcompaction failed to find all input rowsets, tablet_id:{} "
-                " expected_input_rowsets : {} "
-                " deleted_input_rowsets : {} "
-                " op_compaction : {}"
-                " tablet meta : {}",
+                "MetaFileBuilder apply_opcompaction failed to find all input rowsets, tablet_id : {} "
+                "expected_input_rowsets : {} "
+                "deleted_input_rowsets : {} "
+                "op_compaction : {} "
+                "tablet meta : {}",
                 _tablet_meta->id(), op_compaction.input_rowsets_size(), deleted_input_rowset_cnt,
                 op_compaction.ShortDebugString(), _tablet_meta->ShortDebugString());
         return Status::InternalError("failed to find all input rowsets in apply_opcompaction");
@@ -489,6 +491,7 @@ Status MetaFileBuilder::_finalize_delvec(int64_t version, int64_t txn_id) {
             each_delvec.second.set_version(version);
             each_delvec.second.set_offset(iter->second.offset());
             each_delvec.second.set_size(iter->second.size());
+            each_delvec.second.set_crc32c(iter->second.crc32c());
             // record from cache key to segment id, so we can fill up cache later
             _cache_key_to_segment_id[delvec_cache_key(_tablet_meta->id(), each_delvec.second)] = iter->first;
             _delvecs.erase(iter);
@@ -505,6 +508,7 @@ Status MetaFileBuilder::_finalize_delvec(int64_t version, int64_t txn_id) {
 
     // 3. write to delvec file
     if (_buf.size() > 0) {
+        TEST_SYNC_POINT_CALLBACK("MetaFileBuilder::_finalize_delvec", &_buf);
         auto delvec_file_name = gen_delvec_filename(txn_id);
         auto delvec_file_path = _tablet.delvec_location(delvec_file_name);
         // keep delete vector file name in tablet meta
@@ -515,7 +519,7 @@ Status MetaFileBuilder::_finalize_delvec(int64_t version, int64_t txn_id) {
         ASSIGN_OR_RETURN(auto writer_file, fs::new_writable_file(options, delvec_file_path));
         RETURN_IF_ERROR(writer_file->append(Slice(_buf.data(), _buf.size())));
         RETURN_IF_ERROR(writer_file->close());
-        TRACE("end write delvel");
+        TRACE("end write delvec");
     }
 
     // 4. clear delvec file record in version_to_file if it's not refered any more
@@ -652,6 +656,19 @@ Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, co
         ASSIGN_OR_RETURN(rf, fs::new_random_access_file(opts, tablet_mgr->delvec_location(metadata.id(), delvec_name)));
     }
     RETURN_IF_ERROR(rf->read_at_fully(delvec_page.offset(), buf.data(), delvec_page.size()));
+    if (delvec_page.has_crc32c()) {
+        // check crc32c
+        uint32_t crc32c = crc32c::Value(buf.data(), delvec_page.size());
+        if (crc32c != crc32c::Unmask(delvec_page.crc32c())) {
+            LOG(ERROR) << fmt::format(
+                    "delvec crc32c mismatch, tabletid {}, delvecfile {}, offset {}, size {}, expect crc32c {}, actual "
+                    "crc32c {}",
+                    metadata.id(), delvec_name, delvec_page.offset(), delvec_page.size(),
+                    crc32c::Unmask(delvec_page.crc32c()), crc32c);
+            return Status::Corruption(fmt::format("delvec crc32c mismatch. expect crc32c {}, actual {}",
+                                                  crc32c::Unmask(delvec_page.crc32c()), crc32c));
+        }
+    }
     // parse delvec
     RETURN_IF_ERROR(delvec->load(delvec_page.version(), buf.data(), delvec_page.size()));
     // put in cache
