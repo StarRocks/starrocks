@@ -714,7 +714,7 @@ if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" 
         set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -mavx512f -mavx512bw -mavx512dq -mavx512cd -mavx512vl")
     endif()
 elseif ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "aarch64")
-    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -march=armv8-a+crc -mbranch-protection=none -msign-return-address=none")
+    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -march=armv8-a+crc+nosve -mbranch-protection=none -msign-return-address=none")
 endif()
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS}  -Wno-attributes -DS2_USE_GFLAGS -DS2_USE_GLOG")
 
