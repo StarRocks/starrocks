@@ -1148,7 +1148,7 @@ public class FunctionSet {
                 Lists.newArrayList(Type.ANY_ELEMENT), Type.VARCHAR, Type.ANY_STRUCT, true,
                 false, false, false));
 
-        for (Type t : Type.getSupportedTypes()) {
+        for (Type t : Type.SUPPORTED_TYPES) {
             if (t.isFunctionType()) {
                 continue;
             }
@@ -1179,7 +1179,7 @@ public class FunctionSet {
                     Lists.newArrayList(t), t, t, true, true, false));
 
             // MAX_BY
-            for (Type t1 : Type.getSupportedTypes()) {
+            for (Type t1 : Type.SUPPORTED_TYPES) {
                 if (t1.isFunctionType() || t1.isNull() || t1.isChar()) {
                     continue;
                 }
@@ -1188,7 +1188,7 @@ public class FunctionSet {
             }
 
             // MIN_BY
-            for (Type t1 : Type.getSupportedTypes()) {
+            for (Type t1 : Type.SUPPORTED_TYPES) {
                 if (t1.isFunctionType() || t1.isNull() || t1.isChar()) {
                     continue;
                 }
@@ -1426,7 +1426,7 @@ public class FunctionSet {
             addBuiltin(AggregateFunction.createAnalyticBuiltin(
                     LEAD, Lists.newArrayList(t, Type.BIGINT), t, t));
         };
-        for (Type t : Type.getSupportedTypes()) {
+        for (Type t : Type.SUPPORTED_TYPES) {
             // null/char/time is handled through type promotion
             // TODO: array/json/pseudo is not supported yet
             if (!t.canBeWindowFunctionArgumentTypes()) {

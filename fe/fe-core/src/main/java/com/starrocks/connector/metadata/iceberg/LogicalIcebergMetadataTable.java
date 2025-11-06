@@ -24,6 +24,7 @@ import com.starrocks.thrift.THdfsTable;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
 
 import java.util.List;
@@ -50,8 +51,8 @@ public class LogicalIcebergMetadataTable extends MetadataTable {
                 builder()
                         .columns(PLACEHOLDER_COLUMNS)
                         .column("content", TypeFactory.createType(PrimitiveType.INT))
-                        .column("file_path", TypeFactory.createVarcharType())
-                        .column("file_format", TypeFactory.createVarcharType())
+                        .column("file_path", Type.VARCHAR)
+                        .column("file_format", Type.VARCHAR)
                         .column("spec_id", TypeFactory.createType(PrimitiveType.INT))
                         .column("partition_data", TypeFactory.createType(PrimitiveType.VARBINARY))
                         .column("record_count", TypeFactory.createType(PrimitiveType.BIGINT))
