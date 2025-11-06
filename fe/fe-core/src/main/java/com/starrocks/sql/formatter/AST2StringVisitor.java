@@ -663,6 +663,12 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
 
         if (relation.getOnPredicate() != null) {
             sqlBuilder.append("ON ").append(visit(relation.getOnPredicate()));
+        } else if (relation.getUsingColNames() != null && !relation.getUsingColNames().isEmpty()) {
+            sqlBuilder.append("USING (");
+            sqlBuilder.append(relation.getUsingColNames().stream()
+                    .map(col -> "`" + col + "`")
+                    .collect(Collectors.joining(", ")));
+            sqlBuilder.append(")");
         }
         return sqlBuilder.toString();
     }
