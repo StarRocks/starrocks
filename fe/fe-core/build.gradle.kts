@@ -18,6 +18,7 @@ import org.gradle.api.tasks.testing.logging.TestLogEvent
 
 plugins {
     java
+    checkstyle
     id("com.baidu.jprotobuf") version "1.2.1"
 }
 
@@ -410,13 +411,6 @@ tasks.register<Task>("generateByScripts") {
     }
 }
 
-// Add source generation tasks to the build process
-tasks.compileJava {
-    dependsOn("generateThriftSources", "generateProtoSources", "generateByScripts")
-    // Add explicit dependency on hive-udf shadowJar task
-    dependsOn(":plugin:hive-udf:shadowJar")
-}
-
 tasks.named<PrecompileTask>("jprotobuf_precompile") {
     filterClassPackage = "com.starrocks.proto;com.starrocks.rpc;com.starrocks.server"
     generateProtoFile = "true"
@@ -470,6 +464,34 @@ tasks.test {
     }
 }
 
+// Checkstyle configuration to match Maven behavior
+checkstyle {
+    toolVersion = "10.21.1"  // puppycrawl.version from parent pom
+    configFile = rootProject.file("checkstyle.xml")
+}
+
+// Configure Checkstyle tasks to match Maven behavior
+tasks.withType<Checkstyle>().configureEach {
+    // Don't check generated source files
+    setSource(source.filter {
+        !it.path.contains("/generated-sources/") &&
+                !it.path.contains("/sql/parser/gen/")
+    })
+
+    ignoreFailures = false  // Match Maven behavior: failsOnError=true
+    // Avoid circular dependency: Checkstyle should not depend on compiled classes
+    classpath = files()
+
+    // Increase memory for checkstyle to avoid OutOfMemoryError
+    maxHeapSize = "4096m"
+}
+
+// Bind checkstyle to run before compilation
+tasks.compileJava {
+    dependsOn("generateThriftSources", "generateProtoSources", "generateByScripts")
+    // Add explicit dependency on hive-udf shadowJar task
+    dependsOn(":plugin:hive-udf:shadowJar")
+}
 
 // Configure JAR task
 tasks.jar {
