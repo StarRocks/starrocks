@@ -15,11 +15,9 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
-import com.starrocks.catalog.Table;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.KeyPartitionRef;
 import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.QualifiedName;
@@ -97,11 +95,6 @@ public class TruncateTableAnalyzer {
         String tbl = tableRef.getTableName();
         if (Strings.isNullOrEmpty(tbl)) {
             throw new SemanticException("Table name is null");
-        }
-
-        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(context, catalog, db, tbl);
-        if (table == null) {
-            throw new SemanticException("Table %s.%s.%s does not exist", catalog, db, tbl);
         }
 
         return new TableRef(QualifiedName.of(List.of(catalog, db, tbl)), tableRef.getPartitionDef(), tableRef.getPos());

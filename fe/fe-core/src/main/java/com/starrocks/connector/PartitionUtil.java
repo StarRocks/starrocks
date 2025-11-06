@@ -986,10 +986,6 @@ public class PartitionUtil {
                 LOG.info("Source table is not partitioned, partition filter will be ignored");
                 return null;
             }
-            if (partitionFilter == null) {
-                LOG.info("No partition filter provided, no partition pruning will be applied");
-                return null;
-            }
 
             // Create column reference mappings for reusing OptExternalPartitionPruner logic
             ColumnRefFactory columnRefFactory = new ColumnRefFactory();

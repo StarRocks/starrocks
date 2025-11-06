@@ -239,7 +239,8 @@ public class HiveMetadata implements ConnectorMetadata {
         }
         Expr partitionFilter = ExprUtils.compoundAnd(predicates);
 
-        List<PartitionKey> partitionKeys = PartitionUtil.getFilteredPartitionKeys(context, table, partitionFilter);
+        List<PartitionKey> partitionKeys = partitionFilter != null ?
+                PartitionUtil.getFilteredPartitionKeys(context, table, partitionFilter) : null;
         if (partitionKeys == null || partitionKeys.isEmpty()) {
             throw new StarRocksConnectorException("No partitions matched the partition filter");
         }
