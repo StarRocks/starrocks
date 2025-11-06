@@ -643,6 +643,20 @@ void JsonPathDeriver::_visit_json_paths(const vpack::Slice& value, JsonFlatPath*
 // why dfs? because need compute parent isn't extract base on bottom-up, stack is not suitable
 uint32_t JsonPathDeriver::_dfs_finalize(JsonFlatPath* node, const std::string& absolute_path,
                                         std::vector<std::pair<JsonFlatPath*, std::string>>* hit_leaf) {
+    // Type conflict: node has both object and primitive values, flatten as TYPE_JSON
+    if (!absolute_path.empty() && !node->children.empty()) {
+        auto it = _derived_maps.find(node);
+        if (it != _derived_maps.end() && it->second.base_type_count > 0) {
+            for (auto& [key, child] : node->children) {
+                child->remain = true;
+            }
+            hit_leaf->emplace_back(node, absolute_path);
+            node->type = LogicalType::TYPE_JSON;
+            node->remain = false;
+            return 1;
+        }
+    }
+
     uint32_t flat_count = 0;
     for (auto& [key, child] : node->children) {
         if (!key.empty() && key.find('.') == std::string::npos) {

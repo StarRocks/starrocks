@@ -169,16 +169,12 @@ select * from test_json_cast_map order by c1;
 -- !result
 select flat_json_meta(c2) from test_json_cast_map [_META_];
 -- result:
-["nulls(TINYINT), level1.level2.level3.4(JSON), level1.level2.level3.level4.5(VARCHAR), remain(JSON)"]
+["nulls(TINYINT), level1.level2.level3(JSON), remain(JSON)"]
 -- !result
-drop table test_json_cast_map;
+CREATE TABLE source_data(c1 int, c2 json);
 -- result:
 -- !result
-CREATE TABLE test_json_cast_map (c1 int, c2 json) 
-DISTRIBUTED BY RANDOM BUCKETS 3;
--- result:
--- !result
-insert into test_json_cast_map values
+insert into source_data values
 (1, '{"level1": {"level2": {"level3": {"level4": {"5":"abc"}}}}}'),
 (2, '{"level1": {"level2": {"level3": {"4":23234982794}}}}'),
 (3, '{"level1": {"level2": {"level3": {"4":true}}}}'),
@@ -189,6 +185,120 @@ insert into test_json_cast_map values
 (8, '{"100": {"200": {"300": {"500":"abc"}}}}'),
 (9, '{"100": {"200": {"300": "abc"}}}');
 -- result:
+-- !result
+drop table test_json_cast_map;
+-- result:
+-- !result
+CREATE TABLE test_json_cast_map (c1 int, c2 json) 
+DISTRIBUTED BY RANDOM BUCKETS 2;
+-- result:
+-- !result
+insert into test_json_cast_map select * from source_data;
+-- result:
+-- !result
+select * from test_json_cast_map order by c1;
+-- result:
+1	{"level1": {"level2": {"level3": {"level4": {"5": "abc"}}}}}
+2	{"level1": {"level2": {"level3": {"4": 23234982794}}}}
+3	{"level1": {"level2": {"level3": {"4": true}}}}
+4	{"level1": {"level2": {"level3": {"4": null}}}}
+5	{"level1": {"level2": {"level3": {"4": ["abc", 100, 200]}}}}
+6	{"level1": {"level2": {"level3": {"4": {"5": "abc"}}}}}
+7	{"level1": {"level2": {"level3": "abc"}}}
+8	{"100": {"200": {"300": {"500": "abc"}}}}
+9	{"100": {"200": {"300": "abc"}}}
+-- !result
+select flat_json_meta(c2) from test_json_cast_map [_META_];
+-- result:
+["nulls(TINYINT), level1.level2.level3(JSON), remain(JSON)"]
+["nulls(TINYINT), level1.level2.level3.4(JSON), remain(JSON)"]
+-- !result
+drop table test_json_cast_map;
+-- result:
+-- !result
+CREATE TABLE test_json_cast_map (c1 int, c2 json) 
+DISTRIBUTED BY RANDOM BUCKETS 3;
+-- result:
+-- !result
+insert into test_json_cast_map select * from source_data;
+-- result:
+-- !result
+select * from test_json_cast_map order by c1;
+-- result:
+1	{"level1": {"level2": {"level3": {"level4": {"5": "abc"}}}}}
+2	{"level1": {"level2": {"level3": {"4": 23234982794}}}}
+3	{"level1": {"level2": {"level3": {"4": true}}}}
+4	{"level1": {"level2": {"level3": {"4": null}}}}
+5	{"level1": {"level2": {"level3": {"4": ["abc", 100, 200]}}}}
+6	{"level1": {"level2": {"level3": {"4": {"5": "abc"}}}}}
+7	{"level1": {"level2": {"level3": "abc"}}}
+8	{"100": {"200": {"300": {"500": "abc"}}}}
+9	{"100": {"200": {"300": "abc"}}}
+-- !result
+select flat_json_meta(c2) from test_json_cast_map [_META_];
+-- result:
+["nulls(TINYINT), 100.200.300(VARCHAR), level1.level2.level3.4(JSON), remain(JSON)"]
+["nulls(TINYINT), level1.level2.level3(JSON), remain(JSON)"]
+["nulls(TINYINT), 100.200.300.500(VARCHAR), remain(JSON)"]
+-- !result
+drop table test_json_cast_map;
+-- result:
+-- !result
+CREATE TABLE test_json_cast_map (c1 int, c2 json)
+DISTRIBUTED BY RANDOM BUCKETS 4;
+-- result:
+-- !result
+insert into test_json_cast_map select * from source_data;
+-- result:
+-- !result
+select * from test_json_cast_map order by c1;
+-- result:
+1	{"level1": {"level2": {"level3": {"level4": {"5": "abc"}}}}}
+2	{"level1": {"level2": {"level3": {"4": 23234982794}}}}
+3	{"level1": {"level2": {"level3": {"4": true}}}}
+4	{"level1": {"level2": {"level3": {"4": null}}}}
+5	{"level1": {"level2": {"level3": {"4": ["abc", 100, 200]}}}}
+6	{"level1": {"level2": {"level3": {"4": {"5": "abc"}}}}}
+7	{"level1": {"level2": {"level3": "abc"}}}
+8	{"100": {"200": {"300": {"500": "abc"}}}}
+9	{"100": {"200": {"300": "abc"}}}
+-- !result
+select flat_json_meta(c2) from test_json_cast_map [_META_];
+-- result:
+["nulls(TINYINT), 100.200.300(VARCHAR), level1.level2.level3.level4.5(VARCHAR), remain(JSON)"]
+["nulls(TINYINT), level1.level2.level3(JSON), remain(JSON)"]
+["nulls(TINYINT), level1.level2.level3.4(JSON), remain(JSON)"]
+["nulls(TINYINT), 100.200.300.500(VARCHAR), level1.level2.level3.4(JSON)"]
+-- !result
+drop table test_json_cast_map;
+-- result:
+-- !result
+CREATE TABLE test_json_cast_map (c1 int, c2 json)
+DISTRIBUTED BY RANDOM BUCKETS 5;
+-- result:
+-- !result
+insert into test_json_cast_map select * from source_data;
+-- result:
+-- !result
+select * from test_json_cast_map order by c1;
+-- result:
+1	{"level1": {"level2": {"level3": {"level4": {"5": "abc"}}}}}
+2	{"level1": {"level2": {"level3": {"4": 23234982794}}}}
+3	{"level1": {"level2": {"level3": {"4": true}}}}
+4	{"level1": {"level2": {"level3": {"4": null}}}}
+5	{"level1": {"level2": {"level3": {"4": ["abc", 100, 200]}}}}
+6	{"level1": {"level2": {"level3": {"4": {"5": "abc"}}}}}
+7	{"level1": {"level2": {"level3": "abc"}}}
+8	{"100": {"200": {"300": {"500": "abc"}}}}
+9	{"100": {"200": {"300": "abc"}}}
+-- !result
+select flat_json_meta(c2) from test_json_cast_map [_META_];
+-- result:
+["nulls(TINYINT), 100.200.300(VARCHAR), level1.level2.level3.4(JSON)"]
+[]
+["nulls(TINYINT), level1.level2.level3(JSON), remain(JSON)"]
+["nulls(TINYINT), 100.200.300.500(VARCHAR), level1.level2.level3.4(JSON)"]
+["nulls(TINYINT), level1.level2.level3.4.5(VARCHAR), level1.level2.level3.level4.5(VARCHAR)"]
 -- !result
 drop table test_json_cast_map;
 -- result:
