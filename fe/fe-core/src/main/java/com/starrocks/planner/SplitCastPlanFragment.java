@@ -16,12 +16,8 @@ package com.starrocks.planner;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-<<<<<<< HEAD
 import com.starrocks.analysis.Expr;
-=======
-import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.plan.ExecPlan;
->>>>>>> 9188847e9e ([BugFix] Fix output column names for Arrow Flight SQL (#64950))
 import com.starrocks.thrift.TResultSinkType;
 
 import java.util.List;
