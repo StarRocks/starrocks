@@ -176,17 +176,17 @@ public class DefaultCoordinator extends Coordinator {
         @Override
         public DefaultCoordinator createQueryScheduler(ConnectContext context, List<PlanFragment> fragments,
                                                        List<ScanNode> scanNodes,
-                                                       TDescriptorTable descTable) {
+                                                       TDescriptorTable descTable, ExecPlan execPlan) {
             JobSpec jobSpec =
-                    JobSpec.Factory.fromQuerySpec(context, fragments, scanNodes, descTable, TQueryType.SELECT);
+                    JobSpec.Factory.fromQuerySpec(context, fragments, scanNodes, descTable, TQueryType.SELECT, execPlan);
             return new DefaultCoordinator(context, jobSpec);
         }
 
         @Override
         public DefaultCoordinator createInsertScheduler(ConnectContext context, List<PlanFragment> fragments,
                                                         List<ScanNode> scanNodes,
-                                                        TDescriptorTable descTable) {
-            JobSpec jobSpec = JobSpec.Factory.fromQuerySpec(context, fragments, scanNodes, descTable, TQueryType.LOAD);
+                                                        TDescriptorTable descTable, ExecPlan execPlan) {
+            JobSpec jobSpec = JobSpec.Factory.fromQuerySpec(context, fragments, scanNodes, descTable, TQueryType.LOAD, execPlan);
             return new DefaultCoordinator(context, jobSpec);
         }
 
@@ -239,27 +239,10 @@ public class DefaultCoordinator extends Coordinator {
         public DefaultCoordinator createRefreshDictionaryCacheScheduler(ConnectContext context, TUniqueId queryId,
                                                                         DescriptorTable descTable,
                                                                         List<PlanFragment> fragments,
-                                                                        List<ScanNode> scanNodes) {
+                                                                        List<ScanNode> scanNodes, ExecPlan execPlan) {
 
-            JobSpec jobSpec = JobSpec.Factory.fromRefreshDictionaryCacheSpec(context, queryId, descTable, fragments,
-                    scanNodes);
-            return new DefaultCoordinator(context, jobSpec);
-        }
-
-        @Override
-        public DefaultCoordinator createNonPipelineBrokerLoadScheduler(Long jobId, TUniqueId queryId,
-                                                                       DescriptorTable descTable,
-                                                                       List<PlanFragment> fragments,
-                                                                       List<ScanNode> scanNodes,
-                                                                       String timezone,
-                                                                       long startTime,
-                                                                       Map<String, String> sessionVariables,
-                                                                       ConnectContext context, long execMemLimit,
-                                                                       long warehouseId) {
-            JobSpec jobSpec = JobSpec.Factory.fromNonPipelineBrokerLoadJobSpec(context, jobId, queryId, descTable,
-                    fragments, scanNodes, timezone,
-                    startTime, sessionVariables, execMemLimit, warehouseId);
-
+            JobSpec jobSpec = JobSpec.Factory.fromRefreshDictionaryCacheSpec(
+                    context, queryId, descTable, fragments, scanNodes, execPlan);
             return new DefaultCoordinator(context, jobSpec);
         }
     }

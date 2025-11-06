@@ -75,7 +75,7 @@ public class CoordinatorTest extends PlanTestBase {
         ConnectContext.threadLocalInfo.set(ctx);
 
         coordinator = new DefaultCoordinator.Factory().createQueryScheduler(ctx, Lists.newArrayList(), Lists.newArrayList(),
-                new TDescriptorTable());
+                new TDescriptorTable(), null);
         coordinatorPreprocessor = coordinator.getPrepareInfo();
     }
 
