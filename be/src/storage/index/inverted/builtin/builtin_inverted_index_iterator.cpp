@@ -69,13 +69,12 @@ Status BuiltinInvertedIndexIterator::_wildcard_query(const Slice* search_query, 
         return Status::InternalError("stats is null for builtin inverted index");
     }
 
-    const std::string& query = search_query->to_string();
-    size_t wildcard_pos = query.find('%');
-    if (wildcard_pos == std::string::npos) {
+    int64_t wildcard_pos = search_query->find('%');
+    if (wildcard_pos == -1) {
         return Status::InternalError("invalid wildcard query for builtin inverted index");
     }
 
-    if (wildcard_pos == search_query->size - 1) {
+    if (wildcard_pos == search_query->get_size() - 1) {
         SCOPED_RAW_TIMER(&_stats->gin_prefix_filter_ns);
         // optimize for pure prefix query
         Slice prefix_s(search_query->data, wildcard_pos);
@@ -120,35 +119,33 @@ Status BuiltinInvertedIndexIterator::_wildcard_query(const Slice* search_query, 
 
     bool found_at_least_one = false;
     roaring::Roaring filtered_key_words;
-    std::vector<std::string> keywords;
+    std::vector<std::pair<Slice, std::vector<size_t>>> keywords;
 
     SCOPED_RAW_TIMER(&_stats->gin_ngram_filter_dict_ns);
     // parse wildcard like '%%key%word%%' into ['key', 'word']
     // use ngram to filter each word
     wildcard_pos = 0;
-    size_t last_wildcard_pos = 0;
-    while (wildcard_pos < query.size()) {
-        while (wildcard_pos < query.size() && query[wildcard_pos] == '%') {
+    int64_t last_wildcard_pos = 0;
+    while (wildcard_pos < search_query->get_size()) {
+        while (wildcard_pos < search_query->get_size() && (*search_query)[wildcard_pos] == '%') {
             ++wildcard_pos;
         }
-        if (wildcard_pos >= query.size()) {
+        if (wildcard_pos >= search_query->get_size()) {
             break;
         }
         last_wildcard_pos = wildcard_pos;
-        wildcard_pos = query.find('%', last_wildcard_pos);
+        wildcard_pos = search_query->find('%', last_wildcard_pos);
 
-        auto sub_query = wildcard_pos != std::string::npos
-                                 ? query.substr(last_wildcard_pos, wildcard_pos - last_wildcard_pos)
-                                 : query.substr(last_wildcard_pos);
-        keywords.emplace_back(sub_query);
-
-        const Slice sub_query_s(sub_query);
+        auto sub_query = wildcard_pos != -1
+                                 ? Slice(search_query->data + last_wildcard_pos, wildcard_pos - last_wildcard_pos)
+                                 : Slice(search_query->data, search_query->get_size() - last_wildcard_pos);
+        keywords.emplace_back(std::make_pair(sub_query, sub_query.build_next()));
         roaring::Roaring tmp;
 
-        if (const auto st = _bitmap_itr->seek_dict_by_ngram(&sub_query_s, &tmp); !st.ok()) {
+        if (const auto st = _bitmap_itr->seek_dict_by_ngram(&sub_query, &tmp); !st.ok()) {
             if (st.is_not_found()) {
                 // no words match ngram index, just return empty bitmap
-                VLOG(10) << "no words match ngram index for gram query " << sub_query;
+                VLOG(10) << "no words match ngram index for gram query " << sub_query.to_string();
                 return Status::OK();
             }
             return st;
@@ -156,7 +153,7 @@ Status BuiltinInvertedIndexIterator::_wildcard_query(const Slice* search_query, 
 
         if (tmp.cardinality() <= 0) {
             // no words match ngram index, just return empty bitmap
-            VLOG(10) << "no words match ngram index for gram query " << sub_query;
+            VLOG(10) << "no words match ngram index for gram query " << sub_query.to_string();
             return Status::OK();
         }
 
@@ -175,21 +172,20 @@ Status BuiltinInvertedIndexIterator::_wildcard_query(const Slice* search_query, 
     }
 
     if (!found_at_least_one) {
-        VLOG(10) << "no words match ngram index for " << query;
+        VLOG(10) << "no words match ngram index for " << search_query->to_string();
         // no words match ngram index, just return empty bitmap
         return Status::OK();
     }
 
     auto predicate = [&keywords](const Slice* dict) -> bool {
         // just need to make sure keywords is in order.
-        const std::string dictionary_str = dict->to_string();
         size_t last_pos = 0;
-        for (const auto& keyword : keywords) {
-            last_pos = dictionary_str.find(keyword, last_pos);
-            if (last_pos == std::string::npos) {
+        for (const auto& [keyword, next_array]: keywords) {
+            last_pos = dict->find(keyword, next_array, last_pos);
+            if (last_pos == -1) {
                 return false;
             }
-            last_pos += keyword.size();
+            last_pos += keyword.get_size();
         }
         return true;
     };
