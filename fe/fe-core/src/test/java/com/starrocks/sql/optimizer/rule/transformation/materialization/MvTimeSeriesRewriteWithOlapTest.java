@@ -19,7 +19,6 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.MethodOrderer.MethodName;
 import org.junit.jupiter.api.Test;
@@ -109,11 +108,6 @@ public class MvTimeSeriesRewriteWithOlapTest extends MVTestBase {
                 "  ('2020-08-24 12:12:12',1,2),\n" +
                 "  ('2020-09-24 12:12:12',1,2),\n" +
                 "  ('2020-10-25 12:12:12',3,3);");
-    }
-
-    @AfterAll
-    public static void afterClass() throws Exception {
-        starRocksAssert.dropTable("t0");
     }
 
     @Test
