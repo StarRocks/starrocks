@@ -16,7 +16,12 @@ package com.starrocks.planner;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+<<<<<<< HEAD
 import com.starrocks.analysis.Expr;
+=======
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.plan.ExecPlan;
+>>>>>>> 9188847e9e ([BugFix] Fix output column names for Arrow Flight SQL (#64950))
 import com.starrocks.thrift.TResultSinkType;
 
 import java.util.List;
@@ -58,7 +63,7 @@ public class SplitCastPlanFragment extends PlanFragment {
     }
 
     @Override
-    public void createDataSink(TResultSinkType resultSinkType) {
+    public void createDataSink(TResultSinkType resultSinkType, ExecPlan execPlan) {
         if (sink != null) {
             return;
         }
@@ -77,7 +82,11 @@ public class SplitCastPlanFragment extends PlanFragment {
             splitCastDataSink.getDestinations().add(Lists.newArrayList());
             splitCastDataSink.getSplitExprs().add(splitExprs.get(i));
         }
+    }
 
+    @Override
+    public void createDataSink(TResultSinkType resultSinkType) {
+        createDataSink(resultSinkType, null);
     }
 
     @Override
