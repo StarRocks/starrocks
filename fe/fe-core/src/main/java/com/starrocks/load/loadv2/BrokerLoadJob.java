@@ -156,7 +156,7 @@ public class BrokerLoadJob extends BulkLoadJob {
                 for (LoadTask loadTask : newLoadingTasks) {
                     GlobalStateMgr.getCurrentState().getLoadingLoadTaskScheduler().updatePriority(
                             loadTask.getSignature(),
-                            priority);
+                            prio);
                 }
             }
 

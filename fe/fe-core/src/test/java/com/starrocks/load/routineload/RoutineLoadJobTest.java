@@ -40,7 +40,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.Table;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -70,16 +70,29 @@ import mockit.Injectable;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
 
 public class RoutineLoadJobTest {
+
+    @BeforeEach
+    public void setUp() throws Exception {
+        // Initialize test environment
+        UtFrameUtils.setUpForPersistTest();
+    }
+
+    @AfterEach
+    public void tearDown() {
+        UtFrameUtils.tearDownForPersisTest();
+    }
+
     @Test
-    public void testAfterAbortedReasonOffsetOutOfRange(@Mocked GlobalStateMgr globalStateMgr,
-                                                       @Injectable TransactionState transactionState,
+    public void testAfterAbortedReasonOffsetOutOfRange(@Injectable TransactionState transactionState,
                                                        @Injectable RoutineLoadTaskInfo routineLoadTaskInfo)
             throws StarRocksException {
 
@@ -414,15 +427,7 @@ public class RoutineLoadJobTest {
     }
 
     @Test
-    public void testUpdateWhileDbDeleted(@Mocked GlobalStateMgr globalStateMgr) throws StarRocksException {
-        new Expectations() {
-            {
-                globalStateMgr.getLocalMetastore().getDb(anyLong);
-                minTimes = 0;
-                result = null;
-            }
-        };
-
+    public void testUpdateWhileDbDeleted() throws StarRocksException {
         RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
         routineLoadJob.update();
 
@@ -430,40 +435,25 @@ public class RoutineLoadJobTest {
     }
 
     @Test
-    public void testUpdateWhileTableDeleted(@Mocked GlobalStateMgr globalStateMgr,
-                                            @Injectable Database database) throws StarRocksException {
-        new Expectations() {
-            {
-                globalStateMgr.getLocalMetastore().getDb(anyLong);
-                minTimes = 0;
-                result = database;
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), anyLong);
-                minTimes = 0;
-                result = null;
-            }
-        };
-        RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
+    public void testUpdateWhileTableDeleted() throws StarRocksException {
+        long dbId = 11L;
+        Database database = new Database(dbId, "testDb");
+        GlobalStateMgr.getCurrentState().getLocalMetastore().replayCreateDb(database);
+        RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob(
+                1L, "test", dbId, 111L, "brokerList", "topic");
         routineLoadJob.update();
 
         Assertions.assertEquals(RoutineLoadJob.JobState.CANCELLED, routineLoadJob.getState());
     }
 
     @Test
-    public void testUpdateWhilePartitionChanged(@Mocked GlobalStateMgr globalStateMgr,
-                                                @Injectable Database database,
-                                                @Injectable Table table,
-                                                @Injectable KafkaProgress kafkaProgress) throws StarRocksException {
+    public void testUpdateWhilePartitionChanged(@Injectable KafkaProgress kafkaProgress) throws StarRocksException {
 
-        new Expectations() {
-            {
-                globalStateMgr.getLocalMetastore().getDb(anyLong);
-                minTimes = 0;
-                result = database;
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), anyLong);
-                minTimes = 0;
-                result = table;
-            }
-        };
+        long dbId = 11L;
+        Database database = new Database(dbId, "testDb");
+        OlapTable table = new OlapTable(22L, "test", null, null, null, null);
+        database.registerTableUnlocked(table);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().replayCreateDb(database);
 
         new MockUp<KafkaUtil>() {
             @Mock
@@ -481,7 +471,7 @@ public class RoutineLoadJobTest {
             }
         };
 
-        RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
+        RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob(111L, "test", dbId, 22L, "brokerList", "topic");
         Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.RUNNING);
         Deencapsulation.setField(routineLoadJob, "progress", kafkaProgress);
         routineLoadJob.update();
@@ -490,7 +480,7 @@ public class RoutineLoadJobTest {
     }
 
     @Test
-    public void testUpdateNumOfDataErrorRowMoreThanMax(@Mocked GlobalStateMgr globalStateMgr) {
+    public void testUpdateNumOfDataErrorRowMoreThanMax() {
         RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
         Deencapsulation.setField(routineLoadJob, "maxErrorNum", 0);
         Deencapsulation.setField(routineLoadJob, "maxBatchRows", 0);
@@ -840,8 +830,8 @@ public class RoutineLoadJobTest {
     }
 
     @Test
-    public void testPauseOnFatalParseError(@Mocked GlobalStateMgr globalStateMgr, @Injectable TransactionState transactionState,
-                                                       @Injectable RoutineLoadTaskInfo routineLoadTaskInfo)
+    public void testPauseOnFatalParseError(@Injectable TransactionState transactionState,
+                                            @Injectable RoutineLoadTaskInfo routineLoadTaskInfo)
             throws StarRocksException {
         long txnId = 1L;
         new Expectations() {
