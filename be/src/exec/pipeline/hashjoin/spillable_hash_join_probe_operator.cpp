@@ -342,9 +342,7 @@ void SpillableHashJoinProbeOperator::_update_status(Status&& status) const {
 }
 
 Status SpillableHashJoinProbeOperator::_status() const {
-    if (!_join_builder->spiller()->task_status().ok()) {
-        return _join_builder->spiller()->task_status();
-    }
+    RETURN_IF_ERROR(_join_builder->spiller()->task_status());
     std::lock_guard guard(_mutex);
     return _operator_status;
 }
