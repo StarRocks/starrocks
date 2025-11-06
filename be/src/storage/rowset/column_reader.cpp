@@ -402,6 +402,10 @@ Status ColumnReader::_parse_zone_map(const TypeInfoPtr& type_info, const ZoneMap
     detail->set_has_null(zm.has_null());
 
     if (zm.has_not_null()) {
+        if (UNLIKELY(!zm.has_min() || !zm.has_max())) {
+            LOG(ERROR) << "Corrupted zone map protobuf detected: " << zm.ShortDebugString();
+            return Status::Corruption("Corrupted zone map data: missing min or max values");
+        }
         RETURN_IF_ERROR(datum_from_string(type_info.get(), &(detail->min_value()), zm.min(), nullptr));
         RETURN_IF_ERROR(datum_from_string(type_info.get(), &(detail->max_value()), zm.max(), nullptr));
     }
