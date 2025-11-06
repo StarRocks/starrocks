@@ -107,11 +107,8 @@ select * from test_json_cast_map order by c1;
 select flat_json_meta(c2) from test_json_cast_map [_META_];
 
 -- Test 10: inconsistent intermediate node
-drop table test_json_cast_map;
-CREATE TABLE test_json_cast_map (c1 int, c2 json) 
-DISTRIBUTED BY RANDOM BUCKETS 3;
-
-insert into test_json_cast_map values
+CREATE TABLE source_data(c1 int, c2 json);
+insert into source_data values
 (1, '{"level1": {"level2": {"level3": {"level4": {"5":"abc"}}}}}'),
 (2, '{"level1": {"level2": {"level3": {"4":23234982794}}}}'),
 (3, '{"level1": {"level2": {"level3": {"4":true}}}}'),
@@ -122,5 +119,36 @@ insert into test_json_cast_map values
 (8, '{"100": {"200": {"300": {"500":"abc"}}}}'),
 (9, '{"100": {"200": {"300": "abc"}}}');
 
+-- bucket 2
+drop table test_json_cast_map;
+CREATE TABLE test_json_cast_map (c1 int, c2 json) 
+DISTRIBUTED BY RANDOM BUCKETS 2;
+insert into test_json_cast_map select * from source_data;
+select * from test_json_cast_map order by c1;
+select flat_json_meta(c2) from test_json_cast_map [_META_];
+
+-- bucket 3
+drop table test_json_cast_map;
+CREATE TABLE test_json_cast_map (c1 int, c2 json) 
+DISTRIBUTED BY RANDOM BUCKETS 3;
+insert into test_json_cast_map select * from source_data;
+select * from test_json_cast_map order by c1;
+select flat_json_meta(c2) from test_json_cast_map [_META_];
+
+-- bucket 4
+drop table test_json_cast_map;
+CREATE TABLE test_json_cast_map (c1 int, c2 json)
+DISTRIBUTED BY RANDOM BUCKETS 4;
+insert into test_json_cast_map select * from source_data;
+select * from test_json_cast_map order by c1;
+select flat_json_meta(c2) from test_json_cast_map [_META_];
+
+-- bucket 5
+drop table test_json_cast_map;
+CREATE TABLE test_json_cast_map (c1 int, c2 json)
+DISTRIBUTED BY RANDOM BUCKETS 5;
+insert into test_json_cast_map select * from source_data;
+select * from test_json_cast_map order by c1;
+select flat_json_meta(c2) from test_json_cast_map [_META_];
 
 drop table test_json_cast_map;
