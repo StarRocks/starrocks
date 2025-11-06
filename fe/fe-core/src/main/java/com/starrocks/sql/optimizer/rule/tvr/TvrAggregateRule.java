@@ -19,7 +19,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.OlapTable;
 import com.starrocks.sql.ast.expression.JoinOperator;
 import com.starrocks.sql.optimizer.MvRewritePreprocessor;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -76,7 +75,7 @@ public class TvrAggregateRule extends TvrTransformationRule {
     }
 
     protected OptExpression doTransformWithMonotonic(OptimizerContext optimizerContext,
-                                                     OlapTable aggStateTable,
+                                                     MaterializedView aggStateTable,
                                                      LogicalAggregationOperator inputAggOperator,
                                                      OptExpression input) {
         Preconditions.checkArgument(aggStateTable != null,
@@ -112,8 +111,9 @@ public class TvrAggregateRule extends TvrTransformationRule {
                 .stream()
                 .map(col -> (ScalarOperator) col)
                 .collect(Collectors.toList());
-        ScalarOperator eqRowIdOperator = TvrOpUtils.buildRowIdEqBinaryPredicateOp(aggStateRowIdColumnRef,
-                inputAggUniqueKeys);
+        final int encodeRowIdVersion = aggStateTable.getEncodeRowIdVersion();
+        ScalarOperator eqRowIdOperator = TvrOpUtils.buildRowIdEqBinaryPredicateOp(encodeRowIdVersion,
+                aggStateRowIdColumnRef, inputAggUniqueKeys);
 
         // old aggregate function to new column ref operator map
         Map<ScalarOperator, ColumnRefOperator> oldToNewColumnRefMap = Maps.newHashMap();

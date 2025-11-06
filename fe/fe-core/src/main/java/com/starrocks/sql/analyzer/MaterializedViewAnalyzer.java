@@ -357,7 +357,7 @@ public class MaterializedViewAnalyzer {
 
             MaterializedView.RefreshMode refreshMode = IVMAnalyzer.getRefreshMode(statement);
             if (refreshMode.isIncrementalOrAuto()) {
-                IVMAnalyzer ivmAnalyzer = new IVMAnalyzer(context, statement.getQueryStatement());
+                IVMAnalyzer ivmAnalyzer = new IVMAnalyzer(context, statement, statement.getQueryStatement());
                 Optional<IVMAnalyzer.IVMAnalyzeResult> ivmAnalyzeResult = ivmAnalyzer.rewrite(refreshMode);
                 if (ivmAnalyzeResult.isPresent()) {
                     IVMAnalyzer.IVMAnalyzeResult result = ivmAnalyzeResult.get();
@@ -1565,41 +1565,22 @@ public class MaterializedViewAnalyzer {
                         autoInferReplicationNum(tableNameTableMap).toString());
 
             }
-            // If the key type is primary key, the distribution must be hash distribution.
-            if (distributionDesc != null && KeysType.PRIMARY_KEYS.equals(statement.getKeysType()) &&
-                    distributionDesc instanceof RandomDistributionDesc) {
-                // if the mv is primary key, we use hash distribution with all key columns.
-                List<String> keyColNames = statement.getMvColumnItems()
-                        .stream()
-                        .filter(col -> col.isKey())
-                        .map(Column::getName)
-                        .collect(Collectors.toList());
-                throw new SemanticException(String.format("Please use `DISTRIBUTED BY HASH(%s)` instead of `DISTRIBUTED BY " +
-                                "RANDOM` for incremental materialized view, or remove `DISTRIBUTED BY RANDOM` instead.",
-                        Joiner.on(",").join(keyColNames)),
-                        statement.getPartitionByExprs().get(0).getPos());
-            }
 
-            if (distributionDesc == null) {
-                if (KeysType.PRIMARY_KEYS.equals(statement.getKeysType())) {
-                    // if the mv is primary key, we use hash distribution with all key columns.
-                    List<String> keyColNames = statement.getMvColumnItems()
-                            .stream()
-                            .filter(col -> col.isKey())
-                            .map(Column::getName)
-                            .collect(Collectors.toList());
-                    distributionDesc = new HashDistributionDesc(0, keyColNames);
-                } else {
+            // If the key type is primary key, the distribution must be hash distribution.
+            if  (KeysType.PRIMARY_KEYS.equals(statement.getKeysType())) {
+                distributionDesc = checkDistributionForPrimaryKey(statement);
+            } else {
+                // for non primary key tables, if user not specify distribution, we use hash distribution
+                if (distributionDesc == null) {
                     if (connectContext.getSessionVariable().isAllowDefaultPartition()) {
                         distributionDesc = new HashDistributionDesc(0,
                                 Lists.newArrayList(mvColumnItems.get(0).getName()));
                     } else {
                         distributionDesc = new RandomDistributionDesc();
                     }
+                    statement.setDistributionDesc(distributionDesc);
                 }
-                statement.setDistributionDesc(distributionDesc);
             }
-
             Set<String> columnSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
             for (Column columnDef : mvColumnItems) {
                 if (!columnSet.add(columnDef.getName())) {
@@ -1607,6 +1588,37 @@ public class MaterializedViewAnalyzer {
                 }
             }
             DistributionDescAnalyzer.analyze(distributionDesc, columnSet);
+        }
+
+        private DistributionDesc checkDistributionForPrimaryKey(CreateMaterializedViewStatement statement) {
+            DistributionDesc distributionDesc = statement.getDistributionDesc();
+            boolean isGeneratedByIncrementalMV = statement.getCurrentRefreshMode().isIncrementalOrAuto();
+            if (!isGeneratedByIncrementalMV) {
+                return distributionDesc;
+            }
+            // if the mv is primary key, we use hash distribution with all key columns.
+            List<String> keyColNames = statement.getMvColumnItems()
+                    .stream()
+                    .filter(col -> col.isKey())
+                    .map(Column::getName)
+                    .collect(Collectors.toList());
+            int numBuckets = 0;
+            if (distributionDesc != null) {
+                numBuckets = distributionDesc.getBuckets();
+                if (distributionDesc instanceof RandomDistributionDesc) {
+                    LOG.warn("Check distribution for primary key mv, ignore random distribution, " +
+                            "use hash distribution with key columns: {}",
+                            Joiner.on(",").join(keyColNames));
+                } else if (distributionDesc instanceof HashDistributionDesc) {
+                    HashDistributionDesc hashDistributionDesc = (HashDistributionDesc) distributionDesc;
+                    List<String> distColumns = hashDistributionDesc.getDistributionColumnNames();
+                    LOG.warn("Check distribution for primary key mv, ignore defined dist columns: {}, key columns: {}",
+                            Joiner.on(",").join(distColumns), Joiner.on(",").join(keyColNames));
+                }
+            }
+            HashDistributionDesc result = new HashDistributionDesc(numBuckets, keyColNames);
+            statement.setDistributionDesc(result);
+            return result;
         }
 
         private Short autoInferReplicationNum(Map<TableName, Table> tableNameTableMap) {
