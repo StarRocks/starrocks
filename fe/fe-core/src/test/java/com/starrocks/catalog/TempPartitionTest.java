@@ -80,7 +80,9 @@ public class TempPartitionTest extends StarRocksTestBase {
         ctx = UtFrameUtils.createDefaultCtx();
         Config.alter_scheduler_interval_millisecond = 100;
         starRocksAssert = new StarRocksAssert(ctx);
-        // temporarily disable partition duration to prevent blocking ut progress
+
+        // temporarily disable partition duration to prevent CatalogRecycleBin waiting too long time
+        // and blocking ut progress
         defaultRetentionPeriod = Config.partition_recycle_retention_period_secs;
         Config.partition_recycle_retention_period_secs = 0;
     }

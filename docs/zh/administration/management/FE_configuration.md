@@ -1807,7 +1807,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位：Seconds
 - 是否动态：是
 - 描述：因 INSERT OVERWRITE 或物化视图刷新操作而被删除的分区的元数据保留时间。请注意，此类元数据无法通过执行 [RECOVER](../../sql-reference/sql-statements/backup_restore/RECOVER.md) 命令恢复。
-- 引入版本：-
+- 引入版本：3.5.8
 
 ##### check_consistency_default_timeout_second
 

@@ -350,7 +350,8 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
             RecyclePartitionInfo recyclePartitionInfo = idToPartition.get(id);
             if (recyclePartitionInfo.getRetentionPeriod() > 0) {
                 // retain the partition alive for `tabletReservePeriod` seconds
-                // `catalog_trash_expire_second` will not take effect while retention period is set
+                // while retention period is set, `catalog_trash_expire_second` will not take effect and the partition
+                // is assumed to have been set un-recoverable (i.e. partition is not recoverable)
                 expireMs = max(recyclePartitionInfo.getRetentionPeriod() * 1000, MIN_ERASE_LATENCY);
             }
         }
