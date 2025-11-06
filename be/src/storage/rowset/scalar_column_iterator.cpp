@@ -787,4 +787,31 @@ StatusOr<std::vector<std::pair<int64_t, int64_t>>> ScalarColumnIterator::get_io_
     return res;
 }
 
+bool ScalarColumnIterator::support_push_down_predicate(
+        const std::vector<const ColumnPredicate*>& compound_and_predicates) {
+    // Check if there's a binary column != '' predicate
+    // This predicate cannot be efficiently pushed down
+    for (const auto* pred : compound_and_predicates) {
+        if (pred->type() == PredicateType::kNE && pred->type_info()->type() == TYPE_VARCHAR) {
+            const Datum& value = pred->value();
+            if (!value.is_null()) {
+                const Slice& value_slice = value.get_slice();
+                if (value_slice.empty()) {
+                    // Found binary col <> '' predicate, cannot support push down
+                    return false;
+                }
+            }
+        }
+    }
+
+    // Check if the decoder supports push down predicate
+    // First check dict decoder, then check current page decoder
+    if (_dict_decoder != nullptr) {
+        return _dict_decoder->support_push_down_predicate();
+    }
+
+    // No decoder available yet, conservatively return false
+    return false;
+}
+
 } // namespace starrocks

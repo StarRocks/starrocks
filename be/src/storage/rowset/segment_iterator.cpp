@@ -485,6 +485,12 @@ Status SegmentIterator::ScanContext::read_columns(Chunk* chunk, const SparseRang
                                                   Buffer<uint16_t>* selected_idx) {
     std::vector<ColumnIterator*>& column_iterators =
             predicate_col_late_materialize_read ? _column_iterators_for_predicate_late_materialize : _column_iterators;
+
+    bool first_col_supports_pushdown =
+            predicate_col_late_materialize_read
+                    ? column_iterators[0]->support_push_down_predicate(_column_predicate_map[_predicate_order[0]])
+                    : false;
+
     bool may_has_del_row = chunk->delete_state() != DEL_NOT_SATISFIED;
     std::vector<size_t> pruned_cols;
     size_t pruned_col_size = 0;
@@ -504,7 +510,7 @@ Status SegmentIterator::ScanContext::read_columns(Chunk* chunk, const SparseRang
             column_iterators[i]->reserve_col(range.span_size(), col.get());
         }
 
-        if (!predicate_col_late_materialize_read) {
+        if (!predicate_col_late_materialize_read || !first_col_supports_pushdown) {
             RETURN_IF_ERROR(column_iterators[i]->next_batch(range, col.get()));
         } else {
             size_t processed_rows = 0;
@@ -531,6 +537,7 @@ Status SegmentIterator::ScanContext::read_columns(Chunk* chunk, const SparseRang
                         range, col.get(), ColumnPredicates(), selection, selected_idx, &_is_filtered, &processed_rows));
             }
         }
+
         if (pruned_col_size == 0) {
             pruned_col_size = col->size();
         }

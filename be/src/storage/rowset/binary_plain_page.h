@@ -277,6 +277,8 @@ public:
         return -1;
     }
 
+    bool support_push_down_predicate() const override { return Type != TYPE_CHAR; }
+
     uint32_t max_value_length() const {
         uint32_t max_length = 0;
         for (int i = 0; i < _num_elems; ++i) {

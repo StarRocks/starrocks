@@ -117,6 +117,10 @@ public:
 
     std::string name() const override { return "RowIdColumnIterator"; }
 
+    bool support_push_down_predicate(const std::vector<const ColumnPredicate*>& compound_and_predicates) override {
+        return true;
+    }
+
 private:
     ColumnIteratorOptions _opts;
     ordinal_t _current_rowid = 0;
