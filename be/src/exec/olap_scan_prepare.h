@@ -94,6 +94,8 @@ public:
     template <LogicalType SlotType, LogicalType MappingType, template <class> class Decoder, class... Args>
     void normalized_rf_with_null(const JoinRuntimeFilter* rf, const SlotDescriptor* slot_desc, Args&&... args);
 
+    size_t num_predicates() const;
+
 private:
     const ScanConjunctsManagerOptions& _opts;
     const std::vector<E> _exprs;
