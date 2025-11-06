@@ -1,6 +1,6 @@
 # Airflow
 
-This topic describes how to integrate your StarRocks cluster with Apache Airflow. Airflow enables orchestration and scheduling of data workflows with StarRocks using DAGs (Directed Acyclic Graphs) and SQL operators. Users can use Airflow to do data loading and data transformation on StarRocks using the SQLExecuteQueryOperator and MySQLHook without any implementation or complex configuration. 
+Apache Airflow. Airflow enables orchestration and scheduling of data workflows with StarRocks using DAGs (Directed Acyclic Graphs) and SQL operators. Use Airflow for data loading and transformation using the `SQLExecuteQueryOperator` and `MySQLHook` without any implementation or complex configuration. 
 [Apache Airflow GitHub repo](https://github.com/apache/airflow).
 
 ## Supported features 
@@ -18,14 +18,18 @@ This topic describes how to integrate your StarRocks cluster with Apache Airflow
 - Access to a StarRocks cluster (see the [quickstart guide](https://docs.starrocks.io/docs/quick_start/))
 ### Install 
 The MySQL provider package is required to use StarRocks as StarRocks uses MySQL protocol. 
+
 ```sh
 pip install apache-airflow-providers-mysql
 ```
+
 Verify the installation by checking the installed providers:
+
 ```sh
 airflow providers list
 ```
-This should list apache-airflow-providers-mysql in the output. 
+
+This should list `apache-airflow-providers-mysql` in the output. 
 
 ## Configuration
 ### Create a StarRocks Connection
@@ -34,13 +38,13 @@ Create a StarRocks connection in the Airflow UI or via environment variable. The
 1. Navigate to Admin > Connections
 2. Click the + button to add a new connection
 3. Configure the connection: 
-  - Connection Id: starrocks_default
+  - Connection Id: `starrocks_default`
   - Connection Type: MySQL
-  - Host: your-starrocks-host.com
-  - Schema: your_database
-  - Login: your_username
-  - Password: your_password
-  - Port: 9030
+  - Host: `your-starrocks-host.com`
+  - Schema: `your_database`
+  - Login: `your_username`
+  - Password: `your_password`
+  - Port: `9030`
 
 #### Via Airflow CLI
 ```sh
@@ -62,7 +66,7 @@ These examples demonstrate common patterns for integrating StarRocks with Airflo
 - **Advanced Patterns**: Implement incremental loading, async operations, and query optimization
 - **Production Best Practices**: Handle errors gracefully and build resilient pipelines
 
-All examples use the crash data tables described in the [quickstart guide](https://docs.starrocks.io/docs/quick_start/shared-nothing/).
+All examples use the crash data tables described in the [quickstart guide](../quick_start/shared-nothing.md).
 
 ### Data Loading
 #### Stream Data Loading 
@@ -70,7 +74,7 @@ Load large CSV files efficiently using StarRocks Stream Load API. Stream Load is
 - High-throughput data loading (supports parallel loads)
 - Loading data with column transformations and filtering
 
-Stream Load provides better performance than INSERT INTO VALUES statements for large datasets and includes built-in features like error tolerance. Note that this does require the CSV file is accessible on the worker's filesystem. 
+Stream Load provides better performance than INSERT INTO VALUES statements for large datasets and includes built-in features like error tolerance. Note that this does require the CSV file is accessible on the Airflow worker's filesystem. 
 
 ```py
 from airflow.sdk import dag, task
