@@ -758,8 +758,7 @@ public class OlapTableSink extends DataSink {
 
     private static void setMaterializedIndexes(PhysicalPartition partition, TOlapTablePartition tPartition) {
         for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.ALL)) {
-            TOlapTableIndexTablets tIndex = new TOlapTableIndexTablets(index.getId(), index.getTabletIds());
-            tIndex.setVirtual_buckets(Lists.newArrayList(index.getVirtualBuckets()));
+            TOlapTableIndexTablets tIndex = new TOlapTableIndexTablets(index.getId(), index.getTabletIdsInOrder());
             tPartition.addToIndexes(tIndex);
         }
     }

@@ -1955,7 +1955,7 @@ public class OlapTable extends Table {
 
             short replicationNum = partitionInfo.getReplicationNum(partition.getId());
             MaterializedIndex baseIdx = physicalPartition.getBaseIndex();
-            for (Long tabletId : baseIdx.getTabletIds()) {
+            for (Long tabletId : baseIdx.getTabletIdsInOrder()) {
                 LocalTablet tablet = (LocalTablet) baseIdx.getTablet(tabletId);
                 List<Long> replicaBackendIds = tablet.getNormalReplicaBackendIds();
                 if (replicaBackendIds.size() < replicationNum) {
