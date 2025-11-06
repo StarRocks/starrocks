@@ -9461,7 +9461,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                 }
                 return TypeFactory.createDecimalV2Type(precision);
             }
-            return TypeFactory.createDecimalV2Type();
+            return Type.DEFAULT_DECIMALV2;
         } else {
             throw new IllegalArgumentException("Unsupported type " + context.getText());
         }

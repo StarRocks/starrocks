@@ -181,7 +181,7 @@ public class TypeDef implements ParseNode {
     }
 
     private void analyzeArrayType(ArrayType type) {
-        Type baseType = Type.getInnermostType(type);
+        Type baseType = getInnermostType(type);
         if (baseType == null) {
             throw new SemanticException("Cannot get innermost type of '" + type + "'");
         }
@@ -189,6 +189,18 @@ public class TypeDef implements ParseNode {
         if (baseType.isHllType() || baseType.isBitmapType() || baseType.isPseudoType() || baseType.isPercentile()) {
             throw new SemanticException("Invalid data type: " + type.toSql());
         }
+    }
+
+    // getInnermostType() is only used for array
+    private static Type getInnermostType(Type type) {
+        if (type.isScalarType() || type.isStructType() || type.isMapType()) {
+            return type;
+        }
+        if (type.isArrayType()) {
+            return getInnermostType(((ArrayType) type).getItemType());
+        }
+
+        return null;
     }
 
     private void analyzeStructType(StructType type) {
