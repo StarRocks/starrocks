@@ -39,7 +39,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ColumnStats;
 import com.starrocks.common.FeConstants;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.Expr;
@@ -88,7 +87,6 @@ public class SlotDescriptor {
     private int nullIndicatorBit; // index within byte
     private int slotIdx;          // index within tuple struct
 
-    private ColumnStats stats;  // only set if 'column' isn't set
     // used for load to get more information of varchar and decimal
     // and for query result set metadata
     private Type originType;
@@ -122,7 +120,6 @@ public class SlotDescriptor {
         this.column = src.column;
         this.isNullable = src.isNullable;
         this.byteSize = src.byteSize;
-        this.stats = src.stats;
         this.type = src.type;
     }
 
@@ -210,21 +207,6 @@ public class SlotDescriptor {
         }
     }
 
-    public void setStats(ColumnStats stats) {
-        this.stats = stats;
-    }
-
-    public ColumnStats getStats() {
-        if (stats == null) {
-            if (column != null) {
-                stats = column.getStats();
-            } else {
-                stats = new ColumnStats();
-            }
-        }
-        return stats;
-    }
-
     public String getLabel() {
         return label_;
     }
@@ -248,7 +230,6 @@ public class SlotDescriptor {
         setLabel(ExprToSql.toSql(expr));
         Preconditions.checkState(sourceExprs_.isEmpty());
         setSourceExpr(expr);
-        setStats(ColumnStats.fromExpr(expr));
         Preconditions.checkState(expr.getType().isValid());
         setType(expr.getType());
         // Vector query engine need the nullable info
