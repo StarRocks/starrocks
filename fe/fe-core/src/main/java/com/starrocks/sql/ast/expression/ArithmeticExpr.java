@@ -45,6 +45,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
+import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
@@ -113,7 +114,7 @@ public class ArithmeticExpr extends Expr {
     }
 
     public static void initBuiltins(FunctionSet functionSet) {
-        for (Type t : Type.getNumericTypes()) {
+        for (Type t : Type.NUMERIC_TYPES) {
             functionSet.addBuiltin(ScalarFunction.createBuiltinOperator(
                     Operator.MULTIPLY.getName(), Lists.newArrayList(t, t), t));
             functionSet.addBuiltin(ScalarFunction.createBuiltinOperator(
@@ -149,7 +150,7 @@ public class ArithmeticExpr extends Expr {
 
         // MOD(), FACTORIAL(), BITAND(), BITOR(), BITXOR(), and BITNOT() are registered as
         // builtins, see starrocks_functions.py
-        for (Type t : Type.getIntegerTypes()) {
+        for (Type t : Type.INTEGER_TYPES) {
             functionSet.addBuiltin(ScalarFunction.createBuiltinOperator(
                     Operator.INT_DIVIDE.getName(), Lists.newArrayList(t, t), t));
         }
@@ -157,15 +158,15 @@ public class ArithmeticExpr extends Expr {
             functionSet.addBuiltin(ScalarFunction.createBuiltinOperator(
                     Operator.INT_DIVIDE.getName(), Lists.newArrayList(t, t), Type.BIGINT));
         }
-        for (Type t : Type.getIntegerTypes()) {
+        for (Type t : Type.INTEGER_TYPES) {
             functionSet.addBuiltin(ScalarFunction.createBuiltinOperator(
                     Operator.BIT_SHIFT_LEFT.getName(), Lists.newArrayList(t, Type.BIGINT), t));
         }
-        for (Type t : Type.getIntegerTypes()) {
+        for (Type t : Type.INTEGER_TYPES) {
             functionSet.addBuiltin(ScalarFunction.createBuiltinOperator(
                     Operator.BIT_SHIFT_RIGHT.getName(), Lists.newArrayList(t, Type.BIGINT), t));
         }
-        for (Type t : Type.getIntegerTypes()) {
+        for (Type t : Type.INTEGER_TYPES) {
             functionSet.addBuiltin(ScalarFunction.createBuiltinOperator(
                     Operator.BIT_SHIFT_RIGHT_LOGICAL.getName(), Lists.newArrayList(t, Type.BIGINT), t));
         }
@@ -449,7 +450,7 @@ public class ArithmeticExpr extends Expr {
         if (pt1 == PrimitiveType.DOUBLE || pt2 == PrimitiveType.DOUBLE) {
             return Type.DOUBLE;
         } else if (pt1.isDecimalV3Type() || pt2.isDecimalV3Type()) {
-            return ScalarType.getAssigmentCompatibleTypeOfDecimalV3((ScalarType) t1, (ScalarType) t2);
+            return TypeManager.getAssigmentCompatibleTypeOfDecimalV3((ScalarType) t1, (ScalarType) t2);
         } else if (pt1 == PrimitiveType.DECIMALV2 || pt2 == PrimitiveType.DECIMALV2) {
             return Type.DECIMALV2;
         } else if (pt1 == PrimitiveType.LARGEINT || pt2 == PrimitiveType.LARGEINT) {

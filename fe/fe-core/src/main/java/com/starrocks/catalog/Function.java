@@ -46,6 +46,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.sql.ast.HdfsURI;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FunctionName;
+import com.starrocks.sql.common.TypeManager;
 import com.starrocks.thrift.TFunction;
 import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.thrift.TTypeDesc;
@@ -516,11 +517,11 @@ public class Function implements Writable {
         }
         if (other.hasNamedArg()) {
             return compareNamedArguments(other, startArgIndex,
-                    (Type ot, Type m) -> !ot.matchesType(m) && !Type.isImplicitlyCastable(ot, m, true));
+                    (Type ot, Type m) -> !ot.matchesType(m) && !TypeManager.isImplicitlyCastable(ot, m, true));
         } else if (this.defaultArgExprs != null && !other.hasVarArgs) {
             // positional args with defaults in table functions
             return comparePositionalArguments(other, startArgIndex,
-                    (Type ot, Type m) -> !ot.matchesType(m) && !Type.isImplicitlyCastable(ot, m, true));
+                    (Type ot, Type m) -> !ot.matchesType(m) && !TypeManager.isImplicitlyCastable(ot, m, true));
         } else {
             if (!this.hasVarArgs && other.argTypes.length != this.argTypes.length) {
                 return false;
@@ -535,7 +536,7 @@ public class Function implements Writable {
                 if (other.argTypes[i].matchesType(this.argTypes[i])) {
                     continue;
                 }
-                if (!Type.isImplicitlyCastable(other.argTypes[i], this.argTypes[i], true)) {
+                if (!TypeManager.isImplicitlyCastable(other.argTypes[i], this.argTypes[i], true)) {
                     return false;
                 }
             }
@@ -546,7 +547,7 @@ public class Function implements Writable {
                     if (other.argTypes[i].matchesType(getVarArgsType())) {
                         continue;
                     }
-                    if (!Type.isImplicitlyCastable(other.argTypes[i], getVarArgsType(), true)) {
+                    if (!TypeManager.isImplicitlyCastable(other.argTypes[i], getVarArgsType(), true)) {
                         return false;
                     }
                 }
@@ -560,11 +561,11 @@ public class Function implements Writable {
     private boolean isAssignCompatible(Function other) {
         if (other.hasNamedArg()) {
             return compareNamedArguments(other, 0,
-                    (Type ot, Type m) -> !ot.matchesType(m) && !Type.canCastTo(ot, m));
+                    (Type ot, Type m) -> !ot.matchesType(m) && !TypeManager.canCastTo(ot, m));
         } else if (this.defaultArgExprs != null && !other.hasVarArgs) {
             // positional args with defaults in table functions
             return comparePositionalArguments(other, 0,
-                    (Type ot, Type m) -> !ot.matchesType(m) && !Type.canCastTo(ot, m));
+                    (Type ot, Type m) -> !ot.matchesType(m) && !TypeManager.canCastTo(ot, m));
         } else {
             if (!this.hasVarArgs && other.argTypes.length != this.argTypes.length) {
                 return false;
@@ -576,7 +577,7 @@ public class Function implements Writable {
                 if (other.argTypes[i].matchesType(this.argTypes[i])) {
                     continue;
                 }
-                if (!Type.canCastTo(other.argTypes[i], argTypes[i])) {
+                if (!TypeManager.canCastTo(other.argTypes[i], argTypes[i])) {
                     return false;
                 }
             }
@@ -586,7 +587,7 @@ public class Function implements Writable {
                     if (other.argTypes[i].matchesType(getVarArgsType())) {
                         continue;
                     }
-                    if (!Type.canCastTo(other.argTypes[i], getVarArgsType())) {
+                    if (!TypeManager.canCastTo(other.argTypes[i], getVarArgsType())) {
                         return false;
                     }
                 }

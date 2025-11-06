@@ -25,6 +25,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.HintNode;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.JoinOperator;
+import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -348,7 +349,7 @@ public class SkewJoinOptimizeRule extends TransformationRule {
         Map<ColumnRefOperator, ScalarOperator> valueProjectMap = Maps.newHashMap();
         // use skew value to generate array
         List<Type> skewTypes = skewValues.stream().map(ScalarOperator::getType).collect(Collectors.toList());
-        ArrayType arrayType = new ArrayType(Type.getCommonType(
+        ArrayType arrayType = new ArrayType(TypeManager.getCommonType(
                 skewTypes.toArray(new Type[0]), 0, skewTypes.size()));
         ArrayOperator arrayOperator = new ArrayOperator(arrayType, true, skewValues);
 

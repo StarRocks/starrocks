@@ -49,6 +49,7 @@ import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.MaxLiteral;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.common.TypeManager;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.Type;
 import org.apache.logging.log4j.LogManager;
@@ -224,7 +225,7 @@ public class PartitionKey implements Comparable<PartitionKey>, Writable {
         if (key1 instanceof MaxLiteral || key2 instanceof MaxLiteral) {
             ret = key1.compareLiteral(key2);
         } else {
-            final Type destType = Type.getAssignmentCompatibleType(key1.getType(), key2.getType(), false);
+            final Type destType = TypeManager.getAssignmentCompatibleType(key1.getType(), key2.getType(), false);
             try {
                 LiteralExpr newKey = key1;
                 if (key1.getType() != destType) {
