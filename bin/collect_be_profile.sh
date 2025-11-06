@@ -419,9 +419,6 @@ parse_args() {
                 ;;
         esac
     done
-    
-    # Log the profiling configuration
-    log "Profiling type: $PROFILING_TYPE"
 }
 
 # Main execution
