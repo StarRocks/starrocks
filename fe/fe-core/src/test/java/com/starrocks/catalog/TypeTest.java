@@ -67,113 +67,113 @@ public class TypeTest {
         // tinyint
         ScalarType type = Type.TINYINT;
         Assertions.assertEquals(4, MysqlCodec.getMysqlResultSetFieldLength(type));
-        Assertions.assertEquals(0, type.getMysqlResultSetFieldDecimals());
+        Assertions.assertEquals(0, MysqlCodec.getMysqlResultSetFieldDecimals(type));
         Assertions.assertEquals(63, MysqlCodec.getMysqlResultSetFieldCharsetIndex(type));
 
         // smallint
         type = Type.SMALLINT;
         Assertions.assertEquals(6, MysqlCodec.getMysqlResultSetFieldLength(type));
-        Assertions.assertEquals(0, type.getMysqlResultSetFieldDecimals());
+        Assertions.assertEquals(0, MysqlCodec.getMysqlResultSetFieldDecimals(type));
         Assertions.assertEquals(63, MysqlCodec.getMysqlResultSetFieldCharsetIndex(type));
 
         // int
         type = Type.INT;
         Assertions.assertEquals(11, MysqlCodec.getMysqlResultSetFieldLength(type));
-        Assertions.assertEquals(0, type.getMysqlResultSetFieldDecimals());
+        Assertions.assertEquals(0, MysqlCodec.getMysqlResultSetFieldDecimals(type));
         Assertions.assertEquals(63, MysqlCodec.getMysqlResultSetFieldCharsetIndex(type));
 
         // bigint
         type = Type.BIGINT;
         Assertions.assertEquals(20, MysqlCodec.getMysqlResultSetFieldLength(type));
-        Assertions.assertEquals(0, type.getMysqlResultSetFieldDecimals());
+        Assertions.assertEquals(0, MysqlCodec.getMysqlResultSetFieldDecimals(type));
         Assertions.assertEquals(63, MysqlCodec.getMysqlResultSetFieldCharsetIndex(type));
 
         // largeint
         type = Type.LARGEINT;
         Assertions.assertEquals(40, MysqlCodec.getMysqlResultSetFieldLength(type));
-        Assertions.assertEquals(0, type.getMysqlResultSetFieldDecimals());
+        Assertions.assertEquals(0, MysqlCodec.getMysqlResultSetFieldDecimals(type));
         Assertions.assertEquals(33, MysqlCodec.getMysqlResultSetFieldCharsetIndex(type));
 
         // date
         type = Type.DATE;
         Assertions.assertEquals(10, MysqlCodec.getMysqlResultSetFieldLength(type));
-        Assertions.assertEquals(0, type.getMysqlResultSetFieldDecimals());
+        Assertions.assertEquals(0, MysqlCodec.getMysqlResultSetFieldDecimals(type));
         Assertions.assertEquals(63, MysqlCodec.getMysqlResultSetFieldCharsetIndex(type));
 
         // datetime
         type = Type.DATETIME;
         Assertions.assertEquals(19, MysqlCodec.getMysqlResultSetFieldLength(type));
-        Assertions.assertEquals(0, type.getMysqlResultSetFieldDecimals());
+        Assertions.assertEquals(0, MysqlCodec.getMysqlResultSetFieldDecimals(type));
         Assertions.assertEquals(63, MysqlCodec.getMysqlResultSetFieldCharsetIndex(type));
 
         // float
         type = Type.FLOAT;
         Assertions.assertEquals(12, MysqlCodec.getMysqlResultSetFieldLength(type));
-        Assertions.assertEquals(31, type.getMysqlResultSetFieldDecimals());
+        Assertions.assertEquals(31, MysqlCodec.getMysqlResultSetFieldDecimals(type));
         Assertions.assertEquals(63, MysqlCodec.getMysqlResultSetFieldCharsetIndex(type));
 
         // int
         type = Type.DOUBLE;
         Assertions.assertEquals(22, MysqlCodec.getMysqlResultSetFieldLength(type));
-        Assertions.assertEquals(31, type.getMysqlResultSetFieldDecimals());
+        Assertions.assertEquals(31, MysqlCodec.getMysqlResultSetFieldDecimals(type));
         Assertions.assertEquals(63, MysqlCodec.getMysqlResultSetFieldCharsetIndex(type));
 
         // decimal
         type = TypeFactory.createDecimalV2Type(15, 5);
         Assertions.assertEquals(19, MysqlCodec.getMysqlResultSetFieldLength(type));
-        Assertions.assertEquals(5, type.getMysqlResultSetFieldDecimals());
+        Assertions.assertEquals(5, MysqlCodec.getMysqlResultSetFieldDecimals(type));
         Assertions.assertEquals(63, MysqlCodec.getMysqlResultSetFieldCharsetIndex(type));
 
         // decimalv2
         type = TypeFactory.createDecimalV2Type(15, 0);
         Assertions.assertEquals(18, MysqlCodec.getMysqlResultSetFieldLength(type));
-        Assertions.assertEquals(0, type.getMysqlResultSetFieldDecimals());
+        Assertions.assertEquals(0, MysqlCodec.getMysqlResultSetFieldDecimals(type));
         Assertions.assertEquals(63, MysqlCodec.getMysqlResultSetFieldCharsetIndex(type));
 
         // char
         type = TypeFactory.createCharType(10);
         Assertions.assertEquals(30, MysqlCodec.getMysqlResultSetFieldLength(type));
-        Assertions.assertEquals(0, type.getMysqlResultSetFieldDecimals());
+        Assertions.assertEquals(0, MysqlCodec.getMysqlResultSetFieldDecimals(type));
         Assertions.assertEquals(33, MysqlCodec.getMysqlResultSetFieldCharsetIndex(type));
 
         // varchar
         type = TypeFactory.createVarcharType(11);
         Assertions.assertEquals(33, MysqlCodec.getMysqlResultSetFieldLength(type));
-        Assertions.assertEquals(0, type.getMysqlResultSetFieldDecimals());
+        Assertions.assertEquals(0, MysqlCodec.getMysqlResultSetFieldDecimals(type));
         Assertions.assertEquals(33, MysqlCodec.getMysqlResultSetFieldCharsetIndex(type));
 
         // wildcard varchar
         type = TypeFactory.createVarcharType(-1);
         Assertions.assertEquals(192, MysqlCodec.getMysqlResultSetFieldLength(type));
-        Assertions.assertEquals(0, type.getMysqlResultSetFieldDecimals());
+        Assertions.assertEquals(0, MysqlCodec.getMysqlResultSetFieldDecimals(type));
         Assertions.assertEquals(33, MysqlCodec.getMysqlResultSetFieldCharsetIndex(type));
 
         // bitmap
         type = Type.BITMAP;
         // 20 * 3
         Assertions.assertEquals(192, MysqlCodec.getMysqlResultSetFieldLength(type));
-        Assertions.assertEquals(0, type.getMysqlResultSetFieldDecimals());
+        Assertions.assertEquals(0, MysqlCodec.getMysqlResultSetFieldDecimals(type));
         Assertions.assertEquals(33, MysqlCodec.getMysqlResultSetFieldCharsetIndex(type));
 
         // hll
         type = Type.HLL;
         // MAX_HLL_LENGTH(16385) * 3
         Assertions.assertEquals(49155, MysqlCodec.getMysqlResultSetFieldLength(type));
-        Assertions.assertEquals(0, type.getMysqlResultSetFieldDecimals());
+        Assertions.assertEquals(0, MysqlCodec.getMysqlResultSetFieldDecimals(type));
         Assertions.assertEquals(33, MysqlCodec.getMysqlResultSetFieldCharsetIndex(type));
 
         // hll
         type = Type.JSON;
         // default 20 * 3
         Assertions.assertEquals(60, MysqlCodec.getMysqlResultSetFieldLength(type));
-        Assertions.assertEquals(0, type.getMysqlResultSetFieldDecimals());
+        Assertions.assertEquals(0, MysqlCodec.getMysqlResultSetFieldDecimals(type));
         Assertions.assertEquals(33, MysqlCodec.getMysqlResultSetFieldCharsetIndex(type));
 
         // array
         ArrayType arrayType = new ArrayType(Type.INT);
         // default 20 * 3
         Assertions.assertEquals(60, MysqlCodec.getMysqlResultSetFieldLength(arrayType));
-        Assertions.assertEquals(0, arrayType.getMysqlResultSetFieldDecimals());
+        Assertions.assertEquals(0, MysqlCodec.getMysqlResultSetFieldDecimals(arrayType));
         Assertions.assertEquals(33, MysqlCodec.getMysqlResultSetFieldCharsetIndex(arrayType));
 
         // function (an invisible type for users, just used to express the lambda Functions in high-order functions)
@@ -184,7 +184,7 @@ public class TypeTest {
                 new MapType(TypeFactory.createType(PrimitiveType.INT), TypeFactory.createType(PrimitiveType.INT));
         // default 20 * 3
         Assertions.assertEquals(60, MysqlCodec.getMysqlResultSetFieldLength(mapType));
-        Assertions.assertEquals(0, mapType.getMysqlResultSetFieldDecimals());
+        Assertions.assertEquals(0, MysqlCodec.getMysqlResultSetFieldDecimals(mapType));
         Assertions.assertEquals(33, MysqlCodec.getMysqlResultSetFieldCharsetIndex(mapType));
 
         StructField structField = new StructField("a", TypeFactory.createType(PrimitiveType.INT));
@@ -193,7 +193,7 @@ public class TypeTest {
         StructType structType = new StructType(structFields);
         // default 20 * 3
         Assertions.assertEquals(60, MysqlCodec.getMysqlResultSetFieldLength(structType));
-        Assertions.assertEquals(0, structType.getMysqlResultSetFieldDecimals());
+        Assertions.assertEquals(0, MysqlCodec.getMysqlResultSetFieldDecimals(structType));
         Assertions.assertEquals(33, MysqlCodec.getMysqlResultSetFieldCharsetIndex(structType));
     }
 

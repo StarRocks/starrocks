@@ -25,6 +25,7 @@ import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import com.starrocks.type.MapType;
 import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.Type;
 
 import java.util.List;
 
@@ -32,7 +33,6 @@ import static com.starrocks.connector.metadata.TableMetaMetadata.METADATA_DB_NAM
 import static com.starrocks.type.Type.ARRAY_BIGINT;
 import static com.starrocks.type.Type.ARRAY_INT;
 import static com.starrocks.type.TypeFactory.createType;
-import static com.starrocks.type.TypeFactory.createVarcharType;
 
 public class IcebergFilesTable extends MetadataTable {
     public static final String TABLE_NAME = "iceberg_files_table";
@@ -50,8 +50,8 @@ public class IcebergFilesTable extends MetadataTable {
                 Table.TableType.METADATA,
                 builder()
                         .column("content", createType(PrimitiveType.INT))
-                        .column("file_path", createVarcharType())
-                        .column("file_format", createVarcharType())
+                        .column("file_path", Type.VARCHAR)
+                        .column("file_format", Type.VARCHAR)
                         .column("spec_id", createType(PrimitiveType.INT))
                         .column("record_count", createType(PrimitiveType.BIGINT))
                         .column("file_size_in_bytes", createType(PrimitiveType.BIGINT))
@@ -60,8 +60,8 @@ public class IcebergFilesTable extends MetadataTable {
                         .column("null_value_counts", new MapType(
                                 createType(PrimitiveType.INT), createType(PrimitiveType.BIGINT)))
                         .column("nan_value_counts", new MapType(createType(PrimitiveType.INT), createType(PrimitiveType.BIGINT)))
-                        .column("lower_bounds", new MapType(createType(PrimitiveType.INT), createVarcharType()))
-                        .column("upper_bounds", new MapType(createType(PrimitiveType.INT), createVarcharType()))
+                        .column("lower_bounds", new MapType(createType(PrimitiveType.INT), Type.VARCHAR))
+                        .column("upper_bounds", new MapType(createType(PrimitiveType.INT), Type.VARCHAR))
                         .column("split_offsets", ARRAY_BIGINT)
                         .column("sort_id", createType(PrimitiveType.INT))
                         .column("equality_ids", ARRAY_INT)

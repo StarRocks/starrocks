@@ -192,8 +192,8 @@ public class TypeManager {
         }
 
 
-        PrimitiveType t1ResultType = t1.getResultType().getPrimitiveType();
-        PrimitiveType t2ResultType = t2.getResultType().getPrimitiveType();
+        PrimitiveType t1ResultType = getResultType(t1).getPrimitiveType();
+        PrimitiveType t2ResultType = getResultType(t2).getPrimitiveType();
         // Following logical is compatible with MySQL.
         if ((t1ResultType == PrimitiveType.VARCHAR && t2ResultType == PrimitiveType.VARCHAR)) {
             return Type.VARCHAR;
@@ -215,6 +215,19 @@ public class TypeManager {
             return Type.LARGEINT;
         }
         return Type.DOUBLE;
+    }
+
+    private static Type getResultType(Type type) {
+        return switch (type.getPrimitiveType()) {
+            case BOOLEAN, TINYINT, SMALLINT, INT, BIGINT -> Type.BIGINT;
+            case LARGEINT -> Type.LARGEINT;
+            case FLOAT, DOUBLE -> Type.DOUBLE;
+            case DATE, DATETIME, TIME, CHAR, VARCHAR, HLL, BITMAP, PERCENTILE, JSON -> Type.VARCHAR;
+            case DECIMALV2 -> Type.DECIMALV2;
+            case DECIMAL32, DECIMAL64, DECIMAL128, DECIMAL256 -> type;
+            case FUNCTION -> Type.FUNCTION;
+            default -> Type.INVALID;
+        };
     }
 
     public static Type getCompatibleTypeForBinary(boolean isRangeCompare, Type type1, Type type2) {

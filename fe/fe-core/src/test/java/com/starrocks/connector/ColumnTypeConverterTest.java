@@ -300,7 +300,7 @@ public class ColumnTypeConverterTest {
         resType = ColumnTypeConverter.fromHiveType(typeStr);
         Assertions.assertNotEquals(resType, varcharType);
 
-        varcharType = TypeFactory.createVarcharType();
+        varcharType = Type.VARCHAR;
         typeStr = "varchar(-1)";
         resType = ColumnTypeConverter.fromHiveType(typeStr);
         Assertions.assertEquals(resType, varcharType);

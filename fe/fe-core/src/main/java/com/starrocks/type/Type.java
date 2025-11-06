@@ -40,7 +40,6 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSortedMap;
 import com.starrocks.catalog.combinator.AggStateDesc;
 
-import java.util.List;
 import java.util.stream.Collectors;
 
 /**
@@ -189,7 +188,7 @@ public abstract class Type implements Cloneable {
                     .addAll(DECIMAL_TYPES)
                     .build();
 
-    protected static final ImmutableList<Type> SUPPORTED_TYPES =
+    public static final ImmutableList<Type> SUPPORTED_TYPES =
             ImmutableList.<Type>builder()
                     .add(NULL)
                     .addAll(INTEGER_TYPES)
@@ -233,8 +232,6 @@ public abstract class Type implements Cloneable {
                             .collect(Collectors.toMap(Type::getPrimitiveType, x -> (ScalarType) x)))
                     .put(INVALID.getPrimitiveType(), INVALID)
                     .build();
-
-    // Removed getIntegerTypes() and getNumericTypes(); use INTEGER_TYPES and NUMERIC_TYPES directly.
 
     /**
      * The output of this is stored directly in the hive metastore as the column type.
@@ -370,66 +367,6 @@ public abstract class Type implements Cloneable {
 
     public boolean isValidMapKeyType() {
         return !isComplexType() && !isJsonType() && !isOnlyMetricType() && !isFunctionType();
-    }
-
-    public static List<Type> getSupportedTypes() {
-        return SUPPORTED_TYPES;
-    }
-
-    // TODO(dhc): fix this
-    public static Type fromPrimitiveType(PrimitiveType type) {
-        switch (type) {
-            case BOOLEAN:
-                return Type.BOOLEAN;
-            case TINYINT:
-                return Type.TINYINT;
-            case SMALLINT:
-                return Type.SMALLINT;
-            case INT:
-                return Type.INT;
-            case BIGINT:
-                return Type.BIGINT;
-            case LARGEINT:
-                return Type.LARGEINT;
-            case FLOAT:
-                return Type.FLOAT;
-            case DOUBLE:
-                return Type.DOUBLE;
-            case DATE:
-                return Type.DATE;
-            case DATETIME:
-                return Type.DATETIME;
-            case TIME:
-                return Type.TIME;
-            case DECIMALV2:
-                return Type.DECIMALV2;
-            case CHAR:
-                return Type.CHAR;
-            case VARCHAR:
-                return Type.VARCHAR;
-            case HLL:
-                return Type.HLL;
-            case BITMAP:
-                return Type.BITMAP;
-            case PERCENTILE:
-                return Type.PERCENTILE;
-            case DECIMAL32:
-                return Type.DECIMAL32;
-            case DECIMAL64:
-                return Type.DECIMAL64;
-            case DECIMAL128:
-                return Type.DECIMAL128;
-            case DECIMAL256:
-                return Type.DECIMAL256;
-            case JSON:
-                return Type.JSON;
-            case FUNCTION:
-                return Type.FUNCTION;
-            case VARBINARY:
-                return Type.VARBINARY;
-            default:
-                return null;
-        }
     }
 
     public boolean canApplyToNumeric() {
@@ -867,44 +804,6 @@ public abstract class Type implements Cloneable {
         }
     }
 
-    public Type getResultType() {
-        switch (this.getPrimitiveType()) {
-            case BOOLEAN:
-            case TINYINT:
-            case SMALLINT:
-            case INT:
-            case BIGINT:
-                return BIGINT;
-            case LARGEINT:
-                return LARGEINT;
-            case FLOAT:
-            case DOUBLE:
-                return DOUBLE;
-            case DATE:
-            case DATETIME:
-            case TIME:
-            case CHAR:
-            case VARCHAR:
-            case HLL:
-            case BITMAP:
-            case PERCENTILE:
-            case JSON:
-                return VARCHAR;
-            case DECIMALV2:
-                return DECIMALV2;
-            case DECIMAL32:
-            case DECIMAL64:
-            case DECIMAL128:
-            case DECIMAL256:
-                return this;
-            case FUNCTION:
-                return FUNCTION;
-            default:
-                return INVALID;
-
-        }
-    }
-
     public Type getNumResultType() {
         switch (getPrimitiveType()) {
             case BOOLEAN:
@@ -947,33 +846,6 @@ public abstract class Type implements Cloneable {
         }
     }
 
-    /**
-     * @return scalar scale if type is decimal
-     * 31 if type is float or double
-     * 0 others
-     * <p>
-     * https://dev.mysql.com/doc/internals/en/com-query-response.html#column-definition
-     * decimals (1) -- max shown decimal digits
-     * 0x00 for integers and static strings
-     * 0x1f for dynamic strings, double, float
-     * 0x00 to 0x51 for decimals
-     */
-    public int getMysqlResultSetFieldDecimals() {
-        switch (this.getPrimitiveType()) {
-            case DECIMALV2:
-            case DECIMAL32:
-            case DECIMAL64:
-            case DECIMAL128:
-            case DECIMAL256:
-                return ((ScalarType) this).getScalarScale();
-            case FLOAT:
-            case DOUBLE:
-                return 31;
-            default:
-                return 0;
-        }
-    }
-
     @Override
     public Type clone() {
         try {
@@ -985,18 +857,6 @@ public abstract class Type implements Cloneable {
         } catch (CloneNotSupportedException ex) {
             throw new Error("Something impossible just happened", ex);
         }
-    }
-
-    // getInnermostType() is only used for array
-    public static Type getInnermostType(Type type) {
-        if (type.isScalarType() || type.isStructType() || type.isMapType()) {
-            return type;
-        }
-        if (type.isArrayType()) {
-            return getInnermostType(((ArrayType) type).getItemType());
-        }
-
-        return null;
     }
 
     public String canonicalName() {

@@ -49,6 +49,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -92,9 +93,9 @@ public class RangePartitionPruner implements PartitionPruner {
         Column keyColumn = partitionColumns.get(columnIdx);
         PartitionColumnFilter filter = partitionColumnFilters.get(keyColumn.getName());
         if (null == filter) {
-            minKey.pushColumn(LiteralExpr.createInfinity(Type.fromPrimitiveType(keyColumn.getPrimitiveType()), false),
+            minKey.pushColumn(LiteralExpr.createInfinity(TypeFactory.createType(keyColumn.getPrimitiveType()), false),
                     keyColumn.getPrimitiveType());
-            maxKey.pushColumn(LiteralExpr.createInfinity(Type.fromPrimitiveType(keyColumn.getPrimitiveType()), true),
+            maxKey.pushColumn(LiteralExpr.createInfinity(TypeFactory.createType(keyColumn.getPrimitiveType()), true),
                     keyColumn.getPrimitiveType());
             List<Long> result;
             try {
@@ -126,7 +127,7 @@ public class RangePartitionPruner implements PartitionPruner {
                 if (lowerBound instanceof NullLiteral && upperBound instanceof NullLiteral) {
                     // replace Null with min value
                     LiteralExpr minKeyValue = LiteralExpr.createInfinity(
-                            Type.fromPrimitiveType(keyColumn.getPrimitiveType()), false);
+                            TypeFactory.createType(keyColumn.getPrimitiveType()), false);
                     minKey.pushColumn(minKeyValue, keyColumn.getPrimitiveType());
                     maxKey.pushColumn(minKeyValue, keyColumn.getPrimitiveType());
                 } else {
@@ -152,12 +153,12 @@ public class RangePartitionPruner implements PartitionPruner {
                 pushMinCount++;
                 if (filter.lowerBoundInclusive && columnIdx != lastColumnId) {
                     Column column = partitionColumns.get(columnIdx + 1);
-                    Type type = Type.fromPrimitiveType(column.getPrimitiveType());
+                    Type type = TypeFactory.createType(column.getPrimitiveType());
                     minKey.pushColumn(LiteralExpr.createInfinity(type, false), column.getPrimitiveType());
                     pushMinCount++;
                 }
             } else {
-                Type type = Type.fromPrimitiveType(keyColumn.getPrimitiveType());
+                Type type = TypeFactory.createType(keyColumn.getPrimitiveType());
                 minKey.pushColumn(LiteralExpr.createInfinity(type, false), keyColumn.getPrimitiveType());
                 pushMinCount++;
             }
@@ -167,13 +168,13 @@ public class RangePartitionPruner implements PartitionPruner {
                 if (filter.upperBoundInclusive && columnIdx != lastColumnId) {
                     Column column = partitionColumns.get(columnIdx + 1);
                     maxKey.pushColumn(
-                            LiteralExpr.createInfinity(Type.fromPrimitiveType(column.getPrimitiveType()), true),
+                            LiteralExpr.createInfinity(TypeFactory.createType(column.getPrimitiveType()), true),
                             column.getPrimitiveType());
                     pushMaxCount++;
                 }
             } else {
                 maxKey.pushColumn(
-                        LiteralExpr.createInfinity(Type.fromPrimitiveType(keyColumn.getPrimitiveType()), true),
+                        LiteralExpr.createInfinity(TypeFactory.createType(keyColumn.getPrimitiveType()), true),
                         keyColumn.getPrimitiveType());
                 pushMaxCount++;
             }

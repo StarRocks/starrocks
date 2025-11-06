@@ -41,6 +41,7 @@ import com.starrocks.sql.common.mv.MVEagerRangePartitionMapper;
 import com.starrocks.sql.common.mv.MVLazyRangePartitionMapper;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import com.starrocks.utframe.StarRocksTestBase;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -107,7 +108,7 @@ public class SyncPartitionUtilsTest extends StarRocksTestBase {
         children.add(new StringLiteral(granularity));
         children.add(slotRef);
         FunctionCallExpr functionCallExpr = new FunctionCallExpr("date_trunc", children);
-        functionCallExpr.setType(Type.fromPrimitiveType(type));
+        functionCallExpr.setType(TypeFactory.createType(type));
         return functionCallExpr;
     }
     public static PCellSortedSet toPCellSortedSet(Map<String, Range<PartitionKey>> rangeMap) {

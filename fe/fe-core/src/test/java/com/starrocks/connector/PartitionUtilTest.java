@@ -176,8 +176,8 @@ public class PartitionUtilTest {
     public void testHiveTimestampPartitionNames() throws AnalysisException {
         List<String> partitionValues = Lists.newArrayList("2007-01-01 10:35:00.0", "2007-01-01 10:35:00.123");
         List<Column> columns = new ArrayList<>();
-        columns.add(new Column("a", Type.fromPrimitiveType(PrimitiveType.DATETIME)));
-        columns.add(new Column("b", Type.fromPrimitiveType(PrimitiveType.DATETIME)));
+        columns.add(new Column("a", TypeFactory.createType(PrimitiveType.DATETIME)));
+        columns.add(new Column("b", TypeFactory.createType(PrimitiveType.DATETIME)));
 
         PartitionKey partitionKey = PartitionUtil.createPartitionKey(partitionValues, columns, Table.TableType.HIVE);
         List<String> res = PartitionUtil.fromPartitionKey(partitionKey);
@@ -187,9 +187,9 @@ public class PartitionUtilTest {
         partitionValues = Lists.newArrayList("2007-01-01 10:35:00", "2007-01-01 10:35:00.00",
                 "2007-01-01 10:35:00.000");
         columns = new ArrayList<>();
-        columns.add(new Column("a", Type.fromPrimitiveType(PrimitiveType.DATETIME)));
-        columns.add(new Column("b", Type.fromPrimitiveType(PrimitiveType.DATETIME)));
-        columns.add(new Column("c", Type.fromPrimitiveType(PrimitiveType.DATETIME)));
+        columns.add(new Column("a", TypeFactory.createType(PrimitiveType.DATETIME)));
+        columns.add(new Column("b", TypeFactory.createType(PrimitiveType.DATETIME)));
+        columns.add(new Column("c", TypeFactory.createType(PrimitiveType.DATETIME)));
         partitionKey = PartitionUtil.createPartitionKey(partitionValues, columns, Table.TableType.HIVE);
         res = PartitionUtil.fromPartitionKey(partitionKey);
         Assertions.assertEquals("2007-01-01 10:35:00", res.get(0));
@@ -201,8 +201,8 @@ public class PartitionUtilTest {
     public void testHiveIntPartitionNames() throws Exception {
         List<String> partitionValues = Lists.newArrayList("2007-01-01", "01");
         List<Column> columns = new ArrayList<>();
-        columns.add(new Column("a", Type.fromPrimitiveType(PrimitiveType.DATE)));
-        columns.add(new Column("b", Type.fromPrimitiveType(PrimitiveType.INT)));
+        columns.add(new Column("a", TypeFactory.createType(PrimitiveType.DATE)));
+        columns.add(new Column("b", TypeFactory.createType(PrimitiveType.INT)));
 
         PartitionKey partitionKey = PartitionUtil.createPartitionKey(partitionValues, columns, Table.TableType.HIVE);
         List<String> res = PartitionUtil.fromPartitionKey(partitionKey);
@@ -211,8 +211,8 @@ public class PartitionUtilTest {
 
         partitionValues = Lists.newArrayList("125", "0125");
         columns = new ArrayList<>();
-        columns.add(new Column("a", Type.fromPrimitiveType(PrimitiveType.INT)));
-        columns.add(new Column("b", Type.fromPrimitiveType(PrimitiveType.INT)));
+        columns.add(new Column("a", TypeFactory.createType(PrimitiveType.INT)));
+        columns.add(new Column("b", TypeFactory.createType(PrimitiveType.INT)));
 
         partitionKey = PartitionUtil.createPartitionKey(partitionValues, columns, Table.TableType.HIVE);
         res = PartitionUtil.fromPartitionKey(partitionKey);
