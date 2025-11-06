@@ -33,7 +33,12 @@ public:
                        TResultSinkType::type sink_type, bool is_binary_format, TResultSinkFormatType::type format_type,
                        std::vector<ExprContext*> output_expr_ctxs, const std::shared_ptr<BufferControlBlock>& sender,
                        std::atomic<int32_t>& num_sinks, std::atomic<int64_t>& num_written_rows,
+<<<<<<< HEAD
                        FragmentContext* const fragment_ctx)
+=======
+                       const std::vector<std::string>& output_column_names, FragmentContext* const fragment_ctx,
+                       const RowDescriptor& row_desc)
+>>>>>>> 9188847e9e ([BugFix] Fix output column names for Arrow Flight SQL (#64950))
             : Operator(factory, id, "result_sink", plan_node_id, false, driver_sequence),
               _sink_type(sink_type),
               _is_binary_format(is_binary_format),
@@ -42,7 +47,13 @@ public:
               _sender(sender),
               _num_sinkers(num_sinks),
               _num_written_rows(num_written_rows),
+<<<<<<< HEAD
               _fragment_ctx(fragment_ctx) {}
+=======
+              _output_column_names(output_column_names),
+              _fragment_ctx(fragment_ctx),
+              _row_desc(row_desc) {}
+>>>>>>> 9188847e9e ([BugFix] Fix output column names for Arrow Flight SQL (#64950))
 
     ~ResultSinkOperator() override = default;
 
@@ -80,6 +91,7 @@ private:
     const std::shared_ptr<BufferControlBlock>& _sender;
     std::atomic<int32_t>& _num_sinkers;
     std::atomic<int64_t>& _num_written_rows;
+    const std::vector<std::string>& _output_column_names;
 
     std::shared_ptr<ResultWriter> _writer;
     mutable TFetchDataResultPtrs _fetch_data_result;
@@ -96,14 +108,25 @@ class ResultSinkOperatorFactory final : public OperatorFactory {
 public:
     ResultSinkOperatorFactory(int32_t id, size_t dop, TResultSinkType::type sink_type, bool is_binary_format,
                               TResultSinkFormatType::type format_type, std::vector<TExpr> t_output_expr,
+<<<<<<< HEAD
                               FragmentContext* const fragment_ctx)
+=======
+                              FragmentContext* const fragment_ctx, const RowDescriptor& row_desc,
+                              std::vector<std::string> output_column_names)
+>>>>>>> 9188847e9e ([BugFix] Fix output column names for Arrow Flight SQL (#64950))
             : OperatorFactory(id, "result_sink", Operator::s_pseudo_plan_node_id_for_final_sink),
               _dop(dop),
               _sink_type(sink_type),
               _is_binary_format(is_binary_format),
               _format_type(format_type),
               _t_output_expr(std::move(t_output_expr)),
+<<<<<<< HEAD
               _fragment_ctx(fragment_ctx) {}
+=======
+              _fragment_ctx(fragment_ctx),
+              _row_desc(row_desc),
+              _output_column_names(std::move(output_column_names)) {}
+>>>>>>> 9188847e9e ([BugFix] Fix output column names for Arrow Flight SQL (#64950))
 
     ~ResultSinkOperatorFactory() override = default;
 
@@ -115,7 +138,12 @@ public:
         _increment_num_sinkers_no_barrier();
         return std::make_shared<ResultSinkOperator>(this, _id, _plan_node_id, driver_sequence, _sink_type,
                                                     _is_binary_format, _format_type, _output_expr_ctxs, _sender,
+<<<<<<< HEAD
                                                     _num_sinkers, _num_written_rows, _fragment_ctx);
+=======
+                                                    _num_sinkers, _num_written_rows, _output_column_names,
+                                                    _fragment_ctx, _row_desc);
+>>>>>>> 9188847e9e ([BugFix] Fix output column names for Arrow Flight SQL (#64950))
     }
 
     Status prepare(RuntimeState* state) override;
@@ -141,6 +169,12 @@ private:
     std::atomic<int64_t> _num_written_rows = 0;
 
     FragmentContext* const _fragment_ctx;
+<<<<<<< HEAD
+=======
+    const RowDescriptor& _row_desc;
+
+    const std::vector<std::string> _output_column_names;
+>>>>>>> 9188847e9e ([BugFix] Fix output column names for Arrow Flight SQL (#64950))
 };
 
 } // namespace pipeline

@@ -18,7 +18,13 @@
 
 namespace starrocks {
 
+<<<<<<< HEAD:be/src/exec/hdfs_scanner_partition.h
 class HdfsPartitionScanner final : public HdfsScanner {
+=======
+class ResultBufferMgr;
+
+class ArrowFlightBatchReader final : public arrow::RecordBatchReader {
+>>>>>>> 9188847e9e ([BugFix] Fix output column names for Arrow Flight SQL (#64950)):be/src/exec/arrow_flight_batch_reader.h
 public:
     HdfsPartitionScanner() = default;
     ~HdfsPartitionScanner() override = default;

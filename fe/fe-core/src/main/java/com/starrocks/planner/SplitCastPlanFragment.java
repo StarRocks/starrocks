@@ -16,39 +16,36 @@ package com.starrocks.planner;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TResultSinkType;
 
 import java.util.List;
 import java.util.stream.Collectors;
 
-/*
- *  For Multi-cast, like:
- *
- *  Fragment-2              Fragment-3
- *      \                       /
- *   shuffle by v1      shuffle by v2
- *             \         /
- *              Fragment-1
- *
- */
-public class MultiCastPlanFragment extends PlanFragment {
+public class SplitCastPlanFragment extends PlanFragment {
     private final List<ExchangeNode> destNodeList = Lists.newArrayList();
+    private final List<Expr> splitExprs = Lists.newArrayList();
+
+    private final List<DataPartition> outputPartitions = Lists.newArrayList();
 
     public List<ExchangeNode> getDestNodeList() {
         return destNodeList;
     }
 
-    public MultiCastPlanFragment(PlanFragment planFragment) {
+    public List<Expr> getSplitExprs() {
+        return splitExprs;
+    }
+
+    public SplitCastPlanFragment(PlanFragment planFragment) {
         super(planFragment.fragmentId, planFragment.planRoot, planFragment.getDataPartition());
-        // Use random, only send to self
-        this.outputPartition = DataPartition.RANDOM;
+        this.outputPartition = DataPartition.HYBRID_HASH_PARTITIONED;
         this.children.addAll(planFragment.getChildren());
         this.setLoadGlobalDicts(planFragment.loadGlobalDicts);
         this.setQueryGlobalDicts(planFragment.queryGlobalDicts);
-        this.setQueryGlobalDictExprs(planFragment.queryGlobalDictExprs);
     }
 
+    // get the list of destination fragments by exchange nodes
     public List<PlanFragment> getDestFragmentList() {
         return destNodeList.stream().map(PlanNode::getFragment).collect(Collectors.toList());
     }
@@ -57,9 +54,8 @@ public class MultiCastPlanFragment extends PlanFragment {
         return destNodeList.get(index);
     }
 
-    @Override
-    public void createDataSink(TResultSinkType resultSinkType) {
-        createDataSink(resultSinkType, null);
+    public List<DataPartition> getOutputPartitions() {
+        return outputPartitions;
     }
 
     @Override
@@ -68,19 +64,25 @@ public class MultiCastPlanFragment extends PlanFragment {
             return;
         }
 
-        Preconditions.checkState(!destNodeList.isEmpty(), "MultiCastPlanFragment don't support return result");
+        Preconditions.checkState(!destNodeList.isEmpty(), "SplitPlanFragment don't support return result");
 
-        MultiCastDataSink multiCastDataSink = new MultiCastDataSink();
-        this.sink = multiCastDataSink;
+        SplitCastDataSink splitCastDataSink = new SplitCastDataSink();
 
-        for (ExchangeNode f : destNodeList) {
-            DataStreamSink streamSink = new DataStreamSink(f.getId());
-            streamSink.setPartition(DataPartition.RANDOM);
+        this.sink = splitCastDataSink;
+
+        for (int i = 0; i < destNodeList.size(); i++) {
+            DataStreamSink streamSink = new DataStreamSink(destNodeList.get(i).getId());
+            streamSink.setPartition(outputPartitions.get(i));
             streamSink.setFragment(this);
-            streamSink.setOutputColumnIds(f.getReceiveColumns());
-            multiCastDataSink.getDataStreamSinks().add(streamSink);
-            multiCastDataSink.getDestinations().add(Lists.newArrayList());
+            splitCastDataSink.getDataStreamSinks().add(streamSink);
+            splitCastDataSink.getDestinations().add(Lists.newArrayList());
+            splitCastDataSink.getSplitExprs().add(splitExprs.get(i));
         }
+    }
+
+    @Override
+    public void createDataSink(TResultSinkType resultSinkType) {
+        createDataSink(resultSinkType, null);
     }
 
     @Override
@@ -111,7 +113,9 @@ public class MultiCastPlanFragment extends PlanFragment {
 
     @Override
     public void reset() {
-        MultiCastDataSink multiSink = (MultiCastDataSink) getSink();
-        multiSink.getDestinations().forEach(List::clear);
+        SplitCastDataSink splitCastDataSink = (SplitCastDataSink) getSink();
+        // clear destinations before retry
+        splitCastDataSink.getDestinations().forEach(List::clear);
     }
 }
+

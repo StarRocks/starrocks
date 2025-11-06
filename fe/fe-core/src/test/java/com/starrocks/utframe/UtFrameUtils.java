@@ -623,14 +623,23 @@ public class UtFrameUtils {
         if (statementBase instanceof DmlStmt) {
             if (statementBase instanceof InsertStmt) {
                 scheduler = new DefaultCoordinator.Factory().createInsertScheduler(context,
+<<<<<<< HEAD
                         execPlan.getFragments(), execPlan.getScanNodes(),
                         execPlan.getDescTbl().toThrift());
+=======
+                            execPlan.getFragments(), execPlan.getScanNodes(),
+                            execPlan.getDescTbl().toThrift(), execPlan);
+>>>>>>> 9188847e9e ([BugFix] Fix output column names for Arrow Flight SQL (#64950))
             } else {
                 throw new RuntimeException("can only handle insert DML");
             }
         } else {
             scheduler = new DefaultCoordinator.Factory().createQueryScheduler(context,
+<<<<<<< HEAD
                     execPlan.getFragments(), execPlan.getScanNodes(), execPlan.getDescTbl().toThrift());
+=======
+                        execPlan.getFragments(), execPlan.getScanNodes(), execPlan.getDescTbl().toThrift(), execPlan);
+>>>>>>> 9188847e9e ([BugFix] Fix output column names for Arrow Flight SQL (#64950))
         }
 
         return scheduler;

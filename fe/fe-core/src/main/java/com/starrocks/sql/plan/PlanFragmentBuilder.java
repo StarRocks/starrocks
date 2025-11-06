@@ -367,7 +367,12 @@ public class PlanFragmentBuilder {
     private static ExecPlan finalizeFragments(ExecPlan execPlan, TResultSinkType resultSinkType) {
         List<PlanFragment> fragments = execPlan.getFragments();
         for (PlanFragment fragment : fragments) {
+<<<<<<< HEAD
             fragment.createDataSink(resultSinkType);
+=======
+            fragment.createDataSink(resultSinkType, execPlan);
+            fragment.setCollectExecStatsIds(execPlan.getCollectExecStatsIds());
+>>>>>>> 9188847e9e ([BugFix] Fix output column names for Arrow Flight SQL (#64950))
         }
         Collections.reverse(fragments);
         // assign colocate groups to plan fragment

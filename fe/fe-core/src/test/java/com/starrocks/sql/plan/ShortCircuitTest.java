@@ -109,8 +109,13 @@ public class ShortCircuitTest extends PlanTestBase {
         scanNode.setSelectedPartitionIds(selectPartitionIds);
 
         DefaultCoordinator coord = new DefaultCoordinator.Factory().createQueryScheduler(connectContext,
+<<<<<<< HEAD
                 execPlan.getFragments(), ImmutableList.of(scanNode), execPlan.getDescTbl().toThrift());
         coord.startScheduling();
+=======
+                execPlan.getFragments(), ImmutableList.of(scanNode), execPlan.getDescTbl().toThrift(), execPlan);
+        coord.exec();
+>>>>>>> 9188847e9e ([BugFix] Fix output column names for Arrow Flight SQL (#64950))
 
         ExecutionFragment execFragment = coord.getExecutionDAG().getRootFragment();
         Assert.assertEquals(true, execFragment.getPlanFragment().isShortCircuit());
@@ -149,9 +154,15 @@ public class ShortCircuitTest extends PlanTestBase {
                 WarehouseManager.DEFAULT_WAREHOUSE_ID);
 
         DefaultCoordinator coord = new DefaultCoordinator.Factory().createQueryScheduler(connectContext,
+<<<<<<< HEAD
                 execPlan.getFragments(), ImmutableList.of(scanNode), execPlan.getDescTbl().toThrift());
         coord.startScheduling();
         Assert.assertTrue(coord.getNext().isEos());
+=======
+                execPlan.getFragments(), ImmutableList.of(scanNode), execPlan.getDescTbl().toThrift(), execPlan);
+        coord.exec();
+        Assertions.assertTrue(coord.getNext().isEos());
+>>>>>>> 9188847e9e ([BugFix] Fix output column names for Arrow Flight SQL (#64950))
     }
 
     @AfterClass

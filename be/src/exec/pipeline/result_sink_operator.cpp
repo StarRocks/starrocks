@@ -57,7 +57,15 @@ Status ResultSinkOperator::prepare(RuntimeState* state) {
         // query, the result is serialized in packed binary format. FE can parse the result row into object
         // via ORM(Object-Relation Mapping) mechanism. In the future, all the internal queries should be
         // unified to adopt this result sink type.
+<<<<<<< HEAD
         _writer = std::make_shared<CustomizedResultWriter>(_sender.get(), _output_expr_ctxs, _profile.get());
+=======
+        _writer = std::make_shared<CustomizedResultWriter>(_sender.get(), _output_expr_ctxs, profile);
+        break;
+    case TResultSinkType::ARROW_FLIGHT_PROTOCAL:
+        _writer = std::make_shared<ArrowResultWriter>(_sender.get(), _output_expr_ctxs, _output_column_names, profile,
+                                                      _row_desc);
+>>>>>>> 9188847e9e ([BugFix] Fix output column names for Arrow Flight SQL (#64950))
         break;
     default:
         return Status::InternalError("Unknown result sink type");

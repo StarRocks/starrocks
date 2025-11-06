@@ -81,10 +81,19 @@ public:
 
     bool isBinaryFormat() const { return _is_binary_format; }
 
+<<<<<<< HEAD
+=======
+    const RowDescriptor& get_row_desc() const { return _row_desc; }
+
+    const std::vector<std::string>& get_output_column_names() const { return _output_column_names; }
+
+>>>>>>> 9188847e9e ([BugFix] Fix output column names for Arrow Flight SQL (#64950))
 private:
     Status prepare_exprs(RuntimeState* state);
     TResultSinkType::type _sink_type;
     bool _is_binary_format;
+    // It is non-empty only for ARROW_FLIGHT_PROTOCAL.
+    std::vector<std::string> _output_column_names;
     // set format_type when sink type is HTTP
     TResultSinkFormatType::type _format_type;
     // set file options when sink type is FILE

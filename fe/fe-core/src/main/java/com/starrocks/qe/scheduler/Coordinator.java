@@ -52,25 +52,20 @@ public abstract class Coordinator {
         Coordinator createQueryScheduler(ConnectContext context,
                                          List<PlanFragment> fragments,
                                          List<ScanNode> scanNodes,
-                                         TDescriptorTable descTable);
+                                         TDescriptorTable descTable,
+                                         ExecPlan execPlan);
 
         Coordinator createInsertScheduler(ConnectContext context,
                                           List<PlanFragment> fragments,
                                           List<ScanNode> scanNodes,
-                                          TDescriptorTable descTable);
+                                          TDescriptorTable descTable,
+                                          ExecPlan execPlan);
 
         Coordinator createBrokerLoadScheduler(LoadPlanner loadPlanner);
 
         Coordinator createStreamLoadScheduler(LoadPlanner loadPlanner);
 
         Coordinator createSyncStreamLoadScheduler(StreamLoadPlanner planner, TNetworkAddress address);
-
-        Coordinator createNonPipelineBrokerLoadScheduler(Long jobId, TUniqueId queryId, DescriptorTable descTable,
-                                                         List<PlanFragment> fragments,
-                                                         List<ScanNode> scanNodes, String timezone, long startTime,
-                                                         Map<String, String> sessionVariables,
-                                                         ConnectContext context, long execMemLimit,
-                                                         long warehouseId);
 
         Coordinator createBrokerExportScheduler(Long jobId, TUniqueId queryId, DescriptorTable descTable,
                                                 List<PlanFragment> fragments,
@@ -80,8 +75,13 @@ public abstract class Coordinator {
                                                 long warehouseId);
 
         Coordinator createRefreshDictionaryCacheScheduler(ConnectContext context, TUniqueId queryId,
+<<<<<<< HEAD
                                                 DescriptorTable descTable, List<PlanFragment> fragments,
                                                 List<ScanNode> scanNodes);
+=======
+                                                          DescriptorTable descTable, List<PlanFragment> fragments,
+                                                          List<ScanNode> scanNodes, ExecPlan execPlan);
+>>>>>>> 9188847e9e ([BugFix] Fix output column names for Arrow Flight SQL (#64950))
     }
 
     // ------------------------------------------------------------------------------------
