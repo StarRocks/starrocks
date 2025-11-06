@@ -21,9 +21,6 @@ Paimon Catalog 是一种 External Catalog。通过 Paimon Catalog，您不需要
 
 Paimon Catalog 仅支持查询 Paimon 数据，不支持针对 Paimon 的写/删操作。
 
-<<<<<<< HEAD
-## 准备工作
-=======
 ## Paimon to StarRocks data types
 
 | Paimon Type           | StarRocks Type              |
@@ -49,7 +46,6 @@ Paimon Catalog 仅支持查询 Paimon 数据，不支持针对 Paimon 的写/删
 | `ROW/STRUCT`          | `STRUCT<field1:type1, ...>` |
 
 ## 集成准备
->>>>>>> 4514ba5264 ([Doc] Document Paimon to StarRocks data type mappings (#63972))
 
 在创建 Paimon Catalog 之前，请确保 StarRocks 集群能够正常访问 Paimon 的文件存储及元数据服务。
 
