@@ -990,24 +990,13 @@ public class ShowResultMetaFactory implements AstVisitor<ShowResultSetMetaData, 
     @Override
     public ShowResultSetMetaData visitShowDataDistributionStatement(ShowDataDistributionStmt statement, Void context) {
         return ShowResultSetMetaData.builder()
-<<<<<<< HEAD
                 .addColumn(new Column("PartitionName", ScalarType.createVarchar(30)))
                 .addColumn(new Column("SubPartitionId", ScalarType.createVarchar(30)))
                 .addColumn(new Column("MaterializedIndexName", ScalarType.createVarchar(30)))
-                .addColumn(new Column("VirtualBuckets", ScalarType.createVarchar(30)))
                 .addColumn(new Column("RowCount", ScalarType.createVarchar(30)))
                 .addColumn(new Column("RowCount%", ScalarType.createVarchar(10)))
                 .addColumn(new Column("DataSize", ScalarType.createVarchar(30)))
                 .addColumn(new Column("DataSize%", ScalarType.createVarchar(10)))
-=======
-                .addColumn(new Column("PartitionName", TypeFactory.createVarchar(30)))
-                .addColumn(new Column("SubPartitionId", TypeFactory.createVarchar(30)))
-                .addColumn(new Column("MaterializedIndexName", TypeFactory.createVarchar(30)))
-                .addColumn(new Column("RowCount", TypeFactory.createVarchar(30)))
-                .addColumn(new Column("RowCount%", TypeFactory.createVarchar(10)))
-                .addColumn(new Column("DataSize", TypeFactory.createVarchar(30)))
-                .addColumn(new Column("DataSize%", TypeFactory.createVarchar(10)))
->>>>>>> 895a025fa6 ([Refactor] Remove virtual bucket and simplify data distribution and bucket pruning (#64816))
                 .build();
     }
 
