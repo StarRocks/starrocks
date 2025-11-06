@@ -168,7 +168,7 @@ public class ExprToThriftVisitorTest {
 
             // References
             cases.add(nodeCase("SlotRef", ExprCaseFactory::buildSlotRef, TExprNodeType.SLOT_REF,
-                    node -> Assertions.assertEquals(9, node.getOutput_column())));
+                    node -> Assertions.assertEquals(0, node.getOutput_column())));
             cases.add(nodeCase("PlaceHolderExpr", ExprCaseFactory::buildPlaceHolderExpr,
                     TExprNodeType.PLACEHOLDER_EXPR));
             cases.add(exceptionCase("FieldReference", ExprCaseFactory::buildFieldReference,
@@ -493,7 +493,6 @@ public class ExprToThriftVisitorTest {
             SlotRef slotRef = new SlotRef(descriptor);
             slotRef.setType(Type.INT);
             slotRef.setOriginType(Type.INT);
-            slotRef.outputColumn = 9;
             return slotRef;
         }
 

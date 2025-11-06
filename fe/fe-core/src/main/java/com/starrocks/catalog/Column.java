@@ -135,8 +135,6 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     private DefaultExpr defaultExpr;
     @SerializedName(value = "comment")
     private String comment;
-    @SerializedName(value = "stats")
-    private ColumnStats stats;     // cardinality and selectivity etc.
     // Define expr may exist in two forms, one is analyzed, and the other is not analyzed.
     // Currently, analyzed define expr is only used when creating materialized views, so the define expr in RollupJob must be
     // analyzed.
@@ -161,7 +159,6 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         this.type = Type.NULL;
         this.isAggregationTypeImplicit = false;
         this.isKey = false;
-        this.stats = new ColumnStats();
         this.uniqueId = -1;
     }
 
@@ -243,7 +240,6 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         }
         this.isAutoIncrement = false;
         this.comment = comment;
-        this.stats = new ColumnStats();
         this.generatedColumnExpr = null;
         this.uniqueId = columnUniqId;
         this.physicalName = physicalName;
@@ -261,7 +257,6 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         this.isAllowNull = column.isAllowNull();
         this.defaultValue = column.getDefaultValue();
         this.comment = column.getComment();
-        this.stats = column.getStats();
         this.defineExpr = column.getDefineExpr();
         this.defaultExpr = column.defaultExpr;
         Preconditions.checkArgument(this.type.isComplexType() ||
@@ -404,14 +399,6 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
 
     public String getDefaultValue() {
         return this.defaultValue;
-    }
-
-    public void setStats(ColumnStats stats) {
-        this.stats = stats;
-    }
-
-    public ColumnStats getStats() {
-        return this.stats;
     }
 
     public void setComment(String comment) {
