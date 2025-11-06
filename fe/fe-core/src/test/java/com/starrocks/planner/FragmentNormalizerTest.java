@@ -32,6 +32,7 @@ import com.starrocks.sql.ast.expression.LargeIntLiteral;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -80,7 +81,7 @@ public class FragmentNormalizerTest {
 
     @Test
     public void testToClosedAndOpenRangeForDate() throws AnalysisException {
-        Column partitionColumn = new Column("dt", Type.fromPrimitiveType(PrimitiveType.DATE));
+        Column partitionColumn = new Column("dt", TypeFactory.createType(PrimitiveType.DATE));
         LiteralExpr lower = new DateLiteral(2022, 1, 1);
         LiteralExpr lowerSucc = new DateLiteral(2022, 1, 2);
         LiteralExpr upper = new DateLiteral(2022, 1, 10);
@@ -90,7 +91,7 @@ public class FragmentNormalizerTest {
 
     @Test
     public void testToClosedAndOpenRangeForDatetime() throws AnalysisException {
-        Column partitionColumn = new Column("ts", Type.fromPrimitiveType(PrimitiveType.DATETIME));
+        Column partitionColumn = new Column("ts", TypeFactory.createType(PrimitiveType.DATETIME));
         LiteralExpr lower = new DateLiteral(2022, 1, 1, 11, 23, 59, 0);
         LiteralExpr lowerSucc = new DateLiteral(2022, 1, 1, 11, 24, 0, 0);
         LiteralExpr upper = new DateLiteral(2022, 1, 10, 23, 59, 59, 0);
@@ -108,7 +109,7 @@ public class FragmentNormalizerTest {
                 PrimitiveType.TINYINT,
         };
         for (PrimitiveType ptype : integerPtypes) {
-            Type type = Type.fromPrimitiveType(ptype);
+            Type type = TypeFactory.createType(ptype);
             long secondMaxValue = (1L << (ptype.getTypeSize() * 8 - 1)) - 2;
             Column partitionColumn = new Column("k0", type);
             LiteralExpr lower = new IntLiteral(1, type);
@@ -121,7 +122,7 @@ public class FragmentNormalizerTest {
 
     @Test
     public void testToClosedAndOpenRangeForLargeInt() throws AnalysisException {
-        Column partitionColumn = new Column("k0", Type.fromPrimitiveType(PrimitiveType.LARGEINT));
+        Column partitionColumn = new Column("k0", TypeFactory.createType(PrimitiveType.LARGEINT));
         LiteralExpr lower = new LargeIntLiteral("1");
         LiteralExpr lowerSucc = new LargeIntLiteral("2");
         LiteralExpr upper =
