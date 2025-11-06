@@ -142,6 +142,8 @@ public:
 
     void append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) override;
 
+    void append_with_filter(const Column& src, const uint8_t* filter, size_t count) override;
+
     void append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) override;
 
     [[nodiscard]] bool append_nulls(size_t count __attribute__((unused))) override { return false; }

@@ -37,6 +37,7 @@
 #include <memory>
 
 #include "column/binary_column.h"
+#include "column/column_helper.h"
 #include "column/nullable_column.h"
 #include "common/logging.h"
 #include "gutil/casts.h"
@@ -289,9 +290,9 @@ Status BinaryDictPageDecoder<Type>::next_batch(const SparseRange<>& range, Colum
 template <LogicalType Type>
 Status BinaryDictPageDecoder<Type>::next_batch_with_filter(
         Column* column, const SparseRange<>& range, const std::vector<const ColumnPredicate*>& compound_and_predicates,
-        NullColumn* null, uint8_t* selection, uint16_t* selected_idx, bool* data_filtered) {
+        const uint8_t* null_data, uint8_t* selection, uint16_t* selected_idx, bool* data_filtered) {
     if (_encoding_type == PLAIN_ENCODING) {
-        return _data_page_decoder->next_batch_with_filter(column, range, compound_and_predicates, null, selection,
+        return _data_page_decoder->next_batch_with_filter(column, range, compound_and_predicates, null_data, selection,
                                                           selected_idx, data_filtered);
     }
 
@@ -302,7 +303,39 @@ Status BinaryDictPageDecoder<Type>::next_batch_with_filter(
 
     DCHECK(_parsed);
     DCHECK(_dict_decoder != nullptr) << "dict decoder pointer is nullptr";
-    DCHECK(null == nullptr); // don't support nullable column right now
+    DCHECK(null_data == nullptr || column->is_nullable());
+
+    if (null_data != nullptr) {
+        *data_filtered = true;
+
+        // Create temporary nullable column for predicate evaluation
+        auto temp_column = column->clone_empty();
+        auto temp_nullable_column = down_cast<NullableColumn*>(temp_column.get());
+        auto temp_data_column = temp_nullable_column->mutable_data_column();
+        auto& temp_null_column = temp_nullable_column->null_column_ref();
+
+        // Read data column and null column
+        size_t num_rows = range.span_size();
+        temp_null_column.append_numbers(null_data, num_rows);
+        RETURN_IF_ERROR(next_batch(range, temp_data_column));
+        DCHECK(temp_null_column.size() == num_rows);
+        DCHECK(temp_data_column->size() == num_rows);
+
+        // Evaluate predicates on the temporary column
+        RETURN_IF_ERROR(compound_and_predicates_evaluate(compound_and_predicates, temp_column.get(), selection,
+                                                         selected_idx, 0, num_rows));
+
+        uint32_t selected_count = SIMD::count_nonzero(selection, num_rows);
+        if (selected_count == 0) {
+            return Status::OK();
+        }
+
+        // Append selected rows using append_with_filter
+        auto nullable_column = down_cast<NullableColumn*>(column);
+        nullable_column->append_with_filter(*temp_nullable_column, selection, num_rows);
+
+        return Status::OK();
+    }
 
     *data_filtered = true;
 
@@ -366,10 +399,6 @@ Status BinaryDictPageDecoder<Type>::next_batch_with_filter(
         if (code < dict_size && dict_selection[code]) {
             selection[i] = 1;
             Slice element = _dict_decoder->string_at_index(code);
-            if constexpr (Type == TYPE_CHAR) {
-                // Strip trailing '\x00' for CHAR type
-                element.size = strnlen(element.data, element.size);
-            }
             selected_slices.emplace_back(element);
         } else {
             selection[i] = 0;
