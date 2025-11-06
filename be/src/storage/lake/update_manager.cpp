@@ -549,7 +549,7 @@ Status UpdateManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_writ
         if (insert_rowids.empty()) {
             continue;
         }
-        const size_t batch_size = std::max<size_t>(1, config::column_mode_partial_update_batch_size);
+        const size_t batch_size = std::max<size_t>(1, config::column_mode_partial_update_insert_batch_size);
 
         SegmentWriterOptions wopts;
         WritableFileOptions fopts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
