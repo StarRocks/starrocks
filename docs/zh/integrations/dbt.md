@@ -2,15 +2,13 @@
 displayed_sidebar: docs
 ---
 
-import Experimental from '../_assets/commonMarkdown/_experimental.mdx'
-
 # dbt
 
 `dbt-starrocks` 允许使用 `dbt` 在 StarRocks 中使用 dbt 的建模模式和最佳实践来转换数据。
 
 `dbt-starrocks` [GitHub repo](https://github.com/StarRocks/dbt-starrocks).
 
-<Experimental />
+该功能为试验性功能。
 
 ## 支持的功能
 
