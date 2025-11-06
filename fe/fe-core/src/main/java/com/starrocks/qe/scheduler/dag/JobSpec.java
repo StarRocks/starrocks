@@ -258,50 +258,6 @@ public class JobSpec {
                     .build();
         }
 
-<<<<<<< HEAD
-        public static JobSpec fromNonPipelineBrokerLoadJobSpec(ConnectContext context,
-                                                               Long loadJobId, TUniqueId queryId,
-                                                               DescriptorTable descTable,
-                                                               List<PlanFragment> fragments,
-                                                               List<ScanNode> scanNodes,
-                                                               String timezone,
-                                                               long startTime,
-                                                               Map<String, String> sessionVariables,
-                                                               long execMemLimit,
-                                                               long warehouseId) {
-            TQueryOptions queryOptions = new TQueryOptions();
-            setSessionVariablesToLoadQueryOptions(queryOptions, sessionVariables);
-            queryOptions.setQuery_type(TQueryType.LOAD);
-            /*
-             * For broker load job, user only need to set mem limit by 'exec_mem_limit' property.
-             * And the variable 'load_mem_limit' does not make any effect.
-             * However, in order to ensure the consistency of semantics when executing on the BE side,
-             * and to prevent subsequent modification from incorrectly setting the load_mem_limit,
-             * here we use exec_mem_limit to directly override the load_mem_limit property.
-             */
-            queryOptions.setMem_limit(execMemLimit);
-            queryOptions.setLoad_mem_limit(execMemLimit);
-
-            TQueryGlobals queryGlobals = genQueryGlobals(Instant.ofEpochMilli(startTime), timezone);
-
-            return new Builder()
-                    .loadJobId(loadJobId)
-                    .queryId(queryId)
-                    .fragments(fragments)
-                    .scanNodes(scanNodes)
-                    .descTable(descTable.toThrift())
-                    .enableStreamPipeline(false)
-                    .isBlockQuery(true)
-                    .needReport(true)
-                    .queryGlobals(queryGlobals)
-                    .queryOptions(queryOptions)
-                    .commonProperties(context)
-                    .warehouseId(warehouseId)
-                    .build();
-        }
-
-=======
->>>>>>> 9188847e9e ([BugFix] Fix output column names for Arrow Flight SQL (#64950))
         public static JobSpec fromSyncStreamLoadSpec(StreamLoadPlanner planner) {
             TExecPlanFragmentParams params = planner.getExecPlanFragmentParams();
             TUniqueId queryId = params.getParams().getFragment_instance_id();

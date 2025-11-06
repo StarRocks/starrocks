@@ -2496,12 +2496,7 @@ public class StmtExecutor {
 
         try {
             coord = getCoordinatorFactory().createInsertScheduler(
-<<<<<<< HEAD
-                    context, execPlan.getFragments(), execPlan.getScanNodes(), execPlan.getDescTbl().toThrift());
-
-=======
                     context, execPlan.getFragments(), execPlan.getScanNodes(), execPlan.getDescTbl().toThrift(), execPlan);
->>>>>>> 9188847e9e ([BugFix] Fix output column names for Arrow Flight SQL (#64950))
             List<ScanNode> scanNodes = execPlan.getScanNodes();
 
             boolean needQuery = false;
