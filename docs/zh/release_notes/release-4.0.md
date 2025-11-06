@@ -4,6 +4,12 @@ displayed_sidebar: docs
 
 # StarRocks version 4.0
 
+:::warning
+
+升级至 v4.0 后，请勿直接将集群降级至 v3.5.0 和 v3.5.1，否则会导致元数据不兼容和 FE Crash。您必须降级到 v3.5.2 或更高版本以避免出现此问题。
+
+:::
+
 ## 4.0.0
 
 发布日期：2025 年 10 月 17 日
