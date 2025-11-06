@@ -1696,7 +1696,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
                 partitions == null ? STAR_STRING : Joiner.on(",").join(partitions.getPartitionNames()));
         jobProperties.put("columnToColumnExpr", columnDescs == null ? STAR_STRING : Joiner.on(",").join(columnDescs));
         jobProperties.put("whereExpr", whereExpr == null ? STAR_STRING : ExprToSql.toSql(whereExpr));
-        jobProperties.put("precedingFilterExpr", precedingFilterExpr == null ? STAR_STRING : ExprToSql.toSql(precedingFilterExpr));
+        jobProperties.put("precedingFilterExpr",
+                precedingFilterExpr == null ? STAR_STRING : ExprToSql.toSql(precedingFilterExpr));
         if (getFormat().equalsIgnoreCase("json")) {
             jobProperties.put("dataFormat", "json");
         } else {

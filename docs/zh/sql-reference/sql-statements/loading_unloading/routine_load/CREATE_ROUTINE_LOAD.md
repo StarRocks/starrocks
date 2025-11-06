@@ -85,8 +85,29 @@ CSV 格式数据的行分隔符。默认行分隔符是 `\n`。
 过滤条件。只有满足过滤条件的数据才能导入到 StarRocks。例如，如果您只想导入 `col1` 值大于 `100` 且 `col2` 值等于 `1000` 的行，可以使用 `PRECEDING FILTER col1 > 100 and col2 = 1000`。
 
 :::note
-过滤条件中指定的列可以不在目标表中存在。
+`PRECEDING FILTER` 相比于 `WHERE` 过滤条件，`PRECEDING FILTER` 是直接作用于源数据上，而 `WHERE` 过滤条件是作用于 StarRocks 表上的。
 :::
+
+例如，源数据包含如下数据：
+
+
+| id |  key  | value |
+| :-: |:-----:|:-----:|
+| 1 | hello | world |
+| 2 | star  | rocks |
+
+数据表为：
+```sql
+CREATE TABLE `t` (
+  `id` int,
+  `key` varchar(20)
+) engine = OLAP
+DISTRIBUTED BY HASH(`id`) BUCKETS 10;
+```
+
+创建 routine load 时，会设置 `COLUMNS id,key,value` 来表示数据和表列的映射关系，
+此时如果需要根据 key 来做过滤，可以在创建 routine load 的时候加上 `WHERE key = 'hello'`，也可以加上 `PRECEDING FILTER key = 'hello'`，
+但如果需要根据 value 来做过滤，只能通过 `PRECEDING FILTER` 来设置，因为 `value` 是仅存在于源数据中的映射列，并不存在于目标表中。
 
 `WHERE`
 
