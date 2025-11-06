@@ -158,6 +158,8 @@ public:
 
     void reserve_col(size_t n, Column* column) override;
 
+    bool support_push_down_predicate() const override { return Type != TYPE_CHAR; }
+
 private:
     Slice _data;
     std::unique_ptr<PageDecoder> _data_page_decoder;

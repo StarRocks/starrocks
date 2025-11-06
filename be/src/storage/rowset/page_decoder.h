@@ -100,8 +100,7 @@ public:
                                           const std::vector<const ColumnPredicate*>& compound_and_predicates,
                                           const uint8_t* null_data, uint8_t* selection, uint16_t* selected_idx,
                                           bool* data_filtered) {
-        *data_filtered = false;
-        return next_batch(range, column);
+        return Status::NotSupported("PageDecoder Not Support next_batch_with_filter");
     }
 
     /**
@@ -148,6 +147,10 @@ public:
     void set_page_handle(const std::shared_ptr<PageHandle>& page_handle) { _page_handle = page_handle; }
 
     virtual void reserve_col(size_t n, Column* column) { column->reserve(n); }
+
+    // Check if this page decoder supports push down predicate for late materialization
+    // Returns true if this decoder can efficiently handle predicates in next_batch_with_filter
+    virtual bool support_push_down_predicate() const { return false; }
 
 protected:
     std::shared_ptr<PageHandle> _page_handle;
