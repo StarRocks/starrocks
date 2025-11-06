@@ -122,146 +122,6 @@ jobs:
           
           echo "BE_UT_LINUX=${BE_UT_LINUX}" >> $GITHUB_OUTPUT
 
-  be-ut:
-    runs-on: [self-hosted, normal]
-    needs:
-      - info
-    timeout-minutes: 90
-    name: BE UT
-    continue-on-error: true
-    env:
-      BRANCH: ${{ needs.info.outputs.BRANCH }}
-      PR_NUMBER: ${{ needs.info.outputs.PR_NUMBER }}
-      LINUX: ${{ needs.info.outputs.BE_UT_LINUX }}
-    strategy:
-      fail-fast: false
-      matrix:
-        build_type: [ Release, ASAN ]
-    steps:
-      - name: UPDATE ECI & RUN UT
-        id: run_ut
-        shell: bash
-        timeout-minutes: 90
-        if: matrix.build_type == 'Release' || needs.info.outputs.WITH_FEATURE_COV != 'true'
-        env:
-          build_type: ${{ matrix.build_type }}
-        run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
-          ./bin/elastic-ut.sh --repository ${{ github.repository }} --branch ${BRANCH} --pr ${PR_NUMBER} --module be --build ${build_type} --linuxdistro ${LINUX} --with-gcov
-
-      - name: clean ECI
-        if: always()
-        run: |
-          echo ${{ steps.run_ut.outputs.ECI_ID }}
-          eci rm ${{ steps.run_ut.outputs.ECI_ID }}
-          echo "${{ steps.run_ut.outcome }}" > ./${{ matrix.build_type }}.txt
-
-      - name: Upload Log
-        uses: actions/upload-artifact@v4
-        if: always() && (steps.run_ut.outcome == 'success' || steps.run_ut.outcome == 'failure')
-        with:
-          name: BE UT LOG
-          path: ${{ steps.run_ut.outputs.BE_LOG }}
-          retention-days: 1
-          overwrite: true
-
-      - name: Upload BE UT Result
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: BE-UT-RESULT-${{ matrix.build_type }}
-          path: ${{ matrix.build_type }}.txt
-          retention-days: 1
-          overwrite: true
-
-      - name: Clean ENV
-        if: always()
-        run: |
-          rm -f ${{ steps.run_ut.outputs.RES_FILE }}
-          rm -f ${{ steps.run_ut.outputs.RES_LOG }}
-          rm -f ${{ steps.run_ut.outputs.BE_LOG }}
-          rm -rf ${{ github.workspace }}/*
-
-  fe-ut:
-    runs-on: [self-hosted, normal]
-    name: FE UT
-    needs:
-      - info
-    env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      BRANCH: ${{ needs.info.outputs.BRANCH }}
-      PR_NUMBER: ${{ needs.info.outputs.PR_NUMBER }}
-    steps:
-      - name: clean
-        run: |
-          rm -rf ${{ github.workspace }}
-          mkdir -p ${{ github.workspace }}
-
-      - name: BRANCH INFO
-        id: branch
-        env:
-          repo: ${{ github.repository }}
-        run: |
-          bucket_prefix=`echo ${repo%/*} | tr '[:upper:]' '[:lower:]'` 
-          echo "bucket_prefix=${bucket_prefix}" >> $GITHUB_OUTPUT
-
-      - name: UPDATE ECI & RUN UT
-        id: run_ut
-        shell: bash
-        timeout-minutes: 60
-        run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
-          ./bin/elastic-ut.sh --repository ${{ github.repository }} --branch ${BRANCH} --pr ${PR_NUMBER} --module fe --build Release --linuxdistro ubuntu
-
-      - name: Clean ECI
-        if: always()
-        run: |
-          echo ${{ steps.run_ut.outputs.ECI_ID }}
-          echo ">>> Dmesg info:"
-          eci exec ${{ steps.run_ut.outputs.ECI_ID }} bash -c "dmesg -T"
-          eci rm ${{ steps.run_ut.outputs.ECI_ID }}
-
-      - name: Upload log
-        if: always() && (steps.run_ut.outcome == 'success' || steps.run_ut.outcome == 'failure')
-        uses: actions/upload-artifact@v4
-        with:
-          name: FE UT LOG
-          path: ${{ steps.run_ut.outputs.RES_LOG }}
-          retention-days: 1
-          overwrite: true
-
-      - name: Download FE UT XML
-        if: always() && (steps.run_ut.outcome == 'success' || steps.run_ut.outcome == 'failure')
-        id: download-ut-xml
-        env:
-          oss_path: ${{ steps.run_ut.outputs.oss_path }}
-        run: |
-          mkdir fe && cd fe
-          ossutil64 --config-file ~/.ossutilconfig cp ${oss_path}/ . --recursive
-          tar zxf fe_ut_report.tar.gz
-
-      - name: Publish UT Report
-        uses: mikepenz/action-junit-report@v4
-        if: always() && (steps.run_ut.outcome == 'success' || steps.run_ut.outcome == 'failure')
-        id: publish_report
-        env:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          token: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          check_name: 'FE UT Report'
-          detailed_summary: true
-          fail_on_failure: true
-          report_paths: ./fe/fe-core/target/surefire-reports/*.xml
-
-      - name: Clean ENV
-        if: always() && (steps.run_ut.outcome == 'success' || steps.run_ut.outcome == 'failure')
-        run: |
-          rm -rf ${{ steps.run_ut.outputs.FE_REPORT_DIR }}
-          rm -f ${{ steps.run_ut.outputs.RES_FILE }}
-          rm -f ${{ steps.run_ut.outputs.RES_LOG }}
-          rm -rf ${{ steps.run_ut.outputs.COV_DIR }}
-          rm -rf ${{ github.workspace }}/*
-
   build:
     runs-on: [self-hosted, normal]
     name: BUILD
@@ -323,282 +183,68 @@ jobs:
           rm -f ${{ steps.run_build.outputs.RES_LOG }}
           rm -rf ${{ github.workspace }}
 
-  test_filter:
+  docgen:
     runs-on: [self-hosted, normal]
-    name: FILTER
-    needs:
-      - info
-      - build
-    if: always() && needs.info.result == 'success' && needs.build.result != 'cancelled'
-    env:
-      ALL_LINUX: needs.info.outputs.ALL_LINUX
-    outputs:
-      CENTOS_RELEASE_TAR_PATH: ${{ steps.set_output.outputs.CENTOS_RELEASE_TAR_PATH }}
-      CENTOS_ASAN_TAR_PATH: ${{ steps.set_output.outputs.CENTOS_ASAN_TAR_PATH }}
-      UBUNTU_RELEASE_TAR_PATH: ${{ steps.set_output.outputs.UBUNTU_RELEASE_TAR_PATH }}
-      UBUNTU_ASAN_TAR_PATH: ${{ steps.set_output.outputs.UBUNTU_ASAN_TAR_PATH }}
-      IS_SELF_BUILD: ${{ steps.set_output.outputs.IS_SELF_BUILD }}
+    needs: info
+    name: Generate Documentation
     steps:
-      - name: Clean Workspace
-        uses: AutoModality/action-clean@v1.1.0
-
-      - name: Download Build Artifact
-        if: github.event_name == 'schedule' || inputs.IS_REBUILD
-        uses: actions/download-artifact@v4
+      - uses: dorny/paths-filter@v3
+        id: path-filter
         with:
-          pattern: BUILD-RESULT-*
-          path: outputs
+          filters: |
+            be-config:
+              - 'be/src/common/config.h'
+            fe-config:
+              - 'fe/fe-core/src/main/java/com/starrocks/common/Config.java'
+            variable:
+              - 'fe/fe-core/src/main/java/com/starrocks/qe/GlobalVariable.java'
+              - 'fe/fe-core/src/main/java/com/starrocks/qe/SessionVariable.java'
+            function:
+              - 'gensrc/script/functions.py'
 
-      - name: Analyse Build Artifact
-        id: analyse_artifact
-        if: github.event_name == 'schedule' || inputs.IS_REBUILD
+      - name: init doc-agent
+        id: init-doc-agent
         run: |
-          if [[ -e "./outputs/BUILD-RESULT-Release-centos7/tar.txt" ]]; then
-            build_result=$(cat "./outputs/BUILD-RESULT-Release-centos7/tar.txt")
-            echo "CENTOS_RELEASE_TAR_PATH=${build_result}" >> $GITHUB_OUTPUT
-          else
-            has_failure=true
-          fi
-          
-          if [[ -e "./outputs/BUILD-RESULT-ASAN-centos7/tar.txt" ]]; then
-            build_result=$(cat "./outputs/BUILD-RESULT-ASAN-centos7/tar.txt")
-            echo "CENTOS_ASAN_TAR_PATH=${build_result}" >> $GITHUB_OUTPUT
-          else
-            has_failure=true
-          fi
-          
-          if [[ -e "./outputs/BUILD-RESULT-Release-ubuntu/tar.txt" ]]; then
-            build_result=$(cat "./outputs/BUILD-RESULT-Release-ubuntu/tar.txt")
-            echo "UBUNTU_RELEASE_TAR_PATH=${build_result}" >> $GITHUB_OUTPUT
-          else
-            has_failure=true
-          fi
-          
-          if [[ -e "./outputs/BUILD-RESULT-ASAN-ubuntu/tar.txt" ]]; then
-            build_result=$(cat "./outputs/BUILD-RESULT-ASAN-ubuntu/tar.txt")
-            echo "UBUNTU_ASAN_TAR_PATH=${build_result}" >> $GITHUB_OUTPUT
-          else
-            has_failure=true
-          fi
-          
-          if [[ "${has_failure}" == "true" && "${ALL_LINUX}" == "true" ]]; then
-            exit 1
-          fi
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && sh lib/init_doc.sh
 
-      - name: SET OUTPUT
-        id: set_output
-        if: always()
+      - name: FE config 
+        id: fe-config-gen
         run: |
-          if [[ "${{steps.analyse_artifact.outcome}}" == "skipped" ]]; then
-            echo "CENTOS_RELEASE_TAR_PATH=${{ needs.info.outputs.CENTOS_TAR_PATH }}" >> $GITHUB_OUTPUT
-            echo "CENTOS_ASAN_TAR_PATH=${{ needs.info.outputs.CENTOS_ASAN_TAR_PATH }}" >> $GITHUB_OUTPUT
-            echo "UBUNTU_RELEASE_TAR_PATH=${{ needs.info.outputs.UBUNTU_TAR_PATH }}" >> $GITHUB_OUTPUT
-            echo "UBUNTU_ASAN_TAR_PATH=${{ needs.info.outputs.UBUNTU_ASAN_TAR_PATH }}" >> $GITHUB_OUTPUT
-            echo "IS_SELF_BUILD=false" >> $GITHUB_OUTPUT
-          else
-            echo "CENTOS_RELEASE_TAR_PATH=${{ steps.analyse_artifact.outputs.CENTOS_RELEASE_TAR_PATH }}" >> $GITHUB_OUTPUT
-            echo "CENTOS_ASAN_TAR_PATH=${{ steps.analyse_artifact.outputs.CENTOS_ASAN_TAR_PATH }}" >> $GITHUB_OUTPUT
-            echo "UBUNTU_RELEASE_TAR_PATH=${{ steps.analyse_artifact.outputs.UBUNTU_RELEASE_TAR_PATH }}" >> $GITHUB_OUTPUT
-            echo "UBUNTU_ASAN_TAR_PATH=${{ steps.analyse_artifact.outputs.UBUNTU_ASAN_TAR_PATH }}" >> $GITHUB_OUTPUT
-            echo "IS_SELF_BUILD=true" >> $GITHUB_OUTPUT
-          fi
+          cd ci-tool && sh bin/run-doc-gen fe-config ${{ github.repository}}
 
-  system-test-release:
-    name: 'Release/Centos'
-    uses: ./.github/workflows/inspection-reusable-pipeline.yml
-    needs:
-      - info
-      - test_filter
-    secrets: inherit
-    if: always() && needs.test_filter.outputs.CENTOS_RELEASE_TAR_PATH != '' && (needs.info.outputs.ALL_LINUX == 'true' || needs.test_filter.outputs.IS_SELF_BUILD == 'false')
-    with:
-      BRANCH: ${{ needs.info.outputs.BRANCH }}
-      COMMIT_ID: ${{ needs.info.outputs.PR_NUMBER }}
-      TAR_PATH: ${{ needs.test_filter.outputs.CENTOS_RELEASE_TAR_PATH }}
-      BUILD_TYPE: Release
-      LINUX_DISTRO: centos7
-      IS_SELF_BUILD: ${{ needs.test_filter.outputs.IS_SELF_BUILD }}
-      INCLUDE_ADMIT: ${{ needs.info.outputs.INCLUDE_ADMIT }}
-
-  system-test-asan:
-    name: 'ASAN/Centos'
-    uses: ./.github/workflows/inspection-reusable-pipeline.yml
-    needs:
-      - info
-      - test_filter
-    secrets: inherit
-    if: always() && needs.test_filter.outputs.CENTOS_ASAN_TAR_PATH != '' && (needs.info.outputs.ALL_LINUX == 'true' || needs.test_filter.outputs.IS_SELF_BUILD == 'false')
-    with:
-      BRANCH: ${{ needs.info.outputs.BRANCH }}
-      COMMIT_ID: ${{ needs.info.outputs.PR_NUMBER }}
-      TAR_PATH: ${{ needs.test_filter.outputs.CENTOS_ASAN_TAR_PATH }}
-      BUILD_TYPE: ASAN
-      LINUX_DISTRO: centos7
-      IS_SELF_BUILD: ${{ needs.test_filter.outputs.IS_SELF_BUILD }}
-      INCLUDE_ADMIT: ${{ needs.info.outputs.INCLUDE_ADMIT }}
-
-  system-test-release-ubuntu:
-    name: 'Release/Ubuntu'
-    uses: ./.github/workflows/inspection-reusable-pipeline.yml
-    needs:
-      - info
-      - test_filter
-    secrets: inherit
-    if: always() && needs.test_filter.outputs.UBUNTU_RELEASE_TAR_PATH != ''
-    with:
-      BRANCH: ${{ needs.info.outputs.BRANCH }}
-      COMMIT_ID: ${{ needs.info.outputs.PR_NUMBER }}
-      TAR_PATH: ${{ needs.test_filter.outputs.UBUNTU_RELEASE_TAR_PATH }}
-      BUILD_TYPE: Release
-      LINUX_DISTRO: ubuntu
-      IS_SELF_BUILD: ${{ needs.test_filter.outputs.IS_SELF_BUILD }}
-      INCLUDE_ADMIT: ${{ needs.info.outputs.INCLUDE_ADMIT }}
-      WITH_FEATURE_COV: ${{ needs.info.outputs.WITH_FEATURE_COV }}
-      IS_ARM: ${{ needs.info.outputs.IS_ARM }}
-
-  system-test-asan-ubuntu:
-    name: 'ASAN/Ubuntu'
-    uses: ./.github/workflows/inspection-reusable-pipeline.yml
-    needs:
-      - info
-      - test_filter
-    secrets: inherit
-    if: always() && needs.test_filter.outputs.UBUNTU_ASAN_TAR_PATH != '' && (needs.info.outputs.ALL_LINUX == 'true' || needs.test_filter.outputs.IS_SELF_BUILD == 'false')
-    with:
-      BRANCH: ${{ needs.info.outputs.BRANCH }}
-      COMMIT_ID: ${{ needs.info.outputs.PR_NUMBER }}
-      TAR_PATH: ${{ needs.test_filter.outputs.UBUNTU_ASAN_TAR_PATH }}
-      BUILD_TYPE: ASAN
-      LINUX_DISTRO: ubuntu
-      IS_SELF_BUILD: ${{ needs.test_filter.outputs.IS_SELF_BUILD }}
-      INCLUDE_ADMIT: ${{ needs.info.outputs.INCLUDE_ADMIT }}
-
-  diff-info:
-    runs-on: [self-hosted, quick]
-    if: github.repository == 'StarRocks/starrocks' && needs.info.outputs.WITH_FEATURE_COV == 'true'
-    name: Gen Diff File
-    env:
-      commit_id: ${{ inputs.COMMIT_ID }}
-      base_commit_id: ${{ inputs.COV_BASE_COMMIT }}
-    outputs:
-      DIFF_FILE: ${{ steps.diff.outputs.DIFF_FILE }}
-    needs:
-      - info
-      - be-ut
-      - fe-ut
-      - system-test-release-ubuntu
-    steps:
-      - name: CLEAN
+      - name: BE config 
+        id: be-config-gen
         run: |
-          rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
+          cd ci-tool 
+          sh bin/run-doc-gen be-config > $GITHUB_OUTPUT
 
-      - name: Checkout Code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: diff
-        id: diff
+      - name: variables 
+        id: variables-gen
         run: |
-          diff_file=${SHARE_PATH}/${base_commit_id}_${commit_id}.diff
-          git diff ${base_commit_id} ${commit_id} > ${diff_file}
-          echo "DIFF_FILE=${diff_file}" >> $GITHUB_OUTPUT
+          cd ci-tool 
+          sh bin/run-doc-gen variables > $GITHUB_OUTPUT
 
-  FE-COV-REPORT:
-    uses: ./.github/workflows/inspection-fe-coverage.yml
-    name: 'FE Coverage'
-    if: github.repository == 'StarRocks/starrocks' && needs.info.outputs.WITH_FEATURE_COV == 'true'
-    needs:
-      - info
-      - diff-info
-    secrets: inherit
-    with:
-      BRANCH: ${{ needs.info.outputs.BRANCH }}
-      COMMIT_ID: ${{ needs.info.outputs.PR_NUMBER }}
-      DIFF_FILE_PATH: ${{ needs.diff-info.outputs.DIFF_FILE }}
-
-  BE-COV-REPORT:
-    uses: ./.github/workflows/inspection-be-coverage.yml
-    name: 'BE Coverage'
-    if: github.repository == 'StarRocks/starrocks' && needs.info.outputs.WITH_FEATURE_COV == 'true'
-    needs:
-      - info
-      - diff-info
-    secrets: inherit
-    with:
-      BRANCH: ${{ needs.info.outputs.BRANCH }}
-      COMMIT_ID: ${{ needs.info.outputs.PR_NUMBER }}
-      DIFF_FILE_PATH: ${{ needs.diff-info.outputs.DIFF_FILE }}
-
-  FEATURE-COV:
-    runs-on: [ self-hosted, normal ]
-    name: COV INFO
-    needs:
-      - info
-      - FE-COV-REPORT
-      - BE-COV-REPORT
-    env:
-      GH_TOKEN: ${{ secrets.PAT }}
-      BRANCH: ${{ needs.info.outputs.BRANCH }}
-    steps:
-      - name: Prepare Tools
+      - name: function 
+        id: function-gen
         run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull
-
-      - name: INFO
-        run: |
-          echo "FE_COV_RES_FILE: ${{ needs.FE-COV-REPORT.outputs.FE_COV_RES_FILE }}"
-          echo "BE_COV_RES_FILE: ${{ needs.BE-COV-REPORT.outputs.BE_COV_RES_FILE }}"
-
-      - name: Result
-        run: |
-          cd ci-tool/scripts/feature_coverage
-          ./version_cov.sh --repository ${{ github.repository }} \
-            --commit ${{ needs.info.outputs.PR_NUMBER }} \
-            --head ${{ inputs.COV_BASE_COMMIT }} \
-            --branch ${BRANCH} \
-            --redownload \
-            --in_runner
+          cd ci-tool 
+          sh bin/run-doc-gen function --FE_NODE ${FE_NODE} > $GITHUB_OUTPUT
 
   Teardown:
     runs-on: [self-hosted, normal]
     name: Teardown
     needs:
       - info
-      - be-ut
-      - fe-ut
-      - system-test-release
-      - system-test-asan
-      - system-test-release-ubuntu
-      - system-test-asan-ubuntu
     if: always()
     env:
       BRANCH: ${{ needs.info.outputs.BRANCH }}
       PR_NUMBER: ${{ needs.info.outputs.PR_NUMBER }}
       GH_TOKEN: ${{ github.token }}
-      RELEASE_CONF_FILE: ${{ needs.system-test-release.outputs.CONF_FILE }}
-      ASAN_CONF_FILE: ${{ needs.system-test-asan.outputs.CONF_FILE }}
-      RELEASE_MYSQL_ECI_ID: ${{ needs.system-test-release.outputs.MYSQL_ECI_ID }}
-      ASAN_MYSQL_ECI_ID: ${{ needs.system-test-asan.outputs.MYSQL_ECI_ID }}
-      RELEASE_RESULT: ${{ needs.system-test-release.result }}
-      ASAN_RESULT: ${{ needs.system-test-asan.result }}
-      UBUNTU_RELEASE_CONF_FILE: ${{ needs.system-test-release-ubuntu.outputs.CONF_FILE }}
-      UBUNTU_ASAN_CONF_FILE: ${{ needs.system-test-asan-ubuntu.outputs.CONF_FILE }}
-      UBUNTU_RELEASE_MYSQL_ECI_ID: ${{ needs.system-test-release-ubuntu.outputs.MYSQL_ECI_ID }}
-      UBUNTU_ASAN_MYSQL_ECI_ID: ${{ needs.system-test-asan-ubuntu.outputs.MYSQL_ECI_ID }}
-      UBUNTU_RELEASE_RESULT: ${{ needs.system-test-release-ubuntu.result }}
-      UBUNTU_ASAN_RESULT: ${{ needs.system-test-asan-ubuntu.result }}
       BE_UT_LINUX: ${{ needs.info.outputs.BE_UT_LINUX }}
     steps:
       - name: init
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull
-
-      - name: save unstable cases
-        if: always() && (github.event_name == 'schedule' || (github.event_name != 'schedule' && env.BRANCH != 'main'))
-        run: |
-          cd ci-tool && source lib/init.sh
-          ./bin/save_unstable_cases.sh
 
       - name: Clean
         if: always()
