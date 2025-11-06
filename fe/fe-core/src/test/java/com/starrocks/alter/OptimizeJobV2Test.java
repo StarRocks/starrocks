@@ -23,7 +23,6 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.ThreadUtil;
 import com.starrocks.scheduler.Constants;
@@ -201,10 +200,7 @@ public class OptimizeJobV2Test extends DDLTestBase {
         schemaChangeHandler.process(alterTableStmt.getAlterClauseList(), db, olapTable);
         Map<Long, AlterJobV2> alterJobsV2 = schemaChangeHandler.getAlterJobsV2();
         Assertions.assertEquals(1, alterJobsV2.size());
-        OptimizeJobV2 realJob = (OptimizeJobV2) alterJobsV2.values().stream().findAny().get();
-
-        OptimizeJobV2 job = Mockito.spy(realJob);
-        Mockito.doReturn(true).when(job).isPreviousLoadFinished();
+        OptimizeJobV2 job = spyPreviousTxnFinished((OptimizeJobV2) alterJobsV2.values().stream().findAny().get());
         // Force visibility check to return true (has committed-not-visible)
         Mockito.doReturn(true).when(job).hasCommittedNotVisible(Mockito.anyLong());
 
@@ -249,10 +245,7 @@ public class OptimizeJobV2Test extends DDLTestBase {
         schemaChangeHandler.process(alterTableStmt.getAlterClauseList(), db, olapTable);
         Map<Long, AlterJobV2> alterJobsV2 = schemaChangeHandler.getAlterJobsV2();
         Assertions.assertEquals(1, alterJobsV2.size());
-        OptimizeJobV2 realJob = (OptimizeJobV2) alterJobsV2.values().stream().findAny().get();
-
-        OptimizeJobV2 job = Mockito.spy(realJob);
-        Mockito.doReturn(true).when(job).isPreviousLoadFinished();
+        OptimizeJobV2 job = spyPreviousTxnFinished((OptimizeJobV2) alterJobsV2.values().stream().findAny().get());
         // Visibility check returns false (no committed-not-visible), so SUCCESS remains SUCCESS
         Mockito.doReturn(false).when(job).hasCommittedNotVisible(Mockito.anyLong());
 
@@ -701,7 +694,7 @@ public class OptimizeJobV2Test extends DDLTestBase {
         Assertions.assertEquals(JobState.RUNNING, optimizeJob.getJobState());
     }
 
-    private OptimizeJobV2 spyPreviousTxnFinished(OptimizeJobV2 job) throws AnalysisException {
+    private OptimizeJobV2 spyPreviousTxnFinished(OptimizeJobV2 job) {
         // Detach the job from schema change handler to prevent the background scheduler
         // from mutating its state in parallel with the UT driven state machine, which
         // occasionally drops temp partitions and leads to flaky failures.
@@ -709,7 +702,11 @@ public class OptimizeJobV2Test extends DDLTestBase {
         schemaChangeHandler.getAlterJobsV2().remove(job.getJobId());
 
         OptimizeJobV2 spy = Mockito.spy(job);
-        Mockito.doReturn(true).when(spy).isPreviousLoadFinished();
+        try {
+            Mockito.doReturn(true).when(spy).isPreviousLoadFinished();
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
         return spy;
     }
 }
