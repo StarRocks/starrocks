@@ -93,8 +93,18 @@ public class ArrowFlightSqlConnectContext extends ConnectContext {
         this.execPlan = execPlan;
     }
 
+<<<<<<< HEAD
     public Coordinator getCoordinator() {
         return coordinator;
+=======
+    public void setDeployFailed(Throwable e) {
+        this.coordinatorFuture.completeExceptionally(e);
+    }
+
+    public VectorSchemaRoot getResult(String queryId) {
+        ArrowSchemaRootWrapper wrapper = resultCache.getIfPresent(queryId);
+        return wrapper != null ? wrapper.getSchemaRoot() : null;
+>>>>>>> 9188847e9e ([BugFix] Fix output column names for Arrow Flight SQL (#64950))
     }
 
     public void setCoordinator(Coordinator coordinator) {

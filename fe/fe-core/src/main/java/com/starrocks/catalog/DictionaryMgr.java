@@ -630,8 +630,13 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
             List<PlanFragment> fragments = execPlan.getFragments();
             List<ScanNode> scanNodes = execPlan.getScanNodes();
             DescriptorTable descTable = execPlan.getDescTbl();
+<<<<<<< HEAD
             Coordinator coord = getCoordinatorFactory().createRefreshDictionaryCacheScheduler(context, queryId, descTable,
                                                                                               fragments, scanNodes);
+=======
+            Coordinator coord = getCoordinatorFactory().createRefreshDictionaryCacheScheduler(
+                    context, queryId, descTable, fragments, scanNodes, execPlan);
+>>>>>>> 9188847e9e ([BugFix] Fix output column names for Arrow Flight SQL (#64950))
 
             QeProcessorImpl.INSTANCE.registerQuery(queryId, coord);
             int leftTimeSecond = context.getExecTimeout();

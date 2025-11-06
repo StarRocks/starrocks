@@ -14,21 +14,43 @@
 
 package com.starrocks.service.arrow.flight.sql;
 
+<<<<<<< HEAD
+=======
+import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+>>>>>>> 9188847e9e ([BugFix] Fix output column names for Arrow Flight SQL (#64950))
 import com.google.protobuf.Any;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.Message;
 import com.starrocks.common.util.ArrowUtil;
+<<<<<<< HEAD
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.proto.PUniqueId;
+=======
+import com.starrocks.common.util.DebugUtil;
+>>>>>>> 9188847e9e ([BugFix] Fix output column names for Arrow Flight SQL (#64950))
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.SessionVariable;
+<<<<<<< HEAD
 import com.starrocks.server.GlobalStateMgr;
+=======
+import com.starrocks.qe.scheduler.Coordinator;
+import com.starrocks.qe.scheduler.dag.ExecutionFragment;
+import com.starrocks.qe.scheduler.dag.FragmentInstance;
+>>>>>>> 9188847e9e ([BugFix] Fix output column names for Arrow Flight SQL (#64950))
 import com.starrocks.service.arrow.flight.sql.session.ArrowFlightSqlSessionManager;
 import com.starrocks.sql.ast.StatementBase;
+<<<<<<< HEAD
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.TNetworkAddress;
+=======
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.system.ComputeNode;
+>>>>>>> 9188847e9e ([BugFix] Fix output column names for Arrow Flight SQL (#64950))
 import com.starrocks.thrift.TUniqueId;
 import org.apache.arrow.flight.CallStatus;
 import org.apache.arrow.flight.CloseSessionRequest;
@@ -54,6 +76,7 @@ import org.apache.arrow.util.AutoCloseables;
 import org.apache.arrow.vector.VectorSchemaRoot;
 import org.apache.arrow.vector.ipc.WriteChannel;
 import org.apache.arrow.vector.ipc.message.MessageSerializer;
+import org.apache.arrow.vector.types.pojo.Field;
 import org.apache.arrow.vector.types.pojo.Schema;
 
 import java.io.ByteArrayOutputStream;
@@ -63,7 +86,10 @@ import java.nio.channels.Channels;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
+<<<<<<< HEAD
 import java.util.concurrent.Executors;
+=======
+>>>>>>> 9188847e9e ([BugFix] Fix output column names for Arrow Flight SQL (#64950))
 
 public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseable {
     private final BufferAllocator rootAllocator = new RootAllocator();
@@ -388,9 +414,19 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
                     new ArrowFlightSqlConnectProcessor(ctx);
             arrowConnectProcessor.processOnce();
 
+<<<<<<< HEAD
             if (ctx.getState().getStateType() == QueryState.MysqlStateType.ERR) {
                 throw new RuntimeException("Process Query Error: " + ctx.getState().getErrorMessage());
             }
+=======
+                    ctx.setDeploymentFinished(null);
+                    processorFinished.complete(null);
+                } catch (Throwable t) {
+                    ctx.setDeployFailed(t);
+                    processorFinished.completeExceptionally(t);
+                }
+            });
+>>>>>>> 9188847e9e ([BugFix] Fix output column names for Arrow Flight SQL (#64950))
 
             if (ctx.returnFromFE()) {
                 final ByteString handle = ByteString.copyFromUtf8(peerIdentity + ":" + ctx.getQueryId());
@@ -411,6 +447,7 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
                         .toRuntimeException();
             }
 
+<<<<<<< HEAD
             TUniqueId resultFragmentId =
                     coordinator.getExecutionDAG().getFragmentInstanceInfos().get(0).getInstanceId();
             PUniqueId pUniqueId = new PUniqueId();
@@ -421,8 +458,27 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
             String queryIdentifier = hexStringFromUniqueId(queryId) + ":" + hexStringFromUniqueId(resultFragmentId);
             final ByteString handle = ByteString.copyFromUtf8(queryIdentifier);
             FlightSql.TicketStatementQuery ticketStatementQuery =
+=======
+            Preconditions.checkState(coordinator instanceof DefaultCoordinator,
+                    "Coordinator is not DefaultCoordinator, cannot proceed with BE execution.");
+            DefaultCoordinator defaultCoordinator = (DefaultCoordinator) coordinator;
+
+            ExecutionFragment rootFragment = defaultCoordinator.getExecutionDAG().getRootFragment();
+            FragmentInstance rootFragmentInstance = rootFragment.getInstances().get(0);
+            ComputeNode worker = rootFragmentInstance.getWorker();
+            TUniqueId rootFragmentInstanceId = rootFragmentInstance.getInstanceId();
+
+            ExecPlan execPlan = defaultCoordinator.getJobSpec().getExecPlan();
+            Preconditions.checkNotNull(execPlan, "execPlan is null");
+            Schema schema = buildSchema(execPlan);
+
+            // Build BE ticket.
+            final ByteString handle = buildBETicket(defaultCoordinator.getQueryId(), rootFragmentInstanceId);
+            FlightSql.TicketStatementQuery ticketStatement =
+>>>>>>> 9188847e9e ([BugFix] Fix output column names for Arrow Flight SQL (#64950))
                     FlightSql.TicketStatementQuery.newBuilder().setStatementHandle(handle).build();
 
+<<<<<<< HEAD
             int beArrowPort = be.getArrowFlightPort();
             if (beArrowPort <= 0) {
                 throw CallStatus.INTERNAL.withDescription(String.format("BE [%d] has already disabled Arrow Flight Server. " +
@@ -439,7 +495,42 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
             throw CallStatus.INTERNAL.withDescription(e.getMessage()).toRuntimeException();
         } finally {
             ctx.setCommand(MysqlCommand.COM_SLEEP);
+=======
+    private static ByteString buildFETicket(ArrowFlightSqlConnectContext ctx) {
+        // FETicket: <Token> : <QueryId>
+        return ByteString.copyFromUtf8(ctx.getArrowFlightSqlToken() + ":" + DebugUtil.printId(ctx.getExecutionId()));
+    }
+
+    private static ByteString buildBETicket(TUniqueId queryId, TUniqueId rootFragmentInstanceId) {
+        // BETicket: <QueryId> : <FragmentInstanceId>
+        return ByteString.copyFromUtf8(hexStringFromUniqueId(queryId) + ":" + hexStringFromUniqueId(rootFragmentInstanceId));
+    }
+
+    private <T extends Message> FlightInfo buildFlightInfoFromFE(T request, FlightDescriptor descriptor,
+                                                                 Schema schema) {
+        return buildFlightInfo(request, descriptor, schema, feEndpoint);
+    }
+
+    protected <T extends Message> FlightInfo buildFlightInfo(T request, FlightDescriptor descriptor,
+                                                             Schema schema, Location endpoint) {
+        final Ticket ticket = new Ticket(Any.pack(request).toByteArray());
+        final List<FlightEndpoint> endpoints = Collections.singletonList(new FlightEndpoint(ticket, endpoint));
+        return new FlightInfo(schema, descriptor, endpoints, -1, -1);
+    }
+
+    private Schema buildSchema(ExecPlan execPlan) {
+        List<Field> arrowFields = Lists.newArrayList();
+
+        List<String> colNames = execPlan.getColNames();
+        List<Expr> outExprs = execPlan.getOutputExprs();
+        for (int i = 0; i < colNames.size(); i++) {
+            Expr expr = outExprs.get(i);
+            Field arrowField = ArrowUtils.convertToArrowType(expr.getOriginType(), colNames.get(i), expr.isNullable());
+            arrowFields.add(arrowField);
+>>>>>>> 9188847e9e ([BugFix] Fix output column names for Arrow Flight SQL (#64950))
         }
+
+        return new Schema(arrowFields);
     }
 
     private StatementBase parse(String sql, SessionVariable sessionVariables) {
