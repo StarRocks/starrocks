@@ -340,14 +340,17 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
 
         OlapTable tbl = checkAndGetTable(db, tableId);
 
-        int progress = 0;
+        // Use double to avoid integer division precision loss when task count > 100
+        double progressAcc = 0.0;
+        int taskCount = Math.max(1, rewriteTasks.size());
 
         for (OptimizeTask rewriteTask : rewriteTasks) {
             if (rewriteTask.getOptimizeTaskState() == Constants.TaskRunState.FAILED
                         || rewriteTask.getOptimizeTaskState() == Constants.TaskRunState.SUCCESS) {
-                progress += 100 / rewriteTasks.size();
-                if (this.progress < progress) {
-                    this.progress = progress;
+                progressAcc += 100.0 / taskCount;
+                int current = Math.min(99, (int) Math.floor(progressAcc));
+                if (this.progress < current) {
+                    this.progress = current;
                 }
                 continue;
             }
