@@ -334,7 +334,9 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
 
         // wait insert tasks finished
         boolean allFinished = true;
-        int progress = 0;
+        // Use double to avoid integer division precision loss when task count > 100
+        double progressAcc = 0.0;
+        int taskCount = Math.max(1, rewriteTasks.size());
         TaskRunManager taskRunManager = GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunManager();
         TaskRunScheduler taskRunScheduler = taskRunManager.getTaskRunScheduler();
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager(); // add: define taskManager
@@ -358,14 +360,14 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
             }
             if (rewriteTask.getOptimizeTaskState() == Constants.TaskRunState.FAILED
                     || rewriteTask.getOptimizeTaskState() == Constants.TaskRunState.SUCCESS) {
-                progress += 100 / rewriteTasks.size();
+                progressAcc += 100.0 / taskCount;
                 continue;
             }
 
             TaskRun taskRun = taskRunScheduler.getRunnableTaskRun(rewriteTask.getId());
             if (taskRun != null) {
                 if (taskRun.getStatus() != null) {
-                    progress += taskRun.getStatus().getProgress() / rewriteTasks.size();
+                    progressAcc += (double) taskRun.getStatus().getProgress() / taskCount;
                 }
                 allFinished = false;
                 continue;
@@ -411,12 +413,13 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
                     rewriteTask.setOptimizeTaskState(Constants.TaskRunState.FAILED);
                 }
             }
-            progress += 100 / rewriteTasks.size();
+            progressAcc += 100.0 / taskCount;
         }
 
         if (!allFinished) {
             LOG.debug("wait insert tasks to be finished, optimize job: {}", jobId);
-            this.progress = progress;
+            // Cap at 99 until all tasks are fully finished to keep previous semantics
+            this.progress = Math.min(99, (int) Math.floor(progressAcc));
             return;
         }
 
