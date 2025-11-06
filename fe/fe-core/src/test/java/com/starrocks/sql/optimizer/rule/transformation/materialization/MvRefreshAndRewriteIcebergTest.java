@@ -46,7 +46,6 @@ public class MvRefreshAndRewriteIcebergTest extends MVTestBase {
         ConnectorPlanTestBase.mockCatalog(connectContext, MockIcebergMetadata.MOCKED_ICEBERG_CATALOG_NAME);
         connectContext.getSessionVariable().setMaterializedViewUnionRewriteMode(1);
         connectContext.getSessionVariable().setEnableMaterializedViewTransparentUnionRewrite(false);
-        connectContext.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(false);
     }
 
     @Test
