@@ -70,3 +70,83 @@ jobs:
             echo "Re-run failed!"
             exit 1
           fi
+
+  docgen-trigger:
+    name: Trigger Documentation Generation
+    runs-on: ubuntu-latest
+    if: >
+      contains(github.event.issue.pull_request.html_url, 'pull') &&
+      contains(github.event.comment.body, 'docgen')
+    
+    env:
+      PR_NUMBER: ${{ github.event.issue.number }}
+      GITHUB_TOKEN: ${{ secrets.PAT }}
+      REPO: ${{ github.repository }}
+
+    steps:
+      - name: Check if label already exists
+        id: check_label
+        run: |
+          labels=$(gh pr view ${PR_NUMBER} -R ${REPO} --json labels -q '.labels[].name')
+          if echo "${labels}" | grep -q "^docgen$"; then
+            echo "label_exists=true" >> $GITHUB_OUTPUT
+            echo "Label 'docgen' already exists on this PR"
+          else
+            echo "label_exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Add docgen label
+        if: steps.check_label.outputs.label_exists != 'true'
+        run: |
+          gh pr edit ${PR_NUMBER} -R ${REPO} --add-label "docgen"
+          echo "Added 'docgen' label to PR #${PR_NUMBER}"
+
+      - name: Get PR info
+        id: pr_info
+        run: |
+          PR_TITLE=$(gh pr view ${PR_NUMBER} -R ${REPO} --json title -q '.title')
+          PR_AUTHOR=$(gh pr view ${PR_NUMBER} -R ${REPO} --json author -q '.author.login')
+          echo "title=${PR_TITLE}" >> $GITHUB_OUTPUT
+          echo "author=${PR_AUTHOR}" >> $GITHUB_OUTPUT
+
+      - name: Comment trigger status
+        run: |
+          comment="## 🚀 Documentation Generation Triggered
+
+          **PR Information:**
+          - Title: ${{ steps.pr_info.outputs.title }}
+          - Author: @${{ steps.pr_info.outputs.author }}
+          - PR Number: #${PR_NUMBER}
+
+          The documentation generation process has been triggered. 
+          
+          **Track Progress:**
+          - Check the [CI Pipeline Actions](${{ github.server_url }}/${REPO}/actions/workflows/ci-pipeline.yml)
+          - Look for the **Generate Documentation** job
+          
+          ---
+          💡 **Tip:** The \`docgen\` label will be automatically removed after the process completes."
+          
+          gh pr comment ${PR_NUMBER} -R ${REPO} -b "${comment}"
+
+      - name: Handle label already exists
+        if: steps.check_label.outputs.label_exists == 'true'
+        run: |
+          comment="## ℹ️ Documentation Generation Already in Progress
+
+          The \`docgen\` label is already present on this PR, which means:
+          - Documentation generation is currently running, or
+          - A previous generation is still in progress
+          
+          **To check status:**
+          - View the [CI Pipeline](${{ github.server_url }}/${REPO}/actions/workflows/ci-pipeline.yml)
+          - Look for the **Generate Documentation** job
+          
+          **To restart documentation generation:**
+          1. Remove the \`docgen\` label manually
+          2. Comment \`docgen\` again to trigger a new generation
+          
+          ---
+          *If you believe this is an error, please contact the maintainers.*"
+          
+          gh pr comment ${PR_NUMBER} -R ${REPO} -b "${comment}"
