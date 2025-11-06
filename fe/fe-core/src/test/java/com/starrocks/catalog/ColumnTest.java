@@ -241,7 +241,7 @@ public class ColumnTest {
 
         }
 
-        Column decimalv2Column = new Column("user", TypeFactory.createDecimalV2Type(), false, null, true,
+        Column decimalv2Column = new Column("user", Type.DEFAULT_DECIMALV2, false, null, true,
                 new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), "");
         Column decimalColumn3 =
                 new Column("user", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 27, 9), false, null, true,
