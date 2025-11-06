@@ -64,6 +64,7 @@ import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TOverflowMode;
 import com.starrocks.thrift.TPipelineProfileLevel;
+import com.starrocks.thrift.TPredicateTreeParams;
 import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TSpillMode;
 import com.starrocks.thrift.TSpillOptions;
@@ -709,6 +710,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String SCAN_OR_TO_UNION_THRESHOLD = "scan_or_to_union_threshold";
 
+<<<<<<< HEAD
+=======
+    public static final String ENABLE_PUSHDOWN_OR_PREDICATE = "enable_pushdown_or_predicate";
+    public static final String ENABLE_SHOW_PREDICATE_TREE_IN_PROFILE = "enable_show_predicate_tree_in_profile";
+    public static final String MAX_PUSHDOWN_OR_PREDICATES = "max_pushdown_or_predicates";
+
+>>>>>>> 9a3d52038f ([BugFix] Limit push down or predicates (#64544))
     public static final String SELECT_RATIO_THRESHOLD = "select_ratio_threshold";
 
     public static final String DISABLE_FUNCTION_FOLD_CONSTANTS = "disable_function_fold_constants";
@@ -2069,6 +2077,18 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = SCAN_OR_TO_UNION_THRESHOLD, flag = VariableMgr.INVISIBLE)
     private long scanOrToUnionThreshold = 50000000;
 
+<<<<<<< HEAD
+=======
+    @VarAttr(name = ENABLE_PUSHDOWN_OR_PREDICATE, flag = VariableMgr.INVISIBLE)
+    private boolean enablePushdownOrPredicate = true;
+
+    @VarAttr(name = ENABLE_SHOW_PREDICATE_TREE_IN_PROFILE, flag = VariableMgr.INVISIBLE)
+    private boolean enableShowPredicateTreeInProfile = false;
+
+    @VarAttr(name = MAX_PUSHDOWN_OR_PREDICATES, flag = VariableMgr.INVISIBLE)
+    private int maxPushdownOrPredicates = 32;
+
+>>>>>>> 9a3d52038f ([BugFix] Limit push down or predicates (#64544))
     @VarAttr(name = SELECT_RATIO_THRESHOLD, flag = VariableMgr.INVISIBLE)
     private double selectRatioThreshold = 0.15;
 
@@ -4023,6 +4043,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.scanOrToUnionThreshold = scanOrToUnionThreshold;
     }
 
+<<<<<<< HEAD
+=======
+    public TPredicateTreeParams getPredicateTreeParams() {
+        TPredicateTreeParams params = new TPredicateTreeParams();
+        params.setEnable_or(enablePushdownOrPredicate);
+        params.setEnable_show_in_profile(enableShowPredicateTreeInProfile);
+        params.setMax_pushdown_or_predicates(maxPushdownOrPredicates);
+        return params;
+    }
+
+>>>>>>> 9a3d52038f ([BugFix] Limit push down or predicates (#64544))
     public double getSelectRatioThreshold() {
         return selectRatioThreshold;
     }

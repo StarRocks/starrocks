@@ -413,6 +413,15 @@ struct TAdaptiveDopParam {
   2: optional i64 max_output_amplification_factor
 }
 
+<<<<<<< HEAD
+=======
+struct TPredicateTreeParams {
+  1: optional bool enable_or
+  2: optional bool enable_show_in_profile
+  3: optional i32 max_pushdown_or_predicates
+}
+
+>>>>>>> 9a3d52038f ([BugFix] Limit push down or predicates (#64544))
 // ExecPlanFragment
 
 struct TExecPlanFragmentParams {

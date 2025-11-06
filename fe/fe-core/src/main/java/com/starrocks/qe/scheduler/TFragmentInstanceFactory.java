@@ -159,6 +159,15 @@ public class TFragmentInstanceFactory {
                     TQueryOptions queryOptions = result.getQuery_options();
                     queryOptions.setQuery_queue_options(queryQueueOptions);
                 }
+<<<<<<< HEAD
+=======
+
+                result.setPred_tree_params(sessionVariable.getPredicateTreeParams());
+
+                if (CollectionUtils.isNotEmpty(fragment.getCollectExecStatsIds())) {
+                    result.setExec_stats_node_ids(fragment.getCollectExecStatsIds());
+                }
+>>>>>>> 9a3d52038f ([BugFix] Limit push down or predicates (#64544))
             }
         }
     }
