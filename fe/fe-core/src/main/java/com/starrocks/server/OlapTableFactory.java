@@ -779,7 +779,7 @@ public class OlapTableFactory implements AbstractTableFactory {
                     // follow code should be deleted mistakenly.
                     if (FeConstants.runningUnitTest && properties != null && properties.containsKey("resource")) {
                         table.getTableProperty().getProperties().put("resource", properties.get("resource"));
-                    } else if (properties != null && !properties.isEmpty()) {
+                    } else if (!FeConstants.isReplayFromQueryDump && properties != null && !properties.isEmpty()) {
                         // here, all properties should be checked
                         throw new DdlException("Unknown properties: " + properties);
                     }
@@ -813,7 +813,7 @@ public class OlapTableFactory implements AbstractTableFactory {
                         if (hasMedium) {
                             table.setStorageMedium(dataProperty.getStorageMedium());
                         }
-                        if (properties != null && !properties.isEmpty()) {
+                        if (!FeConstants.isReplayFromQueryDump && properties != null && !properties.isEmpty()) {
                             // here, all properties should be checked
                             throw new DdlException("Unknown properties: " + properties);
                         }
