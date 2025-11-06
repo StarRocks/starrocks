@@ -47,6 +47,7 @@ import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UnionRelation;
 import com.starrocks.sql.ast.expression.BoolLiteral;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.TableName;
@@ -233,7 +234,7 @@ public class MVPCTRefreshPlanBuilder {
             return generateMVPartitionPredicate(mvToRefreshedPartitions, queryStatement, insertStmt);
         } else {
             // TODO: merge with above code
-            Expr finalPredicate = Expr.compoundAnd(extraPartitionPredicates);
+            Expr finalPredicate = ExprUtils.compoundAnd(extraPartitionPredicates);
             tracePartitionPredicates(finalPredicate);
             if (queryRelation instanceof SelectRelation) {
                 SelectRelation selectRelation = (SelectRelation) queryRelation;

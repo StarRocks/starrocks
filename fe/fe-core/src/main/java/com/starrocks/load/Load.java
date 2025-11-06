@@ -75,6 +75,7 @@ import com.starrocks.sql.ast.expression.CastExpr;
 import com.starrocks.sql.ast.expression.DictQueryExpr;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.sql.ast.expression.FunctionParams;
@@ -737,7 +738,7 @@ public class Load {
             }
 
             List<CastExpr> casts = Lists.newArrayList();
-            entry.getValue().collect(Expr.IS_VARCHAR_SLOT_REF_IMPLICIT_CAST, casts);
+            entry.getValue().collect(ExprUtils.IS_VARCHAR_SLOT_REF_IMPLICIT_CAST, casts);
             if (casts.isEmpty()) {
                 continue;
             }
@@ -807,7 +808,7 @@ public class Load {
             try {
                 java.util.function.Function<SlotRef, ColumnRefOperator> resolveSlotFunc =
                         (slotRef) -> resolveSlotRef(descriptorTable, srcTupleDesc, slotDescByName, slotRef);
-                expr = Expr.analyzeLoadExpr(expr, resolveSlotFunc);
+                expr = ExprUtils.analyzeLoadExpr(expr, resolveSlotFunc);
             } catch (SemanticException e) {
                 ErrorReport.reportAnalysisException(ERR_MAPPING_EXPR_INVALID, AstToSQLBuilder.toSQL(entry.getValue()),
                         e.getDetailMsg(), entry.getKey());
@@ -864,7 +865,7 @@ public class Load {
             }
             Expr expr = entry.getValue().clone(smap);
 
-            expr = Expr.analyzeAndCastFold(expr);
+            expr = ExprUtils.analyzeAndCastFold(expr);
 
             // check if contain aggregation
             List<FunctionCallExpr> funcs = Lists.newArrayList();
@@ -902,7 +903,7 @@ public class Load {
                 }
             }
             Expr expr = entry.getValue().clone(smap);
-            expr = Expr.analyzeAndCastFold(expr);
+            expr = ExprUtils.analyzeAndCastFold(expr);
 
             exprsByName.put(entry.getKey(), expr);
         }

@@ -20,7 +20,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
-import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.AggType;
@@ -73,7 +73,7 @@ public class GroupByCountDistinctDataSkewEliminateRule extends TransformationRul
 
     private ScalarOperator createBucketColumn(ColumnRefOperator distinctColumn, int bucketNum) {
         CastOperator stringCol = new CastOperator(Type.VARCHAR, distinctColumn, true);
-        Function hashFunc = Expr.getBuiltinFunction(FunctionSet.MURMUR_HASH3_32, new Type[] {Type.VARCHAR},
+        Function hashFunc = ExprUtils.getBuiltinFunction(FunctionSet.MURMUR_HASH3_32, new Type[] {Type.VARCHAR},
                 Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         Type type = pickBucketType(bucketNum);
         CallOperator callHashFuncOp =
@@ -85,7 +85,7 @@ public class GroupByCountDistinctDataSkewEliminateRule extends TransformationRul
         // for an example, when bucketNum=8; the remainder will be
         // -3, -2, -1, 0, 1, 2, 3, 4, NULL
         ConstantOperator bucketConstOp = new ConstantOperator(bucketNum / 2, Type.INT);
-        Function modFunc = Expr.getBuiltinFunction(FunctionSet.MOD,
+        Function modFunc = ExprUtils.getBuiltinFunction(FunctionSet.MOD,
                 new Type[] {callHashFuncOp.getType(), bucketConstOp.getType()},
                 Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         CallOperator modBucketOp =

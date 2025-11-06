@@ -42,8 +42,9 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.common.TreeNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
 import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
+import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.PermutationGenerator;
 import com.starrocks.sql.formatter.ExprExplainVisitor;
@@ -169,7 +170,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         this.limit = node.limit;
         this.tupleIds = Lists.newArrayList(node.tupleIds);
         this.nullableTupleIds = Sets.newHashSet(node.nullableTupleIds);
-        this.conjuncts = Expr.cloneList(node.conjuncts, null);
+        this.conjuncts = ExprUtils.cloneList(node.conjuncts, null);
         this.cardinality = -1;
         this.planNodeName = planNodeName;
     }

@@ -29,7 +29,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.catalog.combinator.AggStateIf;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.FunctionAnalyzer;
-import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionParams;
 import com.starrocks.sql.ast.expression.JoinOperator;
 import com.starrocks.sql.common.MetaUtils;
@@ -413,7 +413,7 @@ public class ReuseFusionPlanRule implements TreeRewriteRule {
                         originalPiece.pieceIdToRowCountRef.put(originalPiece.planId, pieceRowCountRef[0]);
                         extraOutputRefs.add(pieceRowCountRef[0]);
                     } else {
-                        Function anyFn = Expr.getBuiltinFunction(FunctionSet.ANY_VALUE,
+                        Function anyFn = ExprUtils.getBuiltinFunction(FunctionSet.ANY_VALUE,
                                 new Type[] {Type.BOOLEAN}, Function.CompareMode.IS_IDENTICAL);
                         CallOperator anyTrue = new CallOperator(FunctionSet.ANY_VALUE, Type.BOOLEAN,
                                 List.of(ConstantOperator.createBoolean(true)), anyFn);
@@ -468,7 +468,7 @@ public class ReuseFusionPlanRule implements TreeRewriteRule {
                 // count(*)
                 Preconditions.checkState(FunctionSet.COUNT.equalsIgnoreCase(call.getFnName()));
                 child = ConstantOperator.createInt(1);
-                aggFunc = Expr.getBuiltinFunction(call.getFunction().getFunctionName().getFunction(),
+                aggFunc = ExprUtils.getBuiltinFunction(call.getFunction().getFunctionName().getFunction(),
                         new Type[] {Type.INT}, Function.CompareMode.IS_IDENTICAL);
             } else {
                 child = call.getChild(0);
@@ -476,7 +476,7 @@ public class ReuseFusionPlanRule implements TreeRewriteRule {
             }
 
             java.util.function.Function<CallOperator, CallOperator> fallbackAggIfBuilder = aggCall -> {
-                Function f = Expr.getBuiltinFunction(FunctionSet.IF,
+                Function f = ExprUtils.getBuiltinFunction(FunctionSet.IF,
                         new Type[] {Type.BOOLEAN, child.getType(), child.getType()}, Function.CompareMode.IS_IDENTICAL);
                 CallOperator ifNull = new CallOperator("if", child.getType(),
                         List.of(filter, child, ConstantOperator.createNull(child.getType())), f);
@@ -492,7 +492,7 @@ public class ReuseFusionPlanRule implements TreeRewriteRule {
             } else {
                 Preconditions.checkState(aggFunc instanceof AggregateFunction);
                 Type[] argTypes = new Type[] {child.getType(), Type.BOOLEAN};
-                Function aggStateIf = Expr.getBuiltinFunction(aggFunc.functionName() + FunctionSet.AGG_STATE_IF_SUFFIX,
+                Function aggStateIf = ExprUtils.getBuiltinFunction(aggFunc.functionName() + FunctionSet.AGG_STATE_IF_SUFFIX,
                         argTypes, Function.CompareMode.IS_IDENTICAL);
                 // set precision and scale for decimal
                 if (aggStateIf != null && argTypes[0].isDecimalV3()) {

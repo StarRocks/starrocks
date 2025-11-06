@@ -16,7 +16,7 @@ package com.starrocks.sql.ast.expression;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.Type;
 import com.starrocks.catalog.TypeSerializer;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
@@ -76,7 +76,7 @@ public class ExprToThriftVisitor implements AstVisitorExtendInterface<Void, TExp
     public static void treeToThriftHelper(Expr expr, TExpr container, BiConsumer<Expr, TExprNode> consumer) {
         if (expr.getType().isNull()) {
             Preconditions.checkState(expr instanceof NullLiteral || expr instanceof SlotRef);
-            treeToThriftHelper(NullLiteral.create(ScalarType.BOOLEAN), container, consumer);
+            treeToThriftHelper(NullLiteral.create(Type.BOOLEAN), container, consumer);
             return;
         }
 
@@ -251,7 +251,7 @@ public class ExprToThriftVisitor implements AstVisitorExtendInterface<Void, TExp
 
     @Override
     public Void visitFunctionCall(FunctionCallExpr node, TExprNode msg) {
-        if (node.isAggregate() || node.isAnalyticFnCall()) {
+        if (ExprUtils.isAggregate(node) || node.isAnalyticFnCall()) {
             msg.node_type = TExprNodeType.AGG_EXPR;
             msg.setAgg_expr(new TAggregateExpr(node.isMergeAggFn()));
         } else {

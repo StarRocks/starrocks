@@ -15,7 +15,6 @@
 package com.starrocks.alter;
 
 import com.google.common.collect.Multimap;
-import com.starrocks.alter.AlterCancelException;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;

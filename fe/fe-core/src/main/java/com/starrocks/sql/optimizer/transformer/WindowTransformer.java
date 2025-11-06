@@ -29,6 +29,7 @@ import com.starrocks.sql.ast.expression.AnalyticExpr;
 import com.starrocks.sql.ast.expression.AnalyticWindow;
 import com.starrocks.sql.ast.expression.DecimalLiteral;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.NullLiteral;
@@ -144,7 +145,7 @@ public class WindowTransformer {
                 } else {
                     rightBoundary = new DecimalLiteral(BigDecimal.valueOf(1));
                 }
-                BigDecimal offsetValue = BigDecimal.valueOf(Expr.getConstFromExpr(rightBoundary));
+                BigDecimal offsetValue = BigDecimal.valueOf(ExprUtils.getConstFromExpr(rightBoundary));
 
                 windowFrame = new AnalyticWindow(AnalyticWindow.Type.ROWS,
                         new AnalyticWindow.Boundary(AnalyticWindow.BoundaryType.UNBOUNDED_PRECEDING, null),
@@ -179,7 +180,7 @@ public class WindowTransformer {
 
             if (reversedFnName != null) {
                 callExpr.resetFnName("", reversedFnName);
-                Function reversedFn = Expr.getBuiltinFunction(reversedFnName,
+                Function reversedFn = ExprUtils.getBuiltinFunction(reversedFnName,
                         callExpr.getFn().getArgs(), Function.CompareMode.IS_IDENTICAL);
                 callExpr.setFn(reversedFn);
             }

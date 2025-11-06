@@ -21,8 +21,8 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.BetweenPredicate;
-import com.starrocks.sql.ast.expression.CompoundPredicate;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.sql.ast.expression.InPredicate;
@@ -231,12 +231,12 @@ public class SPMFunctions {
                 Expr max = spmExpr.getChild(2);
                 List<Expr> values = checkParameters.stream()
                         .map(p -> (Expr) new BetweenPredicate(p, min, max, false)).toList();
-                checkExpr = CompoundPredicate.compoundAnd(values);
+                checkExpr = ExprUtils.compoundAnd(values);
             } else if (CONST_ENUM_FUNC.equalsIgnoreCase(fn)) {
                 List<Expr> values = spmExpr.getChildren().stream().skip(1).toList();
                 List<Expr> inPredicates = checkParameters.stream()
                         .map(p -> (Expr) new InPredicate(p, values, false)).toList();
-                checkExpr = CompoundPredicate.compoundAnd(inPredicates);
+                checkExpr = ExprUtils.compoundAnd(inPredicates);
             } else {
                 return false;
             }

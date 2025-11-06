@@ -78,6 +78,7 @@ import com.starrocks.sql.analyzer.mvpattern.MVColumnPercentileUnionPattern;
 import com.starrocks.sql.ast.expression.CaseExpr;
 import com.starrocks.sql.ast.expression.CaseWhenClause;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.FunctionParams;
 import com.starrocks.sql.ast.expression.IntLiteral;
@@ -483,7 +484,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                             "Column %s at wrong location", selectListItemExpr.toMySql());
                 }
                 // NOTE: If `selectListItemExpr` contains aggregate function, we can not support it.
-                if (selectListItemExpr.containsAggregate()) {
+                if (ExprUtils.containsAggregate(selectListItemExpr)) {
                     throw new UnsupportedMVException("Aggregate function with function expr is not supported yet",
                             selectListItemExpr.toMySql());
                 }
@@ -661,7 +662,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
             case FunctionSet.BITMAP_AGG:
                 // Compatible aggregation models
                 if (FunctionSet.BITMAP_AGG_TYPE.contains(baseType)) {
-                    Function fn = Expr.getBuiltinFunction(FunctionSet.TO_BITMAP, new Type[] {baseType},
+                    Function fn = ExprUtils.getBuiltinFunction(FunctionSet.TO_BITMAP, new Type[] {baseType},
                             Function.CompareMode.IS_IDENTICAL);
                     defineExpr = new FunctionCallExpr(FunctionSet.TO_BITMAP, Lists.newArrayList(defineExpr));
                     defineExpr.setFn(fn);

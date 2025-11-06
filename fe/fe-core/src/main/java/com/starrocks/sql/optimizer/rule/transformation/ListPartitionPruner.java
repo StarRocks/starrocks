@@ -31,6 +31,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.optimizer.Utils;
@@ -596,7 +597,7 @@ public class ListPartitionPruner implements PartitionPruner {
                 return matches;
             case EQ_FOR_NULL:
                 // SlotRef <=> Literal
-                if (Expr.IS_NULL_LITERAL.apply(literal)) {
+                if (ExprUtils.IS_NULL_LITERAL.apply(literal)) {
                     // null
                     matches.addAll(nullPartitions);
                 } else {

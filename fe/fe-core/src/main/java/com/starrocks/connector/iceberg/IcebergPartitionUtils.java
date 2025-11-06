@@ -30,6 +30,7 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
@@ -335,12 +336,12 @@ public class IcebergPartitionUtils {
                     LiteralExpr upperExpr = LiteralExpr.create(range.upperEndpoint(), slotRef.getType());
                     Expr lower = new BinaryPredicate(BinaryType.GE, slotRef, lowerExpr);
                     Expr upper = new BinaryPredicate(BinaryType.LT, slotRef, upperExpr);
-                    result.add(Expr.compoundAnd(ImmutableList.of(lower, upper)));
+                    result.add(ExprUtils.compoundAnd(ImmutableList.of(lower, upper)));
                 } catch (AnalysisException e) {
                     throw new StarRocksConnectorException("Create literal expr failed", e);
                 }
             }
-            return Expr.compoundOr(result);
+            return ExprUtils.compoundOr(result);
         }
     }
 }

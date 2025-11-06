@@ -47,6 +47,7 @@ import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.expression.BoolLiteral;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.IsNullPredicate;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
@@ -246,7 +247,7 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
             // contain `is null` predicate rather than `in (null) or = null` because the later one is not correct.
             if (isContainsNullPartition) {
                 IsNullPredicate isNullPredicate = new IsNullPredicate(mvPartitionExpr, false);
-                return Expr.compoundOr(Lists.newArrayList(inPredicate, isNullPredicate));
+                return ExprUtils.compoundOr(Lists.newArrayList(inPredicate, isNullPredicate));
             } else {
                 return inPredicate;
             }
@@ -275,10 +276,10 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
                         }
                         predicates.add(predicate);
                     }
-                    partitionPredicates.add(Expr.compoundAnd(predicates));
+                    partitionPredicates.add(ExprUtils.compoundAnd(predicates));
                 }
             }
-            return Expr.compoundOr(partitionPredicates);
+            return ExprUtils.compoundOr(partitionPredicates);
         }
     }
 
@@ -327,7 +328,7 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
             // contain `is null` predicate rather than `in (null) or = null` because the later one is not correct.
             if (isContainsNullPartition) {
                 IsNullPredicate isNullPredicate = new IsNullPredicate(refBaseTablePartitionSlotRef, false);
-                return Expr.compoundOr(Lists.newArrayList(inPredicate, isNullPredicate));
+                return ExprUtils.compoundOr(Lists.newArrayList(inPredicate, isNullPredicate));
             } else {
                 return inPredicate;
             }
@@ -356,10 +357,10 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
                         }
                         predicates.add(predicate);
                     }
-                    partitionPredicates.add(Expr.compoundAnd(predicates));
+                    partitionPredicates.add(ExprUtils.compoundAnd(predicates));
                 }
             }
-            return Expr.compoundOr(partitionPredicates);
+            return ExprUtils.compoundOr(partitionPredicates);
         }
     }
 

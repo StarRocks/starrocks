@@ -24,6 +24,7 @@ import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.expression.AnalyticExpr;
 import com.starrocks.sql.ast.expression.AnalyticWindow;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.NullLiteral;
@@ -258,7 +259,7 @@ public class AnalyticAnalyzer {
 
         if (e.isConstant() && e.getType().isNumericType()) {
             try {
-                val = Expr.getConstFromExpr(e);
+                val = ExprUtils.getConstFromExpr(e);
                 if (val <= 0) {
                     isPos = false;
                 }
@@ -298,8 +299,8 @@ public class AnalyticAnalyzer {
         Preconditions.checkState(e2 != null && e2.isConstant() && e2.getType().isNumericType());
 
         try {
-            double left = Expr.getConstFromExpr(e1);
-            double right = Expr.getConstFromExpr(e2);
+            double left = ExprUtils.getConstFromExpr(e1);
+            double right = ExprUtils.getConstFromExpr(e2);
 
             if (left > right) {
                 throw new SemanticException("Offset boundaries are in the wrong order", e1.getPos());

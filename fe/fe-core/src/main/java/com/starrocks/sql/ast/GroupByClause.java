@@ -40,6 +40,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.VirtualSlotRef;
 import com.starrocks.sql.parser.NodePosition;
 import org.apache.commons.collections.CollectionUtils;
@@ -105,14 +106,14 @@ public class GroupByClause implements ParseNode {
     protected GroupByClause(GroupByClause other) {
         this.pos = other.pos;
         this.groupingType = other.groupingType;
-        this.groupingExprs = (other.groupingExprs != null) ? Expr.cloneAndResetList(other.groupingExprs) : null;
+        this.groupingExprs = (other.groupingExprs != null) ? ExprUtils.cloneAndResetList(other.groupingExprs) : null;
         this.oriGroupingExprs =
-                (other.oriGroupingExprs != null) ? Expr.cloneAndResetList(other.oriGroupingExprs) : null;
+                (other.oriGroupingExprs != null) ? ExprUtils.cloneAndResetList(other.oriGroupingExprs) : null;
 
         if (other.groupingSetList != null) {
             this.groupingSetList = new ArrayList<>();
             for (List<Expr> exprList : other.groupingSetList) {
-                this.groupingSetList.add(Expr.cloneAndResetList(exprList));
+                this.groupingSetList.add(ExprUtils.cloneAndResetList(exprList));
             }
         }
     }

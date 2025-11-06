@@ -20,7 +20,7 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.ast.expression.BinaryType;
-import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
@@ -85,7 +85,7 @@ public class SimplifiedDateColumnPredicateRule extends BottomUpScalarOperatorRew
                 return new BinaryPredicateOperator(binaryType, columnRef, right);
             } else if (binaryType == GT || binaryType == LE) {
                 // date_format(t, '%Y-%m-%d') >/<= '2023-03-27' -> t >=/< days_add('2023-03-27', 1)
-                Function daysAddFn = Expr.getBuiltinFunction(FunctionSet.DAYS_ADD,
+                Function daysAddFn = ExprUtils.getBuiltinFunction(FunctionSet.DAYS_ADD,
                         new Type[] {Type.DATETIME, Type.INT}, Function.CompareMode.IS_IDENTICAL);
                 binaryType = binaryType == GT ? GE : LT;
                 return new BinaryPredicateOperator(binaryType, columnRef, new CallOperator(

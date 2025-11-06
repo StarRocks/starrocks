@@ -20,7 +20,7 @@ import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PartitionKey;
-import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.sql.ast.PartitionValue;
@@ -76,7 +76,7 @@ public class SyncPartitionBench {
 
     private static final Date START_DATETIME = TimeUtils.getTimeAsDate("2000-01-01 00:00:00");
     private static final SimpleDateFormat DATETIME_FORMAT = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-    private static final Column PARTITION_COLUMN = new Column("k1", ScalarType.DATETIME);
+    private static final Column PARTITION_COLUMN = new Column("k1", Type.DATETIME);
 
     private final PCellSortedSet srcRangeMap = PCellSortedSet.of();
     private final PCellSortedSet dstRangeMap = PCellSortedSet.of();

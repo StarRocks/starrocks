@@ -17,6 +17,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstRewriter;
 import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.MetaUtils;
@@ -142,7 +143,7 @@ public class NativeAccessControllerEPack extends NativeAccessController implemen
                 if (rewriteExpr == null) {
                     rewriteExpr = (Expr) r.visit(policyExpr);
                 } else {
-                    rewriteExpr = Expr.compoundAnd(Lists.newArrayList((Expr) r.visit(policyExpr), rewriteExpr));
+                    rewriteExpr = ExprUtils.compoundAnd(Lists.newArrayList((Expr) r.visit(policyExpr), rewriteExpr));
                 }
             } else {
                 rewriteExpr = policyExpr;

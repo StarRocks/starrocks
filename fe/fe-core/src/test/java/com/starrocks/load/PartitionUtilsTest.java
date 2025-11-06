@@ -19,7 +19,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.sql.ast.expression.LiteralExpr;
@@ -38,11 +37,11 @@ public class PartitionUtilsTest {
     @Test
     public void testConvertDateLiteralToDouble() throws Exception {
         Object result = PartitionUtils.convertDateLiteralToNumber(
-                new DateLiteral("2015-03-01", ScalarType.DATE));
+                new DateLiteral("2015-03-01", Type.DATE));
         assertEquals(1031777L, result);
 
         result = PartitionUtils.convertDateLiteralToNumber(
-                new DateLiteral("2015-03-01 12:00:00", ScalarType.DATETIME));
+                new DateLiteral("2015-03-01 12:00:00", Type.DATETIME));
         assertEquals(20150301120000L, result);
     }
 
