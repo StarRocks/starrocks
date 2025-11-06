@@ -96,3 +96,4 @@ CMakeLists.txt
 fe/fe-core/pseudo_cluster_*
 contrib/java-udf/target/
 java-extensions/*/bin/
+.claude
