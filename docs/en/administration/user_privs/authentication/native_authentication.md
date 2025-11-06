@@ -7,7 +7,7 @@ sidebar_position: 10
 
 Create and manage users using the native authentication within StarRocks through SQL commands.
 
-StarRocks native authentication is a password-based authentication method. In addition to that, StarRocks also supports integrating with external authentication systems such as LDAP, OpenID Connect, and OAuth 2.0. For more instructions, see [Authenticate with Security Integration](./security_integration.md).
+StarRocks native authentication is a password-based authentication method. In addition to that, StarRocks also supports integrating with external authentication systems such as LDAP, OpenID Connect, and OAuth 2.0.
 
 :::note
 
@@ -30,7 +30,7 @@ CREATE USER jack@'172.10.1.10' IDENTIFIED BY '12345' DEFAULT ROLE 'example_role'
 - A system-defined default role `PUBLIC` is assigned to a user if no default role is specified during user creation.
 :::
 
-The default role of a user is automatically activated when the user connects to StarRocks. For instructions on how to enable all (default and granted) roles for a user after connection, see [Enable all roles](../authorization/User_privilege.md#enable-all-roles).
+The default role of a user is automatically activated when the user connects to StarRocks. For instructions on how to enable all (default and granted) roles for a user after connection, see [Enable all roles](../User_privilege.md#enable-all-roles).
 
 For more information and advanced instructions on creating a user, see [CREATE USER](../../../sql-reference/sql-statements/account-management/CREATE_USER.md).
 
@@ -38,7 +38,7 @@ For more information and advanced instructions on creating a user, see [CREATE U
 
 You can alter the password, default role, or property for a user.
 
-For instructions on how to alter the default role for a user, see [Alter default role](../authorization/User_privilege.md#alter-the-default-role-of-a-user).
+For instructions on how to alter the default role for a user, see [Alter default role](../User_privilege.md#alter-the-default-role-of-a-user).
 
 ### Alter the property of a user
 
