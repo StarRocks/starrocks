@@ -14,11 +14,11 @@
 
 package com.starrocks.service.arrow.flight.sql;
 
-import com.starrocks.type.ArrayType;
-import com.starrocks.type.MapType;
-import com.starrocks.type.ScalarType;
-import com.starrocks.type.StructType;
-import com.starrocks.type.Type;
+import com.starrocks.catalog.ArrayType;
+import com.starrocks.catalog.MapType;
+import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.StructType;
+import com.starrocks.catalog.Type;
 import org.apache.arrow.vector.types.FloatingPointPrecision;
 import org.apache.arrow.vector.types.pojo.ArrowType;
 import org.apache.arrow.vector.types.pojo.Field;
