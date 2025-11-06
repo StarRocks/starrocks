@@ -45,7 +45,7 @@ Paimon Catalog 仅支持查询 Paimon 数据，不支持针对 Paimon 的写/删
 | `MAP`                 | `MAP<key_type, value_type>` |
 | `ROW/STRUCT`          | `STRUCT<field1:type1, ...>` |
 
-## 集成准备
+## 准备工作
 
 在创建 Paimon Catalog 之前，请确保 StarRocks 集群能够正常访问 Paimon 的文件存储及元数据服务。
 
