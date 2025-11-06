@@ -389,7 +389,6 @@ public class MetadataViewer {
                             row.add(partition.getName());
                             row.add(String.valueOf(physicalPartition.getId()));
                             row.add(olapTable.getIndexNameById(index.getId()));
-                            row.add(index.getVirtualBucketsByTabletId(tablets.get(i).getId()).toString());
                             row.add(String.valueOf(rowCountStatistics.get(i)));
                             row.add(totalRowCount == 0L ? "0.00 %"
                                     : df.format((double) rowCountStatistics.get(i) / totalRowCount));

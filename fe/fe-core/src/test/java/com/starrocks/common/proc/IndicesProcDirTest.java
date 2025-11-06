@@ -76,7 +76,6 @@ public class IndicesProcDirTest {
                 "{\"maxTabletNum\":9,\"minTabletNum\":1,\"maxBeId\":1,\"minBeId\":2," +
                         "\"type\":\"INTER_NODE_TABLET_DISTRIBUTION\",\"balanced\":false}",
                 row.get(4)); // tablet balance stat
-        Assertions.assertEquals("2", row.get(5)); // virtual buckets
-        Assertions.assertEquals("2", row.get(6)); // tablets
+        Assertions.assertEquals("2", row.get(5)); // tablets
     }
 }
