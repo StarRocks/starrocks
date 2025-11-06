@@ -285,8 +285,8 @@ void MetaFileBuilder::remove_compacted_sst(const TxnLogPB_OpCompaction& op_compa
     }
 }
 
-void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction,
-                                         uint32_t max_compact_input_rowset_id, int64_t output_rowset_schema_id) {
+Status MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction,
+                                           uint32_t max_compact_input_rowset_id, int64_t output_rowset_schema_id) {
     // delete input rowsets
     std::stringstream del_range_ss;
     std::vector<std::pair<uint32_t, uint32_t>> delete_delvec_sid_range;
@@ -303,22 +303,36 @@ void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compact
     // Only used for cloud native persistent index.
     std::vector<DelfileWithRowsetId> collect_del_files;
     auto it = _tablet_meta->mutable_rowsets()->begin();
+    uint32_t deleted_input_rowset_cnt = 0;
     while (it != _tablet_meta->mutable_rowsets()->end()) {
         auto search_it = std::find_if(op_compaction.input_rowsets().begin(), op_compaction.input_rowsets().end(),
                                       Finder{it->id()});
         if (search_it != op_compaction.input_rowsets().end()) {
             // find it
-            delete_delvec_sid_range.emplace_back(it->id(), it->id() + it->segments_size() - 1);
+            delete_delvec_sid_range.emplace_back(it->id(), it->id() + std::max(it->segments_size(), 1) - 1);
             // Collect del files.
             _collect_del_files_above_rebuild_point(&(*it), &collect_del_files);
             _tablet_meta->mutable_compaction_inputs()->Add(std::move(*it));
             it = _tablet_meta->mutable_rowsets()->erase(it);
             del_range_ss << "[" << delete_delvec_sid_range.back().first << "," << delete_delvec_sid_range.back().second
                          << "] ";
+            deleted_input_rowset_cnt++;
         } else {
             it++;
         }
     }
+    if (deleted_input_rowset_cnt != op_compaction.input_rowsets_size()) {
+        LOG(ERROR) << fmt::format(
+                "MetaFileBuilder apply_opcompaction failed to find all input rowsets, tablet_id:{} "
+                " expected_input_rowsets : {} "
+                " deleted_input_rowsets : {} "
+                " op_compaction : {}"
+                " tablet meta : {}",
+                _tablet_meta->id(), op_compaction.input_rowsets_size(), deleted_input_rowset_cnt,
+                op_compaction.ShortDebugString(), _tablet_meta->ShortDebugString());
+        return Status::InternalError("failed to find all input rowsets in apply_opcompaction");
+    }
+
     // delete delvec by input rowsets
     auto delvecs = _tablet_meta->mutable_delvec_meta()->mutable_delvecs();
     using T_DELVEC = std::decay_t<decltype(*delvecs)>;
@@ -400,6 +414,7 @@ void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compact
             "MetaFileBuilder apply_opcompaction, id:{} input range:{} delvec del cnt:{} dcg del cnt:{} output:{}",
             _tablet_meta->id(), del_range_ss.str(), delvec_erase_cnt, dcg_erase_cnt,
             op_compaction.output_rowset().ShortDebugString());
+    return Status::OK();
 }
 
 void MetaFileBuilder::apply_opcompaction_with_conflict(const TxnLogPB_OpCompaction& op_compaction) {
