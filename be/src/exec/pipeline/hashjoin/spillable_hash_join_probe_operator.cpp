@@ -23,11 +23,6 @@
 #include "exec/hash_joiner.h"
 #include "exec/join_hash_map.h"
 #include "exec/pipeline/hashjoin/hash_join_probe_operator.h"
-<<<<<<< HEAD
-#include "exec/pipeline/query_context.h"
-=======
-#include "exec/pipeline/hashjoin/hash_joiner_factory.h"
->>>>>>> 8d3106e320 ([BugFix] Fix the bug of hash join spill crash when set finishing task failed (#65027))
 #include "exec/spill/executor.h"
 #include "exec/spill/partition.h"
 #include "exec/spill/spill_components.h"
