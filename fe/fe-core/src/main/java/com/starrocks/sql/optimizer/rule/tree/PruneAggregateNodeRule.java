@@ -127,6 +127,13 @@ public class PruneAggregateNodeRule implements TreeRewriteRule {
                 return null;
             }
 
+            // Do not merge the two-phase non-group-by aggregation into a single phase. For non-group-by aggregation, a blocking
+            // aggregation can only be computed by a single `AggregationOperator`, whereas a streaming aggregation can be computed
+            // by multiple `AggregationOperator`s.
+            if (globalAgg.getGroupBys().isEmpty()) {
+                return null;
+            }
+
             Map<ColumnRefOperator, CallOperator> newAggregationMap = Maps.newHashMap();
             for (Map.Entry<ColumnRefOperator, CallOperator> entry : globalAgg.getAggregations().entrySet()) {
                 ColumnRefOperator globalColumn = entry.getKey();
