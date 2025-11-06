@@ -604,9 +604,23 @@ Status UpdateManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_writ
             wopts.encryption_meta = std::move(pair.encryption_meta);
         }
         std::string seg_name = gen_segment_filename(txn_id);
-        ASSIGN_OR_RETURN(auto wfile, fs::new_writable_file(fopts, tablet->segment_location(seg_name)));
+        std::string seg_path = tablet->segment_location(seg_name);
+        ASSIGN_OR_RETURN(auto wfile, fs::new_writable_file(fopts, seg_path));
         SegmentWriter writer(std::move(wfile), /*segment_id*/ 0, tschema, wopts);
         RETURN_IF_ERROR(writer.init());
+
+        // RAII: Clean up incomplete segment file on error
+        bool segment_finalized = false;
+        DeferOp segment_cleanup([&]() {
+            if (!segment_finalized) {
+                // If segment was not finalized successfully, delete the incomplete file
+                auto st = fs->delete_file(seg_path);
+                if (!st.ok()) {
+                    LOG(WARNING) << "Failed to delete incomplete segment file: " << seg_path
+                                 << ", error: " << st.message();
+                }
+            }
+        });
 
         MutableColumnPtr pk_column_for_upsert;
         RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column_for_upsert));
@@ -627,6 +641,7 @@ Status UpdateManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_writ
 
         uint64_t seg_file_size = 0, idx_size = 0, footer_pos = 0;
         RETURN_IF_ERROR(writer.finalize(&seg_file_size, &idx_size, &footer_pos));
+        segment_finalized = true; // Mark as successfully finalized
 
         new_rows_op.mutable_rowset()->add_segments(seg_name);
         new_rows_op.mutable_rowset()->add_segment_size(seg_file_size);
