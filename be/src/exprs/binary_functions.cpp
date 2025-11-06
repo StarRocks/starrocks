@@ -27,13 +27,12 @@ namespace starrocks {
 // to_binary
 StatusOr<ColumnPtr> BinaryFunctions::to_binary(FunctionContext* context, const Columns& columns) {
     auto state = reinterpret_cast<BinaryFormatState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
-    auto& src_column = columns[0];
-    const int size = src_column->size();
-    ColumnBuilder<TYPE_VARBINARY> result(size);
     auto to_binary_type = state->to_binary_type;
     switch (to_binary_type) {
-    case BinaryFormatType::UTF8:
+    case BinaryFormatType::UTF8: {
+        auto& src_column = columns[0];
         return std::move(*src_column).mutate();
+    }
     case BinaryFormatType::ENCODE64:
         return EncryptionFunctions::from_base64(context, columns);
     default:
@@ -73,13 +72,12 @@ Status BinaryFunctions::to_binary_close(FunctionContext* context, FunctionContex
 // to_binary
 StatusOr<ColumnPtr> BinaryFunctions::from_binary(FunctionContext* context, const Columns& columns) {
     auto state = reinterpret_cast<BinaryFormatState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
-    auto& src_column = columns[0];
-    const int size = src_column->size();
-    ColumnBuilder<TYPE_VARBINARY> result(size);
     auto to_binary_type = state->to_binary_type;
     switch (to_binary_type) {
-    case BinaryFormatType::UTF8:
+    case BinaryFormatType::UTF8: {
+        auto& src_column = columns[0];
         return std::move(*src_column).mutate();
+    }
     case BinaryFormatType::ENCODE64:
         return EncryptionFunctions::to_base64(context, columns);
     default:

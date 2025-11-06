@@ -646,6 +646,14 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     @SerializedName(value = "currentRefreshMode")
     private RefreshMode currentRefreshMode = RefreshMode.PCT;
 
+    // this is the version for encode row id algorithm which must be consistent along with the mv's lifecycle,
+    // otherwise the incremental refresh may cause incorrect result.
+    // 0: no encode row id
+    // 1: encode_sort_key
+    // 2: encode_fingerprint_sha256
+    @SerializedName(value = "encodeRowIdVersion")
+    private int encodeRowIdVersion = 0;
+
     // Use a flag to prevent MV reload too many times while recursively reloading every mv at FE start time
     // and in each round of checkpoint
     private static final int RELOAD_STATE_NOT = -1;
@@ -938,6 +946,14 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
     public void setCurrentRefreshMode(RefreshMode currentRefreshMode) {
         this.currentRefreshMode = currentRefreshMode;
+    }
+
+    public int getEncodeRowIdVersion() {
+        return encodeRowIdVersion;
+    }
+
+    public void setEncodeRowIdVersion(int encodeRowIdVersion) {
+        this.encodeRowIdVersion = encodeRowIdVersion;
     }
 
     /**
