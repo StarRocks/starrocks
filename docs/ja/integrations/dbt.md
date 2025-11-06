@@ -8,7 +8,7 @@ displayed_sidebar: docs
 
 `dbt-starrocks` [GitHub repo](https://github.com/StarRocks/dbt-starrocks).
 
-## Supported features
+これは実験的な機能です。
 
 ## Supported features
 
