@@ -75,7 +75,7 @@ TEST(PrimaryKeyEncoderTest, testEncodeNull) {
 
     for (int i = 0; i < n; i++) {
         if (i % 3 == 0) {
-            nullable_column->set_null(i);
+            nullable_column->append_nulls(1);
         } else {
             Datum tmp;
             tmp.set_int32(i * 2343);
