@@ -233,20 +233,162 @@ public:
         return count;
     }
 
+    Status read_by_rowds(Column* column, const rowid_t* rowids, size_t* count) override {
+        if (!_has_null) {
+            RETURN_IF_ERROR(_data_decoder->read_by_rowids(_first_ordinal, rowids, count, column));
+        } else {
+            // For ParsedPageV1, null bitmap is RLE encoded.
+            // Strategy:
+            // 1. Read all data values at once using _data_decoder->read_by_rowids
+            // 2. For null flags, find consecutive rowid sequences and batch read them using RLE decoder
+            auto nc = down_cast<NullableColumn*>(column);
+
+            // Step 1: Read all data values at once
+            size_t data_read_count = *count;
+            RETURN_IF_ERROR(
+                    _data_decoder->read_by_rowids(_first_ordinal, rowids, &data_read_count, nc->data_column().get()));
+            *count = data_read_count;
+
+            // Step 2: Read null flags using helper function
+            RETURN_IF_ERROR(_read_null_flags_by_rowids(nc, rowids, *count));
+            nc->update_has_null();
+        }
+        return Status::OK();
+    }
+
     Status read_dict_codes_by_rowids(Column* column, const rowid_t* rowids, size_t* count) override {
-        return Status::NotSupported("read_dict_codes_by_rowids not supported");
+        if (!_has_null) {
+            RETURN_IF_ERROR(_data_decoder->read_dict_codes_by_rowids(_first_ordinal, rowids, count, column));
+        } else {
+            // For ParsedPageV1 with nulls, similar to read_by_rowds:
+            // 1. Read all dict codes using _data_decoder->read_dict_codes_by_rowids
+            // 2. Use helper function to read null flags efficiently
+            auto nc = down_cast<NullableColumn*>(column);
+
+            // Step 1: Read all dict codes at once
+            size_t data_read_count = *count;
+            RETURN_IF_ERROR(_data_decoder->read_dict_codes_by_rowids(_first_ordinal, rowids, &data_read_count,
+                                                                     nc->data_column().get()));
+            *count = data_read_count;
+
+            // Step 2: Read null flags using helper function
+            RETURN_IF_ERROR(_read_null_flags_by_rowids(nc, rowids, *count));
+            nc->update_has_null();
+        }
+        return Status::OK();
     }
 
     Status read_with_filter(Column* column, const SparseRange<>& range,
                             const std::vector<const ColumnPredicate*>& compound_and_predicates, uint8_t* selection,
                             uint16_t* selected_idx, bool* data_filtered) override {
-        return Status::NotSupported("read_with_filter not supported");
+        DCHECK_LE(range.span_size(), remaining());
+
+        size_t original_col_size = column->size();
+
+        if (!_has_null) {
+            RETURN_IF_ERROR(_data_decoder->next_batch_with_filter(column, range, compound_and_predicates, nullptr,
+                                                                  selection, selected_idx, data_filtered));
+            _offset_in_page = range.end();
+        } else {
+            // For ParsedPageV1 with nulls: decode null flags from RLE and pass to data_decoder
+            auto nc = down_cast<NullableColumn*>(column);
+
+            // Seek to the start of the range
+            RETURN_IF_ERROR(seek(range.begin()));
+
+            // Decode null flags for the range
+            std::vector<uint8_t> null_flags;
+            null_flags.reserve(range.span_size());
+
+            size_t nrows_to_read = range.span_size();
+            while (nrows_to_read > 0) {
+                bool is_null = false;
+                size_t this_run = _null_decoder.GetNextRun(&is_null, nrows_to_read);
+                uint8_t null_value = is_null ? 1 : 0;
+                for (size_t i = 0; i < this_run; i++) {
+                    null_flags.emplace_back(null_value);
+                }
+                nrows_to_read -= this_run;
+            }
+
+            // Pass null flags to data_decoder for predicate evaluation
+            // The data_decoder will handle appending null flags to the column
+            RETURN_IF_ERROR(_data_decoder->next_batch_with_filter(nc, range, compound_and_predicates, null_flags.data(),
+                                                                  selection, selected_idx, data_filtered));
+
+            _offset_in_page = range.end();
+        }
+
+        size_t selected_size = SIMD::count_nonzero(selection, range.span_size());
+        if (*data_filtered) {
+            size_t added_col_size = column->size() - original_col_size;
+            if (selected_size != added_col_size) {
+                return Status::InternalError(fmt::format("Selected size:{}, does not match added col size:{}",
+                                                         selected_size, added_col_size));
+            }
+        }
+
+        return Status::OK();
     }
 
 private:
     friend Status parse_page_v1(std::unique_ptr<ParsedPage>* result, PageHandle handle, const Slice& body,
                                 const DataPageFooterPB& footer, const EncodingInfo* encoding,
                                 const PagePointer& page_pointer, uint32_t page_index);
+
+    // Helper function to read null flags for given rowids
+    // This function finds consecutive rowid sequences and batch reads null flags using RLE decoder
+    Status _read_null_flags_by_rowids(NullableColumn* nc, const rowid_t* rowids, size_t count) {
+        // Reuse null_decoder across batches to avoid redundant Skip operations
+        RleDecoder<bool> null_decoder((const uint8_t*)_null_bitmap.data, _null_bitmap.size, 1);
+        ordinal_t current_decoder_pos = 0; // Current position of the decoder in the page
+
+        size_t i = 0;
+        while (i < count) {
+            ordinal_t start_ordinal = rowids[i] - _first_ordinal;
+            DCHECK_LT(start_ordinal, _num_rows);
+
+            // Find consecutive rowids to batch null flag reads
+            size_t batch_size = 1;
+            while (i + batch_size < count) {
+                ordinal_t next_ordinal = rowids[i + batch_size] - _first_ordinal;
+                ordinal_t expected_ordinal = rowids[i + batch_size - 1] - _first_ordinal + 1;
+
+                // Check if next rowid is consecutive
+                if (next_ordinal != expected_ordinal) {
+                    break;
+                }
+                batch_size++;
+            }
+
+            // Skip to the start position (only skip the delta)
+            if (start_ordinal > current_decoder_pos) {
+                size_t skip_count = start_ordinal - current_decoder_pos;
+                size_t skip_nulls = 0;
+                if (UNLIKELY(!null_decoder.Skip(skip_count, &skip_nulls))) {
+                    return Status::InternalError("Failed to skip in null decoder");
+                }
+                current_decoder_pos = start_ordinal;
+            }
+
+            // Read null flags for the batch
+            size_t remaining = batch_size;
+            while (remaining > 0) {
+                bool is_null = false;
+                size_t this_run = null_decoder.GetNextRun(&is_null, remaining);
+                uint8_t null_value = is_null ? 1 : 0;
+                for (size_t j = 0; j < this_run; j++) {
+                    nc->null_column()->append_numbers(&null_value, sizeof(uint8_t));
+                }
+                remaining -= this_run;
+                current_decoder_pos += this_run;
+            }
+
+            i += batch_size;
+        }
+
+        return Status::OK();
+    }
 
     bool _has_null = false;
     Slice _null_bitmap;
@@ -305,23 +447,34 @@ public:
                             uint16_t* selected_idx, bool* data_filtered) override {
         DCHECK_EQ(_offset_in_page, range.begin());
         DCHECK_EQ(_offset_in_page, _data_decoder->current_index());
+
+        size_t original_col_size = column->size();
+
         if (_null_flags.size() == 0) {
-            size_t original_col_size = column->size();
             RETURN_IF_ERROR(_data_decoder->next_batch_with_filter(column, range, compound_and_predicates, nullptr,
                                                                   selection, selected_idx, data_filtered));
-            size_t selected_size = SIMD::count_nonzero(selection, range.span_size());
-            if (*data_filtered) {
-                size_t added_col_size = column->size() - original_col_size;
-                if (selected_size != added_col_size) {
-                    return Status::InternalError(fmt::format("Selected size:{}, does not match added col size:{}",
-                                                             selected_size, added_col_size));
-                }
-            }
-            _offset_in_page = range.end();
         } else {
-            *data_filtered = false;
-            return read(column, range);
+            // For ParsedPageV2 with nulls: pass null flags to data_decoder
+            // The data_decoder will handle null predicates
+            auto nc = down_cast<NullableColumn*>(column);
+
+            // Pass the null flags starting from current offset
+            // The data_decoder will handle appending null flags to the column
+            const uint8_t* null_data = _null_flags.data() + _offset_in_page;
+            RETURN_IF_ERROR(_data_decoder->next_batch_with_filter(nc, range, compound_and_predicates, null_data,
+                                                                  selection, selected_idx, data_filtered));
         }
+
+        size_t selected_size = SIMD::count_nonzero(selection, range.span_size());
+        if (*data_filtered) {
+            size_t added_col_size = column->size() - original_col_size;
+            if (selected_size != added_col_size) {
+                return Status::InternalError(fmt::format("Selected size:{}, does not match added col size:{}",
+                                                         selected_size, added_col_size));
+            }
+        }
+        _offset_in_page = range.end();
+
         return Status::OK();
     }
 

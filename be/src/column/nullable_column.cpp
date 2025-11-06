@@ -119,6 +119,65 @@ void NullableColumn::append_selective(const Column& src, const uint32_t* indexes
     DCHECK_EQ(_null_column->size(), _data_column->size());
 }
 
+void NullableColumn::append_with_filter(const Column& src, const uint8_t* filter, size_t count) {
+    if (src.is_view()) {
+        // For view, fall back to row-by-row append
+        for (size_t i = 0; i < count; i++) {
+            if (filter[i]) {
+                append(src, i, 1);
+            }
+        }
+        return;
+    }
+    
+    DCHECK_EQ(_null_column->size(), _data_column->size());
+    size_t orig_size = _null_column->size();
+    
+    if (src.only_null()) {
+        // Count selected rows
+        size_t selected_count = 0;
+        for (size_t i = 0; i < count; i++) {
+            if (filter[i]) {
+                selected_count++;
+            }
+        }
+        append_nulls(selected_count);
+    } else if (src.is_nullable()) {
+        const auto& src_column = down_cast<const NullableColumn&>(src);
+        DCHECK_EQ(src_column._null_column->size(), src_column._data_column->size());
+
+        if (!src_column.has_null()) {
+            // No nulls in source, fill zeros for selected rows in null column
+            size_t selected_count = 0;
+            for (size_t i = 0; i < count; i++) {
+                if (filter[i]) {
+                    selected_count++;
+                }
+            }
+            _null_column->resize(orig_size + selected_count);
+            _data_column->append_with_filter(*src_column._data_column, filter, count);
+        } else {
+            // Has nulls, append both null column and data column with filter
+            _null_column->append_with_filter(*src_column._null_column, filter, count);
+            _data_column->append_with_filter(*src_column._data_column, filter, count);
+            _has_null = _has_null || SIMD::contain_nonzero(_null_column->get_data(), orig_size, 
+                                                           _null_column->size() - orig_size);
+        }
+    } else {
+        // Source is not nullable, fill zeros for selected rows in null column
+        size_t selected_count = 0;
+        for (size_t i = 0; i < count; i++) {
+            if (filter[i]) {
+                selected_count++;
+            }
+        }
+        _null_column->resize(orig_size + selected_count);
+        _data_column->append_with_filter(src, filter, count);
+    }
+
+    DCHECK_EQ(_null_column->size(), _data_column->size());
+}
+
 void NullableColumn::append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) {
     DCHECK_EQ(_null_column->size(), _data_column->size());
     size_t orig_size = _null_column->size();
