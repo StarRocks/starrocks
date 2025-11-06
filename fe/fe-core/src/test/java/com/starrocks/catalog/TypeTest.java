@@ -42,6 +42,7 @@ import com.starrocks.proto.PStructField;
 import com.starrocks.proto.PTypeDesc;
 import com.starrocks.proto.PTypeNode;
 import com.starrocks.sql.analyzer.ColumnDefAnalyzer;
+import com.starrocks.sql.common.TypeManager;
 import com.starrocks.thrift.TPrimitiveType;
 import com.starrocks.thrift.TTypeNodeType;
 import com.starrocks.type.ArrayType;
@@ -424,7 +425,7 @@ public class TypeTest {
                         Arrays.asList(Type.INT, new ArrayType(Type.VARCHAR), new MapType(Type.INT, Type.JSON))))
         );
         for (Type mapType : mapTypes) {
-            Assertions.assertTrue(Type.canCastTo(jsonType, mapType));
+            Assertions.assertTrue(TypeManager.canCastTo(jsonType, mapType));
         }
     }
 

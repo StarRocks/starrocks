@@ -85,8 +85,6 @@ public abstract class Type implements Cloneable {
     // performance tests.
     public static int MAX_NESTING_DEPTH = 15;
 
-
-
     // Static constant types for scalar types that don't require additional information.
     public static final ScalarType INVALID = new ScalarType(PrimitiveType.INVALID_TYPE);
     public static final ScalarType NULL = new ScalarType(PrimitiveType.NULL_TYPE);
@@ -183,7 +181,7 @@ public abstract class Type implements Cloneable {
             ImmutableList.of(Type.DATE, Type.DATETIME);
     public static final ImmutableList<ScalarType> STRING_TYPES =
             ImmutableList.of(Type.CHAR, Type.VARCHAR);
-    private static final ImmutableList<ScalarType> NUMERIC_TYPES =
+    public static final ImmutableList<ScalarType> NUMERIC_TYPES =
             ImmutableList.<ScalarType>builder()
                     .addAll(INTEGER_TYPES)
                     .addAll(FLOAT_TYPES)
@@ -236,13 +234,7 @@ public abstract class Type implements Cloneable {
                     .put(INVALID.getPrimitiveType(), INVALID)
                     .build();
 
-    public static List<ScalarType> getIntegerTypes() {
-        return INTEGER_TYPES;
-    }
-
-    public static List<ScalarType> getNumericTypes() {
-        return NUMERIC_TYPES;
-    }
+    // Removed getIntegerTypes() and getNumericTypes(); use INTEGER_TYPES and NUMERIC_TYPES directly.
 
     /**
      * The output of this is stored directly in the hive metastore as the column type.
@@ -735,121 +727,6 @@ public abstract class Type implements Cloneable {
     }
 
     /**
-     * Returns true if t1 can be implicitly cast to t2 according to Impala's casting rules.
-     * Implicit casts are always allowed when no loss of precision would result (i.e. every
-     * value of t1 can be represented exactly by a value of t2). Implicit casts are allowed
-     * in certain other cases such as casting numeric types to floating point types and
-     * converting strings to timestamps.
-     * If strict is true, only consider casts that result in no loss of precision.
-     * TODO: Support casting of non-scalar types.
-     */
-    public static boolean isImplicitlyCastable(Type t1, Type t2, boolean strict) {
-        if (t1.isScalarType() && t2.isScalarType()) {
-            return ScalarType.isImplicitlyCastable((ScalarType) t1, (ScalarType) t2, strict);
-        }
-        if (t1.isArrayType() && t2.isArrayType()) {
-            return isImplicitlyCastable(((ArrayType) t1).getItemType(), ((ArrayType) t2).getItemType(), strict);
-        }
-        return false;
-    }
-
-    // isAssignable means that assigning or casting rhs to lhs never overflows.
-    // only both integer part width and fraction part width of lhs is not narrower than counterparts
-    // of rhs, then rhs can be assigned to lhs. for integer types, integer part width is computed by
-    // calling Type::getPrecision and its scale is 0.
-    public static boolean isAssignable2Decimal(ScalarType lhs, ScalarType rhs) {
-        int lhsIntPartWidth;
-        int lhsScale;
-        int rhsIntPartWidth;
-        int rhsScale;
-        if (lhs.isFixedPointType()) {
-            lhsIntPartWidth = lhs.getPrecision();
-            lhsScale = 0;
-        } else {
-            lhsIntPartWidth = lhs.getScalarPrecision() - lhs.getScalarScale();
-            lhsScale = lhs.getScalarScale();
-        }
-
-        if (rhs.isFixedPointType()) {
-            rhsIntPartWidth = rhs.getPrecision();
-            rhsScale = 0;
-        } else {
-            rhsIntPartWidth = rhs.getScalarPrecision() - rhs.getScalarScale();
-            rhsScale = rhs.getScalarScale();
-        }
-
-        // when lhs is integer, for instance, tinyint, lhsIntPartWidth is 3, it cannot holds
-        // a DECIMAL(3, 0).
-        if (lhs.isFixedPointType() && rhs.isDecimalOfAnyVersion()) {
-            return lhsIntPartWidth > rhsIntPartWidth && lhsScale >= rhsScale;
-        } else {
-            return lhsIntPartWidth >= rhsIntPartWidth && lhsScale >= rhsScale;
-        }
-    }
-
-    public static boolean canCastTo(Type from, Type to) {
-        if (from.isNull()) {
-            return true;
-        } else if (from.isStringType() && to.isBitmapType()) {
-            return true;
-        } else if (from.isScalarType() && to.isScalarType()) {
-            return ScalarType.canCastTo((ScalarType) from, (ScalarType) to);
-        } else if (from.isArrayType() && to.isArrayType()) {
-            return canCastTo(((ArrayType) from).getItemType(), ((ArrayType) to).getItemType());
-        } else if (from.isMapType() && to.isMapType()) {
-            MapType fromMap = (MapType) from;
-            MapType toMap = (MapType) to;
-            return canCastTo(fromMap.getKeyType(), toMap.getKeyType()) &&
-                    canCastTo(fromMap.getValueType(), toMap.getValueType());
-        } else if (from.isStructType() && to.isStructType()) {
-            StructType fromStruct = (StructType) from;
-            StructType toStruct = (StructType) to;
-            if (fromStruct.getFields().size() != toStruct.getFields().size()) {
-                return false;
-            }
-            for (int i = 0; i < fromStruct.getFields().size(); ++i) {
-                if (!canCastTo(fromStruct.getField(i).getType(), toStruct.getField(i).getType())) {
-                    return false;
-                }
-            }
-            return true;
-        } else if (from.isStringType() && to.isArrayType()) {
-            return true;
-        } else if (from.isJsonType() && to.isArrayType()) {
-            ArrayType array = (ArrayType) to;
-            if (array.getItemType().isScalarType() || array.getItemType().isStructType()) {
-                return true;
-            }
-            return false;
-        } else if (from.isJsonType() && to.isStructType()) {
-            return true;
-        } else if (from.isJsonType() && to.isMapType()) {
-            MapType map = (MapType) to;
-            return canCastTo(Type.VARCHAR, map.getKeyType()) && canCastTo(Type.JSON, map.getValueType());
-        } else if (from.isBoolean() && to.isComplexType()) {
-            // for mock nest type with NULL value, the cast must return NULL
-            // like cast(map{1: NULL} as MAP<int, int>)
-            return true;
-        } else {
-            return false;
-        }
-    }
-
-    /**
-     * Return type t such that values from both t1 and t2 can be assigned to t without an
-     * explicit cast. If strict, does not consider conversions that would result in loss
-     * of precision (e.g. converting decimal to float). Returns INVALID_TYPE if there is
-     * no such type or if any of t1 and t2 is INVALID_TYPE.
-     * TODO: Support non-scalar types.
-     */
-    public static Type getAssignmentCompatibleType(Type t1, Type t2, boolean strict) {
-        if (t1.isScalarType() && t2.isScalarType()) {
-            return ScalarType.getAssignmentCompatibleType((ScalarType) t1, (ScalarType) t2, strict);
-        }
-        return ScalarType.INVALID;
-    }
-
-    /**
      * Returns true if this type exceeds the MAX_NESTING_DEPTH, false otherwise.
      */
     public boolean exceedsMaxNestingDepth() {
@@ -1026,45 +903,6 @@ public abstract class Type implements Cloneable {
                 return INVALID;
 
         }
-    }
-
-    private static Type getCommonScalarType(ScalarType t1, ScalarType t2) {
-        return ScalarType.getAssignmentCompatibleType(t1, t2, true);
-    }
-
-    private static Type getCommonArrayType(ArrayType t1, ArrayType t2) {
-        Type item1 = t1.getItemType();
-        Type item2 = t2.getItemType();
-        Type common = getCommonType(item1, item2);
-        return common.isValid() ? new ArrayType(common) : common;
-    }
-
-    /**
-     * Given two types, return the common supertype of them.
-     *
-     * @return the common type, INVALID if no common type exists.
-     */
-    public static Type getCommonType(Type t1, Type t2) {
-        if (t1.isScalarType() && t2.isScalarType()) {
-            return getCommonScalarType((ScalarType) t1, (ScalarType) t2);
-        }
-        if (t1.isArrayType() && t2.isArrayType()) {
-            return getCommonArrayType((ArrayType) t1, (ArrayType) t2);
-        }
-        if (t1.isNull() || t2.isNull()) {
-            return t1.isNull() ? t2 : t1;
-        }
-        return Type.INVALID;
-    }
-
-    public static Type getCommonType(Type[] argTypes, int fromIndex, int toIndex) {
-        Preconditions.checkState(argTypes != null);
-        Preconditions.checkState(0 <= fromIndex && fromIndex < toIndex && toIndex <= argTypes.length);
-        Type commonType = argTypes[fromIndex];
-        for (int i = fromIndex + 1; i < toIndex; ++i) {
-            commonType = ScalarType.getCommonType(commonType, argTypes[i]);
-        }
-        return commonType;
     }
 
     public Type getNumResultType() {

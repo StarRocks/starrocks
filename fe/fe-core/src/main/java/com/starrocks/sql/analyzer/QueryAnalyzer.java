@@ -1307,7 +1307,7 @@ public class QueryAnalyzer {
                 for (int i = 0; i < pivotValue.getExprs().size(); i++) {
                     Expr expr = pivotValue.getExprs().get(i);
                     analyzeExpression(expr, analyzeState, queryScope);
-                    if (!Type.canCastTo(expr.getType(), types.get(i))) {
+                    if (!TypeManager.canCastTo(expr.getType(), types.get(i))) {
                         throw new SemanticException("Pivot value type %s is not compatible with pivot column type %s",
                                 expr.getType(), types.get(i));
                     }

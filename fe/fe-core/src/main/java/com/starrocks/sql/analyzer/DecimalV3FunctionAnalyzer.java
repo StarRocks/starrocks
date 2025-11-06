@@ -29,6 +29,7 @@ import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.sql.ast.expression.FunctionParams;
 import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.PrimitiveType;
@@ -110,7 +111,7 @@ public class DecimalV3FunctionAnalyzer {
             if (Arrays.stream(argTypes, commonTypeStartIdx, argTypes.length).noneMatch(Type::isDecimalV3)) {
                 return argTypes;
             }
-            Type commonType = Type.getCommonType(argTypes, commonTypeStartIdx, argTypes.length);
+            Type commonType = TypeManager.getCommonType(argTypes, commonTypeStartIdx, argTypes.length);
             Type[] newArgType = new Type[argTypes.length];
             newArgType[0] = isIfFunc ? Type.BOOLEAN : argTypes[0];
             Arrays.fill(newArgType, commonTypeStartIdx, argTypes.length, commonType);
@@ -126,7 +127,7 @@ public class DecimalV3FunctionAnalyzer {
                 }
             }).toArray(Type[]::new);
             Preconditions.checkState(Arrays.stream(childTypes).anyMatch(Type::isDecimalV3));
-            Type commonType = new ArrayType(Type.getCommonType(childTypes, 0, childTypes.length));
+            Type commonType = new ArrayType(TypeManager.getCommonType(childTypes, 0, childTypes.length));
             return Arrays.stream(argTypes).map(t -> commonType).toArray(Type[]::new);
         }
 
@@ -141,7 +142,7 @@ public class DecimalV3FunctionAnalyzer {
                     return a;
                 }
             }).toArray(Type[]::new);
-            ArrayType commonType = new ArrayType(Type.getAssignmentCompatibleType(childTypes[0], childTypes[1], false));
+            ArrayType commonType = new ArrayType(TypeManager.getAssignmentCompatibleType(childTypes[0], childTypes[1], false));
             return new Type[] {commonType, commonType};
         }
         if (FunctionSet.ARRAY_CONTAINS.equalsIgnoreCase(fnName) || FunctionSet.ARRAY_POSITION.equalsIgnoreCase(fnName)) {
@@ -153,7 +154,7 @@ public class DecimalV3FunctionAnalyzer {
                     return a;
                 }
             }).toArray(Type[]::new);
-            Type commonType = Type.getAssignmentCompatibleType(childTypes[0], childTypes[1], false);
+            Type commonType = TypeManager.getAssignmentCompatibleType(childTypes[0], childTypes[1], false);
             ArrayType arrayType = new ArrayType(commonType);
             return new Type[] {arrayType, commonType};
         }

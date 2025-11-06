@@ -37,6 +37,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.expression.TableName;
+import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -60,7 +61,6 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
 import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.thrift.TResultSinkType;
-import com.starrocks.type.Type;
 
 import java.util.Arrays;
 import java.util.HashMap;
@@ -227,7 +227,7 @@ public class UpdatePlanner {
                     targetTable.getName());
             if (!column.getType().matchesType(outputColumn.getType())) {
                 // This should be always true but add a check here to avoid updating the wrong column type.
-                if (!Type.canCastTo(outputColumn.getType(), column.getType())) {
+                if (!TypeManager.canCastTo(outputColumn.getType(), column.getType())) {
                     throw new SemanticException(String.format("Output column type %s is not compatible table column type: %s",
                             outputColumn.getType(), column.getType()));
                 }
