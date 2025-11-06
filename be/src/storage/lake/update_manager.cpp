@@ -610,6 +610,8 @@ Status UpdateManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_writ
                                      pk_column_for_upsert->size(), &segment_deletes));
 
         for (auto& [rssid, del_ids] : segment_deletes) {
+            DCHECK(del_ids.empty()) << "del_ids should be empty for new row segments, but got " << del_ids.size()
+                                    << " deletes for rssid=" << rssid;
             if (del_ids.empty()) continue;
             DelVectorPtr dv = std::make_shared<DelVector>();
             dv->init(metadata->version(), del_ids.data(), del_ids.size());
