@@ -2,15 +2,11 @@
 displayed_sidebar: docs
 ---
 
-import Experimental from '../_assets/commonMarkdown/_experimental.mdx'
-
 # dbt
 
 `dbt-starrocks` は、`dbt` を使用して StarRocks 内のデータを変換するためのツールで、dbt のモデリングパターンとベストプラクティスを活用できます。
 
 `dbt-starrocks` [GitHub repo](https://github.com/StarRocks/dbt-starrocks).
-
-<Experimental />
 
 ## Supported features
 
