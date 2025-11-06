@@ -4202,7 +4202,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         };
         new MockUp<MetadataMgr>() {
             @Mock
-            public Optional<Table> getTableWithIdentifier(ConnectContext context, BaseTableInfo baseTableInfo) {
+            public Optional<Table> getTableWithIdentifier(BaseTableInfo baseTableInfo) {
                 DeltaLakeTable mockTable = new DeltaLakeTable();
                 return Optional.of(mockTable);
             }

@@ -17,10 +17,16 @@ package com.starrocks.analysis;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 public class CreateAsyncMaterializedViewTest extends MVTestBase {
     private static final Logger LOG = LogManager.getLogger(CreateAsyncMaterializedViewTest.class);
+
+    @BeforeAll
+    public static void beforeClass() throws Exception {
+        MVTestBase.beforeClass();
+    }
 
     @Test
     public void testCreateMVWithError() throws Exception {
