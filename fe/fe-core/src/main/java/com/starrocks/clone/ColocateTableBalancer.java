@@ -801,7 +801,7 @@ public class ColocateTableBalancer extends FrontendDaemon {
                         BalanceStat balanceStat = BalanceStat.BALANCED_STAT;
 
                         int idx = 0;
-                        for (Long tabletId : index.getTabletIds()) {
+                        for (Long tabletId : index.getTabletIdsInOrder()) {
                             LocalTablet tablet = (LocalTablet) index.getTablet(tabletId);
                             Set<Long> bucketSeq = backendBucketsSeq.get(idx);
 
