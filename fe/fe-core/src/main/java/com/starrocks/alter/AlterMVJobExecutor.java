@@ -168,7 +168,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 ParseNode mvDefinedQueryParseNode = materializedView.getDefineQueryParseNode();
                 if (mvDefinedQueryParseNode != null && (mvDefinedQueryParseNode instanceof QueryStatement)) {
                     QueryStatement queryStatement = (QueryStatement) mvDefinedQueryParseNode;
-                    IVMAnalyzer ivmAnalyzer = new IVMAnalyzer(context, queryStatement);
+                    IVMAnalyzer ivmAnalyzer = new IVMAnalyzer(context, null, queryStatement);
 
                     Optional<IVMAnalyzer.IVMAnalyzeResult> result = Optional.empty();
                     try {

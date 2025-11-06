@@ -21,6 +21,7 @@
 #include "column/column_viewer.h"
 #include "common/status.h"
 #include "exprs/base64.h"
+#include "types/logical_type_infra.h"
 #include "util/aes_util.h"
 #include "util/md5.h"
 #include "util/sha.h"
@@ -799,6 +800,141 @@ Status EncryptionFunctions::sha2_close(FunctionContext* context, FunctionContext
     }
 
     return Status::OK();
+}
+
+// Type markers to distinguish between different types in the hash digest
+enum class RowFingerprintValueType : uint8_t {
+    Null = 0,
+    Int8 = 1,
+    Int16 = 2,
+    Int32 = 3,
+    Int64 = 4,
+    Int128 = 5,
+    Float = 6,
+    Double = 7,
+    String = 8,
+    Decimal = 9,
+    Date = 10,
+    DateTime = 11,
+};
+
+// Template helper to encode a column into SHA256 digests based on its logical type
+template <LogicalType LT>
+struct EncodeColumnToDigest {
+    using CppType = RunTimeCppType<LT>;
+    using ColumnType = RunTimeColumnType<LT>;
+
+    static void encode(const Column* data_col, const NullColumn* null_col, size_t chunk_size,
+                       std::vector<SHA256Digest>& digests) {
+        if constexpr (lt_is_string<LT> || lt_is_binary<LT>) {
+            // String/Binary types
+            auto* col = down_cast<const ColumnType*>(data_col);
+            const uint8_t* null_data = null_col ? null_col->raw_data() : nullptr;
+            for (size_t row = 0; row < chunk_size; row++) {
+                if (null_data && null_data[row]) {
+                    uint8_t marker = static_cast<uint8_t>(RowFingerprintValueType::Null);
+                    digests[row].update(&marker, 1);
+                } else {
+                    uint8_t marker = static_cast<uint8_t>(RowFingerprintValueType::String);
+                    digests[row].update(&marker, 1);
+                    Slice value = col->get_slice(row);
+                    digests[row].update(value.data, value.size);
+                }
+            }
+        } else if constexpr (lt_is_arithmetic<LT> || lt_is_date_or_datetime<LT> || lt_is_decimal<LT> ||
+                             lt_is_largeint<LT>) {
+            // Fixed-length types: numerics, dates, decimals
+            auto* data = reinterpret_cast<const CppType*>(data_col->raw_data());
+            RowFingerprintValueType marker_type;
+
+            if constexpr (sizeof(CppType) == 1) {
+                marker_type = RowFingerprintValueType::Int8;
+            } else if constexpr (sizeof(CppType) == 2) {
+                marker_type = RowFingerprintValueType::Int16;
+            } else if constexpr (sizeof(CppType) == 4) {
+                marker_type = (LT == TYPE_FLOAT)
+                                      ? RowFingerprintValueType::Float
+                                      : lt_is_date<LT> ? RowFingerprintValueType::Date : RowFingerprintValueType::Int32;
+            } else if constexpr (sizeof(CppType) == 8) {
+                marker_type = (LT == TYPE_DOUBLE) ? RowFingerprintValueType::Double
+                                                  : lt_is_datetime<LT> ? RowFingerprintValueType::DateTime
+                                                                       : RowFingerprintValueType::Int64;
+            } else if constexpr (sizeof(CppType) == 16) {
+                marker_type = lt_is_decimal<LT> ? RowFingerprintValueType::Decimal : RowFingerprintValueType::Int128;
+            } else {
+                marker_type = RowFingerprintValueType::Decimal; // For 256-bit decimals
+            }
+
+            uint8_t marker = static_cast<uint8_t>(marker_type);
+            const uint8_t* null_data = null_col ? null_col->raw_data() : nullptr;
+            for (size_t row = 0; row < chunk_size; row++) {
+                if (null_data && null_data[row]) {
+                    uint8_t null_marker = static_cast<uint8_t>(RowFingerprintValueType::Null);
+                    digests[row].update(&null_marker, 1);
+                } else {
+                    digests[row].update(&marker, 1);
+                    digests[row].update(&data[row], sizeof(CppType));
+                }
+            }
+        } else if (LT == TYPE_NULL) {
+            for (size_t row = 0; row < chunk_size; row++) {
+                uint8_t marker = static_cast<uint8_t>(RowFingerprintValueType::Null);
+                digests[row].update(&marker, 1);
+            }
+        } else {
+            // Fallback for unsupported types (JSON, HLL, OBJECT, STRUCT, ARRAY, MAP, etc.)
+            // Cast to string representation and encode
+            auto* col = down_cast<const ColumnType*>(data_col);
+            const uint8_t* null_data = null_col ? null_col->raw_data() : nullptr;
+            for (size_t row = 0; row < chunk_size; row++) {
+                if (null_data && null_data[row]) {
+                    uint8_t marker = static_cast<uint8_t>(RowFingerprintValueType::Null);
+                    digests[row].update(&marker, 1);
+                } else {
+                    uint8_t marker = static_cast<uint8_t>(RowFingerprintValueType::String);
+                    digests[row].update(&marker, 1);
+                    // Convert the value to string and encode
+                    std::string str_value = col->debug_item(row);
+                    digests[row].update(str_value.data(), str_value.size());
+                }
+            }
+        }
+    }
+};
+
+StatusOr<ColumnPtr> EncryptionFunctions::encode_fingerprint_sha256(FunctionContext* ctx, const Columns& columns) {
+    size_t chunk_size = columns[0]->size();
+    std::vector<SHA256Digest> digests(chunk_size);
+
+    // Process each column using template dispatch
+    for (size_t col_idx = 0; col_idx < columns.size(); col_idx++) {
+        const ColumnPtr& col = columns[col_idx];
+        const Column* data_col = ColumnHelper::get_data_column(col.get());
+        const NullColumn* null_col = ColumnHelper::get_null_column(col.get());
+
+        // Get logical type from FunctionContext
+        const auto* type_desc = ctx->get_arg_type(col_idx);
+        if (type_desc == nullptr) {
+            return Status::InternalError(fmt::format(
+                    "FunctionContext arg types not initialized for ENCODE_FINGERPRINT_SHA256 at index {}", col_idx));
+        }
+        LogicalType type = type_desc->type;
+
+        // Use type dispatch to call the appropriate template specialization
+        type_dispatch_filter(type, false, [&]<LogicalType LT>() -> bool {
+            EncodeColumnToDigest<LT>::encode(data_col, null_col, chunk_size, digests);
+            return true;
+        });
+    }
+
+    // Build result column with raw binary digests as VARBINARY
+    ColumnBuilder<TYPE_VARBINARY> result(chunk_size);
+    for (size_t row = 0; row < chunk_size; row++) {
+        digests[row].digest();
+        // Use raw binary (32 bytes) instead of hex (64 bytes) - 50% more efficient
+        result.append(Slice(reinterpret_cast<const char*>(digests[row].binary()), digests[row].binary_size()));
+    }
+    return result.build(ColumnHelper::is_all_const(columns));
 }
 
 } // namespace starrocks
