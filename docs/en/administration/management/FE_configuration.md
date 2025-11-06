@@ -1525,7 +1525,16 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The maximum number of replicas to create serially. If actual replica count exceeds this value, replicas will be created concurrently. Try to reduce this value if table creation is taking a long time to complete.
+- Description: The maximum number of replicas to create serially. If actual replica count exceeds this value, replicas will The maximum number of replicas to create serially. If actual replica count exceeds this value, replicas will be cr be created concurrently. Try to reduce this value if table creation is taking a long time to complete.
+- Introduced in:
+
+##### tablet_meta_update_max_pending_replicas_per_be
+
+- Default: 200
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of pending replicas per Backend (BE) when altering tablet metadata in parallel within a shared-data cluster.
 - Introduced in: -
 
 ##### http_slow_request_threshold_ms
