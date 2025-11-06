@@ -708,6 +708,7 @@ public class OptimizeJobV2Test extends DDLTestBase {
         Assertions.assertEquals(JobState.RUNNING, optimizeJob.getJobState());
     }
 
+<<<<<<< HEAD
     @Test
     public void testReplayFinishedWithNullDistributionInfo() throws Exception {
         // Regression: a job persisted with allPartitionOptimized=true but no distribution change
@@ -734,6 +735,8 @@ public class OptimizeJobV2Test extends DDLTestBase {
                 "replay must not null out defaultDistributionInfo when persisted job has null distributionInfo");
     }
 
+=======
+>>>>>>> 4d95bb6f94 ([UT] Fix unstable ut (#65088))
     private OptimizeJobV2 spyPreviousTxnFinished(OptimizeJobV2 job) {
         // Detach the job from schema change handler to prevent the background scheduler
         // from mutating its state in parallel with the UT driven state machine, which
