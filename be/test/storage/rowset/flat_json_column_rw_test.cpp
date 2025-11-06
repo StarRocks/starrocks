@@ -828,7 +828,7 @@ TEST_F(FlatJsonColumnRWTest, testHyperFlatJson) {
     EXPECT_EQ("b.b2.b3", writer_opts.meta->children_columns(index++).name());
     EXPECT_EQ("b.b2.c1.c2", writer_opts.meta->children_columns(index++).name());
     EXPECT_EQ("b.b4", writer_opts.meta->children_columns(index++).name());
-    EXPECT_EQ("ff.f1", writer_opts.meta->children_columns(index++).name());
+    EXPECT_EQ("ff", writer_opts.meta->children_columns(index++).name());
     EXPECT_EQ("gg", writer_opts.meta->children_columns(index++).name());
     EXPECT_EQ("remain", writer_opts.meta->children_columns(index++).name());
 
@@ -882,7 +882,7 @@ TEST_F(FlatJsonColumnRWTest, testHyperFlatJsonWithConfig) {
     EXPECT_EQ("b.b2.b3", writer_opts.meta->children_columns(index++).name());
     EXPECT_EQ("b.b2.c1.c2", writer_opts.meta->children_columns(index++).name());
     EXPECT_EQ("b.b4", writer_opts.meta->children_columns(index++).name());
-    EXPECT_EQ("ff.f1", writer_opts.meta->children_columns(index++).name());
+    EXPECT_EQ("ff", writer_opts.meta->children_columns(index++).name());
     EXPECT_EQ("gg", writer_opts.meta->children_columns(index++).name());
     EXPECT_EQ("remain", writer_opts.meta->children_columns(index++).name());
 
@@ -1707,7 +1707,7 @@ TEST_F(FlatJsonColumnRWTest, testHyperNullFlatJson) {
     EXPECT_EQ("b.b2.b3", writer_opts.meta->children_columns(index++).name());
     EXPECT_EQ("b.b2.c1.c2", writer_opts.meta->children_columns(index++).name());
     EXPECT_EQ("b.b4", writer_opts.meta->children_columns(index++).name());
-    EXPECT_EQ("ff.f1", writer_opts.meta->children_columns(index++).name());
+    EXPECT_EQ("ff", writer_opts.meta->children_columns(index++).name());
     EXPECT_EQ("gg", writer_opts.meta->children_columns(index++).name());
     EXPECT_EQ("remain", writer_opts.meta->children_columns(index++).name());
 
