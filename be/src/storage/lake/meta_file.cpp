@@ -326,10 +326,10 @@ Status MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compa
     if (deleted_input_rowset_cnt != op_compaction.input_rowsets_size()) {
         LOG(ERROR) << fmt::format(
                 "MetaFileBuilder apply_opcompaction failed to find all input rowsets, tablet_id:{} "
-                " expected_input_rowsets : {} "
-                " deleted_input_rowsets : {} "
-                " op_compaction : {}"
-                " tablet meta : {}",
+                "expected_input_rowsets : {} "
+                "deleted_input_rowsets : {} "
+                "op_compaction : {} "
+                "tablet meta : {}",
                 _tablet_meta->id(), op_compaction.input_rowsets_size(), deleted_input_rowset_cnt,
                 op_compaction.ShortDebugString(), _tablet_meta->ShortDebugString());
         return Status::InternalError("failed to find all input rowsets in apply_opcompaction");
@@ -656,16 +656,18 @@ Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, co
         ASSIGN_OR_RETURN(rf, fs::new_random_access_file(opts, tablet_mgr->delvec_location(metadata.id(), delvec_name)));
     }
     RETURN_IF_ERROR(rf->read_at_fully(delvec_page.offset(), buf.data(), delvec_page.size()));
-    // check crc32c
-    uint32_t crc32c = crc32c::Value(buf.data(), delvec_page.size());
-    if (delvec_page.has_crc32c() && crc32c != crc32c::Unmask(delvec_page.crc32c())) {
-        LOG(ERROR) << fmt::format(
-                "delvec crc32c mismatch, tabletid {}, delvecfile {}, offset {}, size {}, expect crc32c {}, actual "
-                "crc32c {}",
-                metadata.id(), delvec_name, delvec_page.offset(), delvec_page.size(),
-                crc32c::Unmask(delvec_page.crc32c()), crc32c);
-        return Status::Corruption(fmt::format("delvec crc32c mismatch. expect crc32c {}, actual {}",
-                                              crc32c::Unmask(delvec_page.crc32c()), crc32c));
+    if (delvec_page.has_crc32c()) {
+        // check crc32c
+        uint32_t crc32c = crc32c::Value(buf.data(), delvec_page.size());
+        if (crc32c != crc32c::Unmask(delvec_page.crc32c())) {
+            LOG(ERROR) << fmt::format(
+                    "delvec crc32c mismatch, tabletid {}, delvecfile {}, offset {}, size {}, expect crc32c {}, actual "
+                    "crc32c {}",
+                    metadata.id(), delvec_name, delvec_page.offset(), delvec_page.size(),
+                    crc32c::Unmask(delvec_page.crc32c()), crc32c);
+            return Status::Corruption(fmt::format("delvec crc32c mismatch. expect crc32c {}, actual {}",
+                                                  crc32c::Unmask(delvec_page.crc32c()), crc32c));
+        }
     }
     // parse delvec
     RETURN_IF_ERROR(delvec->load(delvec_page.version(), buf.data(), delvec_page.size()));
