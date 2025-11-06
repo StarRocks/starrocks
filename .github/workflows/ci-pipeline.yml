@@ -926,6 +926,69 @@ jobs:
           echo "FE: ${{steps.deploy_sr.outputs.fe}}, BE: ${{steps.deploy_sr.outputs.be}}"
           rm -rf ${{ github.workspace }}/*
 
+  docgen:
+    runs-on: [self-hosted, normal]
+    needs: deploy
+    name: Generate Documentation
+    if: >
+      contains(github.event.pull_request.labels.*.name, 'docgen')
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+      FE_NODE: ${{ needs.deploy.outputs.fe }}
+    steps:
+      - uses: dorny/paths-filter@v3
+        id: path-filter
+        with:
+          filters: |
+            be-config:
+              - 'be/src/common/config.h'
+            fe-config:
+              - 'fe/fe-core/src/main/java/com/starrocks/common/Config.java'
+            variable:
+              - 'fe/fe-core/src/main/java/com/starrocks/qe/GlobalVariable.java'
+              - 'fe/fe-core/src/main/java/com/starrocks/qe/SessionVariable.java'
+            function:
+              - 'gensrc/script/functions.py'
+
+      - name: init doc-agent
+        id: init-doc-agent
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && sh lib/init_doc.sh
+
+      - name: FE config 
+        id: fe-config-gen
+        if: steps.path-filter.outputs.fe-config == 'true'
+        run: |
+          cd ci-tool && sh bin/run-doc-gen fe-config ${{ github.repository}}
+
+      - name: BE config 
+        id: be-config-gen
+        if: steps.path-filter.outputs.be-config == 'true'
+        run: |
+          cd ci-tool 
+          sh bin/run-doc-gen be-config > $GITHUB_OUTPUT
+
+      - name: variables 
+        id: variables-gen
+        if: steps.path-filter.outputs.variable == 'true'
+        run: |
+          cd ci-tool 
+          sh bin/run-doc-gen variables > $GITHUB_OUTPUT
+
+      - name: function 
+        id: function-gen
+        if: steps.path-filter.outputs.function == 'true'
+        run: |
+          cd ci-tool 
+          sh bin/run-doc-gen function --FE_NODE ${FE_NODE} > $GITHUB_OUTPUT
+
+      - name: Remove docgen label
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr edit ${{ github.event.number }} -R ${{ github.repository }} --remove-label "docgen"
+
   SQL-Tester:
     runs-on: [self-hosted, normal]
     name: SQL-Tester
