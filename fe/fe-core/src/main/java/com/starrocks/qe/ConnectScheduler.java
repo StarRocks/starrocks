@@ -275,11 +275,7 @@ public class ConnectScheduler {
     public int getConnectionNum() {
         return numberConnection.get();
     }
-<<<<<<< HEAD
-    
-=======
 
->>>>>>> 61152317b8 ([Enhancement]Enable auth for metric about connection of per user (#64635))
     public Map<String, AtomicInteger> getUserConnectionMap() {
         return connCountByUser;
     }
