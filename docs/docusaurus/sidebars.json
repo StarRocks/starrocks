@@ -284,7 +284,7 @@
                     },
                     "items": [
                         "data_source/data_cache",
-                        "data_source/data_cache_warmup",
+                        "data_source/block_cache_warmup",
                         "data_source/data_cache_observe",
                         "data_source/data_cache_troubleshooting"
                     ]
