@@ -27,6 +27,7 @@ import com.starrocks.common.util.Util;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergApiConverter;
 import com.starrocks.connector.iceberg.IcebergCatalogType;
+import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.rpc.ConfigurableSerDesFactory;
 import com.starrocks.server.CatalogMgr;
@@ -84,6 +85,7 @@ public class IcebergTable extends Table {
     private List<Column> partitionColumns;
 
     private final AtomicLong partitionIdGen = new AtomicLong(0L);
+    private IcebergMetricsReporter metricsReporter = new IcebergMetricsReporter();
 
     public IcebergTable() {
         super(TableType.ICEBERG);
@@ -400,6 +402,14 @@ public class IcebergTable extends Table {
         return Objects.equal(catalogName, otherTable.getCatalogName()) &&
                 Objects.equal(catalogDBName, otherTable.catalogDBName) &&
                 Objects.equal(tableIdentifier, otherTable.getTableIdentifier());
+    }
+
+    public void setIcebergMetricsReporter(IcebergMetricsReporter reporter) {
+        this.metricsReporter = reporter;
+    }
+
+    public IcebergMetricsReporter getIcebergMetricsReporter() {
+        return metricsReporter;
     }
 
     public static Builder builder() {
