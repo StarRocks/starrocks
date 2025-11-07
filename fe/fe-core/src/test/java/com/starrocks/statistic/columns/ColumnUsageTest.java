@@ -249,12 +249,12 @@ class ColumnUsageTest extends PlanTestBase {
     }
 
     @Test
-    public void testColumnUsagePersist() {
+    public void testColumnUsagePersist() throws MetaNotFoundException {
         // invalid column
         {
             String json = "{\"data\": [\"fe_id\", 1, 1, 1, \"NORMAL\", \"2025-01-01 00:00:00\", \"2025-01-01 " +
                     "00:00:00\"]}";
-            Assertions.assertThrows(IllegalStateException.class,
+            Assertions.assertThrows(MetaNotFoundException.class,
                     () -> PredicateColumnsStorage.ColumnUsageJsonRecord.fromJson(json));
         }
 
