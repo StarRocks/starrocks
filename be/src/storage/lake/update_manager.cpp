@@ -539,6 +539,7 @@ Status UpdateManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_writ
 
     TxnLogPB_OpWrite new_rows_op;
     uint64_t total_rows = 0;
+    uint64_t total_data_size = 0;
     std::map<uint32_t, size_t> segment_id_to_add_dels_new_acc;
 
     DCHECK_EQ(insert_rowids_by_segment.size(), op_write.rowset().segments_size());
@@ -601,6 +602,7 @@ Status UpdateManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_writ
 
         new_rows_op.mutable_rowset()->add_segments(seg_name);
         new_rows_op.mutable_rowset()->add_segment_size(seg_file_size);
+        total_data_size += seg_file_size;
         if (config::enable_transparent_data_encryption) {
             new_rows_op.mutable_rowset()->add_segment_encryption_metas(writer.encryption_meta());
         }
@@ -622,7 +624,7 @@ Status UpdateManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_writ
     }
 
     new_rows_op.mutable_rowset()->set_num_rows(total_rows);
-    new_rows_op.mutable_rowset()->set_data_size(0);
+    new_rows_op.mutable_rowset()->set_data_size(total_data_size);
     new_rows_op.mutable_rowset()->set_overlapped(new_rows_op.rowset().segments_size() > 1);
     if (new_rows_op.rowset().segments_size() > 0) {
         builder->apply_opwrite(new_rows_op, {}, {});
