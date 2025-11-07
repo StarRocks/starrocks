@@ -15,13 +15,12 @@
 #include "exprs/gin_functions.h"
 
 #include <CLucene.h>
-#include <CLucene/analysis/LanguageBasedAnalyzer.h>
-
-#include <boost/locale/encoding_utf.hpp>
 
 #include "column/array_column.h"
 #include "column/column_viewer.h"
-#include "column/datum.h"
+#include "storage/index/inverted/inverted_index_option.h"
+#include "storage/index/inverted/tokenizer/tokenizer.h"
+#include "storage/index/inverted/tokenizer/tokenizer_factory.h"
 
 namespace starrocks {
 
@@ -34,39 +33,22 @@ Status GinFunctions::tokenize_prepare(FunctionContext* context, FunctionContext:
     RETURN_IF(column == nullptr, Status::InvalidArgument("Tokenize function requires constant parameter"));
     auto method = ColumnHelper::get_const_value<TYPE_VARCHAR>(column);
 
-    lucene::analysis::Analyzer* analyzer;
-
-    if (method == "english") {
-        analyzer = _CLNEW lucene::analysis::SimpleAnalyzer();
-    } else if (method == "standard") {
-        analyzer = _CLNEW lucene::analysis::standard::StandardAnalyzer();
-    } else if (method == "chinese") {
-        auto* canalyzer = _CLNEW lucene::analysis::LanguageBasedAnalyzer();
-        canalyzer->setLanguage(L"cjk");
-        canalyzer->setStem(false);
-        analyzer = canalyzer;
-    } else {
-        return Status::NotSupported("Unknown method '" + method.to_string() +
-                                    "'. Supported methods are: 'english', 'standard', 'chinese'.");
-    }
-
-    context->set_function_state(scope, analyzer);
-
+    const auto parser_type = get_inverted_index_parser_type_from_string(method.to_string());
+    auto analyzer = TokenizerFactory::create(parser_type);
+    context->set_function_state(scope, analyzer.release());
     return Status::OK();
 }
 
 Status GinFunctions::tokenize_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope == FunctionContext::THREAD_LOCAL) {
-        auto* analyzer = reinterpret_cast<lucene::analysis::Analyzer*>(
-                context->get_function_state(FunctionContext::THREAD_LOCAL));
+        const auto* analyzer = static_cast<Tokenizer*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
         delete analyzer;
     }
     return Status::OK();
 }
 
 StatusOr<ColumnPtr> GinFunctions::tokenize(FunctionContext* context, const starrocks::Columns& columns) {
-    auto* analyzer =
-            reinterpret_cast<lucene::analysis::Analyzer*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
+    auto* analyzer = static_cast<Tokenizer*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
 
     if (columns.size() != 2) {
         return Status::InvalidArgument("Tokenize function only call by tokenize('<index_type>', str_column)");
@@ -93,18 +75,10 @@ StatusOr<ColumnPtr> GinFunctions::tokenize(FunctionContext* context, const starr
         } else {
             null_array->append(0);
             auto data = value_viewer.value(row);
-            std::string slice_str(data.data, data.get_size());
-            std::wstring wstr = boost::locale::conv::utf_to_utf<wchar_t>(slice_str);
-            lucene::util::StringReader reader(wstr.c_str(), wstr.size(), false);
-            auto stream = analyzer->reusableTokenStream(L"", &reader);
-            lucene::analysis::Token token;
-            while (stream->next(&token)) {
-                if (token.termLength() != 0) {
-                    offset++;
-                    std::string str =
-                            boost::locale::conv::utf_to_utf<char>(std::wstring(token.termBuffer(), token.termLength()));
-                    array_binary_column->append(Slice(std::move(str)));
-                }
+            ASSIGN_OR_RETURN(auto tokens, analyzer->tokenize(&data));
+            for (const auto& token : tokens) {
+                offset++;
+                array_binary_column->append(token.text);
             }
         }
     }

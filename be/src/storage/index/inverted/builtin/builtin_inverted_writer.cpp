@@ -14,19 +14,19 @@
 
 #include "storage/index/inverted/builtin/builtin_inverted_writer.h"
 
-#include <vector>
-
 #include <CLucene.h>
-#include <CLucene/analysis/LanguageBasedAnalyzer.h>
-#include <CLucene/util/Misc.h>
 #include <fmt/format.h>
 
-#include <boost/locale/encoding_utf.hpp>
+#include <vector>
 
 #include "common/status.h"
 #include "gen_cpp/segment.pb.h"
-#include "storage/index/inverted/builtin/builtin_simple_analyzer.h"
 #include "storage/index/inverted/inverted_index_option.h"
+#include "storage/index/inverted/tokenizer/builtin_simple_analyzer.h"
+#include "storage/index/inverted/tokenizer/chinese_tokenizer.h"
+#include "storage/index/inverted/tokenizer/standard_tokenizer.h"
+#include "storage/index/inverted/tokenizer/tokenizer.h"
+#include "storage/index/inverted/tokenizer/tokenizer_factory.h"
 #include "storage/rowset/bitmap_index_writer.h"
 #include "storage/tablet_index.h"
 #include "storage/type_traits.h"
@@ -43,7 +43,7 @@ public:
             : _builtin_writer(std::move(writer)) {
         static_assert(field_type == TYPE_CHAR || field_type == TYPE_VARCHAR);
         _parser_type = get_inverted_index_parser_type_from_string(
-                       get_parser_string_from_properties(inverted_index->index_properties()));
+                get_parser_string_from_properties(inverted_index->index_properties()));
         DCHECK(_parser_type != InvertedIndexParserType::PARSER_UNKNOWN);
     }
 
@@ -58,27 +58,18 @@ public:
     uint64_t size() const override { return _builtin_writer->size(); }
 
 private:
+    std::unique_ptr<Tokenizer> _tokenizer;
     std::unique_ptr<BitmapIndexWriter> _builtin_writer;
-    std::unique_ptr<lucene::analysis::Analyzer> _analyzer{};
-    std::unique_ptr<lucene::util::StringReader> _char_string_reader{};
-
-    std::unique_ptr<SimpleAnalyzer> _builtin_analyzer{};
 
     InvertedIndexParserType _parser_type;
 };
 
 template <LogicalType field_type>
 Status BuiltinInvertedWriterImpl<field_type>::init() {
-    // init tokenizer relative context
-    _char_string_reader = std::make_unique<lucene::util::StringReader>(L"");
-    if (_parser_type == InvertedIndexParserType::PARSER_STANDARD) {
-        _analyzer = std::make_unique<lucene::analysis::standard::StandardAnalyzer>();
-    } else if (_parser_type == InvertedIndexParserType::PARSER_ENGLISH) {
-        _builtin_analyzer = std::make_unique<SimpleAnalyzer>();
-    } else if (_parser_type == InvertedIndexParserType::PARSER_CHINESE) {
-        auto chinese_analyzer = _CLNEW lucene::analysis::LanguageBasedAnalyzer();
-        chinese_analyzer->setLanguage(L"cjk");
-        _analyzer.reset(chinese_analyzer);
+    _tokenizer = TokenizerFactory::create(_parser_type);
+    if (_tokenizer == nullptr) {
+        return Status::InternalError(fmt::format("create tokenizer failed, parser type: {}",
+                                                 inverted_index_parser_type_to_string(_parser_type)));
     }
     return Status::OK();
 }
@@ -87,35 +78,13 @@ template <LogicalType field_type>
 void BuiltinInvertedWriterImpl<field_type>::add_values(const void* values, size_t count) {
     const Slice* val = static_cast<const Slice*>(values);
     for (int i = 0; i < count; ++i) {
-        const char* s = val->data;
-        size_t size = val->size;
-        if (_parser_type == InvertedIndexParserType::PARSER_NONE) {
-            _builtin_writer->add_value_with_current_rowid((void*) val);
-        } else if (_parser_type == InvertedIndexParserType::PARSER_ENGLISH) {
-            std::string mutable_text(val->data, val->size);
-            std::vector<SliceToken> tokens;
-            _builtin_analyzer->tokenize(mutable_text.data(), mutable_text.length(), tokens);
-            for (const auto& token : tokens) {
-                _builtin_writer->add_value_with_current_rowid((void*) &(token.text));
-            }
-        } else {
-            // For all kinds of CLucene analyzers, we need to process the text as follows:
-            // 1. Convert the text to wstring
-            // 2. Tokenize the wstring
-            // 3. Convert the tokens to string
-            // 4. Add the string to the bitmap index
-            std::wstring tchar = boost::locale::conv::utf_to_utf<TCHAR>(s, s + size);
-    
-            _char_string_reader->init(tchar.c_str(), tchar.size(), false);
-            auto stream = _analyzer->reusableTokenStream(L"", _char_string_reader.get());
-            lucene::analysis::Token token;
-            while (stream->next(&token)) {
-                if (token.termLength() != 0) {
-                    std::string str = boost::locale::conv::utf_to_utf<char>(token.termBuffer(), token.termBuffer() + token.termLength());
-                    Slice s(str);
-                    _builtin_writer->add_value_with_current_rowid((void*) &s);
-                }
-            }
+        const auto st = _tokenizer->tokenize(val);
+        if (!st.ok()) {
+            LOG(WARNING) << "tokenize text failed, text: " << val->to_string() << ", error: " << st.status();
+            continue;
+        }
+        for (std::vector<SliceToken> tokens = std::move(st).value(); const auto& token : tokens) {
+            _builtin_writer->add_value_with_current_rowid(&token.text);
         }
 
         ++val;
@@ -132,7 +101,8 @@ Status BuiltinInvertedWriterImpl<field_type>::finish(WritableFile* wfile, Column
     return _builtin_writer->finish(wfile, bitmap_index_meta);
 }
 
-Status BuiltinInvertedWriter::create(const TypeInfoPtr& typeinfo, TabletIndex* tablet_index, std::unique_ptr<InvertedWriter>* res) {
+Status BuiltinInvertedWriter::create(const TypeInfoPtr& typeinfo, TabletIndex* tablet_index,
+                                     std::unique_ptr<InvertedWriter>* res) {
     std::unique_ptr<BitmapIndexWriter> writer;
     RETURN_IF_ERROR(BitmapIndexWriter::create(typeinfo, &writer));
     writer->set_dictionary_compression(CompressionTypePB::ZSTD);

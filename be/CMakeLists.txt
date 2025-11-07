@@ -838,6 +838,7 @@ include_directories(
     SYSTEM ${THIRDPARTY_DIR}/include/thrift/
     SYSTEM ${THIRDPARTY_DIR}/include/event/
     SYSTEM ${THIRDPARTY_DIR}/llvm/include/
+    SYSTEM ${THIRDPARTY_DIR}/jieba/include/
 )
 
 

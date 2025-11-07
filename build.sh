@@ -650,6 +650,10 @@ if [ ${BUILD_BE} -eq 1 ]; then
         cp -r -p ${STARROCKS_THIRDPARTY}/installed/flamegraph/* ${STARROCKS_OUTPUT}/be/bin/flamegraph/
     fi
 
+    # Copy jieba dicts
+    mkdir -p ${STARROCKS_OUTPUT}/be/dict
+    cp -r ${STARROCKS_THIRDPARTY}/installed/jieba/dict/* ${STARROCKS_OUTPUT}/be/dict/
+
     # format $BUILD_TYPE to lower case
     ibuildtype=`echo ${BUILD_TYPE} | tr 'A-Z' 'a-z'`
     if [ "${ibuildtype}" == "release" ] ; then
