@@ -1279,30 +1279,28 @@ StatusOr<size_t> SegmentIterator::trigger_sample_if_necessary(vector<rowid_t>* r
     // Check every 32 chunks if we should trigger sampling based on selectivity
     // if only have one predicate column, do not sample
     const bool should_check_selectivity =
-            (_context->_evaluated_chunk_nums++ & 31) == 0 && (!(_context->_predicate_order.size() == 1));
+            (_context->_evaluated_chunk_nums++ & 16) == 0 && (!(_context->_predicate_order.size() == 1));
     if (should_check_selectivity && _context->_enable_predicate_col_late_materialize &&
         _context->_first_column_total_rows_read > 0) {
-        // Calculate accumulated selectivity
-        double first_column_selectivity = static_cast<double>(_context->_first_column_total_rows_passed) /
-                                          _context->_first_column_total_rows_read;
+        // // Calculate accumulated selectivity
+        // double first_column_selectivity = static_cast<double>(_context->_first_column_total_rows_passed) /
+        //                                   _context->_first_column_total_rows_read;
 
         // If selectivity > 0.5 (more than 50% of rows passed, bad filtering), trigger sampling
         // to potentially find an even better predicate order
-        if (first_column_selectivity > 0.5) {
-            ColumnId old_first_column_id = _context->_predicate_order[0];
+        ColumnId old_first_column_id = _context->_predicate_order[0];
 
-            // Sample and update predicate selectivity
-            ASSIGN_OR_RETURN(size_t sampled_chunk_size, _sample_predicate_columns(rowid));
+        // Sample and update predicate selectivity
+        ASSIGN_OR_RETURN(size_t sampled_chunk_size, _sample_predicate_columns(rowid));
 
-            // Check if first column changed after sampling
-            ColumnId new_first_column_id = _context->_predicate_order.front();
-            if (new_first_column_id != old_first_column_id) {
-                // First column changed, reset selectivity statistics
-                _context->_first_column_total_rows_read = 0;
-                _context->_first_column_total_rows_passed = 0;
-            }
-            return sampled_chunk_size;
+        // Check if first column changed after sampling
+        ColumnId new_first_column_id = _context->_predicate_order.front();
+        if (new_first_column_id != old_first_column_id) {
+            // First column changed, reset selectivity statistics
+            _context->_first_column_total_rows_read = 0;
+            _context->_first_column_total_rows_passed = 0;
         }
+        return sampled_chunk_size;
     }
     return 0;
 }
@@ -2065,7 +2063,7 @@ StatusOr<size_t> SegmentIterator::_predicate_evaluate_late_materialize(vector<ro
     const bool scan_range_normalized = _scan_range.is_sorted();
     Chunk* chunk = _context->_read_chunk.get();
     Columns current_columns;
-    current_columns.reserve(_context->_predicate_order.size());
+    current_columns.reserve(_context->_column_id_for_predicate_late_materialize.size());
 
     const ColumnId first_column_id = _context->_predicate_order.front();
     ColumnPtr first_col = chunk->get_column_by_id(first_column_id);
@@ -2075,7 +2073,9 @@ StatusOr<size_t> SegmentIterator::_predicate_evaluate_late_materialize(vector<ro
 
     ColumnPtr rowid_column = chunk->get_column_by_id(_context->_row_id_column_id);
     current_columns.emplace_back(first_col);
-    current_columns.emplace_back(rowid_column);
+    if (!(_context->_predicate_order.size() == 1 && _schema.num_fields() == 1)) {
+        current_columns.emplace_back(rowid_column);
+    }
     uint16_t chunk_start = first_col->size();
 
     size_t original_chunk_size = chunk_start;
