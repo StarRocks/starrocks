@@ -16,6 +16,7 @@ package com.starrocks.common.util;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
 public class SqlCredentialRedactorTest {
 
@@ -189,5 +190,19 @@ public class SqlCredentialRedactorTest {
             index += 3;
         }
         Assertions.assertEquals(2, count, "Should have exactly 2 redacted values");
+    }
+
+    /**
+     * java.regex uses NFA algorithm, it cannot guarantee O(N) complexity, might run into timeout
+     * when the string is very long.
+     * RE2 is O(n)
+     */
+    @Test
+    @Timeout(10)
+    public void testLongString() {
+        String longString = "1234567890".repeat(104857);
+        String longSql = "INSERT INTO t1 VALUES(\"" + longString + "\", 1)";
+        String redacted = SqlCredentialRedactor.redact(longSql);
+        Assertions.assertEquals(longSql, redacted);
     }
 }

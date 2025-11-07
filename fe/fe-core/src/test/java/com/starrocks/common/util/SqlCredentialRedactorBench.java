@@ -35,13 +35,14 @@ import java.util.regex.Pattern;
 @OutputTimeUnit(TimeUnit.MICROSECONDS)
 @State(Scope.Benchmark)
 @Fork(value = 1)
-@Warmup(iterations = 3)
-@Measurement(iterations = 5)
+@Warmup(iterations = 3, time = 1)
+@Measurement(iterations = 3, time = 1)
 public class SqlCredentialRedactorBench {
 
     private String sqlWithManyKeys;
     private String sqlWithFewKeys;
     private String sqlWithoutCredentials;
+    private String sqlLong;
     private Pattern oldPattern;
 
     public static void main(String[] args) throws Exception {
@@ -112,11 +113,25 @@ public class SqlCredentialRedactorBench {
 
         // SQL without credentials
         sqlWithoutCredentials = "SELECT * FROM table WHERE id = 1";
+
+        // long string
+        String longString = "abcdefdhi".repeat(104857);
+        sqlLong = "INSERT INTO t1 VALUES(\"" + longString + "\",)";
     }
 
     @Benchmark
     public void benchmarkManyKeys() {
         SqlCredentialRedactor.redact(sqlWithManyKeys);
+    }
+
+    @Benchmark
+    public void benchmarkLongString() {
+        SqlCredentialRedactor.redact(sqlLong);
+    }
+
+    @Benchmark
+    public void benchmarkOldVersionLongString() {
+        redactOldVersion(sqlLong);
     }
 
     @Benchmark

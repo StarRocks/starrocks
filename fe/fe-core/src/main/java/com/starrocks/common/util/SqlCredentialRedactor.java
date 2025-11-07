@@ -104,10 +104,15 @@ public class SqlCredentialRedactor {
     // key'='value
     // key"="value
     // Values can contain spaces and span multiple lines, separated by commas
+    private static final int MAX_KEY_LENGTH =
+            CREDENTIAL_KEYS.stream().map(String::length).max(Integer::compareTo).orElse(1);
+    // NOTE: MAX_KEY_LENGTH is used to avoid matching too many characters of a long string
     private static final Pattern KEY_VALUE_PATTERN = Pattern.compile(
-            "(?:([\"']?)([^\"'=\\s,()]+)([\"']?))\\s*=\\s*" +
-                    "(?:([\"'])((?:[^\\\\]|\\\\.)*?)\\4|([^,()\\n]*?))" +
-            "(?=\\s*,|\\s*$|\\s*\\)|\\s*\\n)",
+            "([\"']?)" +                                    // quote
+                    "([^\"'=\\s,()]{1," + MAX_KEY_LENGTH + "})" + // key
+                    "([\"']?)" +                                  // quote
+                    "\\s*=\\s*" +                                 // =
+                    "(?:'((?:[^'\\\\]|\\\\.)*)'|\"((?:[^\"\\\\]|\\\\.)*)\"|([^,()\\n]*))",
             Pattern.DOTALL | Pattern.MULTILINE
     );
 
