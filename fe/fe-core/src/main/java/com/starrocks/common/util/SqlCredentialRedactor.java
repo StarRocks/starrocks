@@ -108,9 +108,9 @@ public class SqlCredentialRedactor {
             CREDENTIAL_KEYS.stream().map(String::length).max(Integer::compareTo).orElse(1);
     // NOTE: MAX_KEY_LENGTH is used to avoid matching too many characters of a long string
     private static final Pattern KEY_VALUE_PATTERN = Pattern.compile(
-            "([\"']?)" +                                    // quote
+            "([\"'])" +                                    // quote
                     "([^\"'=\\s,()]{1," + MAX_KEY_LENGTH + "})" + // key
-                    "([\"']?)" +                                  // quote
+                    "([\"'])" +                                  // quote
                     "\\s*=\\s*" +                                 // =
                     "(?:'((?:[^'\\\\]|\\\\.)*)'|\"((?:[^\"\\\\]|\\\\.)*)\"|([^,()\\n]*))",
             Pattern.DOTALL | Pattern.MULTILINE
