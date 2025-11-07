@@ -1,0 +1,42 @@
+-- name: test_lake_be_tablets @cloud
+
+CREATE TABLE test_lake_be_tablets (
+  k1 date,
+  k2 int,
+  v1 int
+)
+PRIMARY KEY (k1, k2)
+PARTITION BY RANGE(k1) (
+  PARTITION p1 VALUES LESS THAN ('2025-10-01'),
+  PARTITION p2 VALUES LESS THAN ('2025-11-01')
+)
+DISTRIBUTED BY HASH(k2) BUCKETS 3
+PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+
+select count(*) from information_schema.be_tablets t, information_schema.tables_config c where t.table_id = c.table_id and c.table_name = "test_lake_be_tablets";
+-- result:
+6
+-- !result
+select distinct max_version from information_schema.be_tablets t, information_schema.tables_config c where t.table_id = c.table_id and c.table_name = "test_lake_be_tablets" order by max_version;
+-- result:
+1
+-- !result
+
+insert into test_lake_be_tablets values ("2025-09-01",4,100), ("2025-10-01",5,100), ("2025-10-02",4,100);
+-- result:
+-- !result
+select distinct max_version from information_schema.be_tablets t, information_schema.tables_config c where t.table_id = c.table_id and c.table_name = "test_lake_be_tablets" order by max_version;
+-- result:
+2
+-- !result
+
+insert into test_lake_be_tablets values ("2025-10-03",5,100);
+-- result:
+-- !result
+select distinct max_version from information_schema.be_tablets t, information_schema.tables_config c where t.table_id = c.table_id and c.table_name = "test_lake_be_tablets" order by max_version;
+-- result:
+2
+3
+-- !result
