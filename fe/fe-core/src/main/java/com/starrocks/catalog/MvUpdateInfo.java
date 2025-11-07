@@ -15,15 +15,13 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
 import com.starrocks.common.Config;
+import com.starrocks.sql.common.PCellSetMapping;
 import com.starrocks.sql.common.PCellSortedSet;
+import com.starrocks.sql.common.PCellWithName;
 import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.Map;
-import java.util.Set;
-
-import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.shrinkToSize;
 
 /**
  * Store the update information of MV used for mv rewrite(mv refresh can use it later).
@@ -33,13 +31,13 @@ public class MvUpdateInfo {
     // The type of mv refresh later
     private final MvToRefreshType mvToRefreshType;
     // The partition names of mv to refresh
-    private final Set<String> mvToRefreshPartitionNames = Sets.newHashSet();
+    private final PCellSortedSet mvToRefreshPartitionNames = PCellSortedSet.of();
     // The update information of base table
     private final Map<Table, MvBaseTableUpdateInfo> baseTableUpdateInfos = Maps.newHashMap();
     // The mapping of base partition name to mv partition names
-    private final Map<Table, Map<String, Set<String>>> basePartToMvPartNames = Maps.newHashMap();
+    private final Map<Table, PCellSetMapping> basePartToMvPartNames = Maps.newHashMap();
     //  The mapping of mv partition name to base partition names
-    private final Map<String, Map<Table, Set<String>>> mvPartToBasePartNames = Maps.newHashMap();
+    private final Map<String, Map<Table, PCellSortedSet>> mvPartToBasePartNames = Maps.newHashMap();
     // The consistency mode of query rewrite
     private final TableProperty.QueryRewriteConsistencyMode queryRewriteConsistencyMode;
 
@@ -94,15 +92,15 @@ public class MvUpdateInfo {
         return mvToRefreshType == MvToRefreshType.PARTIAL || mvToRefreshType == MvToRefreshType.NO_REFRESH;
     }
 
-    public void addMvToRefreshPartitionNames(String partitionName) {
+    public void addMvToRefreshPartitionNames(PCellWithName partitionName) {
         mvToRefreshPartitionNames.add(partitionName);
     }
 
-    public void addMvToRefreshPartitionNames(Set<String> partitionNames) {
+    public void addMvToRefreshPartitionNames(PCellSortedSet partitionNames) {
         mvToRefreshPartitionNames.addAll(partitionNames);
     }
 
-    public Set<String> getMvToRefreshPartitionNames() {
+    public PCellSortedSet getMvToRefreshPartitionNames() {
         return mvToRefreshPartitionNames;
     }
 
@@ -110,11 +108,11 @@ public class MvUpdateInfo {
         return baseTableUpdateInfos;
     }
 
-    public Map<String, Map<Table, Set<String>>> getMvPartToBasePartNames() {
+    public Map<String, Map<Table, PCellSortedSet>> getMvPartToBasePartNames() {
         return mvPartToBasePartNames;
     }
 
-    public Map<Table, Map<String, Set<String>>> getBasePartToMvPartNames() {
+    public Map<Table, PCellSetMapping> getBasePartToMvPartNames() {
         return basePartToMvPartNames;
     }
 
@@ -140,26 +138,21 @@ public class MvUpdateInfo {
         StringBuilder sb = new StringBuilder();
         sb.append("refreshType=").append(mvToRefreshType);
         if (!CollectionUtils.sizeIsEmpty(mvToRefreshPartitionNames)) {
-            sb.append(", mvToRefreshPartitionNames=").append(shrinkToSize(mvToRefreshPartitionNames, maxLength));
+            sb.append(", mvToRefreshPartitionNames=").append(mvToRefreshPartitionNames);
         }
         if (!CollectionUtils.sizeIsEmpty(basePartToMvPartNames)) {
-            sb.append(", basePartToMvPartNames=");
-            for (Map.Entry<Table, Map<String, Set<String>>> entry : basePartToMvPartNames.entrySet()) {
-                sb.append("[").append(entry.getKey().getName()).append(":");
-                for (Map.Entry<String, Set<String>> entry1 : shrinkToSize(entry.getValue(), maxLength).entrySet()) {
-                    sb.append(" ").append(entry1.getKey()).append(":").append(shrinkToSize(entry1.getValue(), maxLength));
-                }
-                sb.append("]");
-            }
+            sb.append(", basePartToMvPartNames=").append(basePartToMvPartNames);
         }
         if (!CollectionUtils.sizeIsEmpty(mvPartToBasePartNames)) {
             sb.append(", mvPartToBasePartNames=");
-            for (Map.Entry<String, Map<Table, Set<String>>> entry : mvPartToBasePartNames.entrySet()) {
-                sb.append("[").append(entry.getKey()).append(":");
-                for (Map.Entry<Table, Set<String>> entry1 : shrinkToSize(entry.getValue(), maxLength).entrySet()) {
-                    sb.append(" ").append(entry1.getKey().getName()).append(":")
-                            .append(shrinkToSize(entry1.getValue(), maxLength));
+            int i = 0;
+            for (Map.Entry<String, Map<Table, PCellSortedSet>> entry : mvPartToBasePartNames.entrySet()) {
+                if (i > Config.max_mv_task_run_meta_message_values_length) {
+                    sb.append("...");
+                    break;
                 }
+                sb.append("[").append(entry.getKey()).append(":");
+                sb.append(entry.getValue());
                 sb.append("]");
             }
         }
@@ -171,9 +164,9 @@ public class MvUpdateInfo {
      * @param refBaseTable: the input ref base table
      * @return: the partition names to refresh of the ref base table.
      */
-    public Set<String> getBaseTableToRefreshPartitionNames(Table refBaseTable) {
+    public PCellSortedSet getBaseTableToRefreshPartitionNames(Table refBaseTable) {
         if (mvToRefreshPartitionNames.isEmpty() || mvToRefreshType == MvToRefreshType.NO_REFRESH) {
-            return Sets.newHashSet();
+            return PCellSortedSet.of();
         }
         if (mvToRefreshType == MvToRefreshType.FULL) {
             return null;
@@ -183,14 +176,15 @@ public class MvUpdateInfo {
         }
         // MV's partition names to refresh are not only affected by the ref base table, but also other base tables.
         // Deduce the partition names to refresh of the ref base table from the partition names to refresh of the mv.
-        Set<String> refBaseTableToRefreshPartitionNames = Sets.newHashSet();
-        for (String mvPartName : mvToRefreshPartitionNames) {
-            Map<Table, Set<String>> baseTableToPartNames = mvPartToBasePartNames.get(mvPartName);
+        PCellSortedSet refBaseTableToRefreshPartitionNames = PCellSortedSet.of();
+        for (PCellWithName pCell : mvToRefreshPartitionNames.getPartitions()) {
+            String mvPartName = pCell.name();
+            Map<Table, PCellSortedSet> baseTableToPartNames = mvPartToBasePartNames.get(mvPartName);
             // means base table's partitions have already dropped.
             if (baseTableToPartNames == null) {
                 continue;
             }
-            Set<String> partNames = baseTableToPartNames.get(refBaseTable);
+            PCellSortedSet partNames = baseTableToPartNames.get(refBaseTable);
             // Continue since mvPartName to refresh is not triggerred by the base table since multi base tables has been
             // supported.
             if (partNames == null) {

@@ -18,12 +18,15 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
+import com.starrocks.sql.common.PCellSortedSet;
+import com.starrocks.sql.common.PartitionNameSetMap;
 import com.starrocks.sql.optimizer.rule.transformation.partition.PartitionSelector;
 
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -37,7 +40,7 @@ public class MVRefreshPartitionSelector {
     private final long maxBytesThreshold;
     private final int maxSelectedPartitions;
 
-    private final Map<Table, Map<String, Set<String>>> externalPartitionMap;
+    private final Map<Table, PartitionNameSetMap> externalPartitionMap;
     /**
      * Minimum required ratio of collected partition statistics.
      * If the collected stats are less than this ratio compared to the expected partitions,
@@ -56,7 +59,7 @@ public class MVRefreshPartitionSelector {
     public MVRefreshPartitionSelector(long maxRowsThreshold,
                                       long maxBytesThreshold,
                                       int maxPartitionNum,
-                                      Map<Table, Map<String, Set<String>>> externalPartitionMap) {
+                                      Map<Table, PartitionNameSetMap> externalPartitionMap) {
         this.maxRowsThreshold = maxRowsThreshold;
         this.maxBytesThreshold = maxBytesThreshold;
         this.maxSelectedPartitions = maxPartitionNum;
@@ -67,7 +70,7 @@ public class MVRefreshPartitionSelector {
      * Check if the incoming partition set can be added based on current total usage and thresholds.
      * Always allows the first partition.
      */
-    public boolean canAddPartition(Map<Table, Set<String>> partitionSet) throws MVAdaptiveRefreshException {
+    public boolean canAddPartition(Map<Table, PCellSortedSet> partitionSet) throws MVAdaptiveRefreshException {
         if (isFirstPartition) {
             return true;
         }
@@ -88,7 +91,7 @@ public class MVRefreshPartitionSelector {
      * Actually add the given partition set to the total usage.
      * This should be called after canAddPartitionSet() returns true.
      */
-    public void addPartition(Map<Table, Set<String>> partitionSet) throws MVAdaptiveRefreshException {
+    public void addPartition(Map<Table, PCellSortedSet> partitionSet) throws MVAdaptiveRefreshException {
         long[] usage = estimatePartitionUsage(partitionSet);
         currentTotalRows += usage[0];
         currentTotalBytes += usage[1];
@@ -101,15 +104,15 @@ public class MVRefreshPartitionSelector {
      *
      * @return array of [rows, bytes]
      */
-    private long[] estimatePartitionUsage(Map<Table, Set<String>> partitionSet) throws MVAdaptiveRefreshException {
+    private long[] estimatePartitionUsage(Map<Table, PCellSortedSet> partitionSet) throws MVAdaptiveRefreshException {
         long totalRows = 0;
         long totalBytes = 0;
 
-        for (Map.Entry<Table, Set<String>> entry : partitionSet.entrySet()) {
+        for (Map.Entry<Table, PCellSortedSet> entry : partitionSet.entrySet()) {
             Table table = entry.getKey();
-            Set<String> refBaseTablePartitions = entry.getValue();
+            PCellSortedSet refBaseTablePartitions = entry.getValue();
             Set<String> finalPartitionNames = refBaseTablePartitions.stream()
-                    .map(p -> resolveFinalPartitionNames(table, p))
+                    .map(p -> resolveFinalPartitionNames(table, p.name()))
                     .flatMap(Collection::stream)
                     .collect(Collectors.toSet());
             Map<String, Pair<Long, Long>> partitionStats = collectSelectedPartitionStats(table, finalPartitionNames);
@@ -150,10 +153,10 @@ public class MVRefreshPartitionSelector {
         if (table instanceof OlapTable) {
             return Collections.singleton(logicalPartitionNames);
         }
-        Map<String, Set<String>> mapping = externalPartitionMap.get(table);
-        return mapping != null
-                ? mapping.getOrDefault(logicalPartitionNames, Collections.emptySet())
-                : Collections.emptySet();
+        PartitionNameSetMap mapping = externalPartitionMap.get(table);
+        return Optional.ofNullable(mapping)
+                .map(m -> m.get(logicalPartitionNames))
+                .orElse(Collections.emptySet());
     }
 
     /**

@@ -31,6 +31,8 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.common.PCellSortedSet;
+import com.starrocks.sql.common.PCellUtils;
 import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Utils;
@@ -60,7 +62,6 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
@@ -147,9 +148,9 @@ public class MvPartitionCompensator {
                                                    MaterializationContext mvContext) {
         SessionVariable sessionVariable = mvContext.getOptimizerContext().getSessionVariable();
         MvUpdateInfo mvUpdateInfo = mvContext.getMvUpdateInfo();
-        Set<String> mvPartitionNameToRefresh = mvUpdateInfo.getMvToRefreshPartitionNames();
+        PCellSortedSet mvPartitionNameToRefresh = mvUpdateInfo.getMvToRefreshPartitionNames();
         // If mv contains no partitions to refresh, no need compensate
-        if (Objects.isNull(mvPartitionNameToRefresh) || mvPartitionNameToRefresh.isEmpty()) {
+        if (PCellUtils.isEmpty(mvPartitionNameToRefresh)) {
             logMVRewrite(mvContext, "MV has no partitions to refresh, no need compensate");
             return MVCompensation.noCompensate(sessionVariable);
         }

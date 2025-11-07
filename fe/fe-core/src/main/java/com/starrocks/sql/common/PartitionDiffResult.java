@@ -17,12 +17,11 @@ package com.starrocks.sql.common;
 import com.starrocks.catalog.Table;
 
 import java.util.Map;
-import java.util.Set;
 
 public class PartitionDiffResult {
     // For external table, the mapping of base table partition to mv partition:
     // <base table, <base table partition name, mv partition name>>
-    public final Map<Table, Map<String, Set<String>>> refBaseTableMVPartitionMap;
+    public final Map<Table, PartitionNameSetMap> refBaseTableMVPartitionMap;
     // The partition range of the base tables: <base table, partition cells>
     public final Map<Table, PCellSortedSet> refBaseTablePartitionMap;
     // The partition range of the materialized view
@@ -30,7 +29,7 @@ public class PartitionDiffResult {
     // The diff result of partition range between materialized view and base tables
     public final PartitionDiff diff;
 
-    public PartitionDiffResult(Map<Table, Map<String, Set<String>>> refBaseTableMVPartitionMap,
+    public PartitionDiffResult(Map<Table, PartitionNameSetMap> refBaseTableMVPartitionMap,
                                Map<Table, PCellSortedSet> refBaseTablePartitionMap,
                                PCellSortedSet mvPartitionToCells,
                                PartitionDiff diff) {
@@ -40,7 +39,17 @@ public class PartitionDiffResult {
         this.mvPartitionToCells = mvPartitionToCells;
     }
 
-    public Map<Table, Map<String, Set<String>>> getRefBaseTableMVPartitionMap() {
+    public Map<Table, PartitionNameSetMap> getRefBaseTableMVPartitionMap() {
         return refBaseTableMVPartitionMap;
+    }
+
+    @Override
+    public String toString() {
+        return "{" +
+                "refBaseTableMVPartitionMap=" + refBaseTableMVPartitionMap +
+                ", refBaseTablePartitionMap=" + refBaseTablePartitionMap +
+                ", mvPartitionToCells=" + mvPartitionToCells +
+                ", diff=" + diff +
+                '}';
     }
 }

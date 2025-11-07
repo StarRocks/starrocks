@@ -97,7 +97,7 @@ public final class ListPartitionDiffer extends PartitionDiffer {
             // Get sorted source atoms for merge-join filtering
             Set<PListCell> srcAtoms = srcItem.toSingleValueCells();
             List<PListCell> srcDistinctAtoms = filterDistinctAtoms(srcAtoms, dstAtomMaps);
-            
+
             if (!srcDistinctAtoms.isEmpty()) {
                 srcDistinctAtoms.forEach(atom -> dstAtomMaps.put(atom, srcItem));
                 List<List<String>> newSrcItems = srcDistinctAtoms
@@ -137,33 +137,33 @@ public final class ListPartitionDiffer extends PartitionDiffer {
         if (dstAtomMaps.isEmpty()) {
             return Lists.newArrayList(srcAtoms);
         }
-        
+
         // For small sets, direct containsKey check is more efficient
         if (srcAtoms.size() < 10) {
             return srcAtoms.stream()
                     .filter(atom -> !dstAtomMaps.containsKey(atom))
                     .collect(Collectors.toList());
         }
-        
+
         // For larger sets, use merge-join algorithm
         List<PListCell> result = Lists.newArrayList();
         List<PListCell> sortedSrcAtoms = srcAtoms.stream()
                 .sorted()
                 .collect(Collectors.toList());
-        
+
         Iterator<PListCell> srcIter = sortedSrcAtoms.iterator();
         Iterator<Map.Entry<PListCell, PListCell>> dstIter = dstAtomMaps.entrySet().iterator();
-        
+
         if (!srcIter.hasNext() || !dstIter.hasNext()) {
             while (srcIter.hasNext()) {
                 result.add(srcIter.next());
             }
             return result;
         }
-        
+
         PListCell srcAtom = srcIter.next();
         Map.Entry<PListCell, PListCell> dstEntry = dstIter.next();
-        
+
         while (srcAtom != null && dstEntry != null) {
             int cmp = srcAtom.compareTo(dstEntry.getKey());
             if (cmp == 0) {
@@ -179,13 +179,13 @@ public final class ListPartitionDiffer extends PartitionDiffer {
                 dstEntry = dstIter.hasNext() ? dstIter.next() : null;
             }
         }
-        
+
         // Add remaining source atoms (all are distinct)
         while (srcAtom != null) {
             result.add(srcAtom);
             srcAtom = srcIter.hasNext() ? srcIter.next() : null;
         }
-        
+
         return result;
     }
 
@@ -247,18 +247,17 @@ public final class ListPartitionDiffer extends PartitionDiffer {
      * @param mvAtoms base table partition map
      * @return base partition name -> mv partition names mapping
      */
-    public static Map<String, Set<String>> generateBaseRefMapImpl(Map<PListCell, Set<PCellWithName>> mvAtoms,
-                                                                  Map<PListCell, Set<PCellWithName>> baseAtoms) {
+    public static PCellSetMapping generateBaseRefMapImpl(Map<PListCell, Set<PCellWithName>> mvAtoms,
+                                                         Map<PListCell, Set<PCellWithName>> baseAtoms) {
+        PCellSetMapping result = PCellSetMapping.of();
         if (mvAtoms.isEmpty()) {
             // all base partitions have no corresponding mv partitions
-            Map<String, Set<String>> result = Maps.newHashMap();
             for (Set<PCellWithName> baseCellPluses : baseAtoms.values()) {
-                baseCellPluses.forEach(x -> result.computeIfAbsent(x.name(), k -> Sets.newHashSet()));
+                baseCellPluses.forEach(x -> result.put(x.name()));
             }
             return result;
         }
 
-        Map<String, Set<String>> result = Maps.newHashMap();
         // Merge-join algorithm: iterate both sorted maps simultaneously
         Iterator<Map.Entry<PListCell, Set<PCellWithName>>> mvIter = mvAtoms.entrySet().iterator();
         Iterator<Map.Entry<PListCell, Set<PCellWithName>>> baseIter = baseAtoms.entrySet().iterator();
@@ -275,10 +274,7 @@ public final class ListPartitionDiffer extends PartitionDiffer {
                 Set<PCellWithName> mvCellPluses = mvEntry.getValue();
                 Set<PCellWithName> baseCellPluses = baseEntry.getValue();
                 for (PCellWithName baseCellPlus : baseCellPluses) {
-                    mvCellPluses.forEach(x ->
-                            result.computeIfAbsent(baseCellPlus.name(), k -> Sets.newHashSet())
-                                    .add(x.name())
-                    );
+                    mvCellPluses.forEach(x -> result.put(baseCellPlus.name(), x));
                 }
                 // Advance both iterators
                 mvEntry = mvIter.hasNext() ? mvIter.next() : null;
@@ -286,7 +282,7 @@ public final class ListPartitionDiffer extends PartitionDiffer {
             } else if (cmp < 0) {
                 // baseEntry < mvEntry, this base partition has no corresponding mv partition
                 Set<PCellWithName> baseCellPluses = baseEntry.getValue();
-                baseCellPluses.forEach(x -> result.computeIfAbsent(x.name(), k -> Sets.newHashSet()));
+                baseCellPluses.forEach(x -> result.put(x.name()));
                 // Advance base iterator
                 baseEntry = baseIter.hasNext() ? baseIter.next() : null;
             } else {
@@ -297,7 +293,7 @@ public final class ListPartitionDiffer extends PartitionDiffer {
         // Handle remaining base entries that have no corresponding mv partitions
         while (baseEntry != null) {
             Set<PCellWithName> baseCellPluses = baseEntry.getValue();
-            baseCellPluses.forEach(x -> result.computeIfAbsent(x.name(), k -> Sets.newHashSet()));
+            baseCellPluses.forEach(x -> result.put(x.name()));
             baseEntry = baseIter.hasNext() ? baseIter.next() : null;
         }
 
@@ -379,7 +375,7 @@ public final class ListPartitionDiffer extends PartitionDiffer {
                 mvPartitionNameToListMap, uniqueResultNames);
 
         // collect external partition column mapping
-        Map<Table, Map<String, Set<String>>> externalPartitionMaps = Maps.newHashMap();
+        Map<Table, PartitionNameSetMap> externalPartitionMaps = Maps.newHashMap();
         if (!isQueryRewrite) {
             try {
                 collectExternalPartitionNameMapping(mv.getRefBaseTablePartitionColumns(), externalPartitionMaps);
@@ -398,9 +394,9 @@ public final class ListPartitionDiffer extends PartitionDiffer {
      * @return base table -> <partition name, mv partition names> mapping
      */
     @Override
-    public Map<Table, Map<String, Set<String>>> generateBaseRefMap(Map<Table, PCellSortedSet> basePartitionMaps,
-                                                                   PCellSortedSet mvPartitionMap) {
-        Map<Table, Map<String, Set<String>>> result = Maps.newHashMap();
+    public Map<Table, PCellSetMapping> generateBaseRefMap(Map<Table, PCellSortedSet> basePartitionMaps,
+                                                          PCellSortedSet mvPartitionMap) {
+        Map<Table, PCellSetMapping> result = Maps.newHashMap();
         // Convert mv partitions to sorted atoms once and reuse for all base tables
         Map<PListCell, Set<PCellWithName>> mvAtoms = toSortedAtoms(mvPartitionMap);
         for (Map.Entry<Table, PCellSortedSet> entry : basePartitionMaps.entrySet()) {
@@ -408,7 +404,7 @@ public final class ListPartitionDiffer extends PartitionDiffer {
             // Convert base table partitions to sorted atoms
             Map<PListCell, Set<PCellWithName>> baseAtoms = toSortedAtoms(entry.getValue());
             // Use merge-join algorithm to find matching partitions in O(B + M) instead of O(B × log M)
-            Map<String, Set<String>> baseTableRefMap = generateBaseRefMapImpl(mvAtoms, baseAtoms);
+            PCellSetMapping baseTableRefMap = generateBaseRefMapImpl(mvAtoms, baseAtoms);
             result.put(baseTable, baseTableRefMap);
         }
         return result;
@@ -421,12 +417,9 @@ public final class ListPartitionDiffer extends PartitionDiffer {
      * @return mv partition name -> <base table, base partition names> mapping
      */
     @Override
-    public Map<String, Map<Table, Set<String>>> generateMvRefMap(PCellSortedSet mvPCells,
-                                                                 Map<Table, PCellSortedSet> baseTablePCells) {
-        Map<String, Map<Table, Set<String>>> result = Maps.newHashMap();
-        if (mvPCells.isEmpty()) {
-            return result;
-        }
+    public Map<String, Map<Table, PCellSortedSet>> generateMvRefMap(PCellSortedSet mvPCells,
+                                                                    Map<Table, PCellSortedSet> baseTablePCells) {
+        Map<String, Map<Table, PCellSortedSet>> result = Maps.newHashMap();
         // Use sorted maps for merge-join optimization
         Map<PListCell, Set<PCellWithName>> mvAtoms = toSortedAtoms(mvPCells);
         for (Map.Entry<Table, PCellSortedSet> entry : baseTablePCells.entrySet()) {
@@ -449,8 +442,8 @@ public final class ListPartitionDiffer extends PartitionDiffer {
                     for (PCellWithName mvCell : mvCellPluses) {
                         baseCellPluses.forEach(x ->
                                 result.computeIfAbsent(mvCell.name(), k -> Maps.newHashMap())
-                                        .computeIfAbsent(baseTable, k -> Sets.newHashSet())
-                                        .add(x.name())
+                                        .computeIfAbsent(baseTable, k -> PCellSortedSet.of())
+                                        .add(x)
                         );
                     }
                     // Advance both iterators

@@ -269,13 +269,13 @@ public class SyncPartitionUtils {
      * return all src partition name to intersected dst partition names which the src partition
      * is intersected with dst partitions.
      */
-    public static Map<String, Set<String>> getIntersectedPartitions(PCellSortedSet srcRangeMap,
-                                                                    PCellSortedSet dstRangeMap) {
+    public static PartitionNameSetMap getIntersectedPartitions(PCellSortedSet srcRangeMap,
+                                                               PCellSortedSet dstRangeMap) {
         if (dstRangeMap.isEmpty()) {
-            return srcRangeMap
+            return PartitionNameSetMap.of(srcRangeMap
                     .stream()
                     .map(PCellWithName::name)
-                    .collect(Collectors.toMap(Function.identity(), Sets::newHashSet));
+                    .collect(Collectors.toMap(Function.identity(), Sets::newHashSet)));
         }
 
         // TODO: Callers may use `List<PartitionRange>` directly.
@@ -306,8 +306,8 @@ public class SyncPartitionUtils {
      * @return : return all src partition name to intersected dst partition names which the src partition
      * is intersected with dst ranges.
      */
-    public static Map<String, Set<String>> getIntersectedPartitions(List<PCellWithName> srcRanges,
-                                                                    List<PCellWithName> dstRanges) {
+    public static PartitionNameSetMap getIntersectedPartitions(List<PCellWithName> srcRanges,
+                                                               List<PCellWithName> dstRanges) {
         if (!srcRanges.isEmpty() && !dstRanges.isEmpty()) {
             PRangeCell srcRangeCell0 = srcRanges.get(0).cell().cast();
             PRangeCell dstRangeCell0 = dstRanges.get(0).cell().cast();
@@ -322,8 +322,8 @@ public class SyncPartitionUtils {
             }
         }
 
-        Map<String, Set<String>> result = srcRanges.stream().collect(
-                Collectors.toMap(PCellWithName::name, x -> Sets.newHashSet()));
+        PartitionNameSetMap result = PartitionNameSetMap.of(srcRanges.stream().collect(
+                Collectors.toMap(PCellWithName::name, x -> Sets.newHashSet())));
 
         List<PartitionKey> lowerPoints = dstRanges.stream()
                 .map(pCell -> (PRangeCell) pCell.cell())
@@ -352,47 +352,49 @@ public class SyncPartitionUtils {
         return result;
     }
 
-    public static void calcPotentialRefreshPartition(Set<String> mvToRefreshPartitionNames,
-                                                     Map<Table, Set<String>> baseChangedPartitionNames,
-                                                     Map<Table, Map<String, Set<String>>> baseToMvNameRef,
-                                                     Map<String, Map<Table, Set<String>>> mvToBaseNameRef,
-                                                     Set<String> mvPotentialRefreshPartitionNames) {
+    public static void calcPotentialRefreshPartition(PCellSortedSet mvToRefreshPartitionNames,
+                                                     Map<Table, PCellSortedSet> baseChangedPartitionNames,
+                                                     Map<Table, PCellSetMapping> baseToMvNameRef,
+                                                     Map<String, Map<Table, PCellSortedSet>> mvToBaseNameRef,
+                                                     PCellSortedSet mvPotentialRefreshPartitionNames) {
         gatherPotentialRefreshPartitionNames(mvToRefreshPartitionNames, baseChangedPartitionNames,
                 baseToMvNameRef, mvToBaseNameRef, mvPotentialRefreshPartitionNames);
     }
 
-    private static void gatherPotentialRefreshPartitionNames(Set<String> mvToRefreshPartitionNames,
-                                                             Map<Table, Set<String>> baseChangedPartitionNames,
-                                                             Map<Table, Map<String, Set<String>>> baseToMvNameRef,
-                                                             Map<String, Map<Table, Set<String>>> mvToBaseNameRef,
-                                                             Set<String> mvPotentialRefreshPartitionNames) {
+    private static void gatherPotentialRefreshPartitionNames(PCellSortedSet mvToRefreshPartitionNames,
+                                                             Map<Table, PCellSortedSet> baseChangedPartitionNames,
+                                                             Map<Table, PCellSetMapping> baseToMvNameRef,
+                                                             Map<String, Map<Table, PCellSortedSet>> mvToBaseNameRef,
+                                                             PCellSortedSet mvPotentialRefreshPartitionNames) {
         int curNameCount = mvToRefreshPartitionNames.size();
-        Set<String> copiedNeedRefreshMvPartitionNames = Sets.newHashSet(mvToRefreshPartitionNames);
-        for (String needRefreshMvPartitionName : copiedNeedRefreshMvPartitionNames) {
+        PCellSortedSet copiedNeedRefreshMvPartitionNames = PCellSortedSet.of(mvToRefreshPartitionNames);
+        for (PCellWithName pCellWithName : copiedNeedRefreshMvPartitionNames.getPartitions()) {
+            String needRefreshMvPartitionName = pCellWithName.name();
             // baseTable with its partitions by mv's partition
-            Map<Table, Set<String>> baseNames = mvToBaseNameRef.get(needRefreshMvPartitionName);
+            Map<Table, PCellSortedSet> baseNames = mvToBaseNameRef.get(needRefreshMvPartitionName);
             if (baseNames == null) {
                 // mv partition has no base table partition reference if its partition is not added since
                 LOG.warn("MV partition {} does not existed in the collected mv to base table partition mapping: {}",
                         needRefreshMvPartitionName, mvToBaseNameRef);
                 continue;
             }
-            Set<String> mvNeedRefreshPartitions = Sets.newHashSet();
-            for (Map.Entry<Table, Set<String>> entry : baseNames.entrySet()) {
+            PCellSortedSet mvNeedRefreshPartitions = PCellSortedSet.of();
+            for (Map.Entry<Table, PCellSortedSet> entry : baseNames.entrySet()) {
                 Table baseTable = entry.getKey();
-                Set<String> baseTablePartitions = entry.getValue();
+                PCellSortedSet baseTablePartitions = entry.getValue();
                 // base table partition with associated mv's partitions
-                Map<String, Set<String>> baseTableToMVPartitionsMap = baseToMvNameRef.get(baseTable);
-                for (String baseTablePartition : baseTablePartitions) {
+                PCellSetMapping baseTableToMVPartitionsMap = baseToMvNameRef.get(baseTable);
+                for (PCellWithName pCell : baseTablePartitions.getPartitions()) {
+                    String baseTablePartitionName = pCell.name();
                     // find base table partition associated mv partition names
-                    Set<String> mvAssociatedPartitions = baseTableToMVPartitionsMap.get(baseTablePartition);
+                    PCellSortedSet mvAssociatedPartitions = baseTableToMVPartitionsMap.get(baseTablePartitionName);
                     mvNeedRefreshPartitions.addAll(mvAssociatedPartitions);
                 }
 
                 if (mvNeedRefreshPartitions.size() > 1) {
                     mvToRefreshPartitionNames.addAll(mvNeedRefreshPartitions);
-                    mvPotentialRefreshPartitionNames.add(needRefreshMvPartitionName);
-                    baseChangedPartitionNames.computeIfAbsent(baseTable, x -> Sets.newHashSet())
+                    mvPotentialRefreshPartitionNames.add(pCellWithName);
+                    baseChangedPartitionNames.computeIfAbsent(baseTable, x -> PCellSortedSet.of())
                             .addAll(baseTablePartitions);
                 }
             }
@@ -477,10 +479,11 @@ public class SyncPartitionUtils {
                 }
                 break;
             case WEEK:
-                if (upperDateTime.with(DayOfWeek.MONDAY).truncatedTo(ChronoUnit.DAYS).equals(upperDateTime)) {
+                LocalDateTime weekStart = upperDateTime.with(DayOfWeek.MONDAY).truncatedTo(ChronoUnit.DAYS);
+                if (weekStart.equals(upperDateTime)) {
                     truncUpperDateTime = upperDateTime;
                 } else {
-                    truncUpperDateTime = upperDateTime.plusWeeks(1).with(LocalTime.MIN);
+                    truncUpperDateTime = weekStart.plusWeeks(1).with(LocalTime.MIN);
                 }
                 break;
             case MONTH:
@@ -613,7 +616,7 @@ public class SyncPartitionUtils {
     private static void dropRefBaseTableFromVersionMap(
             MaterializedView mv,
             Map<String, MaterializedView.BasePartitionInfo> baseTableVersionInfoMap,
-            Map<String, Set<String>> mvPartitionNameRefBaseTablePartitionMap,
+            PartitionNameSetMap mvPartitionNameRefBaseTablePartitionMap,
             String refBaseTable,
             String mvPartitionName) {
         Set<String> refBaseTableAssociatedPartitions =
@@ -626,7 +629,7 @@ public class SyncPartitionUtils {
         for (String refBaseTableAssociatedPartition : refBaseTableAssociatedPartitions) {
             if (!baseTableVersionInfoMap.containsKey(refBaseTableAssociatedPartition)) {
                 LOG.warn("WARNING: mvPartitionNameRefBaseTablePartitionMap {} failed to tracked the materialized view {} " +
-                                "partition {}", Joiner.on(",").join(mvPartitionNameRefBaseTablePartitionMap.keySet()),
+                                "partition {}", mvPartitionNameRefBaseTablePartitionMap,
                         mv.getName(), mvPartitionName);
                 continue;
             }
@@ -639,7 +642,7 @@ public class SyncPartitionUtils {
 
     private static boolean isMVPartitionNameRefBaseTablePartitionMapEnough(
             Map<String, MaterializedView.BasePartitionInfo> baseTableVersionInfoMap,
-            Map<String, Set<String>> mvPartitionNameRefBaseTablePartitionMap) {
+            PartitionNameSetMap mvPartitionNameRefBaseTablePartitionMap) {
         long refreshedRefBaseTablePartitionSize = baseTableVersionInfoMap.keySet().size();
         long refreshAssociatedRefTablePartitionSize = mvPartitionNameRefBaseTablePartitionMap.values()
                 .stream().map(Set::size).reduce(0, Integer::sum);
@@ -660,8 +663,8 @@ public class SyncPartitionUtils {
         }
 
         Map<String, MaterializedView.BasePartitionInfo> baseTableVersionInfoMap = versionMap.get(tableId);
-        Map<String, Set<String>> mvPartitionNameRefBaseTablePartitionMap =
-                mv.getRefreshScheme().getAsyncRefreshContext().getMvPartitionNameRefBaseTablePartitionMap();
+        PartitionNameSetMap mvPartitionNameRefBaseTablePartitionMap = PartitionNameSetMap.of(mv.getRefreshScheme()
+                        .getAsyncRefreshContext().getMvPartitionNameRefBaseTablePartitionMap());
         if (mvPartitionNameRefBaseTablePartitionMap.containsKey(mvPartitionName)) {
             dropRefBaseTableFromVersionMap(mv, baseTableVersionInfoMap, mvPartitionNameRefBaseTablePartitionMap,
                     tableId.toString(), mvPartitionName);
@@ -699,8 +702,8 @@ public class SyncPartitionUtils {
             return;
         }
 
-        Map<String, Set<String>> mvPartitionNameRefBaseTablePartitionMap =
-                mv.getRefreshScheme().getAsyncRefreshContext().getMvPartitionNameRefBaseTablePartitionMap();
+        PartitionNameSetMap mvPartitionNameRefBaseTablePartitionMap = PartitionNameSetMap.of(
+                mv.getRefreshScheme().getAsyncRefreshContext().getMvPartitionNameRefBaseTablePartitionMap());
         Map<String, MaterializedView.BasePartitionInfo> baseTableVersionInfoMap = versionMap.get(baseTableInfo);
         if (mvPartitionNameRefBaseTablePartitionMap.containsKey(mvPartitionName)) {
             dropRefBaseTableFromVersionMap(mv, baseTableVersionInfoMap,
@@ -754,7 +757,7 @@ public class SyncPartitionUtils {
                 PCellSortedSet basePartitionMap = ((OlapTable) baseTable).getRangePartitionMap();
                 PCellSortedSet mvPartitionRangeMap = PCellSortedSet.of();
                 mvPartitionRangeMap.add(mvPartitionName, new PRangeCell(mvPartitionRange));
-                Map<String, Set<String>> mvToBaseMapping = getIntersectedPartitions(
+                PartitionNameSetMap mvToBaseMapping = getIntersectedPartitions(
                         mvPartitionRangeMap, basePartitionMap);
                 mvToBaseMapping.values().forEach(parts -> parts.forEach(mvTableVersionMap::remove));
             }

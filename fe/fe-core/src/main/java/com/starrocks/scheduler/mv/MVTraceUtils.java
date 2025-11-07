@@ -15,7 +15,6 @@
 package com.starrocks.scheduler.mv;
 
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.HiveTable;
@@ -27,14 +26,13 @@ import com.starrocks.connector.PartitionUtil;
 import com.starrocks.planner.HdfsScanNode;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.ScanNode;
+import com.starrocks.sql.common.PartitionNameSetMap;
 import com.starrocks.sql.plan.ExecPlan;
 import org.apache.logging.log4j.Logger;
 import org.apache.parquet.Strings;
 
 import java.util.Collection;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -48,9 +46,9 @@ public class MVTraceUtils {
      * Extract refreshed/scanned base table and its refreshed partition names
      * NOTE: this is used to trace in task_runs.
      */
-    public static Map<String, Set<String>> getBaseTableRefreshedPartitionsByExecPlan(MaterializedView mv,
-                                                                                     ExecPlan execPlan) {
-        Map<String, Set<String>> baseTableRefreshPartitionNames = Maps.newHashMap();
+    public static PartitionNameSetMap getBaseTableRefreshedPartitionsByExecPlan(MaterializedView mv,
+                                                                                ExecPlan execPlan) {
+        PartitionNameSetMap baseTableRefreshPartitionNames = PartitionNameSetMap.of();
         List<ScanNode> scanNodes = execPlan.getScanNodes();
         for (ScanNode scanNode : scanNodes) {
             if (scanNode instanceof OlapScanNode) {
@@ -58,8 +56,7 @@ public class MVTraceUtils {
                 OlapTable olapTable = olapScanNode.getOlapTable();
                 if (olapScanNode.getSelectedPartitionNames() != null &&
                         !olapScanNode.getSelectedPartitionNames().isEmpty()) {
-                    baseTableRefreshPartitionNames.put(olapTable.getName(),
-                            new HashSet<>(olapScanNode.getSelectedPartitionNames()));
+                    baseTableRefreshPartitionNames.put(olapTable.getName(), olapScanNode.getSelectedPartitionNames());
                 } else {
                     List<Long> selectedPartitionIds = olapScanNode.getSelectedPartitionIds();
                     Set<String> selectedPartitionNames = selectedPartitionIds.stream()

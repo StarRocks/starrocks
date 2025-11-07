@@ -21,6 +21,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Partition;
 import com.starrocks.clone.DynamicPartitionScheduler;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.connector.iceberg.MockIcebergMetadata;
 import com.starrocks.scheduler.mv.pct.MVPCTBasedRefreshProcessor;
@@ -583,8 +584,10 @@ public class PartitionBasedMvRefreshProcessorIcebergTest extends MVTestBase {
 
         partitions = partitionedMaterializedView.getPartitions();
         Assertions.assertEquals(0, partitions.size());
+        FeConstants.enablePruneEmptyOutputScan = true;
         starRocksAssert.query("SELECT id, data, ts  FROM `iceberg0`.`partitioned_transforms_db`.`t0_multi_day_tz`")
                 .explainWithout(mvName);
         starRocksAssert.dropMaterializedView(mvName);
+        FeConstants.enablePruneEmptyOutputScan = false;
     }
 }

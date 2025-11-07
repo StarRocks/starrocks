@@ -14,7 +14,6 @@
 
 package com.starrocks.scheduler.mv.ivm;
 
-import com.google.api.client.util.Sets;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.starrocks.catalog.BaseTableInfo;
@@ -58,6 +57,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.TableRelation;
+import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.plan.ExecPlan;
 import org.apache.commons.collections4.CollectionUtils;
@@ -166,8 +166,8 @@ public final class MVIVMBasedRefreshProcessor extends BaseMVRefreshProcessor {
 
     @Override
     public void updateVersionMeta(ExecPlan execPlan,
-                                  Set<String> mvRefreshedPartitions,
-                                  Map<BaseTableSnapshotInfo, Set<String>> refTableAndPartitionNames) {
+                                  PCellSortedSet mvRefreshedPartitions,
+                                  Map<BaseTableSnapshotInfo, PCellSortedSet> refTableAndPartitionNames) {
         // ivm's meta has already been commited in the transaction of executing the plan,
         // update the meta for pct-based refresh
         try {
@@ -409,7 +409,7 @@ public final class MVIVMBasedRefreshProcessor extends BaseMVRefreshProcessor {
         InsertStmt insertStmt = null;
         try (Timer ignored = Tracers.watchScope("MVRefreshParser")) {
             // generate insert statement from defined query
-            insertStmt = generateInsertAst(ctx, Sets.newHashSet(), mv.getIVMTaskDefinition());
+            insertStmt = generateInsertAst(ctx, PCellSortedSet.of(), mv.getIVMTaskDefinition());
         }
 
         PlannerMetaLocker locker = new PlannerMetaLocker(ctx, insertStmt);
