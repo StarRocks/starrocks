@@ -41,17 +41,17 @@ public class ClusterSnapshotInfo {
     }
 
     public List<Long> getCommittedVersionsAfterVisible(long dbId, long tableId, long partId, long physicalPartId) {
-        List<Long> commitVersions = Lists.newArrayList();
+        List<Long> committedVersions = Lists.newArrayList();
         PhysicalPartitionSnapshotInfo physicalPartInfo = getPhysicalPartitionInfo(dbId, tableId, partId, physicalPartId);
         if (physicalPartInfo == null) {
-            return commitVersions;
+            return committedVersions;
         }
         long visibleVersion = physicalPartInfo.version;
         long maxCommittedVersion = physicalPartInfo.maxCommittedVersion;
         for (long version = visibleVersion + 1; version <= maxCommittedVersion; version++) {
-            commitVersions.add(version);
+            committedVersions.add(version);
         }
-        return commitVersions;
+        return committedVersions;
     }
 
     public boolean containsDb(long dbId) {
