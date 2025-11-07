@@ -20,7 +20,6 @@ import com.starrocks.fs.hdfs.HdfsFsManager;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.LoadStmt;
 
-import java.util.HashSet;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -81,16 +80,7 @@ public class SqlCredentialRedactor {
             .add("broker.password")
             .build();
 
-    // Lowercase set for O(1) lookup (case-insensitive matching)
-    private static final Set<String> CREDENTIAL_KEYS_LOWERCASE = new HashSet<>();
-
-    static {
-        for (String key : CREDENTIAL_KEYS) {
-            CREDENTIAL_KEYS_LOWERCASE.add(key.toLowerCase());
-        }
-    }
-
-    // Simplified pattern to match any key-value pair in SQL
+    // Pattern to match key-value pairs in SQL
     // This pattern handles cases like:
     // "key"="value"
     // 'key'='value'
@@ -105,10 +95,12 @@ public class SqlCredentialRedactor {
     // key"="value
     // Values can contain spaces and span multiple lines, separated by commas
     private static final Pattern KEY_VALUE_PATTERN = Pattern.compile(
-            "(?:([\"']?)([^\"'=\\s,()]+)([\"']?))\\s*=\\s*" +
-                    "(?:([\"'])((?:[^\\\\]|\\\\.)*?)\\4|([^,()\\n]*?))" +
+            "(?:([\"']?)(" + String.join("|", CREDENTIAL_KEYS.stream()
+                    .map(Pattern::quote)
+                    .toArray(String[]::new)) + ")([\"']?))\\s*=\\s*" +
+            "(?:([\"'])((?:[^\\\\]|\\\\.)*?)\\4|([^,]*?))" +
             "(?=\\s*,|\\s*$|\\s*\\)|\\s*\\n)",
-            Pattern.DOTALL | Pattern.MULTILINE
+            Pattern.CASE_INSENSITIVE | Pattern.DOTALL | Pattern.MULTILINE
     );
 
     private static final String REDACTED_VALUE = "***";
@@ -125,39 +117,28 @@ public class SqlCredentialRedactor {
         }
 
         Matcher matcher = KEY_VALUE_PATTERN.matcher(sql);
-        StringBuilder result = new StringBuilder(sql.length() + 100);
+        StringBuffer result = new StringBuffer();
 
-        int lastEnd = 0;
         while (matcher.find()) {
+            String replacement;
             String keyPrefix = matcher.group(1) != null ? matcher.group(1) : "";
             String key = matcher.group(2);
             String keySuffix = matcher.group(3) != null ? matcher.group(3) : "";
 
-            // Check if this key should be redacted (case-insensitive)
-            if (CREDENTIAL_KEYS_LOWERCASE.contains(key.toLowerCase())) {
-                // Append text before the match
-                result.append(sql, lastEnd, matcher.start());
-
-                // Build replacement for redacted value
-                String replacement;
-                if (matcher.group(4) != null && matcher.group(5) != null) {
-                    // Quoted value case
-                    String valueQuote = matcher.group(4);
-                    replacement = keyPrefix + key + keySuffix + " = " + valueQuote + REDACTED_VALUE + valueQuote;
-                } else {
-                    // Unquoted value case
-                    replacement = keyPrefix + key + keySuffix + " = " + REDACTED_VALUE;
-                }
-                result.append(replacement);
+            // Determine if value is quoted or unquoted
+            if (matcher.group(4) != null && matcher.group(5) != null) {
+                // Quoted value case
+                String valueQuote = matcher.group(4);
+                replacement = keyPrefix + key + keySuffix + " = " + valueQuote + REDACTED_VALUE + valueQuote;
             } else {
-                // Not a credential key, append original match
-                result.append(sql, lastEnd, matcher.end());
+                // Unquoted value case
+                replacement = keyPrefix + key + keySuffix + " = " + REDACTED_VALUE;
             }
-            lastEnd = matcher.end();
+
+            matcher.appendReplacement(result, Matcher.quoteReplacement(replacement));
         }
 
-        // Append remaining text
-        result.append(sql, lastEnd, sql.length());
+        matcher.appendTail(result);
         return result.toString();
     }
 }
