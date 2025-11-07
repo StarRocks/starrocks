@@ -214,22 +214,22 @@ jobs:
       - name: FE config 
         id: fe-config-gen
         run: |
-          ./ci-tool/bin/run-doc-gen.sh --type fe_config --sr ${{github.repository}} > $GITHUB_OUTPUT
+          ./ci-tool/bin/run-doc-gen.sh --type fe_config --sr ${{github.repository}} >> $GITHUB_OUTPUT
 
       - name: BE config 
         id: be-config-gen
         run: |
-          ./ci-tool/bin/run-doc-gen.sh --type be_config --sr ${{github.repository}} > $GITHUB_OUTPUT
+          ./ci-tool/bin/run-doc-gen.sh --type be_config --sr ${{github.repository}} >> $GITHUB_OUTPUT
 
       - name: variables 
         id: variables-gen
         run: |
-          ./ci-tool/bin/run-doc-gen.sh --type variables --sr ${{github.repository}} > $GITHUB_OUTPUT
+          ./ci-tool/bin/run-doc-gen.sh --type variables --sr ${{github.repository}} >> $GITHUB_OUTPUT
 
       - name: function 
         id: function-gen
         run: |
-          ./ci-tool/bin/run-doc-gen.sh --type function --sr ${{github.repository}} --fe ${FE_NODE} > $GITHUB_OUTPUT
+          ./ci-tool/bin/run-doc-gen.sh --type function --sr ${{github.repository}} --fe ${FE_NODE} >> $GITHUB_OUTPUT
 
   Teardown:
     runs-on: [self-hosted, normal]
