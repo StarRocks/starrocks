@@ -46,6 +46,7 @@ import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.catalog.constraint.ForeignKeyConstraint;
 import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.catalog.system.SystemTable;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -687,7 +688,13 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         // Do nothing by default.
     }
 
-    public void onCreate(Database database) {
+    /**
+     * This method is called right after the calling of {@link com.starrocks.server.LocalMetastore#onCreate)}.
+     * If error occurs, DdlException should be thrown to abort the creation of the table.
+     * @param database database where the table is created
+     * @throws DdlException thrown if any error occurs during onCreate
+     */
+    public void onCreate(Database database) throws DdlException  {
         onReload();
     }
 

@@ -632,6 +632,7 @@ public class FunctionSet {
                     .add(FunctionSet.HLL_EMPTY)
                     .add(FunctionSet.EXCHANGE_BYTES)
                     .add(FunctionSet.EXCHANGE_SPEED)
+                    .add(FunctionSet.SPLIT_PART)
                     .build();
 
     public static final Set<String> DECIMAL_ROUND_FUNCTIONS =

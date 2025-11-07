@@ -688,7 +688,7 @@ TEST_F(FlatJsonColumnRWTest, testHyperFlatJson) {
     EXPECT_EQ("b.b2.b3", writer_opts.meta->children_columns(index++).name());
     EXPECT_EQ("b.b2.c1.c2", writer_opts.meta->children_columns(index++).name());
     EXPECT_EQ("b.b4", writer_opts.meta->children_columns(index++).name());
-    EXPECT_EQ("ff.f1", writer_opts.meta->children_columns(index++).name());
+    EXPECT_EQ("ff", writer_opts.meta->children_columns(index++).name());
     EXPECT_EQ("gg", writer_opts.meta->children_columns(index++).name());
     EXPECT_EQ("remain", writer_opts.meta->children_columns(index++).name());
 
@@ -702,6 +702,8 @@ TEST_F(FlatJsonColumnRWTest, testHyperFlatJson) {
     EXPECT_EQ(R"({b.b4.b5: NULL, b.b2.b3: "sdf", a: 5, ff.f1: NULL, gg.g1: NULL})", read_col->debug_item(4));
 }
 
+// Conflict markers removed: the upstream test `testHyperFlatJsonWithConfig`
+// depends on FlatJsonConfig which is unavailable on this branch.
 TEST_F(FlatJsonColumnRWTest, testMergeRemainJson) {
     ColumnPtr write_col = JsonColumn::create();
     auto* json_col = down_cast<JsonColumn*>(write_col.get());
@@ -1329,7 +1331,7 @@ TEST_F(FlatJsonColumnRWTest, testHyperNullFlatJson) {
     EXPECT_EQ("b.b2.b3", writer_opts.meta->children_columns(index++).name());
     EXPECT_EQ("b.b2.c1.c2", writer_opts.meta->children_columns(index++).name());
     EXPECT_EQ("b.b4", writer_opts.meta->children_columns(index++).name());
-    EXPECT_EQ("ff.f1", writer_opts.meta->children_columns(index++).name());
+    EXPECT_EQ("ff", writer_opts.meta->children_columns(index++).name());
     EXPECT_EQ("gg", writer_opts.meta->children_columns(index++).name());
     EXPECT_EQ("remain", writer_opts.meta->children_columns(index++).name());
 

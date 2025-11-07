@@ -155,7 +155,8 @@
                         "loading/Loading_intro",
                         "loading/loading_introduction/loading_concepts",
                         "loading/loading_introduction/loading_considerations",
-                        "loading/loading_introduction/feature-support-loading-and-unloading"
+                        "loading/loading_introduction/feature-support-loading-and-unloading",
+                        "loading/loading_introduction/troubleshooting_loading"
                     ]
                 },
                 {
