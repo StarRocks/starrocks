@@ -37,7 +37,7 @@ public class ClusterSnapshotInfo {
         if (physicalPartInfo == null) {
             return 0;
         }
-        return physicalPartInfo.version;
+        return physicalPartInfo.visibleVersion;
     }
 
     public List<Long> getCommittedVersionsAfterVisible(long dbId, long tableId, long partId, long physicalPartId) {
@@ -46,9 +46,9 @@ public class ClusterSnapshotInfo {
         if (physicalPartInfo == null) {
             return committedVersions;
         }
-        long visibleVersion = physicalPartInfo.version;
-        long maxCommittedVersion = physicalPartInfo.maxCommittedVersion;
-        for (long version = visibleVersion + 1; version <= maxCommittedVersion; version++) {
+        long visibleVersion = physicalPartInfo.visibleVersion;
+        long committedVersion = physicalPartInfo.committedVersion;
+        for (long version = visibleVersion + 1; version <= committedVersion; version++) {
             committedVersions.add(version);
         }
         return committedVersions;

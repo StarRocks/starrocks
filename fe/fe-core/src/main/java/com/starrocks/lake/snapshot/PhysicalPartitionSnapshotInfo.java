@@ -22,17 +22,17 @@ public class PhysicalPartitionSnapshotInfo {
     @SerializedName(value = "physicalPartitionId")
     public final long physicalPartitionId;
     @SerializedName(value = "version")
-    public final long version;
+    public final long visibleVersion;
     @SerializedName(value = "indexInfos")
     public final Map<Long, MaterializedIndexSnapshotInfo> indexInfos;
-    @SerializedName(value = "maxCommittedVersion")
-    public final long maxCommittedVersion;
+    @SerializedName(value = "committedVersion")
+    public final long committedVersion;
 
     public PhysicalPartitionSnapshotInfo(long physicalPartId, long visibleVersion,
-                                         Map<Long, MaterializedIndexSnapshotInfo> indexInfos, long maxCommittedVersion) {
+                                         Map<Long, MaterializedIndexSnapshotInfo> indexInfos, long committedVersion) {
         this.physicalPartitionId = physicalPartId;
-        this.version = visibleVersion;
+        this.visibleVersion = visibleVersion;
         this.indexInfos = indexInfos;
-        this.maxCommittedVersion = maxCommittedVersion;
+        this.committedVersion = committedVersion;
     }
 }
