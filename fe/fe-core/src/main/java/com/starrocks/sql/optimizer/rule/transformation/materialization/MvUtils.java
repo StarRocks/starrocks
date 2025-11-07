@@ -1684,13 +1684,13 @@ public class MvUtils {
         } else {
             List<ScalarOperator> values = partitionRanges
                     .stream()
-                    .map(range -> getPartitionKeyRangePredicate(partitionColRefs, range))
+                    .map(range -> convertRangeToBinaryPredicate(partitionColRefs, range))
                     .collect(Collectors.toList());
             return Utils.compoundOr(values);
         }
     }
 
-    private static ScalarOperator getPartitionKeyRangePredicate(List<? extends ScalarOperator> partitionColRefs,
+    private static ScalarOperator convertRangeToBinaryPredicate(List<? extends ScalarOperator> partitionColRefs,
                                                                 Range<PartitionKey> range) {
         final List<LiteralExpr> lowerLiteralExprs = range.lowerEndpoint().getKeys();
         final List<LiteralExpr> upperLiteralExprs = range.upperEndpoint().getKeys();
@@ -1702,6 +1702,7 @@ public class MvUtils {
             final LiteralExpr lowerLiteralExpr = lowerLiteralExprs.get(i);
             final LiteralExpr upperLiteralExpr = upperLiteralExprs.get(i);
             if (lowerLiteralExpr.isMinValue()) {
+                // if the lower bound is min value, treat it as is null predicate
                 predicates.add(new IsNullPredicateOperator(partitionColRef));
             } else {
                 final ConstantOperator lowerBound =

@@ -170,7 +170,7 @@ public final class ExternalTableCompensation extends TableCompensation {
                     .map(col -> icebergTable.getPartitionField(col.getName()))
                     .filter(field -> field != null)
                     .collect(Collectors.toList());
-            // o
+            // if all partition fields are identity transform, we can convert range to in predicates directly.
             final boolean canConvertToInPredicate = partitionFields
                     .stream()
                     .allMatch(field -> field.transform().dedupName().equalsIgnoreCase("identity"));
