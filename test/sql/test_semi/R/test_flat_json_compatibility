@@ -17,13 +17,13 @@ update information_schema.be_configs set value = 'true' where name = 'enable_jso
 -- result:
 -- !result
 INSERT INTO t1 
-SELECT generate_series, json_object('a', generate_series)
-FROM TABLE(generate_series(1, 100000));
+SELECT generate_series, json_object('a', generate_series - 100000)
+FROM TABLE(generate_series(100001, 200000));
 -- result:
 -- !result
 INSERT INTO t1 
-SELECT generate_series, json_object('b', generate_series)
-FROM TABLE(generate_series(1, 100000));
+SELECT generate_series, json_object('b', generate_series - 200000)
+FROM TABLE(generate_series(200001, 300000));
 -- result:
 -- !result
 SELECT count(c2) FROM t1;
@@ -33,15 +33,15 @@ SELECT count(c2) FROM t1;
 SELECT c2 FROM t1 ORDER BY c1 LIMIT 10;
 -- result:
 {"a": 1}
-{"b": 1}
-{"a": 1}
-{"a": 2}
-{"b": 2}
 {"a": 2}
 {"a": 3}
-{"a": 3}
-{"b": 3}
 {"a": 4}
+{"a": 5}
+{"a": 6}
+{"a": 7}
+{"a": 8}
+{"a": 9}
+{"a": 10}
 -- !result
 SET enable_runtime_adaptive_dop = false;
 -- result:
