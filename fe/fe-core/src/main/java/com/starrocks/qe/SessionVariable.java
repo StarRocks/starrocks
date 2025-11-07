@@ -4337,6 +4337,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return scanOrToUnionThreshold;
     }
 
+    public boolean isEnablePushdownOrPredicate() {
+        return enablePushdownOrPredicate;
+    }
+
     public void setScanOrToUnionThreshold(long scanOrToUnionThreshold) {
         this.scanOrToUnionThreshold = scanOrToUnionThreshold;
     }
