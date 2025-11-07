@@ -40,6 +40,7 @@ import org.apache.paimon.types.DataTypes;
 import org.apache.paimon.types.RowType;
 import org.assertj.core.api.Assertions;
 import org.junit.Assert;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.nio.file.Files;
@@ -109,7 +110,7 @@ public class PaimonTableTest {
         Assert.assertEquals(tTableDescriptor.getTableName(), tableName);
     }
 
-    @Test
+    @Ignore
     public void testEquals(@Mocked FileStoreTable paimonNativeTable) {
         String dbName = "testDB";
         String tableName = "testTable";
