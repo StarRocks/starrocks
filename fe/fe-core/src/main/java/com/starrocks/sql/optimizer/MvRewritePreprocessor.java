@@ -60,6 +60,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
@@ -757,7 +758,7 @@ public class MvRewritePreprocessor {
                            MvUpdateInfo mvUpdateInfo) {
         MaterializedView mv = mvWithPlanContext.getMV();
         MvPlanContext mvPlanContext = mvWithPlanContext.getMvPlanContext();
-        Set<String> partitionNamesToRefresh = mvUpdateInfo.getMvToRefreshPartitionNames();
+        PCellSortedSet partitionNamesToRefresh = mvUpdateInfo.getMvToRefreshPartitionNames();
         if (!checkMvPartitionNamesToRefresh(connectContext, mv, partitionNamesToRefresh, mvPlanContext)) {
             return;
         }
@@ -765,7 +766,7 @@ public class MvRewritePreprocessor {
             logMVPrepare(tracers, connectContext, mv, "MV {} has no partitions to refresh", mv.getName());
         } else {
             logMVPrepare(tracers, mv, "MV' partitions to refresh(size: {}): {}", partitionNamesToRefresh.size(),
-                    MvUtils.shrinkToSize(partitionNamesToRefresh, Config.max_mv_task_run_meta_message_values_length));
+                    partitionNamesToRefresh);
         }
 
         MaterializationContext materializationContext = buildMaterializationContext(context, mv, mvPlanContext,
@@ -881,7 +882,7 @@ public class MvRewritePreprocessor {
      */
     public static boolean checkMvPartitionNamesToRefresh(ConnectContext context,
                                                          MaterializedView mv,
-                                                         Set<String> partitionNamesToRefresh,
+                                                         PCellSortedSet partitionNamesToRefresh,
                                                          MvPlanContext mvPlanContext) {
         if (mvPlanContext == null) {
             logMVPrepare(context, "MV {} plan context is null", mv.getName());
@@ -898,7 +899,7 @@ public class MvRewritePreprocessor {
                 traceOutdatedMVInfo(context, mv, partitionNamesToRefresh);
                 return false;
             }
-        } else if (!mv.getPartitionNames().isEmpty() && partitionNamesToRefresh.containsAll(mv.getPartitionNames())) {
+        } else if (!mv.getPartitionNames().isEmpty() && partitionNamesToRefresh.containsAllNames(mv.getPartitionNames())) {
             // if the mv is partitioned, and all partitions need refresh, then it can not be a candidate
             traceOutdatedMVInfo(context, mv, partitionNamesToRefresh);
             return false;
@@ -908,7 +909,7 @@ public class MvRewritePreprocessor {
 
     private static void traceOutdatedMVInfo(ConnectContext context,
                                             MaterializedView mv,
-                                            Set<String> partitionNamesToRefresh) {
+                                            PCellSortedSet partitionNamesToRefresh) {
         if (!Tracers.isSetTraceModule(Tracers.Module.MV)) {
             return;
         }
@@ -1027,7 +1028,7 @@ public class MvRewritePreprocessor {
      */
     public static LogicalOlapScanOperator createScanMvOperator(OlapTable mv,
                                                                ColumnRefFactory columnRefFactory,
-                                                               Set<String> excludedPartitions,
+                                                               PCellSortedSet excludedPartitions,
                                                                boolean isWithHiddenColumns) {
         final ImmutableMap.Builder<ColumnRefOperator, Column> colRefToColumnMetaMapBuilder = ImmutableMap.builder();
         final ImmutableMap.Builder<Column, ColumnRefOperator> columnMetaToColRefMapBuilder = ImmutableMap.builder();
@@ -1067,7 +1068,7 @@ public class MvRewritePreprocessor {
         List<Long> selectTabletIds = Lists.newArrayList();
         List<String> selectedPartitionNames = Lists.newArrayList();
         for (Partition p : mv.getPartitions()) {
-            if (!excludedPartitions.contains(p.getName()) && p.hasData()) {
+            if (!excludedPartitions.containsName(p.getName()) && p.hasData()) {
                 selectPartitionIds.add(p.getId());
                 selectedPartitionNames.add(p.getName());
                 for (PhysicalPartition physicalPartition : p.getSubPartitions()) {

@@ -14,12 +14,12 @@
 
 package com.starrocks.sql.optimizer.rule.tvr;
 
-import com.google.api.client.util.Sets;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.sql.ast.expression.JoinOperator;
+import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.optimizer.MvRewritePreprocessor;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -85,7 +85,7 @@ public class TvrAggregateRule extends TvrTransformationRule {
                 "TVR column row id must exist in agg state table");
         final ColumnRefFactory columnRefFactory = optimizerContext.getColumnRefFactory();
         final LogicalOlapScanOperator aggStateOlapScanOperator = MvRewritePreprocessor.createScanMvOperator(
-                aggStateTable, columnRefFactory, Sets.newHashSet(), true);
+                aggStateTable, columnRefFactory, PCellSortedSet.of(), true);
         ColumnRefOperator aggStateRowIdColumnRef =
                 aggStateOlapScanOperator.getColumnMetaToColRefMap().get(tvrColumnRowId);
         List<Column> aggStateTableFullColumns = aggStateTable.getFullSchema();

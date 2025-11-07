@@ -48,9 +48,11 @@ import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.PlannerMetaLocker;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.common.PCellSetMapping;
+import com.starrocks.sql.common.PCellSortedSet;
+import com.starrocks.sql.common.PCellUtils;
 import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.plan.ExecPlan;
-import org.apache.commons.collections.CollectionUtils;
 
 import java.util.Map;
 import java.util.Set;
@@ -97,7 +99,7 @@ public final class MVPCTBasedRefreshProcessor extends BaseMVRefreshProcessor {
         // check to refresh partitions of mv and base tables
         try (Timer ignored = Tracers.watchScope("MVRefreshCheckMVToRefreshPartitions")) {
             updatePCTToRefreshMetas(taskRunContext);
-            if (CollectionUtils.isEmpty(pctMVToRefreshedPartitions)) {
+            if (PCellUtils.isEmpty(pctMVToRefreshedPartitions)) {
                 return new ProcessExecPlan(Constants.TaskRunState.SKIPPED, null, null);
             }
         }
@@ -129,7 +131,8 @@ public final class MVPCTBasedRefreshProcessor extends BaseMVRefreshProcessor {
     /**
      * Prepare the statement and plan for mv refreshing, considering the partitions of ref table
      */
-    private InsertStmt prepareRefreshPlan(Set<String> mvToRefreshedPartitions, Map<String, Set<String>> refTablePartitionNames)
+    private InsertStmt prepareRefreshPlan(PCellSortedSet mvToRefreshedPartitions,
+                                          PCellSetMapping refTablePartitionNames)
             throws AnalysisException, LockTimeoutException {
         // Prepare refresh connect context
         ConnectContext ctx = mvContext.getCtx();
@@ -197,11 +200,11 @@ public final class MVPCTBasedRefreshProcessor extends BaseMVRefreshProcessor {
         if (logger.isDebugEnabled() || debugOptions.isEnableQueryTraceLog()) {
             logger.info("MV Refresh Final Plan\nMV PartitionsToRefresh: {}\nBase PartitionsToScan: {}\n" +
                             "Insert Plan:\n{}",
-                    String.join(",", mvToRefreshedPartitions), refTablePartitionNames,
+                    mvToRefreshedPartitions, refTablePartitionNames,
                     execPlan != null ? execPlan.getExplainString(StatementBase.ExplainLevel.VERBOSE) : "");
         } else {
             logger.info("MV Refresh Final Plan, MV PartitionsToRefresh: {}, Base PartitionsToScan: {}",
-                    String.join(",", mvToRefreshedPartitions), refTablePartitionNames);
+                    mvToRefreshedPartitions, refTablePartitionNames);
         }
 
         mvContext.setExecPlan(execPlan);
@@ -288,8 +291,8 @@ public final class MVPCTBasedRefreshProcessor extends BaseMVRefreshProcessor {
 
     @Override
     public void updateVersionMeta(ExecPlan execPlan,
-                                  Set<String> mvRefreshedPartitions,
-                                  Map<BaseTableSnapshotInfo, Set<String>> refTableAndPartitionNames) {
+                                  PCellSortedSet mvRefreshedPartitions,
+                                  Map<BaseTableSnapshotInfo, PCellSortedSet> refTableAndPartitionNames) {
         updatePCTMeta(execPlan, pctMVToRefreshedPartitions, pctRefTableRefreshPartitions, Maps.newHashMap());
     }
 }
