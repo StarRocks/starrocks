@@ -1825,6 +1825,36 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：最小采样行数。如果指定了采集类型为抽样采集（SAMPLE），需要设置该参数。如果参数取值超过了实际的表行数，默认进行全量采集。
 - 引入版本：-
 
+<<<<<<< HEAD
+=======
+##### enable_manual_collect_array_ndv
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否允许手动采集 ARRAY 类型列的 NDV 信息。
+- 引入版本：v4.0
+
+##### enable_auto_collect_array_ndv
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否允许自动采集 ARRAY 类型列的 NDV 信息。
+- 引入版本：v4.0
+
+##### enable_predicate_columns_collection
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否启用 Predicate Column 采集。如果禁用，在查询优化期间将不会记录 Predicate Column。
+- 引入版本：-
+
+>>>>>>> 713b35a5cf ([Enhancement]  Add enable_predicate_columns_collection config (#65052))
 ##### histogram_buckets_size
 
 - 默认值：64
