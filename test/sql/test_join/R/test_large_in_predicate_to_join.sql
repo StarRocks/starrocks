@@ -440,9 +440,9 @@ select id, int_col from t_int where id in (
 4	4000
 5	5000
 -- !result
-select id, int_col, (
+select id, int_col, round((
     select avg(score) from t_large where category_id in (1, 2, 3, 4, 5)
-) as avg_score from t_int where id <= 5 order by id;
+), 2) as avg_score from t_int where id <= 5 order by id;
 -- result:
 1	1000	80.35
 2	2000	80.35
