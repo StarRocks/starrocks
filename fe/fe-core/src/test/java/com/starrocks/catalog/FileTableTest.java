@@ -17,7 +17,6 @@ package com.starrocks.catalog;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.hive.HiveStorageFormat;
-import com.starrocks.connector.hive.RemoteFileInputFormat;
 import com.starrocks.connector.hive.TextFileFormatDesc;
 import com.starrocks.planner.DescriptorTable;
 import com.starrocks.qe.ConnectContext;
@@ -64,11 +63,11 @@ public class FileTableTest {
                 createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, connectContext);
         com.starrocks.catalog.Table table = createTable(createTableStmt);
 
-        Assertions.assertTrue(table instanceof FileTable);
+        Assertions.assertInstanceOf(FileTable.class, table);
         FileTable fileTable = (FileTable) table;
         Assertions.assertEquals("file_tbl", fileTable.getName());
         Assertions.assertEquals(hdfsPath, fileTable.getTableLocation());
-        Assertions.assertEquals(RemoteFileInputFormat.ORC, fileTable.getFileFormat());
+        Assertions.assertEquals(HiveStorageFormat.ORC, fileTable.getFileFormat());
         Assertions.assertEquals(hdfsPath, fileTable.getFileProperties().get("path"));
         Assertions.assertEquals("orc", fileTable.getFileProperties().get("format"));
 
@@ -80,11 +79,11 @@ public class FileTableTest {
                 (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql2, connectContext);
         com.starrocks.catalog.Table table2 = createTable(createTableStmt2);
 
-        Assertions.assertTrue(table2 instanceof FileTable);
+        Assertions.assertInstanceOf(FileTable.class, table2);
         FileTable fileTable2 = (FileTable) table2;
         Assertions.assertEquals("file_tbl_parq", fileTable2.getName());
         Assertions.assertEquals(hdfsPath, fileTable2.getTableLocation());
-        Assertions.assertEquals(RemoteFileInputFormat.PARQUET, fileTable2.getFileFormat());
+        Assertions.assertEquals(HiveStorageFormat.PARQUET, fileTable2.getFileFormat());
 
         String createTableSql3 = "create external table  if not exists  db.file_tbl_parq (col1 int, col2 int) " +
                 "engine=file properties " +
@@ -128,11 +127,11 @@ public class FileTableTest {
                     (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, connectContext);
             com.starrocks.catalog.Table table = createTable(createTableStmt);
 
-            Assertions.assertTrue(table instanceof FileTable);
+            Assertions.assertInstanceOf(FileTable.class, table);
             FileTable fileTable = (FileTable) table;
             Assertions.assertEquals("file_tbl", fileTable.getName());
             Assertions.assertEquals(hdfsPath, fileTable.getTableLocation());
-            Assertions.assertEquals(RemoteFileInputFormat.TEXTFILE, fileTable.getFileFormat());
+            Assertions.assertEquals(HiveStorageFormat.TEXTFILE, fileTable.getFileFormat());
             Assertions.assertEquals(hdfsPath, fileTable.getFileProperties().get("path"));
             Assertions.assertEquals("text", fileTable.getFileProperties().get("format"));
         }

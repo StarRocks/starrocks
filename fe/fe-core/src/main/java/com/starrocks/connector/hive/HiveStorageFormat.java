@@ -15,6 +15,7 @@
 package com.starrocks.connector.hive;
 
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.thrift.THdfsFileFormat;
 
 import java.util.Map;
 
@@ -117,4 +118,22 @@ public enum HiveStorageFormat {
     public String getOutputFormat() {
         return outputFormat;
     }
+
+    public THdfsFileFormat toFileFormatThrift() {
+        return switch (this) {
+            case PARQUET -> THdfsFileFormat.PARQUET;
+            case ORC -> THdfsFileFormat.ORC;
+            case TEXTFILE -> THdfsFileFormat.TEXT;
+            case AVRO -> THdfsFileFormat.AVRO;
+            case RCBINARY -> THdfsFileFormat.RC_BINARY;
+            case RCTEXT -> THdfsFileFormat.RC_TEXT;
+            case SEQUENCE -> THdfsFileFormat.SEQUENCE_FILE;
+            default -> THdfsFileFormat.UNKNOWN;
+        };
+    }
+
+    public boolean isTextFormat() {
+        return this == HiveStorageFormat.TEXTFILE;
+    }
+
 }

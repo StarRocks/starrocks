@@ -28,7 +28,6 @@ import com.starrocks.connector.RemotePathKey;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveRemoteFileIO;
 import com.starrocks.connector.hive.HiveStorageFormat;
-import com.starrocks.connector.hive.RemoteFileInputFormat;
 import com.starrocks.connector.hive.TextFileFormatDesc;
 import com.starrocks.credential.azure.AzureCloudConfigurationProvider;
 import com.starrocks.planner.DescriptorTable;
@@ -47,21 +46,20 @@ public class FileTable extends Table {
     public static final String JSON_KEY_FORMAT = "format";
     private static final String JSON_RECURSIVE_DIRECTORIES = "enable_recursive_listing";
     private static final String JSON_ENABLE_WILDCARDS = "enable_wildcards";
-    private static final String JSON_KEY_FILE_PROPERTIES = "fileProperties";
 
     public static final String JSON_KEY_COLUMN_SEPARATOR = "column_separator";
     public static final String JSON_KEY_ROW_DELIMITER = "row_delimiter";
     public static final String JSON_KEY_COLLECTION_DELIMITER = "collection_delimiter";
     public static final String JSON_KEY_MAP_DELIMITER = "map_delimiter";
 
-    private static final ImmutableMap<String, RemoteFileInputFormat> SUPPORTED_FORMAT = ImmutableMap.of(
-            "parquet", RemoteFileInputFormat.PARQUET,
-            "orc", RemoteFileInputFormat.ORC,
-            "text", RemoteFileInputFormat.TEXTFILE,
-            "avro", RemoteFileInputFormat.AVRO,
-            "rctext", RemoteFileInputFormat.RCTEXT,
-            "rcbinary", RemoteFileInputFormat.RCBINARY,
-            "sequence", RemoteFileInputFormat.SEQUENCE);
+    private static final ImmutableMap<String, HiveStorageFormat> SUPPORTED_FORMAT = ImmutableMap.of(
+            "parquet", HiveStorageFormat.PARQUET,
+            "orc", HiveStorageFormat.ORC,
+            "text", HiveStorageFormat.TEXTFILE,
+            "avro", HiveStorageFormat.AVRO,
+            "rctext", HiveStorageFormat.RCTEXT,
+            "rcbinary", HiveStorageFormat.RCBINARY,
+            "sequence", HiveStorageFormat.SEQUENCE);
 
     @SerializedName(value = "fp")
     private Map<String, String> fileProperties = Maps.newHashMap();
@@ -104,13 +102,9 @@ public class FileTable extends Table {
         return fileProperties.get(JSON_KEY_FILE_PATH);
     }
 
-    public RemoteFileInputFormat getFileFormat() {
+    public HiveStorageFormat getFileFormat() {
         String format = fileProperties.get(JSON_KEY_FORMAT).toLowerCase();
-        if (SUPPORTED_FORMAT.containsKey(format)) {
-            return SUPPORTED_FORMAT.get(format);
-        } else {
-            return RemoteFileInputFormat.UNKNOWN;
-        }
+        return SUPPORTED_FORMAT.getOrDefault(format, HiveStorageFormat.UNSUPPORTED);
     }
 
     public Map<String, String> getFileProperties() {
@@ -148,9 +142,9 @@ public class FileTable extends Table {
     public List<RemoteFileDesc> getFileDescs() throws DdlException {
         List<RemoteFileDesc> fileDescs = getFileDescsFromHdfs();
 
-        RemoteFileInputFormat format = getFileFormat();
+        HiveStorageFormat format = getFileFormat();
         TextFileFormatDesc textFileFormatDesc = null;
-        if (format.equals(RemoteFileInputFormat.TEXTFILE)) {
+        if (format.equals(HiveStorageFormat.TEXTFILE)) {
             textFileFormatDesc = new TextFileFormatDesc(
                     fileProperties.getOrDefault(JSON_KEY_COLUMN_SEPARATOR, "\t"),
                     fileProperties.getOrDefault(JSON_KEY_ROW_DELIMITER, "\n"),
