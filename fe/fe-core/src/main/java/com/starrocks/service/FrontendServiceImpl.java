@@ -1433,13 +1433,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             throw new MetaNotFoundException("db " + dbName + " does not exist");
         }
         long dbId = db.getId();
+        TxnCommitAttachment attachment = TxnCommitAttachment.fromThrift(request.getTxnCommitAttachment());
         GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().abortTransaction(dbId, request.getTxnId(),
                 request.isSetReason() ? request.getReason() : "system cancel",
                 TabletCommitInfo.fromThrift(request.getCommitInfos()),
-                TabletFailInfo.fromThrift(request.getFailInfos()),
-                TxnCommitAttachment.fromThrift(request.getTxnCommitAttachment()));
-
-        TxnCommitAttachment attachment = TxnCommitAttachment.fromThrift(request.txnCommitAttachment);
+                TabletFailInfo.fromThrift(request.getFailInfos()), attachment);
         GlobalStateMgr.getCurrentState().getStreamLoadMgr()
                 .setSyncStreamLoadState(request.getTxnId(), attachment, request.getReason());
     }

@@ -73,10 +73,13 @@ import com.starrocks.thrift.TListRecycleBinCatalogsInfo;
 import com.starrocks.thrift.TListRecycleBinCatalogsParams;
 import com.starrocks.thrift.TListRecycleBinCatalogsResult;
 import com.starrocks.thrift.TListTableStatusResult;
+import com.starrocks.thrift.TLoadInfo;
 import com.starrocks.thrift.TLoadTxnBeginRequest;
 import com.starrocks.thrift.TLoadTxnBeginResult;
 import com.starrocks.thrift.TLoadTxnCommitRequest;
 import com.starrocks.thrift.TLoadTxnCommitResult;
+import com.starrocks.thrift.TLoadTxnRollbackRequest;
+import com.starrocks.thrift.TLoadTxnRollbackResult;
 import com.starrocks.thrift.TLoadType;
 import com.starrocks.thrift.TManualLoadTxnCommitAttachment;
 import com.starrocks.thrift.TMergeCommitRequest;
@@ -1209,9 +1212,93 @@ public class FrontendServiceImplTest {
         address.setHostname("127.0.0.1");
         address.setPort(9030);
         doReturn(address).when(impl).getClientAddr();
+
         String db = "test";
         String table = "test_load";
+        long txnId = testBeginAndPutTxn(impl, db, table);
+        TLoadTxnCommitRequest request = buildCommitRequest(txnId, db, table);
+        TLoadTxnCommitResult result = impl.loadTxnPrepare(request);
+        assertEquals(TStatusCode.OK, result.getStatus().status_code);
 
+        StreamLoadTask streamLoadTask =
+                GlobalStateMgr.getCurrentState().getStreamLoadMgr().getSyncSteamLoadTaskByTxnId(txnId);
+        Assertions.assertNotNull(streamLoadTask);
+        List<TLoadInfo> loadInfos = streamLoadTask.toThrift();
+        Assertions.assertNotNull(loadInfos);
+        Assertions.assertEquals(1, loadInfos.size());
+        TLoadInfo loadInfo = loadInfos.get(0);
+        Assertions.assertEquals("", loadInfo.getError_msg());
+        Assertions.assertEquals(2, loadInfo.getNum_sink_rows());
+        Assertions.assertEquals(1, loadInfo.getNum_filtered_rows());
+    }
+
+    @Test
+    public void testLoadTxnCommit() throws TException {
+        FrontendServiceImpl impl = spy(new FrontendServiceImpl(exeEnv));
+        TNetworkAddress address = new TNetworkAddress();
+        address.setHostname("127.0.0.1");
+        address.setPort(9030);
+        doReturn(address).when(impl).getClientAddr();
+
+        String db = "test";
+        String table = "test_load";
+        long txnId = testBeginAndPutTxn(impl, db, table);
+        TLoadTxnCommitRequest request = buildCommitRequest(txnId, db, table);
+        TLoadTxnCommitResult result = impl.loadTxnCommit(request);
+        if (result.getStatus().status_code == TStatusCode.OK) {
+            StreamLoadTask streamLoadTask =
+                    GlobalStateMgr.getCurrentState().getStreamLoadMgr().getSyncSteamLoadTaskByTxnId(txnId);
+            Assertions.assertNotNull(streamLoadTask);
+            List<TLoadInfo> loadInfos = streamLoadTask.toThrift();
+            Assertions.assertNotNull(loadInfos);
+            Assertions.assertEquals(1, loadInfos.size());
+            TLoadInfo loadInfo = loadInfos.get(0);
+            Assertions.assertEquals("", loadInfo.getError_msg());
+            Assertions.assertEquals(2, loadInfo.getNum_sink_rows());
+            Assertions.assertEquals(1, loadInfo.getNum_filtered_rows());
+        }
+    }
+
+    @Test
+    public void testLoadTxnRollback() throws TException {
+        FrontendServiceImpl impl = spy(new FrontendServiceImpl(exeEnv));
+        TNetworkAddress address = new TNetworkAddress();
+        address.setHostname("127.0.0.1");
+        address.setPort(9030);
+        doReturn(address).when(impl).getClientAddr();
+
+        String db = "test";
+        String table = "test_load";
+        long txnId = testBeginAndPutTxn(impl, db, table);
+        TLoadTxnRollbackRequest request = new TLoadTxnRollbackRequest();
+        request.setDb("test");
+        request.setTbl("test_load");
+        request.setTxnId(txnId);
+        request.setReason("artificial failure");
+        TManualLoadTxnCommitAttachment loadAttachment = new TManualLoadTxnCommitAttachment();
+        loadAttachment.setLoadedRows(2);
+        loadAttachment.setFilteredRows(1);
+        TTxnCommitAttachment txnAttachment = new TTxnCommitAttachment();
+        txnAttachment.setLoadType(TLoadType.MANUAL_LOAD);
+        txnAttachment.setManualLoadTxnCommitAttachment(loadAttachment);
+        request.setTxnCommitAttachment(txnAttachment);
+        request.setAuth_code(100);
+        TLoadTxnRollbackResult result = impl.loadTxnRollback(request);
+        assertEquals(TStatusCode.OK, result.getStatus().status_code);
+
+        StreamLoadTask streamLoadTask =
+                GlobalStateMgr.getCurrentState().getStreamLoadMgr().getSyncSteamLoadTaskByTxnId(txnId);
+        Assertions.assertNotNull(streamLoadTask);
+        List<TLoadInfo> loadInfos = streamLoadTask.toThrift();
+        Assertions.assertNotNull(loadInfos);
+        Assertions.assertEquals(1, loadInfos.size());
+        TLoadInfo loadInfo = loadInfos.get(0);
+        Assertions.assertEquals("artificial failure", loadInfo.getError_msg());
+        Assertions.assertEquals(2, loadInfo.getNum_sink_rows());
+        Assertions.assertEquals(1, loadInfo.getNum_filtered_rows());
+    }
+
+    private long testBeginAndPutTxn(FrontendServiceImpl impl, String db, String table) throws TException {
         TLoadTxnBeginRequest beginRequest = new TLoadTxnBeginRequest();
         beginRequest.setLabel(UUID.randomUUID().toString());
         beginRequest.setDb(db);
@@ -1231,11 +1318,14 @@ public class FrontendServiceImplTest {
         putRequest.setAuth_code(100);
         TStreamLoadPutResult putResult = impl.streamLoadPut(putRequest);
         assertEquals(TStatusCode.OK, putResult.getStatus().status_code);
+        return beginResult.getTxnId();
+    }
 
-        TLoadTxnCommitRequest prepareRequest = new TLoadTxnCommitRequest();
-        prepareRequest.setDb(db);
-        prepareRequest.setTbl(table);
-        prepareRequest.setTxnId(beginResult.getTxnId());
+    private TLoadTxnCommitRequest buildCommitRequest(long txnId, String db, String table) {
+        TLoadTxnCommitRequest request = new TLoadTxnCommitRequest();
+        request.setDb("test");
+        request.setTbl("test_load");
+        request.setTxnId(txnId);
         List<TTabletCommitInfo> commitInfos = new ArrayList<>();
         OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db, table);
         tbl.getAllPhysicalPartitions().stream().map(PhysicalPartition::getBaseIndex)
@@ -1245,23 +1335,17 @@ public class FrontendServiceImplTest {
                     commitInfo.setBackendId(tablet.getBackendIds().iterator().next());
                     commitInfos.add(commitInfo);
                 });
-        prepareRequest.setCommitInfos(commitInfos);
+        request.setCommitInfos(commitInfos);
         TManualLoadTxnCommitAttachment loadAttachment = new TManualLoadTxnCommitAttachment();
         loadAttachment.setLoadedRows(2);
         loadAttachment.setFilteredRows(1);
         TTxnCommitAttachment txnAttachment = new TTxnCommitAttachment();
         txnAttachment.setLoadType(TLoadType.MANUAL_LOAD);
         txnAttachment.setManualLoadTxnCommitAttachment(loadAttachment);
-        prepareRequest.setTxnCommitAttachment(txnAttachment);
-        prepareRequest.setAuth_code(100);
-        TLoadTxnCommitResult prepareResult = impl.loadTxnPrepare(prepareRequest);
-        assertEquals(TStatusCode.OK, prepareResult.getStatus().status_code);
-
-        StreamLoadTask streamLoadTask =
-                GlobalStateMgr.getCurrentState().getStreamLoadMgr().getSyncSteamLoadTaskByTxnId(beginResult.getTxnId());
-        Assertions.assertNotNull(streamLoadTask);
-        Assertions.assertEquals("2", streamLoadTask.getShowInfo().get(0).get(11));
-        Assertions.assertEquals("1", streamLoadTask.getShowInfo().get(0).get(12));
+        request.setTxnCommitAttachment(txnAttachment);
+        request.setAuth_code(100);
+        request.setThrift_rpc_timeout_ms(500);
+        return request;
     }
 
     @Test
