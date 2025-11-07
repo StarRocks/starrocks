@@ -1299,10 +1299,11 @@ TEST_F(ParquetSchemaTest, ParquetLists) {
 
         expected_fields.emplace_back(GroupNode::make_field(
                 "my_list_9", true, ColumnType::ARRAY,
-                {GroupNode::make_field("list", false, ColumnType::STRUCT,
-                                       {GroupNode::make_field("element", false, ColumnType::MAP,
-                                                              {PrimitiveNode::make_field("key", false, Type::type::BYTE_ARRAY),
-                                                                PrimitiveNode::make_field("value", true, Type::type::BYTE_ARRAY)})})});
+                {GroupNode::make_field(
+                        "list", false, ColumnType::STRUCT,
+                        {GroupNode::make_field("element", false, ColumnType::MAP,
+                                               {PrimitiveNode::make_field("key", false, Type::type::BYTE_ARRAY),
+                                                PrimitiveNode::make_field("value", true, Type::type::BYTE_ARRAY)})})}));
     }
 
     SchemaDescriptor desc;
