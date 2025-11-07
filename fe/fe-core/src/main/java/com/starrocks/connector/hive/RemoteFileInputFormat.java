@@ -73,12 +73,7 @@ public enum RemoteFileInputFormat {
     }
 
     public boolean isTextFormat() {
-        switch (this) {
-            case TEXTFILE:
-                return true;
-            default:
-                return false;
-        }
+        return this == RemoteFileInputFormat.TEXTFILE;
     }
 
     public THdfsFileFormat toThrift() {
