@@ -1042,7 +1042,7 @@ public class ReplicationJob implements GsonPostProcessable {
     }
 
     private boolean isCrashRecovery() {
-        return runningTasks.isEmpty() && finishedTasks.isEmpty();
+        return runningTasks.isEmpty() && finishedTasks.isEmpty() && (taskNum == 0);
     }
 
     @Override
