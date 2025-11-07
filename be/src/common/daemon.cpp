@@ -301,9 +301,11 @@ void Daemon::init(bool as_cn, const std::vector<StorePath>& paths) {
 
     LOG(INFO) << get_version_string(false);
 
-#ifndef BE_TEST
+
+#if !defined(BE_TEST) && !defined(__APPLE__)
     starrocks::mlock_modules();
 #endif
+
 
     init_thrift_logging();
     CpuInfo::init();

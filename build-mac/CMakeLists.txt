@@ -899,6 +899,7 @@ list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/exec/arrow_flight_.*\\.cpp$")
 
 # Exclude x86-specific gutil sources on ARM64
 list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/gutil/atomicops-internals-x86\\.cc$")
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/util/memory_lock.cpp$")
 
 # ==============================================================================
 # EXCLUDE DISABLED FILE FORMATS (Avro, ORC, Parquet, Iceberg)
