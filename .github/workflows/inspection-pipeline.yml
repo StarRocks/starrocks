@@ -208,8 +208,8 @@ jobs:
       - name: init doc-agent
         id: init-doc-agent
         run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && sh lib/init_doc.sh
-          cd ci-tool && sh bin/doc-checkout.sh --repository ${{ github.repository }} --branch ${BRANCH} --pr ${PR_NUMBER}
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && ./lib/init_doc.sh
+          cd ci-tool && ./bin/doc-checkout.sh --repository ${{ github.repository }} --branch ${BRANCH} --pr ${PR_NUMBER}
 
       - name: FE config 
         id: fe-config-gen
