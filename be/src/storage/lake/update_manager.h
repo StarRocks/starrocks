@@ -227,6 +227,8 @@ public:
 
     bool TEST_primary_index_refcnt(int64_t tablet_id, uint32_t expected_cnt);
 
+    int64_t get_index_memory_size(int64_t tablet_id) const;
+
 private:
     // print memory tracker state
     void _print_memory_stats();

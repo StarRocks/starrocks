@@ -19,10 +19,12 @@
 #include "column/schema.h"
 #include "column/vectorized_fwd.h"
 #include "common/logging.h"
+#include "exec/schema_scanner/schema_be_tablets_scanner.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_writer.h"
+#include "storage/lake/versioned_tablet.h"
 #include "storage/tablet_schema.h"
 #include "test_util.h"
 #include "testutil/assert.h"
@@ -35,7 +37,7 @@ using namespace starrocks;
 class LakeTabletTest : public TestBase {
 public:
     LakeTabletTest() : TestBase(kTestDirectory) {
-        _tablet_metadata = std::make_unique<TabletMetadata>();
+        _tablet_metadata = std::make_shared<TabletMetadata>();
         _tablet_metadata->set_id(next_id());
         _tablet_metadata->set_version(1);
         //
@@ -138,7 +140,7 @@ public:
 protected:
     constexpr static const char* const kTestDirectory = "test_lake_tablet";
 
-    std::unique_ptr<TabletMetadata> _tablet_metadata;
+    std::shared_ptr<TabletMetadata> _tablet_metadata;
     std::shared_ptr<TabletSchema> _tablet_schema;
     std::shared_ptr<Schema> _schema;
 };
@@ -149,6 +151,21 @@ TEST_F(LakeTabletTest, test_get_tablet_num_rows) {
     ASSIGN_OR_ABORT(auto num_rows_with_version,
                     _tablet_mgr->get_tablet_num_rows(_tablet_metadata->id(), _tablet_metadata->version()));
     ASSERT_EQ(num_rows_with_version, 34);
+}
+
+TEST_F(LakeTabletTest, test_get_basic_info) {
+    create_rowsets_for_testing();
+
+    VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
+    auto info = tablet.get_basic_info();
+    ASSERT_EQ(info.tablet_id, _tablet_metadata->id());
+    ASSERT_EQ(info.num_version, 1);
+    ASSERT_EQ(info.max_version, 2);
+    ASSERT_EQ(info.num_rowset, 1);
+    ASSERT_EQ(info.num_segment, 2);
+    ASSERT_EQ(info.num_row, 34);
+    ASSERT_EQ(info.state, 1);
+    ASSERT_EQ(info.type, KeysType::DUP_KEYS);
 }
 
 } // namespace starrocks::lake

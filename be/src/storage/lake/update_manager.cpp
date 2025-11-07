@@ -1606,4 +1606,15 @@ bool UpdateManager::TEST_primary_index_refcnt(int64_t tablet_id, uint32_t expect
     return index_entry->get_ref() == expected_cnt;
 }
 
+int64_t UpdateManager::get_index_memory_size(int64_t tablet_id) const {
+    int64_t index_memory_size = 0;
+    auto& index_cache = _tablet_mgr->update_mgr()->index_cache();
+    auto index_entry = index_cache.get(tablet_id);
+    if (index_entry != nullptr) {
+        index_memory_size = index_entry->size();
+        index_cache.release(index_entry);
+    }
+    return index_memory_size;
+}
+
 } // namespace starrocks::lake
