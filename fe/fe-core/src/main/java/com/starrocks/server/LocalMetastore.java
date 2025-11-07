@@ -2066,7 +2066,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
         DistributionInfo.DistributionInfoType distributionInfoType = distributionInfo.getType();
         if (distributionInfoType != DistributionInfo.DistributionInfoType.HASH
-                && distributionInfoType != DistributionInfo.DistributionInfoType.RANDOM) {
+                && distributionInfoType != DistributionInfo.DistributionInfoType.RANDOM
+                && distributionInfoType != DistributionInfo.DistributionInfoType.RANGE) {
             throw new DdlException("Unknown distribution type: " + distributionInfoType);
         }
 
@@ -2101,7 +2102,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
         DistributionInfo.DistributionInfoType distributionInfoType = distributionInfo.getType();
         if (distributionInfoType != DistributionInfo.DistributionInfoType.HASH
-                && distributionInfoType != DistributionInfo.DistributionInfoType.RANDOM) {
+                && distributionInfoType != DistributionInfo.DistributionInfoType.RANDOM
+                && distributionInfoType != DistributionInfo.DistributionInfoType.RANGE) {
             throw new DdlException("Unknown distribution type: " + distributionInfoType);
         }
 

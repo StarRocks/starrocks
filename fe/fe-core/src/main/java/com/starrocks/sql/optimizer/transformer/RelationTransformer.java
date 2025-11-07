@@ -575,6 +575,8 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
             distributionSpec = DistributionSpec.createHashDistributionSpec(hashDistributionDesc);
         } else if (distributionInfo.getType() == DistributionInfoType.RANDOM) {
             distributionSpec = DistributionSpec.createAnyDistributionSpec();
+        } else if (distributionInfo.getType() == DistributionInfoType.RANGE) {
+            distributionSpec = DistributionSpec.createAnyDistributionSpec();
         } else {
             throw new IllegalStateException("Unknown distribution type: " + distributionInfo.getType());
         }
