@@ -164,15 +164,13 @@ public class PCellSortedSet {
      * @param partitionNames the names of the partitions to retain
      * @return true if the set was modified, false otherwise
      */
-    public boolean retainAllNames(Collection<String> partitionNames) {
+    public boolean retainAllNames(Set<String> partitionNames) {
         boolean modified = false;
         // use a case-insensitive set for name lookup
-        Set<String> namesToRetain = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
-        namesToRetain.addAll(partitionNames);
         Iterator<PCellWithName> iterator = iterator();
         while (iterator.hasNext()) {
             PCellWithName partition = iterator.next();
-            if (!namesToRetain.contains(partition.name())) {
+            if (!partitionNames.contains(partition.name())) {
                 iterator.remove();
                 modified = true;
             }

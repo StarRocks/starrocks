@@ -23,10 +23,10 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * A mapping of partition set to partition name set.
- * The key is the partition set name, the value is the partition name set.
+ * A mapping of partition set to a partition name set, the key is the partition set name, the value is the partition name set.
  */
 public record PartitionNameSetMap(Map<String, Set<String>> mapping) {
+
     public static PartitionNameSetMap of() {
         return new PartitionNameSetMap(Maps.newHashMap());
     }
@@ -82,7 +82,7 @@ public record PartitionNameSetMap(Map<String, Set<String>> mapping) {
         }
 
         // For large maps, show first maxLen entries with ellipsis
-        int maxLen = Config.max_mv_task_run_meta_message_values_length;
+        final int maxLen = Config.max_mv_task_run_meta_message_values_length;
         StringBuilder sb = new StringBuilder("{");
         int count = 0;
         for (Map.Entry<String, Set<String>> entry : mapping.entrySet()) {

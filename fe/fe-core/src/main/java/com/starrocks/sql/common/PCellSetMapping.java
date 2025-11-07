@@ -22,8 +22,7 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * A mapping of partition set to partition cell set.
- * The key is the partition set name, the value is the partition cell set.
+ * A mapping of partition set to a PCell set, the key is the partition set name, the value is the partition cell set.
  */
 public record PCellSetMapping(Map<String, PCellSortedSet> mapping) {
     public static PCellSetMapping of() {

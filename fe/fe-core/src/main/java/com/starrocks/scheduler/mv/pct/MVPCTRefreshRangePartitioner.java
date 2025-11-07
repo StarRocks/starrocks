@@ -469,7 +469,7 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
             // BTW, since the refresh has already scanned the needed base tables' data, it's better to update
             // more mv's partitions as more as possible.
             // TODO: But it may cause much memory to refresh many partitions, support fine-grained partition refresh later.
-            if (!mvToRefreshPotentialPartitions.isEmpty() && mvToRefreshPotentialPartitions.containsPCellWithName(pCell)) {
+            if (!mvToRefreshPotentialPartitions.isEmpty() && mvToRefreshPotentialPartitions.containsName(pCell.name())) {
                 logger.info("partition {} is in the many-to-many mappings, " +
                         "skip to filter it, mvToRefreshPotentialPartitions:{}", mv.getName(),
                         pCell.name(), mvToRefreshPotentialPartitions);
