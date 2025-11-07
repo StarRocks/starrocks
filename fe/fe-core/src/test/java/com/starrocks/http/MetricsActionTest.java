@@ -220,8 +220,8 @@ public class MetricsActionTest {
                 }
             };
             MetricsAction.RequestParams params = action.callParseRequestParams(request);
-            Assertions.assertNotNull(params);
-            Assertions.assertFalse(params.isCollectUserConnMetrics());
+            Assert.assertNotNull(params);
+            Assert.assertFalse(params.isCollectUserConnMetrics());
         }
 
         // Test with user connections parameter and auth
@@ -234,8 +234,8 @@ public class MetricsActionTest {
                 }
             };
             MetricsAction.RequestParams params = action.callParseRequestParams(request);
-            Assertions.assertNotNull(params);
-            Assertions.assertTrue(params.isCollectUserConnMetrics());
+            Assert.assertNotNull(params);
+            Assert.assertTrue(params.isCollectUserConnMetrics());
         }
 
         // Test combined parameters
@@ -248,10 +248,10 @@ public class MetricsActionTest {
                 }
             };
             MetricsAction.RequestParams params = action.callParseRequestParams(request);
-            Assertions.assertNotNull(params);
-            Assertions.assertTrue(params.isCollectTableMetrics());
-            Assertions.assertFalse(params.isMinifyTableMetrics());
-            Assertions.assertTrue(params.isCollectUserConnMetrics());
+            Assert.assertNotNull(params);
+            Assert.assertTrue(params.isCollectTableMetrics());
+            Assert.assertFalse(params.isMinifyTableMetrics());
+            Assert.assertTrue(params.isCollectUserConnMetrics());
         }
     }
 }
