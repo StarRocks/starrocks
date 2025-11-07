@@ -88,7 +88,6 @@ import java.util.Set;
 import java.util.SortedMap;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import javax.management.Attribute;
 import javax.management.AttributeList;
@@ -904,8 +903,8 @@ public final class MetricRepo {
         HttpMetricRegistry.getInstance().visit(visitor);
 
 
-        //collect connections for per user
-        collectUserConnMetrics(visitor);
+        // collect connection metrics
+        collectConnectionMetrics(visitor, requestParams.isCollectUserConnMetrics());
 
         // collect runnning txns of per db
         collectDbRunningTxnMetrics(visitor);
@@ -1065,19 +1064,21 @@ public final class MetricRepo {
         }
     }
 
-    // collect connections of per user
-    private static void collectUserConnMetrics(MetricVisitor visitor) {
-
-        Map<String, AtomicInteger> userConnectionMap = ExecuteEnv.getInstance().getScheduler().getUserConnectionMap();
-
-        userConnectionMap.forEach((username, connValue) -> {
-            GaugeMetricImpl<Integer> metricConnect =
-                    new GaugeMetricImpl<>("connection_total", MetricUnit.CONNECTIONS,
-                        "total connection");
-            metricConnect.addLabel(new MetricLabel("user", username));
-            metricConnect.setValue(connValue.get());
-            visitor.visit(metricConnect);
-        });
+    private static void collectConnectionMetrics(MetricVisitor visitor, boolean collectUserConnMetrics) {
+        if (collectUserConnMetrics) {
+            ExecuteEnv.getInstance().getScheduler().getUserConnectionMap().forEach((user, count) -> {
+                GaugeMetricImpl<Integer> metric = new GaugeMetricImpl<>("connection_total",
+                        MetricUnit.CONNECTIONS, "total connection");
+                metric.addLabel(new MetricLabel("user", user));
+                metric.setValue(count.get());
+                visitor.visit(metric);
+            });
+        } else {
+            GaugeMetricImpl<Integer> metric = new GaugeMetricImpl<>("connection_total",
+                    MetricUnit.CONNECTIONS, "total connections");
+            metric.setValue(ExecuteEnv.getInstance().getScheduler().getConnectionNum());
+            visitor.visit(metric);
+        }
     }
 
     // collect runnning txns of per db
