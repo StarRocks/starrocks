@@ -58,12 +58,18 @@ public class PredicateColumnsMgr {
 
     // ============================ Record predicate columns from query ========================= //
     public void recordScanColumns(Map<ColumnRefOperator, Column> scanColumns, Table table, OptExpression optExpr) {
+        if (!Config.enable_predicate_columns_collection) {
+            return;
+        }
         for (Column column : scanColumns.values()) {
             addOrUpdateColumnUsage(table, column, ColumnUsage.UseCase.NORMAL);
         }
     }
 
     public void recordPredicateColumns(ScalarOperator predicate, ColumnRefFactory factory, OptExpression optExpr) {
+        if (!Config.enable_predicate_columns_collection) {
+            return;
+        }
         if (predicate == null) {
             return;
         }
@@ -73,6 +79,9 @@ public class PredicateColumnsMgr {
 
     public void recordJoinPredicate(List<BinaryPredicateOperator> onPredicates, ColumnRefFactory factory,
                                     OptExpression optExpr) {
+        if (!Config.enable_predicate_columns_collection) {
+            return;
+        }
         for (BinaryPredicateOperator op : onPredicates) {
             List<ColumnRefOperator> refs = Utils.collect(op, ColumnRefOperator.class);
             addOrUpdateColumnUsage(refs, factory, ColumnUsage.UseCase.JOIN, optExpr);
@@ -82,6 +91,9 @@ public class PredicateColumnsMgr {
     public void recordGroupByColumns(Map<ColumnRefOperator, CallOperator> aggregations,
                                      List<ColumnRefOperator> groupBys,
                                      ColumnRefFactory factory, OptExpression optExpr) {
+        if (!Config.enable_predicate_columns_collection) {
+            return;
+        }
         for (var entry : aggregations.entrySet()) {
             if (entry.getValue().isDistinct()) {
                 List<ColumnRefOperator> refs = Utils.collect(entry.getValue(), ColumnRefOperator.class);
@@ -94,6 +106,9 @@ public class PredicateColumnsMgr {
 
     public void recordWindowPartitionBy(List<ScalarOperator> partitionByList, ColumnRefFactory factory,
                                         OptExpression optExpr) {
+        if (!Config.enable_predicate_columns_collection) {
+            return;
+        }
         for (var partitionBy : ListUtils.emptyIfNull(partitionByList)) {
             List<ColumnRefOperator> refs = Utils.collect(partitionBy, ColumnRefOperator.class);
             addOrUpdateColumnUsage(refs, factory, ColumnUsage.UseCase.GROUP_BY, optExpr);

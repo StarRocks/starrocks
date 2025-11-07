@@ -15,7 +15,6 @@
 package com.starrocks.statistic.columns;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Preconditions;
 import com.google.common.base.Stopwatch;
 import com.google.common.collect.Lists;
 import com.google.gson.JsonArray;
@@ -25,6 +24,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.TimeUtils;
@@ -314,7 +314,7 @@ public class PredicateColumnsStorage {
          * "data": [field1, field2, field3]
          * }
          */
-        public static ColumnUsageJsonRecord fromJson(String json) {
+        public static ColumnUsageJsonRecord fromJson(String json) throws MetaNotFoundException {
             JsonElement object = JsonParser.parseString(json);
             JsonArray data = object.getAsJsonObject().get("data").getAsJsonArray();
             // String feId = data.get(0).getAsString();
@@ -326,7 +326,9 @@ public class PredicateColumnsStorage {
             String created = data.get(6).getAsString();
             ColumnFullId fullId = new ColumnFullId(dbId, tableId, columnId);
             Optional<Pair<TableName, ColumnId>> names = fullId.toNames();
-            Preconditions.checkState(names.isPresent(), "unable to find column: " + fullId);
+            if (names.isEmpty()) {
+                throw new MetaNotFoundException("column not found: " + fullId);
+            }
             TableName tableName = names.get().first;
             EnumSet<ColumnUsage.UseCase> useCases = ColumnUsage.fromUseCaseString(useCase);
             ColumnUsage usage = new ColumnUsage(fullId, tableName, useCases);
@@ -351,6 +353,8 @@ public class PredicateColumnsStorage {
                     List<ColumnUsage> records =
                             ListUtils.emptyIfNull(ColumnUsageJsonRecord.fromJson(jsonString).data);
                     res.addAll(records);
+                } catch (MetaNotFoundException ignored) {
+                    // ignore if the table/column not found
                 } catch (Exception e) {
                     LOG.warn("failed to deserialize ColumnUsage record: {}", jsonString, e);
                 }

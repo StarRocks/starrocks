@@ -2195,6 +2195,10 @@ public class Config extends ConfigBase {
             "columns after this period")
     public static long statistic_predicate_columns_ttl_hours = 24;
 
+    @ConfField(mutable = true, comment = "Enable predicate columns collection. If disabled, predicate columns " +
+            "will not be recorded during query optimization")
+    public static boolean enable_predicate_columns_collection = true;
+
     /**
      * Num of thread to handle statistic collect(analyze command)
      */

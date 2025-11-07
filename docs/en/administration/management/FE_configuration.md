@@ -1150,6 +1150,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: Whether to enable automatic collection for the NDV information of the ARRAY type.
 - Introduced in: v4.0
 
+##### enable_predicate_columns_collection
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable predicate columns collection. If disabled, predicate columns will not be recorded during query optimization.
+- Introduced in: -
+
 ##### histogram_buckets_size
 
 - Default: 64
