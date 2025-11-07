@@ -19,7 +19,6 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.server.GlobalStateMgr;
-import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -89,10 +88,6 @@ public abstract class StarRocksTestBase {
                     }
                     LOG.warn("cleanup table after test case: {}", table.getName());
                 }
-            }
-            if (CollectionUtils.isNotEmpty(testDb.getMaterializedViews())) {
-                LOG.warn("database [{}] still contains {} materialized views",
-                        testDb.getFullName(), testDb.getMaterializedViews().size());
             }
         }
     }

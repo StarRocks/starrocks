@@ -20,19 +20,16 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndexMeta;
-import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.utframe.StarRocksAssert;
@@ -50,12 +47,11 @@ import java.util.List;
 import java.util.Set;
 
 import static com.starrocks.sql.optimizer.MVTestUtils.waitingRollupJobV2Finish;
-import static com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase.executeInsertSql;
 
 // If you add a test in this file,
 // please add it in another file LakeSyncMaterializedViewTest too.
 // The test cases for both files are the same, but the RunMode is different.
-public class CreateSyncMaterializedViewTest {
+public class CreateSyncMaterializedViewTest extends MVTestBase {
     @Rule
     public ExpectedException expectedException = ExpectedException.none();
 
@@ -66,7 +62,6 @@ public class CreateSyncMaterializedViewTest {
     public static TemporaryFolder temp = new TemporaryFolder();
 
     private static ConnectContext connectContext;
-    private static StarRocksAssert starRocksAssert;
     private static Database testDb;
     private static GlobalStateMgr currentState;
 
@@ -199,20 +194,6 @@ public class CreateSyncMaterializedViewTest {
         starRocksAssert.withView("create view test.view_to_tbl1 as select * from test.tbl1;");
         currentState = GlobalStateMgr.getCurrentState();
         testDb = currentState.getLocalMetastore().getDb("test");
-    }
-
-    private Table getTable(String dbName, String mvName) {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), mvName);
-        Assert.assertNotNull(table);
-        return table;
-    }
-
-    private MaterializedView getMv(String dbName, String mvName) {
-        Table table = getTable(dbName, mvName);
-        Assert.assertTrue(table instanceof MaterializedView);
-        MaterializedView mv = (MaterializedView) table;
-        return mv;
     }
 
     @Test

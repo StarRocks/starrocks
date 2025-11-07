@@ -27,6 +27,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.system.BackendResourceStat;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
@@ -48,9 +49,8 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-public class ReplayFromDumpTestBase {
+public class ReplayFromDumpTestBase extends MVTestBase {
     public static ConnectContext connectContext;
-    public static StarRocksAssert starRocksAssert;
 
     // Whether print log to system out
     protected static boolean isOutputSystemOut = false;
@@ -86,7 +86,7 @@ public class ReplayFromDumpTestBase {
     }
 
     @Before
-    public void before() throws Exception {
+    public void before() {
         BackendResourceStat.getInstance().reset();
         connectContext.getSessionVariable().setCboPushDownAggregateMode(-1);
         connectContext.setQueryId(UUIDUtil.genUUID());
