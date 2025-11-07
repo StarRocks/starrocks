@@ -280,14 +280,6 @@ public class TaskRunManager implements MemoryTrackable {
         taskRunScheduler.scheduledPendingTaskRun(pendingTaskRun -> {
             if (taskRunExecutor.executeTaskRun(pendingTaskRun)) {
                 LOG.info("start to schedule pending task run to execute: {}", pendingTaskRun);
-                long taskId = pendingTaskRun.getTaskId();
-                // RUNNING state persistence is for FE FOLLOWER update state
-                TaskRunStatusChange statusChange = new TaskRunStatusChange(taskId, pendingTaskRun.getStatus(),
-                        Constants.TaskRunState.PENDING, Constants.TaskRunState.RUNNING);
-                GlobalStateMgr.getCurrentState().getEditLog().logUpdateTaskRun(statusChange, wal -> {
-                    pendingTaskRun.getStatus().setState(Constants.TaskRunState.RUNNING);
-                    pendingTaskRun.getStatus().setProcessStartTime(System.currentTimeMillis());
-                });
             } else {
                 LOG.warn("failed to scheduled task-run {}", pendingTaskRun);
             }

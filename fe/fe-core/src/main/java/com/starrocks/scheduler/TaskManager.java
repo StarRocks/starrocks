@@ -252,10 +252,8 @@ public class TaskManager implements MemoryTrackable {
     public void replayCreateTask(Task task) {
         if (task.getType() == Constants.TaskType.PERIODICAL) {
             TaskSchedule taskSchedule = task.getSchedule();
-            if (taskSchedule == null) {
-                LOG.warn("replay a null schedule period Task [{}]", task.getName());
-                return;
-            }
+            Preconditions.checkState(taskSchedule != null,
+                    "TaskSchedule cannot be null for periodical task");
         }
         if (task.getExpireTime() > 0 && System.currentTimeMillis() > task.getExpireTime()) {
             return;
