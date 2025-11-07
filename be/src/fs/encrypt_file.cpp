@@ -21,7 +21,9 @@
 #include <openssl/types.h>
 #endif
 #include <bvar/bvar.h>
+#ifdef __x86_64__
 #include <cpuid.h>
+#endif
 
 #include "fmt/format.h"
 #include "fs/encrypt_file.h"
