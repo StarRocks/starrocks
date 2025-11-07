@@ -598,9 +598,6 @@ void JsonPathDeriver::_visit_json_paths(const vpack::Slice& value, JsonFlatPath*
         desc->last_row = mark_row;
 
         if (v.isObject()) {
-<<<<<<< HEAD
-            child->remain = v.isEmptyObject();
-=======
             // Accumulate remain status: if node is ever empty in any row, mark as remain
             child->remain |= v.isEmptyObject();
             // If this node was previously visited as primitive (desc->type != JSON_BASE_TYPE_BITS and != initial value),
@@ -609,7 +606,6 @@ void JsonPathDeriver::_visit_json_paths(const vpack::Slice& value, JsonFlatPath*
             if (desc->type != flat_json::JSON_BASE_TYPE_BITS && desc->type != flat_json::JSON_NULL_TYPE_BITS) {
                 root->remain = true;
             }
->>>>>>> 5f7ee30974 ([BugFix] Fix JSON flatten losing data when path tree expects object but actual value is primitive (#64939))
             desc->type = flat_json::JSON_BASE_TYPE_BITS;
             _visit_json_paths(v, child, mark_row);
         } else {
