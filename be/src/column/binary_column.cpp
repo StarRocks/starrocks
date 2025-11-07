@@ -196,7 +196,7 @@ void BinaryColumnBase<T>::append_with_filter(const Column& src, const uint8_t* f
             const T start = src_offsets[i];
             const T end = src_offsets[i + 1];
             const T length = end - start;
-            
+
             strings::memcpy_inlined(dest_bytes + (current_offset - old_bytes_size), src_bytes + start, length);
             current_offset += length;
             *dest_offsets++ = current_offset;
