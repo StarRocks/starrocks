@@ -214,6 +214,8 @@ The following table describes the default settings. If you need to modify them, 
 | statistic_predicate_columns_persist_interval_sec   | LONG    | 60       | The interval at which FE synchronize and persists statistics of Predicate Column. |
 | statistic_predicate_columns_ttl_hours       | LONG    | 24       | The elimination time of the Predicate Column statistics cached in FE. |
 | enable_predicate_columns_collection         | BOOLEAN | TRUE     | Whether to enable predicate columns collection. If disabled, predicate columns will not be recorded during query optimization. |
+| enable_manual_collect_array_ndv             | BOOLEAN | FALSE    | Whether to enable manual collection for the NDV information of the ARRAY type. |
+| enable_auto_collect_array_ndv               | BOOLEAN | FALSE    | Whether to enable automatic collection for the NDV information of the ARRAY type. |
 
 You can rely on automatic jobs for a majority of statistics collection, but if you have specific requirements, you can manually create a task by executing the ANALYZE TABLE statement or customize an automatic task by executing the CREATE ANALYZE  statement.
 
