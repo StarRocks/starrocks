@@ -27,7 +27,7 @@ CREATE USER [IF NOT EXISTS] <user_identity>
 
   ユーザー名の命名規則については、[システム制限](../../System_limit.md)を参照してください。
 
-- `auth_option` は認証方法を指定します。現在、StarRocks ネイティブパスワード、mysql_native_password、および "authentication_ldap_simple" の3つの認証方法がサポートされています。StarRocks ネイティブパスワードは mysql_native_password と論理的には同じですが、構文がわずかに異なります。1つのユーザーアイデンティティは1つの認証方法しか使用できません。
+- `auth_option` は認証方法を指定します。現在、5 つの認証方法がサポートされています：StarRocks ネイティブパスワード、`mysql_native_password`、`authentication_ldap_simple`、JSON Web Token (JWT) 認証、OAuth 2.0 認証です。StarRocks ネイティブパスワードは `mysql_native_password` と論理的には同じですが、構文がわずかに異なります。1つのユーザーアイデンティティは 1 つの認証方法しか使用できません。
 
     ```SQL
     auth_option: {
@@ -35,7 +35,8 @@ CREATE USER [IF NOT EXISTS] <user_identity>
         IDENTIFIED WITH mysql_native_password BY 'auth_string'
         IDENTIFIED WITH mysql_native_password AS 'auth_string'
         IDENTIFIED WITH authentication_ldap_simple AS 'auth_string'
-        
+        IDENTIFIED WITH authentication_jwt [AS 'auth_properties']
+        IDENTIFIED WITH authentication_oauth2 [AS 'auth_properties']
     }
     ```
 
@@ -46,7 +47,13 @@ CREATE USER [IF NOT EXISTS] <user_identity>
     | `mysql_native_password WITH` | 暗号文                         | プレーンテキスト            |
     | `authentication_ldap_simple` | プレーンテキスト               | プレーンテキスト            |
 
-> 注: StarRocks はユーザーのパスワードを暗号化して保存します。
+    :::note
+    StarRocks はユーザーのパスワードを暗号化して保存します。
+    :::
+
+    JSON Web Token (JWT) 認証および OAuth 2.0 認証における `auth_properties` の詳細については、対応するドキュメントを参照してください：
+    - [JSON Web Token 認証](../../../administration/user_privs/authentication/jwt_authentication.md)
+    - [OAuth 2.0 認証](../../../administration/user_privs/authentication/oauth2_authentication.md)
 
 - `DEFAULT ROLE <role_name>[, <role_name>, ...]`: このパラメータが指定されている場合、ロールはユーザーに自動的に割り当てられ、ユーザーがログインするとデフォルトで有効になります。指定されていない場合、このユーザーには特権がありません。指定されたすべてのロールが既に存在していることを確認してください。
 
@@ -139,4 +146,33 @@ CREATE USER 'jack'@'192.168.%' PROPERTIES ('catalog' = 'default_catalog', 'datab
 
 ```SQL
 CREATE USER 'jack'@'192.168.%' PROPERTIES ('session.query_timeout' = '600');
+```
+
+例 12: JSON Web Token 認証を使用したユーザーを作成します。
+
+```SQL
+CREATE USER tom IDENTIFIED WITH authentication_jwt AS
+'{
+  "jwks_url": "http://localhost:38080/realms/master/protocol/jwt/certs",
+  "principal_field": "preferred_username",
+  "required_issuer": "http://localhost:38080/realms/master",
+  "required_audience": "starrocks"
+}';
+```
+
+例 12: OAuth 2.0 認証を使用したユーザーを作成します。
+
+```SQL
+CREATE USER tom IDENTIFIED WITH authentication_oauth2 AS 
+'{
+  "auth_server_url": "http://localhost:38080/realms/master/protocol/openid-connect/auth",
+  "token_server_url": "http://localhost:38080/realms/master/protocol/openid-connect/token",
+  "client_id": "12345",
+  "client_secret": "LsWyD9vPcM3LHxLZfzJsuoBwWQFBLcoR",
+  "redirect_url": "http://localhost:8030/api/oauth2",
+  "jwks_url": "http://localhost:38080/realms/master/protocol/openid-connect/certs",
+  "principal_field": "preferred_username",
+  "required_issuer": "http://localhost:38080/realms/master",
+  "required_audience": "12345"
+}';
 ```
