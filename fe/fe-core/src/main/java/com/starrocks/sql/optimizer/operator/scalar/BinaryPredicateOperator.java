@@ -130,6 +130,10 @@ public class BinaryPredicateOperator extends PredicateOperator {
         return new BinaryPredicateOperator(BinaryType.EQ, lhs, rhs);
     }
 
+    public static BinaryPredicateOperator null_safe_eq(ScalarOperator lhs, ScalarOperator rhs) {
+        return new BinaryPredicateOperator(BinaryType.EQ_FOR_NULL, lhs, rhs);
+    }
+
     public static BinaryPredicateOperator ge(ScalarOperator lhs, ScalarOperator rhs) {
         return new BinaryPredicateOperator(BinaryType.GE, lhs, rhs);
     }
