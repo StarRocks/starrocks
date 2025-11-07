@@ -204,4 +204,54 @@ public class MetricsActionTest {
             Assert.assertTrue(params.isMinifyTableMetrics());
         }
     }
+
+    @Test
+    public void testParseRequestParamsWithUserConnections() {
+        ActionController controller = new ActionController();
+        MockMetricsAction action = new MockMetricsAction(controller);
+
+        // Test with user connections parameter but no auth
+        {
+            BaseRequest request = buildBaseRequest("/metrics?with_user_connections=all", false);
+            new Expectations(request) {
+                {
+                    request.getAuthorizationHeader();
+                    minTimes = 1;
+                }
+            };
+            MetricsAction.RequestParams params = action.callParseRequestParams(request);
+            Assert.assertNotNull(params);
+            Assert.assertFalse(params.isCollectUserConnMetrics());
+        }
+
+        // Test with user connections parameter and auth
+        {
+            BaseRequest request = buildBaseRequest("/metrics?with_user_connections=all", true);
+            new Expectations(request) {
+                {
+                    request.getHostString();
+                    result = "127.0.0.1";
+                }
+            };
+            MetricsAction.RequestParams params = action.callParseRequestParams(request);
+            Assert.assertNotNull(params);
+            Assert.assertTrue(params.isCollectUserConnMetrics());
+        }
+
+        // Test combined parameters
+        {
+            BaseRequest request = buildBaseRequest("/metrics?with_table_metrics=all&with_user_connections=all", true);
+            new Expectations(request) {
+                {
+                    request.getHostString();
+                    result = "127.0.0.1";
+                }
+            };
+            MetricsAction.RequestParams params = action.callParseRequestParams(request);
+            Assert.assertNotNull(params);
+            Assert.assertTrue(params.isCollectTableMetrics());
+            Assert.assertFalse(params.isMinifyTableMetrics());
+            Assert.assertTrue(params.isCollectUserConnMetrics());
+        }
+    }
 }
