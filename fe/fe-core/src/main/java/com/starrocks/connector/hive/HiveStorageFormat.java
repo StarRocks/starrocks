@@ -125,8 +125,7 @@ public enum HiveStorageFormat {
             case ORC -> THdfsFileFormat.ORC;
             case TEXTFILE -> THdfsFileFormat.TEXT;
             case AVRO -> THdfsFileFormat.AVRO;
-            case RCBINARY -> THdfsFileFormat.RC_BINARY;
-            case RCTEXT -> THdfsFileFormat.RC_TEXT;
+            case RCBINARY, RCTEXT -> THdfsFileFormat.RC_FILE;
             case SEQUENCE -> THdfsFileFormat.SEQUENCE_FILE;
             default -> THdfsFileFormat.UNKNOWN;
         };

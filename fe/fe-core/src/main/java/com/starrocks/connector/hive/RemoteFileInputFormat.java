@@ -77,23 +77,14 @@ public enum RemoteFileInputFormat {
     }
 
     public THdfsFileFormat toThrift() {
-        switch (this) {
-            case PARQUET:
-                return THdfsFileFormat.PARQUET;
-            case ORC:
-                return THdfsFileFormat.ORC;
-            case TEXTFILE:
-                return THdfsFileFormat.TEXT;
-            case AVRO:
-                return THdfsFileFormat.AVRO;
-            case RCBINARY:
-                return THdfsFileFormat.RC_BINARY;
-            case RCTEXT:
-                return THdfsFileFormat.RC_TEXT;
-            case SEQUENCE:
-                return THdfsFileFormat.SEQUENCE_FILE;
-            default:
-                return THdfsFileFormat.UNKNOWN;
-        }
+        return switch (this) {
+            case PARQUET -> THdfsFileFormat.PARQUET;
+            case ORC -> THdfsFileFormat.ORC;
+            case TEXTFILE -> THdfsFileFormat.TEXT;
+            case AVRO -> THdfsFileFormat.AVRO;
+            case RCBINARY, RCTEXT -> THdfsFileFormat.RC_FILE;
+            case SEQUENCE -> THdfsFileFormat.SEQUENCE_FILE;
+            default -> THdfsFileFormat.UNKNOWN;
+        };
     }
 }

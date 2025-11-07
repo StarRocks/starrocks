@@ -813,10 +813,12 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         scanner = new HdfsOrcScanner();
     } else if (format == THdfsFileFormat::TEXT) {
         scanner = new HdfsTextScanner();
-    } else if ((format == THdfsFileFormat::AVRO || format == THdfsFileFormat::RC_BINARY ||
+    } else if ((format == THdfsFileFormat::AVRO || format == THdfsFileFormat::RC_FILE ||
                 format == THdfsFileFormat::RC_TEXT || format == THdfsFileFormat::SEQUENCE_FILE) &&
                (dynamic_cast<const HdfsTableDescriptor*>(_hive_table) != nullptr ||
                 dynamic_cast<const FileTableDescriptor*>(_hive_table) != nullptr)) {
+        // THdfsFileFormat::RC_TEXT is deprecated. RCText and RCBinary are both RC_FILE.
+        // It will be retained here for compatibility when upgrading and will be removed in several versions.
         scanner = create_hive_jni_scanner(jni_scanner_create_options).release();
     } else {
         std::string msg = fmt::format("unsupported hdfs file format: {}", to_string(format));
