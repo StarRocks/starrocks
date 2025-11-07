@@ -136,9 +136,10 @@ Status BuiltinInvertedIndexIterator::_wildcard_query(const Slice* search_query, 
         last_wildcard_pos = wildcard_pos;
         wildcard_pos = search_query->find('%', last_wildcard_pos);
 
-        auto sub_query = wildcard_pos != -1
-                                 ? Slice(search_query->data + last_wildcard_pos, wildcard_pos - last_wildcard_pos)
-                                 : Slice(search_query->data, search_query->get_size() - last_wildcard_pos);
+        auto sub_query =
+                wildcard_pos != -1
+                        ? Slice(search_query->data + last_wildcard_pos, wildcard_pos - last_wildcard_pos)
+                        : Slice(search_query->data + last_wildcard_pos, search_query->get_size() - last_wildcard_pos);
         keywords.emplace_back(std::make_pair(sub_query, sub_query.build_next()));
         roaring::Roaring tmp;
 
@@ -180,7 +181,7 @@ Status BuiltinInvertedIndexIterator::_wildcard_query(const Slice* search_query, 
     auto predicate = [&keywords](const Slice* dict) -> bool {
         // just need to make sure keywords is in order.
         size_t last_pos = 0;
-        for (const auto& [keyword, next_array]: keywords) {
+        for (const auto& [keyword, next_array] : keywords) {
             last_pos = dict->find(keyword, next_array, last_pos);
             if (last_pos == -1) {
                 return false;
