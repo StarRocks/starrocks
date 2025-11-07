@@ -187,6 +187,9 @@ jobs:
     runs-on: [self-hosted, normal]
     needs: info
     name: Generate Documentation
+    env:
+      BRANCH: ${{ needs.info.outputs.BRANCH }}
+      PR_NUMBER: ${{ needs.info.outputs.PR_NUMBER }}
     steps:
       # - uses: dorny/paths-filter@v3
       #   id: path-filter
@@ -206,29 +209,27 @@ jobs:
         id: init-doc-agent
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && sh lib/init_doc.sh
+          cd ci-tool && sh bin/doc-checkout.sh --repository ${{ github.repository }} --branch ${BRANCH} --pr ${PR_NUMBER}
 
       - name: FE config 
         id: fe-config-gen
         run: |
-          cd ci-tool && sh bin/run-doc-gen fe-config ${{ github.repository}}
+          ./ci-tool/bin/run-doc-gen.sh --type fe_config --sr ${{github.repository}} > $GITHUB_OUTPUT
 
       - name: BE config 
         id: be-config-gen
         run: |
-          cd ci-tool 
-          sh bin/run-doc-gen be-config > $GITHUB_OUTPUT
+          ./ci-tool/bin/run-doc-gen.sh --type be_config --sr ${{github.repository}} > $GITHUB_OUTPUT
 
       - name: variables 
         id: variables-gen
         run: |
-          cd ci-tool 
-          sh bin/run-doc-gen variables > $GITHUB_OUTPUT
+          ./ci-tool/bin/run-doc-gen.sh --type variables --sr ${{github.repository}} > $GITHUB_OUTPUT
 
       - name: function 
         id: function-gen
         run: |
-          cd ci-tool 
-          sh bin/run-doc-gen function --FE_NODE ${FE_NODE} > $GITHUB_OUTPUT
+          ./ci-tool/bin/run-doc-gen.sh --type function --sr ${{github.repository}} --fe ${FE_NODE} > $GITHUB_OUTPUT
 
   Teardown:
     runs-on: [self-hosted, normal]
