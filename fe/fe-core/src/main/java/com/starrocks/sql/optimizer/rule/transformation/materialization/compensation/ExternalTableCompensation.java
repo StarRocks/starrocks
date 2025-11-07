@@ -77,7 +77,7 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.connector.iceberg.IcebergPartitionUtils.getIcebergTablePartitionPredicateExpr;
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
-import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.convertPartitionKeyRangesToListPredicate;
+import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.convertRangeToPredicates;
 
 public final class ExternalTableCompensation extends TableCompensation {
     private List<PRangeCell> compensations;
@@ -143,7 +143,7 @@ public final class ExternalTableCompensation extends TableCompensation {
             externalExtraPredicate = getIcebergTableCompensation(optimizerContext, mv, (IcebergTable) currentTable,
                     refTableName, refPartitionColRefs);
         } else {
-            externalExtraPredicate = convertPartitionKeyRangesToListPredicate(refPartitionColRefs, compensations, true);
+            externalExtraPredicate = convertRangeToPredicates(refPartitionColRefs, compensations);
         }
         Preconditions.checkState(externalExtraPredicate != null);
         externalExtraPredicate.setRedundant(true);
@@ -172,10 +172,7 @@ public final class ExternalTableCompensation extends TableCompensation {
                     }
                 }
             }
-            final boolean isContainPartitionTransform = partitionFields
-                    .stream()
-                    .anyMatch(field -> field.transform().dedupName().equalsIgnoreCase("time"));
-            return convertPartitionKeyRangesToListPredicate(refPartitionColRefs, compensations, !isContainPartitionTransform);
+            return convertRangeToPredicates(refPartitionColRefs, compensations);
         }
         List<Column> mvPartitionCols = mv.getPartitionColumns();
         // to iceberg, `partitionKeys` are using LocalTime as partition values which cannot be used to prune iceberg
