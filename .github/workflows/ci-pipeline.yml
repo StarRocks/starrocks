@@ -935,6 +935,7 @@ jobs:
     env:
       PR_NUMBER: ${{ github.event.number }}
       FE_NODE: ${{ needs.deploy.outputs.fe }}
+      BRANCH: ${{ github.base_ref }}
     steps:
       - uses: dorny/paths-filter@v3
         id: path-filter
@@ -953,13 +954,14 @@ jobs:
       - name: init doc-agent
         id: init-doc-agent
         run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && sh lib/init_doc.sh
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && ./lib/init_doc.sh
+          cd ci-tool && sh bin/doc-checkout.sh --repository ${{ github.repository }} --branch ${BRANCH} --pr ${PR_NUMBER}
 
       - name: FE config 
         id: fe-config-gen
         if: steps.path-filter.outputs.fe-config == 'true'
         run: |
-          cd ci-tool && sh bin/run-doc-gen fe-config ${{ github.repository}}
+          cd ci-tool && sh bin/run-doc-gen fe-config
 
       - name: BE config 
         id: be-config-gen
