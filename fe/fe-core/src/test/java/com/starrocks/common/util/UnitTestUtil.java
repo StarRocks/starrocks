@@ -54,13 +54,13 @@ import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletMeta;
-import com.starrocks.catalog.Type;
 import com.starrocks.catalog.View;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletType;
+import com.starrocks.type.Type;
 import org.junit.jupiter.api.Assertions;
 
 import java.lang.reflect.Method;

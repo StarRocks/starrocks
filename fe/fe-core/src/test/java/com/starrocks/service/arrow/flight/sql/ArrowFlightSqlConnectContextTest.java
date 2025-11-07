@@ -15,7 +15,6 @@
 package com.starrocks.service.arrow.flight.sql;
 
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.util.ArrowUtil;
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.qe.ConnectContext;
@@ -26,6 +25,7 @@ import com.starrocks.qe.StmtExecutor;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.type.ScalarType;
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.vector.VarCharVector;
 import org.apache.arrow.vector.VectorSchemaRoot;

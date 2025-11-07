@@ -18,7 +18,6 @@ import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.qe.ConnectContext;
@@ -33,6 +32,7 @@ import com.starrocks.sql.automv.qe.PartitionExtractor;
 import com.starrocks.sql.automv.qe.PartitionPlus;
 import com.starrocks.sql.automv.util.PrettyPrinter;
 import com.starrocks.sql.automv.util.TieredMap;
+import com.starrocks.type.Type;
 
 import java.util.Collections;
 import java.util.Comparator;

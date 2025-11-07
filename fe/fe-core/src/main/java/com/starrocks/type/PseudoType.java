@@ -13,7 +13,7 @@
 // limitations under the License.
 
 
-package com.starrocks.catalog;
+package com.starrocks.type;
 
 /**
  * A pseudo-type cannot be used as a column data type, but it can be used to declare a function's argument or

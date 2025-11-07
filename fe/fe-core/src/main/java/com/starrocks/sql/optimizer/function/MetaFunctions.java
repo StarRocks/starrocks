@@ -34,7 +34,6 @@ import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -64,6 +63,7 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.statistics.CacheDictManager;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import com.starrocks.thrift.TResultBatch;
+import com.starrocks.type.Type;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.handler.codec.http.HttpResponseStatus;
@@ -84,8 +84,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static com.starrocks.catalog.PrimitiveType.BOOLEAN;
-import static com.starrocks.catalog.PrimitiveType.VARCHAR;
+import static com.starrocks.type.PrimitiveType.BOOLEAN;
+import static com.starrocks.type.PrimitiveType.VARCHAR;
 
 /**
  * Meta functions can be used to inspect the content of in-memory structures, for debug purpose.

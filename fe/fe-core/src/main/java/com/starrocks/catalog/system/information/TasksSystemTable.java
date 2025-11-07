@@ -18,8 +18,6 @@ import com.google.common.collect.Lists;
 import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.catalog.InternalCatalog;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.catalog.system.SystemId;
@@ -36,6 +34,8 @@ import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.thrift.TGetTasksParams;
 import com.starrocks.thrift.TSchemaTableType;
 import com.starrocks.thrift.TTaskInfo;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

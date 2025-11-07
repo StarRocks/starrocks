@@ -19,10 +19,10 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.type.Type;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;

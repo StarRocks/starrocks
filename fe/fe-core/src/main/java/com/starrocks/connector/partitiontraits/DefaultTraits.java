@@ -24,7 +24,6 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.NullablePartitionKey;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorPartitionTraits;
@@ -35,6 +34,7 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.common.PCellSortedSet;
+import com.starrocks.type.Type;
 import org.apache.commons.lang.NotImplementedException;
 
 import java.time.Clock;

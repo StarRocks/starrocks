@@ -14,7 +14,7 @@
 
 package com.starrocks.sql.automv.pn;
 
-import com.starrocks.catalog.Type;
+import com.starrocks.type.Type;
 
 import java.util.Collections;
 import java.util.Comparator;

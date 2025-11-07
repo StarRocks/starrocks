@@ -14,8 +14,8 @@
 
 package com.starrocks.statistic.base;
 
-import com.starrocks.catalog.Type;
 import com.starrocks.statistic.sample.SampleInfo;
+import com.starrocks.type.Type;
 
 public class ComplexTypeColumnStats extends BaseColumnStats {
 

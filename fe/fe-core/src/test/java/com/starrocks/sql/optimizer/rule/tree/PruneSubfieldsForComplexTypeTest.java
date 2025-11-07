@@ -15,17 +15,17 @@
 package com.starrocks.sql.optimizer.rule.tree;
 
 import com.google.common.collect.ImmutableList;
-import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.ComplexTypeAccessGroup;
-import com.starrocks.catalog.ComplexTypeAccessPath;
-import com.starrocks.catalog.ComplexTypeAccessPathType;
 import com.starrocks.catalog.ComplexTypeAccessPaths;
-import com.starrocks.catalog.MapType;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.StructField;
-import com.starrocks.catalog.StructType;
-import com.starrocks.catalog.Type;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.ComplexTypeAccessPath;
+import com.starrocks.type.ComplexTypeAccessPathType;
+import com.starrocks.type.MapType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.StructField;
+import com.starrocks.type.StructType;
+import com.starrocks.type.Type;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

@@ -21,6 +21,8 @@ import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.optimizer.rule.tree.prunesubfield.SubfieldAccessPathNormalizer;
 import com.starrocks.thrift.TAccessPathType;
 import com.starrocks.thrift.TColumnAccessPath;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeSerializer;
 
 import java.util.List;
 import java.util.stream.Collectors;

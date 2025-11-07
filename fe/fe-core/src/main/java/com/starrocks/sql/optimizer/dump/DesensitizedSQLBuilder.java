@@ -35,7 +35,6 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
-import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.View;
@@ -71,6 +70,7 @@ import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.formatter.AST2SQLVisitor;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.statistic.StatsConstants;
+import com.starrocks.type.PrimitiveType;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 

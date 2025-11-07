@@ -16,13 +16,13 @@ package com.starrocks.sql.ast;
 
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.ScalarType;
 
 import java.util.List;
 import java.util.function.Function;

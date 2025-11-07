@@ -15,7 +15,6 @@
 package com.starrocks.epack.catalog.system.starrocks;
 
 import com.starrocks.catalog.ColumnId;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.epack.authorization.MaskingPolicyContext;
@@ -33,6 +32,7 @@ import com.starrocks.thrift.TGetPolicyReferenceItem;
 import com.starrocks.thrift.TGetPolicyReferenceResponse;
 import com.starrocks.thrift.TGetPolicyReferencesRequest;
 import com.starrocks.thrift.TSchemaTableType;
+import com.starrocks.type.ScalarType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

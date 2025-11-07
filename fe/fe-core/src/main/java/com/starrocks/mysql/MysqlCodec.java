@@ -15,19 +15,19 @@
 package com.starrocks.mysql;
 
 import com.google.common.base.Strings;
-import com.starrocks.catalog.ArrayType;
-import com.starrocks.catalog.MapType;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.StructType;
-import com.starrocks.catalog.Type;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.MapType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.StructType;
+import com.starrocks.type.Type;
 
 import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 
-import static com.starrocks.catalog.Type.CHARSET_BINARY;
-import static com.starrocks.catalog.Type.CHARSET_UTF8;
+import static com.starrocks.type.Type.CHARSET_BINARY;
+import static com.starrocks.type.Type.CHARSET_UTF8;
 
 public class MysqlCodec {
     public static byte readByte(ByteBuffer buffer) {

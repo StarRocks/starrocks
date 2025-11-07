@@ -17,11 +17,12 @@ package com.starrocks.sql.plan;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorEvaluator;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.Type;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
 import org.openjdk.jmh.annotations.Fork;
@@ -63,7 +64,7 @@ public class FunctionEvaluateBench {
 
 
     private Function function = ExprUtils.getBuiltinFunction(FunctionSet.SUBDATE,
-            new com.starrocks.catalog.ScalarType[] {Type.DATETIME, Type.INT}, IS_IDENTICAL);
+            new ScalarType[] {Type.DATETIME, Type.INT}, IS_IDENTICAL);
 
     @Benchmark
     public void test() {

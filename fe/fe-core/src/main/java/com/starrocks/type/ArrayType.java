@@ -13,7 +13,7 @@
 // limitations under the License.
 
 
-package com.starrocks.catalog;
+package com.starrocks.type;
 
 import com.google.common.base.Objects;
 import com.google.common.base.Strings;

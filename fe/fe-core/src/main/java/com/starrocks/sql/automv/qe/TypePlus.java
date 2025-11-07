@@ -14,8 +14,8 @@
 
 package com.starrocks.sql.automv.qe;
 
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.Type;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.Type;
 
 import java.util.Objects;
 

@@ -15,13 +15,13 @@
 package com.starrocks.sql.ast.spm;
 
 import com.google.common.collect.ImmutableMap;
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.Type;
 
 import java.util.Map;
 

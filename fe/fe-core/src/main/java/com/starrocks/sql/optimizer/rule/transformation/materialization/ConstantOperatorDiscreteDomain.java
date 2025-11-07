@@ -15,8 +15,8 @@
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.google.common.collect.DiscreteDomain;
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.type.Type;
 import org.jetbrains.annotations.Nullable;
 
 public class ConstantOperatorDiscreteDomain extends DiscreteDomain<ConstantOperator> {

@@ -4,7 +4,6 @@ package com.starrocks.epack.sql.analyzer;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.epack.authorization.Policy;
 import com.starrocks.epack.authorization.SecurityPolicyMgr;
 import com.starrocks.epack.sql.ast.ApplyMaskingPolicyClause;
@@ -20,6 +19,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.type.Type;
 
 import java.util.List;
 

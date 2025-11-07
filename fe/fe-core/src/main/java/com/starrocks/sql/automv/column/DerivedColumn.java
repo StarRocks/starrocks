@@ -14,9 +14,9 @@
 
 package com.starrocks.sql.automv.column;
 
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.automv.pn.Op;
 import com.starrocks.sql.automv.pn.StrictOp;
+import com.starrocks.type.Type;
 
 import java.util.Objects;
 

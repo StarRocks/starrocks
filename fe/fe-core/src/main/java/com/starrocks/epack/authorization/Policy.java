@@ -2,8 +2,8 @@
 
 package com.starrocks.epack.authorization;
 
-import com.starrocks.catalog.Type;
 import com.starrocks.epack.sql.ast.PolicyType;
+import com.starrocks.type.Type;
 
 import java.util.List;
 

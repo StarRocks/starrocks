@@ -15,10 +15,10 @@
 package com.starrocks.connector.jdbc;
 
 import com.google.common.collect.ImmutableSet;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.Type;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.Type;
 
 import java.sql.Connection;
 import java.sql.ResultSet;

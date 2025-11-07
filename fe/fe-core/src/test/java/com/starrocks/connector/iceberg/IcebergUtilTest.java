@@ -15,9 +15,9 @@
 package com.starrocks.connector.iceberg;
 
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.Type;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.SlotId;
+import com.starrocks.type.Type;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.types.Types;
 import org.junit.jupiter.api.Test;

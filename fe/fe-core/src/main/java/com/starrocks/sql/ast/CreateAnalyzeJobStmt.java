@@ -17,11 +17,11 @@ package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.InternalCatalog;
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.statistic.StatsConstants;
+import com.starrocks.type.Type;
 
 import java.util.List;
 import java.util.Map;

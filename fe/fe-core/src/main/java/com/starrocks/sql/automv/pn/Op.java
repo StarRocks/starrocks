@@ -22,7 +22,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.UnionFind;
 import com.starrocks.sql.automv.boolalgebra.Modifier;
@@ -32,6 +31,7 @@ import com.starrocks.sql.automv.util.Box;
 import com.starrocks.sql.automv.util.Util;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.type.Type;
 
 import java.util.Arrays;
 import java.util.Collection;

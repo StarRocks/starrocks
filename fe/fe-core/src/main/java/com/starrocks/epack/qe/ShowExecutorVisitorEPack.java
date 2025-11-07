@@ -22,7 +22,6 @@ import com.starrocks.authentication.SecurityIntegration;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.AuthorizationMgr;
-import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.CaseSensibility;
@@ -72,6 +71,7 @@ import com.starrocks.sql.ast.warehouse.ShowWarehousesStmt;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.type.PrimitiveType;
 import com.starrocks.warehouse.Warehouse;
 
 import java.util.ArrayList;

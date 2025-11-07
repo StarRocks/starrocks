@@ -17,7 +17,6 @@ package com.starrocks.catalog.system.information;
 import com.google.api.client.util.Lists;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.InternalCatalog;
-import com.starrocks.catalog.Type;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.FeConstants;
@@ -36,6 +35,7 @@ import com.starrocks.thrift.TColumnStatsUsage;
 import com.starrocks.thrift.TColumnStatsUsageReq;
 import com.starrocks.thrift.TColumnStatsUsageRes;
 import com.starrocks.thrift.TSchemaTableType;
+import com.starrocks.type.Type;
 import org.apache.commons.lang3.NotImplementedException;
 
 import java.util.Collections;

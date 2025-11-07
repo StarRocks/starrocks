@@ -3,13 +3,13 @@
 package com.starrocks.epack.persist;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.epack.authorization.DbUID;
 import com.starrocks.epack.authorization.Policy;
 import com.starrocks.epack.sql.ast.PolicyType;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.type.Type;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

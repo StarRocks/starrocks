@@ -15,9 +15,9 @@
 package com.starrocks.connector;
 
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.Type;
 import com.starrocks.thrift.TBucketFunction;
 import com.starrocks.thrift.TBucketProperty;
+import com.starrocks.type.Type;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 

@@ -19,14 +19,14 @@ package com.starrocks.qe;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.thrift.TColumnDefinition;
 import com.starrocks.thrift.TColumnType;
 import com.starrocks.thrift.TPrimitiveType;
 import com.starrocks.thrift.TShowResultSet;
 import com.starrocks.thrift.TShowResultSetMetaData;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 

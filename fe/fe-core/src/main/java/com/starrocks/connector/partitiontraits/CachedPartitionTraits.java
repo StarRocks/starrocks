@@ -22,7 +22,6 @@ import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionKey;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ThrowingSupplier;
 import com.starrocks.connector.ConnectorPartitionTraits;
@@ -30,6 +29,7 @@ import com.starrocks.connector.PartitionInfo;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
+import com.starrocks.type.Type;
 
 import java.util.List;
 import java.util.Map;

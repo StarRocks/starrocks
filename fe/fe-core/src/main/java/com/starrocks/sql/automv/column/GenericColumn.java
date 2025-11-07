@@ -16,13 +16,13 @@ package com.starrocks.sql.automv.column;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.automv.pn.Apply;
 import com.starrocks.sql.automv.pn.Op;
 import com.starrocks.sql.automv.pn.OpUtil;
 import com.starrocks.sql.automv.util.TieredMap;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.type.Type;
 
 import java.util.Objects;
 import java.util.Optional;

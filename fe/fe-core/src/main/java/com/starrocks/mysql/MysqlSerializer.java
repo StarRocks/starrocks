@@ -35,7 +35,7 @@
 package com.starrocks.mysql;
 
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.Type;
+import com.starrocks.type.Type;
 
 import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;

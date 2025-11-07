@@ -14,11 +14,11 @@
 package com.starrocks.epack.sql.ast;
 
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.ScalarType;
 
 public class ShowPasswordPolicyStmt extends ShowStmt {
     private static final ShowResultSetMetaData META_DATA =

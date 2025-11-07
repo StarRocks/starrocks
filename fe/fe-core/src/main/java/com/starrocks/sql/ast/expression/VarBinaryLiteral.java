@@ -16,12 +16,12 @@ package com.starrocks.sql.ast.expression;
 
 import com.google.common.base.CharMatcher;
 import com.google.common.io.BaseEncoding;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.ParsingException;
+import com.starrocks.type.Type;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;

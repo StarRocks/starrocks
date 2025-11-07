@@ -12,21 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.catalog;
 
-public class AnyMapType extends PseudoType {
+package com.starrocks.type;
+
+public class AnyArrayType extends PseudoType {
     @Override
-    public boolean equals(Object obj) {
-        return obj instanceof AnyMapType;
+    public boolean equals(Object t) {
+        return t instanceof AnyArrayType;
     }
 
     @Override
     public boolean matchesType(Type t) {
-        return t instanceof AnyMapType || t instanceof AnyElementType || t.isMapType();
+        return t instanceof AnyArrayType || t instanceof AnyElementType || t.isArrayType();
     }
 
     @Override
     public String toString() {
-        return "PseudoType.AnyMapType";
+        return "PseudoType.AnyArrayType";
     }
 }

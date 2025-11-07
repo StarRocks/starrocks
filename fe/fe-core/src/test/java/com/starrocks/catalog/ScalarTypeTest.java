@@ -19,6 +19,8 @@ import com.google.common.collect.Lists;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 

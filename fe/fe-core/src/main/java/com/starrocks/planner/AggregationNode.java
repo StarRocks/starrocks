@@ -38,8 +38,6 @@ import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.IdGenerator;
@@ -64,6 +62,8 @@ import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TRuntimeFilterDescription;
 import com.starrocks.thrift.TStreamingPreaggregationMode;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.Type;
 import org.apache.commons.collections.CollectionUtils;
 
 import java.nio.ByteBuffer;

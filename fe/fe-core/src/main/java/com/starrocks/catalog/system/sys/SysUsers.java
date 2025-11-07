@@ -15,8 +15,6 @@ package com.starrocks.catalog.system.sys;
 
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authentication.UserAuthenticationInfo;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.catalog.system.SystemId;
@@ -28,6 +26,8 @@ import com.starrocks.thrift.TGetUsersRequest;
 import com.starrocks.thrift.TGetUsersResponse;
 import com.starrocks.thrift.TGetUsersResponseItem;
 import com.starrocks.thrift.TSchemaTableType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
 
 import java.time.Instant;
 import java.time.LocalDateTime;

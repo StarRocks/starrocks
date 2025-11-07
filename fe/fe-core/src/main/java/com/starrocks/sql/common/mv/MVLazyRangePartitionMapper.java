@@ -19,8 +19,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.PartitionKey;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.DateLiteral;
@@ -30,6 +28,8 @@ import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.PCellWithName;
 import com.starrocks.sql.common.PRangeCell;
 import com.starrocks.sql.common.PartitionMapping;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.Type;
 
 import java.time.LocalDateTime;
 import java.util.List;

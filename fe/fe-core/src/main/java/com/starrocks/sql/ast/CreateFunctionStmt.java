@@ -17,10 +17,10 @@ package com.starrocks.sql.ast;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSortedMap;
 import com.starrocks.catalog.Function;
-import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.PrimitiveType;
 
 import java.util.HashMap;
 import java.util.Map;

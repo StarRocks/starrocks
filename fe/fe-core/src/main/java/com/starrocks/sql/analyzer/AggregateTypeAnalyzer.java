@@ -16,8 +16,8 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.AggregateType;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.Type;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.Type;
 
 import java.util.EnumMap;
 import java.util.EnumSet;

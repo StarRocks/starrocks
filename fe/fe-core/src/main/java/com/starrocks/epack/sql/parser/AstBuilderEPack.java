@@ -4,7 +4,6 @@ package com.starrocks.epack.sql.parser;
 
 import com.google.common.base.Joiner;
 import com.starrocks.catalog.InternalCatalog;
-import com.starrocks.catalog.Type;
 import com.starrocks.epack.sql.ast.AlterFailoverGroupAddStmt;
 import com.starrocks.epack.sql.ast.AlterFailoverGroupPrimaryStmt;
 import com.starrocks.epack.sql.ast.AlterFailoverGroupRefreshStmt;
@@ -74,6 +73,7 @@ import com.starrocks.sql.ast.warehouse.SuspendWarehouseStmt;
 import com.starrocks.sql.parser.AstBuilder;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.parser.StarRocksParser;
+import com.starrocks.type.Type;
 import org.antlr.v4.runtime.ParserRuleContext;
 
 import java.util.ArrayList;

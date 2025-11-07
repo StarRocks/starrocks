@@ -15,11 +15,11 @@
 
 package com.starrocks.catalog.system.information;
 
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.thrift.TSchemaTableType;
+import com.starrocks.type.ScalarType;
 
 public class PipeFileSystemTable {
     public static final String NAME = "pipe_files";

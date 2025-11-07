@@ -16,9 +16,6 @@ package com.starrocks.connector.metadata.iceberg;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.StructField;
-import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -32,12 +29,15 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.THdfsTable;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.StructField;
+import com.starrocks.type.StructType;
 import org.apache.iceberg.PartitionField;
 
 import java.util.List;
 
-import static com.starrocks.catalog.ScalarType.createType;
 import static com.starrocks.connector.metadata.TableMetaMetadata.METADATA_DB_NAME;
+import static com.starrocks.type.ScalarType.createType;
 
 public class IcebergPartitionsTable extends MetadataTable {
     public static final String TABLE_NAME = "iceberg_partitions_table";

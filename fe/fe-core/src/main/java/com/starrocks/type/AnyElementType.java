@@ -13,21 +13,21 @@
 // limitations under the License.
 
 
-package com.starrocks.catalog;
+package com.starrocks.type;
 
-public class AnyArrayType extends PseudoType {
+public class AnyElementType extends PseudoType {
     @Override
-    public boolean equals(Object t) {
-        return t instanceof AnyArrayType;
+    public boolean equals(Object obj) {
+        return obj instanceof AnyElementType;
     }
 
     @Override
     public boolean matchesType(Type t) {
-        return t instanceof AnyArrayType || t instanceof AnyElementType || t.isArrayType();
+        return true;
     }
 
     @Override
     public String toString() {
-        return "PseudoType.AnyArrayType";
+        return "PseudoType.AnyType";
     }
 }

@@ -3,7 +3,6 @@
 package com.starrocks.epack.sql.analyzer;
 
 import com.google.common.base.Strings;
-import com.starrocks.catalog.Type;
 import com.starrocks.epack.authorization.PasswordPolicy;
 import com.starrocks.epack.authorization.Policy;
 import com.starrocks.epack.authorization.SecurityPolicyMgr;
@@ -37,6 +36,7 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.TypeManager;
+import com.starrocks.type.Type;
 
 import java.util.ArrayList;
 import java.util.List;

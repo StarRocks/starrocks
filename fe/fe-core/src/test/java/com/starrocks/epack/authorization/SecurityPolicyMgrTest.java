@@ -3,13 +3,13 @@
 package com.starrocks.epack.authorization;
 
 import com.starrocks.catalog.ColumnId;
-import com.starrocks.catalog.Type;
 import com.starrocks.epack.persist.ApplyOrRevokeMaskingPolicyLog;
 import com.starrocks.epack.persist.CreatePasswordPolicyLog;
 import com.starrocks.epack.persist.CreatePolicyLog;
 import com.starrocks.epack.sql.ast.PolicyType;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.type.Type;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.AfterClass;
 import org.junit.Assert;

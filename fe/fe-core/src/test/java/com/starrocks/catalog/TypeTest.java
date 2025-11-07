@@ -44,6 +44,14 @@ import com.starrocks.proto.PTypeNode;
 import com.starrocks.sql.analyzer.ColumnDefAnalyzer;
 import com.starrocks.thrift.TPrimitiveType;
 import com.starrocks.thrift.TTypeNodeType;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.MapType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.StructField;
+import com.starrocks.type.StructType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeDeserializer;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -256,8 +264,8 @@ public class TypeTest {
         Assertions.assertTrue(deType.isMapType());
         Assertions.assertEquals("MAP<INT,struct<c1 int(11), cc1 varchar(1073741824)>>", deType.toString());
         // Make sure select fields are false when initialized
-        Assertions.assertFalse(deType.selectedFields[0]);
-        Assertions.assertFalse(deType.selectedFields[1]);
+        Assertions.assertFalse(deType.getSelectedFields()[0]);
+        Assertions.assertFalse(deType.getSelectedFields()[1]);
     }
 
     @Test
