@@ -59,7 +59,7 @@ public class AnalyticAnalyzer {
         }
 
         FunctionCallExpr analyticFunction = analyticExpr.getFnCall();
-        if (analyticFunction.getParams().isDistinct()) {
+        if (analyticFunction.getParams().isDistinct() && !analyticExpr.isUnboundedWindowWithoutSlidingFrame()) {
             throw new SemanticException("DISTINCT not allowed in analytic function: " + ExprToSql.toSql(analyticFunction),
                     analyticExpr.getPos());
         }
