@@ -1930,7 +1930,6 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_with_delvec_corrupt) {
     ASSERT_ERROR(read(tablet_id, version));
 }
 
->>>>>>> 29a64c1a84 ([BugFix] introduces checksum for pk table's delete vector (#65006))
 INSTANTIATE_TEST_SUITE_P(LakePrimaryKeyPublishTest, LakePrimaryKeyPublishTest,
                          ::testing::Values(PrimaryKeyParam{true}, PrimaryKeyParam{false},
                                            PrimaryKeyParam{true, PersistentIndexTypePB::CLOUD_NATIVE},
