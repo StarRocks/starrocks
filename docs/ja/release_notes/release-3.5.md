@@ -11,6 +11,58 @@ displayed_sidebar: docs
 
 :::
 
+## 3.5.8
+
+リリース日：2025年11月7日
+
+### 改善点
+
+- Arrow を 19.0.1 にアップグレードし、Parquet のレガシー LIST エンコーディングをサポートして、ネストされた複雑なファイルを処理可能にしました。 [#64238](https://github.com/StarRocks/starrocks/pull/64238)
+- FILES() が Parquet のレガシー LIST エンコーディングをサポートしました。 [#64160](https://github.com/StarRocks/starrocks/pull/64160)
+- セッション変数と挿入列数に基づいて Partial Update モードを自動的に判定するようにしました。 [#62091](https://github.com/StarRocks/starrocks/pull/62091)
+- テーブル関数上の分析演算子に低カーディナリティ最適化を適用しました。 [#63378](https://github.com/StarRocks/starrocks/pull/63378)
+- ブロッキングを回避するため、`finishTransaction` に設定可能なテーブルロックタイムアウトを追加しました。 [#63981](https://github.com/StarRocks/starrocks/pull/63981)
+- 共有データクラスターでテーブルレベルのスキャンメトリクスの帰属をサポートしました。 [#62832](https://github.com/StarRocks/starrocks/pull/62832)
+- ウィンドウ関数 LEAD/LAG/FIRST_VALUE/LAST_VALUE が ARRAY 型引数をサポートしました。 [#63547](https://github.com/StarRocks/starrocks/pull/63547)
+- 複数の配列関数で定数畳み込みをサポートし、述語プッシュダウンおよび結合の単純化を改善しました。 [#63692](https://github.com/StarRocks/starrocks/pull/63692)
+- `SHOW PROC /backends/{id}` 経由で指定ノードの `tabletNum` を取得するためのバッチ API を最適化しました。FE 設定項目 `enable_collect_tablet_num_in_show_proc_backend_disk_path`（デフォルト：`true`）を追加。 [#64013](https://github.com/StarRocks/starrocks/pull/64013)
+- `INSERT ... SELECT` が計画前に外部テーブルを更新し、最新のメタデータを参照するようにしました。 [#64026](https://github.com/StarRocks/starrocks/pull/64026)
+- テーブル関数、NL Join Probe、Hash Join Probe に `capacity_limit_reached` チェックを追加し、過剰列の構築を防止しました。 [#64009](https://github.com/StarRocks/starrocks/pull/64009)
+- 外部テーブルの統計収集タスク数の上限を設定する FE 設定項目 `collect_stats_io_tasks_per_connector_operator`（デフォルト：`4`）を追加しました。 [#64016](https://github.com/StarRocks/starrocks/pull/64016)
+- サンプル収集のデフォルトパーティションサイズを 1000 から 300 に変更しました。 [#64022](https://github.com/StarRocks/starrocks/pull/64022)
+- ロックテーブルスロットを 256 に増加し、スロー・ロック・ログに `rid` を追加しました。 [#63945](https://github.com/StarRocks/starrocks/pull/63945)
+- レガシーデータを扱う際の Gson デシリアライズの堅牢性を改善しました。 [#63555](https://github.com/StarRocks/starrocks/pull/63555)
+- FILES() スキーマプッシュダウンにおけるメタデータロック範囲を縮小し、ロック競合と計画遅延を削減しました。 [#63796](https://github.com/StarRocks/starrocks/pull/63796)
+- FE 設定項目 `task_runs_timeout_second` を導入し、Task Run の実行タイムアウト検知と期限切れタスクのキャンセルロジックを改善しました。 [#63842](https://github.com/StarRocks/starrocks/pull/63842)
+- `REFRESH MATERIALIZED VIEW ... FORCE` が常に対象パーティションをリフレッシュするようにしました（不整合や破損がある場合でも）。 [#63844](https://github.com/StarRocks/starrocks/pull/63844)
+
+### バグ修正
+
+次の問題を修正しました：
+
+- ClickHouse の Nullable (Decimal) 型解析時の例外。 [#64195](https://github.com/StarRocks/starrocks/pull/64195)
+- タブレット移行とプライマリキー索引検索の同時実行問題。 [#64164](https://github.com/StarRocks/starrocks/pull/64164)
+- マテリアライズドビュー更新で FINISHED 状態が欠落していた問題。 [#64191](https://github.com/StarRocks/starrocks/pull/64191)
+- 共有データクラスターで Schema Change Publish が再試行されない問題。 [#64093](https://github.com/StarRocks/starrocks/pull/64093)
+- データレイクのプライマリキー表で行数統計が誤っていた問題。 [#64007](https://github.com/StarRocks/starrocks/pull/64007)
+- タブレット作成タイムアウト時にノード情報が返されない問題。 [#63963](https://github.com/StarRocks/starrocks/pull/63963)
+- 破損した Lake DataCache がクリアできない問題。 [#63182](https://github.com/StarRocks/starrocks/pull/63182)
+- IGNORE NULLS フラグ付きウィンドウ関数が対応する非 IGNORE NULLS 関数と統合できない問題。 [#63958](https://github.com/StarRocks/starrocks/pull/63958)
+- FE 再起動後、以前中止されたコンパクションが再スケジュールされない問題。 [#63881](https://github.com/StarRocks/starrocks/pull/63881)
+- FE の頻繁な再起動でタスクがスケジュールできない問題。 [#63966](https://github.com/StarRocks/starrocks/pull/63966)
+- GCS のエラーコード処理に関する問題。 [#64066](https://github.com/StarRocks/starrocks/pull/64066)
+- StarMgr gRPC エグゼキュータの不安定性。 [#63828](https://github.com/StarRocks/starrocks/pull/63828)
+- 排他ワークグループ作成時のデッドロック。 [#63893](https://github.com/StarRocks/starrocks/pull/63893)
+- Iceberg テーブルキャッシュが正しく無効化されない問題。 [#63971](https://github.com/StarRocks/starrocks/pull/63971)
+- 共有データクラスターでソート集約の結果が誤っていた問題。 [#63849](https://github.com/StarRocks/starrocks/pull/63849)
+- `PartitionedSpillerWriter::_remove_partition` における ASAN エラー。 [#63903](https://github.com/StarRocks/starrocks/pull/63903)
+- モーセルキューからスプリットを取得できなかった場合に BE がクラッシュする問題。 [#62753](https://github.com/StarRocks/starrocks/pull/62753)
+- マテリアライズドビュー書き換え時の集約プッシュダウン型キャストバグ。 [#63875](https://github.com/StarRocks/starrocks/pull/63875)
+- FE で期限切れロードジョブを削除する際の NPE。 [#63820](https://github.com/StarRocks/starrocks/pull/63820)
+- パーティション削除時の Partitioned Spill クラッシュ。 [#63825](https://github.com/StarRocks/starrocks/pull/63825)
+- 特定のプランでマテリアライズドビュー書き換えが `IllegalStateException` をスローする問題。 [#63655](https://github.com/StarRocks/starrocks/pull/63655)
+- パーティション付きマテリアライズドビュー作成時の NPE。 [#63830](https://github.com/StarRocks/starrocks/pull/63830)
+
 ## 3.5.7
 
 リリース日：2025年10月21日
