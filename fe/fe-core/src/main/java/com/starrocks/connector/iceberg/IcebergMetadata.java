@@ -78,6 +78,7 @@ import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
+import com.starrocks.sql.ast.TruncateTablePartitionStmt;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -389,6 +390,11 @@ public class IcebergMetadata implements ConnectorMetadata {
         if (table == null) {
             throw new StarRocksConnectorException(
                     "Failed to load iceberg table: " + truncateTableStmt.getTblRef().toString());
+        }
+
+        if (truncateTableStmt instanceof TruncateTablePartitionStmt) {
+            throw new StarRocksConnectorException("Iceberg table partition truncate is not supported: %s.%s",
+                    dbName, tableName);
         }
 
         DeleteFiles deleteFiles = table.newDelete().deleteFromRowFilter(Expressions.alwaysTrue());

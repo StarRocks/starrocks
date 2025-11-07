@@ -230,6 +230,7 @@ import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.InstallPluginStmt;
 import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.JoinRelation;
+import com.starrocks.sql.ast.KeyPartitionRef;
 import com.starrocks.sql.ast.KeysDesc;
 import com.starrocks.sql.ast.KillAnalyzeStmt;
 import com.starrocks.sql.ast.KillStmt;
@@ -404,6 +405,7 @@ import com.starrocks.sql.ast.TabletList;
 import com.starrocks.sql.ast.TagOptions;
 import com.starrocks.sql.ast.TaskName;
 import com.starrocks.sql.ast.TruncatePartitionClause;
+import com.starrocks.sql.ast.TruncateTablePartitionStmt;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.UninstallPluginStmt;
 import com.starrocks.sql.ast.UnionRelation;
@@ -1389,8 +1391,15 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         if (context.partitionNames() != null) {
             stop = context.partitionNames().stop;
             PartitionNames partitionNames = (PartitionNames) visit(context.partitionNames());
-            partitionRef = new PartitionRef(partitionNames.getPartitionNames(), partitionNames.isTemp(),
-                    createPos(context.partitionNames()));
+            if (partitionNames.isKeyPartitionNames()) {
+                KeyPartitionRef keyPartitionRef = new KeyPartitionRef(partitionNames.getPartitionColNames(),
+                        partitionNames.getPartitionColValues(), createPos(context.partitionNames()));
+                NodePosition pos = createPos(start, stop);
+                return new TruncateTablePartitionStmt(new TableRef(qualifiedName, null, pos), keyPartitionRef);
+            } else {
+                partitionRef = new PartitionRef(partitionNames.getPartitionNames(), partitionNames.isTemp(),
+                        createPos(context.partitionNames()));
+            }
         }
         NodePosition pos = createPos(start, stop);
         return new TruncateTableStmt(new TableRef(qualifiedName, partitionRef, pos));
