@@ -23,10 +23,10 @@ public class PhysicalPartitionSnapshotInfo {
     public final long physicalPartitionId;
     @SerializedName(value = "version")
     public final long visibleVersion;
-    @SerializedName(value = "indexInfos")
-    public final Map<Long, MaterializedIndexSnapshotInfo> indexInfos;
     @SerializedName(value = "committedVersion")
     public final long committedVersion;
+    @SerializedName(value = "indexInfos")
+    public final Map<Long, MaterializedIndexSnapshotInfo> indexInfos;
 
     public PhysicalPartitionSnapshotInfo(long physicalPartId, long visibleVersion, long committedVersion,
                                          Map<Long, MaterializedIndexSnapshotInfo> indexInfos) {
