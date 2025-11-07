@@ -1605,12 +1605,13 @@ public class MvUtils {
      */
     public static ScalarOperator convertRangeToPredicates(
             List<? extends ScalarOperator> partitionColRefs,
-            Collection<PRangeCell> pRangeCells) throws AnalysisException {
+            Collection<PRangeCell> pRangeCells,
+            boolean canConvertToInPredicate) throws AnalysisException {
         final List<Range<PartitionKey>> partitionRanges = pRangeCells
                 .stream()
                 .map(PRangeCell::getRange)
                 .collect(Collectors.toList());
-        return convertRangeToPredicate(partitionColRefs, partitionRanges);
+        return convertRangeToPredicate(partitionColRefs, partitionRanges, canConvertToInPredicate);
     }
 
     private static ConstantOperator convertLiteralToConstantOperator(ScalarOperator partitionColRef,
@@ -1669,11 +1670,12 @@ public class MvUtils {
 
     private static ScalarOperator convertRangeToPredicate(
             List<? extends  ScalarOperator> partitionColRefs,
-            List<Range<PartitionKey>> partitionRanges) throws AnalysisException {
+            List<Range<PartitionKey>> partitionRanges,
+            boolean canConvertToInPredicate) throws AnalysisException {
         // only all singleton ranges can be converted to IN predicate
-        boolean areAllRangePartitionsSingleton = partitionRanges.stream()
+        canConvertToInPredicate |= partitionRanges.stream()
                 .allMatch(range -> range.lowerEndpoint().equals(range.upperEndpoint()));
-        if (areAllRangePartitionsSingleton) {
+        if (canConvertToInPredicate) {
             List<PartitionKey> partitionKeys = partitionRanges
                     .stream()
                     .map(Range::lowerEndpoint)
