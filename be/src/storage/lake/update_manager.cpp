@@ -558,6 +558,7 @@ Status UpdateManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_writ
             fopts.encryption_info = pair.info;
             wopts.encryption_meta = std::move(pair.encryption_meta);
         }
+
         std::string seg_name = gen_segment_filename(txn_id);
         std::string seg_path = tablet->segment_location(seg_name);
         ASSIGN_OR_RETURN(auto wfile, fs::new_writable_file(fopts, seg_path));
