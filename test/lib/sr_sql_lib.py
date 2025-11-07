@@ -1947,8 +1947,6 @@ class StarrocksSQLApiLib(object):
             count += 1
         tools.assert_equal("CANCELLED", status, "wait alter table cancel error")
 
-<<<<<<< HEAD
-=======
     def retry_execute_sql(self, sql: str, ori: bool, max_retry_times: int = 3, pending_time_ms: int = 100):
         """
         execute sql with retry
@@ -1985,7 +1983,6 @@ class StarrocksSQLApiLib(object):
             count += 1
         tools.assert_true(last_refresh_state in TASK_RUN_FINAL_STATES, "wait show materialized view finish error: %s" % last_refresh_state)
 
->>>>>>> 0525b5eb30 ([UT] Fix unstable tests (#64940))
     def wait_async_materialized_view_finish(self, current_db, mv_name, check_count=None):
         """
         wait async materialized view job finish and return status
