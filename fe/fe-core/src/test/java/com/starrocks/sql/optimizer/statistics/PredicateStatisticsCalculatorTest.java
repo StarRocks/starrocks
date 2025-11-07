@@ -16,6 +16,7 @@
 package com.starrocks.sql.optimizer.statistics;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -338,5 +339,54 @@ public class PredicateStatisticsCalculatorTest {
 
         Assertions.assertEquals(1, (int) result.getOutputRowCount());
         Assertions.assertEquals(0, result.getColumnStatistic(columnRef).getNullsFraction(), 0.001);
+    }
+
+    @Test
+    public void testEstimateIfPredicate() {
+        ColumnRefOperator columnRef1 = new ColumnRefOperator(1, Type.INT, "c1", true);
+        ColumnRefOperator columnRef2 = new ColumnRefOperator(2, Type.INT, "c2", true);
+        ColumnRefOperator columnRef3 = new ColumnRefOperator(3, Type.INT, "c3", true);
+
+        ColumnStatistic columnStatistic1 = ColumnStatistic.builder()
+                .setMinValue(10)
+                .setMaxValue(30)
+                .setDistinctValuesCount(20)
+                .setNullsFraction(0.1)
+                .build();
+
+        ColumnStatistic columnStatistic2 = ColumnStatistic.builder()
+                .setMinValue(40)
+                .setMaxValue(80)
+                .setDistinctValuesCount(30)
+                .setNullsFraction(0.2)
+                .build();
+
+        ColumnStatistic columnStatistic3 = ColumnStatistic.builder()
+                .setMinValue(10)
+                .setMaxValue(90)
+                .setDistinctValuesCount(50)
+                .setNullsFraction(0.4)
+                .build();
+
+        Statistics statistics = Statistics.builder()
+                .setOutputRowCount(1000)
+                .addColumnStatistic(columnRef1, columnStatistic1)
+                .addColumnStatistic(columnRef2, columnStatistic2)
+                .addColumnStatistic(columnRef3, columnStatistic3)
+                .build();
+
+        BinaryPredicateOperator condition =
+                new BinaryPredicateOperator(BinaryType.GE, columnRef1, ConstantOperator.createInt(20));
+        BinaryPredicateOperator leftPredicate =
+                new BinaryPredicateOperator(BinaryType.EQ, columnRef2, ConstantOperator.createInt(50));
+        BinaryPredicateOperator rightPredicate =
+                new BinaryPredicateOperator(BinaryType.EQ, columnRef3, ConstantOperator.createInt(80));
+
+        CallOperator ifPredicate =
+                new CallOperator(FunctionSet.IF, Type.BOOLEAN, List.of(condition, leftPredicate, rightPredicate));
+
+        Statistics result = PredicateStatisticsCalculator.statisticsCalculate(ifPredicate, statistics);
+
+        Assertions.assertEquals(17.0, (int) result.getOutputRowCount());
     }
 }
