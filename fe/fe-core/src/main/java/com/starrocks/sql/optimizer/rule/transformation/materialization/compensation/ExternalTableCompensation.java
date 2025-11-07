@@ -77,7 +77,7 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.connector.iceberg.IcebergPartitionUtils.getIcebergTablePartitionPredicateExpr;
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
-import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.convertRangeToPredicates;
+import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.convertRangeCellsToPredicate;
 
 public final class ExternalTableCompensation extends TableCompensation {
     private List<PRangeCell> compensations;
@@ -146,7 +146,7 @@ public final class ExternalTableCompensation extends TableCompensation {
             // for non iceberg table, it's safe to convert partition ranges to in predicates directly.
             // this is because they don't have partition transformations and is hive-partition-like, its partition values
             // are point-to-point mapping to partition columns.
-            externalExtraPredicate = convertRangeToPredicates(refPartitionColRefs, compensations, true);
+            externalExtraPredicate = convertRangeCellsToPredicate(refPartitionColRefs, compensations, true);
         }
         Preconditions.checkState(externalExtraPredicate != null);
         externalExtraPredicate.setRedundant(true);
@@ -174,7 +174,7 @@ public final class ExternalTableCompensation extends TableCompensation {
             final boolean canConvertToInPredicate = partitionFields
                     .stream()
                     .allMatch(field -> field.transform().dedupName().equalsIgnoreCase("identity"));
-            return convertRangeToPredicates(refPartitionColRefs, compensations, canConvertToInPredicate);
+            return convertRangeCellsToPredicate(refPartitionColRefs, compensations, canConvertToInPredicate);
         }
         List<Column> mvPartitionCols = mv.getPartitionColumns();
         // to iceberg, `partitionKeys` are using LocalTime as partition values which cannot be used to prune iceberg
