@@ -1825,8 +1825,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：最小采样行数。如果指定了采集类型为抽样采集（SAMPLE），需要设置该参数。如果参数取值超过了实际的表行数，默认进行全量采集。
 - 引入版本：-
 
-<<<<<<< HEAD
-=======
 ##### enable_manual_collect_array_ndv
 
 - 默认值：false
@@ -1854,7 +1852,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：是否启用 Predicate Column 采集。如果禁用，在查询优化期间将不会记录 Predicate Column。
 - 引入版本：-
 
->>>>>>> 713b35a5cf ([Enhancement]  Add enable_predicate_columns_collection config (#65052))
 ##### histogram_buckets_size
 
 - 默认值：64

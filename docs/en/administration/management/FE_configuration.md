@@ -1833,8 +1833,6 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The minimum number of rows to collect for sampled collection. If the parameter value exceeds the actual number of rows in your table, full collection is performed.
 - Introduced in: -
 
-<<<<<<< HEAD
-=======
 ##### enable_manual_collect_array_ndv
 
 - Default: false
@@ -1862,7 +1860,6 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: Whether to enable predicate columns collection. If disabled, predicate columns will not be recorded during query optimization.
 - Introduced in: -
 
->>>>>>> 713b35a5cf ([Enhancement]  Add enable_predicate_columns_collection config (#65052))
 ##### histogram_buckets_size
 
 - Default: 64
