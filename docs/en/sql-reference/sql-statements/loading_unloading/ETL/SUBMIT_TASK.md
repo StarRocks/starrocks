@@ -15,7 +15,7 @@ Supported statements include:
 
 - [CREATE TABLE AS SELECT](../../table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) (from v3.0 onwards)
 - [INSERT](../INSERT.md) (from v3.0 onwards)
-- [CACHE SELECT](../../../../data_source/data_cache_warmup.md) (from v3.3 onwards)
+- [CACHE SELECT](../../../../data_source/block_cache_warmup.md) (from v3.3 onwards)
 
 You can view the list of tasks by querying `INFORMATION_SCHEMA.tasks`, or view the execution history of tasks by querying `INFORMATION_SCHEMA.task_runs`. For more information, see [Usage Notes](#usage-notes).
 
