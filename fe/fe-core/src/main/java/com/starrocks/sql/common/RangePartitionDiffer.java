@@ -44,7 +44,6 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -382,7 +381,7 @@ public final class RangePartitionDiffer extends PartitionDiffer {
                 LOG.warn("Materialized view compute partition difference with base table failed: rangePartitionDiff is null.");
                 return null;
             }
-            Map<Table, Map<String, Set<String>>> extRBTMVPartitionNameMap = Maps.newHashMap();
+            Map<Table, PartitionNameSetMap> extRBTMVPartitionNameMap = Maps.newHashMap();
             if (!isQueryRewrite) {
                 // To solve multi partition columns' problem of external table, record the mv partition name to all the same
                 // partition names map here.
@@ -397,11 +396,11 @@ public final class RangePartitionDiffer extends PartitionDiffer {
         }
     }
 
-    public static void updatePartitionRefMap(Map<String, Map<Table, Set<String>>> result,
+    public static void updatePartitionRefMap(Map<String, Map<Table, PCellSortedSet>> result,
                                              String partitionKey,
-                                             Table table, String partitionValue) {
+                                             Table table, PCellWithName partitionValue) {
         result.computeIfAbsent(partitionKey, k -> new HashMap<>())
-                .computeIfAbsent(table, k -> new HashSet<>())
+                .computeIfAbsent(table, k -> PCellSortedSet.of())
                 .add(partitionValue);
     }
 
@@ -412,29 +411,27 @@ public final class RangePartitionDiffer extends PartitionDiffer {
      * @param baseTablePartitionName: base table partition name
      * @param mvPartitionName: materialized view partition name
      */
-    public static void updateTableRefMap(Map<Table, Map<String, Set<String>>> result,
+    public static void updateTableRefMap(Map<Table, PCellSetMapping> result,
                                          Table baseTable,
                                          String baseTablePartitionName,
-                                         String mvPartitionName) {
-        result.computeIfAbsent(baseTable, k -> new HashMap<>())
-                .computeIfAbsent(baseTablePartitionName, k -> new HashSet<>())
-                .add(mvPartitionName);
+                                         PCellWithName mvPartitionName) {
+        result.computeIfAbsent(baseTable, k -> PCellSetMapping.of())
+                .put(baseTablePartitionName, mvPartitionName);
     }
 
-    private static void initialMvRefMap(Map<String, Map<Table, Set<String>>> result,
+    private static void initialMvRefMap(Map<String, Map<Table, PCellSortedSet>> result,
                                         NavigableSet<PCellWithName> partitionRanges,
                                         Table table) {
         partitionRanges.stream()
                 .forEach(cellPlus -> {
                     result.computeIfAbsent(cellPlus.name(), k -> new HashMap<>())
-                            .computeIfAbsent(table, k -> new HashSet<>());
+                            .computeIfAbsent(table, k -> PCellSortedSet.of());
                 });
     }
 
-    public static void initialBaseRefMap(Map<Table, Map<String, Set<String>>> result,
+    public static void initialBaseRefMap(Map<Table, PCellSetMapping> result,
                                          Table table, PCellWithName partitionRange) {
-        result.computeIfAbsent(table, k -> new HashMap<>())
-                .computeIfAbsent(partitionRange.name(), k -> new HashSet<>());
+        result.computeIfAbsent(table, k -> PCellSetMapping.of()).put(partitionRange.name());
     }
 
     /**
@@ -444,9 +441,9 @@ public final class RangePartitionDiffer extends PartitionDiffer {
      * @return base table -> <partition name, mv partition names> mapping
      */
     @Override
-    public Map<Table, Map<String, Set<String>>> generateBaseRefMap(Map<Table, PCellSortedSet> basePartitionMaps,
-                                                                   PCellSortedSet mvPartitionMap) {
-        Map<Table, Map<String, Set<String>>> result = Maps.newHashMap();
+    public Map<Table, PCellSetMapping> generateBaseRefMap(Map<Table, PCellSortedSet> basePartitionMaps,
+                                                          PCellSortedSet mvPartitionMap) {
+        Map<Table, PCellSetMapping> result = Maps.newHashMap();
         if (mvPartitionMap.isEmpty()) {
             for (Map.Entry<Table, PCellSortedSet> entry : basePartitionMaps.entrySet()) {
                 Table baseTable = entry.getKey();
@@ -481,7 +478,7 @@ public final class RangePartitionDiffer extends PartitionDiffer {
      * This method finds all MV ranges that intersect with each base range.
      * For each base range, we find all MV ranges that intersect with it.
      */
-    private void buildBaseToMvIntersectionsMapping(Map<Table, Map<String, Set<String>>> result,
+    private void buildBaseToMvIntersectionsMapping(Map<Table, PCellSetMapping> result,
                                                    List<PCellWithName> baseRanges,
                                                    List<PCellWithName> mvRanges,
                                                    Table baseTable) {
@@ -519,7 +516,7 @@ public final class RangePartitionDiffer extends PartitionDiffer {
                 //  mv1: [2023-01-01, 2023-02-01)
                 //
                 //Result: Both p1 and p2 correctly map to mv1
-                updateTableRefMap(result, baseTable, baseRange.name(), mvRange.name());
+                updateTableRefMap(result, baseTable, baseRange.name(), mvRange);
                 foundIntersection = true;
                 mvIndex++;
             }
@@ -539,9 +536,9 @@ public final class RangePartitionDiffer extends PartitionDiffer {
      * @return mv partition name -> <base table, base partition names> mapping
      */
     @Override
-    public Map<String, Map<Table, Set<String>>> generateMvRefMap(PCellSortedSet mvPCells,
-                                                                 Map<Table, PCellSortedSet> baseTablePCells) {
-        Map<String, Map<Table, Set<String>>> result = Maps.newHashMap();
+    public Map<String, Map<Table, PCellSortedSet>> generateMvRefMap(PCellSortedSet mvPCells,
+                                                                    Map<Table, PCellSortedSet> baseTablePCells) {
+        Map<String, Map<Table, PCellSortedSet>> result = Maps.newHashMap();
         if (mvPCells.isEmpty()) {
             return result;
         }
@@ -573,7 +570,7 @@ public final class RangePartitionDiffer extends PartitionDiffer {
      * This method finds all intersections between MV ranges and base ranges.
      * For each MV range, we find all base ranges that intersect with it.
      */
-    private void buildMVToBaseIntersectionMapping(Map<String, Map<Table, Set<String>>> result,
+    private void buildMVToBaseIntersectionMapping(Map<String, Map<Table, PCellSortedSet>> result,
                                                   List<PCellWithName> mvRanges,
                                                   List<PCellWithName> baseRanges,
                                                   Table baseTable) {
@@ -615,7 +612,7 @@ public final class RangePartitionDiffer extends PartitionDiffer {
                 //Result: All intersections correctly found:
                 //  b1 → {mv1, mv2}
                 //  b2 → {mv2, mv3}
-                updatePartitionRefMap(result, mvRange.name(), baseTable, baseRange.name());
+                updatePartitionRefMap(result, mvRange.name(), baseTable, baseRange);
                 baseIndex++;
             }
         }

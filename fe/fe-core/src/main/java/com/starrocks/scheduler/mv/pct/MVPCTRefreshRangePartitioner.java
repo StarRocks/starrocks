@@ -54,6 +54,7 @@ import com.starrocks.sql.ast.expression.IsNullPredicate;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.DmlException;
+import com.starrocks.sql.common.PCellSetMapping;
 import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.PCellWithName;
 import com.starrocks.sql.common.PRangeCell;
@@ -131,6 +132,8 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
             logger.warn("compute range partition diff failed: mv: {}", mv.getName());
             return false;
         }
+        logger.info("Materialized view [{}] partition diff result: {}",
+                mv.getName(), result);
 
         // Delete old partitions and then add new partitions because the old and new partitions may overlap
         PCellSortedSet deletes = result.diff.getDeletes();
@@ -152,9 +155,9 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
                 mv.getName(), adds);
 
         // used to get partitions to refresh
-        Map<Table, Map<String, Set<String>>> baseToMvNameRef =
+        Map<Table, PCellSetMapping> baseToMvNameRef =
                 differ.generateBaseRefMap(result.refBaseTablePartitionMap, mvPartitionToCells);
-        Map<String, Map<Table, Set<String>>> mvToBaseNameRef =
+        Map<String, Map<Table, PCellSortedSet>> mvToBaseNameRef =
                 differ.generateMvRefMap(mvPartitionToCells, result.refBaseTablePartitionMap);
 
         mvContext.setMVToCellMap(mvPartitionToCells);
@@ -166,12 +169,15 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
     }
 
     @Override
-    public Expr generatePartitionPredicate(Table table, Set<String> refBaseTablePartitionNames,
+    public Expr generatePartitionPredicate(Table table, PCellSortedSet refBaseTablePartitionNames,
                                            List<Expr> mvPartitionSlotRefs) throws AnalysisException {
         List<Range<PartitionKey>> sourceTablePartitionRange = Lists.newArrayList();
         Map<Table, PCellSortedSet> refBaseTablePartitionCells = mvContext.getRefBaseTableToCellMap();
-        for (String partitionName : refBaseTablePartitionNames) {
-            Preconditions.checkArgument(refBaseTablePartitionCells.containsKey(table));
+        if (!refBaseTablePartitionCells.containsKey(table)) {
+            throw new AnalysisException("Cannot generate mv refresh partition predicate because cannot find " +
+                    "the ref base table partition cells for table:" + table.getName());
+        }
+        for (String partitionName : refBaseTablePartitionNames.getPartitionNames()) {
             PRangeCell rangeCell = (PRangeCell) refBaseTablePartitionCells.get(table).getPCell(partitionName);
             sourceTablePartitionRange.add(rangeCell.getRange());
         }
@@ -231,7 +237,7 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
 
     @Override
     public Expr generateMVPartitionPredicate(TableName tableName,
-                                             Set<String> mvPartitionNames) throws AnalysisException {
+                                             PCellSortedSet mvPartitionNames) throws AnalysisException {
         if (mvPartitionNames.isEmpty()) {
             return new BoolLiteral(true);
         }
@@ -250,7 +256,7 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
 
         List<Range<PartitionKey>> mvPartitionRange = Lists.newArrayList();
         PCellSortedSet mvToCellMap = mvContext.getMVToCellMap();
-        for (String partitionName : mvPartitionNames) {
+        for (String partitionName : mvPartitionNames.getPartitionNames()) {
             Preconditions.checkArgument(mvToCellMap.containsName(partitionName));
             PRangeCell rangeCell = (PRangeCell) mvToCellMap.getPCell(partitionName);
             mvPartitionRange.add(rangeCell.getRange());
@@ -463,7 +469,7 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
             // BTW, since the refresh has already scanned the needed base tables' data, it's better to update
             // more mv's partitions as more as possible.
             // TODO: But it may cause much memory to refresh many partitions, support fine-grained partition refresh later.
-            if (!mvToRefreshPotentialPartitions.isEmpty() && mvToRefreshPotentialPartitions.contains(pCell.name())) {
+            if (!mvToRefreshPotentialPartitions.isEmpty() && mvToRefreshPotentialPartitions.containsName(pCell.name())) {
                 logger.info("partition {} is in the many-to-many mappings, " +
                         "skip to filter it, mvToRefreshPotentialPartitions:{}", mv.getName(),
                         pCell.name(), mvToRefreshPotentialPartitions);

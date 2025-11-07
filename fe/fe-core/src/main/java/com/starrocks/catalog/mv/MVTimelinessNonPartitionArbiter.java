@@ -25,7 +25,6 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
-import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -71,7 +70,8 @@ public final class MVTimelinessNonPartitionArbiter extends MVTimelinessArbiter {
             MvBaseTableUpdateInfo mvBaseTableUpdateInfo = getMvBaseTableUpdateInfo(mv, table, true, isQueryRewrite);
             // TODO: fixme if mvBaseTableUpdateInfo is null, should return full refresh?
             if (mvBaseTableUpdateInfo != null &&
-                    CollectionUtils.isNotEmpty(mvBaseTableUpdateInfo.getToRefreshPartitionNames())) {
+                    mvBaseTableUpdateInfo.getToRefreshPartitionNames() != null &&
+                    !mvBaseTableUpdateInfo.getToRefreshPartitionNames().isEmpty()) {
                 logMVPrepare(mv, "Non-partitioned base table has updated, need refresh totally.");
                 return MvUpdateInfo.fullRefresh(mv);
             }
