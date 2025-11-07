@@ -2,20 +2,20 @@
 displayed_sidebar: docs
 ---
 
-# Data cache warmup
+# Block cache warmup
 
-Some data lake analytics and shared-data cluster scenarios have high performance requirements for queries, such as BI reports and proof of concept (PoC) performance testing. Loading remote data into local data cache can avoid the need to fetch the same data multiple times, significantly speeding up query execution and minimizing resource usage.
+Some data lake analytics and shared-data cluster scenarios have high performance requirements for queries, such as BI reports and proof of concept (PoC) performance testing. Loading remote data into local block cache can avoid the need to fetch the same data multiple times, significantly speeding up query execution and minimizing resource usage.
 
-StarRocks v3.3 introduces the Data Cache Warmup feature, which is an enhancement to [Data Cache](./data_cache.md). Data Cache is a process of passively populating the cache, in which data is written to the cache during data querying. Data Cache Warmup, however, is an active process of populating the cache. It proactively fetches the desired data from remote storage in advance.
+StarRocks v3.3 introduces the Block Cache Warmup feature, which is an enhancement to [Block Cache](./data_cache.md#principles-of-block-cache). Block Cache is a process of passively populating the cache, in which data is written to the cache during data querying. Block Cache Warmup, however, is an active process of populating the cache. It proactively fetches the desired data from remote storage in advance.
 
 ## Scenarios
 
-- The disk used for data cache has a storage capacity much larger than the amount of data to warm up. If the disk capacity is less than the data to warm up, the expected warmup effect cannot be achieved. For example, if 100 GB data needs to be warmed up but the disk has only 50 GB of space, then only 50 GB data can be loaded to the cache and the previously loaded 50 GB data will be replaced by the 50 GB data that is loaded later.
-- Data access on the disk used for data cache is relatively stable. If there is a surge in the access volume, the expected warmup effect cannot be achieved. For example, if 100 GB data needs to be warmed up and the disk has 200 GB of space, then the first condition is met. However, if a large amount of new data (150 GB) is written to the cache during the warmup process, or if an unexpected large cold query needs to load 150 GB data to the cache, it may result in the eviction of the warmed data.
+- The disk used for block cache has a storage capacity much larger than the amount of data to warm up. If the disk capacity is less than the data to warm up, the expected warmup effect cannot be achieved. For example, if 100 GB data needs to be warmed up but the disk has only 50 GB of space, then only 50 GB data can be loaded to the cache and the previously loaded 50 GB data will be replaced by the 50 GB data that is loaded later.
+- Data access on the disk used for block cache is relatively stable. If there is a surge in the access volume, the expected warmup effect cannot be achieved. For example, if 100 GB data needs to be warmed up and the disk has 200 GB of space, then the first condition is met. However, if a large amount of new data (150 GB) is written to the cache during the warmup process, or if an unexpected large cold query needs to load 150 GB data to the cache, it may result in the eviction of the warmed data.
 
 ## How it works
 
-StarRocks provides the CACHE SELECT syntax to implement Data Cache Warmup. Before using CACHE SELECT, make sure that the Data Cache feature has been enabled.
+StarRocks provides the CACHE SELECT syntax to implement Block Cache Warmup. Before using CACHE SELECT, make sure that the Block Cache feature has been enabled.
 
 Syntax of CACHE SELECT:
 
@@ -28,7 +28,7 @@ FROM [<catalog_name>.][<db_name>.]<table_name> [WHERE <boolean_expression>]
 Parameters:
 
 - `column_name`: The columns to fetch. You can use `*` to fetch all columns in the external table.
-- `catalog_name`: The name of the external catalog, required only when querying external tables in data lakes. If you have switched to the external catalog using SET CATALOG, it can be left unspecified.
+- `catalog_name`: The name of the catalog, default is DEFAULT_CATALOG. If you have switched to the catalog using SET CATALOG, it can be left unspecified.
 - `db_name`: The name of the database. If you have switched to that database, it can be left unspecified.
 - `table_name`: The name of the table from which to fetch data.
 - `boolean_expression`: The filter condition.
@@ -52,10 +52,10 @@ mysql> cache select * from hive_catalog.test_db.lineitem;
 
 Return fields:
 
-- `READ_CACHE_SIZE`: The total size of data read from the data cache by all nodes.
-- `WRITE_CACHE_SIZE`: The total size of data written to the data cache by all nodes.
-- `AVG_WRITE_CACHE_TIME`: The average time taken by each node to write data to the data cache.
-- `TOTAL_CACHE_USAGE`: The space usage of the data cache of the entire cluster after this warmup task is complete. This metric can be used to assess whether the data cache has sufficient space.
+- `READ_CACHE_SIZE`: The total size of data read from the block cache by all nodes.
+- `WRITE_CACHE_SIZE`: The total size of data written to the block cache by all nodes.
+- `AVG_WRITE_CACHE_TIME`: The average time taken by each node to write data to the block cache.
+- `TOTAL_CACHE_USAGE`: The disk space usage of the block cache of the entire cluster after this warmup task is complete. This metric can be used to assess whether the block cache has sufficient space.
 
 ### Warm up specified columns with filter conditions
 
@@ -101,7 +101,7 @@ mysql> cache select * from hive_catalog.test_db.lineitem properties("verbose"="t
 
 In verbose mode,  an extra metric will be returned:
 
-- `AVG_READ_CACHE_TIME`: the average time for each node to read data when data cache is hit.
+- `AVG_READ_CACHE_TIME`: the average time for each node to read data when block cache is hit.
 
 ## Periodic scheduling of CACHE SELECT tasks
 
@@ -156,7 +156,7 @@ DROP TASK <task_name>
 
 ## Use cases
 
-1. During PoC performance testing, if you want to assess StarRocks' performance without interference from external storage systems, you can use the CACHE SELECT statement to load the data of the table to test into the data cache in advance.
+1. During PoC performance testing, if you want to assess StarRocks' performance without interference from external storage systems, you can use the CACHE SELECT statement to load the data of the table to test into the block cache in advance.
 
 2. The business team need to view BI reports at 8 a.m. every morning. To ensure a relatively stable query performance, you can schedule a CACHE SELECT task to start running at 7 a.m. each day.
 
@@ -187,15 +187,15 @@ DROP TASK <task_name>
 
 ## Limits and usage notes
 
-- To use CACHE SELECT, you must first enable the Data Cache feature and have the SELECT privilege on the destination table.
+- To use CACHE SELECT, you must first enable the Block Cache feature and have the SELECT privilege on the destination table.
 - CACHE SELECT supports warming up only a single table and does not support operators like ORDER BY, LIMIT, or GROUP BY.
 - CACHE SELECT can be used in both shared-nothing and shared-data clusters.
 - CACHE SELECT can warm up remote TEXT, ORC, Parquet files.
-- The data warmed up by CACHE SELECT may not be retained in cache forever. The cached data may still be evicted based on the LRU rule of the Data Cache feature.
-  - If you are a data lake user, you can check the remaining capacity of the data cache by using `SHOW BACKENDS\G` or `SHOW COMPUTE NODES\G` to assess whether LRU eviction may occur.
-  - If you are a shared-data cluster user, you can check the data cache usage by viewing the metrics of the shared-data cluster.
+- The data warmed up by CACHE SELECT may not be retained in cache forever. The cached data may still be evicted based on the SLRU rule of the Block Cache feature.
+  - If you are a data lake user, you can check the remaining capacity of the block cache by using `SHOW BACKENDS\G` or `SHOW COMPUTE NODES\G` to assess whether SLRU eviction may occur.
+  - If you are a shared-data cluster user, you can check the block cache usage by viewing the metrics of the shared-data cluster.
 - Currently, the implementation of CACHE SELECT uses the INSERT INTO BLACKHOLE() approach, which warms up the table following the normal query process. Therefore, the performance overhead of CACHE SELECT is similar to that of regular queries. Improvements will be made in the future to enhance the performance.
 
 ## What to expect in later versions
 
-In the future, StarRocks will introduce adaptive Data Cache Warmup to ensure a higher cache hit rate.
+In the future, StarRocks will introduce adaptive Block Cache Warmup to ensure a higher cache hit rate.
