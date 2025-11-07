@@ -1124,6 +1124,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：是否允许自动采集 ARRAY 类型列的 NDV 信息。
 - 引入版本：v4.0
 
+##### enable_predicate_columns_collection
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否启用 Predicate Column 采集。如果禁用，在查询优化期间将不会记录 Predicate Column。
+- 引入版本：-
+
 ##### histogram_buckets_size
 
 - 默认值：64
