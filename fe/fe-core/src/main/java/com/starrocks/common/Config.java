@@ -2100,13 +2100,42 @@ public class Config extends ConfigBase {
     public static boolean enable_temporary_table_statistic_collect = true;
 
     /**
-     * auto statistic collect on first load flag
+     * Controls automatic statistics collection and maintenance triggered by data loading operations.
+     * This includes:
+     * 1. Statistics collection when data is loaded into a partition for the first time (version == 2)
+     * 2. Statistics collection for empty partitions during data loading
+     * 3. Statistics copying/updating for INSERT OVERWRITE operations
+     *
+     * Decision Policy for Statistics Collection Type:
+     * - For INSERT OVERWRITE:
+     *   deltaRatio = |targetRows - sourceRows| / (sourceRows + 1)
+     *   - If deltaRatio < statistic_sample_collect_ratio_threshold_of_first_load: No collection, copy existing stats
+     *   - Else if targetRows > statistic_sample_collect_rows: Use SAMPLE statistics
+     *   - Else: Use FULL statistics
+     *
+     * - For First Load:
+     *   deltaRatio = loadRows / (totalRows + 1)
+     *   - If deltaRatio < statistic_sample_collect_ratio_threshold_of_first_load: No collection
+     *   - Else if loadRows > statistic_sample_collect_rows: Use SAMPLE statistics
+     *   - Else: Use FULL statistics
+     *
+     * Synchronization Behavior:
+     * - DML statements (INSERT/INSERT OVERWRITE): sync=true, useLock=true
+     *   Waits for statistics collection to complete (up to semi_sync_collect_statistic_await_seconds)
+     * - Stream load and broker load: sync=false, useLock=false
+     *   Statistics collection runs asynchronously without blocking the load
+     *
+     * Note: Disabling this will prevent all loading-triggered statistics operations, including
+     * statistics maintenance for INSERT OVERWRITE, which may leave tables without statistics.
      */
     @ConfField(mutable = true)
     public static boolean enable_statistic_collect_on_first_load = true;
 
     /**
-     * max await time for collect statistic for loading
+     * Max await time for semi-sync statistics collection during data loading (DML operations).
+     * This applies to INSERT and INSERT OVERWRITE statements where sync=true.
+     * Stream load and broker load use async mode and are not affected by this setting.
+     * If statistics collection exceeds this timeout, the load continues without waiting.
      */
     @ConfField(mutable = true)
     public static long semi_sync_collect_statistic_await_seconds = 30;
@@ -2289,7 +2318,11 @@ public class Config extends ConfigBase {
     public static int statistic_auto_collect_max_predicate_column_size_on_sample_strategy = 16;
 
     /**
-     * The row number of sample collect, default 20w rows
+     * The row count threshold for deciding between SAMPLE and FULL statistics collection.
+     * Default 200,000 rows (20w).
+     * - If loaded/changed rows > this threshold: Use SAMPLE statistics collection
+     * - If loaded/changed rows <= this threshold: Use FULL statistics collection
+     * Used in conjunction with enable_statistic_collect_on_first_load.
      */
     @ConfField(mutable = true)
     public static long statistic_sample_collect_rows = 200000;
@@ -2307,8 +2340,11 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int statistic_sample_collect_partition_size = 300;
 
-    @ConfField(mutable = true, comment = "If changed ratio of a table/partition is larger than this threshold, " +
-            "we would use sample statistics instead of full statistics")
+    @ConfField(mutable = true, comment = "The change ratio threshold for triggering statistics collection. " +
+            "For INSERT OVERWRITE: deltaRatio = |targetRows - sourceRows| / (sourceRows + 1). " +
+            "For first load: deltaRatio = loadRows / (totalRows + 1). " +
+            "If deltaRatio < this threshold (default 0.1 or 10%), statistics collection is skipped. " +
+            "Used in conjunction with enable_statistic_collect_on_first_load.")
     public static double statistic_sample_collect_ratio_threshold_of_first_load = 0.1;
 
     @ConfField(mutable = true)
