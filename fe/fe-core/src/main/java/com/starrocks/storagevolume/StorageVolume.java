@@ -38,6 +38,7 @@ import com.starrocks.credential.CloudType;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
+import org.apache.solr.common.StringUtils;
 
 import java.io.IOException;
 import java.net.URI;
@@ -80,6 +81,24 @@ public class StorageVolume implements Writable, GsonPostProcessable {
 
     @SerializedName("e")
     private boolean enabled;
+
+    /**
+     * Each storage volume can have a virtual tablet bind to it.
+     * It is used to create a virtual shard in starmgr, and the value's persistence is guaranteed in filestore of starmgr.
+     * The value of `vTabletId` is not -1L if a virtual tablet needed.
+     */
+    @SerializedName("vt")
+    private long vTabletId = -1L;
+
+    /**
+     * Same as `vTabletId`, but it is used to create a virtual shard group in starmgr, and the value's persistence
+     * is also guaranteed in filestore of starmgr.
+     */
+    @SerializedName("vtg")
+    private long vTabletGroupId = -1L;
+
+    public static final String V_SHARD_ID = "v_shard_id";
+    public static final String V_SHARD_GROUP_ID = "v_shard_group_id";
 
     public static String CREDENTIAL_MASK = "******";
 
@@ -166,6 +185,22 @@ public class StorageVolume implements Writable, GsonPostProcessable {
 
     public Boolean getEnabled() {
         return enabled;
+    }
+
+    public long getVTabletId() {
+        return vTabletId;
+    }
+
+    public void setVTabletId(long vTabletId) {
+        this.vTabletId = vTabletId;
+    }
+
+    public long getVTabletGroupId() {
+        return vTabletGroupId;
+    }
+
+    public void setVTabletGroupId(long vTabletGroupId) {
+        this.vTabletGroupId = vTabletGroupId;
     }
 
     public void setComment(String comment) {
@@ -262,20 +297,41 @@ public class StorageVolume implements Writable, GsonPostProcessable {
     }
 
     public FileStoreInfo toFileStoreInfo() {
+        Map<String, String> properties = new HashMap<>();
+        if (vTabletId != -1L) {
+            properties.put(V_SHARD_ID, String.valueOf(vTabletId));
+        }
+        if (vTabletGroupId != -1L) {
+            properties.put(V_SHARD_GROUP_ID, String.valueOf(vTabletGroupId));
+        }
         FileStoreInfo.Builder builder = cloudConfiguration.toFileStoreInfo().toBuilder();
         builder.setFsKey(id)
                 .setFsName(this.name)
                 .setComment(this.comment)
                 .setEnabled(this.enabled)
-                .addAllLocations(locations);
+                .addAllLocations(locations)
+                .putAllProperties(properties);
         return builder.build();
     }
 
     public static StorageVolume fromFileStoreInfo(FileStoreInfo fsInfo) throws DdlException {
         String svt = fsInfo.getFsType().toString();
         Map<String, String> params = getParamsFromFileStoreInfo(fsInfo);
-        return new StorageVolume(fsInfo.getFsKey(), fsInfo.getFsName(), svt,
+        StorageVolume storageVolume = new StorageVolume(fsInfo.getFsKey(), fsInfo.getFsName(), svt,
                 fsInfo.getLocationsList(), params, fsInfo.getEnabled(), fsInfo.getComment());
+
+        Map<String, String> propertiesMap = fsInfo.getPropertiesMap();
+        if (propertiesMap.containsKey(V_SHARD_ID)) {
+            String vTabletId = propertiesMap.get(V_SHARD_ID);
+            storageVolume.setVTabletId(StringUtils.isEmpty(vTabletId) ? -1L : Long.parseLong(vTabletId));
+        }
+        if (propertiesMap.containsKey(V_SHARD_GROUP_ID)) {
+            String vTabletIdGroupId = propertiesMap.get(V_SHARD_GROUP_ID);
+            storageVolume.setVTabletGroupId(
+                    StringUtils.isEmpty(vTabletIdGroupId) ? -1L : Long.parseLong(vTabletIdGroupId));
+        }
+
+        return storageVolume;
     }
 
     public static Map<String, String> getParamsFromFileStoreInfo(FileStoreInfo fsInfo) {
