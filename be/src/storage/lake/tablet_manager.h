@@ -33,6 +33,7 @@
 
 namespace starrocks {
 struct FileInfo;
+struct TabletBasicInfo;
 class Segment;
 class TabletSchemaPB;
 class TCreateTabletReq;
@@ -73,7 +74,7 @@ public:
 
     StatusOr<Tablet> get_tablet(int64_t tablet_id);
 
-    StatusOr<VersionedTablet> get_tablet(int64_t tablet_id, int64_t version);
+    StatusOr<VersionedTablet> get_tablet(int64_t tablet_id, int64_t version, bool fill_cache = true);
 
     StatusOr<CompactionTaskPtr> compact(CompactionTaskContext* context);
 
@@ -163,6 +164,7 @@ public:
     }
 
     std::string tablet_root_location(int64_t tablet_id) const;
+    std::string real_tablet_root_location(int64_t tablet_id) const;
 
     std::string tablet_metadata_root_location(int64_t tablet_id) const;
 
@@ -233,6 +235,11 @@ public:
 
     int64_t get_average_row_size_from_latest_metadata(int64_t tablet_id);
 
+    void get_tablets_basic_info(int64_t table_id, int64_t partition_id, int64_t tablet_id,
+                                const std::set<int64_t>& authorized_table_ids,
+                                const std::unordered_map<int64_t, int64_t>& partition_versions,
+                                std::vector<TabletBasicInfo>& tablet_infos);
+
     void stop();
 
 private:
@@ -250,6 +257,12 @@ private:
     StatusOr<TxnLogPtr> load_txn_log(const std::string& txn_log_location, bool fill_cache);
     StatusOr<CombinedTxnLogPtr> load_combined_txn_log(const std::string& path, bool fill_cache);
     Status corrupted_tablet_meta_handler(const Status& s, const std::string& metadata_location);
+
+#if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
+    StatusOr<TabletBasicInfo> get_tablet_basic_info(int64_t tablet_id, int64_t table_id, int64_t partition_id,
+                                                    const std::set<int64_t>& authorized_table_ids,
+                                                    const std::unordered_map<int64_t, int64_t>& partition_versions);
+#endif // USE_STAROS
 
 private:
     std::shared_ptr<LocationProvider> _location_provider;

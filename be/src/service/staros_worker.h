@@ -68,6 +68,8 @@ public:
 
     std::vector<ShardInfo> shards() const override;
 
+    std::vector<ShardId> shard_ids() const;
+
     // `conf`: a k-v map, provides additional information about the filesystem configuration
     absl::StatusOr<std::shared_ptr<FileSystem>> get_shard_filesystem(ShardId id, const Configuration& conf);
 

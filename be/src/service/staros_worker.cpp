@@ -176,6 +176,17 @@ std::vector<staros::starlet::ShardInfo> StarOSWorker::shards() const {
     return vec;
 }
 
+std::vector<staros::starlet::ShardId> StarOSWorker::shard_ids() const {
+    std::vector<staros::starlet::ShardId> vec;
+    vec.reserve(_shards.size());
+
+    std::shared_lock l(_mtx);
+    for (const auto& shard : _shards) {
+        vec.emplace_back(shard.first);
+    }
+    return vec;
+}
+
 absl::StatusOr<staros::starlet::WorkerInfo> StarOSWorker::worker_info() const {
     staros::starlet::WorkerInfo worker_info;
 
