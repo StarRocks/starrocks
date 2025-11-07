@@ -26,6 +26,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.sql.common.ListPartitionDiffer;
+import com.starrocks.sql.common.PCellSetMapping;
 import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.PartitionDiff;
 import org.apache.logging.log4j.LogManager;
@@ -34,7 +35,6 @@ import org.apache.logging.log4j.Logger;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVPrepare;
 
@@ -66,7 +66,7 @@ public final class MVTimelinessListPartitionArbiter extends MVTimelinessArbiter 
 
         // update mv's to refresh partitions based on base table's partition changes
         MvUpdateInfo mvTimelinessInfo = MvUpdateInfo.partialRefresh(mv, TableProperty.QueryRewriteConsistencyMode.CHECKED);
-        Map<Table, Set<String>> baseChangedPartitionNames;
+        Map<Table, PCellSortedSet> baseChangedPartitionNames;
         try (Timer ignored = Tracers.watchScope("CollectBaseTableUpdatePartitionNames")) {
             baseChangedPartitionNames = collectBaseTableUpdatePartitionNames(refBaseTablePartitionColumns,
                     mvTimelinessInfo);
@@ -97,9 +97,9 @@ public final class MVTimelinessListPartitionArbiter extends MVTimelinessArbiter 
         }
 
         // update into mv's to refresh partitions
-        final Set<String> mvToRefreshPartitionNames = mvTimelinessInfo.getMvToRefreshPartitionNames();
-        mvToRefreshPartitionNames.addAll(diff.getDeletes().getPartitionNames());
-        mvToRefreshPartitionNames.addAll(diff.getAdds().getPartitionNames());
+        final PCellSortedSet mvToRefreshPartitionNames = mvTimelinessInfo.getMvToRefreshPartitionNames();
+        mvToRefreshPartitionNames.addAll(diff.getDeletes());
+        mvToRefreshPartitionNames.addAll(diff.getAdds());
 
         // remove ref base table's deleted partitions from `mvPartitionMap`
         // refresh ref base table's new added partitions
@@ -109,11 +109,11 @@ public final class MVTimelinessListPartitionArbiter extends MVTimelinessArbiter 
 
         mvTimelinessInfo.addMVPartitionNameToCellMap(mvPartitionNameToListMap);
 
-        Map<Table, Map<String, Set<String>>> baseToMvNameRef;
+        Map<Table, PCellSetMapping> baseToMvNameRef;
         try (Timer ignored = Tracers.watchScope("GenerateBaseRefMap")) {
             baseToMvNameRef = differ.generateBaseRefMap(refBaseTablePartitionMap, mvPartitionNameToListMap);
         }
-        Map<String, Map<Table, Set<String>>> mvToBaseNameRef;
+        Map<String, Map<Table, PCellSortedSet>> mvToBaseNameRef;
         try (Timer ignored = Tracers.watchScope("GenerateMvRefMap")) {
             mvToBaseNameRef = differ.generateMvRefMap(mvPartitionNameToListMap, refBaseTablePartitionMap);
         }

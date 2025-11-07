@@ -22,7 +22,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.MvBaseTableUpdateInfo;
 import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
@@ -280,7 +279,7 @@ public final class ExternalTableCompensation extends TableCompensation {
                                           MvUpdateInfo mvUpdateInfo,
                                           Optional<LogicalScanOperator> scanOperatorOpt) {
         MaterializedView mv = mvUpdateInfo.getMv();
-        Set<String> toRefreshPartitionNames = mvUpdateInfo.getBaseTableToRefreshPartitionNames(refBaseTable);
+        PCellSortedSet toRefreshPartitionNames = mvUpdateInfo.getBaseTableToRefreshPartitionNames(refBaseTable);
         if (toRefreshPartitionNames == null) {
             logMVRewrite(mv.getName(), "MV's ref base table {} to refresh partition is null, unknown state",
                     refBaseTable.getName());
@@ -323,14 +322,9 @@ public final class ExternalTableCompensation extends TableCompensation {
      */
     private static MVTransparentState getToRefreshPartitionKeysWithoutPruner(Table refBaseTable,
                                                                              MvUpdateInfo mvUpdateInfo,
-                                                                             Set<String> toRefreshPartitionNames,
+                                                                             PCellSortedSet toRefreshPartitionNames,
                                                                              final List<PRangeCell> toRefreshPartitionKeys) {
-        MvBaseTableUpdateInfo baseTableUpdateInfo = mvUpdateInfo.getBaseTableUpdateInfos().get(refBaseTable);
-        if (baseTableUpdateInfo == null) {
-            return null;
-        }
         // use update info's partition to cells since it's accurate.
-        PCellSortedSet nameToPartitionKeys = baseTableUpdateInfo.getPartitionToCells();
         MaterializedView mv = mvUpdateInfo.getMv();
         Map<Table, List<Column>> refBaseTablePartitionColumns = mv.getRefBaseTablePartitionColumns();
         if (!refBaseTablePartitionColumns.containsKey(refBaseTable)) {
@@ -338,11 +332,7 @@ public final class ExternalTableCompensation extends TableCompensation {
         }
         List<Column> partitionColumns = refBaseTablePartitionColumns.get(refBaseTable);
         try {
-            for (String partitionName : toRefreshPartitionNames) {
-                if (!nameToPartitionKeys.containsName(partitionName)) {
-                    return null;
-                }
-                PCell pCell = nameToPartitionKeys.getPCell(partitionName);
+            for (PCell pCell : toRefreshPartitionNames.getPCells()) {
                 if (pCell instanceof PRangeCell) {
                     toRefreshPartitionKeys.add(((PRangeCell) pCell));
                 } else if (pCell instanceof PListCell) {
@@ -367,7 +357,7 @@ public final class ExternalTableCompensation extends TableCompensation {
      */
     private static MVTransparentState getToRefreshPartitionKeysWithPruner(Table refBaseTable,
                                                                           MaterializedView mv,
-                                                                          Set<String> toRefreshPartitionNames,
+                                                                          PCellSortedSet toRefreshPartitionNames,
                                                                           List<PRangeCell> toRefreshPartitionKeys,
                                                                           LogicalScanOperator scanOperator) {
         // selected partition ids/keys are only set for scan operator that supports partition prune.
@@ -418,13 +408,13 @@ public final class ExternalTableCompensation extends TableCompensation {
         // NOTE: use partition names rather than partition keys since the partition key may be different for null value.
         // if all selected partitions need to refresh, no need to rewrite.
         Set<String> selectPartitionNames = selectPartitionNameToKeys.keySet();
-        if (toRefreshPartitionNames.containsAll(selectPartitionNames)) {
+        if (toRefreshPartitionNames.containsAllNames(selectPartitionNames)) {
             logMVRewrite(mv.getName(), "All external table {}'s selected partitions {} need to refresh, no rewrite",
                     refBaseTable.getName(), selectPartitionKeys);
             return MVTransparentState.NO_REWRITE;
         }
         // filter the selected partitions to refresh.
-        toRefreshPartitionNames.retainAll(selectPartitionNames);
+        toRefreshPartitionNames.retainAllNames(selectPartitionNames);
 
         // if no partition needs to refresh, no need to compensate.
         if (toRefreshPartitionNames.isEmpty()) {
@@ -433,7 +423,7 @@ public final class ExternalTableCompensation extends TableCompensation {
         // only retain the selected partitions to refresh.
         toRefreshPartitionNames
                 .stream()
-                .map(selectPartitionNameToKeys::get)
+                .map(pCell -> selectPartitionNameToKeys.get(pCell.name()))
                 .map(key -> PRangeCell.of(key))
                 .forEach(toRefreshPartitionKeys::add);
         return MVTransparentState.COMPENSATE;

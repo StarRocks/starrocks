@@ -13,7 +13,6 @@
 // limitations under the License.
 package com.starrocks.scheduler.mv.pct;
 
-import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -52,6 +51,9 @@ import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.TableName;
+import com.starrocks.sql.common.PCellSetMapping;
+import com.starrocks.sql.common.PCellSortedSet;
+import com.starrocks.sql.common.PCellUtils;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.Logger;
 
@@ -74,11 +76,11 @@ public class MVPCTRefreshPlanBuilder {
     // record mv's plan builder message to trace push-downed partition names and predicates
     private final Map<String, String> mvPlanBuildMessage = Maps.newLinkedHashMap();
 
-    private void tracePartitionNames(Table table, Set<String> partitionNames) {
-        if (table == null || CollectionUtils.isEmpty(partitionNames)) {
+    private void tracePartitionNames(Table table, PCellSortedSet partitionNames) {
+        if (table == null || PCellUtils.isEmpty(partitionNames)) {
             return;
         }
-        mvPlanBuildMessage.put(table.getName(), Joiner.on(",").join(partitionNames));
+        mvPlanBuildMessage.put(table.getName(), partitionNames.toString());
     }
 
     private void tracePartitionPredicate(Table table, Expr partitionPredicate) {
@@ -111,8 +113,8 @@ public class MVPCTRefreshPlanBuilder {
     }
 
     public InsertStmt analyzeAndBuildInsertPlan(InsertStmt insertStmt,
-                                                Set<String> mvToRefreshedPartitions,
-                                                Map<String, Set<String>> refTableRefreshPartitions,
+                                                PCellSortedSet mvToRefreshedPartitions,
+                                                PCellSetMapping refTableRefreshPartitions,
                                                 ConnectContext ctx) throws AnalysisException {
         Analyzer.analyze(insertStmt, ctx);
         InsertStmt newInsertStmt = buildInsertPlan(insertStmt, mvToRefreshedPartitions, refTableRefreshPartitions, ctx);
@@ -120,8 +122,8 @@ public class MVPCTRefreshPlanBuilder {
     }
 
     private InsertStmt buildInsertPlan(InsertStmt insertStmt,
-                                       Set<String> mvToRefreshedPartitions,
-                                       Map<String, Set<String>> refTableRefreshPartitions,
+                                       PCellSortedSet mvToRefreshedPartitions,
+                                       PCellSetMapping refTableRefreshPartitions,
                                        ConnectContext ctx) throws AnalysisException {
         // if the refTableRefreshPartitions is empty(not partitioned mv), no need to generate partition predicate
         if (refTableRefreshPartitions.isEmpty() || mvToRefreshedPartitions.isEmpty()) {
@@ -158,7 +160,7 @@ public class MVPCTRefreshPlanBuilder {
                 continue;
             }
             // set partition names for ref base table
-            Set<String> tablePartitionNames = refTableRefreshPartitions.get(tblName);
+            PCellSortedSet tablePartitionNames = refTableRefreshPartitions.get(tblName);
             Collection<TableRelation> relations = tableRelations.get(tblName);
             TableRelation tableRelation = relations.iterator().next();
             Table table = tableRelation.getTable();
@@ -273,7 +275,7 @@ public class MVPCTRefreshPlanBuilder {
      * @return the insert statement with partition predicates
      * @throws AnalysisException
      */
-    private InsertStmt generateMVPartitionPredicate(Set<String> mvToRefreshedPartitions,
+    private InsertStmt generateMVPartitionPredicate(PCellSortedSet mvToRefreshedPartitions,
                                                     QueryStatement queryStatement,
                                                     InsertStmt insertStmt)
             throws AnalysisException {
@@ -310,7 +312,7 @@ public class MVPCTRefreshPlanBuilder {
     private boolean pushDownPartitionPredicates(Table table,
                                                 TableRelation tableRelation,
                                                 List<SlotRef> refBaseTablePartitionSlots,
-                                                Set<String> tablePartitionNames,
+                                                PCellSortedSet tablePartitionNames,
                                                 boolean isEnableMVRefreshQueryRewrite) throws AnalysisException {
         if (isEnableMVRefreshQueryRewrite) {
             // When `isEnableMVRefreshQueryRewrite` is true, disable push down partition names into scan node since
@@ -329,16 +331,16 @@ public class MVPCTRefreshPlanBuilder {
 
     private boolean pushDownByPartitionNames(Table table,
                                              TableRelation tableRelation,
-                                             Set<String> tablePartitionNames) {
+                                             PCellSortedSet tablePartitionNames) {
         if (table.isExternalTableWithFileSystem()) {
             return false;
         }
         // external table doesn't support query with partitionNames
         logger.info("Optimize materialized view {} refresh task, push down partition names into table " +
                         "relation {}, filtered partition names:{} ",
-                mv.getName(), tableRelation.getName(), Joiner.on(",").join(tablePartitionNames));
+                mv.getName(), tableRelation.getName(), tablePartitionNames);
         tableRelation.setPartitionNames(
-                new PartitionNames(false, new ArrayList<>(tablePartitionNames)));
+                new PartitionNames(false, new ArrayList<>(tablePartitionNames.getPartitionNames())));
         tracePartitionNames(table, tablePartitionNames);
         return true;
     }
@@ -346,7 +348,7 @@ public class MVPCTRefreshPlanBuilder {
     private boolean pushDownByPredicate(Table table,
                                         TableRelation tableRelation,
                                         List<SlotRef> refBaseTablePartitionSlots,
-                                        Set<String> tablePartitionNames) throws AnalysisException {
+                                        PCellSortedSet tablePartitionNames) throws AnalysisException {
         // generate partition predicate for the select relation, so can generate partition predicates
         // for non-ref base tables.
         // eg:
@@ -470,7 +472,7 @@ public class MVPCTRefreshPlanBuilder {
      * @return
      * @throws AnalysisException
      */
-    private Expr generatePartitionPredicate(Table table, Set<String> tablePartitionNames,
+    private Expr generatePartitionPredicate(Table table, PCellSortedSet tablePartitionNames,
                                             List<Expr> mvPartitionOutputExprs)
             throws AnalysisException {
         if (tablePartitionNames.isEmpty()) {

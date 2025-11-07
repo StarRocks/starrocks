@@ -23,6 +23,8 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.common.PCellSortedSet;
+import com.starrocks.sql.common.PCellUtils;
 import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
@@ -37,7 +39,6 @@ import org.apache.logging.log4j.Logger;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
@@ -68,8 +69,8 @@ public class MVCompensationBuilder {
         if (queryPlanOpt.isPresent()) {
             List<LogicalScanOperator> scanOperators = MvUtils.getScanOperator(queryPlanOpt.get());
             // If no partition to refresh, return directly.
-            Set<String> mvToRefreshPartitionNames = mvUpdateInfo.getMvToRefreshPartitionNames();
-            if (CollectionUtils.isEmpty(mvToRefreshPartitionNames)) {
+            PCellSortedSet mvToRefreshPartitionNames = mvUpdateInfo.getMvToRefreshPartitionNames();
+            if (PCellUtils.isEmpty(mvToRefreshPartitionNames)) {
                 return MVCompensation.noCompensate(sessionVariable);
             }
 
@@ -151,7 +152,7 @@ public class MVCompensationBuilder {
      */
     public TableCompensation getRefBaseTableCompensationByPartitionKeys(Table refBaseTable,
                                                                         Optional<LogicalScanOperator> scanOperatorOpt) {
-        Set<String> toRefreshPartitionNames = mvUpdateInfo.getBaseTableToRefreshPartitionNames(refBaseTable);
+        PCellSortedSet toRefreshPartitionNames = mvUpdateInfo.getBaseTableToRefreshPartitionNames(refBaseTable);
         if (toRefreshPartitionNames == null) {
             return TableCompensation.unknown();
         }

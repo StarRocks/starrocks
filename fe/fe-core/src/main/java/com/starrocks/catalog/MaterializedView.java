@@ -2243,6 +2243,11 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             Preconditions.checkArgument(refBaseTablePartitionSlotsOpt.isPresent() &&
                     !refBaseTablePartitionSlotsOpt.get().isEmpty(), String.format("Ref base table " +
                     "partition column slots should not be empty:%s", refBaseTablePartitionSlotsOpt));
+            LOG.info("Materialized view {} ref base table partition columns: {}, exprs: {}, slots: {}",
+                    name, refBaseTablePartitionColumnsOpt.get(),
+                    refBaseTablePartitionExprsOpt.get(), refBaseTablePartitionSlotsOpt.get());
+        } else {
+            LOG.info("Materialized view {} is un-partitioned", name);
         }
     }
 

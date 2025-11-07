@@ -19,6 +19,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
@@ -78,7 +79,7 @@ public final class OlapTableCompensation extends TableCompensation {
                                           MvUpdateInfo mvUpdateInfo,
                                           Optional<LogicalScanOperator> scanOperatorOpt) {
         MaterializedView mv = mvUpdateInfo.getMv();
-        Set<String> toRefreshPartitionNames = mvUpdateInfo.getBaseTableToRefreshPartitionNames(refBaseTable);
+        PCellSortedSet toRefreshPartitionNames = mvUpdateInfo.getBaseTableToRefreshPartitionNames(refBaseTable);
         if (toRefreshPartitionNames == null) {
             logMVRewrite(mv.getName(), "MV's ref base table {} to refresh partition is null, unknown state",
                     refBaseTable.getName());
@@ -102,18 +103,18 @@ public final class OlapTableCompensation extends TableCompensation {
                     .map(p -> p.getName())
                     .collect(Collectors.toSet());
             // if all selected partitions need to refresh, no need to rewrite.
-            if (toRefreshPartitionNames.containsAll(selectedPartitionNames)) {
+            if (toRefreshPartitionNames.containsAllNames(selectedPartitionNames)) {
                 return TableCompensation.noRewrite();
             }
             // only retain the selected partitions to refresh.
-            toRefreshPartitionNames.retainAll(selectedPartitionNames);
+            toRefreshPartitionNames.retainAllNames(selectedPartitionNames);
         }
         // if no partition need to refresh, no need to compensate.
         if (toRefreshPartitionNames.isEmpty()) {
             return TableCompensation.noCompensation();
         }
         List<Long> refTablePartitionIdsToRefresh = toRefreshPartitionNames.stream()
-                .map(name -> refBaseTable.getPartition(name))
+                .map(pCell -> refBaseTable.getPartition(pCell.name()))
                 .filter(Objects::nonNull)
                 .map(p -> p.getId())
                 .collect(Collectors.toList());

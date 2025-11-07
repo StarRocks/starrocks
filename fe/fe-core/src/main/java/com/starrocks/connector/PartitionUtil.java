@@ -22,7 +22,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
-import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HivePartitionKey;
@@ -54,6 +53,7 @@ import com.starrocks.sql.common.PCellWithName;
 import com.starrocks.sql.common.PListCell;
 import com.starrocks.sql.common.PRangeCell;
 import com.starrocks.sql.common.PartitionDiff;
+import com.starrocks.sql.common.PartitionNameSetMap;
 import com.starrocks.sql.common.RangePartitionDiffer;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.common.UnsupportedException;
@@ -75,6 +75,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -377,7 +378,7 @@ public class PartitionUtil {
     }
 
     public static PCellSortedSet getMVPartitionNameWithRange(Table table, Column partitionColumn,
-                                                             List<String> partitionNames,
+                                                             Collection<String> partitionNames,
                                                              Expr partitionExpr) throws AnalysisException {
         if (table.isHiveTable() || table.isHudiTable() || table.isIcebergTable() || table.isPaimonTable()) {
             PCellSortedSet rangeMap =
@@ -401,9 +402,9 @@ public class PartitionUtil {
      *   partitionName1 : par_col=0/par_date=2020-01-01 => p20200101
      *   partitionName2 : par_col=1/par_date=2020-01-01 => p20200101
      */
-    public static Map<String, Set<String>> getMVPartitionNameMapOfExternalTable(Table table,
-                                                                                List<Column> refPartitionColumns,
-                                                                                List<String> partitionNames)
+    public static PartitionNameSetMap getMVPartitionNameMapOfExternalTable(Table table,
+                                                                           List<Column> refPartitionColumns,
+                                                                           List<String> partitionNames)
             throws AnalysisException {
         List<Column> partitionColumns = getPartitionColumns(table);
         // Get the index of partitionColumn when table has multi partition columns.
@@ -412,7 +413,7 @@ public class PartitionUtil {
             partitionColumnIdxes.add(checkAndGetPartitionColumnIndex(partitionColumns, refPartitionColumn));
         }
 
-        Map<String, Set<String>> mvPartitionKeySetMap = Maps.newHashMap();
+        PartitionNameSetMap mvPartitionKeySetMap = PartitionNameSetMap.of();
         if (table.isJDBCTable()) {
             for (String partitionName : partitionNames) {
                 PartitionKey partitionKey = createPartitionKey(
@@ -422,8 +423,7 @@ public class PartitionUtil {
                         partitionColumnIdxes.stream().map(partitionColumns::get).collect(Collectors.toList()),
                         table);
                 String mvPartitionName = generateMVPartitionName(partitionKey);
-                mvPartitionKeySetMap.computeIfAbsent(mvPartitionName, x -> Sets.newHashSet())
-                        .add(partitionName);
+                mvPartitionKeySetMap.put(mvPartitionName, partitionName);
             }
         } else {
             for (String partitionName : partitionNames) {
@@ -433,8 +433,7 @@ public class PartitionUtil {
                         partitionColumnIdxes.stream().map(partitionColumns::get).collect(Collectors.toList()),
                         table);
                 String mvPartitionName = generateMVPartitionName(partitionKey);
-                mvPartitionKeySetMap.computeIfAbsent(mvPartitionName, x -> Sets.newHashSet())
-                        .add(partitionName);
+                mvPartitionKeySetMap.put(mvPartitionName, partitionName);
             }
         }
         return mvPartitionKeySetMap;
@@ -483,7 +482,7 @@ public class PartitionUtil {
      */
     public static PCellSortedSet getRangePartitionMapOfExternalTable(Table table,
                                                                      Column partitionColumn,
-                                                                     List<String> partitionNames,
+                                                                     Collection<String> partitionNames,
                                                                      Expr partitionExpr)
             throws AnalysisException {
         List<Column> partitionColumns = getPartitionColumns(table);
@@ -551,7 +550,7 @@ public class PartitionUtil {
      */
     public static PCellSortedSet getRangePartitionMapOfJDBCTable(Table table,
                                                                  Column partitionColumn,
-                                                                 List<String> partitionNames,
+                                                                 Collection<String> partitionNames,
                                                                  Expr partitionExpr)
             throws AnalysisException {
 
@@ -712,7 +711,7 @@ public class PartitionUtil {
      */
     public static PCellSortedSet getMVPartitionToCells(Table table,
                                                        List<Column> refPartitionColumns,
-                                                       List<String> partitionNames)
+                                                       Collection<String> partitionNames)
             throws AnalysisException {
         PCellSortedSet partitionListMap = PCellSortedSet.of();
         List<Column> partitionColumns = getPartitionColumns(table);

@@ -306,7 +306,7 @@ public class MVPartitionExprResolverTest extends MVTestBase {
                     MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
                     Assertions.assertEquals(Sets.newHashSet("p202202_202203"),
                             processor.getMVTaskRunExtraMessage().getMvPartitionsToRefresh());
-                    Assertions.assertEquals("{tbl15=[p20220202, p20220201], tbl16=[p20220202, p20220201]}",
+                    Assertions.assertEquals("{tbl15=[p20220201, p20220202], tbl16=[p20220201, p20220202]}",
                             processor.getMVTaskRunExtraMessage().getRefBasePartitionsToRefreshMap().toString());
                 });
     }
@@ -356,7 +356,7 @@ public class MVPartitionExprResolverTest extends MVTestBase {
                         // 3. tbl15's associated partitions are p20220201 and p20220202
                         Assertions.assertEquals(Sets.newHashSet("p20220202", "p20220201"),
                                 processor.getMVTaskRunExtraMessage().getMvPartitionsToRefresh());
-                        Assertions.assertEquals("{tbl15=[p20220202, p20220201], tbl16=[p20220202, p20220201]}",
+                        Assertions.assertEquals("{tbl15=[p20220201, p20220202], tbl16=[p20220201, p20220202]}",
                                 processor.getMVTaskRunExtraMessage().getRefBasePartitionsToRefreshMap().toString());
                     }
                 });
@@ -457,7 +457,7 @@ public class MVPartitionExprResolverTest extends MVTestBase {
                     MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
                     Assertions.assertEquals(Sets.newHashSet("p202202_202203"),
                             processor.getMVTaskRunExtraMessage().getMvPartitionsToRefresh());
-                    Assertions.assertEquals("{tbl15=[p20220202, p20220201]}",
+                    Assertions.assertEquals("{tbl15=[p20220201, p20220202]}",
                             processor.getMVTaskRunExtraMessage().getRefBasePartitionsToRefreshMap().toString());
                 });
     }

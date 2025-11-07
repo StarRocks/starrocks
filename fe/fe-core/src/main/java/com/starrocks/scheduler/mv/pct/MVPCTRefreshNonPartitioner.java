@@ -31,7 +31,6 @@ import com.starrocks.sql.common.PCellWithName;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 public final class MVPCTRefreshNonPartitioner extends MVPCTRefreshPartitioner {
@@ -54,7 +53,7 @@ public final class MVPCTRefreshNonPartitioner extends MVPCTRefreshPartitioner {
     }
 
     @Override
-    public Expr generatePartitionPredicate(Table table, Set<String> refBaseTablePartitionNames,
+    public Expr generatePartitionPredicate(Table table, PCellSortedSet refBaseTablePartitionNames,
                                            List<Expr> mvPartitionSlotRefs) {
         // do nothing
         return null;
@@ -63,7 +62,7 @@ public final class MVPCTRefreshNonPartitioner extends MVPCTRefreshPartitioner {
 
     @Override
     public Expr generateMVPartitionPredicate(TableName tableName,
-                                             Set<String> mvPartitionNames) throws AnalysisException {
+                                             PCellSortedSet mvPartitionNames) throws AnalysisException {
         return null;
     }
 

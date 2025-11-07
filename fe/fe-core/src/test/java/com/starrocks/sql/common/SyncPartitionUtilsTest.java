@@ -126,8 +126,8 @@ public class SyncPartitionUtilsTest extends StarRocksTestBase {
         return SyncPartitionUtils.getRangePartitionDiffOfSlotRef(srcRangeSet, dstRangeSet, null);
     }
 
-    private static Map<String, Set<String>> getIntersectedPartitions(Map<String, Range<PartitionKey>> srcRangeMap,
-                                                                     Map<String, Range<PartitionKey>> dstRangeMap) {
+    private static PartitionNameSetMap getIntersectedPartitions(Map<String, Range<PartitionKey>> srcRangeMap,
+                                                                Map<String, Range<PartitionKey>> dstRangeMap) {
         PCellSortedSet srcRangeSet = toPCellSortedSet(srcRangeMap);
         PCellSortedSet dstRangeSet = toPCellSortedSet(dstRangeMap);
         return SyncPartitionUtils.getIntersectedPartitions(srcRangeSet, dstRangeSet);
@@ -155,7 +155,7 @@ public class SyncPartitionUtilsTest extends StarRocksTestBase {
         dstRangeMap.put("p202011_202012", createRange("2020-11-01", "2020-12-01"));
         dstRangeMap.put("p202012_202101", createRange("2020-12-01", "2021-01-01"));
 
-        Map<String, Set<String>> partitionRefMap = getIntersectedPartitions(srcRangeMap, dstRangeMap);
+        PartitionNameSetMap partitionRefMap = getIntersectedPartitions(srcRangeMap, dstRangeMap);
 
         Assertions.assertTrue(partitionRefMap.get("p20201015_20201115").contains("p202010_202011"));
         Assertions.assertTrue(partitionRefMap.get("p20201015_20201115").contains("p202011_202012"));
@@ -196,7 +196,7 @@ public class SyncPartitionUtilsTest extends StarRocksTestBase {
         dstRangeMap.put("p202011_202012", createRange("2020-11-01", "2020-12-01"));
         dstRangeMap.put("p202012_202101", createRange("2020-12-01", "2021-01-01"));
 
-        Map<String, Set<String>> partitionRefMap = getIntersectedPartitions(srcRangeMap, dstRangeMap);
+        PartitionNameSetMap partitionRefMap = getIntersectedPartitions(srcRangeMap, dstRangeMap);
 
         Assertions.assertEquals(1, partitionRefMap.get("p202010_202011").size());
         Assertions.assertEquals(1, partitionRefMap.get("p202011_202012").size());
@@ -784,14 +784,14 @@ public class SyncPartitionUtilsTest extends StarRocksTestBase {
         );
         PCellSortedSet srcSet = PCellSortedSet.of(srcs);
         PCellSortedSet dstSet = PCellSortedSet.of(dsts);
-        Map<String, Set<String>> res = SyncPartitionUtils.getIntersectedPartitions(srcSet, dstSet);
+        PartitionNameSetMap res = SyncPartitionUtils.getIntersectedPartitions(srcSet, dstSet);
         Assertions.assertEquals(
                 ImmutableMap.of(
                         "p20230801", ImmutableSet.of("p000101_202308"),
                         "p20230802", ImmutableSet.of("p202308_202309"),
                         "p20230803", ImmutableSet.of("p202308_202309")
                 ),
-                res);
+                res.getBasePartitionsToRefreshMap());
     }
 
     @Test
@@ -853,7 +853,7 @@ public class SyncPartitionUtilsTest extends StarRocksTestBase {
             // WEEK
             Pair<String, String> result = getDateTruncFuncTransform(baseRange, "WEEK");
             Assertions.assertEquals("2019-12-30 00:00:00", result.first);
-            Assertions.assertEquals("2020-01-09 00:00:00", result.second);
+            Assertions.assertEquals("2020-01-06 00:00:00", result.second);
         }
 
         {
@@ -966,7 +966,7 @@ public class SyncPartitionUtilsTest extends StarRocksTestBase {
         srcRangeMap.put("p202001", createRange("2020-01-01", "2020-02-01"));
         Map<String, Range<PartitionKey>> dstRangeMap = Maps.newHashMap();
         dstRangeMap.put("p202002", createRange("2020-02-01", "2020-03-01"));
-        Map<String, Set<String>> partitionRefMap = getIntersectedPartitions(srcRangeMap, dstRangeMap);
+        PartitionNameSetMap partitionRefMap = getIntersectedPartitions(srcRangeMap, dstRangeMap);
         Assertions.assertTrue(partitionRefMap.get("p202001").isEmpty());
     }
 
@@ -978,7 +978,7 @@ public class SyncPartitionUtilsTest extends StarRocksTestBase {
         Map<String, Range<PartitionKey>> dstRangeMap = Maps.newHashMap();
         dstRangeMap.put("p202001", createRange("2020-01-01", "2020-02-01"));
 
-        Map<String, Set<String>> partitionRefMap = getIntersectedPartitions(srcRangeMap, dstRangeMap);
+        PartitionNameSetMap partitionRefMap = getIntersectedPartitions(srcRangeMap, dstRangeMap);
 
         Assertions.assertEquals(1, partitionRefMap.size());
         Assertions.assertTrue(partitionRefMap.get("p202001").contains("p202001"));
