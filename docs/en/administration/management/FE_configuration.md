@@ -1842,7 +1842,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Unit: Seconds
 - Is mutable: Yes
 - Description: The metadata retention time for the partition that is dropped by INSERT OVERWRITE or materialized view refresh operations. Note that such metadata cannot be recovered by executing [RECOVER](../../sql-reference/sql-statements/backup_restore/RECOVER.md).
-- Introduced in: 3.5.8
+- Introduced in: v3.5.8
 
 ##### check_consistency_default_timeout_second
 

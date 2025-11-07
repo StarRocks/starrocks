@@ -1777,7 +1777,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 単位: 秒
 - 変更可能: はい
 - 説明: INSERT OVERWRITE またはマテリアライズドビューのリフレッシュ操作によって削除されるパーティションのメタデータ保持期間。このようなメタデータは、[RECOVER](../../sql-reference/sql-statements/backup_restore/RECOVER.md) を実行しても復元できないことに注意してください。
-- 導入バージョン: -
+- 導入バージョン: v3.5.8
 
 ##### check_consistency_default_timeout_second
 
