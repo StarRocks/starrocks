@@ -16,7 +16,7 @@ package com.starrocks.statistic.sample;
 
 import com.starrocks.common.Config;
 import com.starrocks.sql.plan.PlanTestBase;
-import com.starrocks.type.Type;
+import com.starrocks.type.CharType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -34,7 +34,7 @@ class PrimitiveTypeColumnStatsTest extends PlanTestBase {
             "GEE|IFNULL(COUNT(1) + 9 * SUM(IF(t1.count = 1, 1, 0)), COUNT(1))"
     })
     public void getDistinctCount(String estimator, String expectedQuery) {
-        PrimitiveTypeColumnStats c1 = new PrimitiveTypeColumnStats("c1", Type.CHAR);
+        PrimitiveTypeColumnStats c1 = new PrimitiveTypeColumnStats("c1", CharType.CHAR);
         final double sampleRatio = 0.01;
 
         Config.statistics_sample_ndv_estimator = estimator;

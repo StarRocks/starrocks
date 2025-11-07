@@ -39,7 +39,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
 import org.roaringbitmap.RoaringBitmap;
 
 import java.util.Collection;
@@ -986,7 +986,7 @@ public class CPJoinGardener extends OptExpressionVisitor<Boolean, Void> {
                 }
             });
             if (newColRefMap.isEmpty()) {
-                newColRefMap.put(columnRefFactory.create("auto_fill_col", Type.TINYINT, false),
+                newColRefMap.put(columnRefFactory.create("auto_fill_col", IntegerType.TINYINT, false),
                         ConstantOperator.createTinyInt((byte) 1));
             }
             LogicalProjectOperator newOperator = LogicalProjectOperator.builder()

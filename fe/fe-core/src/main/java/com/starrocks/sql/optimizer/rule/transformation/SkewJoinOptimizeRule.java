@@ -55,6 +55,9 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.type.ArrayType;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.NullType;
 import com.starrocks.type.Type;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -294,7 +297,7 @@ public class SkewJoinOptimizeRule extends TransformationRule {
                 randFn);
 
         Function multiplyFn =
-                ExprUtils.getBuiltinFunction(FunctionSet.MULTIPLY, new Type[] {randFn.getReturnType(), Type.INT},
+                ExprUtils.getBuiltinFunction(FunctionSet.MULTIPLY, new Type[] {randFn.getReturnType(), IntegerType.INT},
                         Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         int randRange = context.getSessionVariable().getSkewJoinRandRange();
         CallOperator multiplyFnOperator = new CallOperator(FunctionSet.MULTIPLY, randFn.getReturnType(),
@@ -309,7 +312,7 @@ public class SkewJoinOptimizeRule extends TransformationRule {
 
         List<ScalarOperator> inPredicateArgs = Lists.newArrayList();
         inPredicateArgs.add(skewColumn);
-        skewValues.remove(ConstantOperator.createNull(Type.NULL));
+        skewValues.remove(ConstantOperator.createNull(NullType.NULL));
         inPredicateArgs.addAll(skewValues);
         InPredicateOperator inPredicateOperator = new InPredicateOperator(false, inPredicateArgs);
 
@@ -338,10 +341,10 @@ public class SkewJoinOptimizeRule extends TransformationRule {
         ColumnRefFactory columnRefFactory = context.getColumnRefFactory();
         // create empty value node with project
         List<ColumnRefOperator> valuesOutputColumns = Lists.newArrayList();
-        valuesOutputColumns.add(columnRefFactory.create("", Type.NULL, true));
+        valuesOutputColumns.add(columnRefFactory.create("", NullType.NULL, true));
         List<List<ScalarOperator>> values = new ArrayList<>();
         List<ScalarOperator> valuesRow = Lists.newArrayList();
-        valuesRow.add(ConstantOperator.createNull(Type.NULL));
+        valuesRow.add(ConstantOperator.createNull(NullType.NULL));
         values.add(valuesRow);
 
         LogicalValuesOperator valuesOperator = new LogicalValuesOperator(valuesOutputColumns, values);
@@ -381,9 +384,9 @@ public class SkewJoinOptimizeRule extends TransformationRule {
         int skewRandRange = context.getSessionVariable().getSkewJoinRandRange();
 
         Map<ColumnRefOperator, ScalarOperator> generateSeriesChildProjectMap = Maps.newHashMap();
-        generateSeriesChildProjectMap.put(columnRefFactory.create("0", Type.BIGINT, false),
+        generateSeriesChildProjectMap.put(columnRefFactory.create("0", IntegerType.BIGINT, false),
                 ConstantOperator.createBigint(0));
-        generateSeriesChildProjectMap.put(columnRefFactory.create(String.valueOf(skewRandRange), Type.BIGINT, false),
+        generateSeriesChildProjectMap.put(columnRefFactory.create(String.valueOf(skewRandRange), IntegerType.BIGINT, false),
                 ConstantOperator.createBigint(skewRandRange));
         unnestProjectMap.putAll(generateSeriesChildProjectMap);
         OptExpression unnestProjectOpt = OptExpression.create(new LogicalProjectOperator(unnestProjectMap),
@@ -391,9 +394,9 @@ public class SkewJoinOptimizeRule extends TransformationRule {
 
         // create table function, generate series using unnest output
         TableFunction generateSeriesFn = (TableFunction) ExprUtils.getBuiltinFunction("generate_series",
-                new Type[] {Type.BIGINT, Type.BIGINT}, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+                new Type[] {IntegerType.BIGINT, IntegerType.BIGINT}, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         List<ColumnRefOperator> generateSeriesOutputColumns = Lists.newArrayList();
-        generateSeriesOutputColumns.add(columnRefFactory.create("generate_serials", Type.BIGINT, true));
+        generateSeriesOutputColumns.add(columnRefFactory.create("generate_serials", IntegerType.BIGINT, true));
         List<Pair<ColumnRefOperator, ScalarOperator>> generateSeriesChildProjectPairs = Lists.newArrayList();
         for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : generateSeriesChildProjectMap.entrySet()) {
             generateSeriesChildProjectPairs.add(Pair.create(entry.getKey(), entry.getValue()));
@@ -446,7 +449,7 @@ public class SkewJoinOptimizeRule extends TransformationRule {
                         java.util.function.Function.identity(), java.util.function.Function.identity()));
 
         Function ifFn = ExprUtils.getBuiltinFunction(FunctionSet.IF,
-                new Type[] {Type.BOOLEAN, generateSeriesColumn.getType(), Type.BIGINT},
+                new Type[] {BooleanType.BOOLEAN, generateSeriesColumn.getType(), IntegerType.BIGINT},
                 Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
 
         List<ScalarOperator> args = Lists.newArrayList();

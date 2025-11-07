@@ -92,7 +92,9 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.thrift.TBrokerScanRangeParams;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TOpType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.Type;
+import com.starrocks.type.VarcharType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -538,8 +540,8 @@ public class Load {
                     if (tblColumn != null) {
                         if (pathColumns.contains(columnName) || exprArgsColumns.contains(columnName)) {
                             // columns from path or columns in expr args should be parsed as varchar type
-                            slotDesc.setType(Type.VARCHAR);
-                            slotDesc.setColumn(new Column(columnName, Type.VARCHAR));
+                            slotDesc.setType(VarcharType.VARCHAR);
+                            slotDesc.setColumn(new Column(columnName, VarcharType.VARCHAR));
                             varcharColumns.add(columnName);
                         } else {
                             // in vectorized load:
@@ -553,12 +555,12 @@ public class Load {
                         // columns:pk,col1,col2,__op equals to columns:srccol0,srccol1,srccol2,srccol3,pk=srccol0,col1=srccol1,col2=srccol2,__op=srccol3
                         // columns:pk,__op,col1,col2 equals to columns:srccol0,srccol1,srccol2,srccol3,pk=srccol0,__op=srccol1,col1=srccol2,col2=srccol3
                         // columns:__op,pk,col1,col2 equals to columns:srccol0,srccol1,srccol2,srccol3,__op=srccol0,pk=srccol1,col1=srccol2,col2=srccol3
-                        slotDesc.setType(Type.TINYINT);
-                        slotDesc.setColumn(new Column(columnName, Type.TINYINT));
+                        slotDesc.setType(IntegerType.TINYINT);
+                        slotDesc.setColumn(new Column(columnName, IntegerType.TINYINT));
                         slotDesc.setIsMaterialized(true);
                     } else {
-                        slotDesc.setType(Type.VARCHAR);
-                        slotDesc.setColumn(new Column(columnName, Type.VARCHAR));
+                        slotDesc.setType(VarcharType.VARCHAR);
+                        slotDesc.setColumn(new Column(columnName, VarcharType.VARCHAR));
                         // Will check mapping expr has this slot or not later
                         slotDesc.setIsMaterialized(false);
                     }
@@ -566,8 +568,8 @@ public class Load {
                     // dest table column is not null
                     slotDesc.setIsNullable(true);
                 } else {
-                    slotDesc.setType(Type.VARCHAR);
-                    slotDesc.setColumn(new Column(columnName, Type.VARCHAR));
+                    slotDesc.setType(VarcharType.VARCHAR);
+                    slotDesc.setColumn(new Column(columnName, VarcharType.VARCHAR));
                     // ISSUE A: src slot should be nullable even if the column is not nullable.
                     // because src slot is what we read from file, not represent to real column value.
                     // If column is not nullable, error will be thrown when filling the dest slot,
@@ -846,7 +848,7 @@ public class Load {
                 // the expression in expression list instead of column list.
                 if (slotDesc == null || exprsByName.get(slot.getColumnName()) != null) {
                     Expr replaceExpr = exprsByName.get(slot.getColumnName());
-                    if (replaceExpr.getType().matchesType(Type.VARCHAR) &&
+                    if (replaceExpr.getType().matchesType(VarcharType.VARCHAR) &&
                             !replaceExpr.getType().matchesType(slot.getType())) {
                         replaceExpr = replaceExpr.castTo(slot.getType());
                     }
@@ -855,7 +857,7 @@ public class Load {
                     SlotRef slotRef = new SlotRef(slotDesc);
                     slotRef.setColumnName(slot.getColumnName());
                     Expr replaceExpr = slotRef;
-                    if (replaceExpr.getType().matchesType(Type.VARCHAR) &&
+                    if (replaceExpr.getType().matchesType(VarcharType.VARCHAR) &&
                             !replaceExpr.getType().matchesType(slot.getType())) {
                         replaceExpr = replaceExpr.castTo(slot.getType());
                     }
@@ -997,7 +999,7 @@ public class Load {
                             }
                         } else if (defaultValueType == Column.DefaultValueType.NULL) {
                             if (column.isAllowNull()) {
-                                exprs.add(NullLiteral.create(Type.VARCHAR));
+                                exprs.add(NullLiteral.create(VarcharType.VARCHAR));
                             } else {
                                 throw new StarRocksException("Column(" + columnName + ") has no default value.");
                             }
@@ -1024,7 +1026,7 @@ public class Load {
                             }
                         } else if (defaultValueType == Column.DefaultValueType.NULL) {
                             if (column.isAllowNull()) {
-                                innerIfExprs.add(NullLiteral.create(Type.VARCHAR));
+                                innerIfExprs.add(NullLiteral.create(VarcharType.VARCHAR));
                             } else {
                                 throw new StarRocksException("Column(" + columnName + ") has no default value.");
                             }
@@ -1032,7 +1034,7 @@ public class Load {
                     }
                     FunctionCallExpr innerIfFn = new FunctionCallExpr("if", innerIfExprs);
                     exprs.add(innerIfFn);
-                    exprs.add(NullLiteral.create(Type.VARCHAR));
+                    exprs.add(NullLiteral.create(VarcharType.VARCHAR));
                 }
 
                 LOG.debug("replace_value expr: {}", exprs);

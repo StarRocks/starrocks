@@ -44,6 +44,12 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.RangePartitionDesc;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.JsonType;
+import com.starrocks.type.NullType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
 import org.json.JSONException;
@@ -118,7 +124,7 @@ public class EsUtil {
         for (String columnName : properties.keySet()) {
             JSONObject columnAttr = (JSONObject) properties.get(columnName);
             // default set json.
-            Type type = Type.JSON;
+            Type type = JsonType.JSON;
             if (columnAttr.has("type")) {
                 type = convertType(columnAttr.get("type").toString());
             }
@@ -134,31 +140,31 @@ public class EsUtil {
     public static Type convertType(String esType) {
         switch (esType) {
             case "null":
-                return Type.NULL;
+                return NullType.NULL;
             case "boolean":
-                return Type.BOOLEAN;
+                return BooleanType.BOOLEAN;
             case "byte":
-                return Type.TINYINT;
+                return IntegerType.TINYINT;
             case "short":
-                return Type.SMALLINT;
+                return IntegerType.SMALLINT;
             case "integer":
-                return Type.INT;
+                return IntegerType.INT;
             case "long":
-                return Type.BIGINT;
+                return IntegerType.BIGINT;
             case "unsigned_long":
-                return Type.LARGEINT;
+                return IntegerType.LARGEINT;
             case "float":
             case "half_float":
-                return Type.FLOAT;
+                return FloatType.FLOAT;
             case "double":
             case "scaled_float":
-                return Type.DOUBLE;
+                return FloatType.DOUBLE;
             //TODO
             case "date":
-                return Type.DATETIME;
+                return DateType.DATETIME;
             case "nested":
             case "object":
-                return Type.JSON;
+                return JsonType.JSON;
             case "keyword":
             case "text":
             case "ip":

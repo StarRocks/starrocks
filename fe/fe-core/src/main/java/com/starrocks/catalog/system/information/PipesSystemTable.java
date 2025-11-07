@@ -18,7 +18,8 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.thrift.TSchemaTableType;
-import com.starrocks.type.ScalarType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.TypeFactory;
 
 public class PipesSystemTable {
@@ -28,14 +29,14 @@ public class PipesSystemTable {
         return new SystemTable(SystemId.PIPES_ID, NAME, Table.TableType.SCHEMA,
                 SystemTable.builder()
                         .column("DATABASE_NAME", TypeFactory.createVarcharType(SystemTable.NAME_CHAR_LEN))
-                        .column("PIPE_ID", ScalarType.BIGINT)
+                        .column("PIPE_ID", IntegerType.BIGINT)
                         .column("PIPE_NAME", TypeFactory.createVarcharType(SystemTable.NAME_CHAR_LEN))
                         .column("PROPERTIES", TypeFactory.createVarcharType(1024))
                         .column("STATE", TypeFactory.createVarcharType(8))
                         .column("TABLE_NAME", TypeFactory.createVarcharType(SystemTable.NAME_CHAR_LEN))
                         .column("LOAD_STATUS", TypeFactory.createVarcharType(SystemTable.NAME_CHAR_LEN))
                         .column("LAST_ERROR", TypeFactory.createVarcharType(SystemTable.NAME_CHAR_LEN))
-                        .column("CREATED_TIME", ScalarType.DATETIME)
+                        .column("CREATED_TIME", DateType.DATETIME)
                         .build(),
                 TSchemaTableType.SCH_PIPES);
     }

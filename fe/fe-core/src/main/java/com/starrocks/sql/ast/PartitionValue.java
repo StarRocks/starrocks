@@ -20,6 +20,7 @@ import com.starrocks.common.util.DateUtils;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.DateType;
 import com.starrocks.type.Type;
 
 import java.time.LocalDate;
@@ -74,8 +75,8 @@ public class PartitionValue implements ParseNode {
                     return LiteralExpr.create(value, type);
                 } catch (AnalysisException ex) {
                     // partition value allowed DATETIME type like DATE
-                    LiteralExpr literalExpr = LiteralExpr.create(value, Type.DATE);
-                    literalExpr.setType(Type.DATETIME);
+                    LiteralExpr literalExpr = LiteralExpr.create(value, DateType.DATE);
+                    literalExpr.setType(DateType.DATETIME);
                     return literalExpr;
                 }
             } else {

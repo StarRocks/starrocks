@@ -50,7 +50,12 @@ import com.starrocks.thrift.TCompactionStrategy;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TStorageMedium;
-import com.starrocks.type.Type;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.HLLType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.JsonType;
+import com.starrocks.type.VarcharType;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
@@ -69,10 +74,10 @@ public class PropertyAnalyzerTest {
     @Test
     public void testBfColumns() throws AnalysisException {
         List<Column> columns = Lists.newArrayList();
-        columns.add(new Column("k1", Type.INT));
-        columns.add(new Column("k2", Type.TINYINT));
-        columns.add(new Column("v1", Type.VARCHAR, false, AggregateType.REPLACE, "", ""));
-        columns.add(new Column("v2", Type.BIGINT, false, AggregateType.SUM, "0", ""));
+        columns.add(new Column("k1", IntegerType.INT));
+        columns.add(new Column("k2", IntegerType.TINYINT));
+        columns.add(new Column("v1", VarcharType.VARCHAR, false, AggregateType.REPLACE, "", ""));
+        columns.add(new Column("v2", IntegerType.BIGINT, false, AggregateType.SUM, "0", ""));
         columns.get(0).setIsKey(true);
         columns.get(1).setIsKey(true);
 
@@ -96,13 +101,13 @@ public class PropertyAnalyzerTest {
     @Test
     public void testBfColumnsError() {
         List<Column> columns = Lists.newArrayList();
-        columns.add(new Column("k1", Type.INT));
-        columns.add(new Column("k2", Type.TINYINT));
-        columns.add(new Column("k3", Type.BOOLEAN));
-        columns.add(new Column("v1", Type.VARCHAR, false, AggregateType.REPLACE, "", ""));
-        columns.add(new Column("v2", Type.BIGINT, false, AggregateType.SUM, "0", ""));
-        columns.add(new Column("kjson", Type.JSON));
-        columns.add(new Column("khll", Type.HLL));
+        columns.add(new Column("k1", IntegerType.INT));
+        columns.add(new Column("k2", IntegerType.TINYINT));
+        columns.add(new Column("k3", BooleanType.BOOLEAN));
+        columns.add(new Column("v1", VarcharType.VARCHAR, false, AggregateType.REPLACE, "", ""));
+        columns.add(new Column("v2", IntegerType.BIGINT, false, AggregateType.SUM, "0", ""));
+        columns.add(new Column("kjson", JsonType.JSON));
+        columns.add(new Column("khll", HLLType.HLL));
         columns.get(0).setIsKey(true);
         columns.get(1).setIsKey(true);
 
@@ -166,7 +171,7 @@ public class PropertyAnalyzerTest {
         DataProperty dataProperty =
                 PropertyAnalyzer.analyzeDataProperty(properties, new DataProperty(TStorageMedium.SSD), false);
         // avoid UT fail because time zone different
-        DateLiteral dateLiteral = new DateLiteral(tomorrowTimeStr, Type.DATETIME);
+        DateLiteral dateLiteral = new DateLiteral(tomorrowTimeStr, DateType.DATETIME);
         Assertions.assertEquals(dateLiteral.unixTimestamp(TimeUtils.getTimeZone()), dataProperty.getCooldownTimeMs());
 
         Map<String, String> properties1 = Maps.newHashMap();

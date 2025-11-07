@@ -52,6 +52,7 @@ import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.InvalidType;
 import com.starrocks.type.Type;
 import org.roaringbitmap.RoaringBitmap;
 
@@ -107,14 +108,14 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
 
     protected Expr() {
         pos = NodePosition.ZERO;
-        type = Type.INVALID;
-        originType = Type.INVALID;
+        type = InvalidType.INVALID;
+        originType = InvalidType.INVALID;
     }
 
     protected Expr(NodePosition pos) {
         this.pos = pos;
-        type = Type.INVALID;
-        originType = Type.INVALID;
+        type = InvalidType.INVALID;
+        originType = InvalidType.INVALID;
     }
 
     protected Expr(Expr other) {

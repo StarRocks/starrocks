@@ -25,7 +25,7 @@ import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.MetastoreType;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.hadoop.conf.Configuration;
@@ -112,8 +112,8 @@ public class HiveConnectorTest {
         Assertions.assertEquals(Lists.newArrayList("col1"), hiveTable.getPartitionColumnNames());
         Assertions.assertEquals(Lists.newArrayList("col2"), hiveTable.getDataColumnNames());
         Assertions.assertEquals("hdfs://127.0.0.1:10000/hive", hiveTable.getTableLocation());
-        Assertions.assertEquals(Type.INT, hiveTable.getPartitionColumns().get(0).getType());
-        Assertions.assertEquals(Type.INT, hiveTable.getBaseSchema().get(0).getType());
+        Assertions.assertEquals(IntegerType.INT, hiveTable.getPartitionColumns().get(0).getType());
+        Assertions.assertEquals(IntegerType.INT, hiveTable.getBaseSchema().get(0).getType());
         Assertions.assertEquals("hive_catalog", hiveTable.getCatalogName());
     }
 

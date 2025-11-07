@@ -31,6 +31,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.BaseScalarOperatorShuttle;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import com.starrocks.type.ArrayType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.Type;
 
 import java.util.Arrays;
@@ -197,9 +198,9 @@ class DecodeContext {
     // the input column maybe a dictionary column or a string column
     private ColumnRefOperator createNewDictColumn(ColumnRefOperator column) {
         if (column.getType().isArrayType()) {
-            return factory.create(column.getName(), Type.ARRAY_INT, column.isNullable());
+            return factory.create(column.getName(), ArrayType.ARRAY_INT, column.isNullable());
         } else {
-            return factory.create(column.getName(), Type.INT, column.isNullable());
+            return factory.create(column.getName(), IntegerType.INT, column.isNullable());
         }
     }
 
@@ -216,7 +217,7 @@ class DecodeContext {
                 return new DictMappingOperator(useDictRef, expression.clone(), expression.getType());
             }
 
-            Preconditions.checkState(Type.ARRAY_VARCHAR.matchesType(useStringRef.getType()));
+            Preconditions.checkState(ArrayType.ARRAY_VARCHAR.matchesType(useStringRef.getType()));
             array2StringAnchor = Optional.empty();
             ScalarOperator result = expression.accept(this, null);
             if (result.isColumnRef() && array2StringAnchor.isEmpty()) {
@@ -237,7 +238,7 @@ class DecodeContext {
             if (useStringRef.getType().isVarchar()) {
                 return new DictMappingOperator(useDictRef, expression.clone(), useDictRef.getType());
             }
-            Preconditions.checkState(Type.ARRAY_VARCHAR.matchesType(useStringRef.getType()));
+            Preconditions.checkState(ArrayType.ARRAY_VARCHAR.matchesType(useStringRef.getType()));
             array2StringAnchor = Optional.empty();
             ScalarOperator result = expression.accept(this, null);
 
@@ -326,7 +327,7 @@ class DecodeContext {
             List<ScalarOperator> newChildren = visitList(call.getChildren(), hasChange);
 
             if (call.getFunction() instanceof AggregateFunction) {
-                Type argType = newChildren.get(0).getType().isArrayType() ? new ArrayType(Type.INT) : Type.INT;
+                Type argType = newChildren.get(0).getType().isArrayType() ? new ArrayType(IntegerType.INT) : IntegerType.INT;
                 Type[] argTypes = new Type[] {argType};
                 Function fn = ExprUtils.getBuiltinFunction(call.getFnName(), argTypes, Function.CompareMode.IS_SUPERTYPE_OF);
                 // min/max function: will rewrite all stage, return type is dict type

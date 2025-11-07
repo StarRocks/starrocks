@@ -126,11 +126,17 @@ import com.starrocks.sql.ast.spm.ShowBaselinePlanStmt;
 import com.starrocks.sql.ast.warehouse.ShowClustersStmt;
 import com.starrocks.sql.ast.warehouse.ShowNodesStmt;
 import com.starrocks.sql.ast.warehouse.ShowWarehousesStmt;
-import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.ScalarType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.TypeFactory;
 
 import java.util.List;
+
+import static com.starrocks.type.BooleanType.BOOLEAN;
+import static com.starrocks.type.DateType.DATETIME;
+import static com.starrocks.type.FloatType.DOUBLE;
+import static com.starrocks.type.IntegerType.BIGINT;
+import static com.starrocks.type.IntegerType.INT;
 
 public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResultSetMetaData, Void> {
     public ShowResultSetMetaData getMetadata(StatementBase stmt) {
@@ -590,7 +596,7 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
                     .addColumn(new Column("Variable_name", TypeFactory.createVarchar(20)))
                     .addColumn(new Column("Value", TypeFactory.createVarchar(20)))
                     .addColumn(new Column("Default_value", TypeFactory.createVarchar(20)))
-                    .addColumn(new Column("Is_changed", TypeFactory.createType(PrimitiveType.BOOLEAN)))
+                    .addColumn(new Column("Is_changed", BOOLEAN))
                     .build();
         }
     }
@@ -608,8 +614,8 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
     @Override
     public ShowResultSetMetaData visitDescPipeStatement(DescPipeStmt statement, Void context) {
         return ShowResultSetMetaData.builder()
-                .addColumn(new Column("DATABASE_ID", ScalarType.BIGINT))
-                .addColumn(new Column("ID", ScalarType.BIGINT))
+                .addColumn(new Column("DATABASE_ID", IntegerType.BIGINT))
+                .addColumn(new Column("ID", IntegerType.BIGINT))
                 .addColumn(new Column("NAME", TypeFactory.createVarchar(64)))
                 .addColumn(new Column("TYPE", TypeFactory.createVarchar(8)))
                 .addColumn(new Column("TABLE_NAME", TypeFactory.createVarchar(64)))
@@ -623,13 +629,13 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
     public ShowResultSetMetaData visitShowPipeStatement(ShowPipeStmt statement, Void context) {
         return ShowResultSetMetaData.builder()
                 .addColumn(new Column("DATABASE_NAME", TypeFactory.createVarchar(64)))
-                .addColumn(new Column("PIPE_ID", ScalarType.BIGINT))
+                .addColumn(new Column("PIPE_ID", IntegerType.BIGINT))
                 .addColumn(new Column("PIPE_NAME", TypeFactory.createVarchar(64)))
                 .addColumn(new Column("STATE", TypeFactory.createVarcharType(8)))
                 .addColumn(new Column("TABLE_NAME", TypeFactory.createVarchar(64)))
                 .addColumn(new Column("LOAD_STATUS", TypeFactory.createVarchar(512)))
                 .addColumn(new Column("LAST_ERROR", TypeFactory.createVarchar(1024)))
-                .addColumn(new Column("CREATED_TIME", ScalarType.DATETIME))
+                .addColumn(new Column("CREATED_TIME", DateType.DATETIME))
                 .build();
     }
 
@@ -779,18 +785,18 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
     @Override
     public ShowResultSetMetaData visitShowMaterializedViewStatement(ShowMaterializedViewsStmt statement, Void context) {
         return ShowResultSetMetaData.builder()
-                .column("id", TypeFactory.createType(PrimitiveType.BIGINT))
+                .column("id", BIGINT)
                 .column("database_name", TypeFactory.createVarchar(20))
                 .column("name", TypeFactory.createVarchar(50))
                 .column("refresh_type", TypeFactory.createVarchar(10))
                 .column("is_active", TypeFactory.createVarchar(10))
                 .column("inactive_reason", TypeFactory.createVarcharType(64))
                 .column("partition_type", TypeFactory.createVarchar(16))
-                .column("task_id", TypeFactory.createType(PrimitiveType.BIGINT))
+                .column("task_id", BIGINT)
                 .column("task_name", TypeFactory.createVarchar(50))
-                .column("last_refresh_start_time", TypeFactory.createType(PrimitiveType.DATETIME))
-                .column("last_refresh_finished_time", TypeFactory.createType(PrimitiveType.DATETIME))
-                .column("last_refresh_duration", TypeFactory.createType(PrimitiveType.DOUBLE))
+                .column("last_refresh_start_time", DATETIME)
+                .column("last_refresh_finished_time", DATETIME)
+                .column("last_refresh_duration", DOUBLE)
                 .column("last_refresh_state", TypeFactory.createVarchar(20))
                 .column("last_refresh_force_refresh", TypeFactory.createVarchar(8))
                 .column("last_refresh_start_partition", TypeFactory.createVarchar(1024))
@@ -799,12 +805,12 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
                 .column("last_refresh_mv_refresh_partitions", TypeFactory.createVarchar(1024))
                 .column("last_refresh_error_code", TypeFactory.createVarchar(20))
                 .column("last_refresh_error_message", TypeFactory.createVarchar(1024))
-                .column("rows", TypeFactory.createType(PrimitiveType.BIGINT))
+                .column("rows", BIGINT)
                 .column("text", TypeFactory.createVarchar(1024))
                 .column("extra_message", TypeFactory.createVarchar(1024))
                 .column("query_rewrite_status", TypeFactory.createVarchar(64))
                 .column("creator", TypeFactory.createVarchar(64))
-                .column("last_refresh_process_time", TypeFactory.createType(PrimitiveType.DATETIME))
+                .column("last_refresh_process_time", DATETIME)
                 .column("last_refresh_job_id", TypeFactory.createVarchar(64))
                 .build();
     }
@@ -835,20 +841,20 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
         return ShowResultSetMetaData.builder()
                 .addColumn(new Column("Name", TypeFactory.createVarchar(64)))
                 .addColumn(new Column("Engine", TypeFactory.createVarchar(10)))
-                .addColumn(new Column("Version", TypeFactory.createType(PrimitiveType.BIGINT)))
+                .addColumn(new Column("Version", BIGINT))
                 .addColumn(new Column("Row_format", TypeFactory.createVarchar(64)))
-                .addColumn(new Column("Rows", TypeFactory.createType(PrimitiveType.BIGINT)))
-                .addColumn(new Column("Avg_row_length", TypeFactory.createType(PrimitiveType.BIGINT)))
-                .addColumn(new Column("Data_length", TypeFactory.createType(PrimitiveType.BIGINT)))
-                .addColumn(new Column("Max_data_length", TypeFactory.createType(PrimitiveType.BIGINT)))
-                .addColumn(new Column("Index_length", TypeFactory.createType(PrimitiveType.BIGINT)))
-                .addColumn(new Column("Data_free", TypeFactory.createType(PrimitiveType.BIGINT)))
-                .addColumn(new Column("Auto_increment", TypeFactory.createType(PrimitiveType.BIGINT)))
-                .addColumn(new Column("Create_time", TypeFactory.createType(PrimitiveType.DATETIME)))
-                .addColumn(new Column("Update_time", TypeFactory.createType(PrimitiveType.DATETIME)))
-                .addColumn(new Column("Check_time", TypeFactory.createType(PrimitiveType.DATETIME)))
+                .addColumn(new Column("Rows", BIGINT))
+                .addColumn(new Column("Avg_row_length", BIGINT))
+                .addColumn(new Column("Data_length", BIGINT))
+                .addColumn(new Column("Max_data_length", BIGINT))
+                .addColumn(new Column("Index_length", BIGINT))
+                .addColumn(new Column("Data_free", BIGINT))
+                .addColumn(new Column("Auto_increment", BIGINT))
+                .addColumn(new Column("Create_time", DATETIME))
+                .addColumn(new Column("Update_time", DATETIME))
+                .addColumn(new Column("Check_time", DATETIME))
                 .addColumn(new Column("Collation", TypeFactory.createVarchar(64)))
-                .addColumn(new Column("Checksum", TypeFactory.createType(PrimitiveType.BIGINT)))
+                .addColumn(new Column("Checksum", BIGINT))
                 .addColumn(new Column("Create_options", TypeFactory.createVarchar(64)))
                 .addColumn(new Column("Comment", TypeFactory.createVarchar(64)))
                 .build();
@@ -924,13 +930,13 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
     public ShowResultSetMetaData visitShowProcesslistStatement(ShowProcesslistStmt statement, Void context) {
         return ShowResultSetMetaData.builder()
                 .addColumn(new Column("ServerName", TypeFactory.createVarchar(64)))
-                .addColumn(new Column("Id", TypeFactory.createType(PrimitiveType.BIGINT)))
+                .addColumn(new Column("Id", BIGINT))
                 .addColumn(new Column("User", TypeFactory.createVarchar(16)))
                 .addColumn(new Column("Host", TypeFactory.createVarchar(16)))
                 .addColumn(new Column("Db", TypeFactory.createVarchar(16)))
                 .addColumn(new Column("Command", TypeFactory.createVarchar(16)))
                 .addColumn(new Column("ConnectionStartTime", TypeFactory.createVarchar(16)))
-                .addColumn(new Column("Time", TypeFactory.createType(PrimitiveType.INT)))
+                .addColumn(new Column("Time", INT))
                 .addColumn(new Column("State", TypeFactory.createVarchar(64)))
                 .addColumn(new Column("Info", TypeFactory.createVarchar(32 * 1024)))
                 .addColumn(new Column("IsPending", TypeFactory.createVarchar(16)))
@@ -1019,10 +1025,10 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
         return ShowResultSetMetaData.builder()
                 .addColumn(new Column("Collation", TypeFactory.createVarchar(20)))
                 .addColumn(new Column("Charset", TypeFactory.createVarchar(20)))
-                .addColumn(new Column("Id", TypeFactory.createType(PrimitiveType.BIGINT)))
+                .addColumn(new Column("Id", BIGINT))
                 .addColumn(new Column("Default", TypeFactory.createVarchar(20)))
                 .addColumn(new Column("Compiled", TypeFactory.createVarchar(20)))
-                .addColumn(new Column("Sortlen", TypeFactory.createType(PrimitiveType.BIGINT)))
+                .addColumn(new Column("Sortlen", BIGINT))
                 .build();
     }
 

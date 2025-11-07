@@ -23,7 +23,8 @@ import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.CallProcedureStatement;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.VarcharType;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -61,8 +62,8 @@ public class CallProcedureStatementTest {
     private Procedure mockProcedure() {
         return new Procedure("test_db", "test_proc",
                 Arrays.asList(
-                        new NamedArgument("a", Type.INT, true),
-                        new NamedArgument("b", Type.VARCHAR, true)
+                        new NamedArgument("a", IntegerType.INT, true),
+                        new NamedArgument("b", VarcharType.VARCHAR, true)
                 )) {
             @Override
             public void execute(ConnectContext context, Map<String, ConstantOperator> args) {

@@ -17,7 +17,8 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.thrift.TSchemaTableType;
-import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.TypeFactory;
 
 import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
@@ -31,7 +32,7 @@ public class LoadsSystemTable {
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("ID", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("ID", IntegerType.BIGINT)
                         .column("LABEL", TypeFactory.createVarchar(NAME_CHAR_LEN))
                         .column("PROFILE_ID", TypeFactory.createVarchar(NAME_CHAR_LEN))
                         .column("DB_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
@@ -42,21 +43,21 @@ public class LoadsSystemTable {
                         .column("PROGRESS", TypeFactory.createVarchar(NAME_CHAR_LEN))
                         .column("TYPE", TypeFactory.createVarchar(NAME_CHAR_LEN))
                         .column("PRIORITY", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("SCAN_ROWS", TypeFactory.createType(PrimitiveType.BIGINT))
-                        .column("SCAN_BYTES", TypeFactory.createType(PrimitiveType.BIGINT))
-                        .column("FILTERED_ROWS", TypeFactory.createType(PrimitiveType.BIGINT))
-                        .column("UNSELECTED_ROWS", TypeFactory.createType(PrimitiveType.BIGINT))
-                        .column("SINK_ROWS", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("SCAN_ROWS", IntegerType.BIGINT)
+                        .column("SCAN_BYTES", IntegerType.BIGINT)
+                        .column("FILTERED_ROWS", IntegerType.BIGINT)
+                        .column("UNSELECTED_ROWS", IntegerType.BIGINT)
+                        .column("SINK_ROWS", IntegerType.BIGINT)
                         .column("RUNTIME_DETAILS", TypeFactory.createJsonType())
-                        .column("CREATE_TIME", TypeFactory.createType(PrimitiveType.DATETIME))
-                        .column("LOAD_START_TIME", TypeFactory.createType(PrimitiveType.DATETIME))
-                        .column("LOAD_COMMIT_TIME", TypeFactory.createType(PrimitiveType.DATETIME))
-                        .column("LOAD_FINISH_TIME", TypeFactory.createType(PrimitiveType.DATETIME))
+                        .column("CREATE_TIME", DateType.DATETIME)
+                        .column("LOAD_START_TIME", DateType.DATETIME)
+                        .column("LOAD_COMMIT_TIME", DateType.DATETIME)
+                        .column("LOAD_FINISH_TIME", DateType.DATETIME)
                         .column("PROPERTIES", TypeFactory.createJsonType())
                         .column("ERROR_MSG", TypeFactory.createVarchar(NAME_CHAR_LEN))
                         .column("TRACKING_SQL", TypeFactory.createVarchar(NAME_CHAR_LEN))
                         .column("REJECTED_RECORD_PATH", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("JOB_ID", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("JOB_ID", IntegerType.BIGINT)
                         .build(), TSchemaTableType.SCH_LOADS);
     }
 }

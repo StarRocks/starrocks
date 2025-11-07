@@ -21,8 +21,8 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.sql.ast.expression.DateLiteral;
+import com.starrocks.type.DateType;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.Type;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
@@ -153,10 +153,10 @@ public class TimeUtilsTest {
         long timestamp = 1426125600000L;
         Assertions.assertEquals("2015-03-12 10:00:00", TimeUtils.longToTimeString(timestamp));
 
-        DateLiteral date = new DateLiteral("2015-03-01", Type.DATE);
+        DateLiteral date = new DateLiteral("2015-03-01", DateType.DATE);
         Assertions.assertEquals(20150301000000L, date.getLongValue());
 
-        DateLiteral datetime = new DateLiteral("2015-03-01 12:00:00", Type.DATETIME);
+        DateLiteral datetime = new DateLiteral("2015-03-01 12:00:00", DateType.DATETIME);
         Assertions.assertEquals(20150301120000L, datetime.getLongValue());
     }
 

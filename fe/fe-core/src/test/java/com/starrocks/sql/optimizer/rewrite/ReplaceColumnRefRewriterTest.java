@@ -21,7 +21,7 @@ import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -76,6 +76,6 @@ public class ReplaceColumnRefRewriterTest {
     }
 
     ColumnRefOperator createColumnRef(int id) {
-        return new ColumnRefOperator(id, Type.INT, "ref" + id, false);
+        return new ColumnRefOperator(id, IntegerType.INT, "ref" + id, false);
     }
 }

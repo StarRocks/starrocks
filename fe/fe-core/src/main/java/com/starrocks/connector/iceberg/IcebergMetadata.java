@@ -90,6 +90,9 @@ import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.thrift.TIcebergDataFile;
 import com.starrocks.thrift.TSinkCommitInfo;
+import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.VarcharType;
 import org.apache.iceberg.AppendFiles;
 import org.apache.iceberg.BaseFileScanTask;
 import org.apache.iceberg.BaseTable;
@@ -489,9 +492,9 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     private static long getTargetSnapshotIdFromVersion(org.apache.iceberg.Table table, ConstantOperator version) {
         long snapshotId;
-        if (version.getType() == com.starrocks.type.Type.BIGINT) {
+        if (version.getType() == IntegerType.BIGINT) {
             snapshotId = version.getBigint();
-        } else if (version.getType() == com.starrocks.type.Type.VARCHAR) {
+        } else if (version.getType() == VarcharType.VARCHAR) {
             String refName = version.getVarchar();
             SnapshotRef ref = table.refs().get(refName);
             if (ref == null) {
@@ -510,13 +513,13 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     private static long getSnapshotIdFromTemporalVersion(org.apache.iceberg.Table table, ConstantOperator version) {
         try {
-            if (version.getType() != com.starrocks.type.Type.DATETIME &&
-                    version.getType() != com.starrocks.type.Type.DATE &&
-                    version.getType() != com.starrocks.type.Type.VARCHAR) {
+            if (version.getType() != DateType.DATETIME &&
+                    version.getType() != DateType.DATE &&
+                    version.getType() != VarcharType.VARCHAR) {
                 throw new StarRocksConnectorException("Unsupported type for table temporal version: %s." +
                         " You should use timestamp type", version);
             }
-            Optional<ConstantOperator> timestampVersion = version.castTo(com.starrocks.type.Type.DATETIME);
+            Optional<ConstantOperator> timestampVersion = version.castTo(DateType.DATETIME);
             if (timestampVersion.isEmpty()) {
                 throw new StarRocksConnectorException("Unsupported type for table temporal version: %s." +
                         " You should use timestamp type", version);

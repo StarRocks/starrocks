@@ -23,7 +23,6 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.SchemaConstants;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
 
@@ -121,7 +120,7 @@ public class PostgresSchemaResolver extends JDBCSchemaResolver {
                 break;
             case Types.BINARY:
             case Types.VARBINARY:
-                return TypeFactory.createVarbinary(ScalarType.CATALOG_MAX_VARCHAR_LENGTH);
+                return TypeFactory.createVarbinary(TypeFactory.CATALOG_MAX_VARCHAR_LENGTH);
             case Types.DATE:
                 primitiveType = PrimitiveType.DATE;
                 break;

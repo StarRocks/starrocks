@@ -26,7 +26,15 @@ import com.starrocks.sql.ast.expression.LargeIntLiteral;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.CharType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.DecimalType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.NullType;
 import com.starrocks.type.Type;
+import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -44,14 +52,14 @@ public class LiteralExprTest {
 
     @Test
     public void testCreateDefaultNullType() throws Exception {
-        Type type = Type.NULL;
+        Type type = NullType.NULL;
         LiteralExpr expr = LiteralExpr.createDefault(type);
         Assertions.assertTrue(expr instanceof NullLiteral);
     }
 
     @Test
     public void testCreateDefaultBooleanType() throws Exception {
-        Type type = Type.BOOLEAN;
+        Type type = BooleanType.BOOLEAN;
         LiteralExpr expr = LiteralExpr.createDefault(type);
         Assertions.assertTrue(expr instanceof BoolLiteral);
         Assertions.assertEquals(false, ((BoolLiteral) expr).getValue());
@@ -59,7 +67,7 @@ public class LiteralExprTest {
 
     @Test
     public void testCreateDefaultIntType() throws Exception {
-        Type type = Type.INT;
+        Type type = IntegerType.INT;
         LiteralExpr expr = LiteralExpr.createDefault(type);
         Assertions.assertTrue(expr instanceof IntLiteral);
         Assertions.assertEquals(0, ((IntLiteral) expr).getLongValue());
@@ -67,7 +75,7 @@ public class LiteralExprTest {
 
     @Test
     public void testCreateDefaultBigIntType() throws Exception {
-        Type type = Type.BIGINT;
+        Type type = IntegerType.BIGINT;
         LiteralExpr expr = LiteralExpr.createDefault(type);
         Assertions.assertTrue(expr instanceof IntLiteral);
         Assertions.assertEquals(0, ((IntLiteral) expr).getLongValue());
@@ -75,7 +83,7 @@ public class LiteralExprTest {
 
     @Test
     public void testCreateDefaultLargeIntType() throws Exception {
-        Type type = Type.LARGEINT;
+        Type type = IntegerType.LARGEINT;
         LiteralExpr expr = LiteralExpr.createDefault(type);
         Assertions.assertTrue(expr instanceof LargeIntLiteral);
         Assertions.assertEquals(BigInteger.ZERO, ((LargeIntLiteral) expr).getValue());
@@ -83,7 +91,7 @@ public class LiteralExprTest {
 
     @Test
     public void testCreateDefaultFloatType() throws Exception {
-        Type type = Type.FLOAT;
+        Type type = FloatType.FLOAT;
         LiteralExpr expr = LiteralExpr.createDefault(type);
         Assertions.assertTrue(expr instanceof FloatLiteral);
         Assertions.assertEquals(0.0, ((FloatLiteral) expr).getValue());
@@ -91,7 +99,7 @@ public class LiteralExprTest {
 
     @Test
     public void testCreateDefaultDoubleType() throws Exception {
-        Type type = Type.DOUBLE;
+        Type type = FloatType.DOUBLE;
         LiteralExpr expr = LiteralExpr.createDefault(type);
         Assertions.assertTrue(expr instanceof FloatLiteral);
         Assertions.assertEquals(0.0, ((FloatLiteral) expr).getValue());
@@ -99,7 +107,7 @@ public class LiteralExprTest {
 
     @Test
     public void testCreateDefaultDecimalType() throws Exception {
-        Type type = Type.DECIMALV2;
+        Type type = DecimalType.DECIMALV2;
         LiteralExpr expr = LiteralExpr.createDefault(type);
         Assertions.assertTrue(expr instanceof DecimalLiteral);
         Assertions.assertEquals("0", ((DecimalLiteral) expr).getStringValue());
@@ -107,7 +115,7 @@ public class LiteralExprTest {
 
     @Test
     public void testCreateDefaultVarcharType() throws Exception {
-        Type type = Type.VARCHAR;
+        Type type = VarcharType.VARCHAR;
         LiteralExpr expr = LiteralExpr.createDefault(type);
         Assertions.assertTrue(expr instanceof StringLiteral);
         Assertions.assertEquals("", ((StringLiteral) expr).getValue());
@@ -115,7 +123,7 @@ public class LiteralExprTest {
 
     @Test
     public void testCreateDefaultCharType() throws Exception {
-        Type type = Type.CHAR;
+        Type type = CharType.CHAR;
         LiteralExpr expr = LiteralExpr.createDefault(type);
         Assertions.assertTrue(expr instanceof StringLiteral);
         Assertions.assertEquals("", ((StringLiteral) expr).getValue());
@@ -123,7 +131,7 @@ public class LiteralExprTest {
 
     @Test
     public void testCreateDefaultDateType() throws Exception {
-        Type type = Type.DATE;
+        Type type = DateType.DATE;
         LiteralExpr expr = LiteralExpr.createDefault(type);
         Assertions.assertTrue(expr instanceof DateLiteral);
         Assertions.assertEquals("1970-01-01", ((DateLiteral) expr).getStringValue());
@@ -131,7 +139,7 @@ public class LiteralExprTest {
 
     @Test
     public void testCreateDefaultDateTimeType() throws Exception {
-        Type type = Type.DATETIME;
+        Type type = DateType.DATETIME;
         LiteralExpr expr = LiteralExpr.createDefault(type);
         Assertions.assertTrue(expr instanceof DateLiteral);
         Assertions.assertEquals("1970-01-01 00:00:00", ((DateLiteral) expr).getStringValue());

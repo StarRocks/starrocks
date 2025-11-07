@@ -102,7 +102,7 @@ import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.thrift.TTabletType;
-import com.starrocks.type.Type;
+import com.starrocks.type.DateType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.util.Strings;
@@ -914,7 +914,7 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
                         DateTimeFormatter dateTimeFormatter = DateUtils.probeFormat(stringUpperValue);
                         LocalDateTime upperTime = DateUtils.parseStringWithDefaultHSM(stringUpperValue, dateTimeFormatter);
                         LocalDateTime updatedUpperTime = upperTime.plus(periodDuration);
-                        DateLiteral dateLiteral = new DateLiteral(updatedUpperTime, Type.DATETIME);
+                        DateLiteral dateLiteral = new DateLiteral(updatedUpperTime, DateType.DATETIME);
                         long coolDownTimeStamp = dateLiteral.unixTimestamp(TimeUtils.getTimeZone());
                         newDataProperty = new DataProperty(TStorageMedium.SSD, coolDownTimeStamp);
                     }

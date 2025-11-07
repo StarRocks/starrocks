@@ -72,7 +72,7 @@ import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.common.MetaUtils;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.TypeFactory;
 import mockit.Expectations;
 import mockit.Injectable;
@@ -102,7 +102,7 @@ public class SparkLoadPendingTaskTest {
 
         // columns
         List<Column> columns = Lists.newArrayList();
-        columns.add(new Column("c1", Type.BIGINT, true, null, false, null, ""));
+        columns.add(new Column("c1", IntegerType.BIGINT, true, null, false, null, ""));
         Map<ColumnId, Column> idToColumn = Maps.newTreeMap(ColumnId.CASE_INSENSITIVE_ORDER);
         idToColumn.put(columns.get(0).getColumnId(), columns.get(0));
 
@@ -243,9 +243,9 @@ public class SparkLoadPendingTaskTest {
 
         // c1 is partition column, c2 is distribution column
         List<Column> columns = Lists.newArrayList();
-        columns.add(new Column("c1", Type.INT, true, null, false, null, ""));
+        columns.add(new Column("c1", IntegerType.INT, true, null, false, null, ""));
         columns.add(new Column("c2", TypeFactory.createVarchar(10), true, null, false, null, ""));
-        columns.add(new Column("c3", Type.INT, false, AggregateType.SUM, false, null, ""));
+        columns.add(new Column("c3", IntegerType.INT, false, AggregateType.SUM, false, null, ""));
 
         Map<ColumnId, Column> idToColumn = Maps.newTreeMap(ColumnId.CASE_INSENSITIVE_ORDER);
         for (Column column : columns) {

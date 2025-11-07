@@ -48,9 +48,11 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.QualifiedName;
+import com.starrocks.type.InvalidType;
 import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
+import com.starrocks.type.VarcharType;
 
 import java.util.List;
 
@@ -143,7 +145,7 @@ public class SlotRef extends Expr {
         this.originType = desc.getOriginType();
         this.label = null;
         if (this.type.isChar()) {
-            this.type = Type.VARCHAR;
+            this.type = VarcharType.VARCHAR;
         }
         analysisDone();
     }
@@ -165,7 +167,7 @@ public class SlotRef extends Expr {
     }
 
     public SlotRef(SlotId slotId) {
-        this(new SlotDescriptor(slotId, "", Type.INVALID, false));
+        this(new SlotDescriptor(slotId, "", InvalidType.INVALID, false));
     }
 
     public void setBackQuoted(boolean isBackQuoted) {
