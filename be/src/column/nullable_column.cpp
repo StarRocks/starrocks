@@ -129,10 +129,10 @@ void NullableColumn::append_with_filter(const Column& src, const uint8_t* filter
         }
         return;
     }
-    
+
     DCHECK_EQ(_null_column->size(), _data_column->size());
     size_t orig_size = _null_column->size();
-    
+
     if (src.only_null()) {
         // Count selected rows
         size_t selected_count = 0;
@@ -160,8 +160,8 @@ void NullableColumn::append_with_filter(const Column& src, const uint8_t* filter
             // Has nulls, append both null column and data column with filter
             _null_column->append_with_filter(*src_column._null_column, filter, count);
             _data_column->append_with_filter(*src_column._data_column, filter, count);
-            _has_null = _has_null || SIMD::contain_nonzero(_null_column->get_data(), orig_size, 
-                                                           _null_column->size() - orig_size);
+            _has_null = _has_null ||
+                        SIMD::contain_nonzero(_null_column->get_data(), orig_size, _null_column->size() - orig_size);
         }
     } else {
         // Source is not nullable, fill zeros for selected rows in null column
