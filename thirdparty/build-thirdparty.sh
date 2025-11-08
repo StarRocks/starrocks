@@ -638,8 +638,6 @@ build_gperftools() {
         ./autogen.sh
     fi
 
-    patch -p1 < "$TP_PATCH_DIR/gperftools_20251105.patch"
-
     LDFLAGS="-L${TP_LIB_DIR}" \
     CFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g" \
     ./configure --prefix=$TP_INSTALL_DIR/gperftools --disable-shared --enable-static --disable-libunwind --with-pic --enable-frame-pointers
