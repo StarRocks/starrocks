@@ -19,7 +19,7 @@ if(compile_result EQUAL 0)
     COMMAND ${CMAKE_BINARY_DIR}/check_c_source
     OUTPUT_VARIABLE GLIBC_VERSION
     OUTPUT_STRIP_TRAILING_WHITESPACE)
-  message("GLIBC version: ${GLIBC_VERSION}")
+  message(STATUS "GLIBC version: ${GLIBC_VERSION}")
 else()
   message(FATAL_ERROR "Failed to get the glibc version")
 endif()
