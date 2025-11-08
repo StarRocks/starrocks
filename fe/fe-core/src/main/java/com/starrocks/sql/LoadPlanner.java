@@ -234,6 +234,7 @@ public class LoadPlanner {
         this.etlJobType = EtlJobType.STREAM_LOAD;
         this.context.getSessionVariable().setEnablePipelineEngine(true);
         this.computeResource = streamLoadInfo.getComputeResource();
+        this.mergeConditionStr = streamLoadInfo.getMergeConditionStr();
     }
 
     public long getWarehouseId() {
