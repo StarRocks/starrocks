@@ -219,6 +219,7 @@ public class LoadPlanner {
         this.startTime = System.currentTimeMillis();
         this.sessionVariables = sessionVariables;
         this.computeResource = streamLoadInfo.getComputeResource();
+        this.mergeConditionStr = streamLoadInfo.getMergeConditionStr();
     }
 
     public LoadPlanner(long loadJobId, TUniqueId loadId, long txnId, long dbId, String dbName, OlapTable destTable,
@@ -234,7 +235,6 @@ public class LoadPlanner {
         this.etlJobType = EtlJobType.STREAM_LOAD;
         this.context.getSessionVariable().setEnablePipelineEngine(true);
         this.computeResource = streamLoadInfo.getComputeResource();
-        this.mergeConditionStr = streamLoadInfo.getMergeConditionStr();
     }
 
     public long getWarehouseId() {
