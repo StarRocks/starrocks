@@ -30,9 +30,16 @@ Status PublishVersionManager::init() {
     if (max_thread_count <= 0) {
         max_thread_count = CpuInfo::num_cores();
     }
-    max_thread_count = std::max(max_thread_count, MIN_FINISH_PUBLISH_WORKER_COUNT);
+#ifdef BE_TEST
+    // In test environment, limit thread count to reduce startup time
+    max_thread_count = std::min(max_thread_count, 4);
+    int min_thread_count = 2; // Reduced from MIN_FINISH_PUBLISH_WORKER_COUNT for test environment
+#else
+    int min_thread_count = MIN_FINISH_PUBLISH_WORKER_COUNT;
+#endif
+    max_thread_count = std::max(max_thread_count, min_thread_count);
     RETURN_IF_ERROR(ThreadPoolBuilder("finish_publish_version")
-                            .set_min_threads(MIN_FINISH_PUBLISH_WORKER_COUNT)
+                            .set_min_threads(min_thread_count)
                             .set_max_threads(max_thread_count)
                             .build(&_finish_publish_version_thread_pool));
     return Status::OK();
