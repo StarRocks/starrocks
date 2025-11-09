@@ -29,6 +29,7 @@ import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.UserVariableExpr;
+import com.starrocks.sql.common.TypeManager;
 import com.starrocks.type.Type;
 
 import java.math.BigDecimal;
@@ -58,7 +59,7 @@ public class AnalyticAnalyzer {
         }
 
         FunctionCallExpr analyticFunction = analyticExpr.getFnCall();
-        if (analyticFunction.getParams().isDistinct()) {
+        if (analyticFunction.getParams().isDistinct() && !analyticExpr.isUnboundedWindowWithoutSlidingFrame()) {
             throw new SemanticException("DISTINCT not allowed in analytic function: " + ExprToSql.toSql(analyticFunction),
                     analyticExpr.getPos());
         }
@@ -239,7 +240,7 @@ public class AnalyticAnalyzer {
                     + "a RANGE window with PRECEDING/FOLLOWING: " + ExprToSql.toSql(analyticExpr), analyticExpr.getPos());
         }
 
-        if (!Type.isImplicitlyCastable(boundary.getExpr().getType(),
+        if (!TypeManager.isImplicitlyCastable(boundary.getExpr().getType(),
                 analyticExpr.getOrderByElements().get(0).getExpr().getType(), false)) {
             throw new SemanticException("The value expression of a PRECEDING/FOLLOWING clause of a RANGE window "
                     + "must be implicitly convertable to the ORDER BY expression's type: "

@@ -99,7 +99,8 @@ public class ExprToThriftVisitor implements AstVisitorExtendInterface<Void, TExp
                 msg.setVararg_start_idx(expr.fn.getNumArgs() - 1);
             }
         }
-        msg.output_scale = expr.getOutputScale();
+        // BE no longer consumes output_scale; keep thrift field populated with a sentinel to preserve wire compatibility.
+        msg.output_scale = -1;
         msg.setIs_monotonic(expr.isMonotonic());
         msg.setIs_index_only_filter(expr.isIndexOnlyFilter());
         consumer.accept(expr, msg);
@@ -153,7 +154,6 @@ public class ExprToThriftVisitor implements AstVisitorExtendInterface<Void, TExp
     public Void visitArithmeticExpr(ArithmeticExpr node, TExprNode msg) {
         msg.node_type = TExprNodeType.ARITHMETIC_EXPR;
         msg.setOpcode(ExprOpcodeRegistry.getArithmeticOpcode(node.getOp()));
-        msg.setOutput_column(node.getOutputColumn());
         return null;
     }
 
@@ -206,7 +206,6 @@ public class ExprToThriftVisitor implements AstVisitorExtendInterface<Void, TExp
         } else {
             msg.slot_ref = new TSlotRef(0, 0);
         }
-        msg.setOutput_column(node.getOutputColumn());
         return null;
     }
 
@@ -298,7 +297,6 @@ public class ExprToThriftVisitor implements AstVisitorExtendInterface<Void, TExp
     public Void visitCastExpr(CastExpr node, TExprNode msg) {
         msg.node_type = TExprNodeType.CAST_EXPR;
         msg.setOpcode(ExprOpcodeRegistry.getCastOpcode());
-        msg.setOutput_column(node.getOutputColumn());
         if (node.getChild(0).getType().isComplexType()) {
             msg.setChild_type_desc(TypeSerializer.toThrift(node.getChild(0).getType()));
         } else {

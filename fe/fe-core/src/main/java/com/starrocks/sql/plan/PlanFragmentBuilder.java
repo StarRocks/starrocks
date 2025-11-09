@@ -395,7 +395,7 @@ public class PlanFragmentBuilder {
 
         List<PlanFragment> fragments = execPlan.getFragments();
         for (PlanFragment fragment : fragments) {
-            fragment.createDataSink(resultSinkType);
+            fragment.createDataSink(resultSinkType, execPlan);
             fragment.setCollectExecStatsIds(execPlan.getCollectExecStatsIds());
         }
         Collections.reverse(fragments);
@@ -987,7 +987,7 @@ public class PlanFragmentBuilder {
                         Preconditions.checkState(selectTabletIds != null && !selectTabletIds.isEmpty());
                         final MaterializedIndex selectedIndex = physicalPartition.getIndex(selectedIndexId);
                         totalTabletsNum += selectedIndex.getTablets().size();
-                        List<Long> allTabletIds = selectedIndex.getTabletIds();
+                        List<Long> allTabletIds = selectedIndex.getTabletIdsInOrder();
                         for (int i = 0; i < allTabletIds.size(); i++) {
                             tabletId2BucketSeq.put(allTabletIds.get(i), i);
                         }

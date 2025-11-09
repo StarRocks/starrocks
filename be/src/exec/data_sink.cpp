@@ -304,7 +304,7 @@ Status DataSink::decompose_data_sink_to_pipeline(pipeline::PipelineBuilderContex
             op = std::make_shared<ResultSinkOperatorFactory>(
                     context->next_operator_id(), dop, result_sink->get_sink_type(), result_sink->isBinaryFormat(),
                     result_sink->get_format_type(), result_sink->get_output_exprs(), fragment_ctx,
-                    result_sink->get_row_desc());
+                    result_sink->get_row_desc(), result_sink->get_output_column_names());
         }
         // Add result sink operator to last pipeline
         prev_operators.emplace_back(op);

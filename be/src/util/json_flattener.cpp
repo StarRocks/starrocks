@@ -199,6 +199,7 @@ using JsonFlatExtractFunc = void (*)(const vpack::Slice* json, NullableColumn* r
 using JsonFlatMergeFunc = void (*)(vpack::Builder* builder, const std::string_view& name, const Column* src, size_t idx);
 static const uint8_t JSON_BASE_TYPE_BITS = 0;   // least flat to JSON type
 static const uint8_t JSON_BIGINT_TYPE_BITS = 7; // bigint compatible type
+static const uint8_t JSON_NULL_TYPE_BITS = 31;  // JSON_NULL_TYPE_BITS, initial value for JsonFlatDesc::type
 
 // bool will flatting as string, because it's need save string-literal(true/false)
 // int & string compatible type is json, because int cast to string will add double quote, it's different with json
@@ -614,10 +615,21 @@ void JsonPathDeriver::_visit_json_paths(const vpack::Slice& value, JsonFlatPath*
         if (v.isObject()) {
             // Accumulate remain status: if node is ever empty in any row, mark as remain
             child->remain |= v.isEmptyObject();
+            // If this node was previously visited as primitive (desc->type != JSON_BASE_TYPE_BITS and != initial value),
+            // but now we see an object, this indicates a type mismatch.
+            // Mark the parent node as remain to preserve the actual data structure.
+            if (desc->type != flat_json::JSON_BASE_TYPE_BITS && desc->type != flat_json::JSON_NULL_TYPE_BITS) {
+                root->remain = true;
+            }
             desc->type = flat_json::JSON_BASE_TYPE_BITS;
             _visit_json_paths(v, child, mark_row);
         } else {
-            auto desc = &_derived_maps[child];
+            // If this node has children (was previously visited as object), but now we see a primitive,
+            // this indicates a type mismatch: path tree expects object but actual data has primitive.
+            // Mark the parent node as remain to preserve the actual data structure.
+            if (!child->children.empty()) {
+                root->remain = true;
+            }
             vpack::ValueType json_type = v.type();
             desc->type = flat_json::get_compatibility_type(json_type, desc->type);
             desc->base_type_count += flat_json::JSON_BASE_TYPE.count(json_type);
@@ -631,6 +643,20 @@ void JsonPathDeriver::_visit_json_paths(const vpack::Slice& value, JsonFlatPath*
 // why dfs? because need compute parent isn't extract base on bottom-up, stack is not suitable
 uint32_t JsonPathDeriver::_dfs_finalize(JsonFlatPath* node, const std::string& absolute_path,
                                         std::vector<std::pair<JsonFlatPath*, std::string>>* hit_leaf) {
+    // Type conflict: node has both object and primitive values, flatten as TYPE_JSON
+    if (!absolute_path.empty() && !node->children.empty()) {
+        auto it = _derived_maps.find(node);
+        if (it != _derived_maps.end() && it->second.base_type_count > 0) {
+            for (auto& [key, child] : node->children) {
+                child->remain = true;
+            }
+            hit_leaf->emplace_back(node, absolute_path);
+            node->type = LogicalType::TYPE_JSON;
+            node->remain = false;
+            return 1;
+        }
+    }
+
     uint32_t flat_count = 0;
     for (auto& [key, child] : node->children) {
         if (!key.empty() && key.find('.') == std::string::npos) {

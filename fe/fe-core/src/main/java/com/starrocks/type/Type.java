@@ -40,7 +40,6 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSortedMap;
 import com.starrocks.catalog.combinator.AggStateDesc;
 
-import java.util.List;
 import java.util.stream.Collectors;
 
 /**
@@ -85,8 +84,6 @@ public abstract class Type implements Cloneable {
     // performance tests.
     public static int MAX_NESTING_DEPTH = 15;
 
-
-
     // Static constant types for scalar types that don't require additional information.
     public static final ScalarType INVALID = new ScalarType(PrimitiveType.INVALID_TYPE);
     public static final ScalarType NULL = new ScalarType(PrimitiveType.NULL_TYPE);
@@ -101,44 +98,44 @@ public abstract class Type implements Cloneable {
     public static final ScalarType DATE = new ScalarType(PrimitiveType.DATE);
     public static final ScalarType DATETIME = new ScalarType(PrimitiveType.DATETIME);
     public static final ScalarType TIME = new ScalarType(PrimitiveType.TIME);
-    public static final ScalarType DEFAULT_DECIMALV2 = ScalarType.createDecimalV2Type(ScalarType.DEFAULT_PRECISION,
+    public static final ScalarType DEFAULT_DECIMALV2 = TypeFactory.createDecimalV2Type(ScalarType.DEFAULT_PRECISION,
             ScalarType.DEFAULT_SCALE);
     public static final ScalarType DEFAULT_DECIMAL32 =
-            ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL32, 9, 3);
+            TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL32, 9, 3);
     public static final ScalarType DEFAULT_DECIMAL64 =
-            ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 6);
+            TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 6);
     public static final ScalarType DEFAULT_DECIMAL128 =
-            ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 9);
+            TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 9);
     public static final ScalarType DEFAULT_DECIMAL256 =
-            ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL256, 76, 12);
+            TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL256, 76, 12);
 
     public static final ScalarType DECIMALV2 = DEFAULT_DECIMALV2;
 
-    public static final ScalarType DECIMAL32 = ScalarType.createWildcardDecimalV3Type(PrimitiveType.DECIMAL32);
-    public static final ScalarType DECIMAL64 = ScalarType.createWildcardDecimalV3Type(PrimitiveType.DECIMAL64);
-    public static final ScalarType DECIMAL128 = ScalarType.createWildcardDecimalV3Type(PrimitiveType.DECIMAL128);
-    public static final ScalarType DECIMAL256 = ScalarType.createWildcardDecimalV3Type(PrimitiveType.DECIMAL256);
+    public static final ScalarType DECIMAL32 = TypeFactory.createWildcardDecimalV3Type(PrimitiveType.DECIMAL32);
+    public static final ScalarType DECIMAL64 = TypeFactory.createWildcardDecimalV3Type(PrimitiveType.DECIMAL64);
+    public static final ScalarType DECIMAL128 = TypeFactory.createWildcardDecimalV3Type(PrimitiveType.DECIMAL128);
+    public static final ScalarType DECIMAL256 = TypeFactory.createWildcardDecimalV3Type(PrimitiveType.DECIMAL256);
 
     // DECIMAL64_INT and DECIMAL128_INT for integer casting to decimal
     public static final ScalarType DECIMAL_ZERO =
-            ScalarType.createDecimalV3TypeForZero(0);
+            TypeFactory.createDecimalV3TypeForZero(0);
     public static final ScalarType DECIMAL32_INT =
-            ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 9, 0);
+            TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 9, 0);
     public static final ScalarType DECIMAL64_INT =
-            ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 0);
+            TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 0);
     public static final ScalarType DECIMAL128_INT =
-            ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 0);
+            TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 0);
 
-    public static final ScalarType VARCHAR = ScalarType.createVarcharType(-1);
-    public static final ScalarType STRING = ScalarType.createVarcharType(ScalarType.getOlapMaxVarcharLength());
-    public static final ScalarType DEFAULT_STRING = ScalarType.createDefaultString();
-    public static final ScalarType HLL = ScalarType.createHllType();
-    public static final ScalarType CHAR = ScalarType.createCharType(-1);
+    public static final ScalarType VARCHAR = TypeFactory.createVarcharType(-1);
+    public static final ScalarType STRING = TypeFactory.createVarcharType(TypeFactory.getOlapMaxVarcharLength());
+    public static final ScalarType DEFAULT_STRING = TypeFactory.createDefaultString();
+    public static final ScalarType HLL = TypeFactory.createHllType();
+    public static final ScalarType CHAR = TypeFactory.createCharType(-1);
     public static final ScalarType BITMAP = new ScalarType(PrimitiveType.BITMAP);
     public static final ScalarType PERCENTILE = new ScalarType(PrimitiveType.PERCENTILE);
     public static final ScalarType JSON = new ScalarType(PrimitiveType.JSON);
     public static final ScalarType VARIANT = new ScalarType(PrimitiveType.VARIANT);
-    public static final ScalarType UNKNOWN_TYPE = ScalarType.createUnknownType();
+    public static final ScalarType UNKNOWN_TYPE = TypeFactory.createUnknownType();
     public static final ScalarType FUNCTION = new ScalarType(PrimitiveType.FUNCTION);
     public static final ScalarType VARBINARY = new ScalarType(PrimitiveType.VARBINARY);
 
@@ -183,7 +180,7 @@ public abstract class Type implements Cloneable {
             ImmutableList.of(Type.DATE, Type.DATETIME);
     public static final ImmutableList<ScalarType> STRING_TYPES =
             ImmutableList.of(Type.CHAR, Type.VARCHAR);
-    private static final ImmutableList<ScalarType> NUMERIC_TYPES =
+    public static final ImmutableList<ScalarType> NUMERIC_TYPES =
             ImmutableList.<ScalarType>builder()
                     .addAll(INTEGER_TYPES)
                     .addAll(FLOAT_TYPES)
@@ -191,7 +188,7 @@ public abstract class Type implements Cloneable {
                     .addAll(DECIMAL_TYPES)
                     .build();
 
-    protected static final ImmutableList<Type> SUPPORTED_TYPES =
+    public static final ImmutableList<Type> SUPPORTED_TYPES =
             ImmutableList.<Type>builder()
                     .add(NULL)
                     .addAll(INTEGER_TYPES)
@@ -235,14 +232,6 @@ public abstract class Type implements Cloneable {
                             .collect(Collectors.toMap(Type::getPrimitiveType, x -> (ScalarType) x)))
                     .put(INVALID.getPrimitiveType(), INVALID)
                     .build();
-
-    public static List<ScalarType> getIntegerTypes() {
-        return INTEGER_TYPES;
-    }
-
-    public static List<ScalarType> getNumericTypes() {
-        return NUMERIC_TYPES;
-    }
 
     /**
      * The output of this is stored directly in the hive metastore as the column type.
@@ -378,66 +367,6 @@ public abstract class Type implements Cloneable {
 
     public boolean isValidMapKeyType() {
         return !isComplexType() && !isJsonType() && !isOnlyMetricType() && !isFunctionType();
-    }
-
-    public static List<Type> getSupportedTypes() {
-        return SUPPORTED_TYPES;
-    }
-
-    // TODO(dhc): fix this
-    public static Type fromPrimitiveType(PrimitiveType type) {
-        switch (type) {
-            case BOOLEAN:
-                return Type.BOOLEAN;
-            case TINYINT:
-                return Type.TINYINT;
-            case SMALLINT:
-                return Type.SMALLINT;
-            case INT:
-                return Type.INT;
-            case BIGINT:
-                return Type.BIGINT;
-            case LARGEINT:
-                return Type.LARGEINT;
-            case FLOAT:
-                return Type.FLOAT;
-            case DOUBLE:
-                return Type.DOUBLE;
-            case DATE:
-                return Type.DATE;
-            case DATETIME:
-                return Type.DATETIME;
-            case TIME:
-                return Type.TIME;
-            case DECIMALV2:
-                return Type.DECIMALV2;
-            case CHAR:
-                return Type.CHAR;
-            case VARCHAR:
-                return Type.VARCHAR;
-            case HLL:
-                return Type.HLL;
-            case BITMAP:
-                return Type.BITMAP;
-            case PERCENTILE:
-                return Type.PERCENTILE;
-            case DECIMAL32:
-                return Type.DECIMAL32;
-            case DECIMAL64:
-                return Type.DECIMAL64;
-            case DECIMAL128:
-                return Type.DECIMAL128;
-            case DECIMAL256:
-                return Type.DECIMAL256;
-            case JSON:
-                return Type.JSON;
-            case FUNCTION:
-                return Type.FUNCTION;
-            case VARBINARY:
-                return Type.VARBINARY;
-            default:
-                return null;
-        }
     }
 
     public boolean canApplyToNumeric() {
@@ -735,121 +664,6 @@ public abstract class Type implements Cloneable {
     }
 
     /**
-     * Returns true if t1 can be implicitly cast to t2 according to Impala's casting rules.
-     * Implicit casts are always allowed when no loss of precision would result (i.e. every
-     * value of t1 can be represented exactly by a value of t2). Implicit casts are allowed
-     * in certain other cases such as casting numeric types to floating point types and
-     * converting strings to timestamps.
-     * If strict is true, only consider casts that result in no loss of precision.
-     * TODO: Support casting of non-scalar types.
-     */
-    public static boolean isImplicitlyCastable(Type t1, Type t2, boolean strict) {
-        if (t1.isScalarType() && t2.isScalarType()) {
-            return ScalarType.isImplicitlyCastable((ScalarType) t1, (ScalarType) t2, strict);
-        }
-        if (t1.isArrayType() && t2.isArrayType()) {
-            return isImplicitlyCastable(((ArrayType) t1).getItemType(), ((ArrayType) t2).getItemType(), strict);
-        }
-        return false;
-    }
-
-    // isAssignable means that assigning or casting rhs to lhs never overflows.
-    // only both integer part width and fraction part width of lhs is not narrower than counterparts
-    // of rhs, then rhs can be assigned to lhs. for integer types, integer part width is computed by
-    // calling Type::getPrecision and its scale is 0.
-    public static boolean isAssignable2Decimal(ScalarType lhs, ScalarType rhs) {
-        int lhsIntPartWidth;
-        int lhsScale;
-        int rhsIntPartWidth;
-        int rhsScale;
-        if (lhs.isFixedPointType()) {
-            lhsIntPartWidth = lhs.getPrecision();
-            lhsScale = 0;
-        } else {
-            lhsIntPartWidth = lhs.getScalarPrecision() - lhs.getScalarScale();
-            lhsScale = lhs.getScalarScale();
-        }
-
-        if (rhs.isFixedPointType()) {
-            rhsIntPartWidth = rhs.getPrecision();
-            rhsScale = 0;
-        } else {
-            rhsIntPartWidth = rhs.getScalarPrecision() - rhs.getScalarScale();
-            rhsScale = rhs.getScalarScale();
-        }
-
-        // when lhs is integer, for instance, tinyint, lhsIntPartWidth is 3, it cannot holds
-        // a DECIMAL(3, 0).
-        if (lhs.isFixedPointType() && rhs.isDecimalOfAnyVersion()) {
-            return lhsIntPartWidth > rhsIntPartWidth && lhsScale >= rhsScale;
-        } else {
-            return lhsIntPartWidth >= rhsIntPartWidth && lhsScale >= rhsScale;
-        }
-    }
-
-    public static boolean canCastTo(Type from, Type to) {
-        if (from.isNull()) {
-            return true;
-        } else if (from.isStringType() && to.isBitmapType()) {
-            return true;
-        } else if (from.isScalarType() && to.isScalarType()) {
-            return ScalarType.canCastTo((ScalarType) from, (ScalarType) to);
-        } else if (from.isArrayType() && to.isArrayType()) {
-            return canCastTo(((ArrayType) from).getItemType(), ((ArrayType) to).getItemType());
-        } else if (from.isMapType() && to.isMapType()) {
-            MapType fromMap = (MapType) from;
-            MapType toMap = (MapType) to;
-            return canCastTo(fromMap.getKeyType(), toMap.getKeyType()) &&
-                    canCastTo(fromMap.getValueType(), toMap.getValueType());
-        } else if (from.isStructType() && to.isStructType()) {
-            StructType fromStruct = (StructType) from;
-            StructType toStruct = (StructType) to;
-            if (fromStruct.getFields().size() != toStruct.getFields().size()) {
-                return false;
-            }
-            for (int i = 0; i < fromStruct.getFields().size(); ++i) {
-                if (!canCastTo(fromStruct.getField(i).getType(), toStruct.getField(i).getType())) {
-                    return false;
-                }
-            }
-            return true;
-        } else if (from.isStringType() && to.isArrayType()) {
-            return true;
-        } else if (from.isJsonType() && to.isArrayType()) {
-            ArrayType array = (ArrayType) to;
-            if (array.getItemType().isScalarType() || array.getItemType().isStructType()) {
-                return true;
-            }
-            return false;
-        } else if (from.isJsonType() && to.isStructType()) {
-            return true;
-        } else if (from.isJsonType() && to.isMapType()) {
-            MapType map = (MapType) to;
-            return canCastTo(Type.VARCHAR, map.getKeyType()) && canCastTo(Type.JSON, map.getValueType());
-        } else if (from.isBoolean() && to.isComplexType()) {
-            // for mock nest type with NULL value, the cast must return NULL
-            // like cast(map{1: NULL} as MAP<int, int>)
-            return true;
-        } else {
-            return false;
-        }
-    }
-
-    /**
-     * Return type t such that values from both t1 and t2 can be assigned to t without an
-     * explicit cast. If strict, does not consider conversions that would result in loss
-     * of precision (e.g. converting decimal to float). Returns INVALID_TYPE if there is
-     * no such type or if any of t1 and t2 is INVALID_TYPE.
-     * TODO: Support non-scalar types.
-     */
-    public static Type getAssignmentCompatibleType(Type t1, Type t2, boolean strict) {
-        if (t1.isScalarType() && t2.isScalarType()) {
-            return ScalarType.getAssignmentCompatibleType((ScalarType) t1, (ScalarType) t2, strict);
-        }
-        return ScalarType.INVALID;
-    }
-
-    /**
      * Returns true if this type exceeds the MAX_NESTING_DEPTH, false otherwise.
      */
     public boolean exceedsMaxNestingDepth() {
@@ -990,83 +804,6 @@ public abstract class Type implements Cloneable {
         }
     }
 
-    public Type getResultType() {
-        switch (this.getPrimitiveType()) {
-            case BOOLEAN:
-            case TINYINT:
-            case SMALLINT:
-            case INT:
-            case BIGINT:
-                return BIGINT;
-            case LARGEINT:
-                return LARGEINT;
-            case FLOAT:
-            case DOUBLE:
-                return DOUBLE;
-            case DATE:
-            case DATETIME:
-            case TIME:
-            case CHAR:
-            case VARCHAR:
-            case HLL:
-            case BITMAP:
-            case PERCENTILE:
-            case JSON:
-                return VARCHAR;
-            case DECIMALV2:
-                return DECIMALV2;
-            case DECIMAL32:
-            case DECIMAL64:
-            case DECIMAL128:
-            case DECIMAL256:
-                return this;
-            case FUNCTION:
-                return FUNCTION;
-            default:
-                return INVALID;
-
-        }
-    }
-
-    private static Type getCommonScalarType(ScalarType t1, ScalarType t2) {
-        return ScalarType.getAssignmentCompatibleType(t1, t2, true);
-    }
-
-    private static Type getCommonArrayType(ArrayType t1, ArrayType t2) {
-        Type item1 = t1.getItemType();
-        Type item2 = t2.getItemType();
-        Type common = getCommonType(item1, item2);
-        return common.isValid() ? new ArrayType(common) : common;
-    }
-
-    /**
-     * Given two types, return the common supertype of them.
-     *
-     * @return the common type, INVALID if no common type exists.
-     */
-    public static Type getCommonType(Type t1, Type t2) {
-        if (t1.isScalarType() && t2.isScalarType()) {
-            return getCommonScalarType((ScalarType) t1, (ScalarType) t2);
-        }
-        if (t1.isArrayType() && t2.isArrayType()) {
-            return getCommonArrayType((ArrayType) t1, (ArrayType) t2);
-        }
-        if (t1.isNull() || t2.isNull()) {
-            return t1.isNull() ? t2 : t1;
-        }
-        return Type.INVALID;
-    }
-
-    public static Type getCommonType(Type[] argTypes, int fromIndex, int toIndex) {
-        Preconditions.checkState(argTypes != null);
-        Preconditions.checkState(0 <= fromIndex && fromIndex < toIndex && toIndex <= argTypes.length);
-        Type commonType = argTypes[fromIndex];
-        for (int i = fromIndex + 1; i < toIndex; ++i) {
-            commonType = ScalarType.getCommonType(commonType, argTypes[i]);
-        }
-        return commonType;
-    }
-
     public Type getNumResultType() {
         switch (getPrimitiveType()) {
             case BOOLEAN:
@@ -1109,33 +846,6 @@ public abstract class Type implements Cloneable {
         }
     }
 
-    /**
-     * @return scalar scale if type is decimal
-     * 31 if type is float or double
-     * 0 others
-     * <p>
-     * https://dev.mysql.com/doc/internals/en/com-query-response.html#column-definition
-     * decimals (1) -- max shown decimal digits
-     * 0x00 for integers and static strings
-     * 0x1f for dynamic strings, double, float
-     * 0x00 to 0x51 for decimals
-     */
-    public int getMysqlResultSetFieldDecimals() {
-        switch (this.getPrimitiveType()) {
-            case DECIMALV2:
-            case DECIMAL32:
-            case DECIMAL64:
-            case DECIMAL128:
-            case DECIMAL256:
-                return ((ScalarType) this).getScalarScale();
-            case FLOAT:
-            case DOUBLE:
-                return 31;
-            default:
-                return 0;
-        }
-    }
-
     @Override
     public Type clone() {
         try {
@@ -1147,18 +857,6 @@ public abstract class Type implements Cloneable {
         } catch (CloneNotSupportedException ex) {
             throw new Error("Something impossible just happened", ex);
         }
-    }
-
-    // getInnermostType() is only used for array
-    public static Type getInnermostType(Type type) {
-        if (type.isScalarType() || type.isStructType() || type.isMapType()) {
-            return type;
-        }
-        if (type.isArrayType()) {
-            return getInnermostType(((ArrayType) type).getItemType());
-        }
-
-        return null;
     }
 
     public String canonicalName() {

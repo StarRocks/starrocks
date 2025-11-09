@@ -19,7 +19,7 @@ namespace starrocks {
 
 class Column;
 
-// This class is a bridge to connect ColumnPredicatew which is used in scan/storage layer, and ExprContext which is
+// This class is a bridge to connect ColumnPredicate which is used in scan/storage layer, and ExprContext which is
 // used in computation layer. By bridging that, we can push more predicates from computation layer onto storage layer,
 // hopefully to scan less data and boost performance.
 

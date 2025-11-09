@@ -37,8 +37,8 @@ import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.JoinOperator;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import com.starrocks.utframe.UtFrameUtils;
 import org.antlr.v4.runtime.BaseErrorListener;
 import org.antlr.v4.runtime.CharStreams;
@@ -236,7 +236,7 @@ class ParserTest {
             QueryStatement stmt = (QueryStatement) SqlParser.parse(sql, sessionVariable).get(0);
             Analyzer.analyze(stmt, ctx);
             Type type = stmt.getQueryRelation().getOutputExpression().get(0).getType();
-            Assertions.assertEquals(type, ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL256, 76, 0));
+            Assertions.assertEquals(type, TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL256, 76, 0));
         } catch (Throwable err) {
             Assertions.fail(err.getMessage());
         }
@@ -247,7 +247,7 @@ class ParserTest {
             QueryStatement stmt = (QueryStatement) SqlParser.parse(sql, sessionVariable).get(0);
             Analyzer.analyze(stmt, ctx);
             Type type = stmt.getQueryRelation().getOutputExpression().get(0).getType();
-            Assertions.assertEquals(type, ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL256, 76, 0));
+            Assertions.assertEquals(type, TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL256, 76, 0));
         } catch (Throwable err) {
             Assertions.fail(err.getMessage());
         }
@@ -271,8 +271,8 @@ class ParserTest {
         Analyzer.analyze(stmt, ctx);
         Type type1 = stmt.getQueryRelation().getOutputExpression().get(0).getType();
         Type type2 = stmt.getQueryRelation().getOutputExpression().get(1).getType();
-        Assertions.assertEquals(type1, ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL256, 65, 0));
-        Assertions.assertEquals(type2, ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 10, 0));
+        Assertions.assertEquals(type1, TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL256, 65, 0));
+        Assertions.assertEquals(type2, TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 10, 0));
     }
 
     @Test

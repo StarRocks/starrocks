@@ -2836,7 +2836,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                     MVPCTBasedRefreshProcessor processor =
                             (MVPCTBasedRefreshProcessor) mvTaskRunProcessor.getMVRefreshProcessor();
 
-                    Set<String> result = processor.getPCTMVToRefreshedPartitions(false);
+                    Set<String> result = processor.getPCTMVToRefreshedPartitions(false).getPartitionNames();
                     Assertions.assertTrue(result.isEmpty());
                 });
     }
@@ -2879,7 +2879,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                     MVPCTBasedRefreshProcessor mvRefreshProcessor =
                             (MVPCTBasedRefreshProcessor) processor.getMVRefreshProcessor();
                     MvTaskRunContext mvTaskRunContext = new MvTaskRunContext(taskRunContext);
-                    Set<String> result = mvRefreshProcessor.getPCTMVToRefreshedPartitions(false);
+                    Set<String> result = mvRefreshProcessor.getPCTMVToRefreshedPartitions(false).getPartitionNames();
                     Assertions.assertFalse(result.isEmpty());
                     Set<String> expect = ImmutableSet.of("p0", "p1", "p2", "p3", "p4");
                     Assertions.assertEquals(expect, result);

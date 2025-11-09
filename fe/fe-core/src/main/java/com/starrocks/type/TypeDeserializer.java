@@ -162,31 +162,31 @@ public class TypeDeserializer {
         
         if (scalarType.getType() == TPrimitiveType.CHAR) {
             Preconditions.checkState(scalarType.isSetLen());
-            return ScalarType.createCharType(scalarType.getLen());
+            return TypeFactory.createCharType(scalarType.getLen());
         } else if (scalarType.getType() == TPrimitiveType.VARCHAR) {
             Preconditions.checkState(scalarType.isSetLen());
-            return ScalarType.createVarcharType(scalarType.getLen());
+            return TypeFactory.createVarcharType(scalarType.getLen());
         } else if (scalarType.getType() == TPrimitiveType.VARBINARY) {
-            return ScalarType.createVarbinary(scalarType.getLen());
+            return TypeFactory.createVarbinary(scalarType.getLen());
         } else if (scalarType.getType() == TPrimitiveType.HLL) {
-            return ScalarType.createHllType();
+            return TypeFactory.createHllType();
         } else if (scalarType.getType() == TPrimitiveType.DECIMAL) {
             Preconditions.checkState(scalarType.isSetPrecision() && scalarType.isSetScale());
-            return ScalarType.createDecimalV2Type(scalarType.getPrecision(), scalarType.getScale());
+            return TypeFactory.createDecimalV2Type(scalarType.getPrecision(), scalarType.getScale());
         } else if (scalarType.getType() == TPrimitiveType.DECIMALV2) {
             Preconditions.checkState(scalarType.isSetPrecision() && scalarType.isSetScale());
-            return ScalarType.createDecimalV2Type(scalarType.getPrecision(), scalarType.getScale());
+            return TypeFactory.createDecimalV2Type(scalarType.getPrecision(), scalarType.getScale());
         } else if (scalarType.getType() == TPrimitiveType.DECIMAL32 ||
                 scalarType.getType() == TPrimitiveType.DECIMAL64 ||
                 scalarType.getType() == TPrimitiveType.DECIMAL128 ||
                 scalarType.getType() == TPrimitiveType.DECIMAL256) {
             Preconditions.checkState(scalarType.isSetPrecision() && scalarType.isSetScale());
-            return ScalarType.createDecimalV3Type(
+            return TypeFactory.createDecimalV3Type(
                     TypeDeserializer.fromThrift(scalarType.getType()),
                     scalarType.getPrecision(),
                     scalarType.getScale());
         } else {
-            return ScalarType.createType(TypeDeserializer.fromThrift(scalarType.getType()));
+            return TypeFactory.createType(TypeDeserializer.fromThrift(scalarType.getType()));
         }
     }
 
@@ -247,20 +247,20 @@ public class TypeDeserializer {
 
         switch (tPrimitiveType) {
             case CHAR:
-                return ScalarType.createCharType(ptype.len);
+                return TypeFactory.createCharType(ptype.len);
             case VARCHAR:
-                return ScalarType.createVarcharType(ptype.len);
+                return TypeFactory.createVarcharType(ptype.len);
             case VARBINARY:
-                return ScalarType.createVarbinary(ptype.len);
+                return TypeFactory.createVarbinary(ptype.len);
             case DECIMALV2:
-                return ScalarType.createDecimalV2Type(ptype.precision, ptype.precision);
+                return TypeFactory.createDecimalV2Type(ptype.precision, ptype.precision);
             case DECIMAL32:
             case DECIMAL64:
             case DECIMAL128:
             case DECIMAL256:
-                return ScalarType.createDecimalV3Type(TypeDeserializer.fromThrift(tPrimitiveType), ptype.precision, ptype.scale);
+                return TypeFactory.createDecimalV3Type(TypeDeserializer.fromThrift(tPrimitiveType), ptype.precision, ptype.scale);
             default:
-                return ScalarType.createType(TypeDeserializer.fromThrift(tPrimitiveType));
+                return TypeFactory.createType(TypeDeserializer.fromThrift(tPrimitiveType));
         }
     }
 }

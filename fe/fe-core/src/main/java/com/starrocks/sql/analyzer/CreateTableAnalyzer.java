@@ -70,6 +70,7 @@ import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import org.apache.commons.collections.CollectionUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -541,9 +542,9 @@ public class CreateTableAnalyzer {
                 if (type.isScalarType()) {
                     ScalarType scalarType = (ScalarType) type;
                     if (scalarType.isWildcardChar()) {
-                        type = ScalarType.createCharType(ScalarType.getOlapMaxVarcharLength());
+                        type = TypeFactory.createCharType(TypeFactory.getOlapMaxVarcharLength());
                     } else if (scalarType.isWildcardVarchar()) {
-                        type = ScalarType.createVarcharType(ScalarType.getOlapMaxVarcharLength());
+                        type = TypeFactory.createVarcharType(TypeFactory.getOlapMaxVarcharLength());
                     }
                 }
                 TypeDef typeDef = new TypeDef(type);

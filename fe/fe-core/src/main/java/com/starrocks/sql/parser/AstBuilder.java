@@ -230,6 +230,7 @@ import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.InstallPluginStmt;
 import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.JoinRelation;
+import com.starrocks.sql.ast.KeyPartitionRef;
 import com.starrocks.sql.ast.KeysDesc;
 import com.starrocks.sql.ast.KillAnalyzeStmt;
 import com.starrocks.sql.ast.KillStmt;
@@ -404,6 +405,7 @@ import com.starrocks.sql.ast.TabletList;
 import com.starrocks.sql.ast.TagOptions;
 import com.starrocks.sql.ast.TaskName;
 import com.starrocks.sql.ast.TruncatePartitionClause;
+import com.starrocks.sql.ast.TruncateTablePartitionStmt;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.UninstallPluginStmt;
 import com.starrocks.sql.ast.UnionRelation;
@@ -535,6 +537,7 @@ import com.starrocks.type.ScalarType;
 import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.RuleContext;
 import org.antlr.v4.runtime.Token;
@@ -1388,8 +1391,15 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         if (context.partitionNames() != null) {
             stop = context.partitionNames().stop;
             PartitionNames partitionNames = (PartitionNames) visit(context.partitionNames());
-            partitionRef = new PartitionRef(partitionNames.getPartitionNames(), partitionNames.isTemp(),
-                    createPos(context.partitionNames()));
+            if (partitionNames.isKeyPartitionNames()) {
+                KeyPartitionRef keyPartitionRef = new KeyPartitionRef(partitionNames.getPartitionColNames(),
+                        partitionNames.getPartitionColValues(), createPos(context.partitionNames()));
+                NodePosition pos = createPos(start, stop);
+                return new TruncateTablePartitionStmt(new TableRef(qualifiedName, null, pos), keyPartitionRef);
+            } else {
+                partitionRef = new PartitionRef(partitionNames.getPartitionNames(), partitionNames.isTemp(),
+                        createPos(context.partitionNames()));
+            }
         }
         NodePosition pos = createPos(start, stop);
         return new TruncateTableStmt(new TableRef(qualifiedName, partitionRef, pos));
@@ -9400,24 +9410,24 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             length = Integer.parseInt(context.typeParameter().INTEGER_VALUE().toString());
         }
         if (context.STRING() != null || context.TEXT() != null) {
-            ScalarType type = ScalarType.createVarcharType(ScalarType.DEFAULT_STRING_LENGTH);
+            ScalarType type = TypeFactory.createVarcharType(ScalarType.DEFAULT_STRING_LENGTH);
             return type;
         } else if (context.VARCHAR() != null) {
-            ScalarType type = ScalarType.createVarcharType(length);
+            ScalarType type = TypeFactory.createVarcharType(length);
             return type;
         } else if (context.CHAR() != null) {
-            ScalarType type = ScalarType.createCharType(length);
+            ScalarType type = TypeFactory.createCharType(length);
             return type;
         } else if (context.SIGNED() != null) {
             return Type.INT;
         } else if (context.HLL() != null) {
-            ScalarType type = ScalarType.createHllType();
+            ScalarType type = TypeFactory.createHllType();
             return type;
         } else if (context.BINARY() != null || context.VARBINARY() != null) {
-            ScalarType type = ScalarType.createVarbinary(length);
+            ScalarType type = TypeFactory.createVarbinary(length);
             return type;
         } else {
-            return ScalarType.createType(context.getChild(0).getText());
+            return TypeFactory.createType(context.getChild(0).getText());
         }
     }
 
@@ -9433,11 +9443,11 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         if (context.DECIMAL() != null || context.NUMBER() != null || context.NUMERIC() != null) {
             if (precision != null) {
                 if (scale != null) {
-                    return ScalarType.createUnifiedDecimalType(precision, scale);
+                    return TypeFactory.createUnifiedDecimalType(precision, scale);
                 }
-                return ScalarType.createUnifiedDecimalType(precision);
+                return TypeFactory.createUnifiedDecimalType(precision);
             }
-            return ScalarType.createUnifiedDecimalType(10, 0);
+            return TypeFactory.createUnifiedDecimalType(10, 0);
         } else if (context.DECIMAL32() != null || context.DECIMAL64() != null || context.DECIMAL128() != null) {
             if (!Config.enable_decimal_v3) {
                 throw new SemanticException("Config field enable_decimal_v3 is false now, " +
@@ -9448,19 +9458,19 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             final PrimitiveType primitiveType = PrimitiveType.valueOf(context.children.get(0).getText().toUpperCase());
             if (precision != null) {
                 if (scale != null) {
-                    return ScalarType.createDecimalV3Type(primitiveType, precision, scale);
+                    return TypeFactory.createDecimalV3Type(primitiveType, precision, scale);
                 }
-                return ScalarType.createDecimalV3Type(primitiveType, precision);
+                return TypeFactory.createDecimalV3Type(primitiveType, precision);
             }
-            return ScalarType.createDecimalV3Type(primitiveType);
+            return TypeFactory.createDecimalV3Type(primitiveType);
         } else if (context.DECIMALV2() != null) {
             if (precision != null) {
                 if (scale != null) {
-                    return ScalarType.createDecimalV2Type(precision, scale);
+                    return TypeFactory.createDecimalV2Type(precision, scale);
                 }
-                return ScalarType.createDecimalV2Type(precision);
+                return TypeFactory.createDecimalV2Type(precision);
             }
-            return ScalarType.createDecimalV2Type();
+            return Type.DEFAULT_DECIMALV2;
         } else {
             throw new IllegalArgumentException("Unsupported type " + context.getText());
         }

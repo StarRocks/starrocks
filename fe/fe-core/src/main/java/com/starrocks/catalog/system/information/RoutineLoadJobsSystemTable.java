@@ -19,7 +19,7 @@ import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.thrift.TSchemaTableType;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.ScalarType;
+import com.starrocks.type.TypeFactory;
 
 import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
 import static com.starrocks.catalog.system.SystemTable.builder;
@@ -32,28 +32,28 @@ public class RoutineLoadJobsSystemTable {
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("ID", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("CREATE_TIME", ScalarType.createType(PrimitiveType.DATETIME))
-                        .column("PAUSE_TIME", ScalarType.createType(PrimitiveType.DATETIME))
-                        .column("END_TIME", ScalarType.createType(PrimitiveType.DATETIME))
-                        .column("DB_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("TABLE_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("STATE", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("DATA_SOURCE_TYPE", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("CURRENT_TASK_NUM", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("JOB_PROPERTIES", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("DATA_SOURCE_PROPERTIES", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("CUSTOM_PROPERTIES", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("STATISTICS", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("PROGRESS", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("REASONS_OF_STATE_CHANGED", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("ERROR_LOG_URLS", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("TRACKING_SQL", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("OTHER_MSG", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("LATEST_SOURCE_POSITION", ScalarType.createJsonType())
-                        .column("OFFSET_LAG", ScalarType.createJsonType())
-                        .column("TIMESTAMP_PROGRESS", ScalarType.createJsonType())
+                        .column("ID", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("CREATE_TIME", TypeFactory.createType(PrimitiveType.DATETIME))
+                        .column("PAUSE_TIME", TypeFactory.createType(PrimitiveType.DATETIME))
+                        .column("END_TIME", TypeFactory.createType(PrimitiveType.DATETIME))
+                        .column("DB_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("TABLE_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("STATE", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("DATA_SOURCE_TYPE", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("CURRENT_TASK_NUM", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("JOB_PROPERTIES", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("DATA_SOURCE_PROPERTIES", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("CUSTOM_PROPERTIES", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("STATISTICS", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("PROGRESS", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("REASONS_OF_STATE_CHANGED", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("ERROR_LOG_URLS", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("TRACKING_SQL", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("OTHER_MSG", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("LATEST_SOURCE_POSITION", TypeFactory.createJsonType())
+                        .column("OFFSET_LAG", TypeFactory.createJsonType())
+                        .column("TIMESTAMP_PROGRESS", TypeFactory.createJsonType())
                         .build(), TSchemaTableType.SCH_ROUTINE_LOAD_JOBS);
     }
 }

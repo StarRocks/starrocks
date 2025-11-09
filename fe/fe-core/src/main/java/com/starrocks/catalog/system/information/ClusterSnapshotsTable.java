@@ -18,7 +18,7 @@ import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.thrift.TSchemaTableType;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.ScalarType;
+import com.starrocks.type.TypeFactory;
 
 import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
 import static com.starrocks.catalog.system.SystemTable.builder;
@@ -31,14 +31,14 @@ public class ClusterSnapshotsTable {
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("SNAPSHOT_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("SNAPSHOT_TYPE", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("CREATED_TIME", ScalarType.createType(PrimitiveType.DATETIME))
-                        .column("FE_JOURNAL_ID", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("STARMGR_JOURNAL_ID", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("PROPERTIES", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("STORAGE_VOLUME", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("STORAGE_PATH", ScalarType.createVarchar(NAME_CHAR_LEN))
+                        .column("SNAPSHOT_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("SNAPSHOT_TYPE", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("CREATED_TIME", TypeFactory.createType(PrimitiveType.DATETIME))
+                        .column("FE_JOURNAL_ID", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("STARMGR_JOURNAL_ID", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("PROPERTIES", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("STORAGE_VOLUME", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("STORAGE_PATH", TypeFactory.createVarchar(NAME_CHAR_LEN))
                         .build(), TSchemaTableType.SCH_CLUSTER_SNAPSHOTS);
     }
 }

@@ -41,9 +41,10 @@ import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.common.TypeManager;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -303,7 +304,7 @@ public class DateLiteral extends LiteralExpr {
             }
         } else if (targetType.isStringType()) {
             return new StringLiteral(getStringValue());
-        } else if (Type.isImplicitlyCastable(this.type, targetType, true)) {
+        } else if (TypeManager.isImplicitlyCastable(this.type, targetType, true)) {
             return new CastExpr(targetType, this);
         }
         Preconditions.checkState(false);
@@ -478,7 +479,7 @@ public class DateLiteral extends LiteralExpr {
                 if (len > 7) {
                     microsecond = data.getInt();
                     // choose the highest scale to keep microsecond value
-                    type = ScalarType.createDecimalV2Type(6);
+                    type = TypeFactory.createDecimalV2Type(6);
                 }
             } else {
                 copy(MIN_DATETIME);

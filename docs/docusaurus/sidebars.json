@@ -155,7 +155,8 @@
                         "loading/Loading_intro",
                         "loading/loading_introduction/loading_concepts",
                         "loading/loading_introduction/loading_considerations",
-                        "loading/loading_introduction/feature-support-loading-and-unloading"
+                        "loading/loading_introduction/feature-support-loading-and-unloading",
+                        "loading/loading_introduction/troubleshooting_loading"
                     ]
                 },
                 {
@@ -283,7 +284,7 @@
                     },
                     "items": [
                         "data_source/data_cache",
-                        "data_source/data_cache_warmup",
+                        "data_source/block_cache_warmup",
                         "data_source/data_cache_observe",
                         "data_source/data_cache_troubleshooting"
                     ]

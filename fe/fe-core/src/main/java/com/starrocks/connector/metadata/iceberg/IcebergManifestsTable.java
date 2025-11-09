@@ -26,9 +26,9 @@ import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.ScalarType;
 import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
+import com.starrocks.type.TypeFactory;
 
 import java.util.List;
 
@@ -48,22 +48,22 @@ public class IcebergManifestsTable extends MetadataTable {
                 TABLE_NAME,
                 Table.TableType.METADATA,
                 builder()
-                        .column("path", ScalarType.createType(PrimitiveType.VARCHAR))
-                        .column("length", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("partition_spec_id", ScalarType.createType(PrimitiveType.INT))
-                        .column("added_snapshot_id", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("added_data_files_count", ScalarType.createType(PrimitiveType.INT))
-                        .column("added_rows_count", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("existing_data_files_count", ScalarType.createType(PrimitiveType.INT))
-                        .column("existing_rows_count", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("deleted_data_files_count", ScalarType.createType(PrimitiveType.INT))
-                        .column("deleted_rows_count", ScalarType.createType(PrimitiveType.BIGINT))
+                        .column("path", TypeFactory.createType(PrimitiveType.VARCHAR))
+                        .column("length", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("partition_spec_id", TypeFactory.createType(PrimitiveType.INT))
+                        .column("added_snapshot_id", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("added_data_files_count", TypeFactory.createType(PrimitiveType.INT))
+                        .column("added_rows_count", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("existing_data_files_count", TypeFactory.createType(PrimitiveType.INT))
+                        .column("existing_rows_count", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("deleted_data_files_count", TypeFactory.createType(PrimitiveType.INT))
+                        .column("deleted_rows_count", TypeFactory.createType(PrimitiveType.BIGINT))
                         .column("partitions", new ArrayType(
                                 new StructType(Lists.newArrayList(
-                                        new StructField("contains_null", ScalarType.createType(PrimitiveType.VARCHAR)),
-                                        new StructField("contains_nan", ScalarType.createType(PrimitiveType.VARCHAR)),
-                                        new StructField("lower_bound", ScalarType.createType(PrimitiveType.VARCHAR)),
-                                        new StructField("upper_bound", ScalarType.createType(PrimitiveType.VARCHAR)))))
+                                        new StructField("contains_null", TypeFactory.createType(PrimitiveType.VARCHAR)),
+                                        new StructField("contains_nan", TypeFactory.createType(PrimitiveType.VARCHAR)),
+                                        new StructField("lower_bound", TypeFactory.createType(PrimitiveType.VARCHAR)),
+                                        new StructField("upper_bound", TypeFactory.createType(PrimitiveType.VARCHAR)))))
                         )
                         .build(),
                 originDb,

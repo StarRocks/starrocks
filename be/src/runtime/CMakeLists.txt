@@ -115,6 +115,6 @@ set(RUNTIME_FILES ${RUNTIME_FILES}
     mysql_table_sink.cpp
 )
 
-add_library(Runtime STATIC
+ADD_BE_LIB(Runtime
     ${RUNTIME_FILES}
     )

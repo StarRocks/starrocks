@@ -69,6 +69,7 @@ import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TOverflowMode;
 import com.starrocks.thrift.TPipelineProfileLevel;
+import com.starrocks.thrift.TPredicateTreeParams;
 import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TSpillMode;
 import com.starrocks.thrift.TSpillOptions;
@@ -684,6 +685,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_PIPELINE_EVENT_SCHEDULER = "enable_pipeline_event_scheduler";
 
+    public static final String ENABLE_SPLIT_TOPN_AGG = "enable_split_topn_agg";
+
+    public static final String SPLIT_TOPN_AGG_LIMIT = "enable_split_topn_agg_limit";
+
     // Flag to control whether to proxy follower's query statement to leader/follower.
     public enum FollowerQueryForwardMode {
         DEFAULT,    // proxy queries by the follower's replay progress (default)
@@ -839,8 +844,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String SCAN_OR_TO_UNION_THRESHOLD = "scan_or_to_union_threshold";
 
     public static final String ENABLE_PUSHDOWN_OR_PREDICATE = "enable_pushdown_or_predicate";
-
     public static final String ENABLE_SHOW_PREDICATE_TREE_IN_PROFILE = "enable_show_predicate_tree_in_profile";
+    public static final String MAX_PUSHDOWN_OR_PREDICATES = "max_pushdown_or_predicates";
 
     public static final String SELECT_RATIO_THRESHOLD = "select_ratio_threshold";
 
@@ -1345,6 +1350,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = CBO_JSON_V2_DICT_OPT)
     private boolean cboJSONV2DictOpt = true;
+
+    @VarAttr(name = ENABLE_SPLIT_TOPN_AGG)
+    private boolean enableSplitTopNAgg = true;
+
+    @VarAttr(name = SPLIT_TOPN_AGG_LIMIT)
+    private long splitTopNAggLimit = 10000;
 
     /*
      * the parallel exec instance num for one Fragment in one BE
@@ -2050,6 +2061,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_DROP_TABLE_CHECK_MV_DEPENDENCY)
     public boolean enableDropTableCheckMvDependency = false;
 
+    public boolean isEnableSplitTopNAgg() {
+        return enableSplitTopNAgg;
+    }
+
+    public long getSplitTopNAggLimit() {
+        return splitTopNAggLimit;
+    }
+
     public boolean isEnableDesensitizeExplain() {
         return enableDesensitizeExplain;
     }
@@ -2602,6 +2621,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_SHOW_PREDICATE_TREE_IN_PROFILE, flag = VariableMgr.INVISIBLE)
     private boolean enableShowPredicateTreeInProfile = false;
+
+    @VarAttr(name = MAX_PUSHDOWN_OR_PREDICATES, flag = VariableMgr.INVISIBLE)
+    private int maxPushdownOrPredicates = 32;
 
     @VarAttr(name = SELECT_RATIO_THRESHOLD, flag = VariableMgr.INVISIBLE)
     private double selectRatioThreshold = 0.15;
@@ -4937,12 +4959,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.scanOrToUnionThreshold = scanOrToUnionThreshold;
     }
 
-    public boolean isEnablePushdownOrPredicate() {
-        return enablePushdownOrPredicate;
-    }
-
-    public boolean isEnableShowPredicateTreeInProfile() {
-        return enableShowPredicateTreeInProfile;
+    public TPredicateTreeParams getPredicateTreeParams() {
+        TPredicateTreeParams params = new TPredicateTreeParams();
+        params.setEnable_or(enablePushdownOrPredicate);
+        params.setEnable_show_in_profile(enableShowPredicateTreeInProfile);
+        params.setMax_pushdown_or_predicates(maxPushdownOrPredicates);
+        return params;
     }
 
     public double getSelectRatioThreshold() {

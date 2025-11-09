@@ -18,7 +18,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.thrift.TSchemaTableType;
-import com.starrocks.type.ScalarType;
+import com.starrocks.type.TypeFactory;
 
 import static com.starrocks.catalog.system.SystemTable.builder;
 
@@ -30,15 +30,15 @@ public class ApplicableRolesSystemTable {
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("USER", ScalarType.createVarchar(97))
-                        .column("HOST", ScalarType.createVarchar(256))
-                        .column("GRANTEE", ScalarType.createVarchar(97))
-                        .column("GRANTEE_HOST", ScalarType.createVarchar(256))
-                        .column("ROLE_NAME", ScalarType.createVarchar(255))
-                        .column("ROLE_HOST", ScalarType.createVarchar(256))
-                        .column("IS_GRANTABLE", ScalarType.createVarchar(3))
-                        .column("IS_DEFAULT", ScalarType.createVarchar(3))
-                        .column("IS_MANDATORY", ScalarType.createVarchar(3))
+                        .column("USER", TypeFactory.createVarchar(97))
+                        .column("HOST", TypeFactory.createVarchar(256))
+                        .column("GRANTEE", TypeFactory.createVarchar(97))
+                        .column("GRANTEE_HOST", TypeFactory.createVarchar(256))
+                        .column("ROLE_NAME", TypeFactory.createVarchar(255))
+                        .column("ROLE_HOST", TypeFactory.createVarchar(256))
+                        .column("IS_GRANTABLE", TypeFactory.createVarchar(3))
+                        .column("IS_DEFAULT", TypeFactory.createVarchar(3))
+                        .column("IS_MANDATORY", TypeFactory.createVarchar(3))
                         .build(),
                 TSchemaTableType.SCH_APPLICABLE_ROLES);
     }

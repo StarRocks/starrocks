@@ -43,6 +43,7 @@ import com.starrocks.thrift.TShowResultSetMetaData;
 import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeDeserializer;
+import com.starrocks.type.TypeFactory;
 import com.starrocks.type.TypeSerializer;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -73,7 +74,7 @@ public class ShowResultSet {
             TColumnDefinition definition = (TColumnDefinition) resultSet.getMetaData().getColumns().get(i);
             columns.add(new Column(
                     definition.getColumnName(),
-                    ScalarType.createType(TypeDeserializer.fromThrift(definition.getColumnType().getType())))
+                    TypeFactory.createType(TypeDeserializer.fromThrift(definition.getColumnType().getType())))
             );
         }
         this.metaData = new ShowResultSetMetaData(columns);

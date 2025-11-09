@@ -38,7 +38,7 @@ import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.common.FeConstants;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.ScalarType;
+import com.starrocks.type.TypeFactory;
 import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -63,9 +63,9 @@ public class MaterializedIndexTest {
         indexId = 10000;
 
         columns = new LinkedList<Column>();
-        columns.add(new Column("k1", ScalarType.createType(PrimitiveType.TINYINT), true, null, "", ""));
-        columns.add(new Column("k2", ScalarType.createType(PrimitiveType.SMALLINT), true, null, "", ""));
-        columns.add(new Column("v1", ScalarType.createType(PrimitiveType.INT), false, AggregateType.REPLACE, "", ""));
+        columns.add(new Column("k1", TypeFactory.createType(PrimitiveType.TINYINT), true, null, "", ""));
+        columns.add(new Column("k2", TypeFactory.createType(PrimitiveType.SMALLINT), true, null, "", ""));
+        columns.add(new Column("v1", TypeFactory.createType(PrimitiveType.INT), false, AggregateType.REPLACE, "", ""));
         index = new MaterializedIndex(indexId, IndexState.NORMAL);
 
         fakeGlobalStateMgr = new FakeGlobalStateMgr();

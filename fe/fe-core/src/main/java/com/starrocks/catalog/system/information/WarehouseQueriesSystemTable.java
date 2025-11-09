@@ -29,7 +29,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.thrift.TSchemaTableType;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.ScalarType;
+import com.starrocks.type.TypeFactory;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.NotImplementedException;
@@ -48,18 +48,18 @@ public class WarehouseQueriesSystemTable extends SystemTable {
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("WAREHOUSE_ID", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("WAREHOUSE_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("QUERY_ID", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("STATE", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("EST_COSTS_SLOTS", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("ALLOCATE_SLOTS", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("QUEUED_WAIT_SECONDS", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("QUERY", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("QUERY_START_TIME", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("QUERY_END_TIME", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("QUERY_DURATION", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("EXTRA_MESSAGE", ScalarType.createVarchar(NAME_CHAR_LEN))
+                        .column("WAREHOUSE_ID", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("WAREHOUSE_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("QUERY_ID", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("STATE", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("EST_COSTS_SLOTS", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("ALLOCATE_SLOTS", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("QUEUED_WAIT_SECONDS", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("QUERY", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("QUERY_START_TIME", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("QUERY_END_TIME", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("QUERY_DURATION", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("EXTRA_MESSAGE", TypeFactory.createVarchar(NAME_CHAR_LEN))
                         .build(), TSchemaTableType.SCH_WAREHOUSE_QUERIES);
     }
 

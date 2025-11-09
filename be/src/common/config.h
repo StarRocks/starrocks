@@ -1345,8 +1345,8 @@ CONF_mInt64(datacache_disk_adjust_interval_seconds, "10");
 CONF_mInt64(datacache_disk_idle_seconds_for_expansion, "7200");
 // The minimum total disk quota bytes to adjust, once the quota to adjust is less than this value,
 // cache quota will be reset to zero to avoid overly frequent population and eviction.
-// Default: 100G
-CONF_mInt64(datacache_min_disk_quota_for_adjustment, "107374182400");
+// Default: 10G
+CONF_mInt64(datacache_min_disk_quota_for_adjustment, "10737418240");
 // The maximum inline cache item count in datacache.
 // When a cache item has a tiny data size, we will try to cache it inline with its metadata
 // to optimize the io performance and reduce disk waste.

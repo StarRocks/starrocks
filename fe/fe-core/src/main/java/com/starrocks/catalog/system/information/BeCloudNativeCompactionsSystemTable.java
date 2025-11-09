@@ -18,7 +18,7 @@ import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.thrift.TSchemaTableType;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.ScalarType;
+import com.starrocks.type.TypeFactory;
 
 import static com.starrocks.catalog.system.SystemTable.builder;
 
@@ -30,17 +30,17 @@ public class BeCloudNativeCompactionsSystemTable {
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("BE_ID", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("TXN_ID", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("TABLET_ID", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("VERSION", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("SKIPPED", ScalarType.createType(PrimitiveType.BOOLEAN))
-                        .column("RUNS", ScalarType.createType(PrimitiveType.INT))
-                        .column("START_TIME", ScalarType.createType(PrimitiveType.DATETIME))
-                        .column("FINISH_TIME", ScalarType.createType(PrimitiveType.DATETIME))
-                        .column("PROGRESS", ScalarType.createType(PrimitiveType.INT))
-                        .column("STATUS", ScalarType.createType(PrimitiveType.VARCHAR))
-                        .column("PROFILE", ScalarType.createType(PrimitiveType.VARCHAR))
+                        .column("BE_ID", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("TXN_ID", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("TABLET_ID", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("VERSION", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("SKIPPED", TypeFactory.createType(PrimitiveType.BOOLEAN))
+                        .column("RUNS", TypeFactory.createType(PrimitiveType.INT))
+                        .column("START_TIME", TypeFactory.createType(PrimitiveType.DATETIME))
+                        .column("FINISH_TIME", TypeFactory.createType(PrimitiveType.DATETIME))
+                        .column("PROGRESS", TypeFactory.createType(PrimitiveType.INT))
+                        .column("STATUS", TypeFactory.createType(PrimitiveType.VARCHAR))
+                        .column("PROFILE", TypeFactory.createType(PrimitiveType.VARCHAR))
                         .build(), TSchemaTableType.SCH_BE_CLOUD_NATIVE_COMPACTIONS);
     }
 }

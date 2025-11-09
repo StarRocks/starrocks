@@ -56,7 +56,6 @@ import java.util.Map;
 public abstract class LiteralExpr extends Expr implements Comparable<LiteralExpr> {
     public LiteralExpr() {
         super();
-        numDistinctValues = 1;
     }
 
     protected LiteralExpr(NodePosition pos) {
