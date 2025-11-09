@@ -1226,15 +1226,50 @@ public class ExpressionAnalyzer {
                     }
                     break;
                 case FunctionSet.ARRAY_GENERATE:
-                    if (node.getChildren().size() < 1 || node.getChildren().size() > 3) {
+                    if (node.getChildren().size() < 1 || node.getChildren().size() > 4) {
                         throw new SemanticException(fnName + " has wrong input numbers");
                     }
-                    for (Expr expr : node.getChildren()) {
-                        if ((expr instanceof SlotRef) && node.getChildren().size() != 3) {
-                            throw new SemanticException(fnName + " with IntColumn doesn't support default parameters");
+                    boolean hasDateFunctionSignatureOverloading = false;
+                    if (node.getChildren().size() >= 2) {
+                        if (node.getChild(0).getType().isDateType() || node.getChild(1).getType().isDateType()) {
+                            hasDateFunctionSignatureOverloading = true;
+                        } else if (node.getChild(0).getType().isStringType() || node.getChild(1).getType().isStringType()) {
+                            hasDateFunctionSignatureOverloading = true;
                         }
-                        if (!(expr.getType().isFixedPointType()) && !expr.getType().isNull()) {
-                            throw new SemanticException(fnName + "'s parameter only support Integer");
+                    }
+
+                    if (hasDateFunctionSignatureOverloading) {
+                        if (node.getChildren().size() == 2) {
+                            IntLiteral e3 = new IntLiteral(1, Type.INT);
+                            node.addChild(e3);
+                            node.addChild(new StringLiteral("day"));
+                        }
+
+                        if (node.getChildren().size() == 3 || node.getChildren().size() == 4) {
+                            if (!(node.getChild(2) instanceof IntLiteral)) {
+                                throw new SemanticException(
+                                        fnName + " requires step parameter must be a constant interval", node.getPos());
+                            }
+                            if (((IntLiteral) node.getChild(2)).getValue() < 0) {
+                                throw new SemanticException(
+                                        fnName + " requires step parameter must be non-negative", node.getPos());
+                            }
+
+                            if (node.getChildren().size() == 3) {
+                                node.addChild(new StringLiteral("day"));
+                            }
+                        }
+                    } else {
+                        if (node.getChildren().size() == 4) {
+                            throw new SemanticException(fnName + " step param has wrong input type");
+                        }
+                        for (Expr expr : node.getChildren()) {
+                            if ((expr instanceof SlotRef) && node.getChildren().size() != 3) {
+                                throw new SemanticException(fnName + " with IntColumn doesn't support default parameters");
+                            }
+                            if (!(expr.getType().isFixedPointType()) && !expr.getType().isNull()) {
+                                throw new SemanticException(fnName + "'s parameter only support Integer");
+                            }
                         }
                     }
                     break;
