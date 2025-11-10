@@ -967,21 +967,18 @@ jobs:
         id: be-config-gen
         if: steps.path-filter.outputs.be-config == 'true'
         run: |
-          cd ci-tool 
           ./ci-tool/bin/run-doc-gen.sh --type be_config --sr ${{github.repository}} --limit 5 > $GITHUB_OUTPUT
 
       - name: variables 
         id: variables-gen
         if: steps.path-filter.outputs.variable == 'true'
         run: |
-          cd ci-tool 
           ./ci-tool/bin/run-doc-gen.sh --type variables --sr ${{github.repository}} --limit 5 > $GITHUB_OUTPUT
 
       - name: function 
         id: function-gen
         if: steps.path-filter.outputs.function == 'true'
         run: |
-          cd ci-tool 
           ./ci-tool/bin/run-doc-gen.sh --type function --sr ${{github.repository}} --fe ${FE_NODE} --limit 5 > $GITHUB_OUTPUT
 
       - name: Comment DocGen Result
