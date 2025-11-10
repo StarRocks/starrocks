@@ -816,7 +816,15 @@ public class ConnectContext {
         endTime = Instant.now();
     }
 
+<<<<<<< HEAD
     public void updateReturnRows(long returnRows) {
+=======
+    public Instant getEndTime() {
+        return endTime;
+    }
+
+    public void updateReturnRows(int returnRows) {
+>>>>>>> eb2bd5f8cc ([Enhancement] add state check in show_current_queries (#63731))
         this.returnRows += returnRows;
     }
 
