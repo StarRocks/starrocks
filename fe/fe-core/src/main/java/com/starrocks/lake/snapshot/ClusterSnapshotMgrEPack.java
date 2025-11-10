@@ -272,6 +272,7 @@ public class ClusterSnapshotMgrEPack extends ClusterSnapshotMgr {
             if (version != 0) {
                 versions.add(version);
             }
+            versions.addAll(info.getCommittedVersionsAfterVisible(dbId, tableId, partId, physicalPartId));
         }
         return versions;
     }

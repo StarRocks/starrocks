@@ -663,8 +663,15 @@ public class ClusterSnapshotTest {
                 List<Long> versions =
                         localClusterSnapshotMgr.getVacuumRetainVersions(
                                     dbTest.getId(), olapTable.getId(), part.getParentId(), part.getId());
-                Assertions.assertTrue(versions.size() == 1);
-                Assertions.assertTrue(versions.get(0) == part.getVisibleVersion());
+                long visible = part.getVisibleVersion();
+                long committed = part.getCommittedVersion();
+                long expectedSize = 1 + Math.max(0L, committed - visible);
+                Assertions.assertEquals(expectedSize, versions.size());
+                Assertions.assertEquals(visible, versions.get(0).longValue());
+                if (committed > visible) {
+                    Assertions.assertTrue(versions.contains(visible + 1));
+                    Assertions.assertEquals(committed, versions.get(versions.size() - 1).longValue());
+                }
                 Assertions.assertTrue(
                         localClusterSnapshotMgr.isPartitionInClusterSnapshotInfo(
                                 dbTest.getId(), olapTable.getId(), part.getParentId()));
@@ -725,5 +732,82 @@ public class ClusterSnapshotTest {
         log = new ManualClusterSnapshotLog();
         log.setDropManualJob(manualJob.getSnapshotName());
         localClusterSnapshotMgr.replayManualLog(log);
+    }
+
+    @Test
+    public void testRetainVersionsIncludesCommittedAfterVisible() {
+        final ClusterSnapshotMgrEPack localClusterSnapshotMgr = new ClusterSnapshotMgrEPack();
+        localClusterSnapshotMgr.clusterSnapshotCheckpointScheduler = new ClusterSnapshotCheckpointScheduler(null, null);
+
+        long testDbId = 0;
+        List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds();
+        for (Long dbId : dbIds) {
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+            if (db != null && !db.isSystemDatabase()) {
+                testDbId = dbId;
+                break;
+            }
+        }
+        Database sourceDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(testDbId);
+        final Database dbTest = new Database(sourceDb.getId(), sourceDb.getFullName());
+        for (Table tbl : sourceDb.getTables()) {
+            if (tbl.isOlapTable()) {
+                dbTest.registerTableUnlocked(tbl);
+            }
+        }
+
+        new MockUp<Table>() {
+            @Mock
+            public boolean isCloudNativeTableOrMaterializedView() {
+                return true;
+            }
+        };
+
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public List<Database> getAllDbs() {
+                return Lists.newArrayList(dbTest);
+            }
+        };
+
+        // pick one table/partition
+        OlapTable targetTable = null;
+        PhysicalPartition targetPart = null;
+        outer:
+        for (Table tbl : dbTest.getTables()) {
+            OlapTable olapTable = (OlapTable) tbl;
+            for (PhysicalPartition part : olapTable.getPhysicalPartitions()) {
+                targetTable = olapTable;
+                targetPart = part;
+                break outer;
+            }
+        }
+        Assertions.assertNotNull(targetTable);
+        Assertions.assertNotNull(targetPart);
+
+        long visible = targetPart.getVisibleVersion();
+        long originalNext = targetPart.getNextVersion();
+        long bump = 3L;
+        try {
+            // Make committedVersion = visible + bump
+            targetPart.setNextVersion(visible + bump + 1);
+            ClusterSnapshotInfo clusterSnapshotInfo =
+                    SnapshotInfoHelper.buildClusterSnapshotInfo(
+                            GlobalStateMgr.getCurrentState().getLocalMetastore().getAllDbs());
+            ManualClusterSnapshotJob manualJob =
+                    new ManualClusterSnapshotJob(100, "retain_versions_test", "default_sv", System.currentTimeMillis());
+            manualJob.setClusterSnapshotInfo(clusterSnapshotInfo);
+            localClusterSnapshotMgr.addManualClusterSnapshotJob(manualJob);
+
+            List<Long> versions = localClusterSnapshotMgr.getVacuumRetainVersions(
+                    dbTest.getId(), targetTable.getId(), targetPart.getParentId(), targetPart.getId());
+
+            // Expect [visible, visible+1, ..., visible+bump]
+            Assertions.assertEquals(bump + 1, versions.size());
+            Assertions.assertEquals(visible, versions.get(0).longValue());
+            Assertions.assertEquals(visible + bump, versions.get(versions.size() - 1).longValue());
+        } finally {
+            targetPart.setNextVersion(originalNext);
+        }
     }
 }
