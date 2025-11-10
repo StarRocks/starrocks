@@ -307,7 +307,8 @@ public class OptimizerContext {
     public void checkTimeout() {
         long timeout = getSessionVariable().getOptimizerExecuteTimeout();
         long now = optimizerTimer.elapsed(TimeUnit.MILLISECONDS);
-        if (timeout > 0 && now > timeout) {
+        // timeout == -1 is used to inject failure in test, which is not a reasonable value for normal usage
+        if (timeout > 0 && now > timeout || timeout == -1) {
             ConnectContext context = ConnectContext.get();
             long threadAllocatedBytes =
                     ConnectProcessor.getThreadAllocatedBytes(Thread.currentThread().getId()) -
