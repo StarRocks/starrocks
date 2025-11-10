@@ -1814,28 +1814,28 @@ displayed_sidebar: docs
 
 - 单位：毫秒
 - 类型：Summary
-- 描述：测量事务“写入”阶段的延迟，从 `prepare` 时间到 `commit` 时间。此指标隔离了事务准备发布之前数据写入和准备阶段的性能。
+- 描述：事务在 `write` 阶段的延迟，从 `prepare` 时间到 `commit` 时间。此指标隔离了事务准备发布之前数据写入和准备阶段的性能。
 
 #### starrocks_fe_txn_publish_latency_ms
 
 - 单位：毫秒
 - 类型：Summary
-- 描述：测量“发布”阶段的总延迟，从 `commit` 时间到 `finish` 时间。这是已提交的事务对查询可见所需的时间。此指标是 `schedule`、`execute` 和 `ack` 三个子阶段的总和。
+- 描述：事务在 `publish` 阶段的总延迟，从 `commit` 时间到 `finish` 时间。这是已提交的事务对查询可见所需的时间。此指标是 `schedule`、`execute` 和 `ack` 三个子阶段的总和。
 
 #### starrocks_fe_txn_publish_schedule_latency_ms
 
 - 单位：毫秒
 - 类型：Summary
-- 描述：跟踪事务在提交后等待发布的时间，从 `commit` 时间到发布任务被执行的时间。此延迟反映了发布管道中的调度延迟或排队时间。
+- 描述：事务在提交后等待发布的时间，从 `commit` 时间到发布任务被执行的时间。此延迟反映了 Publish Pipeline 中的调度延迟或排队时间。
 
 #### starrocks_fe_txn_publish_execute_latency_ms
 
 - 单位：毫秒
 - 类型：Summary
-- 描述：测量发布任务的活动执行时间，从任务被执行到完成。这代表了为使事务的更改可见而正在进行的实际工作。
+- 描述：事务 Publish 任务的活动执行时间，从任务被执行到完成，代表了用于使事务的更改变为可见而实际花费的时间。
 
 #### starrocks_fe_txn_publish_ack_latency_ms
 
 - 单位：毫秒
 - 类型：Summary
-- 描述：测量最终确认延迟，从发布任务完成到事务被标记为 `VISIBLE` 的最终 `finish` 时间。这包括任何最终步骤或所需的确认。
+- 描述：事务最终确认的延迟，从发布任务完成到事务被标记为 `VISIBLE` 的最终 `finish` 时间。这包括任何最终步骤或所需的确认。
