@@ -759,7 +759,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### txn_latency_metric_report_groups
 
-- Default: ""
+- Default: An empty string
 - Type: String
 - Unit: -
 - Is mutable: Yes
