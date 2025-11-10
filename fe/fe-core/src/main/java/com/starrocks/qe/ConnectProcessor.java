@@ -602,22 +602,44 @@ public class ConnectProcessor {
     // binary<var>      parameter_values  value of each parameter
     // detail https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_com_stmt_execute.html
     private void handleExecute() {
+        MetricRepo.COUNTER_REQUEST_ALL.increase(1L);
+        
         packetBuf = packetBuf.order(ByteOrder.LITTLE_ENDIAN);
         // stmt_id
         int stmtId = packetBuf.getInt();
         // flag
         packetBuf.get();
         packetBuf.getInt();
+        
+        // Initialize audit event builder
+        ctx.getAuditEventBuilder().reset();
+        ctx.getAuditEventBuilder()
+                .setTimestamp(System.currentTimeMillis())
+                .setClientIp(ctx.getMysqlChannel().getRemoteHostPortString())
+                .setUser(ctx.getQualifiedUser())
+                .setAuthorizedUser(
+                        ctx.getCurrentUserIdentity() == null ? "null" : ctx.getCurrentUserIdentity().toString())
+                .setDb(ctx.getDatabase())
+                .setCatalog(ctx.getCurrentCatalog())
+                .setWarehouse(ctx.getCurrentWarehouseName())
+                .setCustomQueryId(ctx.getCustomQueryId())
+                .setCNGroup(ctx.getCurrentComputeResourceName());
+        
         // cache statement
         PrepareStmtContext prepareCtx = ctx.getPreparedStmt(String.valueOf(stmtId));
         if (null == prepareCtx) {
             ctx.getState().setError("msg: Not Found prepared statement, stmtName: " + stmtId);
+            ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
+            // Audit even on early error
+            auditAfterExec("EXECUTE STMT " + stmtId, null, null);
             return;
         }
         int numParams = prepareCtx.getStmt().getParameters().size();
         // null bitmap
         byte[] nullBitmap = new byte[(numParams + 7) / 8];
         packetBuf.get(nullBitmap);
+        
+        String originStmt = null;
         try {
             ctx.setQueryId(UUIDUtil.genUUID());
 
@@ -642,7 +664,7 @@ public class ConnectProcessor {
             ExecuteStmt executeStmt = new ExecuteStmt(String.valueOf(stmtId), exprs);
             // audit will affect performance
             boolean enableAudit = ctx.getSessionVariable().isAuditExecuteStmt();
-            String originStmt = executeStmt.toSql();
+            originStmt = executeStmt.toSql();
             executeStmt.setOrigStmt(new OriginStatement(originStmt, 0));
 
             boolean isQuery = ctx.isQueryStmt(executeStmt);
@@ -672,15 +694,25 @@ public class ConnectProcessor {
             } else {
                 executor.execute();
             }
-
-            if (enableAudit) {
-                auditAfterExec(originStmt, executor.getParsedStmt(), executor.getQueryStatisticsForAuditLog());
-            }
         } catch (Throwable e) {
             // Catch all throwable.
             // If reach here, maybe palo bug.
             LOG.warn("Process one query failed because unknown reason: ", e);
             ctx.getState().setError(e.getClass().getSimpleName() + ", msg: " + e.getMessage());
+            ctx.getState().setErrType(QueryState.ErrType.INTERNAL_ERR);
+        } finally {
+            Tracers.close();
+        }
+        
+        // Always audit after execution, regardless of success or failure
+        if (executor != null) {
+            auditAfterExec(originStmt, executor.getParsedStmt(), executor.getQueryStatisticsForAuditLog());
+            if (ctx.getSessionVariable().isAuditExecuteStmt() && ctx.getState().isQuery()) {
+                executor.addFinishedQueryDetail();
+            }
+        } else {
+            // executor can be null if we encounter analysis error.
+            auditAfterExec(originStmt != null ? originStmt : "EXECUTE STMT " + stmtId, null, null);
         }
     }
 
