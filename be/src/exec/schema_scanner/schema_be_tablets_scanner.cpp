@@ -102,6 +102,7 @@ Status SchemaBeTabletsScanner::start(RuntimeState* state) {
     auto manager = StorageEngine::instance()->tablet_manager();
     manager->get_tablets_basic_infos(_param->table_id, _param->partition_id, _param->tablet_id, _infos,
                                      &authorized_table_ids);
+#ifndef __APPLE__
     // shared-data
     auto lake_manager = ExecEnv::GetInstance()->lake_tablet_manager();
     if (lake_manager != nullptr) {
@@ -126,6 +127,7 @@ Status SchemaBeTabletsScanner::start(RuntimeState* state) {
         lake_manager->get_tablets_basic_info(_param->table_id, _param->partition_id, _param->tablet_id,
                                              authorized_table_ids, partition_versions, _infos);
     }
+#endif // __APPLE__
     LOG(INFO) << strings::Substitute("get_tablets_basic_infos table_id:$0 partition:$1 tablet:$2 #info:$3",
                                      _param->table_id, _param->partition_id, _param->tablet_id, _infos.size());
     _cur_idx = 0;
