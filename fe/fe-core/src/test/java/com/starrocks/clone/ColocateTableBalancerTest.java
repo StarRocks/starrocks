@@ -100,14 +100,26 @@ public class ColocateTableBalancerTest {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        balancer.setStop();
+        new MockUp<ColocateTableBalancer>() {
+            @Mock
+            protected void runAfterCatalogReady() {
+                System.out.println("Mocked ColocateTableBalancer.runAfterCatalogReady() called");
+            }
+        };
+
         GlobalStateMgr.getCurrentState().getAlterJobMgr().stop();
         UtFrameUtils.createMinStarRocksCluster();
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(ctx);
         GlobalStateMgr.getCurrentState().getHeartbeatMgr().setStop();
         GlobalStateMgr.getCurrentState().getTabletScheduler().setStop();
+<<<<<<< HEAD
         ColocateTableBalancer.getInstance().setStop();
+=======
+        TabletCollector collector = (TabletCollector) Deencapsulation.getField(GlobalStateMgr.getCurrentState(),
+                "tabletCollector");
+        collector.setStop();
+>>>>>>> 3c92b030e1 ([UT] Fix unstable colocate balancer ut)
     }
 
     @Before
@@ -187,10 +199,25 @@ public class ColocateTableBalancerTest {
 
         // test if group is unstable when all its tablets are in TabletScheduler
         long tableId = table.getId();
+<<<<<<< HEAD
         ColocateTableBalancer colocateTableBalancer = ColocateTableBalancer.getInstance();
         colocateTableBalancer.runAfterCatalogReady();
         GroupId groupId = GlobalStateMgr.getCurrentState().getColocateTableIndex().getGroup(tableId);
         Assert.assertTrue(GlobalStateMgr.getCurrentState().getColocateTableIndex().isGroupUnstable(groupId));
+=======
+        Deencapsulation.invoke(balancer, "matchGroups");
+        GroupId groupId = globalStateMgr.getColocateTableIndex().getGroup(tableId);
+        Assertions.assertTrue(globalStateMgr.getColocateTableIndex().isGroupUnstable(groupId));
+
+        // check balance stat
+        Partition partition = table.getPartition("tbl");
+        PhysicalPartition physicalPartition = partition.getDefaultPhysicalPartition();
+        Assertions.assertFalse(physicalPartition.isTabletBalanced());
+        MaterializedIndex index = physicalPartition.getBaseIndex();
+        BalanceStat balanceStat = index.getBalanceStat();
+        Assertions.assertFalse(balanceStat.isBalanced());
+        Assertions.assertEquals(BalanceType.COLOCATION_GROUP, balanceStat.getBalanceType());
+>>>>>>> 3c92b030e1 ([UT] Fix unstable colocate balancer ut)
 
         // clean
         colocateIndex.removeTable(table.getId(), table, false);
@@ -207,14 +234,19 @@ public class ColocateTableBalancerTest {
                         "distributed by hash(`id`) buckets 1 " +
                         "properties('replication_num' = '1', 'colocate_with' = 'group3');");
 
+<<<<<<< HEAD
         Database database = GlobalStateMgr.getCurrentState().getDb("db3");
         OlapTable table = (OlapTable) database.getTable("tbl3");
         ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+=======
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db3");
+        OlapTable table =
+                    (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), "tbl3");
+>>>>>>> 3c92b030e1 ([UT] Fix unstable colocate balancer ut)
 
         List<Partition> partitions = Lists.newArrayList(table.getPartitions());
         LocalTablet tablet = (LocalTablet) partitions.get(0).getBaseIndex().getTablets().get(0);
         tablet.getImmutableReplicas().get(0).setBad(true);
-        ColocateTableBalancer colocateTableBalancer = ColocateTableBalancer.getInstance();
         long oldVal = Config.tablet_sched_repair_delay_factor_second;
         try {
             Config.tablet_sched_repair_delay_factor_second = -1;
@@ -222,8 +254,8 @@ public class ColocateTableBalancerTest {
             // single replica, we need to open this test switch to test the behavior of bad replica balance
             ColocateTableBalancer.ignoreSingleReplicaCheck = true;
             // call twice to trigger the real balance action
-            colocateTableBalancer.runAfterCatalogReady();
-            colocateTableBalancer.runAfterCatalogReady();
+            Deencapsulation.invoke(balancer, "matchGroups");
+            Deencapsulation.invoke(balancer, "matchGroups");
             TabletScheduler tabletScheduler = GlobalStateMgr.getCurrentState().getTabletScheduler();
             List<List<String>> result = tabletScheduler.getPendingTabletsInfo(100);
             System.out.println(result);
