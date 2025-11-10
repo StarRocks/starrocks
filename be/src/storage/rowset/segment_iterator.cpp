@@ -456,7 +456,6 @@ private:
     std::unique_ptr<InvertedIndexContext> _inverted_index_ctx;
 
     bool _enable_predicate_col_late_materialize;
-    bool _has_topn_filter;
 };
 
 // ScanContext method implementations
@@ -619,8 +618,7 @@ SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, Schema schema
           _opts(std::move(options)),
           _bitmap_index_evaluator(_schema, _opts.pred_tree),
           _predicate_columns(_opts.pred_tree.num_columns()),
-          _enable_predicate_col_late_materialize(_opts.enable_predicate_col_late_materialize),
-          _has_topn_filter(_opts.has_topn_filter) {
+          _enable_predicate_col_late_materialize(_opts.enable_predicate_col_late_materialize) {
     // Initialize vector index context only when needed
     if (_opts.use_vector_index) {
         _vector_index_ctx = std::make_unique<VectorIndexContext>();
@@ -2107,11 +2105,6 @@ StatusOr<size_t> SegmentIterator::_predicate_evaluate_late_materialize(vector<ro
         if (chunk_start && !scan_range_normalized) {
             break;
         }
-
-        // if has topn filter, storage engine should send data to topn as soon as possible
-        // if (_has_topn_filter) {
-        //     break;
-        // }
     }
 
     size_t chunk_size = first_col->size();
