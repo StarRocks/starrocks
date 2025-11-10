@@ -580,11 +580,6 @@ public class HiveMetastoreApiConverter {
     }
 
     public static TextFileFormatDesc toTextFileFormatDesc(Map<String, String> parameters) {
-        final String DEFAULT_FIELD_DELIM = "\001";
-        final String DEFAULT_COLLECTION_DELIM = "\002";
-        final String DEFAULT_MAPKEY_DELIM = "\003";
-        final String DEFAULT_LINE_DELIM = "\n";
-
         // Get properties 'field.delim', 'line.delim', 'collection.delim' and 'mapkey.delim' from StorageDescriptor
         // Detail refer to:
         // https://github.com/apache/hive/blob/90428cc5f594bd0abb457e4e5c391007b2ad1cb8/serde/src/gen/thrift/gen-javabean/org/apache/hadoop/hive/serde/serdeConstants.java#L34-L40

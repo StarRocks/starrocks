@@ -94,7 +94,7 @@ public enum HiveStorageFormat {
         for (HiveStorageFormat format : values()) {
             formatSerdeMapBuilder.put(format.inputFormat + ":" + format.serde, format);
         }
-        FORMAT_SERDE_MAP = formatMapBuilder.build();
+        FORMAT_SERDE_MAP = formatSerdeMapBuilder.build();
     }
 
     public static HiveStorageFormat get(String name) {
