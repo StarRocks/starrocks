@@ -176,6 +176,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.plan.PlanTestBase.setPartitionStatistics;
+import static com.starrocks.utframe.StarRocksTestBase.isOutputTraceLog;
 
 public class UtFrameUtils {
     private static final AtomicInteger INDEX = new AtomicInteger(0);
@@ -567,7 +568,7 @@ public class UtFrameUtils {
                         UtFrameUtils.getFragmentPlanWithTrace(connectContext, sql, traceModule);
             Pair<ExecPlan, String> execPlanWithQuery = result.second;
             String traceLog = execPlanWithQuery.second;
-            if (!Strings.isNullOrEmpty(traceLog)) {
+            if (isOutputTraceLog && !Strings.isNullOrEmpty(traceLog)) {
                 System.out.println(traceLog);
             }
             return execPlanWithQuery.first.getExplainString(TExplainLevel.NORMAL);
