@@ -180,7 +180,7 @@ public class FileTable extends Table {
                 0, "", "");
         tTableDescriptor.setFileTable(tFileTable);
 
-        HiveStorageFormat storageFormat = HiveStorageFormat.get(fileProperties.get(JSON_KEY_FORMAT));
+        HiveStorageFormat storageFormat = getFileFormat();
         tFileTable.setSerde_lib(storageFormat.getSerde());
         tFileTable.setInput_format(storageFormat.getInputFormat());
 
