@@ -1626,7 +1626,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### tablet_map_shard_size
 
-- 默认值：32
+- 默认值：1024
 - 类型：Int
 - 单位：-
 - 是否动态：否

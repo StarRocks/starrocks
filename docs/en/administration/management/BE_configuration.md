@@ -1667,7 +1667,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 
 ##### tablet_map_shard_size
 
-- Default: 32
+- Default: 1024
 - Type: Int
 - Unit: -
 - Is mutable: No
