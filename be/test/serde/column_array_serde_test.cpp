@@ -194,8 +194,8 @@ PARALLEL_TEST(ColumnArraySerdeTest, decimal_column) {
 
     for (auto level = -1; level < 8; ++level) {
         buffer.resize(ColumnArraySerde::max_serialized_size(*c1, level));
-        ASSIGN_OR_ABORT(auto p1, ColumnArraySerde::serialize(*c1, buffer.data(), false, level));
-        ASSIGN_OR_ABORT(auto p2, ColumnArraySerde::deserialize(buffer.data(), c2.get(), false, level));
+        ASSERT_OK(ColumnArraySerde::serialize(*c1, buffer.data(), false, level));
+        ASSERT_OK(ColumnArraySerde::deserialize(buffer.data(), c2.get(), false, level));
         for (size_t i = 0; i < c1->size(); i++) {
             ASSERT_EQ(c1->get_data()[i], c2->get_data()[i]);
         }
@@ -347,8 +347,10 @@ PARALLEL_TEST(ColumnArraySerdeTest, large_binary_column) {
 
     std::vector<uint8_t> buffer;
     buffer.resize(ColumnArraySerde::max_serialized_size(*c1));
-    ASSERT_EQ(buffer.data() + buffer.size(), ColumnArraySerde::serialize(*c1, buffer.data()));
-    ASSERT_EQ(buffer.data() + buffer.size(), ColumnArraySerde::deserialize(buffer.data(), c2.get()));
+    ASSIGN_OR_ABORT(auto p1, ColumnArraySerde::serialize(*c1, buffer.data()));
+    ASSIGN_OR_ABORT(auto p2, ColumnArraySerde::deserialize(buffer.data(), c2.get()));
+    ASSERT_EQ(buffer.data() + buffer.size(), p1);
+    ASSERT_EQ(buffer.data() + buffer.size(), p2);
     for (size_t i = 0; i < c1->size(); i++) {
         ASSERT_EQ(c1->get_slice(i), c2->get_slice(i));
     }
@@ -379,8 +381,10 @@ PARALLEL_TEST(ColumnArraySerdeTest, const_column) {
 
     std::vector<uint8_t> buffer;
     buffer.resize(ColumnArraySerde::max_serialized_size(*c1));
-    ASSERT_EQ(buffer.data() + buffer.size(), ColumnArraySerde::serialize(*c1, buffer.data()));
-    ASSERT_EQ(buffer.data() + buffer.size(), ColumnArraySerde::deserialize(buffer.data(), c2.get()));
+    ASSIGN_OR_ABORT(auto p1, ColumnArraySerde::serialize(*c1, buffer.data()));
+    ASSIGN_OR_ABORT(auto p2, ColumnArraySerde::deserialize(buffer.data(), c2.get()));
+    ASSERT_EQ(buffer.data() + buffer.size(), p1);
+    ASSERT_EQ(buffer.data() + buffer.size(), p2);
     ASSERT_EQ(c1->size(), c2->size());
     for (size_t i = 0; i < c1->size(); i++) {
         ASSERT_EQ(c1->get(i).get_int32(), c2->get(i).get_int32());
