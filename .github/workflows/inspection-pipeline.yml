@@ -209,29 +209,29 @@ jobs:
         id: init-doc-agent
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && ./lib/init_doc.sh 
-          ./bin/doc-checkout.sh --repository ${{ github.repository }} --branch ${BRANCH} --dir /root/
+          ./bin/doc-checkout.sh --repository ${{ github.repository }} --branch ${BRANCH}
 
       - name: FE config 
         id: fe-config-gen
         run: |
           pwd
           ls
-          ./ci-tool/bin/run-doc-gen.sh --type fe_config --sr ${{github.repository}} >> $GITHUB_OUTPUT
+          ./ci-tool/bin/run-doc-gen.sh --type fe_config --sr starrocks >> $GITHUB_OUTPUT
 
       - name: BE config 
         id: be-config-gen
         run: |
-          ./ci-tool/bin/run-doc-gen.sh --type be_config --sr ${{github.repository}} >> $GITHUB_OUTPUT
+          ./ci-tool/bin/run-doc-gen.sh --type be_config --sr starrocks >> $GITHUB_OUTPUT
 
       - name: variables 
         id: variables-gen
         run: |
-          ./ci-tool/bin/run-doc-gen.sh --type variables --sr ${{github.repository}} >> $GITHUB_OUTPUT
+          ./ci-tool/bin/run-doc-gen.sh --type variables --sr starrocks >> $GITHUB_OUTPUT
 
       - name: function 
         id: function-gen
         run: |
-          ./ci-tool/bin/run-doc-gen.sh --type function --sr ${{github.repository}} --fe ${FE_NODE} >> $GITHUB_OUTPUT
+          ./ci-tool/bin/run-doc-gen.sh --type function --sr starrocks --fe ${FE_NODE} >> $GITHUB_OUTPUT
 
   Teardown:
     runs-on: [self-hosted, normal]
