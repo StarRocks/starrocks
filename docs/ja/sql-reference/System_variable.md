@@ -71,7 +71,6 @@ SET GLOBAL query_mem_limit = 137438953472;
 * cngroup_schedule_mode
 * default_rowset_type
 * enable_group_level_query_queue
-* enable_plan_capture
 * enable_query_history
 * enable_query_queue_load
 * enable_query_queue_select
@@ -83,8 +82,6 @@ SET GLOBAL query_mem_limit = 137438953472;
 * license
 * lower_case_table_names
 * performance_schema
-* plan_capture_include_pattern
-* plan_capture_interval_seconds
 * query_cache_size
 * query_history_keep_seconds
 * query_history_load_interval_seconds
@@ -176,10 +173,6 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 変数は **アルファベット順** に説明されています。`global` ラベルが付いた変数はグローバルにのみ有効です。他の変数はグローバルまたは単一のセッションで有効にすることができます。
 
-### SQL_AUTO_IS_NULL
-
-JDBC 接続プール C3P0 との互換性のために使用されます。実際の用途はありません。
-
 ### activate_all_roles_on_login (global)
 
 * **説明**: StarRocks ユーザーが StarRocks クラスタに接続する際に、すべてのロール（デフォルトロールと付与されたロールを含む）を有効にするかどうか。
@@ -191,10 +184,6 @@ JDBC 接続プール C3P0 との互換性のために使用されます。実際
 セッションで割り当てられたロールをアクティブにしたい場合は、[SET ROLE](sql-statements/account-management/SET_DEFAULT_ROLE.md) コマンドを使用してください。
 
 ### auto_increment_increment
-
-MySQL クライアント互換性のために使用されます。実際の用途はありません。
-
-### autocommit
 
 MySQL クライアント互換性のために使用されます。実際の用途はありません。
 
@@ -231,18 +220,6 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **説明**: DECIMAL データと STRING データの間でデータ比較に使用されるデータ型を指定します。デフォルト値は `DECIMAL` であり、VARCHAR も有効な値です。**この変数は `=` および `!=` 比較にのみ有効です。**
 * **データ型**: 文字列
 * **導入バージョン**: v2.5.14
-
-### cbo_json_v2_dict_opt
-
-* **説明**: JSON v2 のパス書き換えで生成される Flat JSON の文字列サブカラムに対して、低カーディナリティ辞書最適化を有効にするかどうか。有効にすると、オプティマイザはそれらのサブカラムにグローバル辞書を構築・利用し、文字列式、GROUP BY、JOIN などを高速化できます。
-* **デフォルト**: true
-* **データ型**: Boolean
-
-### cbo_json_v2_rewrite
-
-* **説明**: オプティマイザで JSON v2 のパス書き換えを有効にするかどうか。有効にすると、JSON 関数（`get_json_*` など）を Flat JSON のサブカラムへの直接アクセスに書き換え、述語プッシュダウン、カラムプルーニング、辞書最適化を有効化します。
-* **デフォルト**: true
-* **データ型**: Boolean
 
 ### cbo_materialized_view_rewrite_related_mvs_limit
 
@@ -297,6 +274,13 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **デフォルト**: 1024
 * **導入バージョン**: v2.5
 
+### custom_query_id (session)
+
+* **説明**: 現在のクエリに外部の識別子を紐づけるために使用されます。クエリを実行する前に `SET SESSION custom_query_id = 'my-query-id';` のように設定できます。クエリが終了すると値はリセットされます。この値は `KILL QUERY 'my-query-id'` に渡すことができます。値は監査ログの `customQueryId` フィールドで確認できます。
+* **既定値**: ""
+* **データ型**: String
+* **導入バージョン**: v3.4.0
+
 ### datacache_sharing_work_period
 
 * **説明**: キャッシュ共有が有効になる期間。各クラスタースケーリング操作の後、キャッシュ共有機能が有効になっている場合、この期間内のリクエストのみが他のノードからキャッシュデータにアクセスしようとします。
@@ -307,15 +291,6 @@ MySQL クライアント互換性のために使用されます。実際の用�
 ### default_rowset_type (global)
 
 コンピューティングノードのストレージエンジンで使用されるデフォルトのストレージ形式を設定するために使用されます。現在サポートされているストレージ形式は `alpha` と `beta` です。
-
-### default_table_compression
-
-* **説明**: テーブルストレージのデフォルト圧縮アルゴリズム。サポートされている圧縮アルゴリズムは `snappy, lz4, zlib, zstd` です。
-
-  CREATE TABLE 文で `compression` プロパティを指定した場合、`compression` で指定された圧縮アルゴリズムが有効になります。
-
-* **デフォルト**: lz4_frame
-* **導入バージョン**: v3.0
 
 ### disable_colocate_join
 
@@ -384,18 +359,6 @@ MySQL クライアント互換性のために使用されます。実際の用�
 
 * **デフォルト**: false、つまりこの機能は無効です。
 * **導入バージョン**: v2.5
-
-### enable_file_metacache
-
-* **説明**: リモートストレージ内のファイルのメタデータキャッシュ（フッターキャッシュ）を有効にするかどうか。この機能を有効にすると、フッターキャッシュは解析されたフッターオブジェクトをメモリに直接キャッシュします。同じファイルのフッターが後続のクエリでアクセスされると、オブジェクト記述子をキャッシュから直接取得でき、繰り返しの解析を回避できます。この機能は、データキャッシュのメモリモジュールを使用してデータをキャッシュします。したがって、BE パラメータ `datacache_enable` が `true` に設定され、`datacache_mem_size` に適切な値が設定されていることを確認する必要があります。
-* **デフォルト**: true
-* **導入バージョン**: v3.3.0
-
-### enable_file_pagecache
-
-* **説明**: リモートストレージ内のファイルに対して Page Cache を有効化するかどうか。この設定を `true` に設定すると、機能が有効化されます。Page Cache は、圧縮解除された Parquet ページデータをメモリに格納します。後続のクエリで同じページにアクセスする場合、データはキャッシュから直接取得され、繰り返し I/O 操作や圧縮解除を回避できます。この機能は Data Cache と連動し、同じメモリモジュールを使用します。有効にすると、繰り返しページアクセスパターンを持つワークロードのクエリ性能を大幅に向上させることができます。
-* **デフォルト**: true
-* **導入バージョン**: v4.0
 
 ### enable_force_rule_based_mv_rewrite
 
@@ -476,15 +439,6 @@ StarRocks は 2 種類の RF を提供します：ローカル RF とグロー�
 * **説明**: Iceberg Catalog のメタデータ収集クエリに対して Profile を有効にするかどうか。
 * **デフォルト**: true
 * **導入バージョン**: v3.3.3
-
-### enable_multicolumn_global_runtime_filter
-
-マルチカラムグローバルランタイムフィルタを有効にするかどうか。デフォルト値: `false`、つまりマルチカラムグローバル RF は無効です。
-
-ジョイン（Broadcast Join および Replicated Join を除く）に複数の等値ジョイン条件がある場合：
-
-* この機能が無効な場合、ローカル RF のみが機能します。
-* この機能が有効な場合、マルチカラムグローバル RF が有効になり、パーティション by 句に `multi-column` を含みます。
 
 ### enable_parquet_reader_bloom_filter
 
@@ -671,20 +625,6 @@ StarRocks は 2 種類の RF を提供します：ローカル RF とグロー�
 
 MySQL クライアント互換性のために使用されます。実際の用途はありません。
 
-### follower_query_forward_mode
-
-* **説明**: クエリ文がどの FE ノードにルーティングされるかを指定します。
-
-  * 有効な値:
-
-    * `default`: クエリ文を Leader FE または Follower FEs にルーティングします。Follower の再生進行状況に応じて、Follower FE ノードが再生進行を完了していない場合、クエリは Leader FE ノードにルーティングされます。再生進行が完了している場合、クエリは優先的に Follower FE ノードにルーティングされます。
-    * `leader`: クエリ文を Leader FE にルーティングします。
-    * `follower`: クエリ文を Follower FE にルーティングします。
-
-* **デフォルト**: default
-* **データ型**: 文字列
-* **導入バージョン**: v2.5.20, v3.1.9, v3.2.7, v3.3.0
-
 ### forward_to_leader
 
 一部のコマンドがリーダー FE に転送されて実行されるかどうかを指定するために使用されます。エイリアス: `forward_to_master`。デフォルト値は `false` で、リーダー FE に転送されません。StarRocks クラスタには複数の FE があり、そのうちの 1 つがリーダー FE です。通常、ユーザーは任意の FE に接続してフル機能の操作を行うことができます。ただし、一部の情報はリーダー FE にのみ存在します。
@@ -811,16 +751,6 @@ MySQL クライアント互換性のために使用されます。実際の用�
 ### lower_case_table_names (global)
 
 MySQL クライアント互換性のために使用されます。実際の用途はありません。StarRocks のテーブル名は大文字小文字を区別します。
-
-### lower_upper_support_utf8
-
-* **デフォルト**: false
-* **データ型**: Boolean
-* **単位**: -
-* **説明**: `lower` と `upper` 関数で UTF-8 文字の大文字小文字変換をサポートするかどうか。有効な値：
-  * `true`： UTF-8 文字の大文字小文字変換をサポートする。
-  * `false` (デフォルト)： UTF-8 文字の大文字小文字変換をサポートしない。
-* **導入バージョン**: v3.5.0
 
 ### materialized_view_rewrite_mode (v3.2 以降)
 
@@ -1112,12 +1042,6 @@ JDBC 接続プール C3P0 との互換性のために使用されます。実際
 
 * **説明**: Spilling から小さなファイルに対する Compaction を有効にするかどうか。この機能を有効にすると、集約と並べ替え時のメモリ使用量を削減します。
 * **デフォルト**: true
-* **導入バージョン**: v3.4
-
-### spill_enable_direct_io
-
-* **説明**: Spilling 機能を使用する際、ファイルの読み書き時に Page Cache をスキップするかどうか。この機能が有効になっている場合、Spilling は直接 I/O モードを使用してファイルを直接読み書きします。直接 I/O モードは OS の Page Cache への影響を軽減できますが、ディスクの読み書き時間が延長される可能性があります。
-* **デフォルト**: false
 * **導入バージョン**: v3.4
 
 ### spill_mode (3.0 以降)

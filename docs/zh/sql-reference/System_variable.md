@@ -66,7 +66,6 @@ SET GLOBAL query_mem_limit = 137438953472;
 * cngroup_schedule_mode
 * default_rowset_type
 * enable_group_level_query_queue
-* enable_plan_capture
 * enable_query_history
 * enable_query_queue_load
 * enable_query_queue_select
@@ -78,8 +77,6 @@ SET GLOBAL query_mem_limit = 137438953472;
 * license
 * lower_case_table_names
 * performance_schema
-* plan_capture_include_pattern
-* plan_capture_interval_seconds
 * query_cache_size
 * query_history_keep_seconds
 * query_history_load_interval_seconds
@@ -173,10 +170,6 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 本节以字母顺序对变量进行解释。带 `global` 标记的变量为全局变量，仅支持全局生效。其余变量既可以设置全局生效，也可设置会话级别生效。
 
-### SQL_AUTO_IS_NULL
-
-用于兼容 JDBC 连接池 C3P0，无实际作用。默认值：false。
-
 ### activate_all_roles_on_login (global)
 
 * 描述：用于控制是否在用户登录时默认激活所有角色（包括默认角色和授予的角色）。
@@ -192,11 +185,6 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 描述：用于兼容 MySQL 客户端。无实际作用。
 * 默认值：1
 * 类型：Int
-
-### autocommit
-
-* 描述：用于兼容 MySQL 客户端。无实际作用。
-* 默认值：true
 
 ### big_query_profile_threshold
 
@@ -231,18 +219,6 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 描述：用来指定 DECIMAL 类型和 STRING 类型的数据比较时的强制类型，默认按照 `DECIMAL` 类型进行比较，可选 `VARCHAR`（按数值进行比较）。**该变量仅在进行 `=` 和 `!=` 比较时生效。**
 * 类型：String
 * 引入版本：v2.5.14
-
-### cbo_json_v2_dict_opt
-
-* 描述：是否为 JSON v2 路径改写生成的 Flat JSON 字符串子列启用低基数字典优化。开启后，优化器可以为这些子列构建并使用全局字典，从而加速字符串表达式、GROUP BY、JOIN 等操作。
-* 默认值：true
-* 类型：Boolean
-
-### cbo_json_v2_rewrite
-
-* 描述：是否在优化器中启用 JSON v2 路径改写。开启后，会将 JSON 函数（如 `get_json_*`）改写为直接访问 Flat JSON 子列，从而启用谓词下推、列裁剪以及字典优化。
-* 默认值：true
-* 类型：Boolean
 
 ### cbo_materialized_view_rewrite_related_mvs_limit
 
@@ -295,6 +271,13 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：1024
 * 引入版本：v2.5
 
+### custom_query_id (会话)
+
+* **描述**: 用于将某个外部标识符绑定到当前查询。可以在执行查询前使用 `SET SESSION custom_query_id = 'my-query-id';` 进行设置。查询完成后该值将被重置。该值可以传递给 `KILL QUERY 'my-query-id'`。该值可在审计日志 (audit logs) 中以 `customQueryId` 字段找到。
+* **默认值**: ""
+* **数据类型**: String
+* **引入版本**: v3.4.0
+
 ### datacache_sharing_work_period
 
 - 描述：Cache Sharing 功能的生效时长。每次群集扩展操作后，如果启用了缓存共享功能，只有在这段时间内的请求才会尝试访问其他节点的缓存数据。
@@ -305,13 +288,6 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 ### default_rowset_type (global)
 
 全局变量，仅支持全局生效。用于设置计算节点存储引擎默认的存储格式。当前支持的存储格式包括：alpha/beta。
-
-### default_table_compression
-
-* 描述：存储表格数据时使用的默认压缩算法，支持 LZ4、Zstandard（或 zstd）、zlib 和 Snappy。如果您建表时在 PROPERTIES 设置了 `compression`，则 `compression` 指定的压缩算法生效。
-* 默认值：lz4_frame
-* 类型：String
-* 引入版本：v3.0
 
 ### disable_colocate_join
 
@@ -384,18 +360,6 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
   您也可以通过添加 `skew` hint 来开启 count distinct 列的分桶优化，例如 `select a,count(distinct [skew] b) from t group by a;`。
 * 默认值：false，表示不开启。
 * 引入版本：v2.5
-
-### enable_file_metacache
-
-* 描述：是否启用远端文件元数据缓存（Footer Cache）。`true` 表示开启。Footer Cache 通过将解析后生成 Footer 对象直接缓存在内存中，在后续访问相同文件 Footer 时，可以直接从缓存中获得该对象句柄进行使用，避免进行重复解析。该功能依赖 Data Cache 的内存缓存，因此需要保证 BE 参数 `datacache_enable` 为 `true` 且为 `datacache_mem_size` 配置一个合理值后才会生效。
-* 默认值：true
-* 引入版本：v3.3.0
-
-### enable_file_pagecache
-
-* 描述：是否启用远端文件页面缓存。`true` 表示开启。页面缓存将解压缩后的 Parquet 页面数据存储在内存中。在后续查询中访问相同页面时，可以直接从缓存中获取数据，避免重复的 I/O 操作和解压缩。此功能与数据缓存协同工作并使用相同的内存模块。启用后，对于具有重复页面访问模式的工作负载，可以显著提高查询性能。
-* 默认值：true
-* 引入版本：v4.0
 
 ### enable_force_rule_based_mv_rewrite
 
@@ -473,16 +437,6 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 描述：是否为 Iceberg Catalog 的元数据收集查询开启 Profile。
 * 默认值：true
 * 引入版本：v3.3.3
-
-### enable_multicolumn_global_runtime_filter
-
-* 描述：多列 Global runtime filter 开关。默认值为 false，表示关闭该开关。
-
-  对于 Broadcast 和 Replicated Join 类型之外的其他 Join，当 Join 的等值条件有多个的情况下：
-  * 如果该选项关闭: 则只会产生 Local RF。
-  * 如果该选项打开, 则会生成 multi-part GRF, 并且该 GRF 需要携带 multi-column 作为 partition-by 表达式.
-
-* 默认值：false
 
 ### enable_parquet_reader_bloom_filter
 
@@ -669,18 +623,6 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：OFF
 * 类型：String
 
-### follower_query_forward_mode
-
-* 描述：用于指定将查询语句路由到 Leader FE 或 Follower FE 节点。
-
-  有效值:
-  * `default`: 将查询语句路由到 Leader FE 或 Follower FE 节点，取决于 Follower FE 节点的回放进度。如果 Follower FE 节点未完成回放，查询将会被路由至 Leader FE 节点。反之，查询会被优先路由至 Follower FE 节点。
-  * `leader`: 将查询语句路由到 Leader FE 节点。
-  * `follower`: 将查询语句路由到 Follower FE 节点。
-* 默认值：default
-* 类型：String
-* 引入版本：v2.5.20，v3.1.9，v3.2.7，v3.3.0
-
 ### forward_to_leader
 
 用于设置是否将一些命令转发到 Leader FE 节点执行。默认为 `false`，即不转发。StarRocks 中存在多个 FE 节点，其中一个为 Leader 节点。通常用户可以连接任意 FE 节点进行全功能操作。但部分信息查看指令只有从 Leader FE 节点才能获取详细信息。别名 `forward_to_master`。
@@ -820,16 +762,6 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 ### lower_case_table_names (global)
 
 用于兼容 MySQL 客户端，无实际作用。StarRocks 中的表名是大小写敏感的。
-
-### lower_upper_support_utf8
-
-* 默认值：false
-* 类型：Boolean
-* 单位：-
-* 描述：是否在 `lower` 和 `upper` 函数中支持 UTF-8 字符的大小写转换。有效值：
-  * `true`：支持 UTF-8 字符的大小写转换。
-  * `false`（默认）：不支持 UTF-8 字符的大小写转换。
-* 引入版本：v3.5.0
 
 ### materialized_view_rewrite_mode（3.2 及以后）
 
@@ -1131,12 +1063,6 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 * 描述: 是否对 Spill 小文件启用 Compaction。启用此功能后，可减少聚合和排序操作的内存使用量。
 * 默认值: true
-* 引入版本: v3.4
-
-### spill_enable_direct_io
-
-* 描述: 是否在 Spill 读写文件时跳过 Page Cache。如果启用此功能，Spill 将使用直接 I/O 模式直接读写文件。直接 I/O 模式可以减少对操作系统 Page Cache 的影响，但可能会导致磁盘读写时间增加。
-* 默认值: false
 * 引入版本: v3.4
 
 ### spill_mode (3.0 及以后)

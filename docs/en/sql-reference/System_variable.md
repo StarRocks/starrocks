@@ -72,7 +72,6 @@ The following variables only take effect globally. They cannot take effect for a
 * cngroup_schedule_mode
 * default_rowset_type
 * enable_group_level_query_queue
-* enable_plan_capture
 * enable_query_history
 * enable_query_queue_load
 * enable_query_queue_select
@@ -84,8 +83,6 @@ The following variables only take effect globally. They cannot take effect for a
 * license
 * lower_case_table_names
 * performance_schema
-* plan_capture_include_pattern
-* plan_capture_interval_seconds
 * query_cache_size
 * query_history_keep_seconds
 * query_history_load_interval_seconds
@@ -177,10 +174,6 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 The variables are described **in alphabetical order**. Variables with the `global` label can only take effect globally. Other variables can take effect either globally or for a single session.
 
-### SQL_AUTO_IS_NULL
-
-Used for compatibility with the JDBC connection pool C3P0. No practical usage.
-
 ### activate_all_roles_on_login (global)
 
 * **Description**: Whether to enable all roles (including default roles and granted roles) for a StarRocks user when the user connects to the StarRocks cluster.
@@ -192,10 +185,6 @@ Used for compatibility with the JDBC connection pool C3P0. No practical usage.
 If you want to activate the roles assigned to you in a session, use the [SET ROLE](sql-statements/account-management/SET_DEFAULT_ROLE.md) command.
 
 ### auto_increment_increment
-
-Used for MySQL client compatibility. No practical usage.
-
-### autocommit
 
 Used for MySQL client compatibility. No practical usage.
 
@@ -232,18 +221,6 @@ Used for MySQL client compatibility. No practical usage.
 * **Description**: Specifies the data type used for data comparison between DECIMAL data and STRING data. The default value is `DECIMAL`, and VARCHAR is also a valid value. **This variable takes effect only for `=` and `!=` comparison.**
 * **Data type**: String
 * **Introduced in**: v2.5.14
-
-### cbo_json_v2_dict_opt
-
-* **Description**: Whether to enable low-cardinality dictionary optimization for Flat JSON (JSON v2) extended string subcolumns created by JSON path rewrite. When enabled, the optimizer may build and use global dictionaries for those subcolumns to accelerate string expressions, GROUP BY, and JOIN operations.
-* **Default**: true
-* **Data type**: Boolean
-
-### cbo_json_v2_rewrite
-
-* **Description**: Whether to enable JSON v2 path rewrite in the optimizer. When enabled, JSON functions (such as `get_json_*`) can be rewritten to direct access of Flat JSON subcolumns, enabling predicate pushdown, column pruning, and dictionary optimization.
-* **Default**: true
-* **Data type**: Boolean
 
 ### cbo_materialized_view_rewrite_related_mvs_limit
 
@@ -316,15 +293,6 @@ Used for MySQL client compatibility. No practical usage.
 
 Used to set the default storage format used by the storage engine of the computing node. The currently supported storage formats are `alpha` and `beta`.
 
-### default_table_compression
-
-* **Description**: The default compression algorithm for table storage. Supported compression algorithms are `snappy, lz4, zlib, zstd`.
-
-  Note that if you specified the `compression` property in a CREATE TABLE statement, the compression algorithm specified by `compression` takes effect.
-
-* **Default**: lz4_frame
-* **Introduced in**: v3.0
-
 ### disable_colocate_join
 
 * **Description**: Used to control whether the Colocation Join is enabled. The default value is `false`, meaning the feature is enabled. When this feature is disabled, query planning will not attempt to execute Colocation Join.
@@ -393,18 +361,6 @@ Used for MySQL client compatibility. No practical usage.
 
 * **Default**: false, which means this feature is disabled.
 * **Introduced in**: v2.5
-
-### enable_file_metacache
-
-* **Description**: Whether to enable metadata cache for files in remote storage (Footer Cache). Setting this to `true` enables the feature. Footer Cache directly caches the parsed Footer object in memory. When the same file's Footer is accessed in subsequent queries, the object descriptor can be obtained directly from the cache, avoiding repetitive parsing. This feature uses the memory module of the Data Cache for data caching. Therefore, you must ensure that the BE parameter `datacache_enable` is set to `true` and configure a reasonable value for `datacache_mem_size`.
-* **Default**: true
-* **Introduced in**: v3.3.0
-
-### enable_file_pagecache
-
-* **Description**: Whether to enable Page Cache for files in remote storage. Setting this to `true` enables the feature. Page Cache stores decompressed Parquet page data in memory. When the same page is accessed in subsequent queries, the data can be obtained directly from the cache, avoiding repetitive I/O operations and decompression. This feature works together with the Data Cache and uses the same memory module. When enabled, Page Caache can significantly improve query performance for workloads with repetitive page access patterns.
-* **Default**: true
-* **Introduced in**: v4.0
 
 ### enable_force_rule_based_mv_rewrite
 
@@ -485,15 +441,6 @@ Default value: `true`, which means global RF is enabled. If this feature is disa
 * **Description**: Whether to enabled Profile for Iceberg Catalog metadata.
 * **Default**: true
 * **Introduced in**: v3.3.3
-
-### enable_multicolumn_global_runtime_filter
-
-Whether to enable multi-column global runtime filter. Default value: `false`, which means multi-column global RF is disabled.
-
-If a Join (other than Broadcast Join and Replicated Join) has multiple equi-join conditions:
-
-* If this feature is disabled, only Local RF works.
-* If this feature is enabled, multi-column Global RF takes effect and carries `multi-column` in the partition by clause.
 
 ### enable_parquet_reader_bloom_filter
 
@@ -680,20 +627,6 @@ If a Join (other than Broadcast Join and Replicated Join) has multiple equi-join
 
 Used for MySQL client compatibility. No practical usage.
 
-### follower_query_forward_mode
-
-* **Description**: Specifies to which FE nodes the query statements are routed.
-
-  * Valid values:
-
-    * `default`: Routes the query statement to the Leader FE or Follower FEs, depending on the Follower's replay progress. If the Follower FE nodes have not completed replay progress, queries will be routed to the Leader FE node. If the replay progress is complete, queries will be preferentially routed to the Follower FE node.
-    * `leader`: Routes the query statement to the Leader FE.
-    * `follower`: Routes the query statement to Follower FE.
-
-* **Default**: default
-* **Data type**: String
-* **Introduced in**: v2.5.20, v3.1.9, v3.2.7, v3.3.0
-
 ### forward_to_leader
 
 Used to specify whether some commands will be forwarded to the leader FE for execution. Alias: `forward_to_master`. The default value is `false`, meaning not forwarding to the leader FE. There are multiple FEs in a StarRocks cluster, one of which is the leader FE. Normally, users can connect to any FE for full-featured operations. However, some information is only available on the leader FE.
@@ -820,16 +753,6 @@ Specifies the maximum number of unqualified data rows that can be logged. Valid 
 ### lower_case_table_names (global)
 
 Used for MySQL client compatibility. No practical usage. Table names in StarRocks are case-sensitive.
-
-### lower_upper_support_utf8
-
-* **Default**: false
-* **Type**: Boolean
-* **Unit**: -
-* **Description**: Whether to support case conversion for UTF-8 characters in `lower` and `upper` functions. Valid values:
-  * `true`: Support case conversion for UTF-8 characters.
-  * `false` (Default): Not to support case conversion for UTF-8 characters.
-* **Introduced in**: v3.5.0
 
 ### materialized_view_rewrite_mode (v3.2 and later)
 
@@ -1127,12 +1050,6 @@ Used for compatibility with JDBC connection pool C3P0. No practical use.
 
 * **Description**: Whether to enable Compaction for small files from Spilling. When this feature is enabled, it reduces memory usage for aggregation and sorting.
 * **Default**: true
-* **Introduced in**: v3.4
-
-### spill_enable_direct_io
-
-* **Description**: Whether to skip Page Cache when reading or writing files for Spilling. If this feature is enabled, Spilling will use direct I/O mode to read or write files directly. Direct I/O mode can reduce the impact on the OS Page Cache, but it may cause increases in disk read/write time.
-* **Default**: false
 * **Introduced in**: v3.4
 
 ### spill_mode (3.0 and later)
