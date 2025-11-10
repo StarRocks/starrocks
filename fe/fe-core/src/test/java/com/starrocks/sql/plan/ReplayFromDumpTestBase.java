@@ -30,6 +30,7 @@ import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.system.BackendResourceStat;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.StarRocksTestBase;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
@@ -47,7 +48,7 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-public class ReplayFromDumpTestBase {
+public class ReplayFromDumpTestBase extends StarRocksTestBase {
     public static ConnectContext connectContext;
 
     public static List<String> MODEL_LISTS = Lists.newArrayList("[end]", "[dump]", "[result]", "[fragment]",
