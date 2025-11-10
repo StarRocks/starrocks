@@ -52,15 +52,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ### メタデータとクラスタ管理
 
-##### txn_latency_metric_report_groups
-
-- デフォルト: ""
-- タイプ: String
-- 単位: -
-- 変更可能: はい
-- 説明: 報告するトランザクションレイテンシメトリックグループのカンマ区切りリスト。ロードタイプはモニタリングのために論理グループに分類されます。グループが有効になると、その名前がトランザクションメトリックに「type」ラベルとして追加されます。一般的なグループには、「stream_load」、「routine_load」、「broker_load」、「insert」、「compaction」（共有データクラスタ用）などがあります。例：「stream_load,routine_load」。
-- 導入バージョン: v4.0
-
 ### ユーザー、役割、特権
 
 ### クエリエンジン
