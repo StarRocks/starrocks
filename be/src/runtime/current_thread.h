@@ -17,6 +17,13 @@
 #include <cstdint>
 #include <string>
 
+#ifdef __APPLE__
+#include <pthread.h>
+#else
+#include <sys/syscall.h>
+#include <unistd.h>
+#endif
+
 #include "fmt/format.h"
 #include "gen_cpp/Types_types.h"
 #include "gutil/macros.h"
@@ -220,8 +227,19 @@ private:
         int64_t _try_consume_mem_size = 0; // Last time tried to consumed bytes
     };
 
+    // Platform-specific thread ID retrieval
+    static inline int32_t get_thread_id() {
+#ifdef __APPLE__
+        uint64_t tid;
+        pthread_threadid_np(NULL, &tid);
+        return static_cast<int32_t>(tid);
+#else
+        return syscall(SYS_gettid);
+#endif
+    }
+
 public:
-    CurrentThread() : _lwp_id(syscall(SYS_gettid)) { tls_is_thread_status_init = true; }
+    CurrentThread() : _lwp_id(get_thread_id()) { tls_is_thread_status_init = true; }
     ~CurrentThread();
 
     void mem_tracker_ctx_shift() { _mem_cache_manager.commit(true); }

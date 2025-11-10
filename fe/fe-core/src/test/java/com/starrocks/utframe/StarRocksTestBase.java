@@ -16,12 +16,17 @@ package com.starrocks.utframe;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.common.PCellSortedSet;
+import com.starrocks.sql.common.PCellWithName;
+import com.starrocks.sql.common.PRangeCell;
 import com.starrocks.sql.common.QueryDebugOptions;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
@@ -30,21 +35,27 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.extension.ExtendWith;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Basic test class for StarRocks.
  */
+@ExtendWith(StarRocksTestExtension.class)
 public abstract class StarRocksTestBase {
     protected static final Logger LOG = LogManager.getLogger(StarRocksTestBase.class);
 
     // Whether print log to system out
     protected static boolean isOutputSystemOut = false;
+    // Whether output trace log by default
+    protected static boolean isOutputTraceLog = false;
 
     // StarRocksAssert is a class that provides methods to interact with StarRocks.
-    protected static StarRocksAssert starRocksAssert;
+    public static StarRocksAssert starRocksAssert;
     // existedTables is a set that contains all tables that have been created.
     protected static Set<Table> existedTables = Sets.newHashSet();
 
@@ -119,7 +130,9 @@ public abstract class StarRocksTestBase {
         String currentDb = starRocksAssert.getCtx().getDatabase();
         if (StringUtils.isNotEmpty(currentDb)) {
             Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(currentDb);
-            tables.addAll(ListUtils.emptyIfNull(testDb.getTables()));
+            if (testDb != null) {
+                tables.addAll(ListUtils.emptyIfNull(testDb.getTables()));
+            }
         }
     }
 
@@ -178,5 +191,13 @@ public abstract class StarRocksTestBase {
             System.out.println(pr);
         }
         Tracers.close();
+    }
+
+    public static Map<String, Range<PartitionKey>> toRangeMap(PCellSortedSet input) {
+        if (input == null) {
+            return null;
+        }
+        return input.stream()
+                .collect(Collectors.toMap(PCellWithName::name, v -> ((PRangeCell) v.cell()).getRange()));
     }
 }

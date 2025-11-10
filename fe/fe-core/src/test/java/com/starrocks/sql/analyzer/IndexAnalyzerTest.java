@@ -20,9 +20,9 @@ package com.starrocks.sql.analyzer;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.KeysType;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.sql.ast.IndexDef;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.TypeFactory;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -125,7 +125,7 @@ public class IndexAnalyzerTest {
     public void testCheckColumn() {
         // Create a test column
         Column column =
-                new Column("test_col", ScalarType.createType(PrimitiveType.INT), false, null, true, NULL_DEFAULT_VALUE, "");
+                new Column("test_col", TypeFactory.createType(PrimitiveType.INT), false, null, true, NULL_DEFAULT_VALUE, "");
         Map<String, String> properties = new HashMap<>();
 
         // Test BITMAP index with valid column

@@ -4,6 +4,12 @@ displayed_sidebar: docs
 
 # StarRocks version 4.0
 
+:::warning
+
+升级至 v4.0 后，请勿直接将集群降级至 v3.5.0 和 v3.5.1，否则会导致元数据不兼容和 FE Crash。您必须降级到 v3.5.2 或更高版本以避免出现此问题。
+
+:::
+
 ## 4.0.0
 
 发布日期：2025 年 10 月 17 日
@@ -103,4 +109,9 @@ displayed_sidebar: docs
 - 优化 Information Schema 中的 `fe_tablet_schedules` 视图。[#62073](https://github.com/StarRocks/starrocks/pull/62073) [#59813](https://github.com/StarRocks/starrocks/pull/59813)
   - `TABLET_STATUS` 列更名为 `SCHEDULE_REASON`，`CLONE_SRC` 列更名为 `SRC_BE_ID`，`CLONE_DEST` 列更名为 `DEST_BE_ID`。
   - `CREATE_TIME`、`SCHEDULE_TIME` 和 `FINISH_TIME` 列类型从 `DOUBLE` 改为 `DATETIME`。
-- 一些 FE 指标增加了 `is_leader` 标签。[#63004](https://github.com/StarRocks/starrocks/pull/63004)
+- 部分 FE 指标增加了 `is_leader` 标签。[#63004](https://github.com/StarRocks/starrocks/pull/63004)
+- 使用 Microsoft Azure Blob Storage 以及 Data Lake Storage Gen 2 作为对象存储的存算分离集群，升级到 v4.0 后 Data Cache 失效，系统将自动重新加载。
+
+### 降级说明
+
+启用 File Bundling 功能后，您只能将集群降级到 v3.5.2 或更高版本。如果降级到 v3.5.2 之前的版本，将无法读写已启用 File Bundling 功能的表。File Bundling 功能在 v4.0 或更高版本中创建的表格中默认启用。

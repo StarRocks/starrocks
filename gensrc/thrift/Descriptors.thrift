@@ -69,8 +69,10 @@ struct TTupleDescriptor {
 enum THdfsFileFormat {
   TEXT = 0,
   LZO_TEXT = 1,
-  RC_BINARY = 2,
-  RC_TEXT = 3,
+  RC_FILE = 2,
+  // THdfsFileFormat is only used to represent FileFormat, not SerializeFormat,
+  // so there is no need to split it into RC_BINARY and RC_TEXT.
+  RC_TEXT = 3, // Deprecated
   AVRO = 4,
   PARQUET = 5,
   ORC = 6,
@@ -246,10 +248,6 @@ struct TColumn {
 struct TOlapTableIndexTablets {
     1: required i64 index_id
     2: required list<i64> tablets
-
-    // Virtual buckets. There is a tablet id for each virtual bucket,
-    // which means this virtual bucket's data is stored in this tablet.
-    3: optional list<i64> virtual_buckets
 }
 
 // its a closed-open range

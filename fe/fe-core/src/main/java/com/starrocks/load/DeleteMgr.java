@@ -51,9 +51,7 @@ import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
-import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -90,6 +88,7 @@ import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.sql.ast.expression.DecimalLiteral;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.InPredicate;
 import com.starrocks.sql.ast.expression.IsNullPredicate;
 import com.starrocks.sql.ast.expression.LiteralExpr;
@@ -104,6 +103,8 @@ import com.starrocks.transaction.RunningTxnExceedException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.Type;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
@@ -308,7 +309,7 @@ public class DeleteMgr implements Writable, MemoryTrackable {
      */
     private List<String> partitionPruneForDelete(DeleteStmt stmt, OlapTable table) {
         String tableName = stmt.getTableName().toSql();
-        String predicate = stmt.getWherePredicate().toSql();
+        String predicate = ExprToSql.toSql(stmt.getWherePredicate());
         String fakeSql = String.format("SELECT * FROM %s WHERE %s", tableName, predicate);
         PhysicalOlapScanOperator physicalOlapScanOperator;
         ConnectContext currentSession = ConnectContext.get();
@@ -332,10 +333,14 @@ public class DeleteMgr implements Writable, MemoryTrackable {
         } finally {
             currentSession.setBypassAuthorizerCheck(false);
         }
+        // Get the selected partition ids. `selectedPartitionId` may contain outdated partitions since of concurrent
+        // DDL operations, such as automatic partition generating, so filter them out.
         List<Long> selectedPartitionId = physicalOlapScanOperator.getSelectedPartitionId();
         return ListUtils.emptyIfNull(selectedPartitionId)
                 .stream()
-                .map(x -> table.getPartition(x).getName())
+                .map(x -> table.getPartition(x))
+                .filter(Objects::nonNull)
+                .map(Partition::getName)
                 .collect(Collectors.toList());
     }
 
@@ -558,7 +563,7 @@ public class DeleteMgr implements Writable, MemoryTrackable {
                 strBuilder.append(columnName).append(" ").append(notStr).append("IN (");
                 int inElementNum = inPredicate.getInElementNum();
                 for (int i = 1; i <= inElementNum; ++i) {
-                    strBuilder.append(inPredicate.getChild(i).toSql());
+                    strBuilder.append(ExprToSql.toSql(inPredicate.getChild(i)));
                     strBuilder.append((i != inPredicate.getInElementNum()) ? ", " : "");
                 }
                 strBuilder.append(")");

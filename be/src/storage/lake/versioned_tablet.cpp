@@ -14,10 +14,12 @@
 
 #include "storage/lake/versioned_tablet.h"
 
+#include "exec/schema_scanner/schema_be_tablets_scanner.h"
 #include "storage/lake/pk_tablet_writer.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/tablet_writer.h"
+#include "storage/lake/update_manager.h"
 #include "storage/tablet_schema_map.h"
 
 namespace starrocks::lake {
@@ -100,6 +102,55 @@ bool VersionedTablet::has_delete_predicates() const {
 
 std::vector<RowsetPtr> VersionedTablet::get_rowsets() const {
     return Rowset::get_rowsets(_tablet_mgr, _metadata);
+}
+
+TabletBasicInfo VersionedTablet::get_basic_info() const {
+    int64_t num_rowset = _metadata->rowsets_size();
+    int64_t num_segment = 0;
+    int64_t num_row = 0;
+    int64_t data_size = 0;
+    for (const auto& rowset : _metadata->rowsets()) {
+        num_segment += rowset.segments_size();
+        num_row += rowset.num_rows();
+        data_size += rowset.data_size();
+    }
+
+    auto keys_type = _metadata->schema().keys_type();
+
+    TabletBasicInfo info;
+    // set table_id and partition_id outside
+    info.tablet_id = id();
+    info.num_version = num_rowset;
+    info.max_version = version();
+    info.min_version = 0;
+    info.num_rowset = num_rowset;
+    info.num_segment = num_segment;
+    info.num_row = num_row;
+    info.data_size = data_size;
+    info.create_time = 0;
+    info.state = 1; // running
+    info.type = keys_type;
+    info.data_dir = _tablet_mgr->real_tablet_root_location(id());
+    info.shard_id = id();
+    info.schema_hash = 0;
+    info.medium_type = TStorageMedium::HDD;
+
+    // set pk tablet index_mem and index_disk_usage
+    if (keys_type == KeysType::PRIMARY_KEYS) {
+        info.index_mem = _tablet_mgr->update_mgr()->get_index_memory_size(id());
+
+        // only support cloud native pk index
+        if (_metadata->has_sstable_meta()) {
+            int64_t index_disk_usage = 0;
+            for (const auto& sst : _metadata->sstable_meta().sstables()) {
+                index_disk_usage += sst.filesize();
+            }
+            info.index_disk_usage = index_disk_usage;
+            info.data_size += index_disk_usage;
+        }
+    }
+
+    return info;
 }
 
 } // namespace starrocks::lake

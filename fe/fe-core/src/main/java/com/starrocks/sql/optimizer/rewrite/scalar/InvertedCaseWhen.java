@@ -20,9 +20,8 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.ast.expression.BinaryType;
-import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
@@ -33,6 +32,7 @@ import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorUtil;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
+import com.starrocks.type.Type;
 
 import java.util.Collection;
 import java.util.Comparator;
@@ -287,7 +287,7 @@ public class InvertedCaseWhen {
     }
 
     private static ScalarOperator buildIfThen(ScalarOperator p, ConstantOperator first, ConstantOperator second) {
-        Function ifFunc = Expr.getBuiltinFunction(FunctionSet.IF, new Type[] {Type.BOOLEAN, Type.BOOLEAN, Type.BOOLEAN},
+        Function ifFunc = ExprUtils.getBuiltinFunction(FunctionSet.IF, new Type[] {Type.BOOLEAN, Type.BOOLEAN, Type.BOOLEAN},
                 Function.CompareMode.IS_IDENTICAL);
         return new CallOperator(FunctionSet.IF, Type.BOOLEAN,
                 Lists.newArrayList(p, first, second), ifFunc);

@@ -19,8 +19,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.MapType;
-import com.starrocks.catalog.Type;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariableConstants;
 import com.starrocks.sql.ast.expression.ArithmeticExpr;
@@ -37,11 +35,14 @@ import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LargeInPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.MapOperator;
 import com.starrocks.sql.optimizer.operator.scalar.MultiInPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
+import com.starrocks.type.MapType;
+import com.starrocks.type.Type;
 
 import java.util.Arrays;
 import java.util.List;
@@ -219,7 +220,7 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
             if (op.isPresent()) {
                 predicate.getChildren().set(constantIndex, op.get());
                 return Optional.of(predicate);
-            } else if (variable.getType().isDateType() && Type.canCastTo(constant.getType(), variable.getType())) {
+            } else if (variable.getType().isDateType() && TypeManager.canCastTo(constant.getType(), variable.getType())) {
                 // For like MySQL, convert to date type as much as possible
                 addCastChild(variable.getType(), predicate, constantIndex);
                 return Optional.of(predicate);
@@ -246,6 +247,11 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
     @Override
     public ScalarOperator visitInPredicate(InPredicateOperator predicate, ScalarOperatorRewriteContext context) {
         return castForBetweenAndIn(predicate, false);
+    }
+
+    @Override
+    public ScalarOperator visitLargeInPredicate(LargeInPredicateOperator predicate, ScalarOperatorRewriteContext context) {
+        return predicate;
     }
 
     @Override

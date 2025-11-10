@@ -12,6 +12,13 @@ insert into test values(1, 'v0', 1), (2, 'v2', 2);
 insert into test (pk, v1) values(1, 11);
 select * from test order by pk;
 
+-- without partial update
+insert into test values(1, 'v0', 1), (2, 'v2', 2);
+set enable_insert_partial_update = false;
+insert into test (pk, v1) values(1, 111);
+select * from test order by pk;
+set enable_insert_partial_update = true;
+
 -- v0 is not null but does not have default value
 create table test2 (pk bigint NOT NULL, v0 string not null, v1 int not null default '100001')
 primary KEY (pk) DISTRIBUTED BY HASH(pk) BUCKETS 1 PROPERTIES("replication_num" = "1");
@@ -19,6 +26,13 @@ primary KEY (pk) DISTRIBUTED BY HASH(pk) BUCKETS 1 PROPERTIES("replication_num" 
 -- partial update
 insert into test2 values(1, 'v0', 1), (2, 'v2', 2);
 insert into test2 (pk, v1) values(1, 11), (3, 3);
+select * from test2 order by pk;
+
+-- without partial update
+insert into test2 values(1, 'v0', 1), (2, 'v2', 2);
+set enable_insert_partial_update = false;
+insert into test2 (pk, v1) values(1, 11), (3, 3);
+set enable_insert_partial_update = true;
 select * from test2 order by pk;
 
 -- update with generated column

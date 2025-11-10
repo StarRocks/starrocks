@@ -22,6 +22,7 @@ import com.starrocks.sql.ast.MultiItemListPartitionDesc;
 import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletType;
+import com.starrocks.type.PrimitiveType;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;

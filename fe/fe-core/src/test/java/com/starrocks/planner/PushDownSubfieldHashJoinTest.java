@@ -16,8 +16,6 @@ package com.starrocks.planner;
 
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.plan.PlanTestBase;
-import com.starrocks.sql.plan.PlanTestNoneDBBase;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -33,11 +31,12 @@ public class PushDownSubfieldHashJoinTest {
 
     @BeforeAll
     public static void setUp() throws Exception {
+        FeConstants.runningUnitTest = true;
         UtFrameUtils.createMinStarRocksCluster();
         ctx = UtFrameUtils.createDefaultCtx();
         ctx.getSessionVariable().setEnablePipelineEngine(true);
         ctx.getSessionVariable().setCboPushDownAggregateMode(-1);
-        FeConstants.runningUnitTest = true;
+        ctx.getSessionVariable().setOptimizerExecuteTimeout(10000);
         starRocksAssert = new StarRocksAssert(ctx);
         starRocksAssert.withDatabase(StatsConstants.STATISTICS_DB_NAME)
                 .useDatabase(StatsConstants.STATISTICS_DB_NAME)

@@ -33,6 +33,7 @@ message DelvecPagePB {
     // position in file
     optional uint64 offset = 2;
     optional uint64 size = 3;
+    optional uint32 crc32c = 4;
 }
 
 message PersistentIndexSstablePB {

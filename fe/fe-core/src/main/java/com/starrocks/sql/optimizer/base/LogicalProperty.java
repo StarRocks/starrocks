@@ -33,6 +33,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalMysqlScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalRawValuesOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTableFunctionOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
@@ -196,6 +197,11 @@ public class LogicalProperty implements Property {
 
         @Override
         public OneTabletProperty visitLogicalValues(LogicalValuesOperator node, ExpressionContext context) {
+            return OneTabletProperty.supportWithoutChangeDistribution(new ColumnRefSet());
+        }
+
+        @Override
+        public OneTabletProperty visitLogicalRawValues(LogicalRawValuesOperator node, ExpressionContext context) {
             return OneTabletProperty.supportWithoutChangeDistribution(new ColumnRefSet());
         }
 

@@ -19,9 +19,6 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.Type;
 import com.starrocks.catalog.combinator.AggStateDesc;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -37,6 +34,10 @@ import com.starrocks.sql.ast.expression.LargeIntLiteral;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.TypeDef;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 
 import java.util.Set;
 
@@ -161,22 +162,16 @@ public class ColumnDefAnalyzer {
             if (defaultValueDef.isSet) {
                 throw new AnalysisException(String.format("Invalid default value for '%s'", name));
             }
-
-            columnDef.setDefaultValueDef(ColumnDef.DefaultValueDef.EMPTY_VALUE);
         }
         if (type.isBitmapType()) {
             if (defaultValueDef.isSet) {
                 throw new AnalysisException(String.format("Invalid default value for '%s'", name));
             }
-            columnDef.setDefaultValueDef(ColumnDef.DefaultValueDef.EMPTY_VALUE);
         }
         if (aggregateType == AggregateType.REPLACE_IF_NOT_NULL) {
             // If aggregate type is REPLACE_IF_NOT_NULL, we set it nullable.
             // If default value is not set, we set it NULL
             columnDef.setAllowNull(true);
-            if (!defaultValueDef.isSet) {
-                columnDef.setDefaultValueDef(ColumnDef.DefaultValueDef.NULL_DEFAULT_VALUE);
-            }
         }
 
         if (!isAllowNull && defaultValueDef == ColumnDef.DefaultValueDef.NULL_DEFAULT_VALUE) {
@@ -198,7 +193,7 @@ public class ColumnDefAnalyzer {
         }
 
         if (type.isDecimalV3()) {
-            return ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, ((ScalarType) type).getScalarScale());
+            return TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, ((ScalarType) type).getScalarScale());
         }
         return type;
     }

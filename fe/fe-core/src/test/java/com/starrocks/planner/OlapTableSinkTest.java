@@ -40,10 +40,8 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.TabletMeta;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
@@ -69,6 +67,8 @@ import com.starrocks.thrift.TTabletLocation;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWriteQuorumType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import com.starrocks.utframe.MockedWarehouseManager;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -106,11 +106,11 @@ public class OlapTableSinkTest {
 
         // k2
         SlotDescriptor k2 = descTable.addSlotDescriptor(tuple);
-        k2.setColumn(new Column("k2", ScalarType.createVarchar(25)));
+        k2.setColumn(new Column("k2", TypeFactory.createVarchar(25)));
         k2.setIsMaterialized(true);
         // v1
         SlotDescriptor v1 = descTable.addSlotDescriptor(tuple);
-        v1.setColumn(new Column("v1", ScalarType.createVarchar(25)));
+        v1.setColumn(new Column("v1", TypeFactory.createVarchar(25)));
         v1.setIsMaterialized(true);
         // v2
         SlotDescriptor v2 = descTable.addSlotDescriptor(tuple);

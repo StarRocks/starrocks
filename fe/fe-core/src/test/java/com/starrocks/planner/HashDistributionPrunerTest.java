@@ -39,13 +39,13 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.InPredicate;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.plan.PlanTestBase;
+import com.starrocks.type.Type;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
@@ -55,8 +55,6 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 public class HashDistributionPrunerTest extends PlanTestBase {
 
@@ -113,9 +111,7 @@ public class HashDistributionPrunerTest extends PlanTestBase {
         filters.put("channel", channelFilter);
         filters.put("shop_type", shopTypeFilter);
 
-        HashDistributionPruner pruner = new HashDistributionPruner(
-                Stream.concat(tabletIds.stream(), tabletIds.stream()).collect(Collectors.toList()),
-                tabletIds, columns, filters);
+        HashDistributionPruner pruner = new HashDistributionPruner(tabletIds, columns, filters);
 
         Collection<Long> results = pruner.prune();
         // 20 = 1 * 5 * 2 * 2 * 1 (element num of each filter)
@@ -194,9 +190,7 @@ public class HashDistributionPrunerTest extends PlanTestBase {
         Map<String, PartitionColumnFilter> filters = Maps.newHashMap();
         filters.put("main_brand_id", mainBrandFilter);
 
-        HashDistributionPruner pruner = new HashDistributionPruner(
-                Stream.concat(tabletIds.stream(), tabletIds.stream()).collect(Collectors.toList()),
-                tabletIds, columns, filters);
+        HashDistributionPruner pruner = new HashDistributionPruner(tabletIds, columns, filters);
 
         Collection<Long> results = pruner.prune();
         Assertions.assertEquals(tabletIds.size(), results.size());

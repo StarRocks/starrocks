@@ -40,6 +40,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 
 import java.util.ArrayList;
@@ -113,7 +114,7 @@ public final class AggregateInfo extends AggregateInfoBase {
             intermediateTupleSmap_ = outputTupleSmap_;
         }
         partitionExprs_ =
-                (other.partitionExprs_ != null) ? Expr.cloneList(other.partitionExprs_) : null;
+                (other.partitionExprs_ != null) ? ExprUtils.cloneList(other.partitionExprs_) : null;
     }
 
     public List<Expr> getPartitionExprs() {

@@ -45,6 +45,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.cost.CostEstimate;
@@ -447,7 +448,7 @@ public class ProfilingExecPlan {
 
     private static String exprsToString(List<? extends Expr> exprs) {
         List<String> exprContents = exprs.stream()
-                .map(Expr::toSql)
+                .map(ExprToSql::toSql)
                 .collect(Collectors.toList());
         int lastIndex = -1;
         int length = 0;

@@ -42,12 +42,17 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.expression.DateLiteral;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.LargeIntLiteral;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.MaxLiteral;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.common.TypeManager;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -99,7 +104,7 @@ public class PartitionKey implements Comparable<PartitionKey>, Writable {
             throws AnalysisException {
         PartitionKey partitionKey = new PartitionKey();
         for (Column column : columns) {
-            partitionKey.keys.add(LiteralExpr.createInfinity(Type.fromPrimitiveType(column.getPrimitiveType()), isMax));
+            partitionKey.keys.add(LiteralExpr.createInfinity(TypeFactory.createType(column.getPrimitiveType()), isMax));
             partitionKey.types.add(column.getPrimitiveType());
         }
         return partitionKey;
@@ -109,7 +114,7 @@ public class PartitionKey implements Comparable<PartitionKey>, Writable {
             throws AnalysisException {
         PartitionKey partitionKey = new PartitionKey();
         for (PrimitiveType type : types) {
-            partitionKey.keys.add(LiteralExpr.createInfinity(Type.fromPrimitiveType(type), isMax));
+            partitionKey.keys.add(LiteralExpr.createInfinity(TypeFactory.createType(type), isMax));
             partitionKey.types.add(type);
         }
         return partitionKey;
@@ -144,13 +149,13 @@ public class PartitionKey implements Comparable<PartitionKey>, Writable {
         int i;
         for (i = 0; i < keys.size(); ++i) {
             partitionKey.keys.add(keys.get(i).getValue(
-                    Type.fromPrimitiveType(columns.get(i).getPrimitiveType())));
+                    TypeFactory.createType(columns.get(i).getPrimitiveType())));
             partitionKey.types.add(columns.get(i).getPrimitiveType());
         }
 
         // fill the vacancy with MIN
         for (; i < columns.size(); ++i) {
-            Type type = Type.fromPrimitiveType(columns.get(i).getPrimitiveType());
+            Type type = TypeFactory.createType(columns.get(i).getPrimitiveType());
             partitionKey.keys.add(LiteralExpr.createInfinity(type, false));
             partitionKey.types.add(columns.get(i).getPrimitiveType());
         }
@@ -221,7 +226,7 @@ public class PartitionKey implements Comparable<PartitionKey>, Writable {
         if (key1 instanceof MaxLiteral || key2 instanceof MaxLiteral) {
             ret = key1.compareLiteral(key2);
         } else {
-            final Type destType = Type.getAssignmentCompatibleType(key1.getType(), key2.getType(), false);
+            final Type destType = TypeManager.getAssignmentCompatibleType(key1.getType(), key2.getType(), false);
             try {
                 LiteralExpr newKey = key1;
                 if (key1.getType() != destType) {
@@ -272,7 +277,7 @@ public class PartitionKey implements Comparable<PartitionKey>, Writable {
                 final long minValue = -(1L << ((type.getSlotSize() << 3) - 1));
                 long pred = intLiteral.getValue();
                 pred -= pred > minValue ? 1L : 0L;
-                key.pushColumn(new IntLiteral(pred, Type.fromPrimitiveType(type)), type);
+                key.pushColumn(new IntLiteral(pred, TypeFactory.createType(type)), type);
                 return key;
             }
             case LARGEINT: {
@@ -343,7 +348,7 @@ public class PartitionKey implements Comparable<PartitionKey>, Writable {
                 final long maxValue = (1L << ((type.getSlotSize() << 3) - 1)) - 1L;
                 long succ = intLiteral.getValue();
                 succ += succ < maxValue ? 1L : 0L;
-                key.pushColumn(new IntLiteral(succ, Type.fromPrimitiveType(type)), type);
+                key.pushColumn(new IntLiteral(succ, TypeFactory.createType(type)), type);
                 return key;
             }
             case LARGEINT: {
@@ -403,7 +408,7 @@ public class PartitionKey implements Comparable<PartitionKey>, Writable {
         for (LiteralExpr expr : keys) {
             Object value = null;
             if (expr == MaxLiteral.MAX_VALUE) {
-                value = expr.toSql();
+                value = ExprToSql.toSql(expr);
                 sb.append(value);
                 continue;
             } else {
@@ -432,7 +437,7 @@ public class PartitionKey implements Comparable<PartitionKey>, Writable {
         for (LiteralExpr expr : keys) {
             Object value = null;
             if (expr == MaxLiteral.MAX_VALUE) {
-                value = expr.toSql();
+                value = ExprToSql.toSql(expr);
             } else {
                 value = expr.getStringValue();
             }
@@ -467,9 +472,9 @@ public class PartitionKey implements Comparable<PartitionKey>, Writable {
         List<PrimitiveType> typeList = Lists.newArrayList();
         for (int index = 0; index < typeArray.length; ++index) {
             PrimitiveType type = PrimitiveType.valueOf(typeArray[index].toUpperCase());
-            LiteralExpr expr = NullLiteral.create(Type.fromPrimitiveType(type));
+            LiteralExpr expr = NullLiteral.create(TypeFactory.createType(type));
             try {
-                expr = LiteralExpr.create(keyArray[index], Type.fromPrimitiveType(type));
+                expr = LiteralExpr.create(keyArray[index], TypeFactory.createType(type));
             } catch (AnalysisException ignored) {
             }
             typeList.add(type);
@@ -546,7 +551,7 @@ public class PartitionKey implements Comparable<PartitionKey>, Writable {
                         throw new IOException("type[" + type.name() + "] not supported: ");
                 }
             }
-            literal.setType(Type.fromPrimitiveType(type));
+            literal.setType(TypeFactory.createType(type));
             keys.add(literal);
         }
     }

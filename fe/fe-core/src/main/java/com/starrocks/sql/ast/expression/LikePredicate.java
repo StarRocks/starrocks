@@ -39,8 +39,6 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.thrift.TExprNode;
-import com.starrocks.thrift.TExprNodeType;
 
 import java.util.Objects;
 
@@ -75,8 +73,6 @@ public class LikePredicate extends Predicate {
         children.add(e1);
         Preconditions.checkNotNull(e2);
         children.add(e2);
-        // TODO: improve with histograms?
-        selectivity = 0.1;
     }
 
     protected LikePredicate(LikePredicate other) {
@@ -101,10 +97,6 @@ public class LikePredicate extends Predicate {
         return ((LikePredicate) obj).op == op;
     }
 
-    @Override
-    protected void toThrift(TExprNode msg) {
-        msg.node_type = TExprNodeType.FUNCTION_CALL;
-    }
 
     @Override
     public int hashCode() {

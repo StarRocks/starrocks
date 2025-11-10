@@ -57,7 +57,6 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
-import com.starrocks.catalog.Type;
 import com.starrocks.catalog.constraint.ForeignKeyConstraint;
 import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.AnalysisException;
@@ -98,6 +97,7 @@ import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletType;
+import com.starrocks.type.Type;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections.MapUtils;
@@ -1662,7 +1662,11 @@ public class PropertyAnalyzer {
             // replication_num
             short replicationNum = RunMode.defaultReplicationNum();
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM)) {
-                replicationNum = PropertyAnalyzer.analyzeReplicationNum(properties, replicationNum);
+                if (FeConstants.isReplayFromQueryDump) {
+                    replicationNum = 1;
+                } else {
+                    replicationNum = PropertyAnalyzer.analyzeReplicationNum(properties, replicationNum);
+                }
                 materializedView.setReplicationNum(replicationNum);
             }
             // bloom_filter_columns
@@ -1940,11 +1944,15 @@ public class PropertyAnalyzer {
                 materializedView.getTableProperty().getProperties().putAll(properties);
             }
         } catch (AnalysisException e) {
-            if (materializedView.isCloudNativeMaterializedView()) {
-                GlobalStateMgr.getCurrentState().getStorageVolumeMgr()
-                        .unbindTableToStorageVolume(materializedView.getId());
+            if (FeConstants.isReplayFromQueryDump) {
+                LOG.warn("Ignore MV properties analysis error during replay from query dump: ", e);
+            } else {
+                if (materializedView.isCloudNativeMaterializedView()) {
+                    GlobalStateMgr.getCurrentState().getStorageVolumeMgr()
+                            .unbindTableToStorageVolume(materializedView.getId());
+                }
+                ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER, e.getMessage());
             }
-            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER, e.getMessage());
         }
     }
 

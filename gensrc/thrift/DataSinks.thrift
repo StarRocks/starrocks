@@ -157,6 +157,8 @@ struct TResultSink {
     2: optional TResultFileSinkOptions file_options;
     3: optional TResultSinkFormatType format;
     4: optional bool is_binary_row;
+    // It is non-empty only for ARROW_FLIGHT_PROTOCAL.
+    5: optional list<string> output_column_names;
 }
 
 struct TMysqlTableSink {

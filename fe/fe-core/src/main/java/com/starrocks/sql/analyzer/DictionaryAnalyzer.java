@@ -16,7 +16,6 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
@@ -26,6 +25,7 @@ import com.starrocks.sql.ast.DropDictionaryStmt;
 import com.starrocks.sql.ast.RefreshDictionaryStmt;
 import com.starrocks.sql.ast.ShowDictionaryStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.type.Type;
 
 import java.util.List;
 

@@ -25,6 +25,13 @@ public abstract class AlterClause implements ParseNode {
         this.pos = pos;
     }
 
+    /**
+     * @return SQL syntax corresponding to this node.
+     */
+    public String toSql() {
+        throw new RuntimeException("New AST not implement toSql function");
+    }
+
     @Override
     public NodePosition getPos() {
         return pos;

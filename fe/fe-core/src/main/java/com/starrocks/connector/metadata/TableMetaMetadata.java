@@ -15,13 +15,13 @@
 package com.starrocks.connector.metadata;
 
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.tvr.TvrTableDeltaTrait;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorTableVersion;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.type.Type;
 import org.apache.hadoop.util.Lists;
 
 import java.util.List;

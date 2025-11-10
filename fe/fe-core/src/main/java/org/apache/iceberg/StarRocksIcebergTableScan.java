@@ -25,6 +25,7 @@ import com.starrocks.connector.iceberg.AsyncIterable;
 import com.starrocks.connector.iceberg.CachingIcebergCatalog.IcebergTableName;
 import com.starrocks.connector.iceberg.IcebergApiConverter;
 import com.starrocks.connector.iceberg.StarRocksIcebergTableScanContext;
+import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
 import com.starrocks.connector.metadata.MetadataCollectJob;
 import com.starrocks.connector.metadata.iceberg.IcebergMetadataCollectJob;
 import com.starrocks.qe.ConnectContext;
@@ -85,6 +86,7 @@ public class StarRocksIcebergTableScan
     private final long localPlanningMaxSlotSize;
     private ConnectContext connectContext;
     private final IcebergTableName icebergTableName;
+    private IcebergMetricsReporter metricsReporter;
 
     public static TableScanContext newTableScanContext(Table table) {
         if (table instanceof BaseTable) {
@@ -124,7 +126,18 @@ public class StarRocksIcebergTableScan
 
     @Override
     protected TableScan newRefinedScan(Table newTable, Schema newSchema, TableScanContext newContext) {
-        return new StarRocksIcebergTableScan(newTable, newSchema, newContext, scanContext);
+        StarRocksIcebergTableScan scan = new StarRocksIcebergTableScan(newTable, newSchema, newContext, scanContext);
+        scan.metricsReporter = this.metricsReporter;
+        return scan;
+    }
+
+    @Override
+    public TableScan metricsReporter(MetricsReporter reporter) {
+        if (reporter instanceof IcebergMetricsReporter) {
+            this.metricsReporter = (IcebergMetricsReporter) reporter;
+        }
+        TableScan scan = super.metricsReporter(reporter);
+        return scan;
     }
 
     @Override
@@ -522,5 +535,13 @@ public class StarRocksIcebergTableScan
 
     private int liveFilesCount(ManifestFile manifest) {
         return manifest.existingFilesCount() + manifest.addedFilesCount();
+    }
+
+    public IcebergTableName getIcebergTableName() {
+        return icebergTableName;
+    }
+
+    public IcebergMetricsReporter getMetricsReporter() {
+        return metricsReporter;
     }
 }

@@ -26,3 +26,13 @@ displayed_sidebar: docs
 | PROPERTIES    | 任务的属性。                                                 |
 | JOB_ID        | 任务的作业 ID。                                              |
 | PROCESS_TIME  | 任务的处理时间。                                             |
+
+Task Run 记录由 [SUBMIT TASK](../sql-statements/loading_unloading/ETL/SUBMIT_TASK.md) 或 [CREATE MATRIALIZED VIEW](../sql-statements/materialized_view/CREATE_MATERIALIZED_VIEW.md) 生成。
+
+:::note
+一个物化视图操作可能会生成多个 Task Run 记录，每个 Task Run 记录代表一个刷新子任务，该子任务根据 `partition_refresh_number` 配置进行拆分。
+:::
+
+## `EXTRA_MESSAGE`
+
+对于物化视图任务运行，`EXTRA_MESSAGE` 字段将包含物化视图 Task Run 的详细信息，您可以在 [materialized_view_task_run_details](../../using_starrocks/async_mv/materialized_view_task_run_details.md) 中找到更多详细信息。

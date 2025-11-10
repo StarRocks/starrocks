@@ -18,7 +18,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Function;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.FeConstants;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.SlotId;
@@ -42,6 +41,7 @@ import com.starrocks.sql.ast.expression.DictMappingExpr;
 import com.starrocks.sql.ast.expression.DictQueryExpr;
 import com.starrocks.sql.ast.expression.DictionaryGetExpr;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FloatLiteral;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.FunctionName;
@@ -63,6 +63,7 @@ import com.starrocks.sql.ast.expression.SubfieldExpr;
 import com.starrocks.sql.ast.expression.Subquery;
 import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.ast.expression.VarBinaryLiteral;
+import com.starrocks.sql.common.LargeInPredicateException;
 import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.optimizer.operator.scalar.ArrayOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ArraySliceOperator;
@@ -83,6 +84,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ExistsPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LargeInPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.MapOperator;
 import com.starrocks.sql.optimizer.operator.scalar.MatchExprOperator;
@@ -92,8 +94,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
 import com.starrocks.sql.spm.SPMFunctions;
-import com.starrocks.thrift.TExprOpcode;
 import com.starrocks.thrift.TFunctionBinaryType;
+import com.starrocks.type.Type;
 
 import java.time.LocalDateTime;
 import java.util.Comparator;
@@ -337,10 +339,32 @@ public class ScalarOperatorToExpr {
             InPredicate expr =
                     new InPredicate(buildExpr.build(predicate.getChild(0), context), args, predicate.isNotIn());
 
-            expr.setOpcode(expr.isNotIn() ? TExprOpcode.FILTER_NOT_IN : TExprOpcode.FILTER_IN);
-
             expr.setType(Type.BOOLEAN);
             return expr;
+        }
+
+        /**
+         * LargeInPredicate should have been transformed to a join by LargeInPredicateToJoinRule
+         * during the optimization phase. If execution reaches here, it indicates that the
+         * transformation was not applied, which can happen in certain unsupported scenarios:
+         * 
+         * <p>Unsupported cases include:
+         * <ul>
+         *   <li>LargeInPredicate used within CASE WHEN expressions (e.g., CASE WHEN col IN (...))</li>
+         *   <li>LargeInPredicate in complex nested expressions where join rewrite is not applicable</li>
+         * </ul>
+         * 
+         * <p>When this exception is thrown, the query will be automatically retried with
+         * LargeInPredicate optimization disabled, falling back to the standard InPredicate evaluation.
+         * 
+         * @throws LargeInPredicateException to trigger query retry with LargeInPredicate disabled
+         */
+        @Override
+        public Expr visitLargeInPredicate(LargeInPredicateOperator predicate, FormatterContext context) {
+            throw new LargeInPredicateException(
+                    "LargeInPredicate was not transformed to join during optimization. " +
+                    "This may occur in unsupported contexts such as CASE WHEN expressions. " +
+                    "Retrying query with LargeInPredicate optimization disabled.");
         }
 
         static Function isNullFN = new Function(new FunctionName("is_null_pred"),
@@ -380,7 +404,7 @@ public class ScalarOperatorToExpr {
                 expr = new LikePredicate(LikePredicate.Operator.LIKE, child1, child2);
             }
 
-            expr.setFn(Expr.getBuiltinFunction(expr.getOp().name(),
+            expr.setFn(ExprUtils.getBuiltinFunction(expr.getOp().name(),
                     new Type[] {child1.getType(), child2.getType()},
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF));
 

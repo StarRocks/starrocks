@@ -36,7 +36,6 @@ package com.starrocks.sql.ast.expression;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.mysql.MysqlCodec;
@@ -45,6 +44,7 @@ import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.Type;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -56,7 +56,6 @@ import java.util.Map;
 public abstract class LiteralExpr extends Expr implements Comparable<LiteralExpr> {
     public LiteralExpr() {
         super();
-        numDistinctValues = 1;
     }
 
     protected LiteralExpr(NodePosition pos) {

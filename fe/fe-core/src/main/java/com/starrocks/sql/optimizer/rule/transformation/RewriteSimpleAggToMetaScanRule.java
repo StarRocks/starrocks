@@ -24,9 +24,8 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.Type;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnIdentifier;
@@ -47,6 +46,7 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.statistics.IMinMaxStatsMgr;
 import com.starrocks.sql.optimizer.statistics.StatsVersion;
 import com.starrocks.statistic.StatisticUtils;
+import com.starrocks.type.Type;
 
 import java.time.LocalDateTime;
 import java.util.Collections;
@@ -126,7 +126,7 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
             if (aggCall.getFnName().equals(FunctionSet.COUNT)
                     || aggCall.getFnName().equals(FunctionSet.COLUMN_SIZE)
                     || aggCall.getFnName().equals(FunctionSet.COLUMN_COMPRESSED_SIZE)) {
-                aggFunction = Expr.getBuiltinFunction(FunctionSet.SUM,
+                aggFunction = ExprUtils.getBuiltinFunction(FunctionSet.SUM,
                         new Type[] {Type.BIGINT}, Function.CompareMode.IS_IDENTICAL);
                 newAggFnName = FunctionSet.SUM;
                 newAggReturnType = Type.BIGINT;
@@ -274,6 +274,7 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
                         .getStats(new ColumnIdentifier(table.getId(), c.getColumnId()),
                                 new StatsVersion(-1, lastUpdateTimestamp));
                 if (minMax.isEmpty()) {
+                    newAggCalls.put(entry.getKey(), entry.getValue());
                     continue;
                 }
 

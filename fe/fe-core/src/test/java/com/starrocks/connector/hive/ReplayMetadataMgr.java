@@ -25,7 +25,6 @@ import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.ResourceMgr;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.ConnectorTblMetaInfoMgr;
@@ -42,6 +41,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.type.Type;
 
 import java.util.HashMap;
 import java.util.List;

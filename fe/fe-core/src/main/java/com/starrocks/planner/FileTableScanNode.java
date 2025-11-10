@@ -16,10 +16,9 @@ package com.starrocks.planner;
 
 import com.google.common.base.MoreObjects;
 import com.starrocks.catalog.FileTable;
-import com.starrocks.catalog.Type;
 import com.starrocks.connector.RemoteFileBlockDesc;
 import com.starrocks.connector.RemoteFileDesc;
-import com.starrocks.connector.hive.RemoteFileInputFormat;
+import com.starrocks.connector.hive.HiveStorageFormat;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.sql.common.ErrorType;
@@ -34,6 +33,7 @@ import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
+import com.starrocks.type.Type;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -98,8 +98,8 @@ public class FileTableScanNode extends ScanNode {
             hdfsScanRange.setLength(blockDesc.getLength());
             hdfsScanRange.setFile_length(file.getLength());
             hdfsScanRange.setModification_time(file.getModificationTime());
-            RemoteFileInputFormat fileFormat = fileTable.getFileFormat();
-            hdfsScanRange.setFile_format(fileFormat.toThrift());
+            HiveStorageFormat fileFormat = fileTable.getFileFormat();
+            hdfsScanRange.setFile_format(fileFormat.toFileFormatThrift());
             if (fileFormat.isTextFormat()) {
                 hdfsScanRange.setText_file_desc(file.getTextFileFormatDesc().toThrift());
             }

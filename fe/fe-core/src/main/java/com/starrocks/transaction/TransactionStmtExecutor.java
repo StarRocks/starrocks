@@ -140,7 +140,7 @@ public class TransactionStmtExecutor {
                                 OriginStatement originStmt,
                                 ConnectContext context) {
         Coordinator coordinator = new DefaultCoordinator.Factory().createInsertScheduler(
-                context, execPlan.getFragments(), execPlan.getScanNodes(), execPlan.getDescTbl().toThrift());
+                context, execPlan.getFragments(), execPlan.getScanNodes(), execPlan.getDescTbl().toThrift(), execPlan);
 
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         ExplicitTxnState explicitTxnState = globalTransactionMgr.getExplicitTxnState(context.getTxnId());
@@ -168,6 +168,8 @@ public class TransactionStmtExecutor {
             if (!transactionState.getTableIdList().contains(targetTable.getId())) {
                 transactionState.addTableIdList(targetTable.getId());
             }
+            // record modified table id in explicit txn state for later SELECT validation
+            explicitTxnState.addModifiedTableId(targetTable.getId());
 
             for (TableName tableName : m.keySet()) {
                 if (explicitTxnState.getTableHasExplicitStmt(tableName.getTbl())) {
@@ -204,6 +206,9 @@ public class TransactionStmtExecutor {
         }
 
         transactionState.addTableIdList(tableId);
+
+        // record modified table id in explicit txn state for later SELECT validation
+        explicitTxnState.addModifiedTableId(tableId);
 
         explicitTxnState.addTransactionItem(item);
 

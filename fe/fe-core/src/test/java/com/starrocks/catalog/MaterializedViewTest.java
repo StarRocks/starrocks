@@ -49,6 +49,8 @@ import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import com.starrocks.thrift.TTabletType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.TypeFactory;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.StarRocksTestBase;
 import com.starrocks.utframe.UtFrameUtils;
@@ -83,9 +85,9 @@ public class MaterializedViewTest extends StarRocksTestBase {
 
         UtFrameUtils.createMinStarRocksCluster();
 
-        columns.add(new Column("k1", ScalarType.createType(PrimitiveType.TINYINT), true, null, "", ""));
-        columns.add(new Column("k2", ScalarType.createType(PrimitiveType.SMALLINT), true, null, "", ""));
-        columns.add(new Column("v1", ScalarType.createType(PrimitiveType.INT), false, AggregateType.SUM, "", ""));
+        columns.add(new Column("k1", TypeFactory.createType(PrimitiveType.TINYINT), true, null, "", ""));
+        columns.add(new Column("k2", TypeFactory.createType(PrimitiveType.SMALLINT), true, null, "", ""));
+        columns.add(new Column("v1", TypeFactory.createType(PrimitiveType.INT), false, AggregateType.SUM, "", ""));
 
         super.before();
 
@@ -997,15 +999,14 @@ public class MaterializedViewTest extends StarRocksTestBase {
             Config.enable_mv_post_image_reload_cache = false;
             boolean postLoadImage = false;
 
-            baseMv.setReloaded(false);
+            baseMv.changeReloadState(-1);
             baseTable.removeRelatedMaterializedView(baseMv.getMvId());
             baseMv.removeRelatedMaterializedView(mv1.getMvId());
             baseMv.removeRelatedMaterializedView(mv2.getMvId());
 
             mv1.onReload(postLoadImage);
             mv2.onReload(postLoadImage);
-
-            Assertions.assertFalse(baseMv.hasReloaded());
+            Assertions.assertTrue(baseMv.hasReloaded());
             Assertions.assertEquals(1, baseTable.getRelatedMaterializedViews().size());
             Assertions.assertEquals(2, baseMv.getRelatedMaterializedViews().size());
             Assertions.assertTrue(baseMv.getRelatedMaterializedViews().contains(mv1.getMvId()));
@@ -1016,13 +1017,16 @@ public class MaterializedViewTest extends StarRocksTestBase {
             Config.enable_mv_post_image_reload_cache = true;
             boolean postLoadImage = true;
 
-            baseMv.setReloaded(false);
+            baseMv.changeReloadState(-1);
             baseTable.removeRelatedMaterializedView(baseMv.getMvId());
             baseMv.removeRelatedMaterializedView(mv1.getMvId());
             baseMv.removeRelatedMaterializedView(mv2.getMvId());
 
             mv1.onReload(postLoadImage);
+            mv1.waitForReloaded();
+
             mv2.onReload(postLoadImage);
+            mv2.waitForReloaded();
 
             Assertions.assertTrue(baseMv.hasReloaded());
             Assertions.assertEquals(1, baseTable.getRelatedMaterializedViews().size());
@@ -1035,7 +1039,7 @@ public class MaterializedViewTest extends StarRocksTestBase {
             Config.enable_mv_post_image_reload_cache = true;
             boolean postLoadImage = false;
 
-            baseMv.setReloaded(false);
+            baseMv.changeReloadState(-1);
             baseTable.removeRelatedMaterializedView(baseMv.getMvId());
             baseMv.removeRelatedMaterializedView(mv1.getMvId());
             baseMv.removeRelatedMaterializedView(mv2.getMvId());
@@ -1043,7 +1047,7 @@ public class MaterializedViewTest extends StarRocksTestBase {
             mv1.onReload(postLoadImage);
             mv2.onReload(postLoadImage);
 
-            Assertions.assertFalse(baseMv.hasReloaded());
+            Assertions.assertTrue(baseMv.hasReloaded());
             Assertions.assertEquals(1, baseTable.getRelatedMaterializedViews().size());
             Assertions.assertEquals(2, baseMv.getRelatedMaterializedViews().size());
             Assertions.assertTrue(baseMv.getRelatedMaterializedViews().contains(mv1.getMvId()));
@@ -1104,18 +1108,24 @@ public class MaterializedViewTest extends StarRocksTestBase {
         baseMv.removeRelatedMaterializedView(mv1.getMvId());
         baseMv.removeRelatedMaterializedView(mv2.getMvId());
 
-        Assertions.assertFalse(mv1.hasReloaded());
-        Assertions.assertFalse(mv2.hasReloaded());
-        Assertions.assertFalse(baseMv.hasReloaded());
+        baseMv.waitForReloaded();
+        mv1.waitForReloaded();
+        mv2.waitForReloaded();
+        Assertions.assertTrue(mv1.hasReloaded());
+        Assertions.assertTrue(mv2.hasReloaded());
+        Assertions.assertTrue(baseMv.hasReloaded());
 
         Config.enable_mv_post_image_reload_cache = true;
         // do post image reload
         GlobalStateMgr.getCurrentState().processMvRelatedMeta();
+        baseMv.waitForReloaded();
+        mv1.waitForReloaded();
+        mv2.waitForReloaded();
 
         // after post image reload, all materialized views should have `reloaded` flag reset to false
-        Assertions.assertFalse(mv1.hasReloaded());
-        Assertions.assertFalse(mv2.hasReloaded());
-        Assertions.assertFalse(baseMv.hasReloaded());
+        Assertions.assertTrue(mv1.hasReloaded());
+        Assertions.assertTrue(mv2.hasReloaded());
+        Assertions.assertTrue(baseMv.hasReloaded());
         Assertions.assertEquals(1, baseTable.getRelatedMaterializedViews().size());
         Assertions.assertEquals(2, baseMv.getRelatedMaterializedViews().size());
         Assertions.assertTrue(baseMv.getRelatedMaterializedViews().contains(mv1.getMvId()));

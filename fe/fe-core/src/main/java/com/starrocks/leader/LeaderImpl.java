@@ -157,6 +157,7 @@ import com.starrocks.transaction.TransactionState.LoadJobSourceType;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
 import com.starrocks.transaction.TxnCommitAttachment;
+import com.starrocks.type.TypeSerializer;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
@@ -983,7 +984,7 @@ public class LeaderImpl {
                 for (Column column : rangePartitionInfo.getPartitionColumns(olapTable.getIdToColumn())) {
                     TColumnMeta columnMeta = new TColumnMeta();
                     columnMeta.setColumnName(column.getName());
-                    columnMeta.setColumnType(column.getType().toThrift());
+                    columnMeta.setColumnType(TypeSerializer.toThrift(column.getType()));
                     columnMeta.setKey(column.isKey());
                     if (column.getAggregationType() != null) {
                         columnMeta.setAggregationType(column.getAggregationType().name());
@@ -1055,7 +1056,7 @@ public class LeaderImpl {
                     for (Column column : materializedIndexMeta.getSchema()) {
                         TColumnMeta columnMeta = new TColumnMeta();
                         columnMeta.setColumnName(column.getName());
-                        columnMeta.setColumnType(column.getType().toThrift());
+                        columnMeta.setColumnType(TypeSerializer.toThrift(column.getType()));
                         columnMeta.setKey(column.isKey());
                         columnMeta.setAllowNull(column.isAllowNull());
                         if (column.getAggregationType() != null) {

@@ -30,8 +30,8 @@ import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 
 public class AnalyzeTestUtil {
-    protected static ConnectContext connectContext;
-    protected static StarRocksAssert starRocksAssert;
+    public static ConnectContext connectContext;
+    public static StarRocksAssert starRocksAssert;
     protected static String DB_NAME = "test";
 
     public static void initWithoutTableAndDb(RunMode runMode) throws Exception {

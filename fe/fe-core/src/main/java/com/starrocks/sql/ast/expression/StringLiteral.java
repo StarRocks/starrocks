@@ -34,7 +34,6 @@
 
 package com.starrocks.sql.ast.expression;
 
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -42,9 +41,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.thrift.TExprNode;
-import com.starrocks.thrift.TExprNodeType;
-import com.starrocks.thrift.TStringLiteral;
+import com.starrocks.type.Type;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -138,11 +135,6 @@ public class StringLiteral extends LiteralExpr {
         return false;
     }
 
-    @Override
-    protected void toThrift(TExprNode msg) {
-        msg.node_type = TExprNodeType.STRING_LITERAL;
-        msg.string_literal = new TStringLiteral(getUnescapedValue());
-    }
 
     // FIXME: modify by zhaochun
     public String getUnescapedValue() {

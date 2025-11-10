@@ -831,7 +831,7 @@ public class StarRocksAssert {
             withMaterializedView(sql);
             action.accept(mvName);
         } catch (Exception e) {
-            Assertions.fail();
+            Assertions.fail(e.getMessage());
         } finally {
             // Create mv may fail.
             if (!Strings.isNullOrEmpty(mvName)) {

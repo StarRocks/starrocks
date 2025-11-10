@@ -54,7 +54,6 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.PhysicalPartition;
-import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.SparkResource;
 import com.starrocks.common.AnalysisException;
@@ -86,11 +85,13 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.type.PrimitiveType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -539,7 +540,7 @@ public class SparkLoadPendingTask extends LoadTask {
                 continue;
             }
             // the left must be column expr
-            columnMappings.put(columnDesc.getColumnName(), new EtlColumnMapping(columnDesc.getExpr().toSql()));
+            columnMappings.put(columnDesc.getColumnName(), new EtlColumnMapping(ExprToSql.toSql(columnDesc.getExpr())));
         }
 
         // partition ids
@@ -560,7 +561,7 @@ public class SparkLoadPendingTask extends LoadTask {
         // TODO: check
         String where = "";
         if (fileGroup.getWhereExpr() != null) {
-            where = fileGroup.getWhereExpr().toSql();
+            where = ExprToSql.toSql(fileGroup.getWhereExpr());
         }
 
         // load from table

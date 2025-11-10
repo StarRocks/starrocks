@@ -193,7 +193,7 @@ private:
 };
 
 inline std::ostream& operator<<(std::ostream& os, const LoadChannel& load_channel) {
-    os << "LoadChannel(id=" << load_channel.load_id()
+    os << "LoadChannel(id=" << print_id(load_channel.load_id())
        << ", last_update_time=" << static_cast<uint64_t>(load_channel.last_updated_time()) << ")";
     return os;
 }

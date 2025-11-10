@@ -352,7 +352,8 @@ public class MaterializedViewMultiJoinTest extends MaterializedViewTestBase {
                 "AS SELECT " +
                 "sum(p1.p1_col4) AS p1_col4\n" +
                 "FROM " +
-                "tbl_1 AS p1 ");
+                        "tbl_1 AS p1 ",
+                true, true);
         String query = "select sum(p1.p1_col4) from tbl_1 p1";
         starRocksAssert.query(query).explainContains(mvName);
 
@@ -378,7 +379,8 @@ public class MaterializedViewMultiJoinTest extends MaterializedViewTestBase {
                 "AS SELECT " +
                 "sum(p1.p1_col4) AS p1_col4\n" +
                 "FROM tbl_1 AS p1 " +
-                "JOIN tbl_2 AS p2");
+                        "JOIN tbl_2 AS p2",
+                true, true);
         String query = "select sum(p1.p1_col4) from tbl_1 p1 JOIN tbl_2 AS p2";
         starRocksAssert.query(query).explainContains(mvName);
 
@@ -409,7 +411,8 @@ public class MaterializedViewMultiJoinTest extends MaterializedViewTestBase {
                     "PROPERTIES (\n" +
                     "\"replication_num\"=\"1\"\n" +
                     ")\n" +
-                    "AS " + query);
+                            "AS " + query,
+                    true, true);
 
             int limit = SessionVariable.DEFAULT_SESSION_VARIABLE.getMaterializedViewJoinSameTablePermutationLimit();
             if (numTables >= limit) {

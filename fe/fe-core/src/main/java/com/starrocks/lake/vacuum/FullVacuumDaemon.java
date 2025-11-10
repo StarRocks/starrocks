@@ -206,6 +206,9 @@ public class FullVacuumDaemon extends FrontendDaemon implements Writable {
         }
         long minCheckVersion = 0;
         long maxCheckVersion = visibleVersion; // always should be inited by current visibleVersion
+        if (partition.getMinRetainVersion() > 0) {
+            maxCheckVersion = Math.min(maxCheckVersion, partition.getMinRetainVersion());
+        }
         vacuumFullRequest.setMinCheckVersion(minCheckVersion);
         vacuumFullRequest.setMaxCheckVersion(maxCheckVersion);
         vacuumFullRequest.setRetainVersions(retainVersions);

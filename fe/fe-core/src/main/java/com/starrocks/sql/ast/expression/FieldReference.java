@@ -16,9 +16,6 @@ package com.starrocks.sql.ast.expression;
 
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
-import com.starrocks.sql.common.ErrorType;
-import com.starrocks.sql.common.StarRocksPlannerException;
-import com.starrocks.thrift.TExprNode;
 
 import java.util.Objects;
 
@@ -72,8 +69,4 @@ public class FieldReference extends Expr {
         return new FieldReference(fieldIndex, tblName);
     }
 
-    @Override
-    protected void toThrift(TExprNode msg) {
-        throw new StarRocksPlannerException("FieldReference not implement toThrift", ErrorType.INTERNAL_ERROR);
-    }
 }

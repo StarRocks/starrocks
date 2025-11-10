@@ -15,10 +15,10 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Type;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.statistic.MockHistogramStatisticStorage;
+import com.starrocks.type.Type;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;

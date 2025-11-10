@@ -16,7 +16,6 @@ package com.starrocks.qe;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.proto.ExecuteCommandRequestPB;
@@ -26,6 +25,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ExecuteScriptStmt;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.type.Type;
 import groovy.lang.Binding;
 import groovy.lang.GroovyShell;
 import org.apache.commons.lang.StringUtils;

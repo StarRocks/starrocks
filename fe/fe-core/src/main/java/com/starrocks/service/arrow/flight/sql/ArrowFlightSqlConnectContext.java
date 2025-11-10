@@ -113,6 +113,10 @@ public class ArrowFlightSqlConnectContext extends ConnectContext {
         this.coordinatorFuture.complete(coordinator);
     }
 
+    public void setDeployFailed(Throwable e) {
+        this.coordinatorFuture.completeExceptionally(e);
+    }
+
     public VectorSchemaRoot getResult(String queryId) {
         ArrowSchemaRootWrapper wrapper = resultCache.getIfPresent(queryId);
         return wrapper != null ? wrapper.getSchemaRoot() : null;

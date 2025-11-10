@@ -58,6 +58,7 @@ import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.AlterRoutineLoadStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.thrift.TKafkaRLTaskProgress;
 import com.starrocks.thrift.TRoutineLoadJobInfo;
 import com.starrocks.transaction.TransactionState;
@@ -632,7 +633,7 @@ public class RoutineLoadJobTest {
         routineLoadJob.modifyJob(stmt.getRoutineLoadDesc(), stmt.getAnalyzedJobProperties(),
                 stmt.getDataSourceProperties(), new OriginStatementInfo(originStmt, 0), true);
         Assertions.assertEquals("a,b,c,d=a", Joiner.on(",").join(routineLoadJob.getColumnDescs()));
-        Assertions.assertEquals("`a` = 1", routineLoadJob.getWhereExpr().toSql());
+        Assertions.assertEquals("`a` = 1", ExprToSql.toSql(routineLoadJob.getWhereExpr()));
         Assertions.assertEquals("','", routineLoadJob.getColumnSeparator().toString());
         Assertions.assertEquals("'A'", routineLoadJob.getRowDelimiter().toString());
         Assertions.assertEquals("p1,p2,p3", Joiner.on(",").join(routineLoadJob.getPartitions().getPartitionNames()));

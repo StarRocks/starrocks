@@ -15,8 +15,8 @@
 package com.starrocks.sql.optimizer.operator.scalar;
 
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.type.Type;
 
 import java.util.List;
 import java.util.Objects;

@@ -19,6 +19,6 @@ set(SIMD_FILES
     expand.cpp
 )
 
-add_library(Simd STATIC
+ADD_BE_LIB(Simd
     ${SIMD_FILES}
 )

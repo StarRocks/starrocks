@@ -37,6 +37,7 @@ package com.starrocks.sql.ast.expression;
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Function;
 import com.starrocks.sql.ast.OrderByElement;
+import com.starrocks.sql.ast.expression.ExprToSql;
 
 import java.util.Arrays;
 import java.util.List;
@@ -192,7 +193,7 @@ public class FunctionParams {
             if (i != 0) {
                 result = result.concat(",");
             }
-            result = result.concat(exprsNames.get(i) + "=>" + exprs.get(i).toSql());
+            result = result.concat(exprsNames.get(i) + "=>" + ExprToSql.toSql(exprs.get(i)));
         }
         return result;
     }

@@ -140,6 +140,7 @@ T_R_TABLE = "t_r_table"
 
 SECRET_INFOS = {}
 TASK_RUN_SUCCESS_STATES = set(["SUCCESS", "MERGED", "SKIPPED"])
+TASK_RUN_FINAL_STATES = set(["SUCCESS", "MERGED", "SKIPPED", "FAILED"])
 
 
 class StarrocksSQLApiLib(object):
@@ -644,15 +645,21 @@ class StarrocksSQLApiLib(object):
     def use_database(self, db_name):
         return self.execute_sql("use %s" % db_name)
 
-    def create_database_and_table(self, database_name, table_name, table_sql_path=None, tolerate_exist=False):
+    def create_database_and_table(self, catalog_name, database_name, table_name, table_sql_path=None,
+                                  tolerate_exist=False):
         """
         create database, use database and create table
         Args:
+            catalog_name:     catalog
             database_name:    db
             table_name:       table
             table_sql_path:   sql dir
             tolerate_exist:   tolerate if not exists
         """
+        if catalog_name is not None:
+            set_catalog_res = self.execute_sql("set catalog %s" % catalog_name)
+            tools.assert_true(set_catalog_res["status"], "set catalog failed")
+
         # create database
         create_db_res = self.create_database(database_name, tolerate_exist=tolerate_exist)
         tools.assert_true(create_db_res["status"], "create database failed")
@@ -1564,7 +1571,7 @@ class StarrocksSQLApiLib(object):
 
         # create record table
         try:
-            self.create_database_and_table(T_R_DB, T_R_TABLE, "sql_framework", True)
+            self.create_database_and_table("default_catalog", T_R_DB, T_R_TABLE, "sql_framework", True)
         except AssertionError:
             self_print(f"Failed to create DB/Table to save the results, please check the env!", ColorEnum.RED)
             sys.exit(1)
@@ -1974,6 +1981,23 @@ class StarrocksSQLApiLib(object):
                 time.sleep(pending_time_ms / 1000)
                 retry_times += 1
         return res
+    
+    def wait_show_materialized_view_finish(self, mv_name, check_count=60):
+        """
+        wait show materialized view job finish and return status
+        """
+        last_refresh_state = ""
+        show_sql = f"SHOW MATERIALIZED VIEWS WHERE NAME='{mv_name}'"
+        count = 0
+        time.sleep(1)
+        while count < check_count:
+            res = self.execute_sql(show_sql, True)
+            last_refresh_state = res["result"][-1][12]
+            if last_refresh_state in TASK_RUN_FINAL_STATES:
+                break
+            time.sleep(1)
+            count += 1
+        tools.assert_true(last_refresh_state in TASK_RUN_FINAL_STATES, "wait show materialized view finish error: %s" % last_refresh_state)
 
     def wait_async_materialized_view_finish(self, current_db, mv_name, check_count=None):
         """

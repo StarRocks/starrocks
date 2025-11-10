@@ -14,14 +14,12 @@
 
 package com.starrocks.sql.ast.expression;
 
-import com.starrocks.catalog.ArrayType;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.thrift.TExprNode;
-import com.starrocks.thrift.TExprNodeType;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.Type;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -35,17 +33,13 @@ public class ArrayExpr extends Expr {
     public ArrayExpr(Type type, List<Expr> items, NodePosition pos) {
         super(pos);
         this.type = type;
-        this.children = Expr.cloneList(items);
+        this.children = ExprUtils.cloneList(items);
     }
 
     public ArrayExpr(ArrayExpr other) {
         super(other);
     }
 
-    @Override
-    protected void toThrift(TExprNode msg) {
-        msg.setNode_type(TExprNodeType.ARRAY_EXPR);
-    }
 
     @Override
     public Expr clone() {

@@ -19,18 +19,20 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.expression.ArithmeticExpr;
 import com.starrocks.sql.ast.expression.DecimalLiteral;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FloatLiteral;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.TableName;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -52,7 +54,7 @@ public class DecimalV3FunctionAnalyzerTest {
         paramTypes.add(ScalarType.DOUBLE);
         paramTypes.add(Type.TINYINT);
 
-        Function function = Expr.getBuiltinFunction(FunctionSet.TRUNCATE, paramTypes.toArray(new Type[0]),
+        Function function = ExprUtils.getBuiltinFunction(FunctionSet.TRUNCATE, paramTypes.toArray(new Type[0]),
                 Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         Assertions.assertNotNull(function);
         Function newFn = DecimalV3FunctionAnalyzer.getFunctionOfRound(node, function, paramTypes);
@@ -68,10 +70,10 @@ public class DecimalV3FunctionAnalyzerTest {
         FunctionCallExpr node = new FunctionCallExpr(FunctionSet.TRUNCATE, params);
 
         List<Type> paramTypes = Lists.newArrayList();
-        paramTypes.add(ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL32, 7, 2));
+        paramTypes.add(TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL32, 7, 2));
         paramTypes.add(Type.TINYINT);
 
-        Function function = Expr.getBuiltinFunction(FunctionSet.TRUNCATE, paramTypes.toArray(new Type[0]),
+        Function function = ExprUtils.getBuiltinFunction(FunctionSet.TRUNCATE, paramTypes.toArray(new Type[0]),
                 Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         Assertions.assertNotNull(function);
         Function newFn = DecimalV3FunctionAnalyzer.getFunctionOfRound(node, function, paramTypes);
@@ -90,10 +92,10 @@ public class DecimalV3FunctionAnalyzerTest {
         FunctionCallExpr node = new FunctionCallExpr(FunctionSet.TRUNCATE, params);
 
         List<Type> paramTypes = Lists.newArrayList();
-        paramTypes.add(ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL32, 7, 2));
+        paramTypes.add(TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL32, 7, 2));
         paramTypes.add(Type.TINYINT);
 
-        Function function = Expr.getBuiltinFunction(FunctionSet.TRUNCATE, paramTypes.toArray(new Type[0]),
+        Function function = ExprUtils.getBuiltinFunction(FunctionSet.TRUNCATE, paramTypes.toArray(new Type[0]),
                 Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         Assertions.assertNotNull(function);
         Function newFn = DecimalV3FunctionAnalyzer.getFunctionOfRound(node, function, paramTypes);
@@ -110,10 +112,10 @@ public class DecimalV3FunctionAnalyzerTest {
         FunctionCallExpr node = new FunctionCallExpr(FunctionSet.TRUNCATE, params);
 
         List<Type> paramTypes = Lists.newArrayList();
-        paramTypes.add(ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL32, 7, 2));
+        paramTypes.add(TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL32, 7, 2));
         paramTypes.add(Type.TINYINT);
 
-        Function function = Expr.getBuiltinFunction(FunctionSet.TRUNCATE, paramTypes.toArray(new Type[0]),
+        Function function = ExprUtils.getBuiltinFunction(FunctionSet.TRUNCATE, paramTypes.toArray(new Type[0]),
                 Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         Assertions.assertNotNull(function);
         Function newFn = DecimalV3FunctionAnalyzer.getFunctionOfRound(node, function, paramTypes);
@@ -138,10 +140,10 @@ public class DecimalV3FunctionAnalyzerTest {
                         FunctionSet.STDDEV_SAMP);
         for (String funcName : stdFunctions) {
             AggregateFunction function =
-                    (AggregateFunction) Expr.getBuiltinFunction(funcName, paramTypes.toArray(new Type[0]),
+                    (AggregateFunction) ExprUtils.getBuiltinFunction(funcName, paramTypes.toArray(new Type[0]),
                             Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             Assertions.assertNotNull(function);
-            Type argType = ScalarType.createWildcardDecimalV3Type(PrimitiveType.DECIMAL128);
+            Type argType = TypeFactory.createWildcardDecimalV3Type(PrimitiveType.DECIMAL128);
             Type retType = Type.DOUBLE;
             AggregateFunction aggFunc =
                     DecimalV3FunctionAnalyzer.rectifyAggregationFunction(function, argType, retType);

@@ -58,6 +58,9 @@ import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableFunctionTable;
 import com.starrocks.thrift.TTableType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeDeserializer;
+import com.starrocks.type.TypeFactory;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.logging.log4j.LogManager;
@@ -690,7 +693,7 @@ public class TableFunctionTable extends Table {
 
         List<Column> columns = new ArrayList<>();
         for (PSlotDescriptor slot : result.schema) {
-            columns.add(new Column(slot.colName, Type.fromProtobuf(slot.slotType), true));
+            columns.add(new Column(slot.colName, TypeDeserializer.fromProtobuf(slot.slotType), true));
         }
         return columns;
     }
@@ -698,7 +701,7 @@ public class TableFunctionTable extends Table {
     private List<Column> getSchemaFromPath() {
         List<Column> columns = new ArrayList<>();
         for (String colName : columnsFromPath) {
-            columns.add(new Column(colName, ScalarType.createDefaultString(), true));
+            columns.add(new Column(colName, TypeFactory.createDefaultString(), true));
         }
         return columns;
     }

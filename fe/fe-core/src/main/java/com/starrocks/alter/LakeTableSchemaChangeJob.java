@@ -39,7 +39,6 @@ import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
@@ -68,6 +67,8 @@ import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SelectAnalyzer.RewriteAliasVisitor;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
@@ -88,6 +89,7 @@ import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletSchema;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TTaskType;
+import com.starrocks.type.Type;
 import com.starrocks.warehouse.Warehouse;
 import io.opentelemetry.api.trace.StatusCode;
 import org.apache.logging.log4j.LogManager;
@@ -617,7 +619,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
 
                             Expr generatedColumnExpr = expr.accept(visitor, null);
 
-                            generatedColumnExpr = Expr.analyzeAndCastFold(generatedColumnExpr);
+                            generatedColumnExpr = ExprUtils.analyzeAndCastFold(generatedColumnExpr);
 
                             int columnIndex = -1;
                             if (generatedColumn.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PREFIX)) {
@@ -627,7 +629,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                                 columnIndex = table.getFullSchema().indexOf(generatedColumn);
                             }
 
-                            mcExprs.put(columnIndex, generatedColumnExpr.treeToThrift());
+                            mcExprs.put(columnIndex, ExprToThriftVisitor.treeToThrift(generatedColumnExpr));
                         }
                         // we need this thing, otherwise some expr evalution will fail in BE
                         TQueryGlobals queryGlobals = new TQueryGlobals();

@@ -14,14 +14,14 @@
 
 package com.starrocks.connector.trino;
 
-import com.starrocks.catalog.ArrayType;
-import com.starrocks.catalog.MapType;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.StructField;
-import com.starrocks.catalog.StructType;
-import com.starrocks.catalog.Type;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.MapType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.StructField;
+import com.starrocks.type.StructType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -82,17 +82,17 @@ public class TrinoViewColumnTypeConverter {
                 primitiveType = PrimitiveType.DATE;
                 break;
             case "STRING":
-                return ScalarType.createDefaultCatalogString();
+                return TypeFactory.createDefaultCatalogString();
             case "VARCHAR":
                 int length = 0;
                 try {
                     length = getVarcharLength(trinoType);
                 } catch (StarRocksConnectorException e) {
-                    return ScalarType.createDefaultCatalogString();
+                    return TypeFactory.createDefaultCatalogString();
                 }
-                return ScalarType.createVarcharType(length);
+                return TypeFactory.createVarcharType(length);
             case "CHAR":
-                return ScalarType.createCharType(getCharLength(trinoType));
+                return TypeFactory.createCharType(getCharLength(trinoType));
             case "BINARY":
             case "VARBINARY":
                 return Type.VARBINARY;
@@ -126,10 +126,10 @@ public class TrinoViewColumnTypeConverter {
         }
 
         if (primitiveType != PrimitiveType.DECIMAL32) {
-            return ScalarType.createType(primitiveType);
+            return TypeFactory.createType(primitiveType);
         } else {
             int[] parts = getPrecisionAndScale(trinoType);
-            return ScalarType.createUnifiedDecimalType(parts[0], parts[1]);
+            return TypeFactory.createUnifiedDecimalType(parts[0], parts[1]);
         }
     }
 

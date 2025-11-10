@@ -14,9 +14,9 @@
 
 package com.starrocks.statistic.sample;
 
-import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.sql.plan.PlanTestBase;
+import com.starrocks.type.Type;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;

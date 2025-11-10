@@ -29,9 +29,7 @@ import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.memory.MemoryTrackable;
@@ -44,6 +42,7 @@ import com.starrocks.sql.optimizer.rule.tree.prunesubfield.SubfieldAccessPathNor
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.thrift.TResultBatch;
 import com.starrocks.thrift.TResultSinkType;
+import com.starrocks.type.Type;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import org.apache.logging.log4j.LogManager;
@@ -81,7 +80,7 @@ public class ColumnMinMaxMgr implements IMinMaxStatsMgr, MemoryTrackable {
     @Override
     public Optional<ColumnMinMax> getStats(ColumnIdentifier identifier, StatsVersion version) {
         CompletableFuture<Optional<CacheValue>> future = cache.get(identifier);
-        if (future.isDone() || FeConstants.runningUnitTest) {
+        if (future.isDone()) {
             try {
                 Optional<CacheValue> cacheValue = future.get();
                 if (cacheValue.isPresent()) {

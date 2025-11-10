@@ -22,6 +22,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterTableOperationClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import mockit.Mock;
@@ -60,7 +61,7 @@ public class RewriteDataFilesTest {
             list.add(slot);
             return null;
         }).when(where).collect(Mockito.eq(SlotRef.class), Mockito.anyList());
-        Mockito.when(where.toSql()).thenReturn("k1 = 1");
+        Mockito.when(ExprToSql.toSql(where)).thenReturn("k1 = 1");
         Mockito.when(clause.getWhere()).thenReturn(where);
 
         ConnectContext ctx = Mockito.mock(ConnectContext.class);
@@ -105,7 +106,7 @@ public class RewriteDataFilesTest {
             list.add(slot);
             return null;
         }).when(where).collect(Mockito.eq(SlotRef.class), Mockito.anyList());
-        Mockito.when(where.toSql()).thenReturn("k1 = 1");
+        Mockito.when(ExprToSql.toSql(where)).thenReturn("k1 = 1");
         Mockito.when(clause.getWhere()).thenReturn(where);
 
         ConnectContext ctx = Mockito.mock(ConnectContext.class);

@@ -20,9 +20,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PaimonTable;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorProperties;
@@ -56,6 +54,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.transformation.ExternalScanPartitionPruneRule;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.Type;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
@@ -214,12 +213,12 @@ public class PaimonMetadataTest {
                 AstToStringBuilder.getExternalCatalogTableDdlStmt(paimonTable));
         assertEquals(Lists.newArrayList("col1"), paimonTable.getPartitionColumnNames());
         assertEquals("hdfs://127.0.0.1:10000/paimon", paimonTable.getTableLocation());
-        assertEquals(ScalarType.INT, paimonTable.getBaseSchema().get(0).getType());
+        assertEquals(Type.INT, paimonTable.getBaseSchema().get(0).getType());
         org.junit.jupiter.api.Assertions.assertTrue(paimonTable.getBaseSchema().get(0).isAllowNull());
-        assertEquals(ScalarType.DOUBLE, paimonTable.getBaseSchema().get(1).getType());
+        assertEquals(Type.DOUBLE, paimonTable.getBaseSchema().get(1).getType());
         org.junit.jupiter.api.Assertions.assertTrue(paimonTable.getBaseSchema().get(1).isAllowNull());
         assertEquals("paimon_catalog", paimonTable.getCatalogName());
-        assertEquals("paimon_catalog.db1.tbl1.null", paimonTable.getUUID());
+        assertEquals("paimon_catalog.null", paimonTable.getUUID());
     }
 
     @Test

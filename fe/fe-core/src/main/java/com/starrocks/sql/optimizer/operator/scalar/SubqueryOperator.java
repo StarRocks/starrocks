@@ -15,13 +15,13 @@
 
 package com.starrocks.sql.optimizer.operator.scalar;
 
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalApplyOperator;
 import com.starrocks.sql.optimizer.transformer.OptExprBuilder;
+import com.starrocks.type.Type;
 
 import java.util.Collections;
 import java.util.List;

@@ -218,7 +218,7 @@ uint64_t LRUCache::get_release_evict_count() const {
     return _release_evict_count;
 }
 
-size_t LRUCache::get_usage() const {
+uint64_t LRUCache::get_usage() const {
     std::lock_guard l(_mutex);
     return _usage;
 }
@@ -491,13 +491,14 @@ uint64_t ShardedLRUCache::new_id() {
     return ++(_last_id);
 }
 
-size_t ShardedLRUCache::_get_stat(size_t (LRUCache::*mem_fun)() const) const {
-    size_t n = 0;
+size_t ShardedLRUCache::_get_stat(uint64_t (LRUCache::*mem_fun)() const) const {
+    uint64_t n = 0;
     for (auto& shard : _shards) {
         n += (shard.*mem_fun)();
     }
-    return n;
+    return static_cast<size_t>(n);
 }
+
 size_t ShardedLRUCache::get_capacity() const {
     std::lock_guard l(_mutex);
     return _capacity;

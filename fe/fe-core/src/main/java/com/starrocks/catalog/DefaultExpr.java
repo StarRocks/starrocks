@@ -17,10 +17,12 @@ package com.starrocks.catalog;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.sql.ast.expression.FunctionParams;
 import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.type.Type;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -102,7 +104,7 @@ public class DefaultExpr {
             }
             FunctionCallExpr functionCallExpr =
                     new FunctionCallExpr(new FunctionName(functionName), new FunctionParams(false, exprs));
-            Function fn = Expr.getBuiltinFunction(functionName, argumentTypes, Function.CompareMode.IS_IDENTICAL);
+            Function fn = ExprUtils.getBuiltinFunction(functionName, argumentTypes, Function.CompareMode.IS_IDENTICAL);
             functionCallExpr.setFn(fn);
             functionCallExpr.setType(fn.getReturnType());
             return functionCallExpr;

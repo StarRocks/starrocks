@@ -27,7 +27,7 @@ set(EXEC_FILES
     mem_hook.cpp
 )
 
-add_library(Service
+ADD_BE_LIB(Service
         ${EXEC_FILES}
 )
 

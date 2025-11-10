@@ -43,6 +43,7 @@ import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.thrift.TFunction;
 import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.thrift.TScalarFunction;
+import com.starrocks.type.Type;
 import org.apache.logging.log4j.util.Strings;
 
 import java.util.ArrayList;

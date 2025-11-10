@@ -50,6 +50,7 @@ import com.starrocks.server.TableFactoryProvider;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.common.EngineType;
 import com.starrocks.thrift.TTableDescriptor;
+import com.starrocks.type.Type;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;

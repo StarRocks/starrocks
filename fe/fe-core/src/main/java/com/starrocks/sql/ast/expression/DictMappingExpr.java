@@ -17,8 +17,6 @@ package com.starrocks.sql.ast.expression;
 
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
-import com.starrocks.thrift.TExprNode;
-import com.starrocks.thrift.TExprNodeType;
 
 // DictMappingExpr.
 // The original expression will be rewritten as a dictionary mapping function in the global field optimization.
@@ -47,10 +45,6 @@ public class DictMappingExpr extends Expr {
         super(other);
     }
 
-    @Override
-    protected void toThrift(TExprNode msg) {
-        msg.setNode_type(TExprNodeType.DICT_EXPR);
-    }
 
     @Override
     public Expr clone() {

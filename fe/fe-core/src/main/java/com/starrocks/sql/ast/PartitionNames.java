@@ -106,7 +106,7 @@ public class PartitionNames implements ParseNode {
         return pos;
     }
 
-    public boolean isStaticKeyPartitionInsert() {
+    public boolean isKeyPartitionNames() {
         return !partitionColValues.isEmpty();
     }
 

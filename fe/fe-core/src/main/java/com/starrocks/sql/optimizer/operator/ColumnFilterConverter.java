@@ -26,7 +26,6 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.planner.PartitionColumnFilter;
@@ -55,11 +54,13 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LargeInPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorEvaluator;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.spm.SPMFunctions;
+import com.starrocks.type.Type;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -498,6 +499,12 @@ public class ColumnFilterConverter {
                 LOG.warn("build column filter failed.", e);
             }
             return predicate;
+        }
+
+        @Override
+        public ScalarOperator visitLargeInPredicate(LargeInPredicateOperator predicate,
+                                                    Map<String, PartitionColumnFilter> context) {
+            throw new UnsupportedOperationException("not support large in predicate in the ColumnFilterConverter");
         }
 
         @Override

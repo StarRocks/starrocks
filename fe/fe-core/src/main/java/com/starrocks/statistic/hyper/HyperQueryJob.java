@@ -22,10 +22,10 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.StringLiteral;
@@ -38,6 +38,7 @@ import com.starrocks.statistic.base.MultiColumnStats;
 import com.starrocks.statistic.base.PartitionSampler;
 import com.starrocks.statistic.sample.TabletSampleManager;
 import com.starrocks.thrift.TStatisticData;
+import com.starrocks.type.Type;
 import org.apache.commons.lang.StringEscapeUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -190,14 +191,14 @@ public abstract class HyperQueryJob {
 
     public static Expr hllDeserialize(byte[] hll) {
         String str = new String(hll, StandardCharsets.UTF_8);
-        Function unhex = Expr.getBuiltinFunction("unhex", new Type[] {Type.VARCHAR},
+        Function unhex = ExprUtils.getBuiltinFunction("unhex", new Type[] {Type.VARCHAR},
                 Function.CompareMode.IS_IDENTICAL);
 
         FunctionCallExpr unhexExpr = new FunctionCallExpr("unhex", Lists.newArrayList(new StringLiteral(str)));
         unhexExpr.setFn(unhex);
         unhexExpr.setType(unhex.getReturnType());
 
-        Function fn = Expr.getBuiltinFunction("hll_deserialize", new Type[] {Type.VARCHAR},
+        Function fn = ExprUtils.getBuiltinFunction("hll_deserialize", new Type[] {Type.VARCHAR},
                 Function.CompareMode.IS_IDENTICAL);
         FunctionCallExpr fe = new FunctionCallExpr("hll_deserialize", Lists.newArrayList(unhexExpr));
         fe.setFn(fn);
@@ -206,7 +207,7 @@ public abstract class HyperQueryJob {
     }
 
     public static Expr nowFn() {
-        Function fn = Expr.getBuiltinFunction(FunctionSet.NOW, new Type[] {}, Function.CompareMode.IS_IDENTICAL);
+        Function fn = ExprUtils.getBuiltinFunction(FunctionSet.NOW, new Type[] {}, Function.CompareMode.IS_IDENTICAL);
         FunctionCallExpr fe = new FunctionCallExpr("now", Lists.newArrayList());
         fe.setType(fn.getReturnType());
         return fe;

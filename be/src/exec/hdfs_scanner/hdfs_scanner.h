@@ -503,7 +503,7 @@ protected:
     int64_t _total_running_time = 0;
 
 public:
-    static constexpr const std::string ICEBERG_ROW_ID = "_row_id";
+    static constexpr const char* ICEBERG_ROW_ID = "_row_id";
 };
 
 } // namespace starrocks

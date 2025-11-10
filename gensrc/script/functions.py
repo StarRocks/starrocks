@@ -885,8 +885,22 @@ vectorized_functions = [
     [110112, "json_contains", False, False, "BOOLEAN", ["JSON", "JSON"], "JsonFunctions::json_contains"],
 
     # aes and base64 function
-    [120100, "aes_encrypt", False, False, "VARCHAR", ["VARCHAR", "VARCHAR"], "EncryptionFunctions::aes_encrypt"],
-    [120110, "aes_decrypt", False, False, "VARCHAR", ["VARCHAR", "VARCHAR"], "EncryptionFunctions::aes_decrypt"],
+    # aes_encrypt: 2-parameter version (data, key) for backward compatibility with old FE
+    [120100, "aes_encrypt", False, False, "VARCHAR", ["VARCHAR", "VARCHAR"], "EncryptionFunctions::aes_encrypt_with_mode"],
+    # aes_encrypt: 4-parameter version (data, key, iv, mode)
+    # Note: FE's ExpressionAnalyzer converts 2/3 params to 4 params automatically
+    [120101, "aes_encrypt", False, False, "VARCHAR", ["VARCHAR", "VARCHAR", "VARCHAR", "VARCHAR"], "EncryptionFunctions::aes_encrypt_with_mode"],
+
+    # aes_encrypt: 5-parameter version (data, key, iv, mode, aad) for GCM mode
+    [120102, "aes_encrypt", False, False, "VARCHAR", ["VARCHAR", "VARCHAR", "VARCHAR", "VARCHAR", "VARCHAR"], "EncryptionFunctions::aes_encrypt_with_mode"],
+    # aes_decrypt: 2-parameter version (data, key) for backward compatibility with old FE
+    [120110, "aes_decrypt", False, False, "VARCHAR", ["VARCHAR", "VARCHAR"], "EncryptionFunctions::aes_decrypt_with_mode"],
+    # aes_decrypt: 4-parameter version (data, key, iv, mode)
+    # Note: FE's ExpressionAnalyzer converts 2/3 params to 4 params automatically
+    [120111, "aes_decrypt", False, False, "VARCHAR", ["VARCHAR", "VARCHAR", "VARCHAR", "VARCHAR"], "EncryptionFunctions::aes_decrypt_with_mode"],
+
+    # aes_decrypt: 5-parameter version (data, key, iv, mode, aad) for GCM mode
+    [120112, "aes_decrypt", False, False, "VARCHAR", ["VARCHAR", "VARCHAR", "VARCHAR", "VARCHAR", "VARCHAR"], "EncryptionFunctions::aes_decrypt_with_mode"],
     [120120, "from_base64", False, False, "VARCHAR", ["VARCHAR"], "EncryptionFunctions::from_base64"],
     [120121, "base64_decode_binary", False, False, "VARBINARY", ["VARCHAR"], "EncryptionFunctions::from_base64"],
     [120122, "base64_decode_string", False, False, "VARCHAR", ["VARCHAR"], "EncryptionFunctions::from_base64"],
@@ -897,6 +911,8 @@ vectorized_functions = [
     [120160, "sha2", False, False, "VARCHAR", ["VARCHAR", "INT"], "EncryptionFunctions::sha2",
      "EncryptionFunctions::sha2_prepare", "EncryptionFunctions::sha2_close"],
     [120161, "to_base64", False, True, "VARCHAR", ["VARBINARY"], "EncryptionFunctions::to_base64"],
+    [120162, "encode_fingerprint_sha256", False, False, "VARBINARY", ["ANY_ELEMENT", "..."], "EncryptionFunctions::encode_fingerprint_sha256"],
+
 
     # geo function
     [120000, "ST_Point", False, False, "VARCHAR", ["DOUBLE", "DOUBLE"], "GeoFunctions::st_point"],
@@ -1407,6 +1423,9 @@ vectorized_functions = [
     [150335, 'array_sortby', True, False, 'ANY_ARRAY', ['ANY_ARRAY', 'ANY_ARRAY', 'ANY_ARRAY', "..."], 'ArrayFunctions::array_sortby_multi'],
 
     [150340, 'array_repeat', True, False, 'ANY_ARRAY', ['ANY_ELEMENT', 'INT'], 'ArrayFunctions::repeat'],
+
+    # array_top_n
+    [150341, 'array_top_n', True, False, 'ANY_ARRAY', ['ANY_ARRAY', 'INT'], 'ArrayFunctions::array_top_n'],
 
     [150345, 'array_flatten', True, False, 'ANY_ELEMENT', ['ANY_ARRAY'], 'ArrayFunctions::array_flatten'],
 

@@ -21,6 +21,7 @@
 #include "storage/rowset/base_rowset.h"
 
 namespace starrocks {
+struct TabletBasicInfo;
 class TabletSchema;
 class TabletMetadataPB;
 class Schema;
@@ -86,6 +87,8 @@ public:
     TabletManager* tablet_manager() const { return _tablet_mgr; }
 
     bool has_delete_predicates() const;
+
+    TabletBasicInfo get_basic_info() const;
 
 private:
     TabletManager* _tablet_mgr;

@@ -21,11 +21,10 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.Type;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
 import com.starrocks.sql.ast.expression.AnalyticWindow;
-import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -42,6 +41,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.task.TaskContext;
+import com.starrocks.type.Type;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -249,7 +249,7 @@ public class PushDownDistinctAggregateRewriter {
 
         private CallOperator genAggregation(CallOperator origin) {
             ScalarOperator arg = origin.getChild(0);
-            Function fn = Expr.getBuiltinFunction(origin.getFunction().getFunctionName().getFunction(),
+            Function fn = ExprUtils.getBuiltinFunction(origin.getFunction().getFunctionName().getFunction(),
                     new Type[] {arg.getType()}, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
 
             Preconditions.checkState(fn instanceof AggregateFunction);
@@ -343,7 +343,7 @@ public class PushDownDistinctAggregateRewriter {
                 ScalarOperator rewriteCallOp = replacer.rewrite(entry.getValue());
                 List<ScalarOperator> newArgs = rewriteCallOp.getChildren();
                 Type[] argTypes = newArgs.stream().map(ScalarOperator::getType).toArray(Type[]::new);
-                Function newFunc = Expr.getBuiltinFunction(funcName, argTypes,
+                Function newFunc = ExprUtils.getBuiltinFunction(funcName, argTypes,
                         Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
                 if (FunctionSet.SUM.equals(funcName) && argTypes[0].isDecimalOfAnyVersion()) {
                     newFunc = DecimalV3FunctionAnalyzer.rectifyAggregationFunction((AggregateFunction) newFunc,

@@ -253,9 +253,9 @@ configure_file (
     set(SOURCE_FILES ${SOURCE_FILES} OrcHdfsFile.cc)
     add_definitions(-DBUILD_LIBHDFSPP)
   endif(BUILD_LIBHDFSPP)
-  
-  add_library (orc STATIC ${SOURCE_FILES})
-  
+
+  ADD_BE_LIB(orc ${SOURCE_FILES})
+
   if (NOT DEFINED ENV{STARROCKS_HOME}) # starrocks: no need to link liborc.a with other libs and install
   
   target_link_libraries (orc

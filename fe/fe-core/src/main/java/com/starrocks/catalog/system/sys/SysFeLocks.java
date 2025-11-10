@@ -22,8 +22,6 @@ import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
@@ -41,6 +39,8 @@ import com.starrocks.thrift.TFeLocksItem;
 import com.starrocks.thrift.TFeLocksReq;
 import com.starrocks.thrift.TFeLocksRes;
 import com.starrocks.thrift.TSchemaTableType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.TypeFactory;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.SetUtils;
 import org.apache.thrift.TException;
@@ -58,14 +58,14 @@ public class SysFeLocks {
         return new SystemTable(SystemId.FE_LOCKS_ID, NAME,
                 Table.TableType.SCHEMA,
                 SystemTable.builder()
-                        .column("lock_type", ScalarType.createVarcharType(64))
-                        .column("lock_object", ScalarType.createVarcharType(64))
-                        .column("lock_mode", ScalarType.createVarcharType(64))
-                        .column("start_time", ScalarType.createType(PrimitiveType.DATETIME))
-                        .column("hold_time_ms", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("thread_info", ScalarType.createVarcharType(64))
-                        .column("granted", ScalarType.createType(PrimitiveType.BOOLEAN))
-                        .column("waiter_list", ScalarType.createVarcharType(SystemTable.NAME_CHAR_LEN))
+                        .column("lock_type", TypeFactory.createVarcharType(64))
+                        .column("lock_object", TypeFactory.createVarcharType(64))
+                        .column("lock_mode", TypeFactory.createVarcharType(64))
+                        .column("start_time", TypeFactory.createType(PrimitiveType.DATETIME))
+                        .column("hold_time_ms", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("thread_info", TypeFactory.createVarcharType(64))
+                        .column("granted", TypeFactory.createType(PrimitiveType.BOOLEAN))
+                        .column("waiter_list", TypeFactory.createVarcharType(SystemTable.NAME_CHAR_LEN))
                         .build(),
                 TSchemaTableType.SYS_FE_LOCKS);
     }

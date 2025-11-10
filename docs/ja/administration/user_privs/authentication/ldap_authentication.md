@@ -93,7 +93,7 @@ LDAP 認証では、クライアントがクリアテキストのパスワード
 実行時に `--default-auth mysql_clear_password --enable-cleartext-plugin` を追加します。
 
 ```sql
-mysql -utom -P8030 -h127.0.0.1 -p --default-auth mysql_clear_password --enable-cleartext-plugin
+mysql -utom -P9030 -h127.0.0.1 -p --default-auth mysql_clear_password --enable-cleartext-plugin
 ```
 
 ### JDBC/ODBC クライアントから LDAP で接続する

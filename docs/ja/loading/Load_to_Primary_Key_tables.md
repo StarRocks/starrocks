@@ -641,6 +641,12 @@ StarRocks v2.5 以降、主キーテーブルは条件付き更新をサポー�
 
 `example5.csv` の `id` が `101` と `102` のレコードをそれぞれ `table5` に更新し、更新が有効になるのは、2 つのレコードの `version` 値がそれぞれの現在の `version` 値以上である場合のみと指定します。
 
+- Insert Load ジョブを実行します。
+  ```SQL
+  INSERT INTO test_db.table5 properties("merge_condition" = "version")
+  VALUES (101, 2, 70), (102, 3, 100);
+  ```
+
 - Stream Load ジョブを実行します。
 
   ```Bash

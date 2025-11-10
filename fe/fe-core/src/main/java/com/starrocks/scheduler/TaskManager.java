@@ -25,7 +25,6 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.ResourceGroupClassifier;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
@@ -56,6 +55,7 @@ import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TGetTasksParams;
+import com.starrocks.type.TypeFactory;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.logging.log4j.LogManager;
@@ -759,8 +759,8 @@ public class TaskManager implements MemoryTrackable {
         }
 
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
-        builder.addColumn(new Column("TaskName", ScalarType.createVarchar(40)));
-        builder.addColumn(new Column("Status", ScalarType.createVarchar(10)));
+        builder.addColumn(new Column("TaskName", TypeFactory.createVarchar(40)));
+        builder.addColumn(new Column("Status", TypeFactory.createVarchar(10)));
         List<String> item = ImmutableList.of(taskName, submitResult.getStatus().toString());
         List<List<String>> result = ImmutableList.of(item);
         return new ShowResultSet(builder.build(), result);

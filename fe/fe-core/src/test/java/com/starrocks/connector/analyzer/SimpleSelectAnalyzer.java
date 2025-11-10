@@ -18,7 +18,6 @@ package com.starrocks.connector.analyzer;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.TreeNode;
 import com.starrocks.sql.analyzer.AnalyzeState;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
@@ -35,12 +34,15 @@ import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.expression.AnalyticExpr;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.GroupingFunctionCallExpr;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.LimitElement;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.type.Type;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -49,7 +51,7 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
-import static com.starrocks.sql.ast.expression.Expr.pushNegationToOperands;
+import static com.starrocks.sql.ast.expression.ExprUtils.pushNegationToOperands;
 import static com.starrocks.sql.common.ErrorType.INTERNAL_ERROR;
 
 
@@ -137,7 +139,7 @@ public class SimpleSelectAnalyzer {
                         throw new SemanticException("DISTINCT can only be applied to comparable types : %s",
                                 expr.getType());
                     }
-                    if (expr.isAggregate()) {
+                    if (ExprUtils.isAggregate(expr)) {
                         throw new SemanticException(
                                 "cannot combine SELECT DISTINCT with aggregate functions or GROUP BY");
                     }
@@ -197,7 +199,7 @@ public class SimpleSelectAnalyzer {
             expression.collect(AnalyticExpr.class, window);
             if (outputWindowFunctions.stream()
                     .anyMatch((e -> TreeNode.contains(e.getChildren(), AnalyticExpr.class)))) {
-                throw new SemanticException("Nesting of analytic expressions is not allowed: " + expression.toSql());
+                throw new SemanticException("Nesting of analytic expressions is not allowed: " + ExprToSql.toSql(expression));
             }
             outputWindowFunctions.addAll(window);
         }
@@ -209,7 +211,7 @@ public class SimpleSelectAnalyzer {
             expression.collect(AnalyticExpr.class, window);
             if (orderByWindowFunctions.stream()
                     .anyMatch((e -> TreeNode.contains(e.getChildren(), AnalyticExpr.class)))) {
-                throw new SemanticException("Nesting of analytic expressions is not allowed: " + expression.toSql());
+                throw new SemanticException("Nesting of analytic expressions is not allowed: " + ExprToSql.toSql(expression));
             }
             orderByWindowFunctions.addAll(window);
         }
@@ -253,7 +255,7 @@ public class SimpleSelectAnalyzer {
 
     private List<FunctionCallExpr> analyzeAggregations(AnalyzeState analyzeState, List<Expr> outputAndOrderByExpressions) {
         List<FunctionCallExpr> aggregations = Lists.newArrayList();
-        TreeNode.collect(outputAndOrderByExpressions, Expr.isAggregatePredicate()::apply, aggregations);
+        TreeNode.collect(outputAndOrderByExpressions, ExprUtils.isAggregatePredicate()::apply, aggregations);
         aggregations.forEach(e -> analyzeExpression(e, analyzeState));
 
         if (aggregations.stream().filter(FunctionCallExpr::isDistinct).count() > 1) {

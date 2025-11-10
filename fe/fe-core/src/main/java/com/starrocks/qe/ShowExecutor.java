@@ -72,7 +72,6 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
@@ -122,6 +121,7 @@ import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.streamload.AbstractStreamLoadTask;
 import com.starrocks.load.streamload.StreamLoadFunctionalExprProvider;
 import com.starrocks.meta.BlackListSql;
+import com.starrocks.persist.TableRefPersist;
 import com.starrocks.proto.FailPointTriggerModeType;
 import com.starrocks.proto.PFailPointInfo;
 import com.starrocks.proto.PFailPointTriggerMode;
@@ -156,6 +156,7 @@ import com.starrocks.sql.ast.EnhancedShowStmt;
 import com.starrocks.sql.ast.HelpStmt;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
 import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
@@ -225,13 +226,13 @@ import com.starrocks.sql.ast.ShowVariablesStmt;
 import com.starrocks.sql.ast.UserRef;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.LikePredicate;
 import com.starrocks.sql.ast.expression.LimitElement;
 import com.starrocks.sql.ast.expression.Predicate;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.TableName;
-import com.starrocks.sql.ast.expression.TableRefPersist;
 import com.starrocks.sql.ast.group.ShowCreateGroupProviderStmt;
 import com.starrocks.sql.ast.group.ShowGroupProvidersStmt;
 import com.starrocks.sql.ast.integration.ShowCreateSecurityIntegrationStatement;
@@ -263,6 +264,7 @@ import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTableInfo;
 import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.type.TypeFactory;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
@@ -442,8 +444,8 @@ public class ShowExecutor {
         @Override
         public ShowResultSet visitHelpStatement(HelpStmt statement, ConnectContext context) {
             ShowResultSetMetaData metaData = ShowResultSetMetaData.builder()
-                    .addColumn(new Column("name", ScalarType.createVarchar(64)))
-                    .addColumn(new Column("is_it_category", ScalarType.createVarchar(1)))
+                    .addColumn(new Column("name", TypeFactory.createVarchar(64)))
+                    .addColumn(new Column("is_it_category", TypeFactory.createVarchar(1)))
                     .build();
             return new ShowResultSet(metaData, EMPTY_SET);
         }
@@ -757,8 +759,8 @@ public class ShowExecutor {
                                         }
 
                                         ShowResultSetMetaData showResultSetMetaData = ShowResultSetMetaData.builder()
-                                                .addColumn(new Column("Materialized View", ScalarType.createVarchar(20)))
-                                                .addColumn(new Column("Create Materialized View", ScalarType.createVarchar(30)))
+                                                .addColumn(new Column("Materialized View", TypeFactory.createVarchar(20)))
+                                                .addColumn(new Column("Create Materialized View", TypeFactory.createVarchar(30)))
                                                 .build();
                                         return new ShowResultSet(showResultSetMetaData, rows);
                                     }
@@ -783,10 +785,10 @@ public class ShowExecutor {
                     rows.add(Lists.newArrayList(table.getName(), createTableStmt.get(0), "utf8", "utf8_general_ci"));
 
                     ShowResultSetMetaData showViewResultSetMeta = ShowResultSetMetaData.builder()
-                            .addColumn(new Column("View", ScalarType.createVarchar(20)))
-                            .addColumn(new Column("Create View", ScalarType.createVarchar(30)))
-                            .addColumn(new Column("character_set_client", ScalarType.createVarchar(30)))
-                            .addColumn(new Column("collation_connection", ScalarType.createVarchar(30)))
+                            .addColumn(new Column("View", TypeFactory.createVarchar(20)))
+                            .addColumn(new Column("Create View", TypeFactory.createVarchar(30)))
+                            .addColumn(new Column("character_set_client", TypeFactory.createVarchar(30)))
+                            .addColumn(new Column("collation_connection", TypeFactory.createVarchar(30)))
                             .build();
                     return new ShowResultSet(showViewResultSetMeta, rows);
                 } else if (table instanceof MaterializedView) {
@@ -798,17 +800,17 @@ public class ShowExecutor {
                         rows.add(Lists.newArrayList(table.getName(), sb, "utf8", "utf8_general_ci"));
 
                         ShowResultSetMetaData showViewResultSetMeta = ShowResultSetMetaData.builder()
-                                .addColumn(new Column("View", ScalarType.createVarchar(20)))
-                                .addColumn(new Column("Create View", ScalarType.createVarchar(30)))
-                                .addColumn(new Column("character_set_client", ScalarType.createVarchar(30)))
-                                .addColumn(new Column("collation_connection", ScalarType.createVarchar(30)))
+                                .addColumn(new Column("View", TypeFactory.createVarchar(20)))
+                                .addColumn(new Column("Create View", TypeFactory.createVarchar(30)))
+                                .addColumn(new Column("character_set_client", TypeFactory.createVarchar(30)))
+                                .addColumn(new Column("collation_connection", TypeFactory.createVarchar(30)))
                                 .build();
                         return new ShowResultSet(showViewResultSetMeta, rows);
                     } else {
                         rows.add(Lists.newArrayList(table.getName(), createTableStmt.get(0)));
                         ShowResultSetMetaData showResultSetMetaData = ShowResultSetMetaData.builder()
-                                .addColumn(new Column("Materialized View", ScalarType.createVarchar(20)))
-                                .addColumn(new Column("Create Materialized View", ScalarType.createVarchar(30)))
+                                .addColumn(new Column("Materialized View", TypeFactory.createVarchar(20)))
+                                .addColumn(new Column("Create Materialized View", TypeFactory.createVarchar(30)))
                                 .build();
                         return new ShowResultSet(showResultSetMetaData, rows);
                     }
@@ -845,8 +847,8 @@ public class ShowExecutor {
                 rows.add(Lists.newArrayList(tableName, createViewSql));
 
                 ShowResultSetMetaData showResultSetMetaData = ShowResultSetMetaData.builder()
-                        .addColumn(new Column("View", ScalarType.createVarchar(20)))
-                        .addColumn(new Column("Create View", ScalarType.createVarchar(30)))
+                        .addColumn(new Column("View", TypeFactory.createVarchar(20)))
+                        .addColumn(new Column("Create View", TypeFactory.createVarchar(30)))
                         .build();
                 return new ShowResultSet(showResultSetMetaData, rows);
             } else {
@@ -1058,7 +1060,7 @@ public class ShowExecutor {
             // Only success
             ShowResultSetMetaData showMetaData = statement.getIsVerbose() ? showResultMetaFactory.getMetadata(statement) :
                     ShowResultSetMetaData.builder()
-                            .addColumn(new Column("Function Name", ScalarType.createVarchar(256))).build();
+                            .addColumn(new Column("Function Name", TypeFactory.createVarchar(256))).build();
             return new ShowResultSet(showMetaData, resultRowSet);
         }
 
@@ -1114,7 +1116,7 @@ public class ShowExecutor {
                         defaultValue = col.getMetaDefaultValue(Lists.newArrayList());
                     }
                     final String aggType = col.getAggregationType() == null
-                            || col.isAggregationTypeImplicit() ? "" : col.getAggregationType().toSql();
+                            || col.isAggregationTypeImplicit() ? "" : col.getAggregationType().getSqlName();
                     if (statement.isVerbose()) {
                         // Field Type Collation Null Key Default Extra
                         // Privileges Comment
@@ -1312,7 +1314,7 @@ public class ShowExecutor {
             }
             if (routineLoadJob.getWhereExpr() != null) {
                 createRoutineLoadSql.append(",\nWHERE ");
-                createRoutineLoadSql.append(routineLoadJob.getWhereExpr().toSql());
+                createRoutineLoadSql.append(ExprToSql.toSql(routineLoadJob.getWhereExpr()));
             }
 
             createRoutineLoadSql.append("\nPROPERTIES\n").append(routineLoadJob.jobPropertiesToSql());
@@ -2171,7 +2173,7 @@ public class ShowExecutor {
         public ShowResultSet visitAdminShowReplicaStatusStatement(AdminShowReplicaStatusStmt statement, ConnectContext context) {
             List<List<String>> results;
             try {
-                results = MetadataViewer.getTabletStatus(statement);
+                results = MetadataViewer.getTabletStatus(statement, context);
             } catch (DdlException e) {
                 throw new SemanticException(e.getMessage());
             }
@@ -2183,7 +2185,22 @@ public class ShowExecutor {
                                                                         ConnectContext context) {
             List<List<String>> results;
             try {
-                results = MetadataViewer.getTabletDistribution(statement);
+                // Get database name from statement or context
+                String dbName = statement.getDbName();
+                if (dbName == null) {
+                    dbName = context.getDatabase();
+                }
+                
+                PartitionRef partitionRef = statement.getPartitionRef();
+                PartitionNames partitionNames = null;
+                if (partitionRef != null) {
+                    partitionNames = new PartitionNames(
+                            partitionRef.isTemp(),
+                            partitionRef.getPartitionNames(),
+                            partitionRef.getPos());
+                }
+                
+                results = MetadataViewer.getTabletDistribution(dbName, statement.getTblName(), partitionNames);
             } catch (DdlException e) {
                 throw new SemanticException(e.getMessage());
             }

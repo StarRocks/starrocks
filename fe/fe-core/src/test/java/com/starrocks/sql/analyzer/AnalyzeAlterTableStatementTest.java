@@ -15,10 +15,12 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.Column;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.RunMode;
+import com.starrocks.sql.ast.AddColumnsClause;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CompactionClause;
@@ -196,6 +198,37 @@ public class AnalyzeAlterTableStatementTest {
     public void testAlterWithTimeType() {
         analyzeFail("alter table t0 add column testcol TIME");
         analyzeFail("alter table t0 modify column v0 TIME");
+    }
+
+    @Test
+    public void testAddBitmapColumnWithoutDefault() throws Exception {
+        AnalyzeTestUtil.getStarRocksAssert().withTable("CREATE TABLE test.pk_bitmap_base (\n" +
+                "  k1 INT NOT NULL,\n" +
+                "  k2 DATETIME NOT NULL,\n" +
+                "  v1 BIGINT\n" +
+                ") ENGINE=OLAP\n" +
+                "PRIMARY KEY(k1)\n" +
+                "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "  \"replication_num\" = \"1\"\n" +
+                ");");
+
+        try {
+            AlterTableStmt alter = (AlterTableStmt) AnalyzeTestUtil.analyzeSuccess(
+                    "ALTER TABLE test.pk_bitmap_base ADD COLUMN (v_bitmap BITMAP NOT NULL, v_bitmap_nullable BITMAP)");
+            Assertions.assertEquals(1, alter.getAlterClauseList().size());
+            AlterClause clause = alter.getAlterClauseList().get(0);
+            Assertions.assertTrue(clause instanceof AddColumnsClause);
+            AddColumnsClause addColumnsClause = (AddColumnsClause) clause;
+            Assertions.assertEquals(2, addColumnsClause.getColumns().size());
+
+            Column nonNullColumn = addColumnsClause.getColumns().get(0);
+            Assertions.assertFalse(nonNullColumn.isAllowNull());
+            Assertions.assertNotNull(nonNullColumn.getDefaultValue());
+            Assertions.assertNotNull(addColumnsClause.getColumns().get(1).getDefaultValue());
+        } finally {
+            AnalyzeTestUtil.getStarRocksAssert().dropTable("test.pk_bitmap_base");
+        }
     }
 
     @Test

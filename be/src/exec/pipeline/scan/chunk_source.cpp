@@ -14,16 +14,16 @@
 
 #include "exec/pipeline/scan/chunk_source.h"
 
-#include <random>
-
-#include "common/statusor.h"
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
 #include "exec/pipeline/scan/scan_operator.h"
+#include "exec/scan_node.h"
 #include "exec/workgroup/scan_task_queue.h"
 #include "exec/workgroup/work_group.h"
 #include "runtime/runtime_state.h"
+#include "util/failpoint/fail_point.h"
 
 namespace starrocks::pipeline {
+DEFINE_FAIL_POINT(scan_chunk_sleep_after_read);
 
 ChunkSource::ChunkSource(ScanOperator* scan_op, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
                          BalancedChunkBuffer& chunk_buffer)
@@ -75,6 +75,15 @@ Status ChunkSource::buffer_next_batch_chunks_blocking(RuntimeState* state, size_
             if (chunk == nullptr) {
                 chunk = std::make_shared<Chunk>();
             }
+            if (chunk != nullptr && !chunk->is_empty()) {
+                auto* scan_op_factory = down_cast<ScanOperatorFactory*>(_scan_op->get_factory());
+                auto& slot_ids = scan_op_factory->scan_node()->get_heavy_expr_slot_ids();
+                auto& expr_ctxs = scan_op_factory->scan_node()->get_heavy_expr_ctxs();
+                for (auto k = 0; k < slot_ids.size(); ++k) {
+                    ASSIGN_OR_RETURN(auto col, expr_ctxs[k]->evaluate(chunk.get()));
+                    chunk->append_column(std::move(col), slot_ids[k]);
+                }
+            }
             if (!_status.ok()) {
                 // end of file is normal case, need process chunk
                 if (_status.is_end_of_file()) {
@@ -99,6 +108,8 @@ Status ChunkSource::buffer_next_batch_chunks_blocking(RuntimeState* state, size_
             chunk->reset_schema();
             chunk->owner_info().set_owner_id(owner_id, false);
             _chunk_buffer.put(_scan_operator_seq, std::move(chunk), std::move(_chunk_token));
+
+            FAIL_POINT_TRIGGER_EXECUTE(scan_chunk_sleep_after_read, { sleep(1); });
         }
 
         if (time_spent_ns >= workgroup::WorkGroup::YIELD_MAX_TIME_SPENT) {

@@ -18,15 +18,9 @@ package com.starrocks.connector.analyzer;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.MapType;
-import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarFunction;
-import com.starrocks.catalog.StructField;
-import com.starrocks.catalog.StructType;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.analyzer.AnalyzeState;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
@@ -52,6 +46,8 @@ import com.starrocks.sql.ast.expression.CompoundPredicate;
 import com.starrocks.sql.ast.expression.DefaultValueExpr;
 import com.starrocks.sql.ast.expression.ExistsPredicate;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FieldReference;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.GroupingFunctionCallExpr;
@@ -70,6 +66,12 @@ import com.starrocks.sql.ast.expression.SubfieldExpr;
 import com.starrocks.sql.ast.expression.Subquery;
 import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
 import com.starrocks.sql.common.TypeManager;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.MapType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.StructField;
+import com.starrocks.type.StructType;
+import com.starrocks.type.Type;
 
 import java.math.BigInteger;
 import java.util.Arrays;
@@ -166,7 +168,7 @@ public class SimpleExpressionAnalyzer {
     }
 
     private void bottomUpAnalyze(SimpleExpressionAnalyzer.Visitor visitor, Expr expression) {
-        if (expression.hasLambdaFunction(expression)) {
+        if (ExprUtils.hasLambdaFunction(expression)) {
             analyzeHighOrderFunction(visitor, expression);
         } else {
             for (Expr expr : expression.getChildren()) {
@@ -200,7 +202,7 @@ public class SimpleExpressionAnalyzer {
             // 'col' will be parsed as StringLiteral, it's invalid.
             // TODO(SmithCruise) We should handle this problem in parser in the future.
             Preconditions.checkArgument(child.getType().isStructType(),
-                    String.format("%s must be a struct type, check if you are using `'`", child.toSql()));
+                    String.format("%s must be a struct type, check if you are using `'`", ExprToSql.toSql(child)));
 
             List<String> fieldNames = node.getFieldNames();
             Type tmpType = child.getType();
@@ -372,7 +374,7 @@ public class SimpleExpressionAnalyzer {
             Type compatibleType = TypeManager.getCompatibleTypeForBetweenAndIn(list, true);
 
             for (Type type : list) {
-                if (!Type.canCastTo(type, compatibleType)) {
+                if (!TypeManager.canCastTo(type, compatibleType)) {
                     throw new SemanticException(
                             "between predicate type " + type.toSql() + " with type " + compatibleType.toSql()
                                     + " is invalid.");
@@ -390,11 +392,11 @@ public class SimpleExpressionAnalyzer {
             Type compatibleType = TypeManager.getCompatibleTypeForBinary(node.getOp().isRange(), type1, type2);
             // check child type can be cast
             final String ERROR_MSG = "Column type %s does not support binary predicate operation.";
-            if (!Type.canCastTo(type1, compatibleType)) {
+            if (!TypeManager.canCastTo(type1, compatibleType)) {
                 throw new SemanticException(String.format(ERROR_MSG, type1.toSql()));
             }
 
-            if (!Type.canCastTo(type2, compatibleType)) {
+            if (!TypeManager.canCastTo(type2, compatibleType)) {
                 throw new SemanticException(String.format(ERROR_MSG, type1.toSql()));
             }
 
@@ -418,7 +420,7 @@ public class SimpleExpressionAnalyzer {
                     Type rhsType = node.getChild(1).getType();
                     Type resultType = node.getType();
                     Type[] args = {lhsType, rhsType};
-                    Function fn = Expr.getBuiltinFunction(op.getName(), args, Function.CompareMode.IS_IDENTICAL);
+                    Function fn = ExprUtils.getBuiltinFunction(op.getName(), args, Function.CompareMode.IS_IDENTICAL);
                     // In resolved function instance, it's argTypes and resultType are wildcard decimal type
                     // (both precision and and scale are -1, only used in function instance resolution), it's
                     // illegal for a function and expression to has a wildcard decimal type as its type in BE,
@@ -470,19 +472,19 @@ public class SimpleExpressionAnalyzer {
                     commonType = Type.NULL;
                 }
 
-                if (!Type.NULL.equals(node.getChild(0).getType()) && !Type.canCastTo(t1, commonType)) {
+                if (!Type.NULL.equals(node.getChild(0).getType()) && !TypeManager.canCastTo(t1, commonType)) {
                     throw new SemanticException(
                             "cast type " + node.getChild(0).getType().toSql() + " with type " + commonType.toSql()
                                     + " is invalid.");
                 }
 
-                if (!Type.NULL.equals(node.getChild(1).getType()) && !Type.canCastTo(t2, commonType)) {
+                if (!Type.NULL.equals(node.getChild(1).getType()) && !TypeManager.canCastTo(t2, commonType)) {
                     throw new SemanticException(
                             "cast type " + node.getChild(1).getType().toSql() + " with type " + commonType.toSql()
                                     + " is invalid.");
                 }
 
-                Function fn = Expr.getBuiltinFunction(op.getName(), new Type[] {commonType, commonType},
+                Function fn = ExprUtils.getBuiltinFunction(op.getName(), new Type[] {commonType, commonType},
                         Function.CompareMode.IS_SUPERTYPE_OF);
 
                 /*
@@ -494,7 +496,7 @@ public class SimpleExpressionAnalyzer {
                 node.setFn(fn);
             } else if (node.getOp().getPos() == ArithmeticExpr.OperatorPosition.UNARY_PREFIX) {
 
-                Function fn = Expr.getBuiltinFunction(
+                Function fn = ExprUtils.getBuiltinFunction(
                         node.getOp().getName(), new Type[] {Type.BIGINT}, Function.CompareMode.IS_SUPERTYPE_OF);
 
                 node.setType(Type.BIGINT);
@@ -534,7 +536,7 @@ public class SimpleExpressionAnalyzer {
 
             Type[] argumentTypes = node.getChildren().stream().map(Expr::getType)
                     .toArray(Type[]::new);
-            Function fn = Expr.getBuiltinFunction(funcOpName.toLowerCase(), argumentTypes,
+            Function fn = ExprUtils.getBuiltinFunction(funcOpName.toLowerCase(), argumentTypes,
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             if (fn == null) {
                 throw new SemanticException("No matching function with signature: %s(%s).", funcOpName, Joiner.on(", ")
@@ -564,7 +566,7 @@ public class SimpleExpressionAnalyzer {
                 if (type.isJsonType()) {
                     throw new SemanticException("InPredicate of JSON is not supported");
                 }
-                if (!Type.canCastTo(type, compatibleType)) {
+                if (!TypeManager.canCastTo(type, compatibleType)) {
                     throw new SemanticException(
                             "in predicate type " + type.toSql() + " with type " + compatibleType.toSql()
                                     + " is invalid.");
@@ -645,7 +647,7 @@ public class SimpleExpressionAnalyzer {
             } else {
                 castType = cast.getTargetTypeDef().getType();
             }
-            if (!Type.canCastTo(cast.getChild(0).getType(), castType)) {
+            if (!TypeManager.canCastTo(cast.getChild(0).getType(), castType)) {
                 throw new SemanticException("Invalid type cast from " + cast.getChild(0).getType().toSql() + " to "
                         + castType.toSql() + " in sql `" +
                         AstToStringBuilder.toString(cast.getChild(0)).replace("%", "%%") + "`");
@@ -663,7 +665,7 @@ public class SimpleExpressionAnalyzer {
 
             Type[] childTypes = new Type[1];
             childTypes[0] = Type.BIGINT;
-            Function fn = Expr.getBuiltinFunction(node.getFnName().getFunction(),
+            Function fn = ExprUtils.getBuiltinFunction(node.getFnName().getFunction(),
                     childTypes, Function.CompareMode.IS_IDENTICAL);
 
             node.setFn(fn);
@@ -711,7 +713,7 @@ public class SimpleExpressionAnalyzer {
             }
 
             for (Type type : whenTypes) {
-                if (!Type.canCastTo(type, compatibleType)) {
+                if (!TypeManager.canCastTo(type, compatibleType)) {
                     throw new SemanticException("Invalid when type cast " + type.toSql()
                             + " to " + compatibleType.toSql());
                 }
@@ -731,7 +733,7 @@ public class SimpleExpressionAnalyzer {
             Type returnType = thenTypes.stream().allMatch(Type.NULL::equals) ? Type.BOOLEAN :
                     TypeManager.getCompatibleTypeForCaseWhen(thenTypes);
             for (Type type : thenTypes) {
-                if (!Type.canCastTo(type, returnType)) {
+                if (!TypeManager.canCastTo(type, returnType)) {
                     throw new SemanticException("Invalid then type cast " + type.toSql()
                             + " to " + returnType.toSql());
                 }

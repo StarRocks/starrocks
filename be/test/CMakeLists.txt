@@ -103,6 +103,7 @@ set(EXEC_FILES
         ./exec/json_parser_test.cpp
         ./exec/lake_meta_scanner_test.cpp
         ./exec/multi_olap_table_sink_test.cpp
+        ./exec/parquet_schema_builder_test.cpp
         ./exec/repeat_node_test.cpp
         ./exec/sorting_test.cpp
         ./exec/tablet_sink_index_channel_test.cpp
@@ -255,6 +256,7 @@ set(EXEC_FILES
         ./http/stream_load_test.cpp
         ./http/transaction_stream_load_test.cpp
         ./http/action/update_config_action_test.cpp
+        ./http/action/proc_profile_e2e_test.cpp
         ./io/array_input_stream_test.cpp
         ./io/compressed_input_stream_test.cpp
         ./io/io_profiler_test.cpp
@@ -403,6 +405,7 @@ set(EXEC_FILES
         ./util/url_parser_test.cpp
         ./gutil/cpu_test.cc
         ./gutil/sysinfo-test.cc
+        service/backend_base_test.cpp
         ./service/lake_service_test.cpp
         ./service/mem_hook_test.cpp
         ./service/service_be/arrow_flight_call_header_utils_test.cpp

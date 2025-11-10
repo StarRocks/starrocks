@@ -40,7 +40,7 @@ import com.starrocks.planner.PartitionPruner;
 import com.starrocks.planner.RangePartitionPruner;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.expression.BinaryType;
-import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -356,7 +356,7 @@ public class OptExternalPartitionPruner {
                 for (int i = 0; i < literals.size(); i++) {
                     ColumnRefOperator columnRefOperator = partitionColumnRefOperators.get(i);
                     LiteralExpr literal = literals.get(i);
-                    if (Expr.IS_NULL_LITERAL.apply(literal)) {
+                    if (ExprUtils.IS_NULL_LITERAL.apply(literal)) {
                         columnToNullPartitions.get(columnRefOperator).add(partitionId);
                         continue;
                     }

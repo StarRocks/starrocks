@@ -13,11 +13,11 @@
 // limitations under the License.
 package com.starrocks.catalog.system.information;
 
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.thrift.TSchemaTableType;
+import com.starrocks.type.TypeFactory;
 
 import static com.starrocks.catalog.system.SystemTable.FN_REFLEN;
 import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
@@ -33,11 +33,11 @@ public class SchemaPrivilegesSystemTable {
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("GRANTEE", ScalarType.createVarchar(81))
-                        .column("TABLE_CATALOG", ScalarType.createVarchar(FN_REFLEN))
-                        .column("TABLE_SCHEMA", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("PRIVILEGE_TYPE", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("IS_GRANTABLE", ScalarType.createVarchar(3))
+                        .column("GRANTEE", TypeFactory.createVarchar(81))
+                        .column("TABLE_CATALOG", TypeFactory.createVarchar(FN_REFLEN))
+                        .column("TABLE_SCHEMA", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("PRIVILEGE_TYPE", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("IS_GRANTABLE", TypeFactory.createVarchar(3))
                         .build(), TSchemaTableType.SCH_SCHEMA_PRIVILEGES);
     }
 }

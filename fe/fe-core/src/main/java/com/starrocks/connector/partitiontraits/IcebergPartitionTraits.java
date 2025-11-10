@@ -20,7 +20,6 @@ import com.starrocks.catalog.IcebergPartitionKey;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.NullablePartitionKey;
 import com.starrocks.catalog.PartitionKey;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
@@ -29,6 +28,7 @@ import com.starrocks.connector.iceberg.IcebergPartitionUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.NullLiteral;
+import com.starrocks.type.Type;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.Snapshot;
 

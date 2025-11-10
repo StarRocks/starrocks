@@ -59,7 +59,6 @@ public class ColumnPosition implements ParseNode {
         return this == FIRST;
     }
 
-    @Override
     public String toSql() {
         StringBuilder sb = new StringBuilder();
         if (this == FIRST) {

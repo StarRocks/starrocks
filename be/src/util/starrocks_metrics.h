@@ -40,7 +40,7 @@
 #include <vector>
 
 #include "exec/pipeline/pipeline_metrics.h"
-#ifndef MACOS_DISABLE_JAVA
+#ifndef __APPLE__
 #include "util/jvm_metrics.h"
 #endif
 #include "util/metrics.h"
@@ -396,6 +396,8 @@ public:
     METRICS_DEFINE_THREAD_POOL(remote_snapshot);
     METRICS_DEFINE_THREAD_POOL(replicate_snapshot);
 
+    METRIC_DEFINE_INT_COUNTER(exec_runtime_memory_size, MetricUnit::BYTES);
+
     // short circuit executor
     METRIC_DEFINE_INT_COUNTER(short_circuit_request_total, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_COUNTER(short_circuit_request_duration_us, MetricUnit::MICROSECONDS);
@@ -431,7 +433,7 @@ private:
 
     MetricRegistry _metrics;
     SystemMetrics _system_metrics;
-#ifndef MACOS_DISABLE_JAVA
+#ifndef __APPLE__
     JVMMetrics _jvm_metrics;
 #endif
     TableMetricsManager _table_metrics_mgr;

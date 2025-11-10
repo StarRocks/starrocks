@@ -23,7 +23,6 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.ThreadUtil;
 import com.starrocks.scheduler.Constants;
@@ -189,6 +188,86 @@ public class OptimizeJobV2Test extends DDLTestBase {
 
         // finish alter tasks
         Assertions.assertEquals(JobState.FINISHED, optimizeJob.getJobState());
+    }
+
+    @Test
+    public void testTaskSuccessButNotVisibleMarkedFailed() throws Exception {
+        SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), GlobalStateMgrTestUtil.testTable7);
+
+        schemaChangeHandler.process(alterTableStmt.getAlterClauseList(), db, olapTable);
+        Map<Long, AlterJobV2> alterJobsV2 = schemaChangeHandler.getAlterJobsV2();
+        Assertions.assertEquals(1, alterJobsV2.size());
+        OptimizeJobV2 job = spyPreviousTxnFinished((OptimizeJobV2) alterJobsV2.values().stream().findAny().get());
+        // Force visibility check to return true (has committed-not-visible)
+        Mockito.doReturn(true).when(job).hasCommittedNotVisible(Mockito.anyLong());
+
+        job.runPendingJob();
+        job.runWaitingTxnJob();
+        Assertions.assertEquals(JobState.RUNNING, job.getJobState());
+
+        // Mark all tasks SQL SUCCESS and add history
+        for (OptimizeTask t : job.getOptimizeTasks()) {
+            GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunManager()
+                .getTaskRunScheduler().removeRunningTask(t.getId());
+            GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunManager()
+                .getTaskRunScheduler().removePendingTask(t);
+            TaskRunStatus s = new TaskRunStatus();
+            s.setTaskName(t.getName());
+            s.setDbName(db.getFullName());
+            s.setState(Constants.TaskRunState.SUCCESS);
+            GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunManager().getTaskRunHistory().addHistory(s);
+        }
+
+        try {
+            job.runRunningJob();
+        } catch (AlterCancelException e) {
+            job.cancel(e.getMessage());
+        }
+
+        // All tasks should be turned to FAILED due to not visible
+        for (OptimizeTask t : job.getOptimizeTasks()) {
+            Assertions.assertEquals(Constants.TaskRunState.FAILED, t.getOptimizeTaskState());
+        }
+        // All partitions rewrite failed, job should be CANCELLED
+        Assertions.assertEquals(JobState.CANCELLED, job.getJobState());
+    }
+
+    @Test
+    public void testTaskSuccessAndVisibleKeepsSuccess() throws Exception {
+        SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), GlobalStateMgrTestUtil.testTable7);
+
+        schemaChangeHandler.process(alterTableStmt.getAlterClauseList(), db, olapTable);
+        Map<Long, AlterJobV2> alterJobsV2 = schemaChangeHandler.getAlterJobsV2();
+        Assertions.assertEquals(1, alterJobsV2.size());
+        OptimizeJobV2 job = spyPreviousTxnFinished((OptimizeJobV2) alterJobsV2.values().stream().findAny().get());
+        // Visibility check returns false (no committed-not-visible), so SUCCESS remains SUCCESS
+        Mockito.doReturn(false).when(job).hasCommittedNotVisible(Mockito.anyLong());
+
+        job.runPendingJob();
+        job.runWaitingTxnJob();
+        Assertions.assertEquals(JobState.RUNNING, job.getJobState());
+
+        for (OptimizeTask t : job.getOptimizeTasks()) {
+            GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunManager()
+                .getTaskRunScheduler().removeRunningTask(t.getId());
+            GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunManager()
+                .getTaskRunScheduler().removePendingTask(t);
+            TaskRunStatus s = new TaskRunStatus();
+            s.setTaskName(t.getName());
+            s.setDbName(db.getFullName());
+            s.setState(Constants.TaskRunState.SUCCESS);
+            GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunManager().getTaskRunHistory().addHistory(s);
+        }
+
+        // Should proceed to finish
+        job.runRunningJob();
+        Assertions.assertEquals(JobState.FINISHED, job.getJobState());
     }
 
     @Test
@@ -615,9 +694,19 @@ public class OptimizeJobV2Test extends DDLTestBase {
         Assertions.assertEquals(JobState.RUNNING, optimizeJob.getJobState());
     }
 
-    private OptimizeJobV2 spyPreviousTxnFinished(OptimizeJobV2 job) throws AnalysisException {
+    private OptimizeJobV2 spyPreviousTxnFinished(OptimizeJobV2 job) {
+        // Detach the job from schema change handler to prevent the background scheduler
+        // from mutating its state in parallel with the UT driven state machine, which
+        // occasionally drops temp partitions and leads to flaky failures.
+        SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        schemaChangeHandler.getAlterJobsV2().remove(job.getJobId());
+
         OptimizeJobV2 spy = Mockito.spy(job);
-        Mockito.doReturn(true).when(spy).isPreviousLoadFinished();
+        try {
+            Mockito.doReturn(true).when(spy).isPreviousLoadFinished();
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
         return spy;
     }
 }
