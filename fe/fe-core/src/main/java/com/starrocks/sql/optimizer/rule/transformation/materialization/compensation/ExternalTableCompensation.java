@@ -77,7 +77,7 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.connector.iceberg.IcebergPartitionUtils.getIcebergTablePartitionPredicateExpr;
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
-import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.convertPartitionKeyRangesToListPredicate;
+import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.convertRangeCellsToPredicate;
 
 public final class ExternalTableCompensation extends TableCompensation {
     private List<PRangeCell> compensations;
@@ -143,7 +143,10 @@ public final class ExternalTableCompensation extends TableCompensation {
             externalExtraPredicate = getIcebergTableCompensation(optimizerContext, mv, (IcebergTable) currentTable,
                     refTableName, refPartitionColRefs);
         } else {
-            externalExtraPredicate = convertPartitionKeyRangesToListPredicate(refPartitionColRefs, compensations, true);
+            // for non iceberg table, it's safe to convert partition ranges to in predicates directly.
+            // this is because they don't have partition transformations and is hive-partition-like, its partition values
+            // are point-to-point mapping to partition columns.
+            externalExtraPredicate = convertRangeCellsToPredicate(refPartitionColRefs, compensations, true);
         }
         Preconditions.checkState(externalExtraPredicate != null);
         externalExtraPredicate.setRedundant(true);
@@ -163,19 +166,15 @@ public final class ExternalTableCompensation extends TableCompensation {
             final List<Column> refBaseTablePartitionCols = refPartitionColRefs.stream()
                     .map(ref -> icebergTable.getColumn(ref.getName()))
                     .collect(Collectors.toList());
-            final List<PartitionField> partitionFields = Lists.newArrayList();
-            for (Column column : refBaseTablePartitionCols) {
-                for (PartitionField field : icebergTable.getNativeTable().spec().fields()) {
-                    final String partitionFieldName = icebergTable.getNativeTable().schema().findColumnName(field.sourceId());
-                    if (partitionFieldName.equalsIgnoreCase(column.getName())) {
-                        partitionFields.add(field);
-                    }
-                }
-            }
-            final boolean isContainPartitionTransform = partitionFields
+            final List<PartitionField> partitionFields = refBaseTablePartitionCols.stream()
+                    .map(col -> icebergTable.getPartitionField(col.getName()))
+                    .filter(field -> field != null)
+                    .collect(Collectors.toList());
+            // if all partition fields are identity transform, we can convert range to in predicates directly.
+            final boolean canConvertToInPredicate = partitionFields
                     .stream()
-                    .anyMatch(field -> field.transform().dedupName().equalsIgnoreCase("time"));
-            return convertPartitionKeyRangesToListPredicate(refPartitionColRefs, compensations, !isContainPartitionTransform);
+                    .allMatch(field -> field.transform().dedupName().equalsIgnoreCase("identity"));
+            return convertRangeCellsToPredicate(refPartitionColRefs, compensations, canConvertToInPredicate);
         }
         List<Column> mvPartitionCols = mv.getPartitionColumns();
         // to iceberg, `partitionKeys` are using LocalTime as partition values which cannot be used to prune iceberg
