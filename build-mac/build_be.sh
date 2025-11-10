@@ -264,8 +264,8 @@ if [[ ! -d "$GENSRC_TARGET_DIR" ]] || [[ -z "$(ls -A "$GENSRC_TARGET_DIR" 2>/dev
     GENSRC_NEEDS_BUILD=1
 else
     # Check if any .proto or .thrift files are newer than generated files
-    newest_generated=$(find "$GENSRC_TARGET_DIR" -type f -name "*.cc" -o -name "*.h" | xargs stat -f "%m" 2>/dev/null | sort -n | tail -1)
-    newest_source=$(find "$ROOT_DIR/gensrc" -name "*.proto" -o -name "*.thrift" | xargs stat -f "%m" 2>/dev/null | sort -n | tail -1)
+    newest_generated=$(find "$GENSRC_TARGET_DIR" -type f \( -name "*.cc" -o -name "*.cpp" -o -name "*.h" \) | xargs stat -f "%m" 2>/dev/null | sort -n | tail -1)
+    newest_source=$(find "$ROOT_DIR/gensrc" \( -name "*.proto" -o -name "*.thrift" \) | xargs stat -f "%m" 2>/dev/null | sort -n | tail -1)
 
     if [[ -n "$newest_source" ]] && [[ -n "$newest_generated" ]] && [[ $newest_source -gt $newest_generated ]]; then
         GENSRC_NEEDS_BUILD=1
@@ -288,8 +288,8 @@ if [[ $GENSRC_NEEDS_BUILD -eq 1 ]]; then
     fi
 
     # Verify that both protobuf and thrift files were generated
-    PROTO_FILES=$(find "$ROOT_DIR/gensrc/build/gen_cpp" -name "*.pb.cc" -o -name "*.pb.h" | wc -l)
-    THRIFT_FILES=$(find "$ROOT_DIR/gensrc/build/gen_cpp" -name "*_types.cc" -o -name "*_types.h" -o -name "*_service.cc" -o -name "*_service.h" | wc -l)
+    PROTO_FILES=$(find "$ROOT_DIR/gensrc/build/gen_cpp" \( -name "*.pb.cc" -o -name "*.pb.h" \) | wc -l)
+    THRIFT_FILES=$(find "$ROOT_DIR/gensrc/build/gen_cpp" \( -name "*_types.cpp" -o -name "*_types.h" -o -name "*_service.cpp" -o -name "*_service.h" \) | wc -l)
 
     log_info "Generated $PROTO_FILES protobuf files and $THRIFT_FILES thrift files"
 
@@ -352,7 +352,8 @@ mkdir -p "$BE_GEN_OPCODE_DIR"
     fi
 
     if [[ $COPIED_THRIFT_FILES -eq 0 ]]; then
-        log_warn "No thrift/thrift-related files were copied to BE source directory"
+        log_error "No thrift/thrift-related files were copied to BE source directory; please re-run without --skip-codegen and ensure gensrc builds succeed"
+        exit 1
     fi
 
     log_success "Generated files copied to BE source directory"
