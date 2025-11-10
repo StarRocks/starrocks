@@ -94,19 +94,6 @@ select * from test_json_cast_map order by c1;
 select flat_json_meta(c2) from test_json_cast_map [_META_];
 
 -- Test 9: inconsistent intermediate node
-DROP TABLE test_json_cast_map;
-CREATE TABLE test_json_cast_map (c1 int, c2 json) 
-DISTRIBUTED BY HASH(c1) BUCKETS 1;
-
-insert into test_json_cast_map values
-(1, '{"level1": {"level2": {"level3": {"level4": {"5":"abc"}}}}}'),
-(4, '{"level1": {"level2": {"level3": {"4":null}}}}'),
-(7, '{"level1": {"level2": {"level3": "abc"}}}');
-
-select * from test_json_cast_map order by c1;
-select flat_json_meta(c2) from test_json_cast_map [_META_];
-
--- Test 10: inconsistent intermediate node
 CREATE TABLE source_data(c1 int, c2 json);
 insert into source_data values
 (1, '{"level1": {"level2": {"level3": {"level4": {"5":"abc"}}}}}'),
@@ -119,13 +106,19 @@ insert into source_data values
 (8, '{"100": {"200": {"300": {"500":"abc"}}}}'),
 (9, '{"100": {"200": {"300": "abc"}}}');
 
+-- bucket 1
+drop table test_json_cast_map;
+CREATE TABLE test_json_cast_map (c1 int, c2 json) 
+DISTRIBUTED BY RANDOM BUCKETS 1;
+insert into test_json_cast_map select * from source_data;
+select * from test_json_cast_map order by c1;
+
 -- bucket 2
 drop table test_json_cast_map;
 CREATE TABLE test_json_cast_map (c1 int, c2 json) 
 DISTRIBUTED BY RANDOM BUCKETS 2;
 insert into test_json_cast_map select * from source_data;
 select * from test_json_cast_map order by c1;
-select flat_json_meta(c2) from test_json_cast_map [_META_];
 
 -- bucket 3
 drop table test_json_cast_map;
@@ -133,7 +126,6 @@ CREATE TABLE test_json_cast_map (c1 int, c2 json)
 DISTRIBUTED BY RANDOM BUCKETS 3;
 insert into test_json_cast_map select * from source_data;
 select * from test_json_cast_map order by c1;
-select flat_json_meta(c2) from test_json_cast_map [_META_];
 
 -- bucket 4
 drop table test_json_cast_map;
@@ -141,7 +133,6 @@ CREATE TABLE test_json_cast_map (c1 int, c2 json)
 DISTRIBUTED BY RANDOM BUCKETS 4;
 insert into test_json_cast_map select * from source_data;
 select * from test_json_cast_map order by c1;
-select flat_json_meta(c2) from test_json_cast_map [_META_];
 
 -- bucket 5
 drop table test_json_cast_map;
@@ -149,6 +140,51 @@ CREATE TABLE test_json_cast_map (c1 int, c2 json)
 DISTRIBUTED BY RANDOM BUCKETS 5;
 insert into test_json_cast_map select * from source_data;
 select * from test_json_cast_map order by c1;
-select flat_json_meta(c2) from test_json_cast_map [_META_];
 
 drop table test_json_cast_map;
+
+
+-- Test 11: nested json
+CREATE TABLE t_flat_json_remain (c1 int, c2 json)
+DISTRIBUTED BY HASH(c1) BUCKETS 1;
+
+insert into t_flat_json_remain values
+(1, '{"k9": {"k2": {"k0": "A", "k1": "B", "k2": -1, "k3": 2, "k4": "Z"}}}');
+
+select flat_json_meta(c2) from t_flat_json_remain [_META_];
+select c2 -> '$.k9' from t_flat_json_remain;
+select c2 -> '$.k9.k2' from t_flat_json_remain;
+select c2 -> '$.k9.k2.k2' from t_flat_json_remain;
+
+truncate table t_flat_json_remain;
+insert into t_flat_json_remain values
+(1, '{"k9": {"k2": {"k0": "A", "k1": "B", "k2": 10, "k3": 20, "k4": "Z"}}}'),
+(2, '{"k9": {"k2": {"k0": "A", "k4": "Z"}}}');
+
+select flat_json_meta(c2) from t_flat_json_remain [_META_];
+select c1, c2 -> '$.k9.k2' from t_flat_json_remain order by c1;
+
+-- with remain
+truncate table t_flat_json_remain;
+insert into t_flat_json_remain values
+(1, '{"k9": {"k2": {"k0": "A", "k1": "B", "k2": 10, "k3": 20, "k4": "Z"}}}'),
+(2, '{"k9": {"k2": "JSON"}}');
+
+select flat_json_meta(c2) from t_flat_json_remain [_META_];
+select c1, c2 -> '$.k9' from t_flat_json_remain order by c1;
+select c1, c2 -> '$.k9.k2' from t_flat_json_remain order by c1;
+select c1, c2 -> '$.k9.k2.k0' from t_flat_json_remain order by c1;
+
+truncate table t_flat_json_remain;
+insert into t_flat_json_remain values
+(1, '{"k9": {"k2": {"k0": "A", "k1": "B", "k2": 10, "k3": 20, "k4": "Z"}}}'),
+(2, '{"k9": {"k1": "JSON"}}');
+
+select flat_json_meta(c2) from t_flat_json_remain [_META_];
+select c1, c2 -> '$.k9' from t_flat_json_remain order by c1;
+select c1, c2 -> '$.k9.k1' from t_flat_json_remain order by c1;
+select c1, c2 -> '$.k9.k2' from t_flat_json_remain order by c1;
+select c1, c2 -> '$.k9.k2.k0' from t_flat_json_remain order by c1;
+
+
+drop table t_flat_json_remain;
