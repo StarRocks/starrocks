@@ -138,11 +138,8 @@ T_R_DB = "t_r_db"
 T_R_TABLE = "t_r_table"
 
 SECRET_INFOS = {}
-<<<<<<< HEAD
-=======
 TASK_RUN_SUCCESS_STATES = set(["SUCCESS", "MERGED", "SKIPPED"])
 TASK_RUN_FINAL_STATES = set(["SUCCESS", "MERGED", "SKIPPED", "FAILED"])
->>>>>>> 54c2bfd1b7 ([UT] Fix unstable tests (backport #64940) (#64955))
 
 
 class StarrocksSQLApiLib(object):
