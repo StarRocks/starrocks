@@ -329,9 +329,10 @@ public class HiveMetastoreTest {
             StorageDescriptor sd = new StorageDescriptor();
             sd.setCols(unPartKeys);
             sd.setLocation(hdfsPath);
-            sd.setInputFormat("org.apache.hadoop.hive.ql.io.orc.OrcInputFormat");
+            sd.setInputFormat(HiveClassNames.ORC_INPUT_FORMAT_CLASS);
             SerDeInfo serDeInfo = new SerDeInfo();
             serDeInfo.setParameters(ImmutableMap.of());
+            serDeInfo.setSerializationLib(HiveClassNames.ORC_SERDE_CLASS);
             sd.setSerdeInfo(serDeInfo);
             Table msTable1 = new Table();
             msTable1.setDbName(dbName);
