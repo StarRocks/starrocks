@@ -791,8 +791,14 @@ CONF_mBool(brpc_load_ignore_overcrowded, "true");
 CONF_mInt64(max_runnings_transactions_per_txn_map, "100");
 
 // The tablet map shard size, the value must be power of two.
-// this is an enhancement for better performance to manage tablet.
-CONF_Int32(tablet_map_shard_size, "32");
+//
+// It is the total number of slots pre-allocated by TabletManager in shared-nothing mode.
+// All the tablets hosted on the backend will be hashed and put into the corresponding slots.
+// Tablets in the same slots shares the single mutex for R/W ops from TabletManager.
+// Increasing this number would greatly reduce the lock contention between tablets in the same slot.
+// Recommended setting:
+//   tablet_map_shard_size = total_num_of_tablets_in_BE / 512
+CONF_Int32(tablet_map_shard_size, "1024");
 // The value must be power of two.
 CONF_Int32(pk_index_map_shard_size, "4096");
 
