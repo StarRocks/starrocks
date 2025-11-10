@@ -417,10 +417,6 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     if (config::pipeline_exec_thread_pool_thread_num > 0) {
         _max_executor_threads = config::pipeline_exec_thread_pool_thread_num;
     }
-#ifdef BE_TEST
-    // In test environment, limit thread count to reduce startup and shutdown time
-    _max_executor_threads = std::min<int64_t>(_max_executor_threads, 2);
-#endif
     _max_executor_threads = std::max<int64_t>(1, _max_executor_threads);
     LOG(INFO) << strings::Substitute("[PIPELINE] Exec thread pool: thread_num=$0", _max_executor_threads);
 
@@ -434,20 +430,10 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     _pipeline_timer = new pipeline::PipelineTimer();
     RETURN_IF_ERROR(_pipeline_timer->start());
 
-    int num_io_threads = config::pipeline_scan_thread_pool_thread_num <= 0
-                                 ? CpuInfo::num_cores()
-                                 : config::pipeline_scan_thread_pool_thread_num;
-#ifdef BE_TEST
-    // In test environment, limit thread count to reduce startup and shutdown time
-    num_io_threads = std::min(num_io_threads, 2);
-#endif
-
+    const int num_io_threads = config::pipeline_scan_thread_pool_thread_num <= 0
+                                       ? CpuInfo::num_cores()
+                                       : config::pipeline_scan_thread_pool_thread_num;
     int connector_num_io_threads = int(config::pipeline_connector_scan_thread_num_per_cpu * CpuInfo::num_cores());
-#ifdef BE_TEST
-    // In test environment, limit connector scan threads to reduce startup and shutdown time
-    // Use a fixed small number instead of per-cpu calculation
-    connector_num_io_threads = std::min(connector_num_io_threads, 4);
-#endif
     CHECK_GT(connector_num_io_threads, 0) << "pipeline_connector_scan_thread_num_per_cpu should greater than 0";
 
     if (config::hdfs_client_enable_hedged_read) {

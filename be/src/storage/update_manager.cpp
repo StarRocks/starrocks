@@ -104,10 +104,6 @@ Status UpdateManager::init() {
     if (config::transaction_apply_worker_count > 0) {
         max_thread_cnt = config::transaction_apply_worker_count;
     }
-#ifdef BE_TEST
-    // In test environment, limit thread count to reduce startup time
-    max_thread_cnt = std::min(max_thread_cnt, 4);
-#endif
     RETURN_IF_ERROR(
             ThreadPoolBuilder("update_apply")
                     .set_idle_timeout(MonoDelta::FromMilliseconds(config::transaction_apply_worker_idle_time_ms))
@@ -118,10 +114,6 @@ Status UpdateManager::init() {
 
     int max_get_thread_cnt =
             config::get_pindex_worker_count > max_thread_cnt ? config::get_pindex_worker_count : max_thread_cnt * 2;
-#ifdef BE_TEST
-    // In test environment, limit thread count to reduce startup time
-    max_get_thread_cnt = std::min(max_get_thread_cnt, 8);
-#endif
     RETURN_IF_ERROR(
             ThreadPoolBuilder("get_pindex").set_max_threads(max_get_thread_cnt).build(&_get_pindex_thread_pool));
 
