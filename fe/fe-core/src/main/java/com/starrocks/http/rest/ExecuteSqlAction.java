@@ -63,11 +63,9 @@ import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.thrift.TResultSinkFormatType;
-import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpUtil;
-import io.netty.util.AttributeKey;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -80,9 +78,6 @@ import static io.netty.handler.codec.http.HttpResponseStatus.INTERNAL_SERVER_ERR
 import static io.netty.handler.codec.http.HttpResponseStatus.SERVICE_UNAVAILABLE;
 
 public class ExecuteSqlAction extends RestBaseAction {
-
-    private static final AttributeKey<HttpConnectContext> HTTP_CONNECT_CONTEXT_ATTRIBUTE_KEY =
-            AttributeKey.valueOf("httpContextKey");
     private static final Logger LOG = LogManager.getLogger(ExecuteSqlAction.class);
 
     public ExecuteSqlAction(ActionController controller) {
@@ -135,8 +130,8 @@ public class ExecuteSqlAction extends RestBaseAction {
 
                 // only register connectContext once for one channel
                 if (!context.isInitialized()) {
-                    registerContext(requestBody.query, context);
                     context.setInitialized(true);
+                    registerContext(requestBody.query, context);
                 }
 
                 // store context in current thread, Executor rely on this thread local variable
@@ -245,15 +240,6 @@ public class ExecuteSqlAction extends RestBaseAction {
         }
         context.setStartTime();
         LogUtil.logConnectionInfoToAuditLogAndQueryQueue(context, null);
-    }
-
-    // when connect is closed, this function will be called
-    protected void handleChannelInactive(ChannelHandlerContext ctx) {
-        LOG.info("Netty channel is closed");
-        HttpConnectContext context = ctx.channel().attr(HTTP_CONNECT_CONTEXT_ATTRIBUTE_KEY).get();
-        if (context.isInitialized()) {
-            ExecuteEnv.getInstance().getScheduler().unregisterConnection(context);
-        }
     }
 
     private void checkSessionVariable(Map<String, String> customVariable, HttpConnectContext context) {

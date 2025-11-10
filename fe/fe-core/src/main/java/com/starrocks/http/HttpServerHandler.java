@@ -37,6 +37,7 @@ package com.starrocks.http;
 import com.starrocks.common.Config;
 import com.starrocks.http.action.IndexAction;
 import com.starrocks.http.action.NotFoundAction;
+import com.starrocks.service.ExecuteEnv;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
@@ -166,8 +167,10 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
     @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
         HttpServerHandlerMetrics.getInstance().httpConnectionsNum.increase(-1L);
-        if (action != null) {
-            action.handleChannelInactive(ctx);
+        HttpConnectContext context = ctx.channel().attr(HTTP_CONNECT_CONTEXT_ATTRIBUTE_KEY).get();
+        if (context != null && context.isInitialized()) {
+            // Context is registered in ExecuteSqlAction#executeWithoutPassword
+            ExecuteEnv.getInstance().getScheduler().unregisterConnection(context);
         }
         super.channelInactive(ctx);
     }
