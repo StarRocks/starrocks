@@ -895,15 +895,6 @@ void ExecEnv::stop() {
         component_times.emplace_back("pipeline_sink_io_pool", MonotonicMillis() - start);
     }
 
-<<<<<<< HEAD
-=======
-    if (_put_aggregate_metadata_thread_pool) {
-        start = MonotonicMillis();
-        _put_aggregate_metadata_thread_pool->shutdown();
-        component_times.emplace_back("put_aggregate_metadata_thread_pool", MonotonicMillis() - start);
-    }
-
->>>>>>> d16abc99ba ([UT] Optimize BE UT startup and shutdown time (#65159))
     if (_agent_server) {
         start = MonotonicMillis();
         _agent_server->stop();
@@ -1000,12 +991,8 @@ void ExecEnv::stop() {
         component_times.emplace_back("diagnose_daemon", MonotonicMillis() - start);
     }
 
-<<<<<<< HEAD
-#ifndef BE_TEST
-=======
 #if !defined(__APPLE__) && !defined(BE_TEST)
     start = MonotonicMillis();
->>>>>>> d16abc99ba ([UT] Optimize BE UT startup and shutdown time (#65159))
     close_s3_clients();
     component_times.emplace_back("close_s3_clients", MonotonicMillis() - start);
 #endif
