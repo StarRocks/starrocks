@@ -1846,9 +1846,19 @@ public class Config extends ConfigBase {
     /**
      * After checked tablet_checker_partition_batch_num partitions, db lock will be released,
      * so that other threads can get the lock.
+     * TODO: deprecate this configuration after ColocateTableBalancer.java module is optimized by lock holding time.
      */
     @ConfField(mutable = true)
     public static int tablet_checker_partition_batch_num = 500;
+
+    /**
+     * Default 1000ms provides a good balance between lock fairness and overhead.
+     * Allows processing hundreds of partitions while preventing lock monopolization.
+     */
+    @ConfField(mutable = true, comment = "The maximum lock hold time per cycle for tablet checker before releasing " +
+            "and reacquiring the table lock in milliseconds, default is 1000 (ms). " +
+            "Values less than 100 will be treated as 100")
+    public static int tablet_checker_lock_time_per_cycle_ms = 1000;
 
     @Deprecated
     @ConfField(mutable = true)
