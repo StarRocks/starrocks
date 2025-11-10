@@ -187,8 +187,12 @@ TEST_F(ORCScannerTest, implicit_cast) {
     range.format_type = TFileFormatType::FORMAT_ORC;
     range.file_type = TFileType::FILE_LOCAL;
     range.__set_path(_test_exec_dir + "/test_data/orc_scanner/boolean_type.orc");
+    range.__set_start_offset(0);
+    range.__set_size(-1);
     ranges.push_back(range);
     range.__set_path(_test_exec_dir + "/test_data/orc_scanner/date_type.orc");
+    range.__set_start_offset(0);
+    range.__set_size(-1);
     ranges.push_back(range);
 
     auto scanner = create_orc_scanner(types, {"col_0", "col_1"}, ranges);

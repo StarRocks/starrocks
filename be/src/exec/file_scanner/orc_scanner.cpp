@@ -245,9 +245,9 @@ Status ORCScanner::_open_next_orc_reader() {
         _orc_reader->set_read_chunk_size(_max_chunk_size);
         _orc_reader->set_current_file_name(file_name);
 
-        // Attach a byte-range RowReaderFilter to only open stripes within [start_offset, end_offset)
-        int64_t start_offset = range_desc.__isset.start_offset ? range_desc.start_offset : 0;
-        int64_t size = range_desc.__isset.size && range_desc.size >= 0 ? range_desc.size : file_size - start_offset;
+        // Attach a byte-range RowReaderFilter to only open stripes within [start_offset, start_offset + size)
+        int64_t start_offset = std::max<int64_t>(0, range_desc.start_offset);
+        int64_t size = range_desc.size >= 0 ? range_desc.size : file_size - start_offset;
         auto filter = std::make_shared<OrcRangeRowReaderFilter>(start_offset, start_offset + size);
         _orc_reader->set_row_reader_filter(filter);
 
