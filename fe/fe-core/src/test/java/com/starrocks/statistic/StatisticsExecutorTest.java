@@ -24,6 +24,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.qe.ConnectContext;
@@ -83,6 +84,7 @@ public class StatisticsExecutorTest extends PlanTestBase {
 
     @Test
     public void testCollectStatisticSync(@Mocked StmtExecutor executor) throws Exception {
+        Config.internal_log_json_format = true;
         // mock
         MockUp<StmtExecutor> mock = new MockUp<StmtExecutor>() {
             @Mock
