@@ -56,6 +56,7 @@ PARALLEL_TEST(WorkGroupManagerTest, add_workgroups_different_mem_pools) {
     }
     _manager->destroy();
 }
+
 PARALLEL_TEST(WorkGroupManagerTest, add_workgroups_same_mem_pools) {
     PipelineExecutorSetConfig config{10, 1, 1, 1, CpuUtil::CpuIds{}, false, false, nullptr};
     auto _manager = std::make_unique<WorkGroupManager>(config);
