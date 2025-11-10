@@ -193,12 +193,12 @@ read_config() {
             fi
         fi
         
-        # Read collect_be_profile_interval if not set by user
+        # Read COLLECT_BE_PROFILE_INTERVAL if not set by user
+        # Only support uppercase environment variable (from export_env_from_conf)
         if [ "$INTERVAL_SET_BY_USER" != true ]; then
-            read_var_from_conf collect_be_profile_interval "$be_conf" 2>/dev/null || true
-            if [ -n "$collect_be_profile_interval" ] && [ "$collect_be_profile_interval" -gt 0 ] 2>/dev/null; then
-                INTERVAL=$collect_be_profile_interval
-                log "Using collect_be_profile_interval from be.conf: $INTERVAL seconds"
+            if [ -n "$COLLECT_BE_PROFILE_INTERVAL" ] && [ "$COLLECT_BE_PROFILE_INTERVAL" -gt 0 ] 2>/dev/null; then
+                INTERVAL=$COLLECT_BE_PROFILE_INTERVAL
+                log "Using COLLECT_BE_PROFILE_INTERVAL from be.conf: $INTERVAL seconds"
             fi
         fi
     else
@@ -214,21 +214,17 @@ read_config() {
         LOG_FILE="$OUTPUT_DIR/../collect_be_profile.log"
     fi
     
-    # Check write permissions before attempting to create directories or files
-    # Re-enable strict checking for critical path operations
+    # Create all necessary directories before checking write permissions
+    mkdir -p "$OUTPUT_DIR" "$(dirname "$PID_FILE")" 2>/dev/null || true
+    
     check_config_mode
     check_writable "$OUTPUT_DIR" "directory"
     # Skip writable check for /dev/stdout as it's always writable
     if [ "$LOG_FILE" != "/dev/stdout" ]; then
         check_writable "$LOG_FILE" "file"
+        touch "$LOG_FILE" 2>/dev/null || true
     fi
     check_writable "$PID_FILE" "file"
-    
-    # Create log directory and initialize log file (skip for /dev/stdout)
-    if [ "$LOG_FILE" != "/dev/stdout" ]; then
-        mkdir -p "$(dirname "$LOG_FILE")"
-        touch "$LOG_FILE"
-    fi
     
     # Switch to runtime mode after configuration is complete
     runtime_mode
@@ -237,25 +233,6 @@ read_config() {
     log "BRPC_PORT: $BRPC_PORT"
     log "OUTPUT_DIR: $OUTPUT_DIR"
     log "Collection interval: $INTERVAL seconds"
-}
-
-# Create output directory
-create_output_dir() {
-    if [ -z "$OUTPUT_DIR" ]; then
-        log_error "OUTPUT_DIR is not set, using default: $STARROCKS_HOME/log/proc_profile"
-        OUTPUT_DIR="$STARROCKS_HOME/log/proc_profile"
-    fi
-    
-    if ! mkdir -p "$OUTPUT_DIR" 2>/dev/null; then
-        log_error "Failed to create output directory: $OUTPUT_DIR"
-        exit 1
-    fi
-    
-    # Verify directory was created and is writable
-    if [ ! -d "$OUTPUT_DIR" ] || [ ! -w "$OUTPUT_DIR" ]; then
-        log_error "Output directory is not writable: $OUTPUT_DIR"
-        exit 1
-    fi
 }
 
 # Check if BRPC server is accessible
@@ -528,7 +505,6 @@ main() {
     parse_args "$@"
     
     read_config
-    create_output_dir
     
     if [ "$DAEMON_MODE" = true ]; then
         if [ "$DAEMON_INTERNAL" = true ]; then
