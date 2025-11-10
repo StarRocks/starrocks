@@ -1025,6 +1025,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：自动定期采集任务中，检测数据更新的间隔时间。
 - 引入版本：-
 
+##### enable_predicate_columns_collection
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否启用 Predicate Column 采集。如果禁用，在查询优化期间将不会记录 Predicate Column。
+- 引入版本：-
+
 ##### statistic_cache_columns
 
 - 默认值：100000
@@ -1123,15 +1132,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否动态：是
 - 描述：是否允许自动采集 ARRAY 类型列的 NDV 信息。
 - 引入版本：v4.0
-
-##### enable_predicate_columns_collection
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：是否启用 Predicate Column 采集。如果禁用，在查询优化期间将不会记录 Predicate Column。
-- 引入版本：-
 
 ##### histogram_buckets_size
 
@@ -3125,6 +3125,11 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 是否动态：是
 - 描述：是否允许系统跟踪历史节点。将此项设置为 `true`，就可以启用 Cache Sharing 功能，并允许系统在弹性扩展过程中选择正确的缓存节点。
 - 引入版本：v3.5.1
+
+
+
+
+<EditionSpecificFEItem />
 
 
 

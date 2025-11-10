@@ -968,6 +968,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: データが初めてテーブルにロードされるときに自動的に統計を収集するかどうか。テーブルに複数のパーティションがある場合、このテーブルの空のパーティションにデータがロードされると、自動統計収集がトリガーされます。新しいテーブルが頻繁に作成され、データが頻繁にロードされる場合、メモリと CPU のオーバーヘッドが増加します。
 - 導入バージョン: v3.1
 
+##### semi_sync_collect_statistic_await_seconds
+
+- デフォルト: 30
+- 型: Long
+- 単位: 秒
+- 変更可能: はい
+- 説明: DML 操作（INSERT および INSERT OVERWRITE 文）中の半同期統計収集の最大待機時間。Stream load と broker load は非同期モードを使用するためこの設定の影響を受けません。統計収集がこのタイムアウトを超えた場合、収集完了を待たずにロードは継続されます。この設定は `enable_statistic_collect_on_first_load` と連携して動作します。
+- 導入バージョン: v3.1
+
 ##### statistic_auto_analyze_start_time
 
 - デフォルト: 00:00:00
@@ -3088,6 +3097,10 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能: いいえ
 - 説明: JWT 内のオーディエンス (`aud`) を識別するために使用される文字列のリスト。リスト内のいずれかの値が JWT のオーディエンスと一致する場合にのみ、JWT は有効と見なされます。
 - 導入バージョン: v3.5.0
+
+
+
+<EditionSpecificFEItem />
 
 
 

@@ -1051,6 +1051,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The interval for checking data updates during automatic collection.
 - Introduced in: -
 
+##### enable_predicate_columns_collection
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable predicate columns collection. If disabled, predicate columns will not be recorded during query optimization.
+- Introduced in: -
+
 ##### statistic_cache_columns
 
 - Default: 100000
@@ -1149,15 +1158,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Is mutable: Yes
 - Description: Whether to enable automatic collection for the NDV information of the ARRAY type.
 - Introduced in: v4.0
-
-##### enable_predicate_columns_collection
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether to enable predicate columns collection. If disabled, predicate columns will not be recorded during query optimization.
-- Introduced in: -
 
 ##### histogram_buckets_size
 
@@ -3189,6 +3189,10 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Is mutable: Yes
 - Description: Whether to allow the system to trace the historical nodes. By setting this item to `true`, you can enable the Cache Sharing feature and allow the system to choose the right cache nodes during elastic scaling.
 - Introduced in: v3.5.1
+
+
+
+<EditionSpecificFEItem />
 
 
 
