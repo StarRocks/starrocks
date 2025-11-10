@@ -979,7 +979,7 @@ jobs:
         id: function-gen
         if: steps.path-filter.outputs.function == 'true'
         run: |
-          ./ci-tool/bin/run-doc-gen.sh --type function --sr starrocks --fe ${FE_NODE} --limit 5 >> $GITHUB_OUTPUT
+          ./ci-tool/bin/run-doc-gen.sh --type functions --sr starrocks --fe ${FE_NODE} --limit 5 >> $GITHUB_OUTPUT
 
       - name: Comment DocGen Result
         if: >
