@@ -19,6 +19,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
+import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
@@ -30,6 +31,14 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.ha.FrontendNodeType;
+<<<<<<< HEAD
+=======
+import com.starrocks.load.batchwrite.BatchWriteMgr;
+import com.starrocks.load.batchwrite.RequestLoadResult;
+import com.starrocks.load.batchwrite.TableId;
+import com.starrocks.load.streamload.StreamLoadKvParams;
+import com.starrocks.load.streamload.StreamLoadTask;
+>>>>>>> ab5c0bb4db ([BugFix] Fix transaction stream load not update load rows state (#65079))
 import com.starrocks.planner.StreamLoadPlanner;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
@@ -61,10 +70,20 @@ import com.starrocks.thrift.TImmutablePartitionRequest;
 import com.starrocks.thrift.TImmutablePartitionResult;
 import com.starrocks.thrift.TListMaterializedViewStatusResult;
 import com.starrocks.thrift.TListTableStatusResult;
+import com.starrocks.thrift.TLoadInfo;
 import com.starrocks.thrift.TLoadTxnBeginRequest;
 import com.starrocks.thrift.TLoadTxnBeginResult;
 import com.starrocks.thrift.TLoadTxnCommitRequest;
 import com.starrocks.thrift.TLoadTxnCommitResult;
+<<<<<<< HEAD
+=======
+import com.starrocks.thrift.TLoadTxnRollbackRequest;
+import com.starrocks.thrift.TLoadTxnRollbackResult;
+import com.starrocks.thrift.TLoadType;
+import com.starrocks.thrift.TManualLoadTxnCommitAttachment;
+import com.starrocks.thrift.TMergeCommitRequest;
+import com.starrocks.thrift.TMergeCommitResult;
+>>>>>>> ab5c0bb4db ([BugFix] Fix transaction stream load not update load rows state (#65079))
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TPlanFragmentExecParams;
 import com.starrocks.thrift.TResourceUsage;
@@ -77,7 +96,9 @@ import com.starrocks.thrift.TStreamLoadPutResult;
 import com.starrocks.thrift.TTableInfo;
 import com.starrocks.thrift.TTableStatus;
 import com.starrocks.thrift.TTableType;
+import com.starrocks.thrift.TTabletCommitInfo;
 import com.starrocks.thrift.TTransactionStatus;
+import com.starrocks.thrift.TTxnCommitAttachment;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TUpdateResourceUsageRequest;
 import com.starrocks.thrift.TUserIdentity;
@@ -101,10 +122,26 @@ import org.mockito.internal.util.collections.Sets;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+<<<<<<< HEAD
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+=======
+import java.util.Map;
+import java.util.UUID;
+import java.util.function.Consumer;
+import java.util.stream.Collectors;
+
+import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_BATCH_WRITE_ASYNC;
+import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_BATCH_WRITE_INTERVAL_MS;
+import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_BATCH_WRITE_PARALLEL;
+import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_ENABLE_BATCH_WRITE;
+import static com.starrocks.thrift.TFileType.FILE_STREAM;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+>>>>>>> ab5c0bb4db ([BugFix] Fix transaction stream load not update load rows state (#65079))
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.spy;
 
@@ -160,6 +197,7 @@ public class FrontendServiceImplTest {
         starRocksAssert = new StarRocksAssert(connectContext);
 
         starRocksAssert.withDatabase("test").useDatabase("test")
+<<<<<<< HEAD
                 .withTable("CREATE TABLE site_access_auto (\n" +
                         "    event_day DATETIME NOT NULL,\n" +
                         "    site_id INT DEFAULT '10',\n" +
@@ -284,6 +322,138 @@ public class FrontendServiceImplTest {
                 .withView("create view v4 as select user()")
                 .withView("create view v5 as select CONNECTION_ID()")
                 .withView("create view v6 as select CATALOG()")
+=======
+                    .withTable("CREATE TABLE site_access_auto (\n" +
+                                "    event_day DATETIME NOT NULL,\n" +
+                                "    site_id INT DEFAULT '10',\n" +
+                                "    city_code VARCHAR(100),\n" +
+                                "    user_name VARCHAR(32) DEFAULT '',\n" +
+                                "    pv BIGINT DEFAULT '0'\n" +
+                                ")\n" +
+                                "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                                "DISTRIBUTED BY RANDOM\n" +
+                                "PROPERTIES(\n" +
+                                "    \"replication_num\" = \"1\"\n" +
+                                ");")
+                    .withTable("CREATE TABLE site_access_exception (\n" +
+                                "    event_day DATETIME NOT NULL,\n" +
+                                "    site_id INT DEFAULT '10',\n" +
+                                "    city_code VARCHAR(100),\n" +
+                                "    user_name VARCHAR(32) DEFAULT '',\n" +
+                                "    pv BIGINT DEFAULT '0'\n" +
+                                ")\n" +
+                                "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                                "DISTRIBUTED BY RANDOM\n" +
+                                "PROPERTIES(\n" +
+                                "    \"replication_num\" = \"1\"\n" +
+                                ");")
+                    .withTable("CREATE TABLE site_access_empty (\n" +
+                                "    event_day DATETIME NOT NULL,\n" +
+                                "    site_id INT DEFAULT '10',\n" +
+                                "    city_code VARCHAR(100),\n" +
+                                "    user_name VARCHAR(32) DEFAULT '',\n" +
+                                "    pv BIGINT DEFAULT '0'\n" +
+                                ")\n" +
+                                "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                                "PARTITION BY date_trunc('day', event_day)\n" +
+                                "DISTRIBUTED BY HASH(event_day, site_id)\n" +
+                                "PROPERTIES(\n" +
+                                "    \"replication_num\" = \"1\"\n" +
+                                ");")
+                    .withTable("CREATE TABLE site_access_border (\n" +
+                                "    event_day DATETIME NOT NULL,\n" +
+                                "    site_id INT DEFAULT '10',\n" +
+                                "    city_code VARCHAR(100),\n" +
+                                "    user_name VARCHAR(32) DEFAULT '',\n" +
+                                "    pv BIGINT DEFAULT '0'\n" +
+                                ")\n" +
+                                "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                                "PARTITION BY date_trunc('day', event_day)\n" +
+                                "DISTRIBUTED BY HASH(event_day, site_id)\n" +
+                                "PROPERTIES(\n" +
+                                "    \"replication_num\" = \"1\"\n" +
+                                ");")
+                    .withTable("CREATE TABLE site_access_hour (\n" +
+                                "    event_day DATETIME,\n" +
+                                "    site_id INT DEFAULT '10',\n" +
+                                "    city_code VARCHAR(100),\n" +
+                                "    user_name VARCHAR(32) DEFAULT '',\n" +
+                                "    pv BIGINT DEFAULT '0'\n" +
+                                ")\n" +
+                                "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                                "PARTITION BY date_trunc('hour', event_day)\n" +
+                                "DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 32\n" +
+                                "PROPERTIES (\n" +
+                                "\"replication_num\" = \"1\"\n" +
+                                ");")
+                    .withTable("CREATE TABLE site_access_day (\n" +
+                                "    event_day DATE,\n" +
+                                "    site_id INT DEFAULT '10',\n" +
+                                "    city_code VARCHAR(100),\n" +
+                                "    user_name VARCHAR(32) DEFAULT '',\n" +
+                                "    pv BIGINT DEFAULT '0'\n" +
+                                ")\n" +
+                                "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                                "PARTITION BY date_trunc('day', event_day) (\n" +
+                                "START (\"2020-06-01\") END (\"2022-06-05\") EVERY (INTERVAL 1 day)\n" +
+                                ")\n" +
+                                "DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 32\n" +
+                                "PROPERTIES (\n" +
+                                "\"replication_num\" = \"1\"\n" +
+                                ");")
+                    .withTable("CREATE TABLE site_access_month (\n" +
+                                "    event_day DATE,\n" +
+                                "    site_id INT DEFAULT '10',\n" +
+                                "    city_code VARCHAR(100),\n" +
+                                "    user_name VARCHAR(32) DEFAULT '',\n" +
+                                "    pv BIGINT DEFAULT '0'\n" +
+                                ")\n" +
+                                "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                                "PARTITION BY date_trunc('month', event_day) (\n" +
+                                ")\n" +
+                                "DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 32\n" +
+                                "PROPERTIES (\n" +
+                                "\"replication_num\" = \"1\"\n" +
+                                ");")
+                    .withTable("CREATE TABLE site_access_slice (\n" +
+                                "    event_day datetime,\n" +
+                                "    site_id INT DEFAULT '10',\n" +
+                                "    city_code VARCHAR(100),\n" +
+                                "    user_name VARCHAR(32) DEFAULT '',\n" +
+                                "    pv BIGINT DEFAULT '0'\n" +
+                                ")\n" +
+                                "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                                "PARTITION BY time_slice(event_day, interval 5 day)\n" +
+                                "DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 32\n" +
+                                "PROPERTIES(\"replication_num\" = \"1\");")
+                    .withTable("CREATE TABLE site_access_list (\n" +
+                                "    event_day DATE not null,\n" +
+                                "    site_id INT DEFAULT '10',\n" +
+                                "    city_code VARCHAR(100),\n" +
+                                "    user_name VARCHAR(32) DEFAULT '',\n" +
+                                "    pv BIGINT DEFAULT '0'\n" +
+                                ")\n" +
+                                "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                                "PARTITION BY (event_day) (\n" +
+                                ")\n" +
+                                "DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 32\n" +
+                                "PROPERTIES (\n" +
+                                "\"replication_num\" = \"1\"\n" +
+                                ");")
+                    .withTable("CREATE TABLE test_load (\n" +
+                                "    id INT\n" +
+                                ")\n" +
+                                "DUPLICATE KEY(id)\n" +
+                                "DISTRIBUTED BY HASH(id) BUCKETS 1\n" +
+                                "PROPERTIES(\"replication_num\" = \"1\");")
+                    .withView("create view v as select * from site_access_empty")
+                    .withView("create view v1 as select current_role()")
+                    .withView("create view v2 as select current_user()")
+                    .withView("create view v3 as select database()")
+                    .withView("create view v4 as select user()")
+                    .withView("create view v5 as select CONNECTION_ID()")
+                    .withView("create view v6 as select CATALOG()")
+>>>>>>> ab5c0bb4db ([BugFix] Fix transaction stream load not update load rows state (#65079))
 
                 .withMaterializedView("create materialized view mv refresh async as select * from site_access_empty");
     }
@@ -734,7 +904,11 @@ public class FrontendServiceImplTest {
         params.setCurrent_user_ident(tUserIdentity);
 
         TGetTablesResult result = impl.getTableNames(params);
+<<<<<<< HEAD
         Assert.assertEquals(17, result.tables.size());
+=======
+        Assertions.assertEquals(18, result.tables.size());
+>>>>>>> ab5c0bb4db ([BugFix] Fix transaction stream load not update load rows state (#65079))
     }
 
     @Test
@@ -1137,7 +1311,154 @@ public class FrontendServiceImplTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testLoadTxnCommitRateLimitExceeded() throws UserException, TException, LockTimeoutException {
+=======
+    public void testLoadTxnPrepare() throws TException {
+        FrontendServiceImpl impl = spy(new FrontendServiceImpl(exeEnv));
+        TNetworkAddress address = new TNetworkAddress();
+        address.setHostname("127.0.0.1");
+        address.setPort(9030);
+        doReturn(address).when(impl).getClientAddr();
+
+        String db = "test";
+        String table = "test_load";
+        long txnId = testBeginAndPutTxn(impl, db, table);
+        TLoadTxnCommitRequest request = buildCommitRequest(txnId, db, table);
+        TLoadTxnCommitResult result = impl.loadTxnPrepare(request);
+        assertEquals(TStatusCode.OK, result.getStatus().status_code);
+
+        StreamLoadTask streamLoadTask =
+                GlobalStateMgr.getCurrentState().getStreamLoadMgr().getSyncSteamLoadTaskByTxnId(txnId);
+        Assertions.assertNotNull(streamLoadTask);
+        List<TLoadInfo> loadInfos = streamLoadTask.toThrift();
+        Assertions.assertNotNull(loadInfos);
+        Assertions.assertEquals(1, loadInfos.size());
+        TLoadInfo loadInfo = loadInfos.get(0);
+        Assertions.assertEquals("", loadInfo.getError_msg());
+        Assertions.assertEquals(2, loadInfo.getNum_sink_rows());
+        Assertions.assertEquals(1, loadInfo.getNum_filtered_rows());
+    }
+
+    @Test
+    public void testLoadTxnCommit() throws TException {
+        FrontendServiceImpl impl = spy(new FrontendServiceImpl(exeEnv));
+        TNetworkAddress address = new TNetworkAddress();
+        address.setHostname("127.0.0.1");
+        address.setPort(9030);
+        doReturn(address).when(impl).getClientAddr();
+
+        String db = "test";
+        String table = "test_load";
+        long txnId = testBeginAndPutTxn(impl, db, table);
+        TLoadTxnCommitRequest request = buildCommitRequest(txnId, db, table);
+        TLoadTxnCommitResult result = impl.loadTxnCommit(request);
+        if (result.getStatus().status_code == TStatusCode.OK) {
+            StreamLoadTask streamLoadTask =
+                    GlobalStateMgr.getCurrentState().getStreamLoadMgr().getSyncSteamLoadTaskByTxnId(txnId);
+            Assertions.assertNotNull(streamLoadTask);
+            List<TLoadInfo> loadInfos = streamLoadTask.toThrift();
+            Assertions.assertNotNull(loadInfos);
+            Assertions.assertEquals(1, loadInfos.size());
+            TLoadInfo loadInfo = loadInfos.get(0);
+            Assertions.assertEquals("", loadInfo.getError_msg());
+            Assertions.assertEquals(2, loadInfo.getNum_sink_rows());
+            Assertions.assertEquals(1, loadInfo.getNum_filtered_rows());
+        }
+    }
+
+    @Test
+    public void testLoadTxnRollback() throws TException {
+        FrontendServiceImpl impl = spy(new FrontendServiceImpl(exeEnv));
+        TNetworkAddress address = new TNetworkAddress();
+        address.setHostname("127.0.0.1");
+        address.setPort(9030);
+        doReturn(address).when(impl).getClientAddr();
+
+        String db = "test";
+        String table = "test_load";
+        long txnId = testBeginAndPutTxn(impl, db, table);
+        TLoadTxnRollbackRequest request = new TLoadTxnRollbackRequest();
+        request.setDb("test");
+        request.setTbl("test_load");
+        request.setTxnId(txnId);
+        request.setReason("artificial failure");
+        TManualLoadTxnCommitAttachment loadAttachment = new TManualLoadTxnCommitAttachment();
+        loadAttachment.setLoadedRows(2);
+        loadAttachment.setFilteredRows(1);
+        TTxnCommitAttachment txnAttachment = new TTxnCommitAttachment();
+        txnAttachment.setLoadType(TLoadType.MANUAL_LOAD);
+        txnAttachment.setManualLoadTxnCommitAttachment(loadAttachment);
+        request.setTxnCommitAttachment(txnAttachment);
+        request.setAuth_code(100);
+        TLoadTxnRollbackResult result = impl.loadTxnRollback(request);
+        assertEquals(TStatusCode.OK, result.getStatus().status_code);
+
+        StreamLoadTask streamLoadTask =
+                GlobalStateMgr.getCurrentState().getStreamLoadMgr().getSyncSteamLoadTaskByTxnId(txnId);
+        Assertions.assertNotNull(streamLoadTask);
+        List<TLoadInfo> loadInfos = streamLoadTask.toThrift();
+        Assertions.assertNotNull(loadInfos);
+        Assertions.assertEquals(1, loadInfos.size());
+        TLoadInfo loadInfo = loadInfos.get(0);
+        Assertions.assertEquals("artificial failure", loadInfo.getError_msg());
+        Assertions.assertEquals(2, loadInfo.getNum_sink_rows());
+        Assertions.assertEquals(1, loadInfo.getNum_filtered_rows());
+    }
+
+    private long testBeginAndPutTxn(FrontendServiceImpl impl, String db, String table) throws TException {
+        TLoadTxnBeginRequest beginRequest = new TLoadTxnBeginRequest();
+        beginRequest.setLabel(UUID.randomUUID().toString());
+        beginRequest.setDb(db);
+        beginRequest.setTbl(table);
+        beginRequest.setUser("root");
+        beginRequest.setPasswd("");
+        TLoadTxnBeginResult beginResult = impl.loadTxnBegin(beginRequest);
+        assertEquals(TStatusCode.OK, beginResult.getStatus().getStatus_code());
+
+        TUniqueId loadId = UUIDUtil.genTUniqueId();
+        TStreamLoadPutRequest putRequest = new TStreamLoadPutRequest();
+        putRequest.setDb(db);
+        putRequest.setTbl(table);
+        putRequest.setTxnId(beginResult.getTxnId());
+        putRequest.setLoadId(loadId);
+        putRequest.setFileType(FILE_STREAM);
+        putRequest.setAuth_code(100);
+        TStreamLoadPutResult putResult = impl.streamLoadPut(putRequest);
+        assertEquals(TStatusCode.OK, putResult.getStatus().status_code);
+        return beginResult.getTxnId();
+    }
+
+    private TLoadTxnCommitRequest buildCommitRequest(long txnId, String db, String table) {
+        TLoadTxnCommitRequest request = new TLoadTxnCommitRequest();
+        request.setDb("test");
+        request.setTbl("test_load");
+        request.setTxnId(txnId);
+        List<TTabletCommitInfo> commitInfos = new ArrayList<>();
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db, table);
+        tbl.getAllPhysicalPartitions().stream().map(PhysicalPartition::getBaseIndex)
+                .map(MaterializedIndex::getTablets).flatMap(List::stream).forEach(tablet -> {
+                    TTabletCommitInfo commitInfo = new TTabletCommitInfo();
+                    commitInfo.setTabletId(tablet.getId());
+                    commitInfo.setBackendId(tablet.getBackendIds().iterator().next());
+                    commitInfos.add(commitInfo);
+                });
+        request.setCommitInfos(commitInfos);
+        TManualLoadTxnCommitAttachment loadAttachment = new TManualLoadTxnCommitAttachment();
+        loadAttachment.setLoadedRows(2);
+        loadAttachment.setFilteredRows(1);
+        TTxnCommitAttachment txnAttachment = new TTxnCommitAttachment();
+        txnAttachment.setLoadType(TLoadType.MANUAL_LOAD);
+        txnAttachment.setManualLoadTxnCommitAttachment(loadAttachment);
+        request.setTxnCommitAttachment(txnAttachment);
+        request.setAuth_code(100);
+        request.setThrift_rpc_timeout_ms(500);
+        return request;
+    }
+
+    @Test
+    public void testLoadTxnCommitRateLimitExceeded() throws StarRocksException, TException, LockTimeoutException {
+>>>>>>> ab5c0bb4db ([BugFix] Fix transaction stream load not update load rows state (#65079))
         FrontendServiceImpl impl = spy(new FrontendServiceImpl(exeEnv));
         TLoadTxnCommitRequest request = new TLoadTxnCommitRequest();
         request.db = "test";
