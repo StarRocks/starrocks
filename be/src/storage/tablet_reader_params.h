@@ -109,9 +109,6 @@ struct TabletReaderParams {
     bool enable_join_runtime_filter_pushdown = false;
     bool enable_predicate_col_late_materialize = false;
 
-    // Whether the scan operator has TopN runtime filter
-    bool has_topn_filter = false;
-
 public:
     std::string to_string() const;
 };
