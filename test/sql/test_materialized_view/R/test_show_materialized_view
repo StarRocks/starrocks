@@ -2,6 +2,12 @@
 set enable_rewrite_bitmap_union_to_bitamp_agg = false;
 -- result:
 -- !result
+set new_planner_optimize_timeout=10000;
+-- result:
+-- !result
+set enable_evaluate_schema_scan_rule=false;
+-- result:
+-- !result
 create database test_show_materialized_view;
 -- result:
 -- !result
@@ -81,6 +87,10 @@ FROM `test_show_materialized_view`.`user_tags`
 GROUP BY `user_tags`.`user_id`;
 -- !result
 refresh materialized view user_tags_mv1 with sync mode;
+function: wait_show_materialized_view_finish('user_tags_mv1')
+-- result:
+None
+-- !result
 select 
     TABLE_NAME,
     LAST_REFRESH_STATE,
@@ -89,15 +99,18 @@ select
     INACTIVE_REASON
 from information_schema.materialized_views where table_name = 'user_tags_mv1';
 -- result:
-user_tags_mv1	SUCCESS	0	true	
 -- !result
 set @last_refresh_time = (
     select max(last_refresh_start_time)
-    from information_schema.materialized_views where table_name = 'user_tags_mv1'
+    from information_schema.materialized_views where table_name = 'user_tags_mv1' and TABLE_SCHEMA = 'test_show_materialized_view'
 );
 -- result:
 -- !result
 refresh materialized view user_tags_mv1 force with sync mode;
+function: wait_show_materialized_view_finish('user_tags_mv1')
+-- result:
+None
+-- !result
 select 
     TABLE_NAME,
     LAST_REFRESH_STATE,
@@ -106,7 +119,7 @@ select
     INACTIVE_REASON
 from information_schema.materialized_views where table_name = 'user_tags_mv1';
 -- result:
-user_tags_mv1	SUCCESS	0	true	
+user_tags_mv1	SUCCESS	0	true	None
 -- !result
 set @this_refresh_time = (
     select max(last_refresh_start_time)
