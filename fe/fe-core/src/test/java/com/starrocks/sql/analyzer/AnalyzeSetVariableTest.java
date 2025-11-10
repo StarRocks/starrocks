@@ -29,18 +29,11 @@ import com.starrocks.thrift.TWorkGroup;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import com.uber.m3.util.ImmutableMap;
-<<<<<<< HEAD
-import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
-=======
-import mockit.Mock;
-import mockit.MockUp;
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.Test;
->>>>>>> 558fba5c7e ([UT] Fix unstable UT (#64454))
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSetUserVariableFail;
