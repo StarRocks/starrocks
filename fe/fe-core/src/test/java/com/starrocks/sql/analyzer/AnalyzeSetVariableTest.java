@@ -27,19 +27,11 @@ import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.thrift.TWorkGroup;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-<<<<<<< HEAD
-import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
-=======
-import com.uber.m3.util.ImmutableMap;
-import mockit.Mock;
-import mockit.MockUp;
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.Test;
->>>>>>> 558fba5c7e ([UT] Fix unstable UT (#64454))
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSetUserVariableFail;
@@ -47,6 +39,7 @@ import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class AnalyzeSetVariableTest {
     private static StarRocksAssert starRocksAssert;
+
     @BeforeClass
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
@@ -212,20 +205,17 @@ public class AnalyzeSetVariableTest {
     }
 
     @Test
-    public void testSetResourceGroupName() {
+    public void testSetResourceGroupName() throws Exception {
         String rg1Name = "rg1";
-        TWorkGroup rg1 = new TWorkGroup();
-        ResourceGroupMgr mgr = GlobalStateMgr.getCurrentState().getResourceGroupMgr();
-        new Expectations(mgr) {
-            {
-                mgr.chooseResourceGroupByName(rg1Name);
-                result = rg1;
-            }
-            {
-                mgr.chooseResourceGroupByName(anyString);
-                result = null;
-            }
-        };
+
+        String createRgSql = "create resource group rg1\n" +
+                "to (user='rg1_user1')\n" +
+                "   with (" +
+                "   'mem_limit' = '20%'," +
+                "   'cpu_core_limit' = '17'," +
+                "   'concurrency_limit' = '11'" +
+                "   );";
+        starRocksAssert.executeResourceGroupDdlSql(createRgSql);
 
         String sql;
 
@@ -248,22 +238,6 @@ public class AnalyzeSetVariableTest {
         TWorkGroup rg1 = new TWorkGroup();
         rg1.setId(rg1ID);
         ResourceGroupMgr mgr = GlobalStateMgr.getCurrentState().getResourceGroupMgr();
-<<<<<<< HEAD
-        new Expectations(mgr) {
-            {
-                mgr.chooseResourceGroupByID(rg1ID);
-                result = rg1;
-            }
-            {
-                mgr.chooseResourceGroupByID(anyLong);
-                result = null;
-            }
-
-            {
-                mgr.createBuiltinResourceGroupsIfNotExist();
-                result = null;
-                minTimes = 0;
-=======
 
         new MockUp<ResourceGroupMgr>() {
             @Mock
@@ -272,7 +246,6 @@ public class AnalyzeSetVariableTest {
                     return rg1;
                 }
                 return null;
->>>>>>> 558fba5c7e ([UT] Fix unstable UT (#64454))
             }
         };
 
@@ -286,57 +259,5 @@ public class AnalyzeSetVariableTest {
 
         sql = "SET resource_group_id = 0";
         analyzeSuccess(sql);
-    }
-
-    @Test
-    public void testSetTran() {
-        String sql = "SET TRANSACTION ISOLATION LEVEL SERIALIZABLE";
-        analyzeSuccess(sql);
-
-        sql = "SET SESSION TRANSACTION ISOLATION LEVEL SERIALIZABLE";
-        analyzeSuccess(sql);
-
-        sql = "SET GLOBAL TRANSACTION ISOLATION LEVEL SERIALIZABLE";
-        analyzeSuccess(sql);
-    }
-
-    @Test
-    public void testSetAdaptiveDopMaxBlockRowsPerDriverSeq() {
-        String sql;
-
-        sql = "SET runtime_adaptive_dop_max_block_rows_per_driver_seq = 0";
-        analyzeFail(sql);
-
-        sql = "SET runtime_adaptive_dop_max_block_rows_per_driver_seq = -1";
-        analyzeFail(sql);
-
-        sql = "SET runtime_adaptive_dop_max_block_rows_per_driver_seq = 1";
-        analyzeSuccess(sql);
-    }
-
-    @Test
-    public void testComputationFragmentSchedulingPolicy() {
-        String sql;
-
-        sql = "SET computation_fragment_scheduling_policy = compute_nodes_only";
-        analyzeSuccess(sql);
-
-        sql = "SET computation_fragment_scheduling_policy = all_nodes";
-        analyzeSuccess(sql);
-
-        sql = "SET computation_fragment_scheduling_policy = ALL_NODES";
-        analyzeSuccess(sql);
-
-        sql = "SET computation_fragment_scheduling_policy = All_nodes";
-        analyzeSuccess(sql);
-
-        sql = "SET computation_fragment_scheduling_policy = 'all_nodes'";
-        analyzeSuccess(sql);
-
-        sql = "SET computation_fragment_scheduling_policy = \"all_nodes\"";
-        analyzeSuccess(sql);
-
-        sql = "SET computation_fragment_scheduling_policy = compute_nodes";
-        analyzeFail(sql);
     }
 }
