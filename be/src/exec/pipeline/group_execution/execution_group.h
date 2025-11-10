@@ -28,6 +28,16 @@
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
+
+// Synchronization context for parallel driver preparation
+// Use shared_ptr to manage lifecycle and avoid use-after-free
+struct DriverPrepareSyncContext {
+    std::mutex mutex;
+    std::condition_variable cv;
+    std::atomic<std::shared_ptr<Status>> first_error{nullptr};
+    std::atomic<int> pending_tasks{0};
+};
+
 // execution group is a collection of pipelines
 // clang-format off
 template <typename T>
@@ -85,9 +95,8 @@ public:
 
     size_t total_active_driver_size();
 
-    void prepare_active_drivers_parallel(RuntimeState* state, std::atomic<int>& pending_tasks,
-                                         std::mutex& completion_mutex, std::condition_variable& completion_cv,
-                                         std::atomic<std::shared_ptr<Status>>& first_error);
+    void prepare_active_drivers_parallel(RuntimeState* state,
+                                         std::shared_ptr<DriverPrepareSyncContext> sync_ctx);
 
     Status prepare_active_drivers_sequentially(RuntimeState* state);
 
