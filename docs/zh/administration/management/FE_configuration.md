@@ -733,11 +733,11 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### txn_latency_metric_report_groups
 
-- 默认值: ""
-- 类型: String
-- 单位: -
+- 默认值：空字符串
+- 类型：String
+- 单位：-
 - 是否可变: 是
-- 描述:  一个逗号分隔的列表，包含要汇报的事务延迟监控指标 `group`。导入类型被归类为用于监控的 `group`，被启用的 `group` 其名称会作为 'type' 标签添加到监控指标中。常见的 `group` 包括 'stream_load'、'routine_load'、'broker_load'、'insert'，以及 'compaction' (适用于存算分离集群)。例如："stream_load,routine_load"。
+- 描述：需要汇报的事务延迟监控指标组，多个指标组通过逗号分隔。导入类型基于监控组分类，被启用的组其名称会作为 'type' 标签添加到监控指标中。常见的组包括 `stream_load`、`routine_load`、`broker_load`、`insert`，以及 `compaction` (仅适用于存算分离集群)。示例：`"stream_load,routine_load"`。
 - 引入版本: v4.0
 
 ### 用户，角色及权限
