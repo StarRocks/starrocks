@@ -1382,7 +1382,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### tablet_map_shard_size
 
-- Default: 32
+- Default: 1024
 - Type: Int
 - Unit: -
 - Is mutable: No
