@@ -200,6 +200,11 @@ public class Config extends ConfigBase {
     public static String internal_log_roll_interval = "DAY";
     @ConfField
     public static String internal_log_delete_age = "7d";
+<<<<<<< HEAD
+=======
+    @ConfField(mutable = true)
+    public static boolean internal_log_json_format = false;
+>>>>>>> 91fa785551 ([Enhancement] Make internal_log_json_format mutable for dynamic cofiguration (#64808))
 
     /**
      * dump_log_dir:
