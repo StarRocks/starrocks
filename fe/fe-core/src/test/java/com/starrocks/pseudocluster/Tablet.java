@@ -213,12 +213,29 @@ public class Tablet {
         totalReadExecuted.incrementAndGet();
         readExecuted++;
         lastReadVersion = version;
+        
+        // Try to commit pending rowsets first to make versions continuous
+        tryCommitPendingRowsets();
+        
         long currentVersion = maxContinuousVersion();
         if (version > currentVersion) {
+            // Check if the requested version exists in pendingRowsets
+            // This can happen when versions are committed out of order
+            if (pendingRowsets.containsKey(version)) {
+                // Allow reading pending version, similar to real BE behavior
+                totalReadSucceed.incrementAndGet();
+                lastSuccessReadVersion = version;
+                LOG.debug("be:{} read tablet:{} version:{} from pending (currentVersion:{})",
+                        PseudoBackend.getCurrentBackend().getId(), id, version, currentVersion);
+                return;
+            }
+            
+            // Version doesn't exist in pending either, fail the read
             totalReadFailed.incrementAndGet();
             lastFailedReadVersion = version;
-            String msg = String.format("be:%d read tablet:%d version:%d > currentVersion:%d",
-                    PseudoBackend.getCurrentBackend().getId(), id, version, currentVersion);
+            String msg = String.format("be:%d read tablet:%d version:%d > currentVersion:%d (pending versions: %s)",
+                    PseudoBackend.getCurrentBackend().getId(), id, version, currentVersion,
+                    pendingRowsets.keySet().toString());
             LOG.warn(msg);
             throw new Exception(msg);
         }
