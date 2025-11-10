@@ -434,6 +434,9 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
                                        ? CpuInfo::num_cores()
                                        : config::pipeline_scan_thread_pool_thread_num;
     int connector_num_io_threads = int(config::pipeline_connector_scan_thread_num_per_cpu * CpuInfo::num_cores());
+#ifdef BE_TEST
+    connector_num_io_threads = std::min(connector_num_io_threads, 2);
+#endif
     CHECK_GT(connector_num_io_threads, 0) << "pipeline_connector_scan_thread_num_per_cpu should greater than 0";
 
     if (config::hdfs_client_enable_hedged_read) {
