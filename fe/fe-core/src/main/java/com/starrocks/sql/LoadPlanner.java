@@ -223,6 +223,11 @@ public class LoadPlanner {
         this.enableDictOptimize = Config.enable_dict_optimize_stream_load;
         this.startTime = System.currentTimeMillis();
         this.sessionVariables = sessionVariables;
+<<<<<<< HEAD
+=======
+        this.computeResource = streamLoadInfo.getComputeResource();
+        this.mergeConditionStr = streamLoadInfo.getMergeConditionStr();
+>>>>>>> 7251908714 ([BugFix] Support merge condition when enabling merge commit (#63817))
     }
 
     public LoadPlanner(long loadJobId, TUniqueId loadId, long txnId, long dbId, String dbName, OlapTable destTable,
