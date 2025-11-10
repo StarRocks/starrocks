@@ -395,26 +395,15 @@ public class RoutineLoadJobTest {
     }
 
     @Test
-    public void testGetShowInfoSharedData(@Mocked GlobalStateMgr globalStateMgr,
-                                          @Mocked WarehouseManager warehouseManager) throws StarRocksException {
+    public void testGetShowInfoSharedData() {
         new MockUp<RunMode>() {
             @Mock
             public RunMode getCurrentRunMode() {
                 return RunMode.SHARED_DATA;
             }
         };
-
-        new Expectations() {
-            {
-                globalStateMgr.getWarehouseMgr();
-                result = warehouseManager;
-                warehouseManager.getWarehouse(0L);
-                result = new DefaultWarehouse(0, "default_warehouse");
-                warehouseManager.getWarehouse(1L);
-                result = new Exception("Warehouse id: 1 not exist");
-            }
-        };
-
+        GlobalStateMgr.getCurrentState().getWarehouseMgr().initDefaultWarehouse();
+        
         KafkaRoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
         routineLoadJob.setWarehouseId(0L);
         List<String> showInfo = routineLoadJob.getShowInfo();
@@ -423,7 +412,7 @@ public class RoutineLoadJobTest {
 
         routineLoadJob.setWarehouseId(1L);
         showInfo = routineLoadJob.getShowInfo();
-        Assertions.assertEquals("Warehouse id: 1 not exist", showInfo.get(20));
+        Assertions.assertEquals("Warehouse id: 1 not exist.", showInfo.get(20));
     }
 
     @Test
