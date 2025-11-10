@@ -1534,7 +1534,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
 
     public String toRuntimeDetails() {
         TreeMap<String, Object> runtimeDetails = Maps.newTreeMap();
-        if (!clientIp.equals("")) {
+        if (clientIp != null && !clientIp.isEmpty()) {
             runtimeDetails.put(LoadConstants.RUNTIME_DETAILS_CLIENT_IP, clientIp);
         }
         runtimeDetails.put(LoadConstants.RUNTIME_DETAILS_LOAD_ID, DebugUtil.printId(loadId));
