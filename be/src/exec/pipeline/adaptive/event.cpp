@@ -128,26 +128,29 @@ void CollectStatsSourceInitializeEvent::process(RuntimeState* state) {
         }
 
         // Prepare operators' local state in parallel way
-        std::mutex completion_mutex;
-        std::condition_variable completion_cv;
-        std::atomic<std::shared_ptr<Status>> first_error(nullptr);
-
-        std::atomic<int> pending_tasks(static_cast<int>(all_drivers.size()));
+        // Use shared_ptr to manage sync context lifecycle to avoid use-after-free
+        struct SyncContext {
+            std::mutex mutex;
+            std::condition_variable cv;
+            std::atomic<std::shared_ptr<Status>> first_error{nullptr};
+            std::atomic<int> pending_tasks{0};
+        };
+        auto sync_ctx = std::make_shared<SyncContext>();
+        sync_ctx->pending_tasks = static_cast<int>(all_drivers.size());
 
         for (auto& driver : all_drivers) {
-            auto task_fn = [&driver, runtime_state = state, &pending_tasks, &completion_mutex, &completion_cv,
-                            &first_error]() {
+            auto task_fn = [&driver, runtime_state = state, sync_ctx]() {
                 SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(runtime_state->instance_mem_tracker());
                 Status st = driver->prepare_local_state(runtime_state);
                 if (!st.ok()) {
                     auto error_ptr = std::make_shared<Status>(std::move(st));
                     std::shared_ptr<Status> expected = nullptr;
-                    (void)first_error.compare_exchange_strong(expected, error_ptr);
+                    (void)sync_ctx->first_error.compare_exchange_strong(expected, error_ptr);
                 }
 
-                if (pending_tasks.fetch_sub(1) == 1) {
-                    std::lock_guard<std::mutex> l(completion_mutex);
-                    completion_cv.notify_all();
+                if (sync_ctx->pending_tasks.fetch_sub(1) == 1) {
+                    std::lock_guard<std::mutex> l(sync_ctx->mutex);
+                    sync_ctx->cv.notify_all();
                 }
             };
 
@@ -159,11 +162,11 @@ void CollectStatsSourceInitializeEvent::process(RuntimeState* state) {
 
         // Wait for all tasks to finish
         {
-            std::unique_lock<std::mutex> lock(completion_mutex);
-            completion_cv.wait(lock, [&pending_tasks] { return pending_tasks.load() == 0; });
+            std::unique_lock<std::mutex> lock(sync_ctx->mutex);
+            sync_ctx->cv.wait(lock, [&sync_ctx] { return sync_ctx->pending_tasks.load() == 0; });
         }
 
-        Status* error = first_error.load().get();
+        Status* error = sync_ctx->first_error.load().get();
         if (error != nullptr) {
             return *error;
         }

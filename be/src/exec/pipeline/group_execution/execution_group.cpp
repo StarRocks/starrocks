@@ -71,15 +71,13 @@ size_t ExecutionGroup::total_active_driver_size() {
     return total;
 }
 
-void ExecutionGroup::prepare_active_drivers_parallel(RuntimeState* state, std::atomic<int>& pending_tasks,
-                                                     std::mutex& completion_mutex,
-                                                     std::condition_variable& completion_cv,
-                                                     std::atomic<std::shared_ptr<Status>>& first_error) {
+void ExecutionGroup::prepare_active_drivers_parallel(RuntimeState* state,
+                                                     std::shared_ptr<DriverPrepareSyncContext> sync_ctx) {
     auto pipeline_prepare_pool = state->exec_env()->pipeline_prepare_pool();
 
     for_each_active_driver(_pipelines, [&](const DriverPtr& driver) {
         bool submitted = pipeline_prepare_pool->try_offer(
-                [&pending_tasks, &completion_mutex, &completion_cv, &first_error, &driver, runtime_state = state]() {
+                [sync_ctx, &driver, runtime_state = state]() {
                     // make sure mem tracker is instance level
                     auto mem_tracker = runtime_state->instance_mem_tracker();
                     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker);
@@ -88,12 +86,12 @@ void ExecutionGroup::prepare_active_drivers_parallel(RuntimeState* state, std::a
 
                     if (!status.ok()) {
                         std::shared_ptr<Status> expected = nullptr;
-                        first_error.compare_exchange_strong(expected, std::make_shared<Status>(status));
+                        sync_ctx->first_error.compare_exchange_strong(expected, std::make_shared<Status>(status));
                     }
 
-                    if (pending_tasks.fetch_sub(1) == 1) {
-                        std::lock_guard<std::mutex> lock(completion_mutex);
-                        completion_cv.notify_one();
+                    if (sync_ctx->pending_tasks.fetch_sub(1) == 1) {
+                        std::lock_guard<std::mutex> lock(sync_ctx->mutex);
+                        sync_ctx->cv.notify_one();
                     }
                 });
 
@@ -101,12 +99,12 @@ void ExecutionGroup::prepare_active_drivers_parallel(RuntimeState* state, std::a
             Status status = driver->prepare_local_state(state);
             if (!status.ok()) {
                 std::shared_ptr<Status> expected = nullptr;
-                first_error.compare_exchange_strong(expected, std::make_shared<Status>(status));
+                sync_ctx->first_error.compare_exchange_strong(expected, std::make_shared<Status>(status));
             }
 
-            if (pending_tasks.fetch_sub(1) == 1) {
-                std::lock_guard<std::mutex> lock(completion_mutex);
-                completion_cv.notify_one();
+            if (sync_ctx->pending_tasks.fetch_sub(1) == 1) {
+                std::lock_guard<std::mutex> lock(sync_ctx->mutex);
+                sync_ctx->cv.notify_one();
             }
         }
     });

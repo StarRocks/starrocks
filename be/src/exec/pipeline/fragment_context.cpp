@@ -479,23 +479,21 @@ Status FragmentContext::prepare_active_drivers() {
 
     // prepare pipeline-driver parallelly
     // only do prepare operation that is thread safe in prepare_operators_local_state
-    std::mutex completion_mutex;
-    std::condition_variable completion_cv;
-    std::atomic<std::shared_ptr<Status>> first_error(nullptr);
+    // Use shared_ptr to manage sync context lifecycle to avoid use-after-free
+    auto sync_ctx = std::make_shared<DriverPrepareSyncContext>();
+    sync_ctx->pending_tasks = total_active_driver_size;
 
-    std::atomic<int> pending_tasks(total_active_driver_size);
     for (auto& group : _execution_groups) {
-        group->prepare_active_drivers_parallel(runtime_state(), pending_tasks, completion_mutex, completion_cv,
-                                               first_error);
+        group->prepare_active_drivers_parallel(runtime_state(), sync_ctx);
     }
 
     // wait for all the tasks finished
     {
-        std::unique_lock<std::mutex> lock(completion_mutex);
-        completion_cv.wait(lock, [&pending_tasks] { return pending_tasks.load() == 0; });
+        std::unique_lock<std::mutex> lock(sync_ctx->mutex);
+        sync_ctx->cv.wait(lock, [&sync_ctx] { return sync_ctx->pending_tasks.load() == 0; });
     }
 
-    Status* error = first_error.load().get();
+    Status* error = sync_ctx->first_error.load().get();
     if (error != nullptr) {
         return *error;
     }
