@@ -223,6 +223,7 @@ public class LoadPlanner {
         this.enableDictOptimize = Config.enable_dict_optimize_stream_load;
         this.startTime = System.currentTimeMillis();
         this.sessionVariables = sessionVariables;
+        this.mergeConditionStr = streamLoadInfo.getMergeConditionStr();
     }
 
     public LoadPlanner(long loadJobId, TUniqueId loadId, long txnId, long dbId, String dbName, OlapTable destTable,
