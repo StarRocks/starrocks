@@ -62,6 +62,7 @@ import com.starrocks.datacache.DataCacheSelectMetrics;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.planner.DescriptorTable;
+import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.ResultSink;
@@ -544,6 +545,12 @@ public class DefaultCoordinator extends Coordinator {
         return jobSpec.getScanNodes();
     }
 
+    private boolean hasOlapTableSink() {
+        return executionDAG.getFragmentsInPostorder().stream()
+                .anyMatch(fragment -> fragment.getPlanFragment().getSink()
+                        instanceof OlapTableSink);
+    }
+
     @Override
     public void startScheduling(ScheduleOption option) throws StarRocksException, InterruptedException, RpcException {
         try (Timer timer = Tracers.watchScope(Tracers.Module.SCHEDULER, "Pending")) {
@@ -677,7 +684,7 @@ public class DefaultCoordinator extends Coordinator {
 
     private void maybeChangeScheduler() {
         if (executionDAG.getWorkerNum() == 1 && jobSpec.supportSingleNodeParallelSchedule() &&
-                scheduler instanceof AllAtOnceExecutionSchedule && !isLoadType()) {
+                scheduler instanceof AllAtOnceExecutionSchedule && !isLoadType() && !hasOlapTableSink()) {
             scheduler = new SingleNodeSchedule();
         }
     }
