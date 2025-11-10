@@ -13,7 +13,7 @@ displayed_sidebar: docs
 
 ## 3.5.8
 
-Release date: November 7, 2025
+Release date: November 10, 2025
 
 ### Improvements
 
