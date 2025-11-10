@@ -167,14 +167,24 @@ public:
 // PercentileApproxWeightedAggregateFunction: percentile_approx_weighted(expr, weight, DOUBLE p[, DOUBLE compression])
 class PercentileApproxWeightedAggregateFunction final : public PercentileApproxAggregateFunctionBase {
 public:
+    // SplitAggregateRule pass the const args to merge phase aggregator for performance.
+    // Compression parameter is always the last constant parameter (if provided)
     double get_compression_factor(FunctionContext* ctx) const override {
         double compression = DEFAULT_COMPRESSION_FACTOR;
-        if (ctx->get_num_args() > 3) {
-            compression = ColumnHelper::get_const_value<TYPE_DOUBLE>(ctx->get_constant_column(3));
-            if (compression < MIN_COMPRESSION || compression > MAX_COMPRESSION) {
-                LOG(WARNING) << "Compression factor out of range. Using default compression factor: "
-                             << DEFAULT_COMPRESSION_FACTOR;
-                compression = DEFAULT_COMPRESSION_FACTOR;
+        int num_args = ctx->get_num_args();
+        if (num_args > 3) {
+            for (int i = num_args - 1; i >= 0; i--) {
+                auto const_col = ctx->get_constant_column(i);
+                if (const_col != nullptr) {
+                    // Found the last constant column, this should be compression
+                    compression = ColumnHelper::get_const_value<TYPE_DOUBLE>(const_col);
+                    if (compression < MIN_COMPRESSION || compression > MAX_COMPRESSION) {
+                        LOG(WARNING) << "Compression factor out of range. Using default compression factor: "
+                                     << DEFAULT_COMPRESSION_FACTOR;
+                        compression = DEFAULT_COMPRESSION_FACTOR;
+                    }
+                    break;
+                }
             }
         }
         return compression;
