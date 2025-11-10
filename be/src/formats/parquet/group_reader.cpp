@@ -116,7 +116,7 @@ Status GroupReader::prepare() {
     }
 
     RETURN_IF_ERROR(_rewrite_conjunct_ctxs_to_predicates(&_is_group_filtered));
-    _init_read_chunk();
+    RETURN_IF_ERROR(_init_read_chunk());
 
     if (!_is_group_filtered) {
         _range_iter = _range.new_iterator();
