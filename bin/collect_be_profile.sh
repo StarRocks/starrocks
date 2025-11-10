@@ -13,14 +13,28 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-set -e
+# Early error handler - output to stderr before log system is initialized
+early_error() {
+    echo "[ERROR] $1" >&2
+    exit 1
+}
+
+# Configuration check mode - enable strict error checking
+check_config_mode() {
+    set -e
+}
+
+# Runtime mode - disable strict error checking to allow graceful degradation
+runtime_mode() {
+    set +e
+}
 
 # Default configuration
 DEFAULT_DURATION=10
 DEFAULT_BRPC_PORT=8060
 DEFAULT_CLEANUP_DAYS=1
 DEFAULT_CLEANUP_SIZE=2147483648  # 2GB in bytes
-DEFAULT_INTERVAL=120   # 2 minutes
+DEFAULT_INTERVAL=60
 
 # Global variables
 DURATION=$DEFAULT_DURATION
@@ -30,16 +44,12 @@ CLEANUP_DAYS=$DEFAULT_CLEANUP_DAYS
 CLEANUP_SIZE=$DEFAULT_CLEANUP_SIZE
 DAEMON_MODE=false
 INTERVAL=$DEFAULT_INTERVAL
+INTERVAL_SET_BY_USER=false  # Track if interval was set via command line
 PID_FILE=""
-LOG_FILE=""
+LOG_FILE="/dev/stdout" 
 PROFILING_TYPE="cpu"  # Default profiling type
 BE_CONF_PATH=""      # Custom be.conf path
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
 
 usage() {
     echo "Usage: $0 [OPTIONS]"
@@ -67,21 +77,91 @@ usage() {
 }
 
 log() {
-    echo -e "${GREEN}[$(date '+%Y-%m-%d %H:%M:%S')]${NC} $1"
+    local msg="[$(date '+%Y-%m-%d %H:%M:%S')] $1"
+    echo "$msg" >> "$LOG_FILE" 2>&1
 }
 
 log_warn() {
-    echo -e "${YELLOW}[$(date '+%Y-%m-%d %H:%M:%S')] WARNING:${NC} $1"
+    local msg="[$(date '+%Y-%m-%d %H:%M:%S')] WARNING: $1"
+    echo "$msg" >> "$LOG_FILE" 2>&1
 }
 
 log_error() {
-    echo -e "${RED}[$(date '+%Y-%m-%d %H:%M:%S')] ERROR:${NC} $1"
+    local msg="[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: $1"
+    echo "$msg" >> "$LOG_FILE" 2>&1
+}
+
+# Check if a directory or file is writable, exit if not
+check_writable() {
+    local path="$1"
+    local path_type="$2"  # "directory" or "file"
+    
+    if [ -z "$path" ]; then
+        return 1
+    fi
+    
+    # If it's a file path, check the directory containing it
+    if [ "$path_type" = "file" ]; then
+        local dir_path=$(dirname "$path")
+        if [ -z "$dir_path" ] || [ "$dir_path" = "." ]; then
+            dir_path="$(pwd)"
+        fi
+        path="$dir_path"
+        path_type="directory"
+    fi
+    
+    # Check if directory exists
+    if [ -d "$path" ]; then
+        # Directory exists, check if it's writable
+        if [ ! -w "$path" ]; then
+            early_error "Directory is not writable: $path. Please check permissions or choose a different location"
+        fi
+    else
+        # Directory doesn't exist, check if parent directory is writable
+        local parent_dir=$(dirname "$path")
+        if [ -z "$parent_dir" ] || [ "$parent_dir" = "." ]; then
+            parent_dir="$(pwd)"
+        fi
+        
+        if [ ! -d "$parent_dir" ]; then
+            early_error "Parent directory does not exist: $parent_dir"
+        fi
+        
+        if [ ! -w "$parent_dir" ]; then
+            early_error "Parent directory is not writable: $parent_dir. Cannot create directory: $path. Please check permissions or choose a different location"
+        fi
+    fi
 }
 
 # Read configuration from be.conf
 read_config() {
+    # Enable strict error checking during configuration phase
+    check_config_mode
+    
     if [ -z "$STARROCKS_HOME" ]; then
         STARROCKS_HOME=$(dirname $(dirname $(readlink -f "$0")))
+    fi
+    
+    if [ -z "$STARROCKS_HOME" ] || [ ! -d "$STARROCKS_HOME" ]; then
+        early_error "STARROCKS_HOME is not set or invalid: $STARROCKS_HOME"
+    fi
+    
+    # Source common.sh to get configuration loading functions
+    # Note: These warnings use echo because log system is not initialized yet
+    if [ ! -f "$STARROCKS_HOME/bin/common.sh" ]; then
+        echo "[WARNING] Cannot find common.sh at: $STARROCKS_HOME/bin/common.sh, some features may not work" >&2
+        runtime_mode  # Disable strict checking if common.sh is missing
+    else
+        # Try to source common.sh, but don't fail if it doesn't work
+        runtime_mode  # Disable strict checking for source operations
+        if ! source "$STARROCKS_HOME/bin/common.sh" 2>/dev/null; then
+            echo "[WARNING] Failed to source common.sh, continuing with defaults" >&2
+        else
+            # Try to export shared envvars, but don't fail if it doesn't work
+            if ! export_shared_envvars 2>/dev/null; then
+                echo "[WARNING] Failed to export shared environment variables, continuing with defaults" >&2
+            fi
+        fi
     fi
     
     # Use custom be.conf path if provided, otherwise use default
@@ -94,19 +174,31 @@ read_config() {
     
     if [ -f "$be_conf" ]; then
         log "Reading configuration from: $be_conf"
-        # Read sys_log_dir
+        
+        # Load all uppercase environment variables from be.conf
+        # Runtime mode allows graceful failure
+        export_env_from_conf "$be_conf" 2>/dev/null || true
+        
+        # Read sys_log_dir using read_var_from_conf
         if [ -z "$OUTPUT_DIR" ]; then
-            OUTPUT_DIR=$(grep "^sys_log_dir" "$be_conf" | cut -d'=' -f2 | tr -d ' ' | tr -d '"')
-            if [ -z "$OUTPUT_DIR" ]; then
-                OUTPUT_DIR="$STARROCKS_HOME/log"
+            read_var_from_conf sys_log_dir "$be_conf" 2>/dev/null || true
+            OUTPUT_DIR="${sys_log_dir:-$STARROCKS_HOME/log}"
+        fi
+        
+        # Read brpc_port using read_var_from_conf
+        if [ "$BRPC_PORT" = "$DEFAULT_BRPC_PORT" ]; then
+            read_var_from_conf brpc_port "$be_conf" 2>/dev/null || true
+            if [ -n "$brpc_port" ]; then
+                BRPC_PORT=$brpc_port
             fi
         fi
         
-        # Read brpc_port
-        if [ "$BRPC_PORT" = "$DEFAULT_BRPC_PORT" ]; then
-            local port=$(grep "^brpc_port" "$be_conf" | cut -d'=' -f2 | tr -d ' ' | tr -d '"')
-            if [ -n "$port" ]; then
-                BRPC_PORT=$port
+        # Read collect_be_profile_interval if not set by user
+        if [ "$INTERVAL_SET_BY_USER" != true ]; then
+            read_var_from_conf collect_be_profile_interval "$be_conf" 2>/dev/null || true
+            if [ -n "$collect_be_profile_interval" ] && [ "$collect_be_profile_interval" -gt 0 ] 2>/dev/null; then
+                INTERVAL=$collect_be_profile_interval
+                log "Using collect_be_profile_interval from be.conf: $INTERVAL seconds"
             fi
         fi
     else
@@ -117,18 +209,51 @@ read_config() {
     
     OUTPUT_DIR="$OUTPUT_DIR/proc_profile"
     PID_FILE="$STARROCKS_HOME/bin/collect_be_profile.pid"
-    LOG_FILE="$OUTPUT_DIR/../collect_be_profile.log"
+    # Set LOG_FILE: use file path in daemon mode, keep /dev/stdout in non-daemon mode
+    if [ "$DAEMON_MODE" = true ] || [ "$LOG_FILE" != "/dev/stdout" ]; then
+        LOG_FILE="$OUTPUT_DIR/../collect_be_profile.log"
+    fi
+    
+    # Check write permissions before attempting to create directories or files
+    # Re-enable strict checking for critical path operations
+    check_config_mode
+    check_writable "$OUTPUT_DIR" "directory"
+    # Skip writable check for /dev/stdout as it's always writable
+    if [ "$LOG_FILE" != "/dev/stdout" ]; then
+        check_writable "$LOG_FILE" "file"
+    fi
+    check_writable "$PID_FILE" "file"
+    
+    # Create log directory and initialize log file (skip for /dev/stdout)
+    if [ "$LOG_FILE" != "/dev/stdout" ]; then
+        mkdir -p "$(dirname "$LOG_FILE")"
+        touch "$LOG_FILE"
+    fi
+    
+    # Switch to runtime mode after configuration is complete
+    runtime_mode
     
     # Log configuration values
     log "BRPC_PORT: $BRPC_PORT"
     log "OUTPUT_DIR: $OUTPUT_DIR"
+    log "Collection interval: $INTERVAL seconds"
 }
 
 # Create output directory
 create_output_dir() {
-    mkdir -p "$OUTPUT_DIR"
-    if [ $? -ne 0 ]; then
+    if [ -z "$OUTPUT_DIR" ]; then
+        log_error "OUTPUT_DIR is not set, using default: $STARROCKS_HOME/log/proc_profile"
+        OUTPUT_DIR="$STARROCKS_HOME/log/proc_profile"
+    fi
+    
+    if ! mkdir -p "$OUTPUT_DIR" 2>/dev/null; then
         log_error "Failed to create output directory: $OUTPUT_DIR"
+        exit 1
+    fi
+    
+    # Verify directory was created and is writable
+    if [ ! -d "$OUTPUT_DIR" ] || [ ! -w "$OUTPUT_DIR" ]; then
+        log_error "Output directory is not writable: $OUTPUT_DIR"
         exit 1
     fi
 }
@@ -187,8 +312,21 @@ collect_profile() {
     local pprof_url="http://localhost:$BRPC_PORT/pprof/${endpoint}?seconds=$DURATION"
     
     log "Executing curl command: curl -s \"$pprof_url\" | gzip > \"$pprof_file\""
-    curl -s "$pprof_url" | gzip > "$pprof_file"
+    
+    # Check if curl command succeeds
+    if ! curl -s "$pprof_url" | gzip > "$pprof_file"; then
+        log_error "Failed to collect ${profile_type} profile from $pprof_url"
+        return 1
+    fi
+    
+    # Check if file was created and has content
+    if [ ! -f "$pprof_file" ] || [ ! -s "$pprof_file" ]; then
+        log_error "Profile file was not created or is empty: $pprof_file"
+        return 1
+    fi
+    
     log "${profile_type^} pprof saved: $pprof_file"
+    return 0
 }
 
 # Collect CPU profile
@@ -271,7 +409,7 @@ start_daemon() {
     # Start daemon in background
     nohup "$0" --daemon-internal "$@" > "$LOG_FILE" 2>&1 &
     local daemon_pid=$!
-    echo $daemon_pid > "$PID_FILE"
+    echo "$daemon_pid" > "$PID_FILE"
     
     log "Daemon started with PID: $daemon_pid"
     log "Use 'kill $daemon_pid' or 'pkill -f collect_be_profile.sh' to stop"
@@ -364,6 +502,7 @@ parse_args() {
                 ;;
             --interval)
                 INTERVAL="$2"
+                INTERVAL_SET_BY_USER=true
                 shift 2
                 ;;
             --help)
@@ -375,33 +514,49 @@ parse_args() {
                 ;;
         esac
     done
-    
-    # Log the profiling configuration
-    log "Profiling type: $PROFILING_TYPE"
 }
 
 # Main execution
 main() {
+    # Start in runtime mode (no strict error checking) - allows graceful degradation
+    runtime_mode
+    
+    # Trap errors and output to stderr before exiting
+    # Note: This trap uses echo because it may fire before log system is initialized
+    trap 'echo "[ERROR] Script failed at line $LINENO. Command: $BASH_COMMAND" >&2; exit 1' ERR
+    
     parse_args "$@"
+    
     read_config
     create_output_dir
     
     if [ "$DAEMON_MODE" = true ]; then
         if [ "$DAEMON_INTERNAL" = true ]; then
+            # In daemon internal mode, redirect all output to log file
+            exec >> "$LOG_FILE" 2>&1
             daemon_loop
         else
             start_daemon "$@"
         fi
     else
-        # Single collection mode
-        check_brpc_server
+        # Single collection mode - log messages go to both stdout and log file
+        if ! check_brpc_server; then
+            log_error "BRPC server check failed"
+            exit 1
+        fi
         
         if [ "$PROFILING_TYPE" = "cpu" ] || [ "$PROFILING_TYPE" = "both" ]; then
-            collect_cpu_profile
+            if ! collect_cpu_profile; then
+                log_error "Failed to collect CPU profile"
+                exit 1
+            fi
         fi
         
         if [ "$PROFILING_TYPE" = "contention" ] || [ "$PROFILING_TYPE" = "both" ]; then
-            collect_contention_profile
+            if ! collect_contention_profile; then
+                log_error "Failed to collect contention profile"
+                exit 1
+            fi
         fi
         
         cleanup_old_files
