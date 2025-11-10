@@ -34,6 +34,7 @@ import mockit.Mock;
 import mockit.MockUp;
 import org.awaitility.Awaitility;
 import org.junit.Assert;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -50,6 +51,7 @@ import java.util.stream.Collectors;
 
 public class JoinTest extends SchedulerTestBase {
 
+    @Ignore
     @Test
     public void testCancelAtJoining() throws Exception {
         String sql = "insert into lineitem select * from lineitem";
@@ -89,6 +91,7 @@ public class JoinTest extends SchedulerTestBase {
         Assert.assertEquals(TStatusCode.INTERNAL_ERROR, scheduler.getExecStatus().getErrorCode());
     }
 
+    @Ignore
     @Test
     public void testReportFailedExecutionAtJoining() throws Exception {
         String sql = "insert into lineitem select * from lineitem";

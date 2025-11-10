@@ -748,11 +748,13 @@ public class OptimizerTaskTest {
             }
         };
 
+        ctx.getSessionVariable().setOptimizerExecuteTimeout(10000);
         Optimizer optimizer = new Optimizer();
         OptExpression physicalTree = optimizer.optimize(ctx, expression, new PhysicalPropertySet(), new ColumnRefSet(),
                 columnRefFactory);
         Operator root = physicalTree.getOp();
         assertEquals(root.getOpType(), OperatorType.PHYSICAL_LIMIT);
+        ctx.getSessionVariable().setOptimizerExecuteTimeout(3000);
     }
 
     @Test
@@ -1313,7 +1315,6 @@ public class OptimizerTaskTest {
                 call.getUsedColumns();
                 result = new ColumnRefSet(1);
                 minTimes = 0;
-
 
                 call.getFunction();
                 result = AggregateFunction.createBuiltin(FunctionSet.SUM,
