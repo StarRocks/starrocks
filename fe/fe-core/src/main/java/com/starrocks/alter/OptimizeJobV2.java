@@ -357,13 +357,8 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
                 }
             }
             if (rewriteTask.getOptimizeTaskState() == Constants.TaskRunState.FAILED
-<<<<<<< HEAD
                         || rewriteTask.getOptimizeTaskState() == Constants.TaskRunState.SUCCESS) {
-                progress += 100 / rewriteTasks.size();
-=======
-                    || rewriteTask.getOptimizeTaskState() == Constants.TaskRunState.SUCCESS) {
                 progressAcc += 100.0 / taskCount;
->>>>>>> 4cc58a0a00 ([BugFix] Fix progress calculation when task count > 100 in optimize/merge jobs)
                 continue;
             }
 
