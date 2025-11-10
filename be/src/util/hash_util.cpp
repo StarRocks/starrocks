@@ -98,7 +98,7 @@ uint32_t HashUtil::crc_hash_sse42(const void* data, int32_t bytes, uint32_t hash
         ++s;
     }
 
-    // The lower half of the CRC hash has has poor uniformity, so swap the halves
+    // The lower half of the CRC hash has poor uniformity, so swap the halves
     // for anyone who only uses the first several bits of the hash.
     hash = (hash << 16) | (hash >> 16);
     return hash;
