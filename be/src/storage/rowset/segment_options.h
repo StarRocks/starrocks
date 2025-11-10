@@ -127,9 +127,6 @@ public:
 
     bool read_by_generated_column_adding = false;
 
-    // Whether the scan operator has TopN runtime filter
-    bool has_topn_filter = false;
-
 public:
     Status convert_to(SegmentReadOptions* dst, const std::vector<LogicalType>& new_types, ObjectPool* obj_pool) const;
 
