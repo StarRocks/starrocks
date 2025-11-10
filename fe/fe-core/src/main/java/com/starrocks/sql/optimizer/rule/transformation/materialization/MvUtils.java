@@ -15,8 +15,12 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
+import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVPrepare;
+import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
+
 import com.google.common.base.Preconditions;
 import com.google.common.base.Predicates;
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
@@ -115,10 +119,6 @@ import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.optimizer.transformer.TransformerContext;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.util.Box;
-import org.apache.commons.collections4.SetUtils;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -132,9 +132,9 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
-
-import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVPrepare;
-import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
+import org.apache.commons.collections4.SetUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 public class MvUtils {
     private static final Logger LOG = LogManager.getLogger(MvUtils.class);
@@ -1398,6 +1398,9 @@ public class MvUtils {
     }
 
     public static ParseNode getQueryAst(String query, ConnectContext connectContext) {
+        if (Strings.isNullOrEmpty(query)) {
+            return null;
+        }
         try {
             List<StatementBase> statementBases =
                     com.starrocks.sql.parser.SqlParser.parse(query, connectContext.getSessionVariable());
