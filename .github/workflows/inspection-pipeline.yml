@@ -214,24 +214,22 @@ jobs:
       - name: FE config 
         id: fe-config-gen
         run: |
-          pwd
-          ls
-          ./ci-tool/bin/run-doc-gen.sh --type fe_config --sr starrocks >> $GITHUB_OUTPUT
+          ./ci-tool/bin/run-doc-gen.sh --type fe_config --sr starrocks
 
       - name: BE config 
         id: be-config-gen
         run: |
-          ./ci-tool/bin/run-doc-gen.sh --type be_config --sr starrocks >> $GITHUB_OUTPUT
+          ./ci-tool/bin/run-doc-gen.sh --type be_config --sr starrocks
 
       - name: variables 
         id: variables-gen
         run: |
-          ./ci-tool/bin/run-doc-gen.sh --type variables --sr starrocks >> $GITHUB_OUTPUT
+          ./ci-tool/bin/run-doc-gen.sh --type variables --sr starrocks
 
       - name: function 
         id: function-gen
         run: |
-          ./ci-tool/bin/run-doc-gen.sh --type function --sr starrocks --fe ${FE_NODE} >> $GITHUB_OUTPUT
+          ./ci-tool/bin/run-doc-gen.sh --type function --sr starrocks --fe ${FE_NODE}
 
   Teardown:
     runs-on: [self-hosted, normal]
