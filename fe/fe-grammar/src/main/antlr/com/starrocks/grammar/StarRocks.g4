@@ -971,6 +971,7 @@ alterClause
     | addPartitionClause
     | dropPartitionClause
     | distributionClause
+    | alterModifyDefaultBuckets
     | truncatePartitionClause
     | modifyPartitionClause
     | replacePartitionClause
@@ -1773,11 +1774,13 @@ showRolesStatement
 grantRoleStatement
     : GRANT identifierOrStringList TO USER? user                                                        #grantRoleToUser
     | GRANT identifierOrStringList TO ROLE identifierOrString                                           #grantRoleToRole
+    | GRANT identifierOrStringList TO EXTERNAL GROUP identifierOrString                                 #grantRoleToGroup
     ;
 
 revokeRoleStatement
     : REVOKE identifierOrStringList FROM USER? user                                                     #revokeRoleFromUser
     | REVOKE identifierOrStringList FROM ROLE identifierOrString                                        #revokeRoleFromRole
+    | REVOKE identifierOrStringList FROM EXTERNAL GROUP identifierOrString                              #revokeRoleFromGroup
     ;
 
 setRoleStatement
@@ -1823,6 +1826,7 @@ revokePrivilegeStatement
 showGrantsStatement
     : SHOW GRANTS
     | SHOW GRANTS FOR USER? user
+    | SHOW GRANTS FOR EXTERNAL GROUP identifierOrString
     | SHOW GRANTS FOR ROLE identifierOrString
     ;
 
@@ -1853,7 +1857,7 @@ privilegeType
     | CREATE (
         DATABASE| TABLE| VIEW| FUNCTION| GLOBAL FUNCTION| MATERIALIZED VIEW|
         RESOURCE| RESOURCE GROUP| EXTERNAL CATALOG | STORAGE VOLUME | WAREHOUSE | CNGROUP | PIPE )
-    | DELETE | DROP | EXPORT | FILE | IMPERSONATE | INSERT | GRANT | NODE | OPERATE
+    | DELETE | DROP | EXPORT | FILE | IMPERSONATE | INSERT | GRANT | NODE | OPERATE | SECURITY
     | PLUGIN | REPOSITORY| REFRESH | SELECT | UPDATE | USAGE
     ;
 
@@ -1892,11 +1896,11 @@ showCreateSecurityIntegrationStatement
 // ------------------------------------------- Group Provider Statement ------------------------------------------
 
 createGroupProviderStatement
-    : CREATE GROUP PROVIDER identifier properties
+    : CREATE GROUP PROVIDER (IF NOT EXISTS)? identifier properties
     ;
 
 dropGroupProviderStatement
-    : DROP GROUP PROVIDER identifier
+    : DROP GROUP PROVIDER (IF EXISTS)? identifier
     ;
 
 showGroupProvidersStatement
@@ -2598,7 +2602,9 @@ tupleInSubquery
     ;
 
 predicateOperations [ParserRuleContext value]
-    : NOT? IN '(' queryRelation ')'                                                       #inSubquery
+    : NOT? IN integerList                                                                 #inIntegerList
+    | NOT? IN stringList                                                                  #inStringList
+    | NOT? IN '(' queryRelation ')'                                                       #inSubquery
     | NOT? IN '(' expressionList ')'                                                      #inList
     | NOT? BETWEEN lower = valueExpression AND upper = predicate                          #between
     | NOT? (LIKE | RLIKE | REGEXP) pattern=valueExpression                                #like
@@ -2655,9 +2661,9 @@ primaryExpression
     ;
 
 literalExpression
-    : NULL                                                                                #nullLiteral
+    : number                                                                              #numericLiteral
+    | NULL                                                                                #nullLiteral
     | booleanValue                                                                        #booleanLiteral
-    | number                                                                              #numericLiteral
     | (DATE | DATETIME) string                                                            #dateLiteral
     | string                                                                              #stringLiteral
     | interval                                                                            #intervalLiteral
@@ -2868,6 +2874,10 @@ stringList
     : '(' string (',' string)* ')'
     ;
 
+integerList
+    : '(' INTEGER_VALUE (',' INTEGER_VALUE)* ')'
+    ;
+
 literalExpressionList
     : '(' literalExpression (',' literalExpression)* ')'
     ;
@@ -2916,6 +2926,10 @@ distributionDesc
     : DISTRIBUTED BY HASH identifierList (BUCKETS INTEGER_VALUE)?
     | DISTRIBUTED BY HASH identifierList
     | DISTRIBUTED BY RANDOM (BUCKETS INTEGER_VALUE)?
+    ;
+
+alterModifyDefaultBuckets
+    : DISTRIBUTED BY HASH identifierList DEFAULT BUCKETS INTEGER_VALUE
     ;
 
 refreshSchemeDesc
@@ -3078,6 +3092,7 @@ baseType
     | HLL
     | PERCENTILE
     | JSON
+    | VARIANT
     | VARBINARY typeParameter?
     | BINARY typeParameter?
     ;
@@ -3148,9 +3163,9 @@ assignmentList
     ;
 
 number
-    : DECIMAL_VALUE  #decimalValue
+    : INTEGER_VALUE  #integerValue
+    | DECIMAL_VALUE  #decimalValue
     | DOUBLE_VALUE   #doubleValue
-    | INTEGER_VALUE  #integerValue
     ;
 
 nonReserved

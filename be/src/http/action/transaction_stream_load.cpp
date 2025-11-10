@@ -120,6 +120,14 @@ void TransactionManagerAction::handle(HttpRequest* req) {
         return _send_error_reply(req, Status::InvalidArgument(fmt::format("empty label")));
     }
 
+    // HTTP_TRANSACTION_TYPE header is used for multi-statement transactions and should only be sent to FE
+    // (Frontend) nodes. BE (Backend) nodes cannot process multi-statement transaction requests.
+    if (!req->header(HTTP_TRANSACTION_TYPE).empty()) {
+        return _send_error_reply(
+                req, Status::InvalidArgument(
+                             "Multi-statement transaction requests can only be sent to FE nodes, not BE nodes"));
+    }
+
     if (boost::iequals(txn_op, TXN_BEGIN)) {
         st = _exec_env->transaction_mgr()->begin_transaction(req, &resp);
     } else if (boost::iequals(txn_op, TXN_COMMIT) || boost::iequals(txn_op, TXN_PREPARE)) {
@@ -491,17 +499,25 @@ Status TransactionStreamLoadAction::_parse_request(HttpRequest* http_req, Stream
 }
 
 Status TransactionStreamLoadAction::_exec_plan_fragment(HttpRequest* http_req, StreamLoadContext* ctx) {
-    if (ctx->is_channel_stream_load_context()) {
-        return Status::OK();
-    }
     TStreamLoadPutRequest request;
     RETURN_IF_ERROR(_parse_request(http_req, ctx, request));
+    // Enforce request parameter consistency across multiple HTTP calls of the same transaction.
+    // A streaming load may arrive in several requests (e.g., chunked uploads). We cache the first
+    // TStreamLoadPutRequest in ctx->request and require subsequent requests to be identical
+    // (headers like columns, format, separators, partitions, etc.). This prevents parameter drift
+    // that could lead to undefined behavior or loading into an unexpected schema.
+    // Note: For channel stream load, this check still applies; planning is skipped later.
     if (ctx->request.db != "") {
         if (ctx->request != request) {
             return Status::InternalError("load request not equal last.");
         }
     } else {
         ctx->request = request;
+    }
+    if (ctx->is_channel_stream_load_context()) {
+        // Channel stream load is planned elsewhere; here we only validate request equality above
+        // and return. The data path will proceed without re-planning.
+        return Status::OK();
     }
     // setup stream pipe
     auto pipe = _exec_env->load_stream_mgr()->get(ctx->id);

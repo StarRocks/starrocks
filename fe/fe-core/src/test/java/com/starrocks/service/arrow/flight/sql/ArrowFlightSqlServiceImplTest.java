@@ -18,25 +18,22 @@ import com.google.protobuf.ByteString;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.ArrowUtil;
-import com.starrocks.common.util.DebugUtil;
 import com.starrocks.metric.LongCounterMetric;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.plugin.AuditEvent;
-import com.starrocks.proto.PFetchArrowSchemaResult;
-import com.starrocks.proto.PUniqueId;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.scheduler.dag.ExecutionDAG;
 import com.starrocks.qe.scheduler.dag.ExecutionFragment;
 import com.starrocks.qe.scheduler.dag.FragmentInstance;
-import com.starrocks.rpc.BackendServiceClient;
+import com.starrocks.qe.scheduler.dag.JobSpec;
 import com.starrocks.service.arrow.flight.sql.session.ArrowFlightSqlSessionManager;
 import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.AuditEncryptionChecker;
+import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TUniqueId;
@@ -62,28 +59,24 @@ import org.apache.arrow.flight.SetSessionOptionsRequest;
 import org.apache.arrow.flight.SetSessionOptionsResult;
 import org.apache.arrow.flight.sql.FlightSqlProducer;
 import org.apache.arrow.flight.sql.impl.FlightSql;
-import org.apache.arrow.memory.RootAllocator;
 import org.apache.arrow.vector.VectorSchemaRoot;
-import org.apache.arrow.vector.ipc.ArrowStreamWriter;
-import org.apache.arrow.vector.types.pojo.ArrowType;
-import org.apache.arrow.vector.types.pojo.FieldType;
 import org.apache.arrow.vector.types.pojo.Schema;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
-import java.io.ByteArrayOutputStream;
 import java.lang.reflect.Field;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -119,7 +112,6 @@ public class ArrowFlightSqlServiceImplTest {
         mockCallContext = mock(FlightProducer.CallContext.class);
         when(mockCallContext.peerIdentity()).thenReturn("token123");
         when(sessionManager.validateAndGetConnectContext("token123")).thenReturn(mockContext);
-        when(mockContext.getSessionVariable()).thenReturn(new SessionVariable());
         when(mockContext.getQuery()).thenReturn("SELECT 1");
         when(mockContext.getState()).thenReturn(mock(QueryState.class));
         when(mockContext.getResult(anyString())).thenReturn(mock(VectorSchemaRoot.class));
@@ -127,6 +119,12 @@ public class ArrowFlightSqlServiceImplTest {
         when(mockContext.returnFromFE()).thenReturn(true);
         when(mockContext.isFromFECoordinator()).thenReturn(true);
         when(mockContext.getArrowFlightSqlToken()).thenReturn("token123");
+
+        SessionVariable mockSessionVariable = mock(SessionVariable.class);
+        when(mockContext.getSessionVariable()).thenReturn(mockSessionVariable);
+        when(mockSessionVariable.getQueryTimeoutS()).thenReturn(10);
+        when(mockSessionVariable.getQueryDeliveryTimeoutS()).thenReturn(10);
+        when(mockSessionVariable.getSqlDialect()).thenReturn("mysql");
 
         CallHeaders mockHeaders = mock(CallHeaders.class);
         when(mockHeaders.get("database")).thenReturn("test_db");
@@ -162,7 +160,14 @@ public class ArrowFlightSqlServiceImplTest {
     }
 
     @Test
-    public void testGetFlightInfoStatement() {
+    public void testGetFlightInfoStatement() throws ExecutionException, InterruptedException, TimeoutException {
+        DefaultCoordinator mockCoordinator = mock(DefaultCoordinator.class);
+        JobSpec mockJobSpec = mock(JobSpec.class);
+        ExecPlan mockPlan = mock(ExecPlan.class);
+        when(mockContext.waitForDeploymentFinished(anyLong())).thenReturn(mockCoordinator);
+        when(mockCoordinator.getJobSpec()).thenReturn(mockJobSpec);
+        when(mockJobSpec.getExecPlan()).thenReturn(mockPlan);
+
         FlightSql.CommandStatementQuery command = FlightSql.CommandStatementQuery.newBuilder()
                 .setQuery("SELECT 1").build();
         FlightInfo info = service
@@ -182,12 +187,6 @@ public class ArrowFlightSqlServiceImplTest {
         when(mockSessionVariable.getQueryDeliveryTimeoutS()).thenReturn(10);
         when(mockSessionVariable.getSqlDialect()).thenReturn("mysql");
 
-        DefaultCoordinator mockCoordinator = mock(DefaultCoordinator.class);
-        try {
-            when(mockContext.waitForDeploymentFinished(anyLong())).thenReturn(mockCoordinator);
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
 
         ExecutionDAG mockDAG = mock(ExecutionDAG.class);
         when(mockCoordinator.getExecutionDAG()).thenReturn(mockDAG);
@@ -207,10 +206,7 @@ public class ArrowFlightSqlServiceImplTest {
         TUniqueId mockInstanceId = new TUniqueId(3, 4);
         when(mockInstance.getInstanceId()).thenReturn(mockInstanceId);
 
-        Schema mockSchema = mock(Schema.class);
         ArrowFlightSqlServiceImpl spyService = Mockito.spy(service);
-        doReturn(mockSchema).when(spyService).fetchArrowSchema(any(), any(), any(), anyLong());
-
         FlightInfo mockFlightInfo = mock(FlightInfo.class);
         doReturn(mockFlightInfo).when(spyService).buildFlightInfo(any(), any(), any(), any());
 
@@ -218,14 +214,6 @@ public class ArrowFlightSqlServiceImplTest {
                 .getFlightInfoStatement(command, mockCallContext, FlightDescriptor.command("SELECT 1".getBytes()));
         assertNotNull(beInfo);
         assertEquals(mockFlightInfo, beInfo);
-    }
-    @Test
-    public void testGetFlightInfoPreparedStatement() {
-        FlightSql.CommandPreparedStatementQuery command = FlightSql.CommandPreparedStatementQuery.newBuilder()
-                .setPreparedStatementHandle(ByteString.copyFromUtf8("token123")).build();
-        FlightInfo info = service
-                .getFlightInfoPreparedStatement(command, mockCallContext, FlightDescriptor.command("SELECT 1".getBytes()));
-        assertNotNull(info);
     }
 
     @Test
@@ -445,83 +433,6 @@ public class ArrowFlightSqlServiceImplTest {
     }
 
     @Test
-    public void testFetchArrowSchema_normal() throws Exception {
-        // 1. 构造 Arrow schema
-        Schema schema = new Schema(Collections.singletonList(
-                new org.apache.arrow.vector.types.pojo.Field("col1", FieldType
-                        .nullable(new ArrowType.Int(32, true)), null)
-        ));
-
-        // 2. 序列化 schema
-        byte[] schemaBytes;
-        try (RootAllocator allocator = new RootAllocator(Integer.MAX_VALUE);
-                VectorSchemaRoot root = VectorSchemaRoot.create(schema, allocator);
-                ByteArrayOutputStream out = new ByteArrayOutputStream();
-                ArrowStreamWriter writer = new ArrowStreamWriter(root, null, out)) {
-            writer.start();
-            writer.end();
-            schemaBytes = out.toByteArray();
-        }
-
-        // 3. mock future.get() 返回 schema
-        PFetchArrowSchemaResult result = new PFetchArrowSchemaResult();
-        result.setSchema(schemaBytes);
-        Future<PFetchArrowSchemaResult> future = mock(Future.class);
-        when(future.get(anyLong(), any())).thenReturn(result);
-
-        // 4. mock BackendServiceClient
-        BackendServiceClient mockClient = mock(BackendServiceClient.class);
-        when(mockClient.fetchArrowSchema(any(), any())).thenReturn(future);
-
-        try (MockedStatic<BackendServiceClient> mocked = mockStatic(BackendServiceClient.class)) {
-            mocked.when(BackendServiceClient::getInstance).thenReturn(mockClient);
-
-            // 5. 构造参数
-            ArrowFlightSqlServiceImpl service =
-                    new ArrowFlightSqlServiceImpl(mock(ArrowFlightSqlSessionManager.class), null);
-            ConnectContext ctx = mock(ConnectContext.class);
-            when(ctx.getExecutionId()).thenReturn(new com.starrocks.thrift.TUniqueId(1, 1));
-            TNetworkAddress addr = new TNetworkAddress("127.0.0.1", 8080);
-            PUniqueId id = new PUniqueId();
-
-            // 6. 调用方法
-            Schema resultSchema = service.fetchArrowSchema(ctx, addr, id, 1000);
-            assertNotNull(resultSchema);
-        }
-    }
-
-    @Test
-    public void testFetchArrowSchema_exception() throws Exception {
-        Future<PFetchArrowSchemaResult> future = mock(Future.class);
-        when(future.get(anyLong(), any())).thenThrow(new RuntimeException("mocked error"));
-
-        BackendServiceClient mockClient = mock(BackendServiceClient.class);
-        when(mockClient.fetchArrowSchema(any(), any())).thenReturn(future);
-
-        try (MockedStatic<BackendServiceClient> mocked = mockStatic(BackendServiceClient.class);
-                MockedStatic<DebugUtil> mockDebugUtil = mockStatic(DebugUtil.class)) {
-
-            mocked.when(BackendServiceClient::getInstance).thenReturn(mockClient);
-
-            // mock DebugUtil
-            mockDebugUtil.when(() -> DebugUtil.printId(any(PUniqueId.class))).thenReturn("mockedId");
-            mockDebugUtil.when(() -> DebugUtil.printId(any(com.starrocks.thrift.TUniqueId.class))).thenReturn("mockedId");
-
-            ArrowFlightSqlServiceImpl service =
-                    new ArrowFlightSqlServiceImpl(mock(ArrowFlightSqlSessionManager.class), null);
-            ConnectContext ctx = mock(ConnectContext.class);
-            when(ctx.getExecutionId()).thenReturn(new com.starrocks.thrift.TUniqueId(1, 1));
-            TNetworkAddress addr = new TNetworkAddress("127.0.0.1", 8080);
-            PUniqueId id = new PUniqueId();
-
-            RuntimeException ex = assertThrows(RuntimeException.class, () -> service.fetchArrowSchema(ctx, addr, id, 1000));
-
-            assert ex.getMessage().contains("mocked error");
-            assert ex.getMessage().contains("mockedId");
-        }
-    }
-
-    @Test
     public void testUnimplementedFlightSqlMethods() {
         FlightStream mockStream = mock(FlightStream.class);
         FlightProducer.ServerStreamListener mockServerListener = mock(FlightProducer.ServerStreamListener.class);
@@ -530,10 +441,10 @@ public class ArrowFlightSqlServiceImplTest {
         Criteria mockCriteria = mock(Criteria.class);
 
         assertThrows(FlightRuntimeException.class, () -> service.getSchemaStatement(FlightSql.CommandStatementQuery
-                        .getDefaultInstance(), mockCallContext, mockDescriptor));
+                .getDefaultInstance(), mockCallContext, mockDescriptor));
 
         assertThrows(FlightRuntimeException.class, () -> service.acceptPutStatement(FlightSql.CommandStatementUpdate
-                        .getDefaultInstance(), mockCallContext, mockStream, mockPutListener));
+                .getDefaultInstance(), mockCallContext, mockStream, mockPutListener));
 
         assertThrows(FlightRuntimeException.class,
                 () -> service.acceptPutPreparedStatementUpdate(FlightSql.CommandPreparedStatementUpdate
@@ -544,12 +455,12 @@ public class ArrowFlightSqlServiceImplTest {
                         .getDefaultInstance(), mockCallContext, mockStream, mockPutListener));
 
         assertThrows(FlightRuntimeException.class, () -> service.getStreamTypeInfo(FlightSql.CommandGetXdbcTypeInfo
-                        .getDefaultInstance(), mockCallContext, mockServerListener));
+                .getDefaultInstance(), mockCallContext, mockServerListener));
 
         assertThrows(FlightRuntimeException.class, () -> service.getStreamCatalogs(mockCallContext, mockServerListener));
 
         assertThrows(FlightRuntimeException.class, () -> service.getStreamSchemas(FlightSql.CommandGetDbSchemas
-                        .getDefaultInstance(), mockCallContext, mockServerListener));
+                .getDefaultInstance(), mockCallContext, mockServerListener));
 
         assertThrows(FlightRuntimeException.class,
                 () -> service.getStreamTables(FlightSql.CommandGetTables.getDefaultInstance(), mockCallContext,
@@ -558,16 +469,16 @@ public class ArrowFlightSqlServiceImplTest {
         assertThrows(FlightRuntimeException.class, () -> service.getStreamTableTypes(mockCallContext, mockServerListener));
 
         assertThrows(FlightRuntimeException.class, () -> service.getStreamPrimaryKeys(FlightSql.CommandGetPrimaryKeys
-                        .getDefaultInstance(), mockCallContext, mockServerListener));
+                .getDefaultInstance(), mockCallContext, mockServerListener));
 
         assertThrows(FlightRuntimeException.class, () -> service.getStreamExportedKeys(FlightSql.CommandGetExportedKeys
-                        .getDefaultInstance(), mockCallContext, mockServerListener));
+                .getDefaultInstance(), mockCallContext, mockServerListener));
 
         assertThrows(FlightRuntimeException.class, () -> service.getStreamImportedKeys(FlightSql.CommandGetImportedKeys
-                        .getDefaultInstance(), mockCallContext, mockServerListener));
+                .getDefaultInstance(), mockCallContext, mockServerListener));
 
         assertThrows(FlightRuntimeException.class, () -> service.getStreamCrossReference(FlightSql.CommandGetCrossReference
-                        .getDefaultInstance(), mockCallContext, mockServerListener));
+                .getDefaultInstance(), mockCallContext, mockServerListener));
 
         assertThrows(FlightRuntimeException.class,
                 () -> service.listFlights(mockCallContext, mockCriteria, mock(FlightProducer.StreamListener.class)));

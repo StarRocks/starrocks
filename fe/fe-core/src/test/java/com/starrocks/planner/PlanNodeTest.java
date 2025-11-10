@@ -16,9 +16,9 @@
 package com.starrocks.planner;
 
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.type.Type;
 import com.starrocks.utframe.StarRocksTestBase;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;

@@ -30,6 +30,10 @@ public final class TvrTableSnapshot extends TvrVersionRange {
         return new TvrTableSnapshot(end);
     }
 
+    public static TvrTableSnapshot of(Long end) {
+        return new TvrTableSnapshot(Optional.of(end));
+    }
+
     public static TvrTableSnapshot of(TvrVersion end) {
         return new TvrTableSnapshot(end);
     }
@@ -40,6 +44,11 @@ public final class TvrTableSnapshot extends TvrVersionRange {
 
     public TvrTableSnapshot(TvrVersion to) {
         super(TvrVersion.MIN, to);
+    }
+
+    @Override
+    public boolean isEmpty() {
+        return to.isMinOrMax();
     }
 
     @Override

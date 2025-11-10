@@ -515,7 +515,7 @@ class ChooseCase(object):
 
                     _t_info_line = f_lines[line_id].rstrip()
                     _t_line = _t_info_line.lstrip()
-                    tools.assert_regexp_matches(_t_line.lstrip(), t_info_regex, f"Missing thread info : {_t_line}")
+                    tools.assert_regex(_t_line.lstrip(), t_info_regex, f"Missing thread info : {_t_line}")
 
                     # get thread name & thread count
                     _t_name, _, _t_count = re.findall(r"-- ([0-9a-zA-Z_\- ]+)(\(([0-9]+)\))?:", _t_line)[0]

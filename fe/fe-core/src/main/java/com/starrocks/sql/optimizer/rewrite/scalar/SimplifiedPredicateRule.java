@@ -21,9 +21,8 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.ScalarFunction;
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.ast.expression.BinaryType;
-import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
@@ -31,12 +30,14 @@ import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LargeInPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
 import com.starrocks.sql.optimizer.rewrite.EliminateNegationsRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
 import com.starrocks.sql.spm.SPMFunctions;
+import com.starrocks.type.Type;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.text.StrTokenizer;
 
@@ -112,7 +113,7 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
         }
 
         Type[] argTypes = args.stream().map(ScalarOperator::getType).toArray(Type[]::new);
-        Function fn = Expr.getBuiltinFunction(FunctionSet.IF, argTypes, Function.CompareMode.IS_IDENTICAL);
+        Function fn = ExprUtils.getBuiltinFunction(FunctionSet.IF, argTypes, Function.CompareMode.IS_IDENTICAL);
 
         if (fn == null) {
             return operator;
@@ -350,6 +351,11 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
         }
     }
 
+    @Override
+    public ScalarOperator visitLargeInPredicate(LargeInPredicateOperator predicate, ScalarOperatorRewriteContext context) {
+        return predicate;
+    }
+
     // Simplify the comparison result of the same column
     // eg a >= a with not nullable transform to true constant;
     @Override
@@ -464,7 +470,7 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
         if (result != 0) {
             String fnName = result < 0 ? Objects.requireNonNull(TIME_FNS.get(fn)).get(1) :
                     Objects.requireNonNull(TIME_FNS.get(fn)).get(0);
-            Function newFn = Expr.getBuiltinFunction(fnName, call.getFunction().getArgs(),
+            Function newFn = ExprUtils.getBuiltinFunction(fnName, call.getFunction().getArgs(),
                     Function.CompareMode.IS_SUPERTYPE_OF);
             return new CallOperator(fnName, call.getType(), Lists.newArrayList(child.getChild(0), interval), newFn);
         } else {
@@ -605,7 +611,7 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
             // Keep original behavior: only succeeds when argument list matches hour_from_unixtime signature
             Type[] argTypes = fromUnixTime.getChildren().stream().map(ScalarOperator::getType).toArray(Type[]::new);
             Function fn =
-                    Expr.getBuiltinFunction(FunctionSet.HOUR_FROM_UNIXTIME, argTypes,
+                    ExprUtils.getBuiltinFunction(FunctionSet.HOUR_FROM_UNIXTIME, argTypes,
                             Function.CompareMode.IS_IDENTICAL);
             if (fn == null) {
                 return call;
@@ -658,7 +664,7 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
             // Build hour_from_unixtime(...) with the converted unix time argument
             Type[] argTypes = new Type[] { unixtimeArgForHour.getType() };
             Function fn =
-                    Expr.getBuiltinFunction(FunctionSet.HOUR_FROM_UNIXTIME, argTypes, Function.CompareMode.IS_IDENTICAL);
+                    ExprUtils.getBuiltinFunction(FunctionSet.HOUR_FROM_UNIXTIME, argTypes, Function.CompareMode.IS_IDENTICAL);
 
             if (fn == null) {
                 return call;

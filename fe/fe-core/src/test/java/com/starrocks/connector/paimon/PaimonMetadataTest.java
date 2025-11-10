@@ -20,9 +20,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PaimonTable;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorProperties;
@@ -56,6 +54,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.transformation.ExternalScanPartitionPruneRule;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.Type;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
@@ -156,7 +155,6 @@ public class PaimonMetadataTest {
         writer.writeInt(0, 3000);
         writer.writeInt(1, 5555);
         writer.complete();
-
         List<DataFileMeta> meta1 = new ArrayList<>();
         meta1.add(new DataFileMeta("file1", 100, 200, EMPTY_MIN_KEY, EMPTY_MAX_KEY, EMPTY_STATS, EMPTY_STATS,
                 1, 1, 1, DUMMY_LEVEL, 0L, null, null, null));
@@ -215,12 +213,12 @@ public class PaimonMetadataTest {
                 AstToStringBuilder.getExternalCatalogTableDdlStmt(paimonTable));
         assertEquals(Lists.newArrayList("col1"), paimonTable.getPartitionColumnNames());
         assertEquals("hdfs://127.0.0.1:10000/paimon", paimonTable.getTableLocation());
-        assertEquals(ScalarType.INT, paimonTable.getBaseSchema().get(0).getType());
+        assertEquals(Type.INT, paimonTable.getBaseSchema().get(0).getType());
         org.junit.jupiter.api.Assertions.assertTrue(paimonTable.getBaseSchema().get(0).isAllowNull());
-        assertEquals(ScalarType.DOUBLE, paimonTable.getBaseSchema().get(1).getType());
+        assertEquals(Type.DOUBLE, paimonTable.getBaseSchema().get(1).getType());
         org.junit.jupiter.api.Assertions.assertTrue(paimonTable.getBaseSchema().get(1).isAllowNull());
         assertEquals("paimon_catalog", paimonTable.getCatalogName());
-        assertEquals("paimon_catalog.db1.tbl1.null", paimonTable.getUUID());
+        assertEquals("paimon_catalog.null", paimonTable.getUUID());
     }
 
     @Test
@@ -256,7 +254,7 @@ public class PaimonMetadataTest {
             {
                 paimonNativeCatalog.getTable((Identifier) any);
                 result = paimonSystemTable;
-                paimonSystemTable.latestSnapshotId();
+                paimonSystemTable.latestSnapshot();
                 result = new Exception("Readonly Table tbl1$manifests does not support currentSnapshot.");
                 paimonSystemTable.newReadBuilder();
                 result = readBuilder;
@@ -282,9 +280,9 @@ public class PaimonMetadataTest {
                 ));
         Identifier tblIdentifier = new Identifier("db1", "tbl1");
         org.apache.paimon.partition.Partition partition1 = new Partition(Map.of("year", "2020", "month", "1"),
-                100L, 1L, 1L, 1741327322000L);
+                100L, 1L, 1L, 1741327322000L, true);
         org.apache.paimon.partition.Partition partition2 = new Partition(Map.of("year", "2020", "month", "2"),
-                100L, 1L, 1L, 1741327322000L);
+                100L, 1L, 1L, 1741327322000L, true);
 
         new Expectations() {
             {

@@ -100,17 +100,25 @@ public class ScalarOperatorsReuseRuleTest extends PlanTestBase {
         {
             String query = "select * from (select rand() as rnd) t where t.rnd < 10 or t.rnd > 20";
             String plan = getFragmentPlan(query);
-            assertContains(plan, "  1:SELECT\n" +
-                    "  |  predicates: (3: rand < 10.0) OR (3: rand > 20.0)\n" +
-                    "  |    common sub expr:\n" +
-                    "  |    <slot 3> : rand()");
+            assertContains(plan, "2:SELECT\n" +
+                    "  |  predicates: (2: rand < 10.0) OR (2: rand > 20.0)\n" +
+                    "  |  \n" +
+                    "  1:Project\n" +
+                    "  |  <slot 2> : rand()\n" +
+                    "  |  \n" +
+                    "  0:UNION");
         }
         {
             connectContext.getSessionVariable().setEnablePredicateExprReuse(false);
             String query = "select * from (select rand() as rnd) t where t.rnd < 10 or t.rnd > 20";
             String plan = getFragmentPlan(query);
-            assertContains(plan, "  1:SELECT\n" +
-                    "  |  predicates: (rand() < 10.0) OR (rand() > 20.0)");
+            assertContains(plan, " 2:SELECT\n" +
+                    "  |  predicates: (2: rand < 10.0) OR (2: rand > 20.0)\n" +
+                    "  |  \n" +
+                    "  1:Project\n" +
+                    "  |  <slot 2> : rand()\n" +
+                    "  |  \n" +
+                    "  0:UNION");
             connectContext.getSessionVariable().setEnablePredicateExprReuse(true);
         }
     }

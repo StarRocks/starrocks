@@ -14,11 +14,11 @@
 
 package com.starrocks.statistic.base;
 
-import com.starrocks.catalog.ArrayType;
-import com.starrocks.catalog.MapType;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.statistic.sample.SampleInfo;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.MapType;
+import com.starrocks.type.Type;
 
 public class CollectionTypeColumnStats extends BaseColumnStats {
     private final boolean isManualJob;

@@ -29,7 +29,7 @@ class BundleWritableFileContext;
 
 namespace starrocks::lake {
 
-class PkTabletSSTWriter;
+class DefaultSSTWriter;
 
 class HorizontalPkTabletWriter : public HorizontalGeneralTabletWriter {
 public:
@@ -64,7 +64,7 @@ protected:
 private:
     std::unique_ptr<RowsetTxnMetaPB> _rowset_txn_meta;
     std::unique_ptr<RowsMapperBuilder> _rows_mapper_builder;
-    std::unique_ptr<PkTabletSSTWriter> _pk_sst_writer;
+    std::unique_ptr<DefaultSSTWriter> _pk_sst_writer;
 };
 
 class VerticalPkTabletWriter : public VerticalGeneralTabletWriter {
@@ -93,7 +93,7 @@ public:
 
 private:
     std::unique_ptr<RowsMapperBuilder> _rows_mapper_builder;
-    std::vector<std::unique_ptr<PkTabletSSTWriter>> _pk_sst_writers;
+    std::vector<std::unique_ptr<DefaultSSTWriter>> _pk_sst_writers;
 };
 
 } // namespace starrocks::lake

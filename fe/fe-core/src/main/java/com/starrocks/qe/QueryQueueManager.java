@@ -16,6 +16,7 @@ package com.starrocks.qe;
 
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.ResourceGroupMetricMgr;
 import com.starrocks.qe.scheduler.RecoverableException;
@@ -54,6 +55,9 @@ public class QueryQueueManager {
     }
 
     public void maybeWait(ConnectContext context, DefaultCoordinator coord) throws StarRocksException, InterruptedException {
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("Maybe wait for query queue, queryId: {}", UUIDUtil.fromTUniqueid(coord.getQueryId()).toString());
+        }
         final JobSpec jobSpec = coord.getJobSpec();
         final SlotProvider slotProvider = jobSpec.getSlotProvider();
         long startMs = System.currentTimeMillis();

@@ -67,7 +67,7 @@ public class SnapshotInfoHelper {
             indexInfos.put(index.getId(), SnapshotInfoHelper.buildMaterializedIndexSnapshotInfo(index));
         }
         return new PhysicalPartitionSnapshotInfo(
-                physicalPart.getId(), physicalPart.getVisibleVersion(), indexInfos);
+                physicalPart.getId(), physicalPart.getVisibleVersion(), physicalPart.getCommittedVersion(), indexInfos);
     }
 
     public static MaterializedIndexSnapshotInfo buildMaterializedIndexSnapshotInfo(MaterializedIndex index) {

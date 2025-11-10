@@ -44,6 +44,10 @@
 #ifdef USE_STAROS
 #include "fslib/star_cache_handler.h"
 #endif
+#include <fmt/ranges.h>
+
+#include <csignal>
+
 #include "fs/encrypt_file.h"
 #include "gutil/cpu.h"
 #include "jemalloc/jemalloc.h"
@@ -58,6 +62,7 @@
 #include "util/disk_info.h"
 #include "util/logging.h"
 #include "util/mem_info.h"
+#include "util/memory_lock.h"
 #include "util/misc.h"
 #include "util/monotime.h"
 #include "util/network_util.h"
@@ -164,6 +169,12 @@ struct JemallocStats {
 };
 
 static void retrieve_jemalloc_stats(JemallocStats* stats) {
+    // On macOS, jemalloc may define je_mallctl as mallctl via macro in jemalloc.h
+#ifdef __APPLE__
+#ifndef je_mallctl
+#define je_mallctl mallctl
+#endif
+#endif
     uint64_t epoch = 1;
     size_t sz = sizeof(epoch);
     je_mallctl("epoch", &epoch, &sz, &epoch, sz);
@@ -190,6 +201,7 @@ static void retrieve_jemalloc_stats(JemallocStats* stats) {
     }
 }
 
+#ifndef __APPLE__
 // Tracker the memory usage of jemalloc
 void jemalloc_tracker_daemon(void* arg_this) {
     auto* daemon = static_cast<Daemon*>(arg_this);
@@ -207,9 +219,11 @@ void jemalloc_tracker_daemon(void* arg_this) {
         nap_sleep(1, [daemon] { return daemon->stopped(); });
     }
 }
+#endif
 
 static void init_starrocks_metrics(const std::vector<StorePath>& store_paths) {
     bool init_system_metrics = config::enable_system_metrics;
+    bool init_jvm_metrics = config::enable_jvm_metrics;
     std::set<std::string> disk_devices;
     std::vector<std::string> network_interfaces;
     std::vector<std::string> paths;
@@ -229,7 +243,8 @@ static void init_starrocks_metrics(const std::vector<StorePath>& store_paths) {
             return;
         }
     }
-    StarRocksMetrics::instance()->initialize(paths, init_system_metrics, disk_devices, network_interfaces);
+    StarRocksMetrics::instance()->initialize(paths, init_system_metrics, init_jvm_metrics, disk_devices,
+                                             network_interfaces);
 }
 
 void sigterm_handler(int signo, siginfo_t* info, void* context) {
@@ -286,6 +301,10 @@ void Daemon::init(bool as_cn, const std::vector<StorePath>& paths) {
 
     LOG(INFO) << get_version_string(false);
 
+#if !defined(BE_TEST) && !defined(__APPLE__)
+    starrocks::mlock_modules();
+#endif
+
     init_thrift_logging();
     CpuInfo::init();
     DiskInfo::init();
@@ -312,6 +331,7 @@ void Daemon::init(bool as_cn, const std::vector<StorePath>& paths) {
 
     init_starrocks_metrics(paths);
 
+#ifndef __APPLE__
     if (config::enable_metric_calculator) {
         std::thread calculate_metrics_thread(calculate_metrics, this);
         Thread::set_thread_name(calculate_metrics_thread, "metrics_daemon");
@@ -323,16 +343,19 @@ void Daemon::init(bool as_cn, const std::vector<StorePath>& paths) {
         Thread::set_thread_name(jemalloc_tracker_thread, "jemalloc_tracker_daemon");
         _daemon_threads.emplace_back(std::move(jemalloc_tracker_thread));
     }
+#endif
 
     init_signals();
     init_minidump();
 #if defined(__SANITIZE_ADDRESS__) || defined(ADDRESS_SANITIZER)
 #else
+#ifndef __APPLE__
     // Don't bother set the limit if the process is running with very limited memory capacity
     if (MemInfo::physical_mem() > 1024 * 1024 * 1024) {
         // set mem hook to reject the memory allocation if large than available physical memory detected.
         set_large_memory_alloc_failure_threshold(MemInfo::physical_mem());
     }
+#endif
 #endif
 }
 

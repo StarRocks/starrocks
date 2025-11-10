@@ -16,8 +16,8 @@
 
 #include <gtest/gtest.h>
 
-#include "cache/lrucache_engine.h"
-#include "cache/object_cache/page_cache.h"
+#include "cache/mem_cache/lrucache_engine.h"
+#include "cache/mem_cache/page_cache.h"
 #include "fs/fs_memory.h"
 #include "storage/rowset/binary_plain_page.h"
 #include "storage/rowset/bitshuffle_page.h"
@@ -243,4 +243,28 @@ TEST_F(PageIOTest, test_use_cache_hit) {
         ASSERT_EQ(col.debug_string(), "[1, 2, 3]");
     }
 }
+
+TEST_F(PageIOTest, test_corrupted_cache) {
+    // open file
+    WritableFileOptions write_opts;
+    write_opts.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE;
+    ASSIGN_OR_ASSERT_FAIL(auto write_file, _fs->new_writable_file(write_opts, "/test_corrupt"));
+
+    // corrupt file with no footer
+    std::vector<int32_t> values{1, 2, 3};
+    OwnedSlice page = _build_data_page(values);
+    ASSERT_OK(write_file->append(page.slice()));
+    ASSERT_OK(write_file->close());
+    uint64_t file_size = write_file->size();
+
+    // read
+    ASSIGN_OR_ASSERT_FAIL(auto read_file, _fs->new_random_access_file("/test_corrupt"));
+    PageReadOptions read_opts = _build_read_options(read_file.get(), 0, file_size, false);
+    PageHandle handle;
+    Slice body;
+    PageFooterPB read_footer;
+    Status s = PageIO::read_and_decompress_page(read_opts, &handle, &body, &read_footer);
+    ASSERT_TRUE(s.is_corruption());
+}
+
 } // namespace starrocks

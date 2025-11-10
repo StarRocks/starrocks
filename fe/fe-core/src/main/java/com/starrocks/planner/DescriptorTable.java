@@ -63,6 +63,7 @@ public class DescriptorTable {
     private final IdGenerator<TupleId> tupleIdGenerator_ = TupleId.createGenerator();
     private final IdGenerator<SlotId> slotIdGenerator_ = SlotId.createGenerator();
     private final HashMap<SlotId, SlotDescriptor> slotDescs = Maps.newHashMap();
+    private final Map<Table, PartitionIdGenerator> tableToPartitionIdGen = Maps.newHashMap();
 
     public DescriptorTable() {
     }
@@ -176,6 +177,10 @@ public class DescriptorTable {
                     tbl.toThrift(referencedPartitionsPerTable.getOrDefault(tbl, Lists.newArrayList())));
         }
         return result;
+    }
+
+    public PartitionIdGenerator getTablePartitionIdGenerator(Table table) {
+        return tableToPartitionIdGen.computeIfAbsent(table, k -> new PartitionIdGenerator());
     }
 
     public static class ReferencedPartitionInfo {

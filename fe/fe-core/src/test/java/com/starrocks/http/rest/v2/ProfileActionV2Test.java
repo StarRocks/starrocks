@@ -46,6 +46,7 @@ public class ProfileActionV2Test extends StarRocksHttpTestCase {
                 .build();
         Response response = networkClient.newCall(request).execute();
         String respStr = response.body().string();
+        Assertions.assertEquals(response.code(), 404);
         Assertions.assertTrue(respStr.contains("Query id eaff21d2-3734-11ee-909f-8e20563011de not found."));
     }
 
@@ -90,6 +91,7 @@ public class ProfileActionV2Test extends StarRocksHttpTestCase {
                 .build();
         Response response = networkClient.newCall(request).execute();
         String respStr = response.body().string();
+        Assertions.assertEquals(response.code(), 200);
         Assertions.assertTrue(respStr.contains("Query ID: eaff21d2-3734-11ee-909f-8e20563011de"));
     }
 
@@ -162,6 +164,7 @@ public class ProfileActionV2Test extends StarRocksHttpTestCase {
                 .build();
         Response response = networkClient.newCall(request).execute();
         String respStr = response.body().string();
+        Assertions.assertEquals(response.code(), 200);
         Assertions.assertTrue(respStr.contains("Query ID: eaff21d2-3734-11ee-909f-8e20563011de"));
     }
 }

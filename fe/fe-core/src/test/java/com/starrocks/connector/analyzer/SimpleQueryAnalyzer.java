@@ -18,7 +18,6 @@ package com.starrocks.connector.analyzer;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.TableFunction;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.sql.analyzer.AnalyzeState;
@@ -52,11 +51,13 @@ import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.CompoundPredicate;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FieldReference;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.TypeManager;
+import com.starrocks.type.Type;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -318,7 +319,7 @@ public class SimpleQueryAnalyzer {
                 AnalyzerUtils.verifyNoGroupingFunctions(args.get(i), "Table Function");
             }
 
-            Function fn = Expr.getBuiltinFunction(node.getFunctionName().getFunction(), argTypes,
+            Function fn = ExprUtils.getBuiltinFunction(node.getFunctionName().getFunction(), argTypes,
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
 
             if (fn == null) {

@@ -14,11 +14,21 @@
 
 package com.starrocks.connector.iceberg.procedure;
 
-import com.starrocks.catalog.Type;
+import com.google.common.base.Strings;
+import com.starrocks.catalog.PartitionKey;
+import com.starrocks.common.Pair;
+import com.starrocks.connector.GetRemoteFilesParams;
+import com.starrocks.connector.PartitionUtil;
+import com.starrocks.connector.RemoteFileDesc;
+import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergPartitionData;
 import com.starrocks.connector.iceberg.IcebergTableOperation;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AstToSQLBuilder;
+import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.type.Type;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -51,8 +61,10 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 
 public class AddFilesProcedure extends IcebergTableProcedure {
@@ -114,6 +126,7 @@ public class AddFilesProcedure extends IcebergTableProcedure {
                         "Unsupported file format: %s. Supported formats are: parquet, orc", fileFormat);
             }
         }
+
         boolean recursive = true;
         ConstantOperator recursiveArg = args.get(RECURSIVE);
         if (recursiveArg != null) {
@@ -135,9 +148,9 @@ public class AddFilesProcedure extends IcebergTableProcedure {
                 String tableLocation = tableLocationArg.getVarchar();
                 addFilesFromLocation(context, table, transaction, tableLocation, recursive, fileFormat);
             } else {
-                // Add files from source table (not implemented yet)
-                throw new StarRocksConnectorException(
-                        "Adding files from source_table is not yet implemented");
+                // Add files from source table
+                String sourceTable = sourceTableArg.getVarchar();
+                addFilesFromSourceTable(context, table, transaction, sourceTable, recursive);
             }
         } catch (Exception e) {
             LOGGER.error("Failed to execute add_files procedure", e);
@@ -186,7 +199,7 @@ public class AddFilesProcedure extends IcebergTableProcedure {
         if (fileStatus.isFile()) {
             // Single file
             if (isDataFile(fileStatus)) {
-                DataFile dataFile = createDataFile(context, table, fileStatus, fileFormat);
+                DataFile dataFile = createDataFileFromLocation(context, table, fileStatus, fileFormat);
                 if (dataFile != null) {
                     dataFiles.add(dataFile);
                 }
@@ -202,7 +215,7 @@ public class AddFilesProcedure extends IcebergTableProcedure {
             for (FileStatus file : files) {
                 if (file.isFile() && isDataFile(file)) {
                     try {
-                        DataFile dataFile = createDataFile(context, table, file, fileFormat);
+                        DataFile dataFile = createDataFileFromLocation(context, table, file, fileFormat);
                         if (dataFile != null) {
                             dataFiles.add(dataFile);
                         }
@@ -238,14 +251,13 @@ public class AddFilesProcedure extends IcebergTableProcedure {
         return fileStatus.getLen() != 0;
     }
 
-    private DataFile createDataFile(IcebergTableProcedureContext context, Table table, FileStatus fileStatus,
-                                    String fileFormat) {
+    private DataFile createDataFileFromLocation(IcebergTableProcedureContext context, Table table, FileStatus fileStatus,
+                                                String fileFormat) {
         String filePath = fileStatus.getPath().toString();
-        long fileSize = fileStatus.getLen();
 
         // Get the table's partition spec
         PartitionSpec spec = table.spec();
-        Optional<StructLike> partition = Optional.empty();
+        String partitionPath = "";
         if (spec.isPartitioned()) {
             List<String> validPartitionPath = new ArrayList<>();
             String[] partitions = filePath.split("/", -1);
@@ -254,12 +266,23 @@ public class AddFilesProcedure extends IcebergTableProcedure {
                     validPartitionPath.add(part);
                 }
             }
-            String partitionPath = String.join("/", validPartitionPath);
-            if (!partitionPath.isEmpty()) {
-                partition = Optional.of(IcebergPartitionData.partitionDataFromPath(partitionPath, spec));
-            }
+            partitionPath = String.join("/", validPartitionPath);
         }
 
+        return buildDataFile(context, table, partitionPath, fileStatus, fileFormat);
+    }
+
+    private DataFile buildDataFile(IcebergTableProcedureContext context, Table table, String partitionPath,
+                                   FileStatus fileStatus, String fileFormat) {
+        Optional<StructLike> partition = Optional.empty();
+        String filePath = fileStatus.getPath().toString();
+        long fileSize = fileStatus.getLen();
+
+        // Get the table's partition spec
+        PartitionSpec spec = table.spec();
+        if (!Strings.isNullOrEmpty(partitionPath)) {
+            partition = Optional.of(IcebergPartitionData.partitionDataFromPath(partitionPath, spec));
+        }
         // Extract file metrics based on format
         Metrics metrics = extractFileMetrics(context, table, fileStatus, fileFormat);
 
@@ -270,6 +293,27 @@ public class AddFilesProcedure extends IcebergTableProcedure {
                 .withMetrics(metrics);
         partition.ifPresent(builder::withPartition);
         return builder.build();
+
+    }
+
+    private List<DataFile> createDataFilesFromPartition(IcebergTableProcedureContext context, Table table, String partitionName,
+                                                        RemoteFileInfo remoteFileInfo) {
+        String partitionFullPath = remoteFileInfo.getFullPath();
+        List<RemoteFileDesc> remoteFiles = remoteFileInfo.getFiles();
+        if (remoteFiles == null || remoteFiles.isEmpty()) {
+            LOGGER.warn("No files found in RemoteFileInfo for partition: {}", partitionName);
+            return null;
+        }
+
+        return remoteFiles.stream().map(remoteFile -> {
+            String filePath = remoteFile.getFullPath() != null ? remoteFile.getFullPath() :
+                    (partitionFullPath.endsWith("/") ? partitionFullPath + remoteFile.getFileName() :
+                            partitionFullPath + "/" + remoteFile.getFileName());
+            FileStatus fileStatus = new FileStatus(remoteFile.getLength(), false,
+                    1, 0, remoteFile.getModificationTime(), new Path(filePath));
+            return buildDataFile(context, table, table.spec().isPartitioned() ? partitionName : "", fileStatus,
+                    remoteFileInfo.getFormat().name());
+        }).filter(Objects::nonNull).collect(Collectors.toList());
     }
 
     private Metrics extractFileMetrics(IcebergTableProcedureContext context, Table table, FileStatus fileStatus,
@@ -421,5 +465,124 @@ public class AddFilesProcedure extends IcebergTableProcedure {
             LOGGER.warn("Failed to get column name for ORC column ID: {}", columnId);
         }
         return null;
+    }
+
+    private void addFilesFromSourceTable(IcebergTableProcedureContext context, Table table, Transaction transaction,
+                                         String sourceTable, boolean recursive) throws Exception {
+        ParseNode where = context.clause().getWhere();
+        LOGGER.info("Adding files from source Hive table: {} with partition filter: {}", sourceTable,
+                where != null ? AstToSQLBuilder.toSQL(where) : "none");
+
+        // Parse source table name to get database and table
+        String[] parts = sourceTable.split("\\.");
+        String catalogName;
+        String dbName;
+        String tableName;
+
+        if (parts.length == 3) {
+            // Catalog.database.table format
+            catalogName = parts[0];
+            dbName = parts[1];
+            tableName = parts[2];
+        } else {
+            throw new StarRocksConnectorException(
+                    "Invalid source table format: %s. Expected format: catalog.database.table", sourceTable);
+        }
+
+        com.starrocks.catalog.Table sourceHiveTable;
+        try {
+            sourceHiveTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(context.context(), catalogName,
+                    dbName, tableName);
+        } catch (Exception e) {
+            throw new StarRocksConnectorException(
+                    "Failed to access source table %s: %s", sourceTable, e.getMessage(), e);
+        }
+
+        if (sourceHiveTable == null) {
+            throw new StarRocksConnectorException(
+                    "Source table %s not found", sourceTable);
+        }
+
+        // Ensure the source table is a Hive table
+        if (!sourceHiveTable.isHiveTable()) {
+            throw new StarRocksConnectorException(
+                    "Source table %s is not a Hive table. Only Hive tables are supported as source tables.", sourceTable);
+        }
+
+        // Use Hive table partition pruning to get filtered partition names
+        List<PartitionKey> filteredPartitionKeys = PartitionUtil.getFilteredPartitionKeys(context.context(),
+                sourceHiveTable, context.clause().getWhere());
+        GetRemoteFilesParams.Builder paramsBuilder;
+        List<GetRemoteFilesParams> paramsList = new ArrayList<>();
+        if (filteredPartitionKeys == null) {
+            // un-partitioned table
+            paramsBuilder = GetRemoteFilesParams.newBuilder()
+                    .setUseCache(false)
+                    .setIsRecursive(recursive);
+            paramsList.add(paramsBuilder.build());
+        } else if (filteredPartitionKeys.isEmpty()) {
+            // all partitions are pruned
+            LOGGER.warn("No partitions match the specified filter in source Hive table: {}", sourceTable);
+            return;
+        } else {
+            paramsList.addAll(filteredPartitionKeys.stream().map(p -> GetRemoteFilesParams.newBuilder()
+                    .setUseCache(false)
+                    .setPartitionKeys(List.of(p))
+                    .setIsRecursive(recursive)
+                    .build()).toList());
+        }
+
+
+        List<Pair<String, List<RemoteFileInfo>>> partitionRemoteFiles = new ArrayList<>();
+        List<String> partitionColumnNames = sourceHiveTable.getPartitionColumnNames();
+        try {
+            for (GetRemoteFilesParams params : paramsList) {
+                List<RemoteFileInfo> remoteFiles = GlobalStateMgr.getCurrentState().getMetadataMgr().
+                        getRemoteFiles(sourceHiveTable, params);
+                partitionRemoteFiles.add(Pair.create(params.getPartitionKeys() == null ? "" :
+                                params.getPartitionKeys().stream().map(partitionKey ->
+                                        PartitionUtil.toHivePartitionName(partitionColumnNames, partitionKey)).
+                                        collect(Collectors.joining()),
+                        remoteFiles));
+            }
+        } catch (Exception e) {
+            throw new StarRocksConnectorException(
+                    "Failed to get files from source Hive table %s: %s", sourceTable, e.getMessage(), e);
+        }
+
+        if (partitionRemoteFiles.isEmpty()) {
+            LOGGER.warn("No files found in source Hive table: {}", sourceTable);
+            return;
+        }
+
+        // Convert remote files to Iceberg DataFiles
+        List<DataFile> dataFiles = new ArrayList<>();
+        for (Pair<String, List<RemoteFileInfo>> partitionRemoteFileInfo : partitionRemoteFiles) {
+            String partitionName = partitionRemoteFileInfo.first;
+            List<RemoteFileInfo> remoteFileInfos = partitionRemoteFileInfo.second;
+
+            for (RemoteFileInfo remoteFileInfo : remoteFileInfos) {
+                List<DataFile> partitionDataFiles = createDataFilesFromPartition(context, table, partitionName, remoteFileInfo);
+                if (partitionDataFiles != null) {
+                    dataFiles.addAll(partitionDataFiles);
+                }
+            }
+        }
+
+        if (dataFiles.isEmpty()) {
+            LOGGER.warn("No valid data files found after filtering in source Hive table: {}", sourceTable);
+            return;
+        }
+
+        // Add the files to the target Iceberg table
+        AppendFiles appendFiles = transaction.newAppend();
+        for (DataFile dataFile : dataFiles) {
+            appendFiles.appendFile(dataFile);
+        }
+
+        // Commit the transaction
+        appendFiles.commit();
+        LOGGER.info("Successfully added {} files from source Hive table {} to Iceberg table",
+                dataFiles.size(), sourceTable);
     }
 }

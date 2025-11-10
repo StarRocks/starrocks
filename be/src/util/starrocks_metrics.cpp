@@ -55,7 +55,6 @@ StarRocksMetrics::StarRocksMetrics() : _metrics(_s_registry_name) {
     REGISTER_STARROCKS_METRIC(query_scan_bytes);
     REGISTER_STARROCKS_METRIC(query_scan_rows);
 
-    pipeline_executor_metrics.register_all_metrics(&_metrics);
     REGISTER_STARROCKS_METRIC(pipe_scan_executor_queuing);
     REGISTER_STARROCKS_METRIC(pipe_driver_schedule_count);
     REGISTER_STARROCKS_METRIC(pipe_driver_execution_time);
@@ -255,13 +254,17 @@ StarRocksMetrics::StarRocksMetrics() : _metrics(_s_registry_name) {
     REGISTER_STARROCKS_METRIC(blocks_open_reading);
     REGISTER_STARROCKS_METRIC(blocks_open_writing);
 
+    REGISTER_STARROCKS_METRIC(exec_runtime_memory_size);
+
     REGISTER_STARROCKS_METRIC(short_circuit_request_total);
     REGISTER_STARROCKS_METRIC(short_circuit_request_duration_us);
 }
 
 void StarRocksMetrics::initialize(const std::vector<std::string>& paths, bool init_system_metrics,
-                                  const std::set<std::string>& disk_devices,
+                                  bool init_jvm_metrics, const std::set<std::string>& disk_devices,
                                   const std::vector<std::string>& network_interfaces) {
+    pipeline_executor_metrics.register_all_metrics(&_metrics);
+
     // disk usage
     for (auto& path : paths) {
         IntGauge* gauge = disks_total_capacity.add_metric(path, MetricUnit::BYTES);
@@ -277,6 +280,17 @@ void StarRocksMetrics::initialize(const std::vector<std::string>& paths, bool in
     if (init_system_metrics) {
         _system_metrics.install(&_metrics, disk_devices, network_interfaces);
     }
+
+#ifndef __APPLE__
+    if (init_jvm_metrics) {
+        auto status = _jvm_metrics.init();
+        if (!status.ok()) {
+            LOG(WARNING) << "init jvm metrics failed: " << status.to_string();
+            return;
+        }
+        _jvm_metrics.install(&_metrics);
+    }
+#endif
 }
 
 void StarRocksMetrics::_update() {

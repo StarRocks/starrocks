@@ -14,18 +14,18 @@
 
 package com.starrocks.http.rest.v2;
 
-import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.http.rest.RestBaseAction;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.QueryDetail;
 import com.starrocks.qe.QueryDetailQueue;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 
-import java.util.Arrays;
 import java.util.List;
 
 // This class is a RESTFUL interface to get query profile from all frontend nodes.
@@ -81,17 +81,16 @@ public class QueryDetailActionV2 extends RestBaseAction {
             if (dataList != null) {
                 for (String data : dataList) {
                     if (data != null) {
-                        Gson gson = new Gson();
-                        QueryDetail[] queryDetailArray = gson.fromJson(data, QueryDetail[].class);
-                        queryDetails.addAll(Arrays.asList(queryDetailArray));
+                        RestBaseResultV2<List<QueryDetail>> queryDetail = GsonUtils.GSON.fromJson(
+                                data,
+                                new TypeToken<RestBaseResultV2<List<QueryDetail>>>() {
+                                }.getType());
+                        queryDetails.addAll(queryDetail.getResult());
                     }
                 }
             }
         }
 
-        Gson gson = new Gson();
-        String jsonString = gson.toJson(queryDetails);
-        response.getContent().append(jsonString);
-        sendResult(request, response);
+        sendResult(request, response, new RestBaseResultV2<>(queryDetails));
     }
 }

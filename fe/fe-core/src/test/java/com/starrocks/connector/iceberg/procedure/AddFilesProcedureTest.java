@@ -14,7 +14,6 @@
 
 package com.starrocks.connector.iceberg.procedure;
 
-import com.starrocks.catalog.Type;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergTableOperation;
@@ -23,6 +22,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterTableOperationClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.type.Type;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
@@ -176,16 +176,21 @@ public class AddFilesProcedureTest {
         IcebergTableProcedureContext context = createMockContext(table, catalog);
 
         Map<String, ConstantOperator> args = new HashMap<>();
-        args.put("source_table", ConstantOperator.createVarchar("test_table"));
+        args.put("source_table", ConstantOperator.createVarchar("test_catalog.test_db.test_table"));
 
+        // This test will now validate the new source table functionality
+        // The test should fail due to missing Hive table access, not "not implemented"
         StarRocksConnectorException exception = assertThrows(StarRocksConnectorException.class,
                 () -> procedure.execute(context, args));
 
-        assertTrue(exception.getMessage().contains("Adding files from source_table is not yet implemented"));
+        // The exception should be about Hive table access, not "not implemented"
+        assertTrue(exception.getMessage().contains("Failed to access source table") || 
+                   exception.getMessage().contains("not found") ||
+                   exception.getMessage().contains("not a Hive table"));
     }
 
     @Test
-    public void testCreateDataFileWithMetrics() throws Exception {
+    public void testCreateDataFileFromLocationWithMetrics() throws Exception {
         AddFilesProcedure procedure = AddFilesProcedure.getInstance();
 
         // Mock table schema and partition spec

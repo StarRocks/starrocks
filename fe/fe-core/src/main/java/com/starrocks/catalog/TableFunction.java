@@ -27,6 +27,8 @@ import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.thrift.TFunction;
 import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.thrift.TTableFunction;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeSerializer;
 
 import java.util.List;
 import java.util.Map;
@@ -149,6 +151,9 @@ public class TableFunction extends Function {
         this.isLeftJoin = isLeftJoin;
     }
 
+    public boolean isLeftJoin() {
+        return this.isLeftJoin;
+    }
 
 
 
@@ -157,7 +162,7 @@ public class TableFunction extends Function {
         TFunction fn = super.toThrift();
         TTableFunction tableFn = new TTableFunction();
         tableFn.setSymbol(symbolName);
-        tableFn.setRet_types(tableFnReturnTypes.stream().map(Type::toThrift).collect(Collectors.toList()));
+        tableFn.setRet_types(tableFnReturnTypes.stream().map(TypeSerializer::toThrift).collect(Collectors.toList()));
         tableFn.setIs_left_join(isLeftJoin);
         fn.setTable_fn(tableFn);
         return fn;

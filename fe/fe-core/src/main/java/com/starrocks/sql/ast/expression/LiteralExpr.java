@@ -36,7 +36,6 @@ package com.starrocks.sql.ast.expression;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.mysql.MysqlCodec;
@@ -45,6 +44,7 @@ import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.Type;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -56,7 +56,6 @@ import java.util.Map;
 public abstract class LiteralExpr extends Expr implements Comparable<LiteralExpr> {
     public LiteralExpr() {
         super();
-        numDistinctValues = 1;
     }
 
     protected LiteralExpr(NodePosition pos) {
@@ -135,6 +134,54 @@ public abstract class LiteralExpr extends Expr implements Comparable<LiteralExpr
             default:
                 throw new AnalysisException("Invalid data type for creating infinity: " + type);
         }
+    }
+
+    public static LiteralExpr createDefault(Type type) throws AnalysisException {
+        Preconditions.checkArgument(type.isValid());
+        LiteralExpr literalExpr = null;
+        switch (type.getPrimitiveType()) {
+            case NULL_TYPE:
+                literalExpr = new NullLiteral();
+                break;
+            case BOOLEAN:
+                literalExpr = new BoolLiteral(false);
+                break;
+            case TINYINT:
+            case SMALLINT:
+            case INT:
+            case BIGINT:
+                literalExpr = new IntLiteral(0, type);
+                break;
+            case LARGEINT:
+                literalExpr = new LargeIntLiteral("0");
+                break;
+            case FLOAT:
+            case DOUBLE:
+                literalExpr = new FloatLiteral(0.0, type);
+                break;
+            case DECIMALV2:
+            case DECIMAL32:
+            case DECIMAL64:
+            case DECIMAL128:
+            case DECIMAL256:
+                literalExpr = new DecimalLiteral("0");
+                break;
+            case CHAR:
+            case VARCHAR:
+            case BINARY:
+            case VARBINARY:
+            case HLL:
+                literalExpr = new StringLiteral("");
+                break;
+            case DATE:
+            case DATETIME:
+                literalExpr = new DateLiteral("1970-01-01 00:00:00", type);
+                break;
+            default:
+                throw new AnalysisException("Type[" + type.toSql() + "] not supported.");
+        }
+        Preconditions.checkNotNull(literalExpr);
+        return literalExpr;
     }
 
     /*

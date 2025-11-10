@@ -444,7 +444,7 @@ public class ClusterSnapshotTest {
         final ClusterSnapshotMgr localClusterSnapshotMgr = new ClusterSnapshotMgr();
         final CheckpointController feController = new CheckpointController("fe", new BDBJEJournal(null, ""), "");
         final CheckpointController starMgrController = new CheckpointController("starMgr", new BDBJEJournal(null, ""), "");
-        final ClusterSnapshotInfo info = new ClusterSnapshotInfo(null);
+        final ClusterSnapshotInfo info = new ClusterSnapshotInfo(new HashMap<>());
         ClusterSnapshotJob job = localClusterSnapshotMgr.createAutomatedSnapshotJob();
         Assertions.assertTrue(!job.needClusterSnapshotInfo());
         Assertions.assertTrue(job.isAutomated());
@@ -481,9 +481,7 @@ public class ClusterSnapshotTest {
             new MockUp<GlobalStateCheckpointWorker>() {
                 @Mock
                 void doCheckpoint(long epoch, long journalId, boolean needClusterSnapshotInfo) throws Exception {
-                    if (needClusterSnapshotInfo) {
-                        Deencapsulation.setField(info, "dbInfos", new HashMap<>());
-                    }
+                    Deencapsulation.setField(info, "dbInfos", new HashMap<>());
                 }
             };
     

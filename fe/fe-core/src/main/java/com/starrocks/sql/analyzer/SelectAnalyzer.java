@@ -19,13 +19,12 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.common.collect.Streams;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.TreeNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.GroupByClause;
+import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.Relation;
@@ -34,14 +33,20 @@ import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.expression.AnalyticExpr;
 import com.starrocks.sql.ast.expression.CastExpr;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FieldReference;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.GroupingFunctionCallExpr;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.LimitElement;
 import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.ast.expression.UserVariableExpr;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.common.TypeManager;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.Type;
 import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.ArrayList;
@@ -49,6 +54,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -58,7 +64,7 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
-import static com.starrocks.sql.ast.expression.Expr.pushNegationToOperands;
+import static com.starrocks.sql.ast.expression.ExprUtils.pushNegationToOperands;
 import static com.starrocks.sql.common.ErrorType.INTERNAL_ERROR;
 
 public class SelectAnalyzer {
@@ -173,7 +179,7 @@ public class SelectAnalyzer {
              * group by expressions and aggregation expressions.
              */
             List<FunctionCallExpr> aggregationsInOrderBy = Lists.newArrayList();
-            TreeNode.collect(orderByExpressions, Expr.isAggregatePredicate(), aggregationsInOrderBy);
+            TreeNode.collect(orderByExpressions, ExprUtils.isAggregatePredicate(), aggregationsInOrderBy);
 
             /*
              * Prohibit the use of aggregate sorting for non-aggregated query,
@@ -181,7 +187,7 @@ public class SelectAnalyzer {
              * eg. select 1 from t0 order by sum(v)
              */
             List<FunctionCallExpr> aggregationsInOutput = Lists.newArrayList();
-            TreeNode.collect(sourceExpressions, Expr.isAggregatePredicate(), aggregationsInOutput);
+            TreeNode.collect(sourceExpressions, ExprUtils.isAggregatePredicate(), aggregationsInOutput);
             if (!AnalyzerUtils.isAggregate(aggregationsInOutput, groupByExpressions) &&
                     !aggregationsInOrderBy.isEmpty()) {
                 throw new SemanticException(
@@ -211,9 +217,16 @@ public class SelectAnalyzer {
 
         for (SelectListItem item : selectList.getItems()) {
             if (item.isStar()) {
-                List<Field> fields = (item.getTblName() == null ? scope.getRelationFields().getAllFields()
-                        : scope.getRelationFields().resolveFieldsWithPrefix(item.getTblName()))
-                        .stream().filter(Field::isVisible)
+                List<Field> fields;
+
+                if (getJoinRelationWithUsing(fromRelation) != null) {
+                    fields = getFieldsForJoinUsingStar(fromRelation, scope, item.getTblName());
+                } else {
+                    fields = (item.getTblName() == null ? scope.getRelationFields().getAllFields()
+                            : scope.getRelationFields().resolveFieldsWithPrefix(item.getTblName()));
+                }
+                
+                fields = fields.stream().filter(Field::isVisible)
                         .filter(field -> !field.getName().startsWith(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX))
                         .collect(Collectors.toList());
                 List<String> unknownTypeFields = fields.stream()
@@ -379,7 +392,7 @@ public class SelectAnalyzer {
                 ExpressionAnalyzer expressionAnalyzer = new ExpressionAnalyzer(session);
                 expressionAnalyzer.analyzeWithoutUpdateState(expression, analyzeState, orderByScope);
                 List<Expr> aggregations = Lists.newArrayList();
-                expression.collectAll(e -> e.isAggregate(), aggregations);
+                expression.collectAll(e -> ExprUtils.isAggregate(e), aggregations);
                 if (isDistinct && !aggregations.isEmpty()) {
                     throw new SemanticException("for SELECT DISTINCT, ORDER BY expressions must appear in select list",
                             expression.getPos());
@@ -410,7 +423,7 @@ public class SelectAnalyzer {
             expression.collect(AnalyticExpr.class, window);
             if (window.stream()
                     .anyMatch((e -> TreeNode.contains(e.getChildren(), AnalyticExpr.class)))) {
-                throw new SemanticException("Nesting of analytic expressions is not allowed: " + expression.toSql());
+                throw new SemanticException("Nesting of analytic expressions is not allowed: " + ExprToSql.toSql(expression));
             }
             outputWindowFunctions.addAll(window);
         }
@@ -422,7 +435,7 @@ public class SelectAnalyzer {
             expression.collect(AnalyticExpr.class, window);
             if (window.stream()
                     .anyMatch((e -> TreeNode.contains(e.getChildren(), AnalyticExpr.class)))) {
-                throw new SemanticException("Nesting of analytic expressions is not allowed: " + expression.toSql());
+                throw new SemanticException("Nesting of analytic expressions is not allowed: " + ExprToSql.toSql(expression));
             }
             orderByWindowFunctions.addAll(window);
         }
@@ -443,10 +456,11 @@ public class SelectAnalyzer {
 
         if (predicate.getType().isBoolean() || predicate.getType().isNull()) {
             // do nothing
-        } else if (!session.getSessionVariable().isEnableStrictType() && Type.canCastTo(predicate.getType(), Type.BOOLEAN)) {
+        } else if (!session.getSessionVariable().isEnableStrictType()
+                && TypeManager.canCastTo(predicate.getType(), Type.BOOLEAN)) {
             predicate = new CastExpr(Type.BOOLEAN, predicate);
         } else {
-            throw new SemanticException("WHERE clause %s can not be converted to boolean type", predicate.toSql());
+            throw new SemanticException("WHERE clause %s can not be converted to boolean type", ExprToSql.toSql(predicate));
         }
 
         analyzeState.setPredicate(predicate);
@@ -471,14 +485,14 @@ public class SelectAnalyzer {
     private List<FunctionCallExpr> analyzeAggregations(AnalyzeState analyzeState, Scope sourceScope,
                                                           List<Expr> outputAndOrderByExpressions) {
         List<FunctionCallExpr> aggregations = Lists.newArrayList();
-        TreeNode.collect(outputAndOrderByExpressions, Expr.isAggregatePredicate()::apply, aggregations);
+        TreeNode.collect(outputAndOrderByExpressions, ExprUtils.isAggregatePredicate()::apply, aggregations);
         aggregations.forEach(e -> analyzeExpression(e, analyzeState, sourceScope));
 
         for (FunctionCallExpr agg : aggregations) {
             if (agg.isDistinct() && agg.getChildren().size() > 0) {
                 Type[] args = agg.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
                 if (Arrays.stream(args).anyMatch(t -> (t.isJsonType() || t.isComplexType()) && !t.canGroupBy())) {
-                    throw new SemanticException(agg.toSql() + " can't rewrite distinct to group by on (" +
+                    throw new SemanticException(ExprToSql.toSql(agg) + " can't rewrite distinct to group by on (" +
                             Arrays.stream(args).map(Type::toSql).collect(Collectors.joining(",")) + ")");
                 }
             }
@@ -621,7 +635,7 @@ public class SelectAnalyzer {
                 ((UserVariableExpr) limitExpr).getValue() instanceof IntLiteral) {
             limit = ((IntLiteral) ((UserVariableExpr) limitExpr).getValue()).getLongValue();
         } else {
-            throw new SemanticException("LIMIT clause %s must be number", limitExpr.toMySql());
+            throw new SemanticException("LIMIT clause %s must be number", ExprToSql.toMySql(limitExpr));
         }
         if (limit == -1) {
             return null;
@@ -633,7 +647,7 @@ public class SelectAnalyzer {
                 ((UserVariableExpr) offsetExpr).getValue() instanceof IntLiteral) {
             offset = ((IntLiteral) ((UserVariableExpr) offsetExpr).getValue()).getLongValue();
         } else {
-            throw new SemanticException("OFFSET clause %s must be number", offsetExpr.toMySql());
+            throw new SemanticException("OFFSET clause %s must be number", ExprToSql.toMySql(offsetExpr));
         }
         return new LimitElement(offset, limit, limitElement.getPos());
     }
@@ -871,5 +885,121 @@ public class SelectAnalyzer {
             }
         }
         return allFields;
+    }
+
+    private JoinRelation getJoinRelationWithUsing(Relation relation) {
+        if (relation instanceof JoinRelation joinRelation) {
+            if (CollectionUtils.isNotEmpty(joinRelation.getUsingColNames())) {
+                return joinRelation;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Constructs field list for SELECT * in JOIN USING context per SQL standard.
+     * 
+     * SQL standard specifies that JOIN USING columns should appear only once in SELECT *,
+     * unlike JOIN ON where both L.col and R.col would appear. The column ordering follows
+     * specific rules based on JOIN type:
+     * 
+     * MYSQL Standard column order:
+     * - INNER/LEFT/FULL JOIN: [USING columns, left non-USING, right non-USING]  
+     * - RIGHT JOIN: [USING columns, right non-USING, left non-USING]
+     * 
+     * USING column selection (COALESCE semantics):
+     * - RIGHT JOIN: prefer right table's field (for non-null values)
+     * - Other JOINs: prefer left table's field
+     * 
+     * Examples:
+     * - SELECT * FROM t1(a,b,c) JOIN t2(a,d) USING(a) -> [a, b, c, d]
+     * - SELECT * FROM t1(a,b,c) RIGHT JOIN t2(a,d) USING(a) -> [a, d, b, c]
+     * 
+     * @param fromRelation The JOIN relation containing USING clause
+     * @param scope Current scope with all available fields
+     * @param tblName Optional table qualifier (e.g., t1.* vs *)
+     * @return Properly ordered field list for SELECT * with USING columns appearing once
+     */
+    private List<Field> getFieldsForJoinUsingStar(Relation fromRelation, Scope scope, TableName tblName) {
+        if (tblName != null) {
+            // Qualified SELECT (e.g., SELECT t1.* FROM t1 JOIN t2 USING(id))
+            // Return only fields from specified table, no special USING handling needed
+            return scope.getRelationFields().resolveFieldsWithPrefix(tblName);
+        }
+
+        JoinRelation joinRelation = getJoinRelationWithUsing(fromRelation);
+
+        // TODO(stephen): Support FULL OUTER JOIN USING with proper COALESCE semantics
+        if (joinRelation.getJoinOp().isFullOuterJoin()) {
+            return scope.getRelationFields().getAllFields();
+        }
+
+        Set<String> usingColSet = joinRelation.getUsingColNames().stream()
+                .map(String::toLowerCase)
+                .collect(Collectors.toSet());
+
+        List<Field> allFields = scope.getRelationFields().getAllFields();
+
+        // Step 1: Add USING columns once with appropriate table preference
+        Map<String, Field> usingFields = new LinkedHashMap<>();
+        
+        // Determine which table to prefer for USING columns (COALESCE semantics)
+        boolean preferRightTable = joinRelation.getJoinOp() != null && joinRelation.getJoinOp().isRightJoin();
+        
+        // Iterate through all fields to find USING columns, selecting appropriate table's field
+        for (Field field : allFields) {
+            if (field.getName() != null && usingColSet.contains(field.getName().toLowerCase())) {
+                String key = field.getName().toLowerCase();
+                if (!usingFields.containsKey(key)) {
+                    // First occurrence: always use it
+                    usingFields.put(key, field);
+                } else if (preferRightTable) {
+                    // Second occurrence in RIGHT JOIN: replace left table field with right table field
+                    usingFields.put(key, field);
+                }
+            }
+        }
+        List<Field> result = new ArrayList<>(usingFields.values());
+
+        // Step 2: Add non-USING columns in MYSQL SQL standard compliant order
+        // Get original field counts to accurately separate left and right table fields
+        int leftFieldCount = joinRelation.getLeft().getScope().getRelationFields().getAllFields().size();
+        int rightFieldCount = joinRelation.getRight().getScope().getRelationFields().getAllFields().size();
+        
+        if (preferRightTable) {
+            // RIGHT JOIN: [USING cols, right non-USING, left non-USING] per SQL standard
+            addNonUsingFieldsByCount(allFields, usingColSet, result, leftFieldCount, rightFieldCount, false);
+            addNonUsingFieldsByCount(allFields, usingColSet, result, leftFieldCount, rightFieldCount, true);
+        } else {
+            // Other JOINs: [USING cols, left non-USING, right non-USING] per SQL standard
+            addNonUsingFieldsByCount(allFields, usingColSet, result, leftFieldCount, rightFieldCount, true);
+            addNonUsingFieldsByCount(allFields, usingColSet, result, leftFieldCount, rightFieldCount, false);
+        }
+
+        return result;
+    }
+
+    private void addNonUsingFieldsByCount(List<Field> allFields, Set<String> usingColSet, 
+                                          List<Field> result, int leftFieldCount, int rightFieldCount,
+                                          boolean addLeftTable) {
+        int startIdx;
+        int endIdx;
+        if (addLeftTable) {
+            // Add left table fields: indices [0, leftFieldCount)
+            startIdx = 0;
+            endIdx = leftFieldCount;
+        } else {
+            // Add right table fields: indices [leftFieldCount, leftFieldCount + rightFieldCount)
+            startIdx = leftFieldCount;
+            endIdx = leftFieldCount + rightFieldCount;
+        }
+        
+        // Add non-USING fields from the specified table range
+        for (int i = startIdx; i < endIdx && i < allFields.size(); i++) {
+            Field field = allFields.get(i);
+            if (field.getName() == null || !usingColSet.contains(field.getName().toLowerCase())) {
+                result.add(field);
+            }
+        }
     }
 }

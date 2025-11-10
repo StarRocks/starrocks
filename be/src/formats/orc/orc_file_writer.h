@@ -23,27 +23,6 @@
 
 namespace starrocks::formats {
 
-class OrcOutputStream : public orc::OutputStream {
-public:
-    OrcOutputStream(std::unique_ptr<starrocks::WritableFile> wfile);
-
-    ~OrcOutputStream() override;
-
-    uint64_t getLength() const override;
-
-    uint64_t getNaturalWriteSize() const override;
-
-    void write(const void* buf, size_t length) override;
-
-    void close() override;
-
-    const std::string& getName() const override;
-
-private:
-    std::unique_ptr<starrocks::WritableFile> _wfile;
-    bool _is_closed = false;
-};
-
 class AsyncOrcOutputStream : public orc::OutputStream {
 public:
     AsyncOrcOutputStream(io::AsyncFlushOutputStream* _stream);
@@ -115,6 +94,8 @@ private:
     Status _write_date(orc::ColumnVectorBatch& orc_column, ColumnPtr& column);
 
     Status _write_datetime(orc::ColumnVectorBatch& orc_column, ColumnPtr& column);
+
+    Status _write_map(const TypeDescriptor& type, orc::ColumnVectorBatch& orc_column, ColumnPtr& column);
 
     inline static const std::string STARROCKS_ORC_WRITER_VERSION_KEY = "starrocks.writer.version";
 

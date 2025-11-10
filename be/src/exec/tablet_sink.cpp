@@ -46,9 +46,9 @@
 #include "column/column_helper.h"
 #include "column/map_column.h"
 #include "column/nullable_column.h"
+#include "common/config.h"
 #include "common/statusor.h"
 #include "common/tracer.h"
-#include "config.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/tablet_sink_colocate_sender.h"
 #include "exprs/expr.h"
@@ -600,7 +600,7 @@ Status OlapTableSink::_incremental_open_node_channel(const std::vector<TOlapTabl
         });
 
         if (channel->has_intolerable_failure()) {
-            LOG(WARNING) << "Open channel failed. load_id: " << _load_id << ", error: " << err_st.to_string();
+            LOG(WARNING) << "Open channel failed. load_id: " << print_id(_load_id) << ", error: " << err_st.to_string();
             return err_st;
         }
     }

@@ -567,4 +567,13 @@ Status Rowset::load_segments(std::vector<SegmentPtr>* segments, SegmentReadOptio
     return Status::OK();
 }
 
+int64_t Rowset::data_size_after_deletion() const {
+    // get data size after delete vector applied
+    if (num_rows() == 0 || data_size() == 0) {
+        return 0;
+    }
+    // data size * (num_rows - num_deleted_rows) / num_rows
+    return (int64_t)(data_size() * ((double)(num_rows() - num_dels()) / num_rows()));
+}
+
 } // namespace starrocks::lake

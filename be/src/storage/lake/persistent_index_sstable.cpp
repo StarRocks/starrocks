@@ -27,8 +27,8 @@
 namespace starrocks::lake {
 
 Status PersistentIndexSstable::init(std::unique_ptr<RandomAccessFile> rf, const PersistentIndexSstablePB& sstable_pb,
-                                    Cache* cache, TabletManager* tablet_mgr, int64_t tablet_id, bool need_filter,
-                                    DelVectorPtr delvec) {
+                                    Cache* cache, bool need_filter, DelVectorPtr delvec,
+                                    const TabletMetadataPtr& metadata, TabletManager* tablet_mgr) {
     sstable::Options options;
     if (need_filter) {
         _filter_policy.reset(const_cast<sstable::FilterPolicy*>(sstable::NewBloomFilterPolicy(10)));
@@ -41,17 +41,22 @@ Status PersistentIndexSstable::init(std::unique_ptr<RandomAccessFile> rf, const 
     _rf = std::move(rf);
     _sstable_pb.CopyFrom(sstable_pb);
     // load delvec
-    if (_sstable_pb.has_delvec()) {
+    if (_sstable_pb.has_delvec() && _sstable_pb.delvec().size() > 0) {
         if (delvec) {
             // If delvec is already provided, use it directly.
             _delvec = std::move(delvec);
         } else {
+            if (metadata == nullptr) {
+                return Status::InvalidArgument("metadata is null when loading delvec from file");
+            }
+            if (tablet_mgr == nullptr) {
+                return Status::InvalidArgument("tablet_mgr is null when loading delvec from file");
+            }
             // otherwise, load delvec from file
             LakeIOOptions lake_io_opts{.fill_data_cache = true, .skip_disk_cache = false};
             auto delvec_loader =
                     std::make_unique<LakeDelvecLoader>(tablet_mgr, nullptr, true /* fill cache */, lake_io_opts);
-            RETURN_IF_ERROR(delvec_loader->load(TabletSegmentId(tablet_id, _sstable_pb.shared_rssid()),
-                                                _sstable_pb.shared_version(), &_delvec));
+            RETURN_IF_ERROR(delvec_loader->load_from_meta(metadata, _sstable_pb.delvec(), &_delvec));
         }
     }
     return Status::OK();
@@ -70,7 +75,7 @@ Status PersistentIndexSstable::build_sstable(const phmap::btree_map<std::string,
         value->set_version(v.first);
         value->set_rssid(v.second.get_rssid());
         value->set_rowid(v.second.get_rowid());
-        builder.Add(Slice(k), Slice(index_value_pb.SerializeAsString()));
+        RETURN_IF_ERROR(builder.Add(Slice(k), Slice(index_value_pb.SerializeAsString())));
     }
     RETURN_IF_ERROR(builder.Finish());
     *filesz = builder.FileSize();
@@ -158,17 +163,12 @@ Status PersistentIndexSstableStreamBuilder::add(const Slice& key) {
         return Status::InvalidArgument("Builder already finished");
     }
 
-    if (!_status.ok()) {
-        return _status;
-    }
-
     IndexValuesWithVerPB index_value_pb;
     auto* val = index_value_pb.add_values();
     val->set_rowid(_sst_rowid++);
 
-    _table_builder->Add(key, Slice(index_value_pb.SerializeAsString()));
-    _status = _table_builder->status();
-    return _status;
+    RETURN_IF_ERROR(_table_builder->Add(key, Slice(index_value_pb.SerializeAsString())));
+    return _table_builder->status();
 }
 
 Status PersistentIndexSstableStreamBuilder::finish(uint64_t* file_size) {
@@ -176,18 +176,12 @@ Status PersistentIndexSstableStreamBuilder::finish(uint64_t* file_size) {
         return Status::InvalidArgument("Builder already finished");
     }
 
-    if (!_status.ok()) {
-        return _status;
+    RETURN_IF_ERROR(_table_builder->Finish());
+    _finished = true;
+    if (file_size != nullptr) {
+        *file_size = _table_builder->FileSize();
     }
-
-    _status = _table_builder->Finish();
-    if (_status.ok()) {
-        _finished = true;
-        if (file_size != nullptr) {
-            *file_size = _table_builder->FileSize();
-        }
-    }
-    return _status;
+    return _table_builder->status();
 }
 
 uint64_t PersistentIndexSstableStreamBuilder::num_entries() const {
@@ -200,10 +194,6 @@ FileInfo PersistentIndexSstableStreamBuilder::file_info() const {
     file_info.size = _table_builder ? _table_builder->FileSize() : 0;
     file_info.encryption_meta = _encryption_meta;
     return file_info;
-}
-
-Status PersistentIndexSstableStreamBuilder::status() const {
-    return _status;
 }
 
 } // namespace starrocks::lake

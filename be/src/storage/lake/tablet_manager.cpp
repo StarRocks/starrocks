@@ -23,6 +23,7 @@
 #include "agent/master_info.h"
 #include "common/compiler_util.h"
 #include "common/config.h"
+#include "exec/schema_scanner/schema_be_tablets_scanner.h"
 #include "fmt/format.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
@@ -85,6 +86,11 @@ TabletManager::~TabletManager() = default;
 
 std::string TabletManager::tablet_root_location(int64_t tablet_id) const {
     return _location_provider->root_location(tablet_id);
+}
+
+std::string TabletManager::real_tablet_root_location(int64_t tablet_id) const {
+    auto location_or = _location_provider->real_location(tablet_root_location(tablet_id));
+    return location_or.ok() ? location_or.value() : "";
 }
 
 std::string TabletManager::tablet_metadata_root_location(int64_t tablet_id) const {
@@ -378,6 +384,22 @@ Status TabletManager::put_bundle_tablet_metadata(std::map<int64_t, TabletMetadat
     return Status::OK();
 }
 
+Status TabletManager::corrupted_tablet_meta_handler(const Status& s, const std::string& metadata_location) {
+    if (s.is_corruption() && config::lake_clear_corrupted_cache_meta) {
+        auto drop_status = drop_local_cache(metadata_location);
+        TEST_SYNC_POINT_CALLBACK("TabletManager::corrupted_tablet_meta_handler", &drop_status);
+        if (!drop_status.ok()) {
+            LOG(WARNING) << "clear corrupted cache for " << metadata_location << " failed, "
+                         << "error: " << drop_status;
+            return s; // return error so load tablet meta can be retried
+        }
+        LOG(INFO) << "clear corrupted cache for " << metadata_location;
+        return Status::OK();
+    } else {
+        return s;
+    }
+}
+
 StatusOr<TabletMetadataPtr> TabletManager::load_tablet_metadata(const string& metadata_location, bool fill_cache,
                                                                 int64_t expected_gtid,
                                                                 const std::shared_ptr<FileSystem>& fs) {
@@ -387,21 +409,11 @@ StatusOr<TabletMetadataPtr> TabletManager::load_tablet_metadata(const string& me
     ProtobufFile file(metadata_location, fs);
     auto s = file.load(metadata.get(), fill_cache);
     if (!s.ok()) {
-        if (s.is_corruption() && config::lake_clear_corrupted_cache) {
-            auto drop_status = drop_local_cache(metadata_location);
-            if (!drop_status.ok()) {
-                LOG(WARNING) << "clear corrupted cache for " << metadata_location << " failed, "
-                             << "error: " << drop_status;
-                return s; // return error so load tablet meta can be retried
-            }
-            LOG(INFO) << "clear corrupted cache for " << metadata_location;
-            // reset metadata
-            metadata = std::make_shared<TabletMetadataPB>();
-            // read again
-            RETURN_IF_ERROR(file.load(metadata.get(), fill_cache));
-        } else {
-            return s;
-        }
+        RETURN_IF_ERROR(corrupted_tablet_meta_handler(s, metadata_location));
+        // reset metadata
+        metadata = std::make_shared<TabletMetadataPB>();
+        // read again
+        RETURN_IF_ERROR(file.load(metadata.get(), fill_cache));
     }
 
     if (expected_gtid > 0 && metadata->gtid() > 0 && expected_gtid != metadata->gtid()) {
@@ -502,7 +514,13 @@ StatusOr<BundleTabletMetadataPtr> TabletManager::parse_bundle_tablet_metadata(co
             std::string_view(serialized_string.data() + file_size - footer_size - bundle_metadata_size);
     RETURN_IF(!bundle_metadata->ParseFromArray(bundle_metadata_str.data(), bundle_metadata_size),
               Status::Corruption(strings::Substitute("deserialized shared metadata failed")));
-
+#ifdef BE_TEST
+    bool inject_error = false;
+    TEST_SYNC_POINT_CALLBACK("TabletManager::parse_bundle_tablet_metadata::corruption", &inject_error);
+    if (inject_error) {
+        return Status::Corruption("injected error");
+    }
+#endif
     return bundle_metadata;
 }
 
@@ -581,7 +599,18 @@ StatusOr<TabletMetadataPtr> TabletManager::get_single_tablet_metadata(int64_t ta
     g_read_bundle_tablet_meta_latency << (butil::gettimeofday_us() - t0);
 
     auto file_size = serialized_string.size();
-    ASSIGN_OR_RETURN(auto bundle_metadata, parse_bundle_tablet_metadata(path, serialized_string));
+    BundleTabletMetadataPtr bundle_metadata;
+    auto bundle_metadata_status = parse_bundle_tablet_metadata(path, serialized_string);
+    if (!bundle_metadata_status.ok()) {
+        RETURN_IF_ERROR(corrupted_tablet_meta_handler(bundle_metadata_status.status(), path));
+        // read bundle metadata again
+        ASSIGN_OR_RETURN(auto input_file, file_system->new_random_access_file(opts, path));
+        ASSIGN_OR_RETURN(serialized_string, input_file->read_all());
+        file_size = serialized_string.size();
+        ASSIGN_OR_RETURN(bundle_metadata, parse_bundle_tablet_metadata(path, serialized_string));
+    } else {
+        bundle_metadata = bundle_metadata_status.value();
+    }
 
     auto meta_it = bundle_metadata->tablet_meta_pages().find(tablet_id);
     size_t offset = 0;
@@ -1142,8 +1171,8 @@ void TabletManager::TEST_set_global_schema_cache(int64_t schema_id, TabletSchema
     _metacache->cache_tablet_schema(cache_key, std::move(schema), 0);
 }
 
-StatusOr<VersionedTablet> TabletManager::get_tablet(int64_t tablet_id, int64_t version) {
-    ASSIGN_OR_RETURN(auto metadata, get_tablet_metadata(tablet_id, version));
+StatusOr<VersionedTablet> TabletManager::get_tablet(int64_t tablet_id, int64_t version, bool fill_cache) {
+    ASSIGN_OR_RETURN(auto metadata, get_tablet_metadata(tablet_id, version, fill_cache));
     return VersionedTablet(this, std::move(metadata));
 }
 
@@ -1185,6 +1214,113 @@ StatusOr<SegmentPtr> TabletManager::load_segment(const FileInfo& segment_info, i
     size_t footer_size_hint = 16 * 1024;
     return load_segment(segment_info, segment_id, &footer_size_hint, lake_io_opts, fill_metadata_cache,
                         std::move(tablet_schema));
+}
+
+#if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
+static std::pair<int64_t, int64_t> get_table_partition_id(const staros::starlet::ShardInfo& shard_info) {
+    const auto& properties = shard_info.properties;
+
+    int64_t table_id = -1;
+    auto table_id_iter = properties.find("tableId");
+    if (table_id_iter != properties.end()) {
+        table_id = std::atol(table_id_iter->second.data());
+    }
+
+    int64_t partition_id = -1;
+    auto partition_id_iter = properties.find("partitionId");
+    if (partition_id_iter != properties.end()) {
+        partition_id = std::atol(partition_id_iter->second.data());
+    }
+
+    return std::make_pair(table_id, partition_id);
+}
+
+StatusOr<TabletBasicInfo> TabletManager::get_tablet_basic_info(
+        int64_t tablet_id, int64_t table_id, int64_t partition_id, const std::set<int64_t>& authorized_table_ids,
+        const std::unordered_map<int64_t, int64_t>& partition_versions) {
+    auto shard_info_or = g_worker->retrieve_shard_info(tablet_id);
+    if (!shard_info_or.ok()) {
+        return Status::InternalError(fmt::format("fail to get shard info of tablet: {}, err: {}", tablet_id,
+                                                 shard_info_or.status().message()));
+    }
+
+    auto shard_info = shard_info_or.value();
+    auto id_pair = get_table_partition_id(shard_info);
+    auto shard_table_id = id_pair.first;
+    auto shard_partition_id = id_pair.second;
+
+    if ((partition_id != -1 && partition_id != shard_partition_id) || (table_id != -1 && table_id != shard_table_id) ||
+        authorized_table_ids.find(shard_table_id) == authorized_table_ids.end()) {
+        return Status::NotAuthorized(fmt::format("tablet: {}, table_id: {}, partition_id: {} not authorized", tablet_id,
+                                                 table_id, partition_id));
+    }
+
+    auto search = partition_versions.find(shard_partition_id);
+    if (search == partition_versions.end()) {
+        return Status::NotFound(fmt::format("partition: {} not found, tablet: {}", shard_partition_id, tablet_id));
+    }
+
+    // Don't fill cache to avoid polluting the cache
+    int64_t version = search->second;
+    auto tablet_or = get_tablet(tablet_id, version, false);
+    if (!tablet_or.ok()) {
+        return Status::InternalError(fmt::format("fail to get tablet: {}, version: {}, err: {}", tablet_id, version,
+                                                 tablet_or.status().to_string()));
+    }
+
+    auto info = tablet_or.value().get_basic_info();
+    info.table_id = shard_table_id;
+    info.partition_id = shard_partition_id;
+
+    return info;
+}
+#endif // USE_STAROS
+
+void TabletManager::get_tablets_basic_info(int64_t table_id, int64_t partition_id, int64_t tablet_id,
+                                           const std::set<int64_t>& authorized_table_ids,
+                                           const std::unordered_map<int64_t, int64_t>& partition_versions,
+                                           std::vector<TabletBasicInfo>& tablet_infos) {
+#if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
+    if (g_worker == nullptr) {
+        return;
+    }
+
+    if (tablet_id != -1) {
+        // process the tablet with the given tablet_id
+        auto tablet_info_or =
+                get_tablet_basic_info(tablet_id, table_id, partition_id, authorized_table_ids, partition_versions);
+        auto st = tablet_info_or.status();
+        if (st.ok()) {
+            tablet_infos.emplace_back(std::move(tablet_info_or.value()));
+        } else if (!st.is_not_authorized() && !st.is_not_found()) {
+            LOG(WARNING) << "fail to get tablet basic info, err: " << st;
+        }
+    } else {
+        // iterate all shards and get the tablets belong to the given table_id and partition_id
+        auto shard_ids = g_worker->shard_ids();
+        for (const auto& shard_id : shard_ids) {
+            auto tablet_info_or =
+                    get_tablet_basic_info(shard_id, table_id, partition_id, authorized_table_ids, partition_versions);
+            auto st = tablet_info_or.status();
+            if (st.ok()) {
+                tablet_infos.emplace_back(std::move(tablet_info_or.value()));
+            } else if (!st.is_not_authorized() && !st.is_not_found()) {
+                LOG(WARNING) << "fail to get tablet basic info, err: " << st;
+            }
+        }
+
+        // order by table_id, partition_id, tablet_id by default
+        std::sort(tablet_infos.begin(), tablet_infos.end(), [](const TabletBasicInfo& a, const TabletBasicInfo& b) {
+            if (a.partition_id == b.partition_id) {
+                return a.tablet_id < b.tablet_id;
+            }
+            if (a.table_id == b.table_id) {
+                return a.partition_id < b.partition_id;
+            }
+            return a.table_id < b.table_id;
+        });
+    }
+#endif // USE_STAROS
 }
 
 void TabletManager::stop() {

@@ -15,12 +15,12 @@
 package com.starrocks.sql.common;
 
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.type.Type;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;

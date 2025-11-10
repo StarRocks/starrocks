@@ -4,6 +4,46 @@ displayed_sidebar: docs
 
 # StarRocks version 3.4
 
+## 3.4.8
+
+Release Date: September 30, 2025
+
+### Behavior Changes
+
+- By setting the default value of `enable_lake_tablet_internal_parallel` to `true`, Parallel Scan for Cloud-native tables in shared-data clusters is enabled by default to increase per‑query internal parallelism. It may raise peak resource usage. [#62159](https://github.com/StarRocks/starrocks/pull/62159)
+
+### Bug Fixes
+
+The following issues have been fixed:
+
+- Delta Lake partition column names were forcibly converted to lowercase, causing a mismatch with the actual column names. [#62953](https://github.com/StarRocks/starrocks/pull/62953)
+- The Iceberg manifest cache eviction race could trigger a NullPointerException (NPE). [#](https://github.com/StarRocks/starrocks/pull/63052)[#63043](https://github.com/StarRocks/starrocks/pull/63043)
+- Uncaught generic exceptions during the Iceberg scan phase interrupted scan range submission and produced no metrics. [#62994](https://github.com/StarRocks/starrocks/pull/62994)
+- Complex multi-layer projected views used in materialized view rewrite produced invalid plans or missing column statistics. [#62918](https://github.com/StarRocks/starrocks/pull/62918) [#62198](https://github.com/StarRocks/starrocks/pull/62198)
+- Case mismatch of partition columns in the Hive table-based materialized view was incorrectly rejected. [#62598](https://github.com/StarRocks/starrocks/pull/62598) 
+- Materialized view refresh used only the creator’s default role, causing an insufficient privilege issue. [#62396](https://github.com/StarRocks/starrocks/pull/62396) 
+- Case-insensitive conflicts in partition names of list-partitioned materialized views led to duplicate name errors. [#62389](https://github.com/StarRocks/starrocks/pull/62389)
+- Residual version mapping after failed materialized view restores caused subsequent incremental refresh to be skipped, returning empty results. [#62634](https://github.com/StarRocks/starrocks/pull/62634)
+- Abnormal partitions after materialized view restores caused FE restart NullPointerException. [#62563](https://github.com/StarRocks/starrocks/pull/62563)  
+- Non-global aggregation queries incorrectly applied the aggregation pushdown rewrite, producing invalid plans. [#63060](https://github.com/StarRocks/starrocks/pull/63060)
+- The tablet deletion state was only updated in memory and not persisted, so GC still treated it as running and skipped reclamation. [#63623](https://github.com/StarRocks/starrocks/pull/63623)
+- Concurrent query and drop tablet led to early delvec cleanup and "no delete vector found" errors. [#63291](https://github.com/StarRocks/starrocks/pull/63291) 
+- An issue with base and cumulative compaction for the Primary Key index sharing the same `max_rss_rowid`. [#63277](https://github.com/StarRocks/starrocks/pull/63277) 
+- Possible BE crash when LakePersistentIndex destructor runs after a failed initialization. [#62279](https://github.com/StarRocks/starrocks/pull/62279) 
+- Graceful shutdown of Publish thread pool silently discarded queued tasks without marking failures, creating version holes and a false "all succeeded" impression. [#62417](https://github.com/StarRocks/starrocks/pull/62417) 
+- The newly cloned replica on a newly added BE during rebalance was immediately judged redundant and removed, preventing data migration to the new node. [#62542](https://github.com/StarRocks/starrocks/pull/62542) 
+- Missing lock when reading the tablet's maximum version caused inconsistent replication transaction decisions. [#62238](https://github.com/StarRocks/starrocks/pull/62238)
+- A combination of `date_trunc` equality and raw column range predicate was reduced to a point interval, returning empty result sets (for example, `date_trunc('month', dt)='2025-09-01' AND dt>'2025-09-23'`). [#63464](https://github.com/StarRocks/starrocks/pull/63464) 
+- Pushdown of non-deterministic predicates (random/time functions) produced inconsistent results. [#63495](https://github.com/StarRocks/starrocks/pull/63495) 
+- Missing consumer node after CTE reuse decision produced incomplete execution plans. [#62784](https://github.com/StarRocks/starrocks/pull/62784) 
+- Type mismatch crashes when table functions and low-cardinality dictionary encoding coexist. [#62466](https://github.com/StarRocks/starrocks/pull/62466) [#62292](https://github.com/StarRocks/starrocks/pull/62292) 
+- Oversized CSV split into parallel fragments caused every fragment to skip header rows, leading to data loss. [#62719](https://github.com/StarRocks/starrocks/pull/62719) 
+- `SHOW CREATE ROUTINE LOAD` without explicit DB returned job from another database with the same name. [#62745](https://github.com/StarRocks/starrocks/pull/62745) 
+- NullPointerException when `sameLabelJobs` became null during concurrent load job cleanup. [#63042](https://github.com/StarRocks/starrocks/pull/63042) 
+- BE decommission blocked even when all tablets were already in the recycle bin. [#62781](https://github.com/StarRocks/starrocks/pull/62781) 
+- `OPTIMIZE TABLE` task stuck in PENDING after thread pool rejection. [#62300](https://github.com/StarRocks/starrocks/pull/62300) 
+- Dirty tablet metadata cleanup used GTID arguments in the wrong order. [62275](https://github.com/StarRocks/starrocks/pull/62275) 
+
 ## 3.4.7
 
 Release Date: September 1, 2025

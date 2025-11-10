@@ -18,10 +18,7 @@ package com.starrocks.sql.ast.expression;
 import com.google.common.base.Preconditions;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
-import com.starrocks.sql.common.ErrorType;
-import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.thrift.TExprNode;
 
 /**
  * ArrowExpr: col->'xxx'
@@ -53,10 +50,6 @@ public class ArrowExpr extends Expr {
         return getChild(1);
     }
 
-    @Override
-    protected void toThrift(TExprNode msg) {
-        throw new StarRocksPlannerException("not support", ErrorType.INTERNAL_ERROR);
-    }
 
     @Override
     public Expr clone() {

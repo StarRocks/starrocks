@@ -29,7 +29,6 @@ import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunction;
-import com.starrocks.catalog.Type;
 import com.starrocks.catalog.View;
 import com.starrocks.common.Pair;
 import com.starrocks.common.tvr.TvrVersionRange;
@@ -72,6 +71,7 @@ import com.starrocks.sql.ast.UnionRelation;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.InPredicate;
 import com.starrocks.sql.ast.expression.JoinOperator;
@@ -139,6 +139,7 @@ import com.starrocks.sql.optimizer.operator.stream.LogicalBinlogScanOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.rewrite.scalar.ReduceCastRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.TextMatchBasedRewriteRule;
+import com.starrocks.type.Type;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.tuple.Triple;
 import org.apache.logging.log4j.LogManager;
@@ -613,7 +614,6 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
                     new ExpressionMapping(node.getScope(), outputVariables), columnRefFactory);
         }
 
-        // TODO: merge with tableVersionRange
         TvrVersionRange tableVersionRange;
         if (node.getTvrVersionRange() != null) {
             tableVersionRange = node.getTvrVersionRange();
@@ -1275,7 +1275,7 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
         }
 
         if (subqueries.size() > 1) {
-            throw new SemanticException(PARSER_ERROR_MSG.unsupportedSubquery(joinOnConjunct.toSql(),
+            throw new SemanticException(PARSER_ERROR_MSG.unsupportedSubquery(ExprToSql.toSql(joinOnConjunct),
                     "contains more than one subquery"), joinOnConjunct.getPos());
         }
 
@@ -1327,14 +1327,14 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
 
         if (predicate instanceof InPredicate &&
                 (refLeftNodeCols || correlatedLeftNode) && (refRightNodeCols || correlatedRightNode)) {
-            throw new SemanticException(PARSER_ERROR_MSG.unsupportedSubquery(predicate.toSql(),
+            throw new SemanticException(PARSER_ERROR_MSG.unsupportedSubquery(ExprToSql.toSql(predicate),
                     "referencing columns from more than one table"), predicate.getPos());
         }
 
         if (correlatedFieldIds.isEmpty()) {
             usingLeftRelation = refLeftNodeCols;
         } else if (correlatedLeftNode && correlatedRightNode) {
-            throw new SemanticException(PARSER_ERROR_MSG.unsupportedSubquery(predicate.toSql(),
+            throw new SemanticException(PARSER_ERROR_MSG.unsupportedSubquery(ExprToSql.toSql(predicate),
                     "referencing columns from more than one table"), predicate.getPos());
         } else {
             usingLeftRelation = correlatedLeftNode;

@@ -61,6 +61,7 @@ OBJECT_DATABASE: NULL
 | [role_edges](./role_edges.md)          | 记录了角色的授予关系。                             |
 | [object_dependencies](./object_dependencies.md) | 记录了异步物化视图的依赖关系。             |
 | [policy_references](./policy_references.md)     | 记录了行访问策略和列屏蔽策略引用的对象。     |
+| [fe_locks](./fe_locks.md)                       | 记录了 StarRocks FE 中元数据锁的信息。    |
 
 :::note
 

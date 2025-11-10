@@ -6,6 +6,10 @@ displayed_sidebar: docs
 
 DataGrip は、StarRocks 内部データと外部データの両方のクエリをサポートしています。
 
+:::tip
+[DataGrip docs](https://www.jetbrains.com/help/datagrip/getting-started.html)
+:::
+
 DataGrip でデータソースを作成します。データソースとして MySQL を選択する必要があることに注意してください。
 
 ![DataGrip - 1](../../_assets/BI_datagrip_1.png)

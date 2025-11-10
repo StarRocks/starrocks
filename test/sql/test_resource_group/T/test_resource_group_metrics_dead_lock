@@ -1,4 +1,4 @@
--- name: test_resource_group_metrics_dead_lock
+-- name: test_resource_group_metrics_dead_lock @sequential
 
 CREATE RESOURCE GROUP rgd1_${uuid0} 
     TO ( user='user_${uuid0}' ) 

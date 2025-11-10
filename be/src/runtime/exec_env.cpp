@@ -241,7 +241,6 @@ Status GlobalEnv::_init_mem_tracker() {
     _consistency_mem_tracker =
             regist_tracker(MemTrackerType::CONSISTENCY, consistency_mem_limit, process_mem_tracker());
     _datacache_mem_tracker = regist_tracker(MemTrackerType::DATACACHE, -1, process_mem_tracker());
-    _poco_connection_pool_mem_tracker = regist_tracker(MemTrackerType::POCO_CONNECTION_POOL, -1, process_mem_tracker());
     _replication_mem_tracker = regist_tracker(MemTrackerType::REPLICATION, -1, process_mem_tracker());
 
     MemChunkAllocator::init_metrics();
@@ -484,7 +483,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
                     .build(&load_segment_pool));
     _load_segment_thread_pool = load_segment_pool.release();
 
-    _broker_mgr = new BrokerMgr(this);
+    _broker_mgr = new BrokerMgr();
 
     RETURN_IF_ERROR(ThreadPoolBuilder("put_combined_txn_log_thread_pool")
                             .set_min_threads(0)
@@ -493,7 +492,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
                             .build(&put_combined_txn_log_thread_pool));
     _put_combined_txn_log_thread_pool = put_combined_txn_log_thread_pool.release();
 
-#ifndef BE_TEST
+#if !defined(__APPLE__) && !defined(BE_TEST)
     _bfd_parser = BfdParser::create();
 #endif
     _load_channel_mgr = new LoadChannelMgr();
@@ -515,8 +514,10 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     _batch_write_mgr = new BatchWriteMgr(std::move(batch_write_executor));
     RETURN_IF_ERROR(_batch_write_mgr->init());
 
+#ifndef __APPLE__
     _routine_load_task_executor = new RoutineLoadTaskExecutor(this);
     RETURN_IF_ERROR(_routine_load_task_executor->init());
+#endif
 
     _connector_sink_spill_executor = new connector::ConnectorSinkSpillExecutor();
     RETURN_IF_ERROR(_connector_sink_spill_executor->init());
@@ -707,9 +708,11 @@ void ExecEnv::stop() {
         _batch_write_mgr->stop();
     }
 
+#ifndef __APPLE__
     if (_routine_load_task_executor) {
         _routine_load_task_executor->stop();
     }
+#endif
 
     if (_dictionary_cache_pool) {
         _dictionary_cache_pool->shutdown();
@@ -719,7 +722,7 @@ void ExecEnv::stop() {
         _diagnose_daemon->stop();
     }
 
-#ifndef BE_TEST
+#if !defined(__APPLE__) && !defined(BE_TEST)
     close_s3_clients();
 #endif
 
@@ -734,14 +737,18 @@ void ExecEnv::destroy() {
     SAFE_DELETE(_small_file_mgr);
     SAFE_DELETE(_transaction_mgr);
     SAFE_DELETE(_stream_context_mgr);
+#ifndef __APPLE__
     SAFE_DELETE(_routine_load_task_executor);
+#endif
     SAFE_DELETE(_stream_load_executor);
     SAFE_DELETE(_connector_sink_spill_executor);
     SAFE_DELETE(_fragment_mgr);
     SAFE_DELETE(_load_stream_mgr);
     SAFE_DELETE(_load_channel_mgr);
     SAFE_DELETE(_broker_mgr);
+#if !defined(__APPLE__)
     SAFE_DELETE(_bfd_parser);
+#endif
     SAFE_DELETE(_load_path_mgr);
     SAFE_DELETE(_brpc_stub_cache);
     SAFE_DELETE(_udf_call_pool);
@@ -768,9 +775,11 @@ void ExecEnv::destroy() {
     if (HttpBrpcStubCache::getInstance() != nullptr) {
         HttpBrpcStubCache::getInstance()->shutdown();
     }
+#ifndef __APPLE__
     if (LakeServiceBrpcStubCache::getInstance() != nullptr) {
         LakeServiceBrpcStubCache::getInstance()->shutdown();
     }
+#endif
     SAFE_DELETE(_pipeline_timer);
     SAFE_DELETE(_broker_client_cache);
     SAFE_DELETE(_frontend_client_cache);

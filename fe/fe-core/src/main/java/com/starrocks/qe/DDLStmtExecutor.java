@@ -220,7 +220,7 @@ public class DDLStmtExecutor {
 
         @Override
         public ShowResultSet visitNode(ParseNode node, ConnectContext context) {
-            throw new RuntimeException(new DdlException("unsupported statement: " + node.toSql()));
+            throw new RuntimeException(new DdlException("unsupported statement"));
         }
 
         @Override
@@ -657,8 +657,10 @@ public class DDLStmtExecutor {
 
         @Override
         public ShowResultSet visitDropGroupProviderStatement(DropGroupProviderStmt statement, ConnectContext context) {
-            AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
-            authenticationMgr.dropGroupProviderStatement(statement, context);
+            ErrorReport.wrapWithRuntimeException(() -> {
+                AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+                authenticationMgr.dropGroupProviderStatement(statement, context);
+            });
             return null;
         }
 
@@ -741,7 +743,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitBackupStatement(BackupStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getBackupHandler().process(stmt);
+                context.getGlobalStateMgr().getBackupHandler().process(context, stmt);
             });
             return null;
         }
@@ -749,7 +751,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitRestoreStatement(RestoreStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getBackupHandler().process(stmt);
+                context.getGlobalStateMgr().getBackupHandler().process(context, stmt);
             });
             return null;
         }
@@ -788,7 +790,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitTruncateTableStatement(TruncateTableStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getLocalMetastore().truncateTable(stmt, context);
+                context.getGlobalStateMgr().getMetadataMgr().truncateTable(context, stmt);
             });
             return null;
         }
@@ -796,16 +798,15 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitAdminRepairTableStatement(AdminRepairTableStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getTabletChecker().repairTable(stmt);
+                GlobalStateMgr.getCurrentState().getTabletChecker().repairTable(context, stmt);
             });
             return null;
         }
 
         @Override
-        public ShowResultSet visitAdminCancelRepairTableStatement(AdminCancelRepairTableStmt stmt,
-                                                                  ConnectContext context) {
+        public ShowResultSet visitAdminCancelRepairTableStatement(AdminCancelRepairTableStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getTabletChecker().cancelRepairTable(stmt);
+                GlobalStateMgr.getCurrentState().getTabletChecker().cancelRepairTable(context, stmt);
             });
             return null;
         }

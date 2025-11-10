@@ -40,6 +40,8 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.connector.BucketProperty;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
+import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
 import com.starrocks.thrift.TBucketProperty;
 import com.starrocks.thrift.TDataPartition;
 import com.starrocks.thrift.TExplainLevel;
@@ -128,7 +130,7 @@ public class DataPartition {
     public TDataPartition toThrift() {
         TDataPartition result = new TDataPartition(type);
         if (partitionExprs != null) {
-            result.setPartition_exprs(Expr.treesToThrift(partitionExprs));
+            result.setPartition_exprs(ExprToThriftVisitor.treesToThrift(partitionExprs));
         }
         if (!tBucketProperties.isEmpty()) {
             result.setBucket_properties(tBucketProperties);
@@ -142,7 +144,7 @@ public class DataPartition {
         if (!partitionExprs.isEmpty()) {
             List<String> strings = Lists.newArrayList();
             for (Expr expr : partitionExprs) {
-                strings.add(expr.toSql());
+                strings.add(ExprToSql.toSql(expr));
             }
             str.append(": ").append(Joiner.on(", ").join(strings));
         }

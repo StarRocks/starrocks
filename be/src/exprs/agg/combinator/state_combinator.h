@@ -26,6 +26,7 @@
 #include "exprs/agg/aggregate_state_allocator.h"
 #include "exprs/function_context.h"
 #include "runtime/agg_state_desc.h"
+#include "util/bit_util.h"
 
 namespace starrocks {
 
@@ -55,9 +56,6 @@ public:
         return Status::InternalError("StateCombinator execute is not implemented");
     }
 
-    // align the size to the align
-    static size_t align_to(size_t size, size_t align) noexcept { return (size + align - 1) / align * align; }
-
 protected:
     // AlignedMemoryGuard is a helper class to allocate aligned memory.
     // It is used to allocate memory for aggregate state.
@@ -71,7 +69,7 @@ protected:
             }
         }
         Status allocate() {
-            _ptr = reinterpret_cast<AggDataPtr>(std::aligned_alloc(_alignment, _size));
+            _ptr = reinterpret_cast<AggDataPtr>(BitUtil::safe_aligned_alloc(_alignment, _size));
             if (_ptr == nullptr) {
                 return Status::MemoryAllocFailed("Failed to allocate aligned memory");
             }

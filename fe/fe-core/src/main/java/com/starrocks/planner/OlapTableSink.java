@@ -87,6 +87,9 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.IndexDef.IndexType;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
+import com.starrocks.sql.ast.expression.ExprToSql;
+import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.TableName;
@@ -230,6 +233,10 @@ public class OlapTableSink extends DataSink {
 
     public void setMissAutoIncrementColumn() {
         this.missAutoIncrementColumn = true;
+    }
+
+    public TPartialUpdateMode getPartialUpdateMode() {
+        return partialUpdateMode;
     }
 
     public void updateLoadId(TUniqueId newLoadId) {
@@ -478,11 +485,11 @@ public class OlapTableSink extends DataSink {
                                 outputExprs, connectContext);
 
                 whereClause = whereClause.accept(visitor, null);
-                whereClause = Expr.analyzeAndCastFold(whereClause);
+                whereClause = ExprUtils.analyzeAndCastFold(whereClause);
 
-                indexSchema.setWhere_clause(whereClause.treeToThrift());
+                indexSchema.setWhere_clause(ExprToThriftVisitor.treeToThrift(whereClause));
                 if (LOG.isDebugEnabled()) {
-                    LOG.debug("OlapTableSink Where clause: {}", whereClause.explain());
+                    LOG.debug("OlapTableSink Where clause: {}", ExprToSql.explain(whereClause));
                 }
             }
         }
@@ -585,8 +592,8 @@ public class OlapTableSink extends DataSink {
                             break;
                         }
                     }
-                    partitionParam.setPartition_exprs(Expr.treesToThrift(exprPartitionInfo
-                            .getPartitionExprs(table.getIdToColumn())));
+                    partitionParam.setPartition_exprs(ExprToThriftVisitor.treesToThrift(
+                            exprPartitionInfo.getPartitionExprs(table.getIdToColumn())));
                 } else if (rangePartitionInfo instanceof ExpressionRangePartitionInfoV2) {
                     ExpressionRangePartitionInfoV2 expressionRangePartitionInfoV2 = (ExpressionRangePartitionInfoV2) rangePartitionInfo;
                     List<Expr> partitionExprs = expressionRangePartitionInfoV2.getPartitionExprs(table.getIdToColumn());
@@ -606,8 +613,8 @@ public class OlapTableSink extends DataSink {
                             break;
                         }
                     }
-                    partitionParam.setPartition_exprs(Expr
-                            .treesToThrift(expressionRangePartitionInfoV2.getPartitionExprs(table.getIdToColumn())));
+                    partitionParam.setPartition_exprs(ExprToThriftVisitor.treesToThrift(
+                            expressionRangePartitionInfoV2.getPartitionExprs(table.getIdToColumn())));
                 }
                 break;
             }
@@ -692,7 +699,7 @@ public class OlapTableSink extends DataSink {
 
     private static List<TExprNode> literalExprsToTExprNodes(List<LiteralExpr> values) {
         return values.stream()
-                .map(value -> value.treeToThrift().getNodes().get(0))
+                .map(value -> ExprToThriftVisitor.treeToThrift(value).getNodes().get(0))
                 .collect(Collectors.toList());
     }
 
@@ -733,14 +740,14 @@ public class OlapTableSink extends DataSink {
         if (range.hasLowerBound() && !range.lowerEndpoint().isMinValue()) {
             for (int i = 0; i < partColNum; i++) {
                 tPartition.addToStart_keys(
-                        range.lowerEndpoint().getKeys().get(i).treeToThrift().getNodes().get(0));
+                        ExprToThriftVisitor.treeToThrift(range.lowerEndpoint().getKeys().get(i)).getNodes().get(0));
             }
         }
         // set end keys
         if (range.hasUpperBound() && !range.upperEndpoint().isMaxValue()) {
             for (int i = 0; i < partColNum; i++) {
                 tPartition.addToEnd_keys(
-                        range.upperEndpoint().getKeys().get(i).treeToThrift().getNodes().get(0));
+                        ExprToThriftVisitor.treeToThrift(range.upperEndpoint().getKeys().get(i)).getNodes().get(0));
             }
         }
 
@@ -751,8 +758,7 @@ public class OlapTableSink extends DataSink {
 
     private static void setMaterializedIndexes(PhysicalPartition partition, TOlapTablePartition tPartition) {
         for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.ALL)) {
-            TOlapTableIndexTablets tIndex = new TOlapTableIndexTablets(index.getId(), index.getTabletIds());
-            tIndex.setVirtual_buckets(Lists.newArrayList(index.getVirtualBuckets()));
+            TOlapTableIndexTablets tIndex = new TOlapTableIndexTablets(index.getId(), index.getTabletIdsInOrder());
             tPartition.addToIndexes(tIndex);
         }
     }

@@ -657,7 +657,7 @@ jobs:
       - name: UPDATE ECI & RUN UT
         id: run_ut
         shell: bash
-        timeout-minutes: 60
+        timeout-minutes: 90
         env:
           EXTENSION: ${{ needs.fe-codestyle-check.outputs.extension_filter }}
         run: |

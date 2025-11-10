@@ -103,9 +103,6 @@ import com.starrocks.backup.BackupJob;
 import com.starrocks.backup.RestoreJob;
 import com.starrocks.backup.SnapshotInfo;
 import com.starrocks.catalog.AggregateFunction;
-import com.starrocks.catalog.AnyArrayType;
-import com.starrocks.catalog.AnyElementType;
-import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.EsTable;
@@ -125,14 +122,11 @@ import com.starrocks.catalog.JDBCResource;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.LocalTablet;
-import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OdbcCatalogResource;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.PseudoType;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.RecycleListPartitionInfo;
@@ -141,13 +135,12 @@ import com.starrocks.catalog.RecycleRangePartitionInfo;
 import com.starrocks.catalog.RecycleUnPartitionInfo;
 import com.starrocks.catalog.Resource;
 import com.starrocks.catalog.ScalarFunction;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.SparkResource;
-import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.View;
+import com.starrocks.common.Config;
 import com.starrocks.common.tvr.TvrTableDelta;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
@@ -204,6 +197,15 @@ import com.starrocks.system.FrontendHbResponse;
 import com.starrocks.system.HeartbeatResponse;
 import com.starrocks.transaction.InsertTxnCommitAttachment;
 import com.starrocks.transaction.TxnCommitAttachment;
+import com.starrocks.type.AnyArrayType;
+import com.starrocks.type.AnyElementType;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.MapType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.PseudoType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.StructField;
+import com.starrocks.type.StructType;
 import com.starrocks.warehouse.DefaultWarehouse;
 import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -215,6 +217,7 @@ import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
@@ -237,9 +240,9 @@ import java.util.Map;
 public class GsonUtils {
 
     // runtime adapter for class "Type"
-    private static final RuntimeTypeAdapterFactory<com.starrocks.catalog.Type> COLUMN_TYPE_ADAPTER_FACTORY =
+    private static final RuntimeTypeAdapterFactory<com.starrocks.type.Type> COLUMN_TYPE_ADAPTER_FACTORY =
             RuntimeTypeAdapterFactory
-                    .of(com.starrocks.catalog.Type.class, "clazz")
+                    .of(com.starrocks.type.Type.class, "clazz")
                     .registerSubtype(ScalarType.class, "ScalarType")
                     .registerSubtype(ArrayType.class, "ArrayType")
                     .registerSubtype(MapType.class, "MapType")
@@ -436,7 +439,7 @@ public class GsonUtils {
             RuntimeTypeAdapterFactory.of(ComputeResource.class, "clazz")
                     .registerSubtype(WarehouseComputeResource.class, "WarehouseComputeResource", true);
 
-    public static final RuntimeTypeAdapterFactory<DynamicTablet> DYNAMIC_TABLET_RUNTIME_TYPE_ADAPTER_FACTORY = 
+    public static final RuntimeTypeAdapterFactory<DynamicTablet> DYNAMIC_TABLET_RUNTIME_TYPE_ADAPTER_FACTORY =
             RuntimeTypeAdapterFactory.of(DynamicTablet.class, "clazz")
                     .registerSubtype(SplittingTablet.class, "SplittingTablet")
                     .registerSubtype(MergingTablet.class, "MergingTablet")
@@ -472,53 +475,62 @@ public class GsonUtils {
 
     // the builder of GSON instance.
     // Add any other adapters if necessary.
-    private static final GsonBuilder GSON_BUILDER = new GsonBuilder()
-            .addSerializationExclusionStrategy(new HiddenAnnotationExclusionStrategy())
-            .addDeserializationExclusionStrategy(new HiddenAnnotationExclusionStrategy())
-            .enableComplexMapKeySerialization()
-            .registerTypeHierarchyAdapter(Table.class, new GuavaTableAdapter())
-            .registerTypeHierarchyAdapter(Multimap.class, new GuavaMultimapAdapter())
-            .registerTypeHierarchyAdapter(ColumnId.class, new ColumnIdAdapter())
-            .registerTypeAdapterFactory(new ProcessHookTypeAdapterFactory())
-            // For call constructor with selectedFields
-            .registerTypeAdapter(MapType.class, new MapType.MapTypeDeserializer())
-            .registerTypeAdapter(StructType.class, new StructType.StructTypeDeserializer())
-            .registerTypeAdapterFactory(COLUMN_TYPE_ADAPTER_FACTORY)
-            .registerTypeAdapterFactory(DISTRIBUTION_INFO_TYPE_ADAPTER_FACTORY)
-            .registerTypeAdapterFactory(RESOURCE_TYPE_ADAPTER_FACTORY)
-            .registerTypeAdapterFactory(ALTER_JOB_V2_TYPE_ADAPTER_FACTORY)
-            .registerTypeAdapterFactory(LOAD_JOB_STATE_UPDATE_INFO_TYPE_ADAPTER_FACTORY)
-            .registerTypeAdapterFactory(TABLET_TYPE_ADAPTER_FACTORY)
-            .registerTypeAdapterFactory(HEARTBEAT_RESPONSE_ADAPTER_FACTOR)
-            .registerTypeAdapterFactory(PARTITION_INFO_TYPE_ADAPTER_FACTORY)
-            .registerTypeAdapterFactory(PARTITION_PERSIST_INFO_V_2_ADAPTER_FACTORY)
-            .registerTypeAdapterFactory(RECYCLE_PARTITION_INFO_V_2_ADAPTER_FACTORY)
-            .registerTypeAdapterFactory(TABLE_TYPE_ADAPTER_FACTORY)
-            .registerTypeAdapterFactory(SNAPSHOT_INFO_TYPE_ADAPTER_FACTORY)
-            .registerTypeAdapterFactory(P_ENTRY_OBJECT_RUNTIME_TYPE_ADAPTER_FACTORY)
-            .registerTypeAdapterFactory(SEC_INTEGRATION_RUNTIME_TYPE_ADAPTER_FACTORY)
-            .registerTypeAdapterFactory(GROUP_PROVIDER_RUNTIME_TYPE_ADAPTER_FACTORY)
-            .registerTypeAdapterFactory(WAREHOUSE_TYPE_ADAPTER_FACTORY)
-            .registerTypeAdapterFactory(LOAD_JOB_TYPE_RUNTIME_ADAPTER_FACTORY)
-            .registerTypeAdapterFactory(TXN_COMMIT_ATTACHMENT_TYPE_RUNTIME_ADAPTER_FACTORY)
-            .registerTypeAdapterFactory(ROUTINE_LOAD_PROGRESS_TYPE_RUNTIME_ADAPTER_FACTORY)
-            .registerTypeAdapterFactory(ROUTINE_LOAD_JOB_TYPE_RUNTIME_ADAPTER_FACTORY)
-            .registerTypeAdapterFactory(ABSTRACT_JOB_TYPE_RUNTIME_ADAPTER_FACTORY)
-            .registerTypeAdapterFactory(FUNCTION_TYPE_RUNTIME_ADAPTER_FACTORY)
-            .registerTypeAdapterFactory(STORAGE_VOLUME_MGR_TYPE_RUNTIME_ADAPTER_FACTORY)
-            .registerTypeAdapterFactory(ANALYZE_STATUS_RUNTIME_TYPE_ADAPTER_FACTORY)
-            .registerTypeAdapterFactory(ANALYZE_JOB_RUNTIME_TYPE_ADAPTER_FACTORY)
-            .registerTypeAdapterFactory(COMPUTE_RESOURCE_RUNTIME_TYPE_ADAPTER_FACTORY)
-            .registerTypeAdapterFactory(DYNAMIC_TABLET_RUNTIME_TYPE_ADAPTER_FACTORY)
-            .registerTypeAdapterFactory(TVR_DELTA_RUNTIME_TYPE_ADAPTER_FACTORY)
-            .registerTypeAdapter(LocalDateTime.class, LOCAL_DATE_TIME_TYPE_SERIALIZER)
-            .registerTypeAdapter(LocalDateTime.class, LOCAL_DATE_TIME_TYPE_DESERIALIZER)
-            .registerTypeAdapter(QueryDumpInfo.class, DUMP_INFO_SERIALIZER)
-            .registerTypeAdapter(QueryDumpInfo.class, DUMP_INFO_DESERIALIZER)
-            .registerTypeAdapter(EncryptionKeyPB.class, new EncryptionKeyPBAdapter())
-            .registerTypeAdapter(HiveTableDumpInfo.class, HIVE_TABLE_DUMP_INFO_SERIALIZER)
-            .registerTypeAdapter(HiveTableDumpInfo.class, HIVE_TABLE_DUMP_INFO_DESERIALIZER)
-            .registerTypeAdapter(PrimitiveType.class, PRIMITIVE_TYPE_DESERIALIZER);
+    private static final GsonBuilder GSON_BUILDER = createGsonBuilder();
+
+    private static GsonBuilder createGsonBuilder() {
+        GsonBuilder builder = new GsonBuilder()
+                .addSerializationExclusionStrategy(new HiddenAnnotationExclusionStrategy())
+                .addDeserializationExclusionStrategy(new HiddenAnnotationExclusionStrategy())
+                .enableComplexMapKeySerialization()
+                .registerTypeHierarchyAdapter(Table.class, new GuavaTableAdapter())
+                .registerTypeHierarchyAdapter(Multimap.class, new GuavaMultimapAdapter())
+                .registerTypeHierarchyAdapter(ColumnId.class, new ColumnIdAdapter())
+                .registerTypeAdapterFactory(new ProcessHookTypeAdapterFactory())
+                // For call constructor with selectedFields
+                .registerTypeAdapter(MapType.class, new MapTypeDeserializer())
+                .registerTypeAdapter(StructType.class, new StructTypeDeserializer())
+                .registerTypeAdapterFactory(COLUMN_TYPE_ADAPTER_FACTORY)
+                .registerTypeAdapterFactory(DISTRIBUTION_INFO_TYPE_ADAPTER_FACTORY)
+                .registerTypeAdapterFactory(RESOURCE_TYPE_ADAPTER_FACTORY)
+                .registerTypeAdapterFactory(ALTER_JOB_V2_TYPE_ADAPTER_FACTORY)
+                .registerTypeAdapterFactory(LOAD_JOB_STATE_UPDATE_INFO_TYPE_ADAPTER_FACTORY)
+                .registerTypeAdapterFactory(TABLET_TYPE_ADAPTER_FACTORY)
+                .registerTypeAdapterFactory(HEARTBEAT_RESPONSE_ADAPTER_FACTOR)
+                .registerTypeAdapterFactory(PARTITION_INFO_TYPE_ADAPTER_FACTORY)
+                .registerTypeAdapterFactory(PARTITION_PERSIST_INFO_V_2_ADAPTER_FACTORY)
+                .registerTypeAdapterFactory(RECYCLE_PARTITION_INFO_V_2_ADAPTER_FACTORY)
+                .registerTypeAdapterFactory(TABLE_TYPE_ADAPTER_FACTORY)
+                .registerTypeAdapterFactory(SNAPSHOT_INFO_TYPE_ADAPTER_FACTORY)
+                .registerTypeAdapterFactory(P_ENTRY_OBJECT_RUNTIME_TYPE_ADAPTER_FACTORY)
+                .registerTypeAdapterFactory(SEC_INTEGRATION_RUNTIME_TYPE_ADAPTER_FACTORY)
+                .registerTypeAdapterFactory(GROUP_PROVIDER_RUNTIME_TYPE_ADAPTER_FACTORY)
+                .registerTypeAdapterFactory(WAREHOUSE_TYPE_ADAPTER_FACTORY)
+                .registerTypeAdapterFactory(LOAD_JOB_TYPE_RUNTIME_ADAPTER_FACTORY)
+                .registerTypeAdapterFactory(TXN_COMMIT_ATTACHMENT_TYPE_RUNTIME_ADAPTER_FACTORY)
+                .registerTypeAdapterFactory(ROUTINE_LOAD_PROGRESS_TYPE_RUNTIME_ADAPTER_FACTORY)
+                .registerTypeAdapterFactory(ROUTINE_LOAD_JOB_TYPE_RUNTIME_ADAPTER_FACTORY)
+                .registerTypeAdapterFactory(ABSTRACT_JOB_TYPE_RUNTIME_ADAPTER_FACTORY)
+                .registerTypeAdapterFactory(FUNCTION_TYPE_RUNTIME_ADAPTER_FACTORY)
+                .registerTypeAdapterFactory(STORAGE_VOLUME_MGR_TYPE_RUNTIME_ADAPTER_FACTORY)
+                .registerTypeAdapterFactory(ANALYZE_STATUS_RUNTIME_TYPE_ADAPTER_FACTORY)
+                .registerTypeAdapterFactory(ANALYZE_JOB_RUNTIME_TYPE_ADAPTER_FACTORY)
+                .registerTypeAdapterFactory(COMPUTE_RESOURCE_RUNTIME_TYPE_ADAPTER_FACTORY)
+                .registerTypeAdapterFactory(DYNAMIC_TABLET_RUNTIME_TYPE_ADAPTER_FACTORY)
+                .registerTypeAdapterFactory(TVR_DELTA_RUNTIME_TYPE_ADAPTER_FACTORY)
+                .registerTypeAdapter(LocalDateTime.class, LOCAL_DATE_TIME_TYPE_SERIALIZER)
+                .registerTypeAdapter(LocalDateTime.class, LOCAL_DATE_TIME_TYPE_DESERIALIZER)
+                .registerTypeAdapter(QueryDumpInfo.class, DUMP_INFO_SERIALIZER)
+                .registerTypeAdapter(QueryDumpInfo.class, DUMP_INFO_DESERIALIZER)
+                .registerTypeAdapter(EncryptionKeyPB.class, new EncryptionKeyPBAdapter())
+                .registerTypeAdapter(HiveTableDumpInfo.class, HIVE_TABLE_DUMP_INFO_SERIALIZER)
+                .registerTypeAdapter(HiveTableDumpInfo.class, HIVE_TABLE_DUMP_INFO_DESERIALIZER)
+                .registerTypeAdapter(PrimitiveType.class, PRIMITIVE_TYPE_DESERIALIZER);
+
+        if (Config.metadata_ignore_unknown_subtype) {
+            builder.registerTypeAdapterFactory(new SubtypeSkippingTypeAdapterFactory());
+        }
+        return builder;
+    }
 
     // this instance is thread-safe.
     public static final Gson GSON = GSON_BUILDER.create();
@@ -778,6 +790,41 @@ public class GsonUtils {
             } catch (Throwable t) {
                 return PrimitiveType.INVALID_TYPE;
             }
+        }
+    }
+
+    // Todo: remove it after remove selectedFields
+    private static class MapTypeDeserializer implements JsonDeserializer<MapType> {
+        @Override
+        public MapType deserialize(JsonElement jsonElement, java.lang.reflect.Type type,
+                                   JsonDeserializationContext jsonDeserializationContext)
+                throws JsonParseException {
+            JsonObject dumpJsonObject = jsonElement.getAsJsonObject();
+            JsonObject key = dumpJsonObject.getAsJsonObject("keyType");
+            com.starrocks.type.Type keyType = GsonUtils.GSON.fromJson(key, com.starrocks.type.Type.class);
+            JsonObject value = dumpJsonObject.getAsJsonObject("valueType");
+            com.starrocks.type.Type valueType = GsonUtils.GSON.fromJson(value, com.starrocks.type.Type.class);
+            return new MapType(keyType, valueType);
+        }
+    }
+
+    // Todo: remove it after remove selectedFields
+    public static class StructTypeDeserializer implements JsonDeserializer<StructType> {
+        @Override
+        public StructType deserialize(JsonElement jsonElement, java.lang.reflect.Type type,
+                                      JsonDeserializationContext jsonDeserializationContext)
+                throws JsonParseException {
+            JsonObject dumpJsonObject = jsonElement.getAsJsonObject();
+            boolean isNamed = false;
+            if (dumpJsonObject.get("named") != null) {
+                isNamed = dumpJsonObject.get("named").getAsBoolean();
+            }
+            JsonArray fields = dumpJsonObject.getAsJsonArray("fields");
+            ArrayList<StructField> structFields = new ArrayList<>(fields.size());
+            for (JsonElement field : fields) {
+                structFields.add(GsonUtils.GSON.fromJson(field, StructField.class));
+            }
+            return new StructType(structFields, isNamed);
         }
     }
 }

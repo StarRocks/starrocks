@@ -68,6 +68,8 @@ public:
 
     SchemaPtr schema() { return _schema; }
 
+    size_t total_bytes() const;
+
 private:
     Status _prepare(const ChunkPtr& chunk_ptr);
 

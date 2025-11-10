@@ -1,4 +1,4 @@
--- name: test_meta_scan_agg
+-- name: test_meta_scan_agg @mac
 create table t0 (
     c0 DATE,
     c1 INT,

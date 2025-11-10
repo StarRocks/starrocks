@@ -34,16 +34,17 @@
 
 package com.starrocks.sql.ast.expression;
 
-import com.starrocks.catalog.ArrayType;
-import com.starrocks.catalog.MapType;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.StructField;
-import com.starrocks.catalog.StructType;
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.MapType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.StructField;
+import com.starrocks.type.StructType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 
 import java.util.List;
 
@@ -66,19 +67,19 @@ public class TypeDef implements ParseNode {
     }
 
     public static TypeDef create(PrimitiveType type) {
-        return new TypeDef(ScalarType.createType(type));
+        return new TypeDef(TypeFactory.createType(type));
     }
 
     public static TypeDef createDecimal(int precision, int scale) {
-        return new TypeDef(ScalarType.createDecimalV2Type(precision, scale));
+        return new TypeDef(TypeFactory.createDecimalV2Type(precision, scale));
     }
 
     public static TypeDef createVarchar(int len) {
-        return new TypeDef(ScalarType.createVarchar(len));
+        return new TypeDef(TypeFactory.createVarchar(len));
     }
 
     public static TypeDef createChar(int len) {
-        return new TypeDef(ScalarType.createCharType(len));
+        return new TypeDef(TypeFactory.createCharType(len));
     }
 
     public void analyze() {
@@ -122,7 +123,7 @@ public class TypeDef implements ParseNode {
                 int maxLen;
                 if (type == PrimitiveType.VARCHAR) {
                     name = "Varchar";
-                    maxLen = ScalarType.getOlapMaxVarcharLength();
+                    maxLen = TypeFactory.getOlapMaxVarcharLength();
                 } else {
                     name = "Char";
                     maxLen = ScalarType.MAX_CHAR_LENGTH;
@@ -141,7 +142,7 @@ public class TypeDef implements ParseNode {
             }
             case VARBINARY: {
                 String name = "VARBINARY";
-                int maxLen = ScalarType.getOlapMaxVarcharLength();
+                int maxLen = TypeFactory.getOlapMaxVarcharLength();
                 int len = scalarType.getLength();
                 // len is decided by child, when it is -1.
                 if (scalarType.getLength() > maxLen) {
@@ -180,11 +181,26 @@ public class TypeDef implements ParseNode {
     }
 
     private void analyzeArrayType(ArrayType type) {
-        Type baseType = Type.getInnermostType(type);
+        Type baseType = getInnermostType(type);
+        if (baseType == null) {
+            throw new SemanticException("Cannot get innermost type of '" + type + "'");
+        }
         analyze(baseType);
         if (baseType.isHllType() || baseType.isBitmapType() || baseType.isPseudoType() || baseType.isPercentile()) {
             throw new SemanticException("Invalid data type: " + type.toSql());
         }
+    }
+
+    // getInnermostType() is only used for array
+    private static Type getInnermostType(Type type) {
+        if (type.isScalarType() || type.isStructType() || type.isMapType()) {
+            return type;
+        }
+        if (type.isArrayType()) {
+            return getInnermostType(((ArrayType) type).getItemType());
+        }
+
+        return null;
     }
 
     private void analyzeStructType(StructType type) {
@@ -218,7 +234,6 @@ public class TypeDef implements ParseNode {
         return parsedType.toString();
     }
 
-    @Override
     public String toSql() {
         return parsedType.toSql();
     }

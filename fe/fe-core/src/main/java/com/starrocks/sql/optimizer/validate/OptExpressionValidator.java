@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.optimizer.validate;
 
-import com.starrocks.catalog.Type;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
@@ -34,6 +33,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.BaseScalarOperatorShuttle;
+import com.starrocks.type.Type;
 
 import java.util.List;
 import java.util.Map;
@@ -158,6 +158,11 @@ public class OptExpressionValidator extends OptExpressionVisitor<OptExpression, 
 
     @Override
     public OptExpression visitLogicalValues(OptExpression optExpression, Void context) {
+        return commonValidate(optExpression);
+    }
+
+    @Override
+    public OptExpression visitLogicalRawValues(OptExpression optExpression, Void context) {
         return commonValidate(optExpression);
     }
 

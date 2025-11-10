@@ -5,7 +5,7 @@ keywords: ['Routine Load']
 
 # Routine Load を使用したデータのロード
 
-import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
+import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.mdx'
 import QSTip from '../_assets/commonMarkdown/quickstart-routine-load-tip.mdx'
 
 <QSTip />

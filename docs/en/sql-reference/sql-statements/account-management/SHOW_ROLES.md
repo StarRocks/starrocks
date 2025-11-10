@@ -4,7 +4,7 @@ displayed_sidebar: docs
 
 # SHOW ROLES
 
-import UserManagementPriv from '../../../_assets/commonMarkdown/userManagementPriv.md'
+import UserManagementPriv from '../../../_assets/commonMarkdown/userManagementPriv.mdx'
 
 SHOW ROLES displays all roles in the system. You can use `SHOW GRANTS FOR ROLE <role_name>;` to view the privileges of a specific role. For more information, see [SHOW GRANTS](SHOW_GRANTS.md).
 

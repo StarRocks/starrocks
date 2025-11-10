@@ -1076,6 +1076,21 @@ displayed_sidebar: docs
 - 单位：个
 - 描述：Storage Page Cache 中的命中总次数。
 
+### page_cache_insert_count
+
+- 单位：个
+- 描述：Storage Page Cache 中的插入操作总次数。
+
+### page_cache_insert_evict_count
+
+- 单位：个
+- 描述：由于容量限制，在插入操作期间被淘汰的缓存项总次数。
+
+### page_cache_release_evict_count
+
+- 单位：个
+- 描述：当缓存使用量超过容量时，在释放操作期间被淘汰的缓存项总次数。
+
 ### bytes_read_total（已弃用）
 
 ### update_rowset_commit_request_total

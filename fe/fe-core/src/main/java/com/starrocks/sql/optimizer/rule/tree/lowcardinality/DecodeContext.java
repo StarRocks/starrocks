@@ -18,11 +18,9 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.AggregateFunction;
-import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.Type;
-import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -32,6 +30,8 @@ import com.starrocks.sql.optimizer.operator.scalar.DictMappingOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.BaseScalarOperatorShuttle;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.Type;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -42,6 +42,7 @@ import java.util.Optional;
 import java.util.Set;
 
 import static com.starrocks.sql.optimizer.rule.tree.lowcardinality.DecodeCollector.LOW_CARD_ARRAY_FUNCTIONS;
+import static com.starrocks.sql.optimizer.rule.tree.lowcardinality.DecodeCollector.LOW_CARD_WINDOW_FUNCTIONS;
 
 /*
  * DecodeContext is used to store the information needed for decoding
@@ -271,7 +272,7 @@ class DecodeContext {
             }
 
             Type[] argTypes = newChildren.stream().map(ScalarOperator::getType).toArray(Type[]::new);
-            Function arrayFn = Expr.getBuiltinFunction(call.getFnName(), argTypes,
+            Function arrayFn = ExprUtils.getBuiltinFunction(call.getFnName(), argTypes,
                     Function.CompareMode.IS_SUPERTYPE_OF);
             ScalarOperator result = new CallOperator(call.getFnName(), arrayFn.getReturnType(), newChildren, arrayFn);
 
@@ -325,8 +326,9 @@ class DecodeContext {
             List<ScalarOperator> newChildren = visitList(call.getChildren(), hasChange);
 
             if (call.getFunction() instanceof AggregateFunction) {
-                Type[] argTypes = new Type[] {Type.INT};
-                Function fn = Expr.getBuiltinFunction(call.getFnName(), argTypes, Function.CompareMode.IS_SUPERTYPE_OF);
+                Type argType = newChildren.get(0).getType().isArrayType() ? new ArrayType(Type.INT) : Type.INT;
+                Type[] argTypes = new Type[] {argType};
+                Function fn = ExprUtils.getBuiltinFunction(call.getFnName(), argTypes, Function.CompareMode.IS_SUPERTYPE_OF);
                 // min/max function: will rewrite all stage, return type is dict type
                 if (FunctionSet.MAX.equals(call.getFnName()) || FunctionSet.MIN.equals(call.getFnName())) {
                     return new CallOperator(call.getFnName(), fn.getReturnType(), newChildren, fn,
@@ -338,6 +340,12 @@ class DecodeContext {
                     // return type don't update
                     return new CallOperator(call.getFnName(), call.getType(), newChildren, fn,
                             call.isDistinct(), call.isRemovedDistinct());
+                } else if (LOW_CARD_WINDOW_FUNCTIONS.contains(call.getFnName())) {
+                    CallOperator newCall = new CallOperator(call.getFnName(), fn.getReturnType(), newChildren, fn,
+                            call.isDistinct(), call.isRemovedDistinct());
+                    //encoded window functions should set ignore null flag
+                    newCall.setIgnoreNulls(call.getIgnoreNulls());
+                    return newCall;
                 }
             }
 
@@ -349,7 +357,7 @@ class DecodeContext {
             for (int i = 0; i < newChildren.size(); i++) {
                 argTypes[i] = newChildren.get(i).getType();
             }
-            Function fn = Expr.getBuiltinFunction(call.getFnName(), argTypes, Function.CompareMode.IS_SUPERTYPE_OF);
+            Function fn = ExprUtils.getBuiltinFunction(call.getFnName(), argTypes, Function.CompareMode.IS_SUPERTYPE_OF);
             return new CallOperator(call.getFnName(), fn.getReturnType(), newChildren, fn,
                     call.isDistinct(), call.isRemovedDistinct());
         }

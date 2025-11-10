@@ -4,6 +4,46 @@ displayed_sidebar: docs
 
 # StarRocks version 3.4
 
+## 3.4.8
+
+リリース日：2025年9月30日
+
+### 動作変更
+
+- `enable_lake_tablet_internal_parallel` を `true` に設定すると、共有データクラスタにおけるクラウドネイティブテーブルの並列スキャンがデフォルトで有効になり、クエリ単位の内部並列度が向上します。ただし、ピーク時のリソース使用量が増加する可能性があります。 [#62159](https://github.com/StarRocks/starrocks/pull/62159)
+
+### バグ修正
+
+以下の問題を修正しました：
+
+- Delta Lake のパーティション列名が強制的に小文字に変換され、実際の列名と不一致となる問題。 [#62953](https://github.com/StarRocks/starrocks/pull/62953)
+- Iceberg の manifest キャッシュ削除時の競合により NullPointerException (NPE) が発生する可能性。 [#63052](https://github.com/StarRocks/starrocks/pull/63052) [#63043](https://github.com/StarRocks/starrocks/pull/63043)
+- Iceberg スキャンフェーズで捕捉されなかった例外によりスキャン範囲のサブミットが中断され、メトリクスが生成されない問題。 [#62994](https://github.com/StarRocks/starrocks/pull/62994)
+- 複雑な多層の投影ビューを用いたマテリアライズドビューのリライトで無効な計画や列統計の欠落が発生。 [#62918](https://github.com/StarRocks/starrocks/pull/62918) [#62198](https://github.com/StarRocks/starrocks/pull/62198)
+- Hive テーブルベースのマテリアライズドビューにおいて、パーティション列の大文字小文字の不一致が誤って拒否される問題。 [#62598](https://github.com/StarRocks/starrocks/pull/62598)
+- マテリアライズドビューのリフレッシュが作成者のデフォルトロールのみを使用していたため、権限不足が発生する問題。 [#62396](https://github.com/StarRocks/starrocks/pull/62396)
+- リストパーティション型のマテリアライズドビューでパーティション名が大文字小文字を区別しない場合、重複名エラーが発生する問題。 [#62389](https://github.com/StarRocks/starrocks/pull/62389)
+- マテリアライズドビューの復元失敗後に残るバージョンマッピングが原因で、以降の増分リフレッシュがスキップされ空結果を返す問題。 [#62634](https://github.com/StarRocks/starrocks/pull/62634)
+- マテリアライズドビューの復元後に異常なパーティションが存在すると FE 再起動時に NullPointerException が発生。 [#62563](https://github.com/StarRocks/starrocks/pull/62563)
+- グローバル集計でないクエリに対して集計プッシュダウンのリライトが誤って適用され、無効な計画が生成される問題。 [#63060](https://github.com/StarRocks/starrocks/pull/63060)
+- タブレットの削除状態がメモリ内でのみ更新され永続化されなかったため、GC が実行中と判断し回収をスキップする問題。 [#63623](https://github.com/StarRocks/starrocks/pull/63623)
+- クエリとタブレット削除の並行実行により delvec が早期にクリーンアップされ、「no delete vector found」エラーが発生。 [#63291](https://github.com/StarRocks/starrocks/pull/63291)
+- 主キーインデックスで Base Compaction と Cumulative Compaction が同じ `max_rss_rowid` を共有していた問題。 [#63277](https://github.com/StarRocks/starrocks/pull/63277)
+- LakePersistentIndex のデストラクタが初期化失敗後に実行されると BE がクラッシュする可能性。 [#62279](https://github.com/StarRocks/starrocks/pull/62279)
+- Publish スレッドプールの優雅なシャットダウンでキューに残っていたタスクが失敗としてマークされず破棄され、バージョンの欠落や「すべて成功」の誤認を招く問題。 [#62417](https://github.com/StarRocks/starrocks/pull/62417)
+- リバランス時に新規追加された BE 上の新しい複製が即座に冗長と判断され削除され、データ移行が妨げられる問題。 [#62542](https://github.com/StarRocks/starrocks/pull/62542)
+- タブレットの最大バージョンを読み取る際にロックが欠落し、複製トランザクションの決定が不整合となる問題。 [#62238](https://github.com/StarRocks/starrocks/pull/62238)
+- `date_trunc` の等価条件と生の列範囲述語の組み合わせが点区間に簡約され、空の結果セットが返る問題（例：`date_trunc('month', dt)='2025-09-01' AND dt>'2025-09-23'`）。 [#63464](https://github.com/StarRocks/starrocks/pull/63464)
+- 非決定的述語（ランダム/時間関数）のプッシュダウンにより結果が不一致となる問題。 [#63495](https://github.com/StarRocks/starrocks/pull/63495)
+- CTE の再利用判断後に consumer ノードが欠落し、実行計画が不完全になる問題。 [#62784](https://github.com/StarRocks/starrocks/pull/62784)
+- テーブル関数と低カーディナリティ辞書エンコードが共存する場合の型不一致クラッシュ。 [#62466](https://github.com/StarRocks/starrocks/pull/62466) [#62292](https://github.com/StarRocks/starrocks/pull/62292)
+- 大規模 CSV が並列フラグメントに分割される際、各フラグメントがヘッダー行をスキップしてデータが欠落する問題。 [#62719](https://github.com/StarRocks/starrocks/pull/62719)
+- `SHOW CREATE ROUTINE LOAD` がデータベースを明示しない場合、同名の他データベースのジョブを返す問題。 [#62745](https://github.com/StarRocks/starrocks/pull/62745)
+- ロードジョブの並行クリーンアップ中に `sameLabelJobs` が null となり NullPointerException が発生する問題。 [#63042](https://github.com/StarRocks/starrocks/pull/63042)
+- すべてのタブレットがリサイクルビンに移動済みであるにもかかわらず BE のデコミッションがブロックされる問題。 [#62781](https://github.com/StarRocks/starrocks/pull/62781)
+- `OPTIMIZE TABLE` タスクがスレッドプール拒否後に PENDING 状態で停止する問題。 [#62300](https://github.com/StarRocks/starrocks/pull/62300)
+- 汚れたタブレットメタデータのクリーンアップで GTID 引数の順序が誤っていた問題。 [#62275](https://github.com/StarRocks/starrocks/pull/62275)
+
 ## 3.4.7
 
 リリース日：2025年9月1日

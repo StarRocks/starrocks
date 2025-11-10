@@ -3354,6 +3354,12 @@ Status StringFunctions::regexp_replace_prepare(FunctionContext* context, Functio
         }
     }
 
+    state->global_mode = pattern_str.empty() || (!pattern_str.starts_with("^") && !pattern_str.ends_with("$"));
+    if (context->is_notnull_constant_column(2)) {
+        const auto rpl_column = context->get_constant_column(2);
+        const auto rpl_slice = ColumnHelper::get_const_value<TYPE_VARCHAR>(rpl_column);
+        state->opt_const_rpl = rpl_slice.to_string();
+    }
     return Status::OK();
 }
 
@@ -3468,6 +3474,76 @@ StatusOr<ColumnPtr> StringFunctions::regexp_extract(FunctionContext* context, co
     return regexp_extract_general(context, options, columns);
 }
 
+// Helper function to extract whole match (group 0) using RE2::Match
+// This is shared by both overloaded extract_regex_matches functions
+template <typename IndexType>
+static void extract_whole_matches(const re2::StringPiece& str_sp, const re2::RE2& regex, BinaryColumn* str_col,
+                                  IndexType& index, int max_matches) {
+    re2::StringPiece input = str_sp;
+    std::vector<re2::StringPiece> matches(max_matches);
+    size_t pos = 0;
+
+    while (pos <= input.size()) {
+        re2::StringPiece remaining = input.substr(pos);
+        if (regex.Match(remaining, 0, remaining.size(), RE2::UNANCHORED, &matches[0], max_matches)) {
+            // matches[0] contains the whole match (group 0)
+            str_col->append(Slice(matches[0].data(), matches[0].size()));
+            index += 1;
+            // Move past this match
+            pos = matches[0].data() - input.data() + matches[0].size();
+            if (matches[0].size() == 0) {
+                pos++; // Avoid infinite loop on zero-length matches
+            }
+        } else {
+            break;
+        }
+    }
+}
+
+// Helper function to extract regex matches and append to column
+// This reduces code duplication across regexp_extract_all_* functions
+static void extract_regex_matches(const Slice& str_value, const re2::RE2& regex, int group, BinaryColumn* str_col,
+                                  uint32_t& index, int max_matches) {
+    re2::StringPiece str_sp(str_value.get_data(), str_value.get_size());
+
+    if (group == 0) {
+        // Extract the whole match (group 0)
+        extract_whole_matches(str_sp, regex, str_col, index, max_matches);
+    } else {
+        // Extract specific capture group
+        re2::StringPiece find[group];
+        const RE2::Arg* args[group];
+        RE2::Arg argv[group];
+
+        for (size_t i = 0; i < group; i++) {
+            argv[i] = &find[i];
+            args[i] = &argv[i];
+        }
+        while (re2::RE2::FindAndConsumeN(&str_sp, regex, args, group)) {
+            str_col->append(Slice(find[group - 1].data(), find[group - 1].size()));
+            index += 1;
+        }
+    }
+}
+
+// Overloaded version for pre-allocated arrays (used by regexp_extract_all_const)
+static void extract_regex_matches(const Slice& str_value, const re2::RE2& regex, int group, BinaryColumn* str_col,
+                                  uint64_t& index, const std::unique_ptr<re2::StringPiece[]>& find,
+                                  const std::unique_ptr<const RE2::Arg*[]>& args, int max_matches) {
+    re2::StringPiece str_sp(str_value.get_data(), str_value.get_size());
+
+    if (group == 0) {
+        // Extract the whole match (group 0) - reuse common logic
+        extract_whole_matches(str_sp, regex, str_col, index, max_matches);
+    } else {
+        // Extract specific capture group using pre-allocated arrays
+        while (re2::RE2::FindAndConsumeN(&str_sp, regex, args.get(), group)) {
+            str_col->append(Slice(find[group - 1].data(), find[group - 1].size()));
+            index += 1;
+        }
+    }
+}
+
 static ColumnPtr regexp_extract_all_general(FunctionContext* context, re2::RE2::Options* options,
                                             const Columns& columns) {
     auto content_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
@@ -3483,7 +3559,7 @@ static ColumnPtr regexp_extract_all_general(FunctionContext* context, re2::RE2::
     uint32_t index = 0;
 
     for (int row = 0; row < size; ++row) {
-        if (content_viewer.is_null(row) || ptn_viewer.is_null(row)) {
+        if (content_viewer.is_null(row) || ptn_viewer.is_null(row) || group_viewer.is_null(row)) {
             offset_col->append(index);
             nl_col->append(1);
             continue;
@@ -3500,7 +3576,7 @@ static ColumnPtr regexp_extract_all_general(FunctionContext* context, re2::RE2::
 
         nl_col->append(0);
         auto group = group_viewer.value(row);
-        if (group <= 0) {
+        if (group < 0) {
             offset_col->append(index);
             continue;
         }
@@ -3511,21 +3587,7 @@ static ColumnPtr regexp_extract_all_general(FunctionContext* context, re2::RE2::
             continue;
         }
 
-        auto str_value = content_viewer.value(row);
-        re2::StringPiece str_sp(str_value.get_data(), str_value.get_size());
-
-        re2::StringPiece find[group];
-        const RE2::Arg* args[group];
-        RE2::Arg argv[group];
-
-        for (size_t i = 0; i < group; i++) {
-            argv[i] = &find[i];
-            args[i] = &argv[i];
-        }
-        while (re2::RE2::FindAndConsumeN(&str_sp, local_re, args, group)) {
-            str_col->append(Slice(find[group - 1].data(), find[group - 1].size()));
-            index += 1;
-        }
+        extract_regex_matches(content_viewer.value(row), local_re, group, str_col.get(), index, max_matches);
         offset_col->append(index);
     }
 
@@ -3547,7 +3609,7 @@ static ColumnPtr regexp_extract_all_const_pattern(re2::RE2* const_re, const Colu
     uint32_t index = 0;
 
     for (int row = 0; row < size; ++row) {
-        if (content_viewer.is_null(row)) {
+        if (content_viewer.is_null(row) || group_viewer.is_null(row)) {
             offset_col->append(index);
             nl_col->append(1);
             continue;
@@ -3555,7 +3617,7 @@ static ColumnPtr regexp_extract_all_const_pattern(re2::RE2* const_re, const Colu
 
         nl_col->append(0);
         auto group = group_viewer.value(row);
-        if (group <= 0) {
+        if (group < 0) {
             offset_col->append(index);
             continue;
         }
@@ -3566,21 +3628,7 @@ static ColumnPtr regexp_extract_all_const_pattern(re2::RE2* const_re, const Colu
             continue;
         }
 
-        auto str_value = content_viewer.value(row);
-        re2::StringPiece str_sp(str_value.get_data(), str_value.get_size());
-
-        re2::StringPiece find[group];
-        const RE2::Arg* args[group];
-        RE2::Arg argv[group];
-
-        for (size_t i = 0; i < group; i++) {
-            argv[i] = &find[i];
-            args[i] = &argv[i];
-        }
-        while (re2::RE2::FindAndConsumeN(&str_sp, *const_re, args, group)) {
-            str_col->append(Slice(find[group - 1].data(), find[group - 1].size()));
-            index += 1;
-        }
+        extract_regex_matches(content_viewer.value(row), *const_re, group, str_col.get(), index, max_matches);
         offset_col->append(index);
     }
 
@@ -3612,7 +3660,7 @@ static ColumnPtr regexp_extract_all_const(re2::RE2* const_re, const Columns& col
 
     uint64_t index = 0;
     int max_matches = 1 + const_re->NumberOfCapturingGroups();
-    if (group <= 0 || group >= max_matches) {
+    if (group < 0 || group >= max_matches) {
         offset_col->append_value_multiple_times(&index, size);
         auto array = ArrayColumn::create(NullableColumn::create(std::move(str_col), NullColumn::create(0, 0)),
                                          std::move(offset_col));
@@ -3623,26 +3671,27 @@ static ColumnPtr regexp_extract_all_const(re2::RE2* const_re, const Columns& col
         return NullableColumn::create(std::move(array), std::move(nl_col));
     }
 
-    re2::StringPiece find[group];
-    const RE2::Arg* args[group];
-    RE2::Arg argv[group];
+    // Prepare arguments for FindAndConsumeN (only needed when group > 0)
+    std::unique_ptr<re2::StringPiece[]> find;
+    std::unique_ptr<const RE2::Arg*[]> args;
+    std::unique_ptr<RE2::Arg[]> argv;
 
-    for (size_t i = 0; i < group; i++) {
-        argv[i] = &find[i];
-        args[i] = &argv[i];
-    }
-    for (int row = 0; row < size; ++row) {
-        if (content_viewer.is_null(row)) {
-            offset_col->append(index);
-            continue;
+    if (group > 0) {
+        find = std::make_unique<re2::StringPiece[]>(group);
+        args = std::make_unique<const RE2::Arg*[]>(group);
+        argv = std::make_unique<RE2::Arg[]>(group);
+
+        for (size_t i = 0; i < group; i++) {
+            argv[i] = &find[i];
+            args[i] = &argv[i];
         }
+    }
 
-        auto str_value = content_viewer.value(row);
-        re2::StringPiece str_sp(str_value.get_data(), str_value.get_size());
-        while (re2::RE2::FindAndConsumeN(&str_sp, *const_re, args, group)) {
-            str_col->append(Slice(find[group - 1].data(), find[group - 1].size()));
-
-            index += 1;
+    // focuses only on iteration and offset management
+    for (int row = 0; row < size; ++row) {
+        if (!content_viewer.is_null(row)) {
+            extract_regex_matches(content_viewer.value(row), *const_re, group, str_col.get(), index, find, args,
+                                  max_matches);
         }
         offset_col->append(index);
     }
@@ -3705,6 +3754,47 @@ static ColumnPtr regexp_replace_general(FunctionContext* context, re2::RE2::Opti
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
+template <bool global_mode>
+static ColumnPtr regexp_replace_const_pattern_and_rpl(re2::RE2* const_re, const Columns& columns,
+                                                      const std::string& rpl) {
+    auto str_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
+    re2::StringPiece rpl_str = re2::StringPiece(rpl);
+    auto size = columns[0]->size();
+    ColumnBuilder<TYPE_VARCHAR> result(size);
+    std::string result_str;
+    for (int row = 0; row < size; ++row) {
+        if (str_viewer.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+
+        auto str_value = str_viewer.value(row);
+        re2::StringPiece str_str = re2::StringPiece(str_value.get_data(), str_value.get_size());
+        result_str.clear();
+#ifdef __APPLE__
+        // macOS RE2 API only supports 3-parameter GlobalReplace
+        result_str = std::string(str_str.data(), str_str.size());
+        if constexpr (global_mode) {
+            re2::RE2::GlobalReplace(&result_str, *const_re, rpl_str);
+        } else {
+            re2::RE2::Replace(&result_str, *const_re, rpl_str);
+        }
+#else
+        // Linux RE2 API supports 4-parameter GlobalReplace
+        if constexpr (global_mode) {
+            re2::RE2::GlobalReplace(str_str, *const_re, rpl_str, result_str);
+        } else {
+            result_str = std::string(str_str.data(), str_str.size());
+            re2::RE2::Replace(&result_str, *const_re, rpl_str);
+        }
+#endif
+        result.append(Slice(result_str.data(), result_str.size()));
+    }
+
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+template <bool global_mode>
 static ColumnPtr regexp_replace_const(re2::RE2* const_re, const Columns& columns) {
     auto str_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
     auto rpl_viewer = ColumnViewer<TYPE_VARCHAR>(columns[2]);
@@ -3723,7 +3813,23 @@ static ColumnPtr regexp_replace_const(re2::RE2* const_re, const Columns& columns
         auto str_value = str_viewer.value(row);
         re2::StringPiece str_str = re2::StringPiece(str_value.get_data(), str_value.get_size());
         result_str.clear();
-        re2::RE2::GlobalReplace(str_str, *const_re, rpl_str, result_str);
+#ifdef __APPLE__
+        // macOS RE2 API only supports 3-parameter GlobalReplace
+        result_str = std::string(str_str.data(), str_str.size());
+        if constexpr (global_mode) {
+            re2::RE2::GlobalReplace(&result_str, *const_re, rpl_str);
+        } else {
+            re2::RE2::Replace(&result_str, *const_re, rpl_str);
+        }
+#else
+        // Linux RE2 API supports 4-parameter GlobalReplace
+        if constexpr (global_mode) {
+            re2::RE2::GlobalReplace(str_str, *const_re, rpl_str, result_str);
+        } else {
+            result_str = std::string(str_str.data(), str_str.size());
+            re2::RE2::Replace(&result_str, *const_re, rpl_str);
+        }
+#endif
         result.append(Slice(result_str.data(), result_str.size()));
     }
 
@@ -3955,7 +4061,19 @@ StatusOr<ColumnPtr> StringFunctions::regexp_replace(FunctionContext* context, co
             }
         } else {
             re2::RE2* const_re = state->get_or_prepare_regex();
-            return regexp_replace_const(const_re, columns);
+            if (state->opt_const_rpl.has_value()) {
+                if (state->global_mode) {
+                    return regexp_replace_const_pattern_and_rpl<true>(const_re, columns, state->opt_const_rpl.value());
+                } else {
+                    return regexp_replace_const_pattern_and_rpl<false>(const_re, columns, state->opt_const_rpl.value());
+                }
+            } else {
+                if (state->global_mode) {
+                    return regexp_replace_const<true>(const_re, columns);
+                } else {
+                    return regexp_replace_const<false>(const_re, columns);
+                }
+            }
         }
     }
 
@@ -4714,7 +4832,8 @@ static StatusOr<ColumnPtr> url_extract_parameter_general(const starrocks::Column
         }
         auto url = url_viewer.value(i);
         auto param_key = param_key_viewer.value(i);
-        bool ill_formed = param_key.size == 0 || std::any_of(param_key.data, param_key.data + param_key.size, isspace);
+        bool ill_formed = param_key.size == 0 || std::any_of(param_key.data, param_key.data + param_key.size,
+                                                             [](int c) { return std::isspace(c); });
         if (ill_formed) {
             result.append_null();
             continue;
@@ -4742,7 +4861,8 @@ static StatusOr<ColumnPtr> url_extract_parameter_const_query_params(const starro
             continue;
         }
         auto param_key = param_key_viewer.value(i);
-        bool ill_formed = param_key.size == 0 || std::any_of(param_key.data, param_key.data + param_key.size, isspace);
+        bool ill_formed = param_key.size == 0 || std::any_of(param_key.data, param_key.data + param_key.size,
+                                                             [](int c) { return std::isspace(c); });
         if (ill_formed) {
             result.append_null();
             continue;
@@ -4785,7 +4905,8 @@ Status StringFunctions::url_extract_parameter_prepare(starrocks::FunctionContext
         auto param_key_column = context->get_constant_column(1);
         auto param_key = ColumnHelper::get_const_value<TYPE_VARCHAR>(param_key_column);
         state->opt_const_param_key = param_key.to_string();
-        ill_formed |= param_key.empty() || std::any_of(param_key.data, param_key.data + param_key.size, isspace);
+        ill_formed |= param_key.empty() || std::any_of(param_key.data, param_key.data + param_key.size,
+                                                       [](int c) { return std::isspace(c); });
     }
 
     if (url_is_const) {

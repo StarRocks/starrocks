@@ -111,7 +111,7 @@ Status LakePrimaryIndex::_do_lake_load(TabletManager* tablet_mgr, const TabletMe
             _persistent_index = std::make_shared<LakePersistentIndex>(tablet_mgr, metadata->id());
             set_enable_persistent_index(true);
             auto* lake_persistent_index = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
-            RETURN_IF_ERROR(lake_persistent_index->init(metadata->sstable_meta()));
+            RETURN_IF_ERROR(lake_persistent_index->init(metadata));
             return lake_persistent_index->load_from_lake_tablet(tablet_mgr, metadata, base_version, builder);
         }
         default:
@@ -201,15 +201,15 @@ Status LakePrimaryIndex::apply_opcompaction(const TabletMetadata& metadata,
     return Status::OK();
 }
 
-Status LakePrimaryIndex::ingest_sst(const FileMetaPB& sst_meta, uint32_t rssid, int64_t version, bool is_compaction,
-                                    DelVectorPtr delvec) {
+Status LakePrimaryIndex::ingest_sst(const FileMetaPB& sst_meta, uint32_t rssid, int64_t version,
+                                    const DelvecPagePB& delvec_page, DelVectorPtr delvec) {
     if (!_enable_persistent_index) {
         return Status::OK();
     }
 
     auto* lake_persistent_index = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
     if (lake_persistent_index != nullptr) {
-        return lake_persistent_index->ingest_sst(sst_meta, rssid, version, is_compaction, std::move(delvec));
+        return lake_persistent_index->ingest_sst(sst_meta, rssid, version, delvec_page, std::move(delvec));
     } else {
         return Status::InternalError("Persistent index is not a LakePersistentIndex.");
     }

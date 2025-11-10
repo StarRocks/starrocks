@@ -21,7 +21,6 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.FunctionAnalyzer;
@@ -31,6 +30,8 @@ import com.starrocks.thrift.TAggStateDesc;
 import com.starrocks.thrift.TFunctionVersion;
 import com.starrocks.thrift.TTypeDesc;
 import com.starrocks.thrift.TTypeNode;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeSerializer;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -147,7 +148,7 @@ public class AggStateDesc {
         for (Type argType : argTypes) {
             TTypeDesc tTypeDesc = new TTypeDesc();
             tTypeDesc.setTypes(new ArrayList<TTypeNode>());
-            argType.toThrift(tTypeDesc);
+            TypeSerializer.toThrift(argType, tTypeDesc);
             tAggStateDesc.addToArg_types(tTypeDesc);
         }
         tAggStateDesc.setResult_nullable(resultNullable);
@@ -156,7 +157,7 @@ public class AggStateDesc {
         // ret type
         TTypeDesc tTypeDesc = new TTypeDesc();
         tTypeDesc.setTypes(new ArrayList<TTypeNode>());
-        returnType.toThrift(tTypeDesc);
+        TypeSerializer.toThrift(returnType, tTypeDesc);
         tAggStateDesc.setRet_type(tTypeDesc);
         Preconditions.checkState(!tTypeDesc.types.isEmpty());
 

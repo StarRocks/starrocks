@@ -218,6 +218,68 @@ SELECT t1.c1, t1.c2, t1.c2 FROM t1 LEFT ANTI JOIN t2 ON t1.id = t2.id;
   LEFT JOIN t2 ON t1.id > t2.id;
   ```
 
+## ASOF Join
+
+ASOF Join 是一种常用于时序分析的时间型或范围型 Join 方式。它允许在 Join 两个表时，既使用某些键的等值条件，又使用时间或序列字段上的非等值条件（例如 `t1.time >= t2.time`）。在执行时，ASOF Join 会为左表中的每一行选择右表中最接近且不超过指定时间（或序列值）的匹配行。自 v4.0 起支持。
+
+在实际的时序数据分析场景中，常常会遇到以下问题：
+- 数据采集时间不对齐（例如不同传感器的采样频率不同）
+- 事件发生时间与记录时间存在微小差异
+- 需要为某个时间点找到最接近的历史记录
+
+传统的等值 Join（INNER JOIN）在处理这类数据时往往会造成大量数据丢失，而不等值 Join 则容易带来性能问题。ASOF Join 正是为了解决这些挑战而设计的。
+
+ASOF Join 常见的应用场景包括：
+
+- **金融市场分析**
+  - 将股票价格与成交量数据进行匹配
+  - 对齐不同市场之间的数据
+  - 匹配衍生品定价所需的参考数据
+- **IoT 数据处理**
+  - 对齐多个传感器的数据流
+  - 关联设备状态变化
+  - 插值处理时序数据
+- **日志分析**
+  - 关联系统事件与用户行为
+  - 匹配来自不同服务的日志
+  - 故障分析与问题定位
+
+### 语法
+
+```SQL
+SELECT [select_list]
+FROM left_table [AS left_alias]
+ASOF LEFT JOIN right_table [AS right_alias]
+    ON equality_condition
+    AND asof_condition
+[WHERE ...]
+[ORDER BY ...]
+```
+
+- `ASOF LEFT JOIN`：基于时间或序列的最近匹配执行非等值 Join。结果包含左表所有行，若右表无匹配则填充为 NULL。
+- `equality_condition`：标准的等值条件（例如匹配股票代码或 ID）。
+- `asof_condition`：范围条件，通常写作 `left.time >= right.time`，表示查找不超过 `left.time` 的最新 `right.time` 记录。
+
+:::note
+`asof_condition` 仅支持 DATE 和 DATETIME 类型。且仅支持一个 `asof_condition`。
+:::
+
+### 示例
+
+```SQL
+SELECT *
+FROM holdings h ASOF LEFT JOIN prices p             
+ON h.ticker = p.ticker            
+AND h.when >= p.when
+ORDER BY ALL;
+```
+
+### 限制
+
+- 目前仅支持 Inner Join（默认）和 Left Outer Join。
+- `asof_condition` 仅支持 DATE 和 DATETIME 类型。
+- 仅支持一个 `asof_condition`。
+
 ### ORDER BY
 
 ORDER BY 通过比较一列或者多列的大小来对结果集进行排序。

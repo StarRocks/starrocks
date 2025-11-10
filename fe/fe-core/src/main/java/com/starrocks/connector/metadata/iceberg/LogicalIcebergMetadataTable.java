@@ -15,8 +15,6 @@
 package com.starrocks.connector.metadata.iceberg;
 
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.metadata.MetadataTable;
@@ -25,13 +23,16 @@ import com.starrocks.planner.DescriptorTable;
 import com.starrocks.thrift.THdfsTable;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 
 import java.util.List;
 import java.util.stream.Collectors;
 
-import static com.starrocks.catalog.Type.ARRAY_BIGINT;
-import static com.starrocks.catalog.Type.ARRAY_INT;
 import static com.starrocks.connector.metadata.TableMetaMetadata.METADATA_DB_NAME;
+import static com.starrocks.type.Type.ARRAY_BIGINT;
+import static com.starrocks.type.Type.ARRAY_INT;
 
 public class LogicalIcebergMetadataTable extends MetadataTable {
     public static final String TABLE_NAME = "starrocks_connector_iceberg_logical_metadata_table";
@@ -49,20 +50,20 @@ public class LogicalIcebergMetadataTable extends MetadataTable {
                 Table.TableType.METADATA,
                 builder()
                         .columns(PLACEHOLDER_COLUMNS)
-                        .column("content", ScalarType.createType(PrimitiveType.INT))
-                        .column("file_path", ScalarType.createVarcharType())
-                        .column("file_format", ScalarType.createVarcharType())
-                        .column("spec_id", ScalarType.createType(PrimitiveType.INT))
-                        .column("partition_data", ScalarType.createType(PrimitiveType.VARBINARY))
-                        .column("record_count", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("file_size_in_bytes", ScalarType.createType(PrimitiveType.BIGINT))
+                        .column("content", TypeFactory.createType(PrimitiveType.INT))
+                        .column("file_path", Type.VARCHAR)
+                        .column("file_format", Type.VARCHAR)
+                        .column("spec_id", TypeFactory.createType(PrimitiveType.INT))
+                        .column("partition_data", TypeFactory.createType(PrimitiveType.VARBINARY))
+                        .column("record_count", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("file_size_in_bytes", TypeFactory.createType(PrimitiveType.BIGINT))
                         .column("split_offsets", ARRAY_BIGINT)
-                        .column("sort_id", ScalarType.createType(PrimitiveType.INT))
+                        .column("sort_id", TypeFactory.createType(PrimitiveType.INT))
                         .column("equality_ids", ARRAY_INT)
-                        .column("file_sequence_number", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("data_sequence_number", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("column_stats", ScalarType.createType(PrimitiveType.VARBINARY))
-                        .column("key_metadata", ScalarType.createType(PrimitiveType.VARBINARY))
+                        .column("file_sequence_number", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("data_sequence_number", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("column_stats", TypeFactory.createType(PrimitiveType.VARBINARY))
+                        .column("key_metadata", TypeFactory.createType(PrimitiveType.VARBINARY))
                         .build(),
                 originDb,
                 originTable,

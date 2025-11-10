@@ -25,7 +25,6 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunctionTable;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
@@ -53,7 +52,6 @@ import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
 import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
 import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
 import com.starrocks.sql.ast.ShowColumnStmt;
-import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowCreateExternalCatalogStmt;
 import com.starrocks.sql.ast.ShowCreateRoutineLoadStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
@@ -84,6 +82,7 @@ import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.CompoundPredicate;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.LikePredicate;
 import com.starrocks.sql.ast.expression.Predicate;
 import com.starrocks.sql.ast.expression.SlotRef;
@@ -91,6 +90,7 @@ import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.ast.spm.ShowBaselinePlanStmt;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.type.Type;
 import org.apache.commons.lang.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -321,14 +321,6 @@ public class ShowStmtAnalyzer {
         }
 
         @Override
-        public Void visitShowCreateDbStatement(ShowCreateDbStmt node, ConnectContext context) {
-            String dbName = node.getDb();
-            dbName = getDatabaseName(dbName, context);
-            node.setDb(dbName);
-            return null;
-        }
-
-        @Override
         public Void visitShowDataStatement(ShowDataStmt node, ConnectContext context) {
             String dbName = node.getDbName();
             dbName = getDatabaseName(dbName, context);
@@ -338,9 +330,10 @@ public class ShowStmtAnalyzer {
 
         @Override
         public Void visitShowDataDistributionStatement(ShowDataDistributionStmt node, ConnectContext context) {
-            String dbName = node.getDbName();
-            dbName = getDatabaseName(dbName, context);
-            node.setDbName(dbName);
+            String db = context.getDatabase();
+            if (Strings.isNullOrEmpty(db)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
+            }
             return null;
         }
 
@@ -586,18 +579,18 @@ public class ShowStmtAnalyzer {
                         !(expr instanceof LikePredicate)) {
                     throw new SemanticException(
                             "Invalid predicate in SHOW statement. Only '=' and 'LIKE' operators are supported. " +
-                                    "Found: '" + expr.toSql() + "'");
+                                    "Found: '" + ExprToSql.toSql(expr) + "'");
                 }
 
                 if (!(expr.getChild(0) instanceof SlotRef)) {
                     throw new SemanticException(
-                            "Invalid left operator in predicate '" + expr.toSql() + "'. " +
+                            "Invalid left operator in predicate '" + ExprToSql.toSql(expr) + "'. " +
                                     "Left side must be a column reference");
                 }
 
                 if (!(expr.getChild(1) instanceof StringLiteral)) {
                     throw new SemanticException(
-                            "Invalid right operator in predicate '" + expr.toSql() + "'. " +
+                            "Invalid right operator in predicate '" + ExprToSql.toSql(expr) + "'. " +
                                     "Right side must be a string literal. " +
                                     "Example: column = 'value' or column LIKE 'pattern%'");
                 }

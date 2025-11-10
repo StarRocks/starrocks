@@ -19,14 +19,10 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.re2j.Pattern;
 import com.starrocks.catalog.AggregateFunction;
-import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.ScalarFunction;
-import com.starrocks.catalog.StructField;
-import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.TableFunction;
-import com.starrocks.catalog.Type;
 import com.starrocks.catalog.combinator.AggStateCombineCombinator;
 import com.starrocks.catalog.combinator.AggStateIf;
 import com.starrocks.catalog.combinator.AggStateMergeCombinator;
@@ -42,6 +38,8 @@ import com.starrocks.qe.SessionVariableConstants;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.expression.ArrayExpr;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.sql.ast.expression.FunctionParams;
@@ -59,6 +57,10 @@ import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.spm.SPMFunctions;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.StructField;
+import com.starrocks.type.StructType;
+import com.starrocks.type.Type;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
@@ -218,7 +220,7 @@ public class FunctionAnalyzer {
             // Validate that the condition parameter (last parameter) is boolean type or can be cast to boolean
             if (!params.exprs().isEmpty()) {
                 Expr conditionExpr = params.exprs().get(params.exprs().size() - 1);
-                if (!Type.canCastTo(conditionExpr.getType(), Type.BOOLEAN)) {
+                if (!TypeManager.canCastTo(conditionExpr.getType(), Type.BOOLEAN)) {
                     throw new SemanticException(String.format(
                         "The condition expression in %s function must be boolean type or castable to boolean, but got %s",
                         fnName.getFunction(), conditionExpr.getType().toSql()), functionCallExpr.getPos());
@@ -247,7 +249,7 @@ public class FunctionAnalyzer {
                                                   FunctionParams fnParams,
                                                   FunctionCallExpr functionCallExpr) {
         if (fnParams.isStar() && !fnName.getFunction().equals(FunctionSet.COUNT)) {
-            throw new SemanticException("'*' can only be used in conjunction with COUNT: " + functionCallExpr.toSql(),
+            throw new SemanticException("'*' can only be used in conjunction with COUNT: " + ExprToSql.toSql(functionCallExpr),
                     functionCallExpr.getPos());
         }
 
@@ -255,7 +257,7 @@ public class FunctionAnalyzer {
             // for multiple exprs count must be qualified with distinct
             if (functionCallExpr.getChildren().size() > 1 && !fnParams.isDistinct()) {
                 throw new SemanticException(
-                        "COUNT must have DISTINCT for multiple arguments: " + functionCallExpr.toSql(),
+                        "COUNT must have DISTINCT for multiple arguments: " + ExprToSql.toSql(functionCallExpr),
                         functionCallExpr.getPos());
             }
             return;
@@ -268,7 +270,7 @@ public class FunctionAnalyzer {
         if (fnName.getFunction().equals(FunctionSet.GROUP_CONCAT)) {
             if (functionCallExpr.getChildren().size() - fnParams.getOrderByElemNum() < 2) {
                 throw new SemanticException(
-                        "group_concat requires at least one parameter: " + functionCallExpr.toSql(),
+                        "group_concat requires at least one parameter: " + ExprToSql.toSql(functionCallExpr),
                         functionCallExpr.getPos());
             }
 
@@ -278,7 +280,7 @@ public class FunctionAnalyzer {
             if (!arg1.getType().isStringType() && !arg1.getType().isNull()) {
                 throw new SemanticException(
                         "group_concat requires separator to be of getType() STRING: " +
-                                functionCallExpr.toSql(), arg1.getPos());
+                                ExprToSql.toSql(functionCallExpr), arg1.getPos());
             }
             return;
         }
@@ -293,7 +295,7 @@ public class FunctionAnalyzer {
                     if (!functionCallExpr.getChild(2).isConstant()) {
                         throw new SemanticException(
                                 "The default parameter (parameter 3) of LAG must be a constant: "
-                                        + functionCallExpr.toSql(), functionCallExpr.getChild(2).getPos());
+                                        + ExprToSql.toSql(functionCallExpr), functionCallExpr.getChild(2).getPos());
                     }
                 }
                 return;
@@ -304,7 +306,7 @@ public class FunctionAnalyzer {
             if (!functionCallExpr.getChild(1).isConstant()) {
                 throw new SemanticException(
                         "The delta parameter (parameter 2) of SESSION_NUMBER must be a constant: "
-                                + functionCallExpr.toSql(), functionCallExpr.getChild(1).getPos());
+                                + ExprToSql.toSql(functionCallExpr), functionCallExpr.getChild(1).getPos());
             }
         }
 
@@ -364,7 +366,7 @@ public class FunctionAnalyzer {
         if (fnName.getFunction().equals(FunctionSet.MAX_BY) || fnName.getFunction().equals(FunctionSet.MIN_BY)) {
             if (functionCallExpr.getChildren().size() != 2 || functionCallExpr.getChildren().isEmpty()) {
                 throw new SemanticException(
-                        fnName.getFunction() + " requires two parameters: " + functionCallExpr.toSql(),
+                        fnName.getFunction() + " requires two parameters: " + ExprToSql.toSql(functionCallExpr),
                         functionCallExpr.getPos());
             }
 
@@ -391,7 +393,7 @@ public class FunctionAnalyzer {
                 !(arg instanceof NullLiteral)) ||
                 !arg.getType().canApplyToNumeric())) {
             throw new SemanticException(
-                    fnName.getFunction() + " requires a numeric parameter: " + functionCallExpr.toSql(),
+                    fnName.getFunction() + " requires a numeric parameter: " + ExprToSql.toSql(functionCallExpr),
                     functionCallExpr.getPos());
         }
 
@@ -537,7 +539,7 @@ public class FunctionAnalyzer {
                 if (!k.isPresent() || k.get() >= Integer.MAX_VALUE || k.get() < 0) {
                     throw new SemanticException(
                             "The second parameter of DICT_MERGE must be a constant positive integer: " +
-                                    functionCallExpr.toSql(), kExpr.getPos());
+                                    ExprToSql.toSql(functionCallExpr), kExpr.getPos());
                 }
             }
         }
@@ -553,7 +555,7 @@ public class FunctionAnalyzer {
                 if (!k.isPresent() || k.get() <= 0) {
                     throw new SemanticException(
                             "The second parameter of APPROX_TOP_K must be a constant positive integer: " +
-                                    functionCallExpr.toSql(), kExpr.getPos());
+                                    ExprToSql.toSql(functionCallExpr), kExpr.getPos());
                 }
             }
             if (functionCallExpr.hasChild(2)) {
@@ -562,23 +564,23 @@ public class FunctionAnalyzer {
                 if (!counterNum.isPresent() || counterNum.get() <= 0) {
                     throw new SemanticException(
                             "The third parameter of APPROX_TOP_K must be a constant positive integer: " +
-                                    functionCallExpr.toSql(), counterNumExpr.getPos());
+                                    ExprToSql.toSql(functionCallExpr), counterNumExpr.getPos());
                 }
             }
             if (k.isPresent() && k.get() > FeConstants.MAX_COUNTER_NUM_OF_TOP_K) {
                 throw new SemanticException("The maximum number of the second parameter is "
-                        + FeConstants.MAX_COUNTER_NUM_OF_TOP_K + ", " + functionCallExpr.toSql(), kExpr.getPos());
+                        + FeConstants.MAX_COUNTER_NUM_OF_TOP_K + ", " + ExprToSql.toSql(functionCallExpr), kExpr.getPos());
             }
             if (counterNum.isPresent()) {
                 if (counterNum.get() > FeConstants.MAX_COUNTER_NUM_OF_TOP_K) {
                     throw new SemanticException("The maximum number of the third parameter is "
-                            + FeConstants.MAX_COUNTER_NUM_OF_TOP_K + ", " + functionCallExpr.toSql(),
+                            + FeConstants.MAX_COUNTER_NUM_OF_TOP_K + ", " + ExprToSql.toSql(functionCallExpr),
                             counterNumExpr.getPos());
                 }
                 if (k.get() > counterNum.get()) {
                     throw new SemanticException(
                             "The second parameter must be smaller than or equal to the third parameter" +
-                                    functionCallExpr.toSql(), kExpr.getPos());
+                                    ExprToSql.toSql(functionCallExpr), kExpr.getPos());
                 }
             }
         }
@@ -725,7 +727,7 @@ public class FunctionAnalyzer {
         // validate argument types
         for (int i = 0; i < fn.getNumArgs(); i++) {
             if (!argumentTypes[i].matchesType(fn.getArgs()[i]) &&
-                    !Type.canCastTo(argumentTypes[i], fn.getArgs()[i])) {
+                    !TypeManager.canCastTo(argumentTypes[i], fn.getArgs()[i])) {
                 String msg = String.format("No matching function with signature: %s(%s)", fnName,
                         node.getParams().isStar() ? "*" :
                                 Arrays.stream(argumentTypes).map(Type::toSql).collect(Collectors.joining(", ")));
@@ -736,7 +738,7 @@ public class FunctionAnalyzer {
             Type varType = fn.getArgs()[fn.getNumArgs() - 1];
             for (int i = fn.getNumArgs(); i < argumentTypes.length; i++) {
                 if (!argumentTypes[i].matchesType(varType) &&
-                        !Type.canCastTo(argumentTypes[i], varType)) {
+                        !TypeManager.canCastTo(argumentTypes[i], varType)) {
                     String msg = String.format("Variadic function %s(%s) can't support type: %s", fnName,
                             Arrays.stream(fn.getArgs()).map(Type::toSql).collect(Collectors.joining(", ")),
                             argumentTypes[i]);
@@ -849,12 +851,12 @@ public class FunctionAnalyzer {
             if (DecimalV3FunctionAnalyzer.argumentTypeContainDecimalV3(FunctionSet.ARRAY_CONCAT, argumentTypes)) {
                 fn = DecimalV3FunctionAnalyzer.getDecimalV3Function(session, node, argumentTypes);
             } else {
-                fn = Expr.getBuiltinFunction(FunctionSet.ARRAY_CONCAT, argumentTypes,
+                fn = ExprUtils.getBuiltinFunction(FunctionSet.ARRAY_CONCAT, argumentTypes,
                         Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             }
         } else if (FunctionSet.NAMED_STRUCT.equals(fnName)) {
             // deriver struct type
-            fn = Expr.getBuiltinFunction(FunctionSet.NAMED_STRUCT, argumentTypes,
+            fn = ExprUtils.getBuiltinFunction(FunctionSet.NAMED_STRUCT, argumentTypes,
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             fn = fn.copy();
             ArrayList<StructField> sf = Lists.newArrayList();
@@ -871,7 +873,7 @@ public class FunctionAnalyzer {
         } else if (FunctionSet.BITMAP_UNION.equals(fnName)) {
             // bitmap_union is analyzed here rather than `getAnalyzedAggregateFunction` because
             // it's just a syntax sugar for bitmap_agg transformed from bitmap_union(to_bitmap())
-            fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_IDENTICAL);
+            fn = ExprUtils.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_IDENTICAL);
             if (session.getSessionVariable().isEnableRewriteBitmapUnionToBitmapAgg() &&
                     node.getChild(0) instanceof FunctionCallExpr) {
                 FunctionCallExpr arg0Func = (FunctionCallExpr) node.getChild(0);
@@ -886,7 +888,7 @@ public class FunctionAnalyzer {
                         node.setChild(0, toBitmapArg0);
                         node.resetFnName("", FunctionSet.BITMAP_AGG);
                         node.getParams().setExprs(Lists.newArrayList(toBitmapArg0));
-                        fn = Expr.getBuiltinFunction(FunctionSet.BITMAP_AGG, argumentTypes,
+                        fn = ExprUtils.getBuiltinFunction(FunctionSet.BITMAP_AGG, argumentTypes,
                                 Function.CompareMode.IS_IDENTICAL);
                     }
                 }
@@ -899,13 +901,13 @@ public class FunctionAnalyzer {
                     case NDV:
                         node.resetFnName("", FunctionSet.NDV);
                         node.getParams().setIsDistinct(false);
-                        fn = Expr.getBuiltinFunction(FunctionSet.NDV, argumentTypes,
+                        fn = ExprUtils.getBuiltinFunction(FunctionSet.NDV, argumentTypes,
                                 Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
                         break;
                     case MULTI_COUNT_DISTINCT:
                         node.resetFnName("", FunctionSet.MULTI_DISTINCT_COUNT);
                         node.getParams().setIsDistinct(false);
-                        fn = Expr.getBuiltinFunction(FunctionSet.MULTI_DISTINCT_COUNT, argumentTypes,
+                        fn = ExprUtils.getBuiltinFunction(FunctionSet.MULTI_DISTINCT_COUNT, argumentTypes,
                                 Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
                         break;
                 }
@@ -921,7 +923,7 @@ public class FunctionAnalyzer {
                         //do nothing
                     } else if ((targetType.isNumericType() && argumentTypes[i].isNumericType()) ||
                                 (targetType.isStringType() && argumentTypes[i].isStringType())) {
-                        targetType = Type.getAssignmentCompatibleType(targetType, argumentTypes[i], false);
+                        targetType = TypeManager.getAssignmentCompatibleType(targetType, argumentTypes[i], false);
                         if (targetType.isInvalid()) {
                             throw new SemanticException("Parameter's type is invalid");
                         }
@@ -932,7 +934,7 @@ public class FunctionAnalyzer {
             }
             Type[] argsTypes = new Type[1];
             argsTypes[0] = targetType;
-            fn = Expr.getBuiltinFunction(fnName, argsTypes, true, returnType, Function.CompareMode.IS_IDENTICAL);
+            fn = ExprUtils.getBuiltinFunction(fnName, argsTypes, true, returnType, Function.CompareMode.IS_IDENTICAL);
             // correct decimal's precision and scale
             if (targetType.isDecimalV3()) {
                 List<Type> argTypes = Arrays.asList(targetType);
@@ -954,7 +956,20 @@ public class FunctionAnalyzer {
                     argumentTypes[0].isArrayType() && ((ArrayType) argumentTypes[0]).getItemType().isNull()) {
                 argumentTypes[0] = Type.ARRAY_BOOLEAN;
                 argumentTypes[1] = Type.BOOLEAN;
-                fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_IDENTICAL);
+                fn = ExprUtils.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_IDENTICAL);
+            }
+        } else if (FunctionSet.ICEBERG_TRANSFORM_BUCKET.equalsIgnoreCase(fnName) ||
+                FunctionSet.ICEBERG_TRANSFORM_TRUNCATE.equalsIgnoreCase(fnName)) {
+            Preconditions.checkState(argumentTypes.length == 2);
+            Type[] args = new Type[] {argumentTypes[0], Type.INT};
+            fn = ExprUtils.getBuiltinFunction(fnName, args, Function.CompareMode.IS_IDENTICAL);
+            if (args[0].isDecimalV3()) {
+                fn.setArgsType(args);
+            }
+            if (FunctionSet.ICEBERG_TRANSFORM_TRUNCATE.equalsIgnoreCase(fnName)) {
+                fn.setRetType(args[0]);
+            } else {
+                fn.setRetType(Type.INT);
             }
         }
         // add new argument types
@@ -975,7 +990,7 @@ public class FunctionAnalyzer {
      * datetime.
      */
     private static Function getStrToDateFunction(FunctionCallExpr node, Type[] argumentTypes) {
-        Function fn = Expr.getBuiltinFunction(node.getFnName().getFunction(),
+        Function fn = ExprUtils.getBuiltinFunction(node.getFnName().getFunction(),
                 argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         if (fn == null) {
             return null;
@@ -990,7 +1005,7 @@ public class FunctionAnalyzer {
         ScalarOperator format = SqlToScalarOperatorTranslator.translate(node.getChild(1), expressionMapping,
                 new ColumnRefFactory());
         if (format.isConstantRef() && !HAS_TIME_PART.matcher(format.toString()).matches()) {
-            return Expr.getBuiltinFunction("str2date", argumentTypes,
+            return ExprUtils.getBuiltinFunction("str2date", argumentTypes,
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         }
 
@@ -1023,7 +1038,7 @@ public class FunctionAnalyzer {
         }
 
         Type[] argTypes = node.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
-        return Expr.getBuiltinFunction(
+        return ExprUtils.getBuiltinFunction(
             FunctionSet.ARRAY_GENERATE,
             argTypes,
             Function.CompareMode.IS_SUPERTYPE_OF);
@@ -1080,16 +1095,16 @@ public class FunctionAnalyzer {
         if (fnName.equals(FunctionSet.COUNT) && isDistinct) {
             // Compatible with the logic of the original search function "count distinct"
             // TODO: fix how we equal count distinct.
-            fn = Expr.getBuiltinFunction(FunctionSet.COUNT, new Type[] { argumentTypes[0] },
+            fn = ExprUtils.getBuiltinFunction(FunctionSet.COUNT, new Type[] { argumentTypes[0] },
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         } else if (fnName.equals(FunctionSet.EXCHANGE_BYTES) || fnName.equals(FunctionSet.EXCHANGE_SPEED)) {
-            fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+            fn = ExprUtils.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             fn = fn.copy();
             fn.setArgsType(argumentTypes); // as accepting various types
             fn.setIsNullable(false);
         } else if (fnName.equals(FunctionSet.ARRAY_AGG) || fnName.equals(FunctionSet.GROUP_CONCAT)) {
             // move order by expr to node child, and extract is_asc and null_first information.
-            fn = Expr.getBuiltinFunction(fnName, new Type[] {argumentTypes[0]},
+            fn = ExprUtils.getBuiltinFunction(fnName, new Type[] {argumentTypes[0]},
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             fn = fn.copy();
             List<Boolean> isAscOrder = new ArrayList<>();
@@ -1131,7 +1146,7 @@ public class FunctionAnalyzer {
             ((AggregateFunction) fn).setIsDistinct(isDistinct && (!isAscOrder.isEmpty() || outputConst));
         } else if (FunctionSet.PERCENTILE_DISC.equals(fnName) || FunctionSet.LC_PERCENTILE_DISC.equals(fnName)) {
             argumentTypes[1] = Type.DOUBLE;
-            fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_IDENTICAL);
+            fn = ExprUtils.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_IDENTICAL);
             // correct decimal's precision and scale
             if (fn.getArgs()[0].isDecimalV3()) {
                 List<Type> argTypes = Arrays.asList(argumentTypes[0], fn.getArgs()[1]);
@@ -1149,7 +1164,7 @@ public class FunctionAnalyzer {
                 fn = newFn;
             }
         } else if (AggStateUtils.isAggStateCombinator(fnName)) {
-            Function func = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+            Function func = ExprUtils.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             if (func == null) {
                 return null;
             }
@@ -1207,12 +1222,12 @@ public class FunctionAnalyzer {
         } else if (DecimalV3FunctionAnalyzer.argumentTypeContainDecimalV2(fnName, argumentTypes)) {
             fn = DecimalV3FunctionAnalyzer.getDecimalV2Function(fnName, argumentTypes);
         } else if (Arrays.stream(argumentTypes).anyMatch(arg -> arg.matchesType(Type.TIME))) {
-            fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+            fn = ExprUtils.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             if (fn instanceof AggregateFunction) {
                 throw new SemanticException("Time Type can not used in " + fnName + " function", pos);
             }
         } else {
-            fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+            fn = ExprUtils.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         }
         return fn;
     }

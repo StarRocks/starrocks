@@ -178,7 +178,7 @@ void OlapChunkSource::_init_counter(RuntimeState* state) {
             ADD_CHILD_COUNTER(_runtime_profile, "RemainingRowsAfterShortKeyFilter", TUnit::UNIT, segment_init_name);
     _column_iterator_init_timer = ADD_CHILD_TIMER(_runtime_profile, "ColumnIteratorInit", segment_init_name);
     _bitmap_index_iterator_init_timer = ADD_CHILD_TIMER(_runtime_profile, "BitmapIndexIteratorInit", segment_init_name);
-    _zone_map_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "ZoneMapIndexFiter", segment_init_name);
+    _zone_map_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "ZoneMapIndexFilter", segment_init_name);
     _rows_key_range_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "ShortKeyFilter", segment_init_name);
     _rows_key_range_counter =
             ADD_CHILD_COUNTER(_runtime_profile, "ShortKeyRangeNumber", TUnit::UNIT, segment_init_name);
@@ -409,6 +409,10 @@ Status OlapChunkSource::_init_column_access_paths(Schema* schema) {
             } else {
                 LOG(WARNING) << "failed to convert column access path: " << res.status();
             }
+        } else if (path->is_root() && !path->children().empty()) {
+            // Check if this is a ROOT path for JSON field that has been pruned
+            // For JSON fields, the root column might be pruned but sub-paths are still needed
+            VLOG_ROW << "Skipping pruned JSON root path: " << root;
         } else {
             LOG(WARNING) << "failed to find column in schema: " << root;
         }

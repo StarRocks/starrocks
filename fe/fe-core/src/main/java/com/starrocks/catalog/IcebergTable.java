@@ -28,6 +28,7 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergApiConverter;
 import com.starrocks.connector.iceberg.IcebergCatalogType;
 import com.starrocks.connector.iceberg.IcebergTableOperation;
+import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
 import com.starrocks.connector.iceberg.procedure.AddFilesProcedure;
 import com.starrocks.connector.iceberg.procedure.CherryPickSnapshotProcedure;
 import com.starrocks.connector.iceberg.procedure.ExpireSnapshotsProcedure;
@@ -44,6 +45,8 @@ import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.LiteralExpr;
@@ -59,6 +62,7 @@ import com.starrocks.thrift.TPartitionMap;
 import com.starrocks.thrift.TSortOrder;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
+import com.starrocks.type.Type;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.NullOrder;
 import org.apache.iceberg.PartitionField;
@@ -96,6 +100,7 @@ public class IcebergTable extends Table {
     public static final String DATA_SEQUENCE_NUMBER = "$data_sequence_number";
     public static final String SPEC_ID = "$spec_id";
     public static final String EQUALITY_DELETE_TABLE_COMMENT = "equality_delete_table_comment";
+    public static final String ROW_ID = "_row_id";
 
     private String catalogName;
     @SerializedName(value = "dn")
@@ -111,6 +116,7 @@ public class IcebergTable extends Table {
     private List<Column> partitionColumns;
     private Optional<Boolean> hasBucketProperties = Optional.empty();
     private final AtomicLong partitionIdGen = new AtomicLong(0L);
+    private IcebergMetricsReporter metricsReporter = new IcebergMetricsReporter();
 
     public IcebergTable() {
         super(TableType.ICEBERG);
@@ -245,6 +251,9 @@ public class IcebergTable extends Table {
         return ((BaseTable) getNativeTable()).operations().current().formatVersion() > 1;
     }
 
+    public int getFormatVersion() {
+        return ((BaseTable) getNativeTable()).operations().current().formatVersion();
+    }
     /**
      * <p>
      * In the Iceberg Partition Evolution scenario, 'org.apache.iceberg.PartitionField#name' only represents the
@@ -424,7 +433,7 @@ public class IcebergTable extends Table {
                                 } else {
                                     throw new SemanticException("Unsupported function call %s", expr.toString());
                                 }
-                                Function builtinFunction = Expr.getBuiltinFunction(
+                                Function builtinFunction = ExprUtils.getBuiltinFunction(
                                         ((FunctionCallExpr) expr).getFnName().getFunction(),
                                         args, Function.CompareMode.IS_IDENTICAL);
                                 ((FunctionCallExpr) expr).setFn(builtinFunction);
@@ -451,7 +460,7 @@ public class IcebergTable extends Table {
                         .findColumnName(nativeTable.spec().fields().get(i).sourceId()));
                 partInfo.setPartition_column_name(nativeTable.spec().fields().get(i).name());
                 partInfo.setTransform_expr(nativeTable.spec().fields().get(i).transform().toString());
-                partInfo.setPartition_expr(partitionExprs.get(i).treeToThrift());
+                partInfo.setPartition_expr(ExprToThriftVisitor.treeToThrift(partitionExprs.get(i)));
                 partitionInfos.add(partInfo);
             }
             tIcebergTable.setPartition_info(partitionInfos);
@@ -465,7 +474,9 @@ public class IcebergTable extends Table {
                 long partitionId = info.getId();
                 THdfsPartition tPartition = new THdfsPartition();
                 List<LiteralExpr> keys = key.getKeys();
-                tPartition.setPartition_key_exprs(keys.stream().map(Expr::treeToThrift).collect(Collectors.toList()));
+                tPartition.setPartition_key_exprs(keys.stream()
+                        .map(ExprToThriftVisitor::treeToThrift)
+                        .collect(Collectors.toList()));
                 tPartitionMap.putToPartitions(partitionId, tPartition);
             }
 
@@ -566,6 +577,14 @@ public class IcebergTable extends Table {
         };
     }
 
+    public void setIcebergMetricsReporter(IcebergMetricsReporter reporter) {
+        this.metricsReporter = reporter;
+    }
+
+    public IcebergMetricsReporter getIcebergMetricsReporter() {
+        return metricsReporter;
+    }
+    
     public static Builder builder() {
         return new Builder();
     }

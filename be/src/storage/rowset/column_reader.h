@@ -159,7 +159,8 @@ public:
     Status zone_map_filter(const std::vector<const ::starrocks::ColumnPredicate*>& p,
                            const ::starrocks::ColumnPredicate* del_predicate,
                            std::unordered_set<uint32_t>* del_partial_filtered_pages, SparseRange<>* row_ranges,
-                           const IndexReadOptions& opts, CompoundNodeType pred_relation);
+                           const IndexReadOptions& opts, CompoundNodeType pred_relation,
+                           const Range<>* src_range = nullptr);
 
     // NOTE: RAW interface should be used carefully
     // Return all page-level zonemap
@@ -227,13 +228,18 @@ private:
     Status _load_bitmap_index(const IndexReadOptions& opts);
     Status _load_bloom_filter_index(const IndexReadOptions& opts);
 
+    // Determines the logical type to use when parsing zone map values for predicate filtering,
+    // handling type mismatches between column and predicate types after fast schema evolution
+    LogicalType _get_zone_map_parse_type(const ColumnPredicate* predicate) const;
     Status _parse_zone_map(LogicalType type, const ZoneMapPB& zm, ZoneMapDetail* detail) const;
+    Status _parse_zone_map(const TypeInfoPtr& type_info, const ZoneMapPB& zm, ZoneMapDetail* detail) const;
 
     Status _calculate_row_ranges(const std::vector<uint32_t>& page_indexes, SparseRange<>* row_ranges);
 
     template <CompoundNodeType PredRelation>
     Status _zone_map_filter(const std::vector<const ColumnPredicate*>& predicates, const ColumnPredicate* del_predicate,
-                            std::unordered_set<uint32_t>* del_partial_filtered_pages, std::vector<uint32_t>* pages);
+                            std::unordered_set<uint32_t>* del_partial_filtered_pages, std::vector<uint32_t>* pages,
+                            const Range<>* src_range);
 
     Status _load_inverted_index(const std::shared_ptr<TabletIndex>& index_meta, const SegmentReadOptions& opts);
 

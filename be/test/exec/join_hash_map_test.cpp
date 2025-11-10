@@ -1050,7 +1050,9 @@ TEST_F(JoinHashMapTest, CompileFixedSizeKeyColumn) {
     auto c2 = JoinHashMapTest::create_int32_column(2, 2);
     Columns columns{c1, c2};
 
-    JoinHashMapHelper::serialize_fixed_size_key_column<LogicalType::TYPE_BIGINT>(columns, data_column.get(), 0, 2);
+    std::vector<uint32_t> serialized_fixed_size_key_bytes{4, 4};
+    JoinHashMapHelper::serialize_fixed_size_key_column<LogicalType::TYPE_BIGINT>(columns, data_column.get(),
+                                                                                 serialized_fixed_size_key_bytes, 0, 2);
 
     auto* c3 = ColumnHelper::as_raw_column<Int64Column>(data_column);
     ASSERT_EQ(c3->get_data()[0], 8589934592l);
@@ -1368,6 +1370,8 @@ TEST_F(JoinHashMapTest, FixedSizeJoinBuildProbeFunc) {
     probe_state.next.resize(config::vector_chunk_size, 0);
     Columns probe_columns{probe_column1, probe_column2};
     probe_state.key_columns = &probe_columns;
+    table_items.serialized_fixed_size_key_bytes.emplace_back(4);
+    table_items.serialized_fixed_size_key_bytes.emplace_back(4);
 
     using BuildKeyConstructor = BuildKeyConstructorForSerializedFixedSize<LogicalType::TYPE_BIGINT>;
     using ProbeKeyConstructor = ProbeKeyConstructorForSerializedFixedSize<LogicalType::TYPE_BIGINT>;
@@ -1428,6 +1432,8 @@ TEST_F(JoinHashMapTest, FixedSizeJoinBuildProbeFuncNullable) {
     probe_state.next.resize(config::vector_chunk_size, 0);
     Columns probe_columns{probe_column1, probe_column2};
     probe_state.key_columns = &probe_columns;
+    table_items.serialized_fixed_size_key_bytes.emplace_back(4);
+    table_items.serialized_fixed_size_key_bytes.emplace_back(4);
 
     using BuildKeyConstructor = BuildKeyConstructorForSerializedFixedSize<LogicalType::TYPE_BIGINT>;
     using ProbeKeyConstructor = ProbeKeyConstructorForSerializedFixedSize<LogicalType::TYPE_BIGINT>;
@@ -2244,6 +2250,8 @@ TEST_F(JoinHashMapTest, BuildKeyConstructorForSerializedFixedSizeForNotNullableC
     column_1->append(*create_column(TYPE_INT, 0, build_row_count));
     table_items.key_columns.emplace_back(std::move(column_1));
     table_items.join_keys.emplace_back(JoinKeyDesc{&_int_type, false, nullptr});
+    table_items.serialized_fixed_size_key_bytes.emplace_back(4);
+    table_items.serialized_fixed_size_key_bytes.emplace_back(4);
 
     // Add int column
     auto column_2 = create_column(TYPE_INT);
@@ -2284,6 +2292,8 @@ TEST_F(JoinHashMapTest, BuildKeyConstructorForSerializedFixedSizeForNullableColu
     column_1->append(*create_nullable_column(TYPE_INT, nulls_1, 0, build_row_count));
     table_items.key_columns.emplace_back(std::move(column_1));
     table_items.join_keys.emplace_back(JoinKeyDesc{&_int_type, false, nullptr});
+    table_items.serialized_fixed_size_key_bytes.emplace_back(4);
+    table_items.serialized_fixed_size_key_bytes.emplace_back(4);
 
     // Add int column
     auto nulls_2 = create_bools(build_row_count, 0);
@@ -2325,6 +2335,8 @@ TEST_F(JoinHashMapTest, BuildKeyConstructorForSerializedFixedSizeForPartialNulla
     column_1->append(*create_nullable_column(TYPE_INT, nulls_1, 0, build_row_count));
     table_items.key_columns.emplace_back(std::move(column_1));
     table_items.join_keys.emplace_back(JoinKeyDesc{&_int_type, false, nullptr});
+    table_items.serialized_fixed_size_key_bytes.emplace_back(4);
+    table_items.serialized_fixed_size_key_bytes.emplace_back(4);
 
     // Add int column
     auto nulls_2 = create_bools(build_row_count, 2);
@@ -3119,6 +3131,8 @@ TEST_F(JoinHashMapTest, TestBuildKeyConstructorForSerializedFixedSizeNonNullable
     build_column2->append_datum(Datum(0));
     build_column2->append(*JoinHashMapTest::create_int32_column(10, 100), 0, 10);
     table_items.key_columns.emplace_back(build_column2);
+    table_items.serialized_fixed_size_key_bytes.emplace_back(4);
+    table_items.serialized_fixed_size_key_bytes.emplace_back(4);
 
     BuildKeyBuilder::prepare(nullptr, &table_items);
     BuildKeyBuilder::build_key(nullptr, &table_items);
@@ -3150,6 +3164,8 @@ TEST_F(JoinHashMapTest, TestBuildKeyConstructorForSerializedFixedSizeNullable) {
     build_column2->append_datum(Datum(0));
     build_column2->append(*JoinHashMapTest::create_int32_column(10, 100), 0, 10);
     table_items.key_columns.emplace_back(build_column2);
+    table_items.serialized_fixed_size_key_bytes.emplace_back(4);
+    table_items.serialized_fixed_size_key_bytes.emplace_back(4);
 
     {
         table_items.row_count = 10;
@@ -3195,6 +3211,8 @@ TEST_F(JoinHashMapTest, TestProbeKeyConstructorForSerializedFixedSizeNullable) {
     JoinHashTableItems table_items;
     table_items.join_keys.emplace_back(JoinKeyDesc{&int_type, false, nullptr});
     table_items.join_keys.emplace_back(JoinKeyDesc{&int_type, false, nullptr});
+    table_items.serialized_fixed_size_key_bytes.emplace_back(4);
+    table_items.serialized_fixed_size_key_bytes.emplace_back(4);
 
     HashTableProbeState probe_state;
 
