@@ -1094,7 +1094,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### tablet_map_shard_size
 
-- デフォルト: 32
+- デフォルト: 1024
 - タイプ: Int
 - 単位: -
 - 可変: いいえ
