@@ -1271,7 +1271,7 @@ TEST_F(ParquetSchemaTest, ParquetLists) {
 
         expected_fields.emplace_back(GroupNode::make_field(
                 "my_list_8", true, ColumnType::ARRAY,
-                {GroupNode::make_field("array", false, ColumnType::STRUCT,
+                {GroupNode::make_field("array", false, ColumnType::ARRAY,
                                        {PrimitiveNode::make_field("array", false, Type::type::INT32)})}));
     }
 
