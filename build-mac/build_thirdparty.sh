@@ -177,6 +177,7 @@ install_homebrew_deps() {
         "zlib"
 
         # Other libraries
+        "boost"          # Required by vectorscan build for CMake config files
         "icu4c"
         "xsimd"
         "gperftools"
