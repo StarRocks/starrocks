@@ -1067,6 +1067,9 @@ public class ExpressionAnalyzer {
             Type[] argumentTypes = node.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
             // check fn & throw exception direct if analyze failed
             checkFunction(fnName, node, argumentTypes);
+            // checkFunction may modify node's children (e.g., add default parameters for array_generate),
+            // so we need to update argumentTypes after checkFunction
+            argumentTypes = node.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
             // get function by function expression and argument types
             Function fn = FunctionAnalyzer.getAnalyzedFunction(session, node, argumentTypes);
             if (fn == null) {

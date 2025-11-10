@@ -1041,7 +1041,7 @@ public class FunctionAnalyzer {
         return ExprUtils.getBuiltinFunction(
             FunctionSet.ARRAY_GENERATE,
             argTypes,
-            Function.CompareMode.IS_SUPERTYPE_OF);
+            Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
     }
 
     private static BigInteger toBigInteger(Expr expr) {
