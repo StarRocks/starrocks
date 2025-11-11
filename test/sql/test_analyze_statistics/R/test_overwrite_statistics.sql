@@ -63,10 +63,13 @@ select count(*) from _statistics_.column_statistics where table_name = 'test_ove
 -- result:
 8
 -- !result
-INSERT OVERWRITE sales_data partition("p202401") VALUES (101, '2024-01-10');
+INSERT OVERWRITE test_overwrite_statistics.sales_data partition("p202401") VALUES (101, '2024-01-10');
 -- result:
 -- !result
 select count(*) from _statistics_.column_statistics where table_name = 'test_overwrite_statistics.sales_data';
 -- result:
 10
+-- !result
+select * from information_schema.analyze_status where `Database`='test_overwrite_statistics' and `Table`='sales_data' and Status='FAILED';
+-- result:
 -- !result
