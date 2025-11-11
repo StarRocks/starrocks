@@ -50,7 +50,6 @@
 #include "gen_cpp/Types_types.h"
 #include "storage/decimal12.h"
 #include "storage/uint24.h"
-#include "util/cpu_info.h"
 #include "util/int96.h"
 
 namespace starrocks {
@@ -61,27 +60,21 @@ public:
     static uint32_t zlib_crc_hash(const void* data, int32_t bytes, uint32_t hash) {
         return crc32(hash, (const unsigned char*)data, bytes);
     }
-#ifdef __SSE4_2__
-    // Compute the Crc32 hash for data using SSE4 instructions.  The input hash parameter is
-    // the current hash/seed value.
-    // This should only be called if SSE is supported.
-    // This is ~4x faster than Fnv/Boost Hash.
+
+    // Compute the Crc32 hash for data. Uses SSE4 instructions when available, otherwise falls back to zlib.
+    // The input hash parameter is the current hash/seed value.
+    // This is ~4x faster than Fnv/Boost Hash when SSE4.2 is available.
     // NOTE: DO NOT use this method for checksum! This does not generate the standard CRC32 checksum!
     //       For checksum, use CRC-32C algorithm from crc32c.h
     // NOTE: Any changes made to this function need to be reflected in Codegen::GetHashFn.
     // TODO: crc32 hashes with different seeds do not result in different hash functions.
     // The resulting hashes are correlated.
-
     // Public interface - uses function pointer initialized at program startup
     static uint32_t crc_hash(const void* data, int32_t bytes, uint32_t hash);
 
     // Public interface for 64-bit hash - uses function pointer initialized at program startup
+    // Uses SSE4 instructions when available, otherwise falls back to zlib-based implementation
     static uint64_t crc_hash64(const void* data, int32_t bytes, uint64_t hash);
-#else
-    static uint32_t crc_hash(const void* data, int32_t bytes, uint32_t hash) {
-        return zlib_crc_hash(data, bytes, hash);
-    }
-#endif
 
     // refer to https://github.com/apache/commons-codec/blob/master/src/main/java/org/apache/commons/codec/digest/MurmurHash3.java
     static const uint32_t MURMUR3_32_SEED = 104729;
@@ -228,10 +221,10 @@ public:
     // Seed values for different steps of the query execution should use different seeds
     // to prevent accidental key collisions. (See IMPALA-219 for more details).
     // Uses function pointers initialized at program startup to avoid runtime CPU checks.
-    static uint32_t hash(const void* data, int32_t bytes, uint32_t seed) { return g_hash32_func(data, bytes, seed); }
+    static uint32_t hash(const void* data, int32_t bytes, uint32_t seed);
 
     // Uses function pointers initialized at program startup to avoid runtime CPU checks.
-    static uint64_t hash64(const void* data, int32_t bytes, uint64_t seed) { return g_hash64_func(data, bytes, seed); }
+    static uint64_t hash64(const void* data, int32_t bytes, uint64_t seed);
 
     template <typename T>
     static inline void hash_combine(std::size_t& seed, const T& v) {
@@ -258,31 +251,7 @@ public:
         return x;
     }
 
-    // Function pointer types for hash functions to avoid runtime CPU checks
-    using Hash32Func = uint32_t (*)(const void*, int32_t, uint32_t);
-    using Hash64Func = uint64_t (*)(const void*, int32_t, uint64_t);
-    using Crc32Func = uint32_t (*)(const void*, int32_t, uint32_t);
-    using Crc64Func = uint64_t (*)(const void*, int32_t, uint64_t);
-
-    // Function pointers that will be initialized at program startup based on CPU capabilities
-    // Made public to allow initialization in SelectHashFunctions()
-    static Hash32Func g_hash32_func;
-    static Hash64Func g_hash64_func;
-#ifdef __SSE4_2__
-    static Crc32Func g_crc32_func;
-    static Crc64Func g_crc64_func;
-
-    // SSE4.2 implementation (no runtime check - selected at program startup)
-    // Made public to allow assignment in SelectHashFunctions()
-    static uint32_t crc_hash_sse42(const void* data, int32_t bytes, uint32_t hash);
-
-    // SSE4.2 implementation for 64-bit hash (no runtime check)
-    // Made public to allow assignment in SelectHashFunctions()
-    static uint64_t crc_hash64_sse42(const void* data, int32_t bytes, uint64_t hash);
-#endif
-
     // Static helper function for hash64 fallback (non-SSE4.2 case)
-    // Made public to allow assignment in SelectHashFunctions()
     static uint64_t hash64_fallback(const void* data, int32_t bytes, uint64_t seed);
 };
 

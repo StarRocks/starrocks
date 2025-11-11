@@ -24,13 +24,21 @@
 
 namespace starrocks {
 
-// Static member definitions
-HashUtil::Hash32Func HashUtil::g_hash32_func = nullptr;
-HashUtil::Hash64Func HashUtil::g_hash64_func = nullptr;
 #ifdef __SSE4_2__
-HashUtil::Crc32Func HashUtil::g_crc32_func = nullptr;
-HashUtil::Crc64Func HashUtil::g_crc64_func = nullptr;
+// Forward declarations for SSE4.2 implementations (only used within this file)
+static uint32_t crc_hash_sse42(const void* data, int32_t bytes, uint32_t hash);
+static uint64_t crc_hash64_sse42(const void* data, int32_t bytes, uint64_t hash);
 #endif
+
+// Function pointer types for hash functions to avoid runtime CPU checks
+using Hash32Func = uint32_t (*)(const void*, int32_t, uint32_t);
+using Hash64Func = uint64_t (*)(const void*, int32_t, uint64_t);
+
+// Function pointers that will be initialized at program startup based on CPU capabilities
+static Hash32Func g_hash32_func = nullptr;
+static Hash64Func g_hash64_func = nullptr;
+static Hash32Func g_crc32_func = nullptr;
+static Hash64Func g_crc64_func = nullptr;
 
 // Initialize function pointers at program startup based on CPU capabilities.
 // This avoids runtime CPU checks in the hot path (hash(), hash64(), crc_hash(), crc_hash64() functions).
@@ -42,15 +50,15 @@ __attribute__((constructor)) void SelectHashFunctions() {
 
 #ifdef __SSE4_2__
     if (CpuInfo::is_supported(CpuInfo::SSE4_2)) {
-        HashUtil::g_hash32_func = HashUtil::crc_hash_sse42;
-        HashUtil::g_hash64_func = HashUtil::crc_hash64_sse42;
-        HashUtil::g_crc32_func = HashUtil::crc_hash_sse42;
-        HashUtil::g_crc64_func = HashUtil::crc_hash64_sse42;
+        g_hash32_func = crc_hash_sse42;
+        g_hash64_func = crc_hash64_sse42;
+        g_crc32_func = crc_hash_sse42;
+        g_crc64_func = crc_hash64_sse42;
     } else {
-        HashUtil::g_hash32_func = HashUtil::fnv_hash;
-        HashUtil::g_hash64_func = HashUtil::hash64_fallback;
-        HashUtil::g_crc32_func = HashUtil::zlib_crc_hash;
-        HashUtil::g_crc64_func = [](const void* data, int32_t bytes, uint64_t hash) -> uint64_t {
+        g_hash32_func = HashUtil::fnv_hash;
+        g_hash64_func = HashUtil::hash64_fallback;
+        g_crc32_func = HashUtil::zlib_crc_hash;
+        g_crc64_func = [](const void* data, int32_t bytes, uint64_t hash) -> uint64_t {
             // For 64-bit fallback, use zlib_crc_hash on both halves
             uint32_t h1 = hash >> 32;
             uint32_t h2 = (hash << 32) >> 32;
@@ -60,8 +68,17 @@ __attribute__((constructor)) void SelectHashFunctions() {
         };
     }
 #else
-    HashUtil::g_hash32_func = HashUtil::fnv_hash;
-    HashUtil::g_hash64_func = HashUtil::hash64_fallback;
+    g_hash32_func = HashUtil::fnv_hash;
+    g_hash64_func = HashUtil::hash64_fallback;
+    g_crc32_func = HashUtil::zlib_crc_hash;
+    g_crc64_func = [](const void* data, int32_t bytes, uint64_t hash) -> uint64_t {
+        // For 64-bit fallback, use zlib_crc_hash on both halves
+        uint32_t h1 = hash >> 32;
+        uint32_t h2 = (hash << 32) >> 32;
+        h1 = HashUtil::zlib_crc_hash(data, bytes, h1);
+        h2 = HashUtil::zlib_crc_hash(data, bytes, h2);
+        return ((uint64_t)h1 << 32) | h2;
+    };
 #endif
 }
 
@@ -80,7 +97,7 @@ uint64_t HashUtil::hash64_fallback(const void* data, int32_t bytes, uint64_t see
 }
 
 #ifdef __SSE4_2__
-uint32_t HashUtil::crc_hash_sse42(const void* data, int32_t bytes, uint32_t hash) {
+static uint32_t crc_hash_sse42(const void* data, int32_t bytes, uint32_t hash) {
     uint32_t words = bytes / sizeof(uint32_t);
     bytes = bytes % sizeof(uint32_t);
 
@@ -104,7 +121,7 @@ uint32_t HashUtil::crc_hash_sse42(const void* data, int32_t bytes, uint32_t hash
     return hash;
 }
 
-uint64_t HashUtil::crc_hash64_sse42(const void* data, int32_t bytes, uint64_t hash) {
+static uint64_t crc_hash64_sse42(const void* data, int32_t bytes, uint64_t hash) {
     uint32_t words = bytes / sizeof(uint32_t);
     bytes = bytes % sizeof(uint32_t);
 
@@ -129,6 +146,15 @@ uint64_t HashUtil::crc_hash64_sse42(const void* data, int32_t bytes, uint64_t ha
     ((uint32_t*)(&hash))[1] = h2;
     return hash;
 }
+#endif
+
+uint32_t HashUtil::hash(const void* data, int32_t bytes, uint32_t seed) {
+    return g_hash32_func(data, bytes, seed);
+}
+
+uint64_t HashUtil::hash64(const void* data, int32_t bytes, uint64_t seed) {
+    return g_hash64_func(data, bytes, seed);
+}
 
 uint32_t HashUtil::crc_hash(const void* data, int32_t bytes, uint32_t hash) {
     return g_crc32_func(data, bytes, hash);
@@ -137,6 +163,5 @@ uint32_t HashUtil::crc_hash(const void* data, int32_t bytes, uint32_t hash) {
 uint64_t HashUtil::crc_hash64(const void* data, int32_t bytes, uint64_t hash) {
     return g_crc64_func(data, bytes, hash);
 }
-#endif
 
 } // namespace starrocks
