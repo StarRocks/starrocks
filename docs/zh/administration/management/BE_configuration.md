@@ -123,6 +123,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：bRPC 的 bthread 线程数量，`-1` 表示和 CPU 核数一样。
 - 引入版本：-
 
+##### brpc_stub_expire_s
+
+- 默认值: 3600
+- 类型: Int
+- 単位: Seconds
+- 是否可变: Yes
+- 描述: BRPC stub 缓存的过期时间，默认 60 minutes。
+- 引入版本: -
+
 ##### priority_networks
 
 - 默认值：空字符串
@@ -2009,6 +2018,24 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 是否动态：否
 - 描述：UDF 存放的路径。
 - 引入版本：-
+
+##### load_replica_status_check_interval_ms_on_success
+
+- 默认值: 15000
+- 类型: Int
+- 単位: Milliseconds
+- 是否可变: Yes
+- 描述: 当上一次检查的 RPC 成功时，从副本向主副本检查其状态的时间间隔。
+- 引入版本: 3.5.1
+
+##### load_replica_status_check_interval_ms_on_failure
+
+- 默认值: 2000
+- 类型: Int
+- 単位: Milliseconds
+- 是否可变: Yes
+- 描述: 当上一次检查的 RPC 失败时，从副本向主副本检查其状态的时间间隔。
+- 引入版本: 3.5.1
 
 ##### enable_token_check
 
