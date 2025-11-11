@@ -39,11 +39,7 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TPartialUpdateMode;
-<<<<<<< HEAD
-=======
-import com.starrocks.type.Type;
 import com.starrocks.utframe.StarRocksAssert;
->>>>>>> 444532bafb ([Enhancement] print memory info when optimizer timeout (#65206))
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
