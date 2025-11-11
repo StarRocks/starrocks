@@ -2609,7 +2609,20 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The longest duration the metadata can be retained after a database, table, or partition is dropped. If this duration expires, the data will be deleted and cannot be recovered through the [RECOVER](../../sql-reference/sql-statements/backup_restore/RECOVER.md) command.
 - Introduced in: -
 
+<<<<<<< HEAD
 ##### enable_auto_tablet_distribution
+=======
+##### partition_recycle_retention_period_secs
+
+- Default: 1800
+- Type: Long
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The metadata retention time for the partition that is dropped by INSERT OVERWRITE or materialized view refresh operations. Note that such metadata cannot be recovered by executing [RECOVER](../../sql-reference/sql-statements/backup_restore/RECOVER.md).
+- Introduced in: v3.5.9
+
+##### check_consistency_default_timeout_second
+>>>>>>> c6ffa5472e ([Enhancement] Retain partition for a while after insert overwrite happened (#64779))
 
 - Default: true
 - Type: Boolean
