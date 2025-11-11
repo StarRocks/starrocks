@@ -165,9 +165,8 @@ PARALLEL_TEST(ColumnArraySerdeTest, variant_column_failed_deserialize) {
     ASSERT_OK(ColumnArraySerde::serialize(*c1, buffer.data()));
 
     auto c2 = VariantColumn::create();
-    ASSIGN_OR_ABORT(auto p2, ColumnArraySerde::deserialize(buffer.data(), c2.get()));
-    ASSERT_TRUE(p2 == nullptr); // Deserialization should fail due to empty value
-    ASSERT_EQ(0, c2->size());   // Deserialization should fail, resulting in an empty column
+    ASSERT_ERROR(ColumnArraySerde::deserialize(buffer.data(), c2.get()));
+    ASSERT_EQ(0, c2->size()); // Deserialization should fail, resulting in an empty column
 }
 
 // NOLINTNEXTLINE
