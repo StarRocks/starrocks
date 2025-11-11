@@ -33,6 +33,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
@@ -92,6 +93,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -1344,11 +1346,26 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                             partitionName, baseTable.getName(), refreshedPartitionNames);
                     continue;
                 }
-                MaterializedView.BasePartitionInfo basePartitionInfo = new MaterializedView.BasePartitionInfo(
-                        partition.getId(),
-                        partition.getDefaultPhysicalPartition().getVisibleVersion(),
-                        partition.getDefaultPhysicalPartition().getVisibleVersionTime());
-                partitionInfos.put(partition.getName(), basePartitionInfo);
+                if (partition.getSubPartitions() != null && partition.getSubPartitions().size() > 1) {
+                    Optional<PhysicalPartition> latestPartition = partition
+                            .getSubPartitions()
+                            .stream()
+                            .max(Comparator.comparing(PhysicalPartition::getVisibleVersionTime));
+                    if (latestPartition.isPresent()) {
+                        PhysicalPartition subPartition = latestPartition.get();
+                        MaterializedView.BasePartitionInfo basePartitionInfo = new MaterializedView.BasePartitionInfo(
+                                partition.getId(),
+                                subPartition.getVisibleVersion(),
+                                subPartition.getVisibleVersionTime());
+                        partitionInfos.put(partition.getName(), basePartitionInfo);
+                    }
+                } else {
+                    MaterializedView.BasePartitionInfo basePartitionInfo = new MaterializedView.BasePartitionInfo(
+                            partition.getId(),
+                            partition.getDefaultPhysicalPartition().getVisibleVersion(),
+                            partition.getDefaultPhysicalPartition().getVisibleVersionTime());
+                    partitionInfos.put(partition.getName(), basePartitionInfo);
+                }
             }
             if (logger.isDebugEnabled()) {
                 logger.debug("Collect olap base table {}'s refreshed partition infos: {}", baseTable.getName(), partitionInfos);
