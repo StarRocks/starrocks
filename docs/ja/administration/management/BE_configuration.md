@@ -108,6 +108,8 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: BE の thrift サーバーポートで、FEs からのリクエストを受け取るために使用されます。
 - 導入バージョン: -
 
+
+
 ##### brpc_port
 
 - デフォルト: 8060
@@ -125,6 +127,17 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 可変: いいえ
 - 説明: bRPC の bthreads の数。値 `-1` は CPU スレッドと同じ数を示します。
 - 導入バージョン: -
+
+
+
+##### brpc_stub_expire_s
+
+- デフォルト: 3600
+- 型: Int
+- 単位: Seconds
+- 変更可能: Yes
+- 説明: BRPC stub cache の有効期限。デフォルト 60 minutes。
+- 導入: -
 
 ##### priority_networks
 
@@ -259,6 +272,10 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 可変: いいえ
 - 説明: bRPC の最大ボディサイズ。
 - 導入バージョン: -
+
+### メタデータとクラスタ管理
+
+
 
 ### クエリエンジン
 
@@ -543,6 +560,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 可変: いいえ
 - 説明: Pipeline 実行エンジンの PREPARE Fragment スレッドプールの最大キュー長。
 - 導入バージョン: -
+
+##### lake_tablet_ignore_invalid_delete_predicate
+
+- デフォルト: false
+- 型: Boolean
+- 単位: -
+- Is mutable: Yes
+- 説明: カラム名がリネームされた後、重複キー（duplicate key）テーブルに対する論理削除により tablet の rowset メタデータに導入される可能性のある無効な delete predicates を無視するかどうかを制御するブール値。
+- Introduced in: v4.0
 
 ##### max_hdfs_file_handle
 
@@ -1772,6 +1798,24 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: 共有データクラスタでの主キーテーブルコンパクションタスクで許可される最大入力 rowset 数。このパラメータのデフォルト値は v3.2.4 および v3.1.10 以降 `5` から `1000` に、v3.3.1 および v3.2.9 以降 `500` に変更されました。主キーテーブルのためのサイズ階層型コンパクションポリシーが有効になった後 (`enable_pk_size_tiered_compaction_strategy` を `true` に設定することで)、StarRocks は各コンパクションの rowset 数を制限して書き込み増幅を減らす必要がなくなります。したがって、このパラメータのデフォルト値は増加しました。
 - 導入バージョン: v3.1.8, v3.2.3
 
+##### loop_count_wait_fragments_finish
+
+- デフォルト: 2
+- 型: Int
+- 単位: -
+- 変更可能: はい
+- 説明: BE/CN プロセスが終了する際に待機するループ回数です。各ループは固定間隔の10秒です。ループ待機を無効にするには `0` に設定します。v3.4 以降、この項目は変更可能になり、デフォルト値が `0` から `2` に変更されました。
+- 導入バージョン: v2.5
+
+##### graceful_exit_wait_for_frontend_heartbeat
+
+- デフォルト: false
+- 型: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: graceful exit（優雅な終了）を完了する前に、少なくとも1回の frontend からの HEARTBEAT 応答で SHUTDOWN ステータスを受け取るまで待機するかどうかを決定します。有効にすると、graceful shutdown プロセスは heartbeat RPC による SHUTDOWN 確認が返されるまで継続し、frontend が定期的な heartbeat 間隔の間に終了状態を検知するための十分な時間を確保します。
+- 導入バージョン: v3.4.5
+
 ### データレイク
 
 ##### disk_high_level
@@ -1945,6 +1989,17 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: Data Cache のエビクションポリシー。有効な値: `lru` (最も最近使用されていない) および `slru` (セグメント化された LRU)。
 - 導入バージョン: v3.4.0
 
+##### rocksdb_write_buffer_memory_percent
+
+- Default: 5
+- Type: Int64
+- Unit: -
+- Is mutable: No
+- Description: rocksdb におけるメタ用 write buffer のメモリ割合です。デフォルトはシステムメモリの 5% です。ただし、これに加えて write buffer メモリの最終的な計算サイズは 64MB 未満にならず、1G (rocksdb_max_write_buffer_memory_bytes) を超えません。
+- Introduced in: v3.5.0
+
+
+
 ##### lake_service_max_concurrency
 
 - デフォルト: 0
@@ -1994,6 +2049,24 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: ユーザー定義関数 (UDF) を保存するために使用されるディレクトリ。
 - 導入バージョン: -
 
+##### load_replica_status_check_interval_ms_on_success
+
+- デフォルト: 15000
+- 型: Int
+- 単位: Milliseconds
+- 変更可能: Yes
+- 説明: 最後のチェック RPC が成功した場合に、secondary replica が primary replica のステータスを確認する間隔。
+- 導入: 3.5.1
+
+##### load_replica_status_check_interval_ms_on_failure
+
+- デフォルト: 2000
+- 型: Int
+- 単位: Milliseconds
+- Is mutable: Yes
+- 説明: 直前のチェック RPC が失敗した場合に、セカンダリレプリカがプライマリレプリカの状態を再確認する間隔。
+- Introduced in: 3.5.1
+
 ##### enable_token_check
 
 - デフォルト: true
@@ -2011,6 +2084,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 可変: いいえ
 - 説明: ファイルマネージャーによってダウンロードされたファイルを保存するために使用されるディレクトリ。
 - 導入バージョン: -
+
+##### report_exec_rpc_request_retry_num
+
+- Default: 10
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: FE に対して exec rpc の完了を報告する RPC リクエストのリトライ回数です。デフォルト値は 10 で、fragment instance finish rpc の場合に限り失敗したときに RPC リクエストを最大 10 回リトライします。Report exec rpc request は load job にとって重要で、もしある fragment instance の finish レポートが失敗すると、ロードジョブはタイムアウトするまでハングします。
+- Introduced in: -
 
 ##### max_length_for_to_base64
 
@@ -2065,3 +2147,4 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 可変: はい
 - 説明: リソースグループ `default_mv_wg` のマテリアライズドビューリフレッシュタスクで中間結果のスピリングをトリガーする前のメモリ使用量のしきい値。デフォルト値はメモリの 80% を示します。
 - 導入バージョン: v3.1
+

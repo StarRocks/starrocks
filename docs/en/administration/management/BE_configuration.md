@@ -109,6 +109,19 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Description: The BE thrift server port, which is used to receive requests from FEs.
 - Introduced in: -
 
+## thrift_port
+
+// document start, just to marked the document is start and doesn't need to be included in the output.
+##### thrift_port
+
+- Default: 0
+- Type: Int
+- Unit: Port
+- Is mutable: No
+- Description: Port on which the BE Thrift service (the ImpalaInternalService / BackendService Thrift server) is published. When running in CN mode (as_cn=true) and this value is non‑zero, it overrides the value of be_port for the Thrift server bind port. Default 0 means "disabled" / ignored and be_port will be used. This option is deprecated — when used the BE startup logs a warning advising to switch to be_port. Misconfiguring this port (e.g., using an already‑occupied port) will prevent the Thrift server from starting.
+- Introduced in: 3.2.0
+// document end, just to marked the document is end and doesn't need to be included in the output.
+
 ##### brpc_port
 
 - Default: 8060
@@ -126,6 +139,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Is mutable: No
 - Description: The number of bthreads of a bRPC. The value `-1` indicates the same number with the CPU threads.
 - Introduced in: -
+
+##### enable_https
+
+- Default: false
+- Type: Boolean
+- Unit: N/A
+- Is mutable: No
+- Description: When true, StarRocks configures BRPC to use TLS by populating ServerOptions::ssl_options with the certificate and private key from ssl_certificate_path and ssl_private_key_path. This enables HTTPS/TLS for BRPC services started by the BE process so clients must connect using TLS. You must provide valid paths to a PEM certificate and matching private key; the flag is read at startup and not applied dynamically, so changing it requires restarting the process. The option only affects BRPC server SSL setup (see server options -> mutable_ssl_options()).
+- Introduced in: 4.0.0
 
 ##### brpc_stub_expire_s
 
@@ -270,6 +292,21 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Is mutable: No
 - Description: The maximum body size of a bRPC.
 - Introduced in: -
+
+### Metadata and cluster management
+
+## cluster_id
+
+// document start, just to marked the document is start and doesn't need to be included in the output.
+##### cluster_id
+
+- Default: -1
+- Type: Int
+- Unit: N/A
+- Is mutable: No
+- Description: Numeric identifier for the StarRocks cluster that this BE process belongs to. At startup StorageEngine reads config::cluster_id into its _effective_cluster_id and compares it with cluster ids persisted on each data-root. A value of -1 means "unset" (allowing the engine to accept a cluster id from existing data directories or from the frontend heartbeat). If a non -1 cluster_id is provided it is treated as the initial authoritative id; mismatches between this value and persisted root-path ids cause startup failure. If some root paths lack a stored id and the engine is allowed to write cluster ids (EngineOptions::need_write_cluster_id), the effective cluster id will be written to those paths. Set this to the correct cluster id to attach to an existing cluster, or leave -1 for automatic detection.
+- Introduced in: 3.2.0
+// document end, just to marked the document is end and doesn't need to be included in the output.
 
 ### Query engine
 

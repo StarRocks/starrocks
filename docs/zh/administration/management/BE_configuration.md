@@ -105,6 +105,8 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：BE 上 Thrift Server 的端口，用于接收来自 FE 的请求。
 - 引入版本：-
 
+
+
 ##### brpc_port
 
 - 默认值：8060
@@ -122,6 +124,17 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 是否动态：否
 - 描述：bRPC 的 bthread 线程数量，`-1` 表示和 CPU 核数一样。
 - 引入版本：-
+
+
+
+##### brpc_stub_expire_s
+
+- Default: 3600
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: BRPC stub 缓存的过期时间，默认 60 分钟。
+- Introduced in: -
 
 ##### priority_networks
 
@@ -257,6 +270,10 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 是否动态：否
 - 描述：bRPC 最大的包容量。
 - 引入版本：-
+
+### 元数据与集群管理
+
+
 
 ### 查询引擎
 
@@ -543,6 +560,8 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：Pipeline 执行引擎在线程池中执行 PREPARE Fragment 的队列长度。
 - 引入版本：-
 
+
+
 ##### max_hdfs_file_handle
 
 - 默认值：1000
@@ -587,6 +606,8 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 是否动态：是
 - 描述：是否启用 Parquet 文件的 Bloom Filter 以提高性能。`true` 表示启用 Bloom Filter，`false` 表示禁用。还可以使用系统变量 `enable_parquet_reader_bloom_filter` 在 Session 级别上控制这一行为。Parquet 中的 Bloom Filter 是在**每个行组的列级维护的**。如果 Parquet 文件包含某些列的 Bloom Filter，查询就可以使用这些列上的谓词来有效地跳过行组。
 - 引入版本：v3.5
+
+
 
 ##### io_coalesce_adaptive_lazy_active
 
@@ -1570,6 +1591,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：在导入线程内存占用达到硬上限后，是否允许新的导入线程。`true` 表示允许新导入线程，`false` 表示拒绝新导入线程。
 - 引入版本：v3.3.2
 
+##### compaction_memory_limit_per_worker
+
+- Default: 2147483648
+- Type: Int
+- Unit: Bytes
+- Is mutable: No
+- Description: 每个 Compaction 线程允许使用的最大内存大小。
+- Introduced in: -
+
 ##### tablet_stat_cache_update_interval_second
 
 - 默认值：300
@@ -2009,6 +2039,24 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 是否动态：否
 - 描述：UDF 存放的路径。
 - 引入版本：-
+
+##### load_replica_status_check_interval_ms_on_success
+
+- Default: 15000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: 当上一次检查 RPC 成功时，备副本向主副本检查其状态的间隔时间。
+- Introduced in: 3.5.1
+
+##### load_replica_status_check_interval_ms_on_failure
+
+- Default: 2000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: 当最近一次检查 RPC 失败时，secondary replica 向 primary replica 再次检查其状态的间隔时间。
+- Introduced in: 3.5.1
 
 ##### enable_token_check
 
