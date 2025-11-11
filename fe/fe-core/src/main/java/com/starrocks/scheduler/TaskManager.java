@@ -33,6 +33,7 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.QueryableReentrantLock;
 import com.starrocks.memory.MemoryTrackable;
+import com.starrocks.persist.AlterTaskInfo;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -45,6 +46,7 @@ import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.history.TaskRunHistory;
 import com.starrocks.scheduler.persist.ArchiveTaskRunsLog;
+import com.starrocks.scheduler.persist.DropTasksLog;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.scheduler.persist.TaskSchedule;
@@ -157,7 +159,7 @@ public class TaskManager implements MemoryTrackable {
         }
     }
 
-    private void clearUnfinishedTaskRun() {
+    protected void clearUnfinishedTaskRun() {
         if (!taskRunManager.tryTaskRunLock()) {
             return;
         }
@@ -165,67 +167,100 @@ public class TaskManager implements MemoryTrackable {
             // clear pending task runs
             List<TaskRun> taskRuns = taskRunScheduler.getCopiedPendingTaskRuns();
             for (TaskRun taskRun : taskRuns) {
-                taskRun.getStatus().setErrorMessage("Fe abort the task");
-                taskRun.getStatus().setErrorCode(-1);
-                taskRun.getStatus().setState(Constants.TaskRunState.FAILED);
+                final String errorMsg = "Fe abort the task";
+                final int errorCode = -1;
 
-                taskRunManager.getTaskRunHistory().addHistory(taskRun.getStatus());
                 TaskRunStatusChange statusChange = new TaskRunStatusChange(taskRun.getTaskId(), taskRun.getStatus(),
                         Constants.TaskRunState.PENDING, Constants.TaskRunState.FAILED);
-                GlobalStateMgr.getCurrentState().getEditLog().logUpdateTaskRun(statusChange);
+                statusChange.setErrorMessage(errorMsg);
+                statusChange.setErrorCode(errorCode);
 
-                // remove pending task run
-                taskRunScheduler.removePendingTaskRun(taskRun, Constants.TaskRunState.FAILED);
+                GlobalStateMgr.getCurrentState().getEditLog().logUpdateTaskRun(statusChange, wal -> {
+                    taskRun.getStatus().setErrorMessage(errorMsg);
+                    taskRun.getStatus().setErrorCode(errorCode);
+                    taskRun.getStatus().setState(Constants.TaskRunState.FAILED);
+
+                    taskRunManager.getTaskRunHistory().addHistory(taskRun.getStatus());
+                    // remove pending task run
+                    taskRunScheduler.removePendingTaskRun(taskRun, Constants.TaskRunState.FAILED);
+                });
             }
 
             // clear running task runs
             Set<Long> runningTaskIds = taskRunScheduler.getCopiedRunningTaskIds();
             for (Long taskId : runningTaskIds) {
-                TaskRun taskRun = taskRunScheduler.getRunningTaskRun(taskId);
-                taskRun.getStatus().setErrorMessage("Fe abort the task");
-                taskRun.getStatus().setErrorCode(-1);
-                taskRun.getStatus().setState(Constants.TaskRunState.FAILED);
-                taskRun.getStatus().setFinishTime(System.currentTimeMillis());
+                final String errorMsg = "Fe abort the task";
+                final int errorCode = -1;
+                final long finishTime = System.currentTimeMillis();
 
-                taskRunManager.getTaskRunHistory().addHistory(taskRun.getStatus());
+                TaskRun taskRun = taskRunScheduler.getRunningTaskRun(taskId);
                 TaskRunStatusChange statusChange = new TaskRunStatusChange(taskRun.getTaskId(), taskRun.getStatus(),
                         Constants.TaskRunState.RUNNING, Constants.TaskRunState.FAILED);
-                GlobalStateMgr.getCurrentState().getEditLog().logUpdateTaskRun(statusChange);
+                statusChange.setErrorCode(errorCode);
+                statusChange.setErrorMessage(errorMsg);
+                statusChange.setFinishTime(finishTime);
 
-                // remove running task run
-                taskRunScheduler.removeRunningTask(taskId);
+                GlobalStateMgr.getCurrentState().getEditLog().logUpdateTaskRun(statusChange, wal -> {
+                    taskRun.getStatus().setErrorMessage(errorMsg);
+                    taskRun.getStatus().setErrorCode(errorCode);
+                    taskRun.getStatus().setState(Constants.TaskRunState.FAILED);
+                    taskRun.getStatus().setFinishTime(finishTime);
+
+                    taskRunManager.getTaskRunHistory().addHistory(taskRun.getStatus());
+                    // remove running task run
+                    taskRunScheduler.removeRunningTask(taskId);
+                });
+
             }
         } finally {
             taskRunManager.taskRunUnlock();
         }
     }
 
-    public void createTask(Task task, boolean isReplay) throws DdlException {
+    public void createTask(Task task) throws DdlException {
         takeTaskLock();
         try {
             if (nameToTaskMap.containsKey(task.getName())) {
                 throw new DdlException("Task [" + task.getName() + "] already exists");
             }
-            if (!isReplay) {
-                // TaskId should be assigned by the framework
-                Preconditions.checkArgument(task.getId() == 0);
-                task.setId(GlobalStateMgr.getCurrentState().getNextId());
-            }
+
+            // TaskId should be assigned by the framework
+            Preconditions.checkArgument(task.getId() == 0, "TaskId should be assigned by the framework");
+            task.setId(GlobalStateMgr.getCurrentState().getNextId());
+
             if (task.getType() == Constants.TaskType.PERIODICAL) {
                 task.setState(Constants.TaskState.ACTIVE);
-                if (!isReplay) {
-                    TaskSchedule schedule = task.getSchedule();
-                    if (schedule == null) {
-                        throw new DdlException("Task [" + task.getName() + "] has no scheduling information");
-                    }
-                    registerScheduler(task);
+                TaskSchedule schedule = task.getSchedule();
+                if (schedule == null) {
+                    throw new DdlException("Task [" + task.getName() + "] has no scheduling information");
                 }
             }
-            nameToTaskMap.put(task.getName(), task);
-            idToTaskMap.put(task.getId(), task);
-            if (!isReplay) {
-                GlobalStateMgr.getCurrentState().getEditLog().logCreateTask(task);
+            GlobalStateMgr.getCurrentState().getEditLog().logCreateTask(task, wal -> addTask((Task) wal));
+            if (task.getType() == Constants.TaskType.PERIODICAL) {
+                registerScheduler(task);
             }
+        } finally {
+            taskUnlock();
+        }
+    }
+
+    private void addTask(Task task) {
+        nameToTaskMap.put(task.getName(), task);
+        idToTaskMap.put(task.getId(), task);
+    }
+
+    public void replayCreateTask(Task task) {
+        if (task.getType() == Constants.TaskType.PERIODICAL) {
+            TaskSchedule taskSchedule = task.getSchedule();
+            Preconditions.checkState(taskSchedule != null,
+                    "TaskSchedule cannot be null for periodical task");
+        }
+        if (task.getExpireTime() > 0 && System.currentTimeMillis() > task.getExpireTime()) {
+            return;
+        }
+        takeTaskLock();
+        try {
+            addTask(task);
         } finally {
             taskUnlock();
         }
@@ -486,7 +521,7 @@ public class TaskManager implements MemoryTrackable {
         }
     }
 
-    public void dropTasks(List<Long> taskIdList, boolean isReplay) {
+    public void dropTasks(List<Long> taskIdList) {
         takeTaskLock();
         try {
             for (long taskId : taskIdList) {
@@ -495,27 +530,46 @@ public class TaskManager implements MemoryTrackable {
                     LOG.warn("drop taskId {} failed because task is null", taskId);
                     continue;
                 }
-                if (task.getType() == Constants.TaskType.PERIODICAL && !isReplay) {
+                if (task.getType() == Constants.TaskType.PERIODICAL) {
                     boolean isCancel = stopScheduler(task.getName());
                     if (!isCancel) {
                         continue;
                     }
                     periodFutureMap.remove(task.getId());
                 }
-                if (!killTask(task.getName(), true)) {
-                    LOG.warn("kill task failed: {}", task.getName());
-                }
-                idToTaskMap.remove(task.getId());
-                nameToTaskMap.remove(task.getName());
             }
 
-            if (!isReplay) {
-                GlobalStateMgr.getCurrentState().getEditLog().logDropTasks(taskIdList);
-            }
+            GlobalStateMgr.getCurrentState().getEditLog().logDropTasks(new DropTasksLog(taskIdList),
+                    wal -> killAndDeleteTasks(((DropTasksLog) wal).getTaskIdList()));
         } finally {
             taskUnlock();
         }
         LOG.info("drop tasks:{}", taskIdList);
+    }
+
+    private void killAndDeleteTasks(List<Long> taskIdList) {
+        for (long taskId : taskIdList) {
+            Task task = idToTaskMap.get(taskId);
+            if (task == null) {
+                LOG.warn("delete taskId {} failed because task is null", taskId);
+                continue;
+            }
+
+            if (!killTask(task.getName(), true)) {
+                LOG.warn("kill task failed: {}", task.getName());
+            }
+            idToTaskMap.remove(task.getId());
+            nameToTaskMap.remove(task.getName());
+        }
+    }
+
+    public void replayDropTasks(List<Long> taskIdList) {
+        takeTaskLock();
+        try {
+            killAndDeleteTasks(taskIdList);
+        } finally {
+            taskUnlock();
+        }
     }
 
     private boolean isTaskMatched(Task task, TGetTasksParams params) {
@@ -541,7 +595,7 @@ public class TaskManager implements MemoryTrackable {
         return taskList;
     }
 
-    public void alterTask(Task currentTask, Task changedTask, boolean isReplay) {
+    public void alterTask(Task currentTask, Task changedTask) {
         Constants.TaskType currentType = currentTask.getType();
         Constants.TaskType changedType = changedTask.getType();
         boolean hasChanged = false;
@@ -554,34 +608,47 @@ public class TaskManager implements MemoryTrackable {
                 hasChanged = true;
             }
         } else if (currentTask.getType() == Constants.TaskType.PERIODICAL) {
-            if (!isReplay) {
-                boolean isCancel = stopScheduler(currentTask.getName());
-                if (!isCancel) {
-                    throw new RuntimeException("stop scheduler failed");
-                }
+            boolean isCancel = stopScheduler(currentTask.getName());
+            if (!isCancel) {
+                throw new RuntimeException("stop scheduler failed");
             }
-            periodFutureMap.remove(currentTask.getId());
-            currentTask.setState(Constants.TaskState.UNKNOWN);
-            currentTask.setSchedule(null);
             hasChanged = true;
         }
 
         if (changedType == Constants.TaskType.PERIODICAL) {
-            currentTask.setState(Constants.TaskState.ACTIVE);
-            TaskSchedule schedule = changedTask.getSchedule();
-            currentTask.setSchedule(schedule);
-            if (!isReplay) {
-                registerScheduler(currentTask);
-            }
             hasChanged = true;
         }
 
         if (hasChanged) {
-            currentTask.setType(changedTask.getType());
-            if (!isReplay) {
-                GlobalStateMgr.getCurrentState().getEditLog().logAlterTask(changedTask);
+            GlobalStateMgr.getCurrentState().getEditLog().logAlterTask(
+                    new AlterTaskInfo(currentTask.getName(), changedType, changedTask.getSchedule()),
+                    wal -> {
+                        AlterTaskInfo alterTaskInfo = (AlterTaskInfo) wal;
+                        changeTask(currentTask, alterTaskInfo.getType(), alterTaskInfo.getSchedule());
+                    }
+            );
+            if (changedType == Constants.TaskType.PERIODICAL) {
+                registerScheduler(currentTask);
             }
         }
+    }
+
+    private void changeTask(Task currentTask, Constants.TaskType changedType, TaskSchedule changedSchedule) {
+        if (currentTask.getType() == Constants.TaskType.PERIODICAL) {
+            periodFutureMap.remove(currentTask.getId());
+            currentTask.setState(Constants.TaskState.UNKNOWN);
+            currentTask.setSchedule(null);
+        }
+        if (changedType == Constants.TaskType.PERIODICAL) {
+            currentTask.setState(Constants.TaskState.ACTIVE);
+            currentTask.setSchedule(changedSchedule);
+        }
+        currentTask.setType(changedType);
+    }
+
+    public void replayAlterTask(AlterTaskInfo alterTaskInfo) {
+        Task currentTask = getTask(alterTaskInfo.getName());
+        changeTask(currentTask, alterTaskInfo.getType(), alterTaskInfo.getSchedule());
     }
 
     @VisibleForTesting
@@ -666,11 +733,6 @@ public class TaskManager implements MemoryTrackable {
         periodFutureMap.put(task.getId(), future);
     }
 
-    public void replayAlterTask(Task task) {
-        Task currentTask = getTask(task.getName());
-        alterTask(currentTask, task, true);
-    }
-
     private boolean tryTaskLock() {
         try {
             if (!taskLock.tryLock(5, TimeUnit.SECONDS)) {
@@ -704,27 +766,6 @@ public class TaskManager implements MemoryTrackable {
         this.taskLock.unlock();
     }
 
-    public void replayCreateTask(Task task) {
-        if (task.getType() == Constants.TaskType.PERIODICAL) {
-            TaskSchedule taskSchedule = task.getSchedule();
-            if (taskSchedule == null) {
-                LOG.warn("replay a null schedule period Task [{}]", task.getName());
-                return;
-            }
-        }
-        if (task.getExpireTime() > 0 && System.currentTimeMillis() > task.getExpireTime()) {
-            return;
-        }
-        try {
-            createTask(task, true);
-        } catch (DdlException e) {
-            LOG.warn("failed to replay create task [{}]", task.getName(), e);
-        }
-    }
-
-    public void replayDropTasks(List<Long> taskIdList) {
-        dropTasks(taskIdList, true);
-    }
 
     public TaskRunManager getTaskRunManager() {
         return taskRunManager;
@@ -743,7 +784,7 @@ public class TaskManager implements MemoryTrackable {
         String taskName = task.getName();
         SubmitResult submitResult;
         try {
-            createTask(task, false);
+            createTask(task);
             if (task.getType() == Constants.TaskType.MANUAL) {
                 submitResult = executeTask(task.getName());
             } else {
@@ -1073,7 +1114,7 @@ public class TaskManager implements MemoryTrackable {
             taskUnlock();
         }
         // this will do in checkpoint thread and does not need write log
-        dropTasks(taskIdToDelete, true);
+        replayDropTasks(taskIdToDelete);
     }
 
     public void removeExpiredTaskRuns(boolean archiveHistory) {

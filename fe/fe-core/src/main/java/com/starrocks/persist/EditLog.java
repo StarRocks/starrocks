@@ -688,8 +688,8 @@ public class EditLog {
                     break;
                 }
                 case OperationType.OP_ALTER_TASK: {
-                    final Task task = (Task) journal.data();
-                    globalStateMgr.getTaskManager().replayAlterTask(task);
+                    final AlterTaskInfo alterTaskInfo = (AlterTaskInfo) journal.data();
+                    globalStateMgr.getTaskManager().replayAlterTask(alterTaskInfo);
                     break;
                 }
                 case OperationType.OP_CREATE_TASK_RUN: {
@@ -1470,24 +1470,24 @@ public class EditLog {
         logJsonObject(OperationType.OP_RESOURCE_GROUP, op);
     }
 
-    public void logCreateTask(Task info) {
-        logJsonObject(OperationType.OP_CREATE_TASK, info);
+    public void logCreateTask(Task info, WALApplier applier) {
+        logJsonObject(OperationType.OP_CREATE_TASK, info, applier);
     }
 
-    public void logDropTasks(List<Long> taskIdList) {
-        logJsonObject(OperationType.OP_DROP_TASKS, new DropTasksLog(taskIdList));
+    public void logDropTasks(DropTasksLog tasksLog, WALApplier applier) {
+        logJsonObject(OperationType.OP_DROP_TASKS, tasksLog, applier);
     }
 
-    public void logTaskRunCreateStatus(TaskRunStatus status) {
-        logJsonObject(OperationType.OP_CREATE_TASK_RUN, status);
+    public void logTaskRunCreateStatus(TaskRunStatus status, WALApplier applier) {
+        logJsonObject(OperationType.OP_CREATE_TASK_RUN, status, applier);
     }
 
-    public void logUpdateTaskRun(TaskRunStatusChange statusChange) {
-        logJsonObject(OperationType.OP_UPDATE_TASK_RUN, statusChange);
+    public void logUpdateTaskRun(TaskRunStatusChange statusChange, WALApplier applier) {
+        logJsonObject(OperationType.OP_UPDATE_TASK_RUN, statusChange, applier);
     }
 
-    public void logArchiveTaskRuns(ArchiveTaskRunsLog log) {
-        logJsonObject(OperationType.OP_ARCHIVE_TASK_RUNS, log);
+    public void logArchiveTaskRuns(ArchiveTaskRunsLog log, WALApplier applier) {
+        logJsonObject(OperationType.OP_ARCHIVE_TASK_RUNS, log, applier);
     }
 
     public void logAlterRunningTaskRunProgress(TaskRunPeriodStatusChange info) {
@@ -2148,8 +2148,8 @@ public class EditLog {
         logJsonObject(OperationType.OP_MODIFY_TABLE_ADD_OR_DROP_COLUMNS, info);
     }
 
-    public void logAlterTask(Task changedTask) {
-        logJsonObject(OperationType.OP_ALTER_TASK, changedTask);
+    public void logAlterTask(AlterTaskInfo info, WALApplier applier) {
+        logJsonObject(OperationType.OP_ALTER_TASK, info, applier);
     }
 
     public void logSetDefaultStorageVolume(SetDefaultStorageVolumeLog log) {

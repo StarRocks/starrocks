@@ -518,12 +518,12 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             if (currentTask == null) {
                 task = TaskBuilder.buildMvTask(materializedView, dbName);
                 TaskBuilder.updateTaskInfo(task, refreshSchemeDesc, materializedView);
-                taskManager.createTask(task, false);
+                taskManager.createTask(task);
             } else {
                 Task changedTask = TaskBuilder.rebuildMvTask(materializedView, dbName, currentTask.getProperties(),
                         currentTask);
                 TaskBuilder.updateTaskInfo(changedTask, refreshSchemeDesc, materializedView);
-                taskManager.alterTask(currentTask, changedTask, false);
+                taskManager.alterTask(currentTask, changedTask);
                 task = currentTask;
             }
 
