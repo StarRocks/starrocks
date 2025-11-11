@@ -1784,11 +1784,11 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 ##### loop_count_wait_fragments_finish
 
 - デフォルト: 2
-- 型: Int
+- タイプ: Int
 - 単位: -
 - 変更可能: Yes
 - 説明: BE/CN プロセスが終了する際に待機するループ回数。各ループは固定間隔の 10 秒です。ループ待機を無効にするには `0` に設定できます。v3.4 以降、この項目は変更可能になり、デフォルト値は `0` から `2` に変更されました。
-- 導入: v2.5
+- 導入バージョン: v2.5
 
 ##### graceful_exit_wait_for_frontend_heartbeat
 
