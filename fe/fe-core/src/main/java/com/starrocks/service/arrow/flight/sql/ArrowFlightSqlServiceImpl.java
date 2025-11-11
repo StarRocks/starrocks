@@ -25,6 +25,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.util.ArrowUtil;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.scheduler.Coordinator;
@@ -186,7 +187,11 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
         if (!StringUtils.isEmpty(database)) {
             ctx.setDatabase(database);
         }
-        return getFlightInfoFromQuery(ctx, descriptor);
+        synchronized(ctx) {  // Synchronize on the shared context
+            ctx.setQueryId(UUIDUtil.genUUID());
+            ctx.setExecutionId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
+            return getFlightInfoFromQuery(ctx, descriptor);
+        }
     }
 
     /**
