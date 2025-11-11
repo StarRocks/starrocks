@@ -503,26 +503,27 @@ public class OlapTableFactory implements AbstractTableFactory {
                 throw new DdlException(e.getMessage());
             }
 
-            // replicated storage
-            table.setEnableReplicatedStorage(
-                    PropertyAnalyzer.analyzeBooleanProp(
-                            properties, PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE,
-                            Config.enable_replicated_storage_as_default_engine));
+            if (table.isOlapTableOrMaterializedView()) {
+                // replicated storage
+                table.setEnableReplicatedStorage(
+                        PropertyAnalyzer.analyzeBooleanProp(
+                                properties, PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE,
+                                Config.enable_replicated_storage_as_default_engine));
 
+                boolean hasGin = table.getIndexes().stream()
+                        .anyMatch(index -> index.getIndexType() == IndexType.GIN);
+                if (hasGin && table.enableReplicatedStorage()) {
+                    // GIN indexes are incompatible with replicated_storage right now and we will disable replicated_storage
+                    // if table contains GIN Index.
+                    table.setEnableReplicatedStorage(false);
+                }
 
-            boolean hasGin = table.getIndexes().stream()
-                            .anyMatch(index -> index.getIndexType() == IndexType.GIN);
-            if (hasGin && table.enableReplicatedStorage()) {
-                // GIN indexes are incompatible with replicated_storage right now and we will disable replicated_storage
-                // if table contains GIN Index.
-                table.setEnableReplicatedStorage(false);
-            }
-
-            if (table.enableReplicatedStorage().equals(false)) {
-                for (Column col : baseSchema) {
-                    if (col.isAutoIncrement()) {
-                        throw new DdlException("Table with AUTO_INCREMENT column must use Replicated Storage " +
-                                " and not compatible with GIN Index");
+                if (table.enableReplicatedStorage().equals(false)) {
+                    for (Column col : baseSchema) {
+                        if (col.isAutoIncrement()) {
+                            throw new DdlException("Table with AUTO_INCREMENT column must use Replicated Storage " +
+                                    " and not compatible with GIN Index");
+                        }
                     }
                 }
             }
