@@ -310,6 +310,17 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 "\"in_memory\" = \"false\"\n" +
                 ");");
 
+        starRocksAssert.withTable("CREATE TABLE test_using (" +
+                "v1 bigint," +
+                "v2 array<int>," +
+                "v3 int," +
+                "v5 int," +
+                "v6 bigint," +
+                "v4 json) " +
+                "DUPLICATE KEY (`v1`) " +
+                "DISTRIBUTED BY HASH(`v1`) BUCKETS 1 " +
+                "PROPERTIES(\"replication_num\" = \"1\");");
+
         starRocksAssert.withTable(TpchSQL.REGION);
         starRocksAssert.withTable(TpchSQL.SUPPLIER);
         starRocksAssert.withTable(TpchSQL.PARTSUPP);

@@ -116,7 +116,7 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
                         "\"replication_num\" = \"1\",\n" +
                         "\"storage_medium\" = \"HDD\"\n" +
                         ")\n" +
-                        "AS SELECT t1.c1, t1.c2, t1_par.par_col, t1_par.par_date FROM `hive0`.`partitioned_db`.`t1` join " +
+                        "AS SELECT t1.c1, t1.c2, par_col, t1_par.par_date FROM `hive0`.`partitioned_db`.`t1` join " +
                         "`hive0`.`partitioned_db`.`t1_par` using (par_col)");
     }
 
@@ -270,7 +270,7 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
                 "\"replication_num\" = \"1\",\n" +
                 "\"storage_medium\" = \"HDD\"\n" +
                 ")\n" +
-                "AS SELECT t1.c1, t1.c2, t1_par.par_col, t1_par.par_date FROM `hive0`.`partitioned_db`.`t1` join " +
+                "AS SELECT t1.c1, t1.c2, par_col, t1_par.par_date FROM `hive0`.`partitioned_db`.`t1` join " +
                 "`hive0`.`partitioned_db`.`t1_par` using (par_col)");
 
         Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
@@ -795,7 +795,7 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
                         "\"replication_num\" = \"1\",\n" +
                         "\"storage_medium\" = \"HDD\"\n" +
                         ")\n" +
-                        "AS SELECT part_tbl1.c1, part_tbl2.c2, part_tbl1.par_date FROM " +
+                        "AS SELECT part_tbl1.c1, part_tbl2.c2, par_date FROM " +
                         "`hive0`.`partitioned_db`.`part_tbl1` join " +
                         "`hive0`.`partitioned_db`.`part_tbl2` using (par_date)");
 
@@ -911,7 +911,7 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
                         "\"replication_num\" = \"1\",\n" +
                         "\"storage_medium\" = \"HDD\"\n" +
                         ")\n" +
-                        "AS SELECT t2_par.c1, t2_par.c2, t1_par.par_col, t1_par.par_date " +
+                        "AS SELECT t2_par.c1, t2_par.c2, par_col, t1_par.par_date " +
                         "FROM `hive0`.`partitioned_db`.`t2_par` join " +
                         "`hive0`.`partitioned_db`.`t1_par` using (par_col)");
 
@@ -1364,7 +1364,7 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
                             "PROPERTIES (\n" +
                             "   \"replication_num\" = \"1\"\n" +
                             ")\n" +
-                            "AS SELECT a.c1, a.c2, b.par_col, b.par_date \n" +
+                            "AS SELECT a.c1, a.c2, par_col, b.par_date \n" +
                             "FROM hive0.partitioned_db.t2_par a join \n" +
                             "hive0.partitioned_db.t1_par b using (par_col)");
         } catch (Exception e) {

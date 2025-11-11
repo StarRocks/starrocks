@@ -391,14 +391,14 @@ public class MvRewriteTest extends MVTestBase {
         createAndRefreshMv("create materialized view join_mv_3" +
                 " distributed by hash(empid)" +
                 " as" +
-                " select emps.empid, depts.deptno, depts.name from emps join depts using (deptno)");
-        String query11 = "select empid, depts.deptno from emps join depts using (deptno) where empid = 1";
+                " select emps.empid, deptno, depts.name from emps join depts using (deptno)");
+        String query11 = "select empid, deptno from emps join depts using (deptno) where empid = 1";
         String plan11 = getFragmentPlan(query11);
         PlanTestBase.assertContains(plan11, "join_mv_3");
         String costPlan2 = getFragmentPlan(query11);
         PlanTestBase.assertContains(costPlan2, "join_mv_3");
         PlanTestBase.assertNotContains(costPlan2, "name-->");
-        String newQuery11 = "select depts.deptno from emps join depts using (deptno) where empid = 1";
+        String newQuery11 = "select deptno from emps join depts using (deptno) where empid = 1";
         String newPlan11 = getFragmentPlan(newQuery11);
         PlanTestBase.assertContains(newPlan11, "join_mv_3");
         OptExpression optExpression11 = getOptimizedPlan(newQuery11, connectContext);
@@ -423,15 +423,15 @@ public class MvRewriteTest extends MVTestBase {
         Assertions.assertFalse(scanOperators13.get(0).getColRefToColumnMetaMap().keySet().toString().contains("deptno"));
 
         // output on equivalence classes
-        String query12 = "select empid, emps.deptno from emps join depts using (deptno) where empid = 1";
+        String query12 = "select empid, deptno from emps join depts using (deptno) where empid = 1";
         String plan12 = getFragmentPlan(query12);
         PlanTestBase.assertContains(plan12, "join_mv_3");
 
-        String query13 = "select empid, emps.deptno from emps join depts using (deptno) where empid > 1";
+        String query13 = "select empid, deptno from emps join depts using (deptno) where empid > 1";
         String plan13 = getFragmentPlan(query13);
         PlanTestBase.assertContains(plan13, "join_mv_3");
 
-        String query14 = "select empid, emps.deptno from emps join depts using (deptno) where empid < 1";
+        String query14 = "select empid, deptno from emps join depts using (deptno) where empid < 1";
         String plan14 = getFragmentPlan(query14);
         PlanTestBase.assertContains(plan14, "join_mv_3");
 
@@ -477,12 +477,12 @@ public class MvRewriteTest extends MVTestBase {
         createAndRefreshMv("create materialized view join_mv_4" +
                 " distributed by hash(empid)" +
                 " as" +
-                " select emps.empid, emps.name as name1, emps.deptno, depts.name as name2 from emps join depts using (deptno)" +
+                " select emps.empid, emps.name as name1, deptno, depts.name as name2 from emps join depts using (deptno)" +
                 " where (depts.name is not null and emps.name ='a')" +
                 " or (depts.name is not null and emps.name = 'b')" +
                 " or (depts.name is not null and emps.name = 'c')");
 
-        String query18 = "select depts.deptno, depts.name from emps join depts using (deptno)" +
+        String query18 = "select deptno, depts.name from emps join depts using (deptno)" +
                 " where (depts.name is not null and emps.name = 'a')" +
                 " or (depts.name is not null and emps.name = 'b')";
         String plan18 = getFragmentPlan(query18);
