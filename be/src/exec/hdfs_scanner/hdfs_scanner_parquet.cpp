@@ -14,6 +14,7 @@
 
 #include "exec/hdfs_scanner/hdfs_scanner_parquet.h"
 
+#include "cache/disk_cache/block_cache_hit_rate_counter.hpp"
 #include "connector/deletion_vector/deletion_vector.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "exec/iceberg/iceberg_delete_builder.h"
