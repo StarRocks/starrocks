@@ -628,6 +628,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: Whether to delete a BE after the BE is decommissioned. `TRUE` indicates that the BE is deleted immediately after it is decommissioned. `FALSE` indicates that the BE is not deleted after it is decommissioned.
 - Introduced in: -
 
+##### txn_latency_metric_report_groups
+
+- Default: An empty string
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: A comma-separated list of transaction latency metric groups to report. Load types are categorized into logical groups for monitoring. When a group is enabled, its name is added as a 'type' label to transaction metrics. Valid values: `stream_load`, `routine_load`, `broker_load`, `insert`, and `compaction` (availabl only for shared-data clusters). Example: `"stream_load,routine_load"`.
+- Introduced in: v4.0
+
 ##### ignore_materialized_view_error
 
 - Default: false
@@ -755,15 +764,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
   - After enabling this feature, all related names will be stored in lowercase, and all SQL commands containing these names will automatically convert them to lowercase.
   - You can enable this feature only when creating a cluster. **After the cluster is started, the value of this configuration cannot be modified by any means**. Any attempt to modify it will result in an error. FE will fail to start when it detects that the value of this configuration item is inconsistent with that when the cluster was first started.
   - Currently, this feature does not support JDBC catalog and table names. Do not enable this feature if you want to perform case-insensitive processing on JDBC or ODBC data sources.
-- Introduced in: v4.0
-
-##### txn_latency_metric_report_groups
-
-- Default: An empty string
-- Type: String
-- Unit: -
-- Is mutable: Yes
-- Description: A comma-separated list of transaction latency metric groups to report. Load types are categorized into logical groups for monitoring. When a group is enabled, its name is added as a 'type' label to transaction metrics. Valid values: `stream_load`, `routine_load`, `broker_load`, `insert`, and `compaction` (availabl only for shared-data clusters). Example: `"stream_load,routine_load"`.
 - Introduced in: v4.0
 
 ### User, role, and privilege
@@ -992,41 +992,36 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Controls automatic statistics collection and maintenance triggered by data loading operations. This includes:
-  - Statistics collection when data is first loaded into a partition (partition version equals 2).
-  - Statistics collection when data is loaded into empty partitions of multi-partition tables.
-  - Statistics copying and updating for INSERT OVERWRITE operations.
+- Description: Controls automatic statistics collection and maintenance triggered by data loading operations. This includes: (1) Statistics collection when data is first loaded into a partition (partition version equals 2). (2) Statistics collection when data is loaded into empty partitions of multi-partition tables. (3) Statistics copying and updating for INSERT OVERWRITE operations.
 
   **Decision Policy for Statistics Collection Type:**
   
   - For INSERT OVERWRITE: `deltaRatio = |targetRows - sourceRows| / (sourceRows + 1)`
-    - If `deltaRatio < statistic_sample_collect_ratio_threshold_of_first_load` (Default: 0.1), statistics collection will not be performed. Only the existing statistics will be copied.
-    - Else, if `targetRows > statistic_sample_collect_rows` (Default: 200000), SAMPLE statistics collection is used.
-    - Else, FULL statistics collection is used.
+    - If `deltaRatio < statistic_sample_collect_ratio_threshold_of_first_load` (default 0.1): No collection, copy existing statistics
+    - Else if `targetRows > statistic_sample_collect_rows` (default 200000): Use SAMPLE statistics
+    - Else: Use FULL statistics
   
   - For First Load: `deltaRatio = loadRows / (totalRows + 1)`
-    - If `deltaRatio < statistic_sample_collect_ratio_threshold_of_first_load` (Default: 0.1), statistics collection will not be performed.
-    - Else, if `loadRows > statistic_sample_collect_rows` (Default: 200000), SAMPLE statistics collection is used.
-    - Else, FULL statistics collection is used.
+    - If `deltaRatio < statistic_sample_collect_ratio_threshold_of_first_load` (default 0.1): No collection
+    - Else if `loadRows > statistic_sample_collect_rows` (default 200000): Use SAMPLE statistics
+    - Else: Use FULL statistics
   
   **Synchronization Behavior:**
   
-  - For DML statements (INSERT INTO/INSERT OVERWRITE): Synchronous mode with table lock. The load operation waits for statistics collection to complete (up to `semi_sync_collect_statistic_await_seconds`).
-  - For Stream Load and Broker Load: Asynchronous mode without lock. Statistics collection runs in background without blocking the load operation.
+  - DML statements (INSERT/INSERT OVERWRITE): Synchronous mode with table lock. Waits for statistics collection to complete (up to `semi_sync_collect_statistic_await_seconds`).
+  - Stream load and broker load: Asynchronous mode without lock. Statistics collection runs in background without blocking the load.
   
-  :::note
-  Disabling this configuration will prevent all loading-triggered statistics operations, including statistics maintenance for INSERT OVERWRITE, which may result in tables lacking statistics. If new tables are frequently created and data is frequently loaded, enabling this feature will increase memory and CPU overhead.
-  :::
+  **Note:** Disabling this configuration will prevent all loading-triggered statistics operations, including statistics maintenance for INSERT OVERWRITE, which may result in tables lacking statistics. If new tables are frequently created and data is frequently loaded, enabling this feature will increase memory and CPU overhead.
 
 - Introduced in: v3.1
 
 ##### semi_sync_collect_statistic_await_seconds
 
 - Default: 30
-- Type: Int
+- Type: Long
 - Unit: Seconds
 - Is mutable: Yes
-- Description: Maximum wait time for semi-synchronous statistics collection during DML operations (INSERT INTO and INSERT OVERWRITE statements). Stream Load and Broker Load use asynchronous mode and are not affected by this configuration. If statistics collection time exceeds this value, the load operation continues without waiting for collection to complete. This configuration works in conjunction with `enable_statistic_collect_on_first_load`.
+- Description: Maximum wait time for semi-synchronous statistics collection during DML operations (INSERT and INSERT OVERWRITE statements). Stream load and broker load use asynchronous mode and are not affected by this setting. If statistics collection exceeds this timeout, the load continues without waiting for collection to complete. This setting works in conjunction with `enable_statistic_collect_on_first_load`.
 - Introduced in: v3.1
 
 ##### statistic_auto_analyze_start_time
@@ -1063,6 +1058,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Unit: Seconds
 - Is mutable: Yes
 - Description: The interval for checking data updates during automatic collection.
+- Introduced in: -
+
+##### enable_predicate_columns_collection
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable predicate columns collection. If disabled, predicate columns will not be recorded during query optimization.
 - Introduced in: -
 
 ##### statistic_cache_columns
@@ -1163,15 +1167,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Is mutable: Yes
 - Description: Whether to enable automatic collection for the NDV information of the ARRAY type.
 - Introduced in: v4.0
-
-##### enable_predicate_columns_collection
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether to enable predicate columns collection. If disabled, predicate columns will not be recorded during query optimization.
-- Introduced in: -
 
 ##### histogram_buckets_size
 
@@ -1848,15 +1843,6 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Is mutable: Yes
 - Description: The longest duration the metadata can be retained after a database, table, or partition is dropped. If this duration expires, the data will be deleted and cannot be recovered through the [RECOVER](../../sql-reference/sql-statements/backup_restore/RECOVER.md) command.
 - Introduced in: -
-
-##### partition_recycle_retention_period_secs
-
-- Default: 1800
-- Type: Long
-- Unit: Seconds
-- Is mutable: Yes
-- Description: The metadata retention time for the partition that is dropped by INSERT OVERWRITE or materialized view refresh operations. Note that such metadata cannot be recovered by executing [RECOVER](../../sql-reference/sql-statements/backup_restore/RECOVER.md).
-- Introduced in: v3.5.9
 
 ##### check_consistency_default_timeout_second
 
@@ -2670,8 +2656,6 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Is mutable: Yes
 - Description: Whether to prefer string type for fixed length varchar columns in materialized view creation and CTAS operations.
 - Introduced in: v4.0.0
-
-<EditionSpecificFEItem />
 
 ##### backup_job_default_timeout_ms
 
