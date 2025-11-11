@@ -44,30 +44,10 @@ static Hash64Func g_crc64_func = nullptr;
 // This avoids runtime CPU checks in the hot path (hash(), hash64(), crc_hash(), crc_hash64() functions).
 // The constructor attribute ensures this runs before main(), but after CpuInfo::init()
 // is called in Daemon::init(). If CpuInfo hasn't been initialized yet, we initialize it here.
-__attribute__((constructor)) void SelectHashFunctions() {
+__attribute__((constructor)) void select_hash_functions() {
     // Ensure CpuInfo is initialized
     CpuInfo::init();
 
-#ifdef __SSE4_2__
-    if (CpuInfo::is_supported(CpuInfo::SSE4_2)) {
-        g_hash32_func = crc_hash_sse42;
-        g_hash64_func = crc_hash64_sse42;
-        g_crc32_func = crc_hash_sse42;
-        g_crc64_func = crc_hash64_sse42;
-    } else {
-        g_hash32_func = HashUtil::fnv_hash;
-        g_hash64_func = HashUtil::hash64_fallback;
-        g_crc32_func = HashUtil::zlib_crc_hash;
-        g_crc64_func = [](const void* data, int32_t bytes, uint64_t hash) -> uint64_t {
-            // For 64-bit fallback, use zlib_crc_hash on both halves
-            uint32_t h1 = hash >> 32;
-            uint32_t h2 = (hash << 32) >> 32;
-            h1 = HashUtil::zlib_crc_hash(data, bytes, h1);
-            h2 = HashUtil::zlib_crc_hash(data, bytes, h2);
-            return ((uint64_t)h1 << 32) | h2;
-        };
-    }
-#else
     g_hash32_func = HashUtil::fnv_hash;
     g_hash64_func = HashUtil::hash64_fallback;
     g_crc32_func = HashUtil::zlib_crc_hash;
@@ -79,6 +59,14 @@ __attribute__((constructor)) void SelectHashFunctions() {
         h2 = HashUtil::zlib_crc_hash(data, bytes, h2);
         return ((uint64_t)h1 << 32) | h2;
     };
+
+#ifdef __SSE4_2__
+    if (CpuInfo::is_supported(CpuInfo::SSE4_2)) {
+        g_hash32_func = crc_hash_sse42;
+        g_hash64_func = crc_hash64_sse42;
+        g_crc32_func = crc_hash_sse42;
+        g_crc64_func = crc_hash64_sse42;
+    }
 #endif
 }
 
