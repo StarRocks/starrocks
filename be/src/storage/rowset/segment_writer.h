@@ -70,7 +70,8 @@ struct SegmentWriterOptions {
 #endif
     GlobalDictByNameMaps* global_dicts = nullptr;
     std::vector<int32_t> referenced_column_ids;
-    std::variant<std::string, std::pair<std::string, std::string>> segment_file_mark;
+    // default empty value/segment location/pair<rowset dir, rowset id>
+    std::variant<std::monostate, std::string, std::pair<std::string, std::string>> segment_file_mark;
     std::string encryption_meta;
     bool is_compaction = false;
 };

@@ -460,12 +460,12 @@ public class OlapTableFactory implements AbstractTableFactory {
                         PropertyAnalyzer.analyzeBooleanProp(
                                 properties, PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE,
                                 Config.enable_replicated_storage_as_default_engine));
-            }
 
-            if (table.enableReplicatedStorage().equals(false)) {
-                for (Column col : baseSchema) {
-                    if (col.isAutoIncrement()) {
-                        throw new DdlException("Table with AUTO_INCREMENT column must use Replicated Storage");
+                if (table.enableReplicatedStorage().equals(false)) {
+                    for (Column col : baseSchema) {
+                        if (col.isAutoIncrement()) {
+                            throw new DdlException("Table with AUTO_INCREMENT column must use Replicated Storage");
+                        }
                     }
                 }
             }

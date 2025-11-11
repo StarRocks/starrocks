@@ -453,7 +453,9 @@ Status UpdateManager::_write_segment_for_upsert(const TxnLogPB_OpWrite& op_write
         wopts.encryption_meta = std::move(pair.encryption_meta);
     }
     std::string seg_name = gen_segment_filename(txn_id);
-    ASSIGN_OR_RETURN(auto wfile, fs::new_writable_file(fopts, tablet->segment_location(seg_name)));
+    std::string seg_location = tablet->segment_location(seg_name);
+    ASSIGN_OR_RETURN(auto wfile, fs::new_writable_file(fopts, seg_location));
+    wopts.segment_file_mark = seg_location;
     SegmentWriter writer(std::move(wfile), /*segment_id*/ 0, tschema, wopts);
     RETURN_IF_ERROR(writer.init());
     RETURN_IF_ERROR(writer.append_chunk(*full_chunk));

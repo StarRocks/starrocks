@@ -397,6 +397,8 @@ StatusOr<std::unique_ptr<SegmentWriter>> RowsetColumnUpdateState::_prepare_delta
     WritableFileOptions opts{.sync_on_close = true, .tablet_id = rowset->tablet_id()};
     ASSIGN_OR_RETURN(auto wfile, fs->new_writable_file(opts, path));
     SegmentWriterOptions writer_options;
+    writer_options.segment_file_mark =
+            std::make_pair(rowset->rowset_path(), rowsetid_segid.unique_rowset_id.to_string());
     auto segment_writer =
             std::make_unique<SegmentWriter>(std::move(wfile), rowsetid_segid.segment_id, tschema, writer_options);
     RETURN_IF_ERROR(segment_writer->init(false));
@@ -492,6 +494,7 @@ StatusOr<std::unique_ptr<SegmentWriter>> RowsetColumnUpdateState::_prepare_segme
     WritableFileOptions opts{.sync_on_close = true, .tablet_id = rowset->tablet_id()};
     ASSIGN_OR_RETURN(auto wfile, fs->new_writable_file(opts, path));
     SegmentWriterOptions writer_options;
+    writer_options.segment_file_mark = std::make_pair(rowset->rowset_path(), rowset->rowset_id().to_string());
     auto segment_writer = std::make_unique<SegmentWriter>(std::move(wfile), segment_id, tablet_schema, writer_options);
     RETURN_IF_ERROR(segment_writer->init());
     return std::move(segment_writer);

@@ -165,6 +165,7 @@ public:
         WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::OpenMode::CREATE_OR_OPEN_WITH_TRUNCATE};
         ASSIGN_OR_RETURN(auto wfile, fs->new_writable_file(opts, _tmp_file));
         SegmentWriterOptions writer_options;
+        writer_options.segment_file_mark = _tmp_file;
         _writer = std::make_unique<SegmentWriter>(std::move(wfile), _pk_column_pb->segment_id(), tablet_schema,
                                                   writer_options);
         RETURN_IF_ERROR(_writer->init(false));
