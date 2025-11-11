@@ -25,57 +25,58 @@ struct PathTestCase {
     std::vector<std::string> expected_types; // "object" or "array"
     bool should_succeed;
 
-    PathTestCase(const std::string& p, const std::vector<std::string>& segs,
-                 const std::vector<std::string>& types, bool succeed = true)
-        : path(p), expected_segments(segs), expected_types(types), should_succeed(succeed) {}
+    PathTestCase(const std::string& p, const std::vector<std::string>& segs, const std::vector<std::string>& types,
+                 bool succeed = true)
+            : path(p), expected_segments(segs), expected_types(types), should_succeed(succeed) {}
 };
 
 class VariantPathParserTest : public ::testing::TestWithParam<PathTestCase> {
 public:
     static std::vector<PathTestCase> get_test_cases() {
         return {
-            // Root only
-            {"$", {}, {}, true},
+                // Root only
+                {"$", {}, {}, true},
 
-            // Simple field access
-            {"$.name", {"name"}, {"object"}, true},
-            {"$.field1", {"field1"}, {"object"}, true},
+                // Simple field access
+                {"$.name", {"name"}, {"object"}, true},
+                {"$.field1", {"field1"}, {"object"}, true},
 
-            // Nested field access
-            {"$.field1.field2", {"field1", "field2"}, {"object", "object"}, true},
-            {"$.user.profile.name", {"user", "profile", "name"}, {"object", "object", "object"}, true},
+                // Nested field access
+                {"$.field1.field2", {"field1", "field2"}, {"object", "object"}, true},
+                {"$.user.profile.name", {"user", "profile", "name"}, {"object", "object", "object"}, true},
 
-            // Array index access
-            {"$[0]", {"0"}, {"array"}, true},
-            {"$[123]", {"123"}, {"array"}, true},
-            {"$[999]", {"999"}, {"array"}, true},
+                // Array index access
+                {"$[0]", {"0"}, {"array"}, true},
+                {"$[123]", {"123"}, {"array"}, true},
+                {"$[999]", {"999"}, {"array"}, true},
 
-            // Mixed access patterns
-            {"$.field[0]", {"field", "0"}, {"object", "array"}, true},
-            {"$.users[0].name", {"users", "0", "name"}, {"object", "array", "object"}, true},
-            {"$.data[5].items[2]", {"data", "5", "items", "2"}, {"object", "array", "object", "array"}, true},
+                // Mixed access patterns
+                {"$.field[0]", {"field", "0"}, {"object", "array"}, true},
+                {"$.users[0].name", {"users", "0", "name"}, {"object", "array", "object"}, true},
+                {"$.data[5].items[2]", {"data", "5", "items", "2"}, {"object", "array", "object", "array"}, true},
 
-            // Quoted keys
-            {"$['quoted_key']", {"quoted_key"}, {"object"}, true},
-            {"$[\"double_quoted\"]", {"double_quoted"}, {"object"}, true},
-            {"$.field['special-key']", {"field", "special-key"}, {"object", "object"}, true},
-            {"$['key with spaces']", {"key with spaces"}, {"object"}, true},
+                // Quoted keys
+                {"$['quoted_key']", {"quoted_key"}, {"object"}, true},
+                {"$[\"double_quoted\"]", {"double_quoted"}, {"object"}, true},
+                {"$.field['special-key']", {"field", "special-key"}, {"object", "object"}, true},
+                {"$['key with spaces']", {"key with spaces"}, {"object"}, true},
 
-            // Complex paths
-            {"$.arr[0].field['key']", {"arr", "0", "field", "key"}, {"object", "array", "object", "object"}, true},
-            {"$.users[1].profile['personal-info'].address",
-             {"users", "1", "profile", "personal-info", "address"},
-             {"object", "array", "object", "object", "object"}, true},
+                // Complex paths
+                {"$.arr[0].field['key']", {"arr", "0", "field", "key"}, {"object", "array", "object", "object"}, true},
+                {"$.users[1].profile['personal-info'].address",
+                 {"users", "1", "profile", "personal-info", "address"},
+                 {"object", "array", "object", "object", "object"},
+                 true},
 
-            // Invalid cases
-            {"", {}, {}, false},                    // Empty string
-            {"invalid", {}, {}, false},             // No $ prefix
-            {"$.", {}, {}, false},                  // Incomplete dot notation
-            {"$[", {}, {}, false},                  // Incomplete bracket
-            {"$[]", {}, {}, false},                 // Empty brackets
-            {"$[abc]", {}, {}, false},              // Invalid array index
-            {"$['unclosed", {}, {}, false},         // Unclosed quote
-            {"$.field[", {}, {}, false},            // Incomplete bracket after field
+                // Invalid cases
+                {"", {}, {}, false},            // Empty string
+                {"invalid", {}, {}, false},     // No $ prefix
+                {"$.", {}, {}, false},          // Incomplete dot notation
+                {"$[", {}, {}, false},          // Incomplete bracket
+                {"$[]", {}, {}, false},         // Empty brackets
+                {"$[abc]", {}, {}, false},      // Invalid array index
+                {"$['unclosed", {}, {}, false}, // Unclosed quote
+                {"$.field[", {}, {}, false},    // Incomplete bracket after field
         };
     }
 };
@@ -94,7 +95,7 @@ TEST_P(VariantPathParserTest, ParseAndVerifySegments) {
 
     const auto& segments = result.value().segments;
     EXPECT_EQ(segments.size(), test_case.expected_segments.size())
-        << "Unexpected number of segments for path: " << test_case.path;
+            << "Unexpected number of segments for path: " << test_case.path;
 
     for (size_t i = 0; i < segments.size() && i < test_case.expected_segments.size(); ++i) {
         const auto& segment = segments[i];
@@ -103,21 +104,21 @@ TEST_P(VariantPathParserTest, ParseAndVerifySegments) {
 
         if (expected_type == "object") {
             EXPECT_TRUE(std::holds_alternative<ObjectExtraction>(segment))
-                << "Expected object extraction at index " << i << " for path: " << test_case.path;
+                    << "Expected object extraction at index " << i << " for path: " << test_case.path;
 
             if (std::holds_alternative<ObjectExtraction>(segment)) {
                 const auto& obj_extraction = std::get<ObjectExtraction>(segment);
                 EXPECT_EQ(obj_extraction.get_key(), expected_value)
-                    << "Unexpected object key at index " << i << " for path: " << test_case.path;
+                        << "Unexpected object key at index " << i << " for path: " << test_case.path;
             }
         } else if (expected_type == "array") {
             EXPECT_TRUE(std::holds_alternative<ArrayExtraction>(segment))
-                << "Expected array extraction at index " << i << " for path: " << test_case.path;
+                    << "Expected array extraction at index " << i << " for path: " << test_case.path;
 
             if (std::holds_alternative<ArrayExtraction>(segment)) {
                 const auto& arr_extraction = std::get<ArrayExtraction>(segment);
                 EXPECT_EQ(std::to_string(arr_extraction.get_index()), expected_value)
-                    << "Unexpected array index at index " << i << " for path: " << test_case.path;
+                        << "Unexpected array index at index " << i << " for path: " << test_case.path;
             }
         } else {
             FAIL() << "Unknown expected type: " << expected_type << " at index " << i;
@@ -125,56 +126,53 @@ TEST_P(VariantPathParserTest, ParseAndVerifySegments) {
     }
 }
 
-INSTANTIATE_TEST_SUITE_P(
-    VariantPathParsingTests,
-    VariantPathParserTest,
-    ::testing::ValuesIn(VariantPathParserTest::get_test_cases()),
-    [](const ::testing::TestParamInfo<PathTestCase>& info) {
-        std::string name = info.param.path;
+INSTANTIATE_TEST_SUITE_P(VariantPathParsingTests, VariantPathParserTest,
+                         ::testing::ValuesIn(VariantPathParserTest::get_test_cases()),
+                         [](const ::testing::TestParamInfo<PathTestCase>& info) {
+                             std::string name = info.param.path;
 
-        // Handle special cases first before general replacement
-        if (name.empty()) {
-            return std::string("empty_string");
-        }
-        if (name == "$") {
-            return std::string("root_only");
-        }
-        if (name == "$.") {
-            return std::string("incomplete_dot");
-        }
-        if (name == "$[") {
-            return std::string("incomplete_bracket");
-        }
-        if (name == "$[]") {
-            return std::string("empty_brackets");
-        }
-        if (name == "invalid") {
-            return std::string("no_dollar_prefix");
-        }
+                             // Handle special cases first before general replacement
+                             if (name.empty()) {
+                                 return std::string("empty_string");
+                             }
+                             if (name == "$") {
+                                 return std::string("root_only");
+                             }
+                             if (name == "$.") {
+                                 return std::string("incomplete_dot");
+                             }
+                             if (name == "$[") {
+                                 return std::string("incomplete_bracket");
+                             }
+                             if (name == "$[]") {
+                                 return std::string("empty_brackets");
+                             }
+                             if (name == "invalid") {
+                                 return std::string("no_dollar_prefix");
+                             }
 
-        // Replace special characters for test name
-        std::replace(name.begin(), name.end(), '$', '_');
-        std::replace(name.begin(), name.end(), '.', '_');
-        std::replace(name.begin(), name.end(), '[', '_');
-        std::replace(name.begin(), name.end(), ']', '_');
-        std::replace(name.begin(), name.end(), '\'', '_');
-        std::replace(name.begin(), name.end(), '"', '_');
-        std::replace(name.begin(), name.end(), ' ', '_');
-        std::replace(name.begin(), name.end(), '-', '_');
+                             // Replace special characters for test name
+                             std::replace(name.begin(), name.end(), '$', '_');
+                             std::replace(name.begin(), name.end(), '.', '_');
+                             std::replace(name.begin(), name.end(), '[', '_');
+                             std::replace(name.begin(), name.end(), ']', '_');
+                             std::replace(name.begin(), name.end(), '\'', '_');
+                             std::replace(name.begin(), name.end(), '"', '_');
+                             std::replace(name.begin(), name.end(), ' ', '_');
+                             std::replace(name.begin(), name.end(), '-', '_');
 
-        // Remove leading underscore if present
-        if (!name.empty() && name[0] == '_') {
-            name = name.substr(1);
-        }
+                             // Remove leading underscore if present
+                             if (!name.empty() && name[0] == '_') {
+                                 name = name.substr(1);
+                             }
 
-        // Ensure we don't have empty names after processing
-        if (name.empty() || name == "_") {
-            return std::string("unnamed_case");
-        }
+                             // Ensure we don't have empty names after processing
+                             if (name.empty() || name == "_") {
+                                 return std::string("unnamed_case");
+                             }
 
-        return name;
-    }
-);
+                             return name;
+                         });
 
 class VariantPathParserBasicTest : public ::testing::Test {};
 
@@ -184,33 +182,29 @@ TEST_F(VariantPathParserBasicTest, SpecificPathTests) {
         std::string path;
         std::function<void(const std::vector<VariantPathExtraction>&)> verifier;
     } specific_tests[] = {
-        {
-            "$.users[0].profile['personal-data'].address",
-            [](const std::vector<VariantPathExtraction>& segments) {
-                EXPECT_EQ(segments.size(), 5);
+            {"$.users[0].profile['personal-data'].address", [](const std::vector<VariantPathExtraction>& segments) {
+                 EXPECT_EQ(segments.size(), 5);
 
-                // $.users
-                EXPECT_TRUE(std::holds_alternative<ObjectExtraction>(segments[0]));
-                EXPECT_EQ(std::get<ObjectExtraction>(segments[0]).get_key(), "users");
+                 // $.users
+                 EXPECT_TRUE(std::holds_alternative<ObjectExtraction>(segments[0]));
+                 EXPECT_EQ(std::get<ObjectExtraction>(segments[0]).get_key(), "users");
 
-                // [0]
-                EXPECT_TRUE(std::holds_alternative<ArrayExtraction>(segments[1]));
-                EXPECT_EQ(std::get<ArrayExtraction>(segments[1]).get_index(), 0);
+                 // [0]
+                 EXPECT_TRUE(std::holds_alternative<ArrayExtraction>(segments[1]));
+                 EXPECT_EQ(std::get<ArrayExtraction>(segments[1]).get_index(), 0);
 
-                // .profile
-                EXPECT_TRUE(std::holds_alternative<ObjectExtraction>(segments[2]));
-                EXPECT_EQ(std::get<ObjectExtraction>(segments[2]).get_key(), "profile");
+                 // .profile
+                 EXPECT_TRUE(std::holds_alternative<ObjectExtraction>(segments[2]));
+                 EXPECT_EQ(std::get<ObjectExtraction>(segments[2]).get_key(), "profile");
 
-                // ['personal-data']
-                EXPECT_TRUE(std::holds_alternative<ObjectExtraction>(segments[3]));
-                EXPECT_EQ(std::get<ObjectExtraction>(segments[3]).get_key(), "personal-data");
+                 // ['personal-data']
+                 EXPECT_TRUE(std::holds_alternative<ObjectExtraction>(segments[3]));
+                 EXPECT_EQ(std::get<ObjectExtraction>(segments[3]).get_key(), "personal-data");
 
-                // .address
-                EXPECT_TRUE(std::holds_alternative<ObjectExtraction>(segments[4]));
-                EXPECT_EQ(std::get<ObjectExtraction>(segments[4]).get_key(), "address");
-            }
-        }
-    };
+                 // .address
+                 EXPECT_TRUE(std::holds_alternative<ObjectExtraction>(segments[4]));
+                 EXPECT_EQ(std::get<ObjectExtraction>(segments[4]).get_key(), "address");
+             }}};
 
     for (const auto& test : specific_tests) {
         auto result = VariantPathParser::parse(test.path);
