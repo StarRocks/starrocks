@@ -221,7 +221,7 @@ static size_t WriteCallback(void* contents, size_t size, size_t nmemb, void* use
     return size * nmemb;
 }
 
-static StatusOr<KeySpec> get_key_spec_from_vault(const std::string url) {
+static StatusOr<KeySpec> get_key_spec_from_vault(const std::string& url) {
     std::string url_without_query;
     std::string token;
     if (url.starts_with('/')) {
@@ -282,7 +282,7 @@ static StatusOr<KeySpec> get_key_spec_from_vault(const std::string url) {
 
 static std::mutex g_get_key_spec_from_vault_cache_lock;
 static std::unique_ptr<std::pair<std::string, KeySpec>> g_get_key_spec_from_vault_cache;
-static StatusOr<KeySpec> get_key_spec_from_vault_cached(const std::string url) {
+static StatusOr<KeySpec> get_key_spec_from_vault_cached(const std::string& url) {
     std::lock_guard lg(g_get_key_spec_from_vault_cache_lock);
     if (g_get_key_spec_from_vault_cache && g_get_key_spec_from_vault_cache->first == url) {
         return g_get_key_spec_from_vault_cache->second;

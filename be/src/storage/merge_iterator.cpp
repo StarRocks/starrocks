@@ -193,7 +193,7 @@ public:
     }
 
 protected:
-    Status init();
+    Status init() override;
     void close_child(size_t child);
 
     virtual Status fill(size_t child) = 0;

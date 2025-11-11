@@ -129,12 +129,12 @@ private:
     void loop_schedule();
 
     void batch_prepare_warmup();
-    void get_tablet_visible_version(std::shared_ptr<WarmupContext> ctx);
-    void add_tablet_id_pending_visible_version(std::shared_ptr<WarmupContext> ctx);
+    void get_tablet_visible_version(const std::shared_ptr<WarmupContext>& ctx);
+    void add_tablet_id_pending_visible_version(const std::shared_ptr<WarmupContext>& ctx);
     void batch_get_partitions_meta_from_frontend(
             const std::unordered_map<int64_t, std::shared_ptr<WarmupContext>>& tablet_pending_version);
     void batch_report_tablet_replica_status(const std::vector<uint64_t>& tablet_ids);
-    void do_warmup_tablet(std::shared_ptr<WarmupContext> ctx);
+    void do_warmup_tablet(const std::shared_ptr<WarmupContext>& ctx);
     void abort_warmup(int64_t tablet_id, Status status);
     void done_warmup(int64_t tablet_id, staros::WarmupLevel level, bool report);
 

@@ -275,7 +275,7 @@ void TabletWarmupManager::batch_prepare_warmup() {
     }
 }
 
-void TabletWarmupManager::get_tablet_visible_version(std::shared_ptr<WarmupContext> ctx) {
+void TabletWarmupManager::get_tablet_visible_version(const std::shared_ptr<WarmupContext>& ctx) {
     int64_t tablet_id = ctx->_tablet_id;
     auto info_or = g_worker->get_shard_info(tablet_id);
     if (!info_or.ok()) {
@@ -301,7 +301,7 @@ void TabletWarmupManager::get_tablet_visible_version(std::shared_ptr<WarmupConte
     }
 }
 
-void TabletWarmupManager::add_tablet_id_pending_visible_version(std::shared_ptr<WarmupContext> ctx) {
+void TabletWarmupManager::add_tablet_id_pending_visible_version(const std::shared_ptr<WarmupContext>& ctx) {
     std::scoped_lock lock(_mutex_pending_version);
     _tablet_pending_version.emplace(ctx->_tablet_id, ctx);
 }
@@ -357,7 +357,7 @@ void TabletWarmupManager::abort_warmup(int64_t tablet_id, Status status) {
     std::scoped_lock lock(_mutex_in_progress);
     auto iter = _tablet_in_progress.find(tablet_id);
     if (iter != _tablet_in_progress.end()) {
-        iter->second->abort(status);
+        iter->second->abort(std::move(status));
         _tablet_in_progress.erase(iter);
         g_lake_warmup_tablet_processing_count << -1;
     }
@@ -389,7 +389,7 @@ void TabletWarmupManager::done_warmup(int64_t tablet_id, staros::WarmupLevel lev
             << ", profile: " << ctx->_stats.to_json_str();
 }
 
-void TabletWarmupManager::do_warmup_tablet(std::shared_ptr<WarmupContext> ctx) {
+void TabletWarmupManager::do_warmup_tablet(const std::shared_ptr<WarmupContext>& ctx) {
     ctx->record_start();
     int64_t tablet_id = ctx->_tablet_id;
     int64_t version = ctx->_version;

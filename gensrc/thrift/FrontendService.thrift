@@ -2038,10 +2038,6 @@ struct TGetUsersRequest {
 
 }
 
-struct TGetUsersResponse {
-    1: optional list<TGetUsersResponseItem> users;
-}
-
 struct TGetUsersResponseItem {
     1: optional string host;
     2: optional string user;
@@ -2049,6 +2045,10 @@ struct TGetUsersResponseItem {
     4: optional string password_policy;
     5: optional string password_last_change;
     6: optional bool is_locked;
+}
+
+struct TGetUsersResponse {
+    1: optional list<TGetUsersResponseItem> users;
 }
 
 struct TUserSecurityPolicyRequest {
