@@ -26,18 +26,12 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.common.Config;
-import com.starrocks.common.AlreadyExistsException;
-import com.starrocks.type.Type;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.OperationType;
-import com.starrocks.persist.WALApplier;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TTabletType;
+import com.starrocks.type.Type;
 import com.starrocks.utframe.UtFrameUtils;
-import mockit.Expectations;
-import mockit.Mock;
-import mockit.MockUp;
-import mockit.Mocked;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -46,7 +40,6 @@ import org.junit.jupiter.api.Test;
 import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -200,39 +193,6 @@ public class AnalyzeMgrEditLogTest {
         Assertions.assertNotNull(updatedJob);
         Assertions.assertEquals(StatsConstants.ScheduleStatus.FINISH, updatedJob.getStatus());
     }
-//
-//    @Test
-//    public void testUpdateAnalyzeJobWithLogEditLogException() throws Exception {
-//        // 1. Prepare test data and add job first
-//        NativeAnalyzeJob job = new NativeAnalyzeJob(testDbId, testTableId, Lists.newArrayList(),
-//                Lists.newArrayList(), StatsConstants.AnalyzeType.FULL,
-//                StatsConstants.ScheduleType.SCHEDULE, Maps.newHashMap(),
-//                StatsConstants.ScheduleStatus.PENDING, LocalDateTime.now());
-//
-//        AnalyzeMgr exceptionAnalyzeMgr = new AnalyzeMgr();
-//        exceptionAnalyzeMgr.addAnalyzeJob(job);
-//        Assertions.assertEquals(1, exceptionAnalyzeMgr.getAllAnalyzeJobList().size());
-//
-//        // 2. Mock EditLog.logAddAnalyzeJob to throw exception
-//        EditLog spyEditLog = spy(GlobalStateMgr.getCurrentState().getEditLog());
-//        doThrow(new RuntimeException("EditLog write failed"))
-//                .when(spyEditLog).logAddAnalyzeJob(any(AnalyzeJob.class), any());
-//
-//        GlobalStateMgr.getCurrentState().setEditLog(spyEditLog);
-//
-//        // 3. Execute updateAnalyzeJobWithLog operation and expect exception
-//        job.setStatus(StatsConstants.ScheduleStatus.FINISH);
-//        RuntimeException exception = Assertions.assertThrows(RuntimeException.class, () -> {
-//            exceptionAnalyzeMgr.updateAnalyzeJobWithLog(job);
-//        });
-//        Assertions.assertEquals("EditLog write failed", exception.getMessage());
-//
-//        // 4. Verify leader memory state remains unchanged after exception
-//        AnalyzeJob retrievedJob = exceptionAnalyzeMgr.getAnalyzeJob(job.getId());
-//        Assertions.assertNotNull(retrievedJob);
-//        Assertions.assertEquals(StatsConstants.ScheduleStatus.PENDING, retrievedJob.getStatus());
-//    }
-//
     // ==================== Remove AnalyzeJob Tests ====================
 
     @Test
