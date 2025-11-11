@@ -1145,6 +1145,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：自动化集群快照任务的触发间隔。
 - 引入版本：v3.4.2
 
+##### txn_latency_metric_report_groups
+
+- 默认值：空字符串
+- 类型：String
+- 单位：-
+- 是否可变: 是
+- 描述：需要汇报的事务延迟监控指标组，多个指标组通过逗号分隔。导入类型基于监控组分类，被启用的组其名称会作为 'type' 标签添加到监控指标中。常见的组包括 `stream_load`、`routine_load`、`broker_load`、`insert`，以及 `compaction` (仅适用于存算分离集群)。示例：`"stream_load,routine_load"`。
+- 引入版本: v4.0
+
 ### 用户，角色及权限
 
 ##### privilege_max_total_roles_per_user
