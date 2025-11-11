@@ -3046,7 +3046,7 @@ public class SchemaChangeHandler extends AlterHandler {
             olapTable.rebuildFullSchema();
 
             // If modified columns are already done, inactive related mv
-            AlterMVJobExecutor.inactiveRelatedMaterializedViews(db, olapTable, modifiedColumns);
+            AlterMVJobExecutor.inactiveRelatedMaterializedViews(olapTable, modifiedColumns);
 
             if (!isReplay) {
                 TableAddOrDropColumnsInfo info = new TableAddOrDropColumnsInfo(db.getId(), olapTable.getId(),

@@ -646,7 +646,7 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
             GlobalStateMgr.getCurrentState().getLocalMetastore().renameColumn(db, table, clause);
 
             // If modified columns are already done, inactive related mv
-            AlterMVJobExecutor.inactiveRelatedMaterializedViews(db, (OlapTable) table, modifiedColumns);
+            AlterMVJobExecutor.inactiveRelatedMaterializedViews((OlapTable) table, modifiedColumns);
 
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);

@@ -679,7 +679,16 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                     olapTable.getName(), GlobalStateMgr.getCurrentState().isLeader(), isReplay, reason);
             return;
         }
+        Set<MvId> inactiveMVIds = Sets.newHashSet();
+        inactiveRelatedMaterializedViewsRecursiveImpl(olapTable, reason, inactiveMVIds);
+    }
+
+    private static void inactiveRelatedMaterializedViewsRecursiveImpl(Table olapTable, String reason,
+                                                                      Set<MvId> inactiveMVIds) {
         for (MvId mvId : olapTable.getRelatedMaterializedViews()) {
+            if (inactiveMVIds.contains(mvId)) {
+                continue;
+            }
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mvId.getDbId());
             if (db == null) {
                 LOG.warn("Table {} inactive MaterializedView, viewId {} ,db {} not found",
@@ -691,7 +700,12 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 LOG.info("Ignore materialized view {} does not exists", mvId);
                 continue;
             }
+            // do inactive this mvs
             doInactiveMaterializedView(mv, reason);
+            // add it into visited
+            inactiveMVIds.add(mvId);
+            // inactive mvs recursively
+            inactiveRelatedMaterializedView(mv, reason, false);
         }
     }
 
@@ -700,9 +714,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
      * modified columns have done because the modified process may be failed and in this situation
      * should not inactive mvs then.
      */
-    public static void inactiveRelatedMaterializedViews(Database db,
-                                                        OlapTable olapTable,
-                                                        Set<String> modifiedColumns) {
+    public static void inactiveRelatedMaterializedViews(OlapTable olapTable, Set<String> modifiedColumns) {
         if (modifiedColumns == null || modifiedColumns.isEmpty()) {
             return;
         }
@@ -715,16 +727,25 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         if (!GlobalStateMgr.getCurrentState().isLeader()) {
             return;
         }
+        Set<MvId> inactiveMvIds = Sets.newHashSet();
+        inactiveRelatedMaterializedViewsRecursiveImpl(olapTable, modifiedColumns, inactiveMvIds);
+    }
+
+    private static void inactiveRelatedMaterializedViewsRecursiveImpl(OlapTable olapTable, Set<String> modifiedColumns,
+                                                                      Set<MvId> inactiveMVIds) {
         // inactive related asynchronous mvs
         for (MvId mvId : olapTable.getRelatedMaterializedViews()) {
-            MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(db.getId(), mvId.getId());
+            if (inactiveMVIds.contains(mvId)) {
+                continue;
+            }
+            MaterializedView mv = GlobalStateMgr.getCurrentState().getLocalMetastore().getMaterializedView(mvId);
             if (mv == null) {
                 LOG.warn("Ignore materialized view {} does not exists", mvId);
                 continue;
 
             }
             // TODO: support more types for base table's schema change.
+            boolean isInactived = false;
             String reason = MaterializedViewExceptions.inactiveReasonForColumnChanged(modifiedColumns);
             try {
                 List<MvPlanContext> mvPlanContexts = MvPlanContextBuilder.getPlanContext(mv, true);
@@ -752,12 +773,19 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                                 "the columns  of the table {} was modified.", mv.getName(), mv.getId(),
                         olapTable.getName());
                 doInactiveMaterializedView(mv, reason);
+                isInactived = true;
             } catch (Exception e) {
                 LOG.warn("Get related materialized view {} failed:", mv.getName(), e);
                 // basic check: may lose some situations
                 if (mv.getColumns().stream().anyMatch(x -> modifiedColumns.contains(x.getName()))) {
                     doInactiveMaterializedView(mv, reason);
+                    isInactived = true;
                 }
+            }
+
+            // inactive mvs recursively.
+            if (isInactived) {
+                inactiveRelatedMaterializedViewsRecursiveImpl(mv, reason, inactiveMVIds);
             }
         }
     }
