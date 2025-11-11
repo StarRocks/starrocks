@@ -372,6 +372,7 @@ echo "Finished patching $PROTOBUF_SOURCE"
 cd $TP_SOURCE_DIR/$GPERFTOOLS_SOURCE
 if [ ! -f $PATCHED_MARK ] && [ $GPERFTOOLS_SOURCE = "gperftools-gperftools-2.7" ]; then
     patch -p1 < $TP_PATCH_DIR/tcmalloc_hook.patch
+    patch -p1 < $TP_PATCH_DIR/gperftools_20251105.patch
     touch $PATCHED_MARK
 fi
 cd -
