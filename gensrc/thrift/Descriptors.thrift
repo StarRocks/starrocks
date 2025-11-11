@@ -68,7 +68,7 @@ struct TTupleDescriptor {
 
 enum THdfsFileFormat {
   TEXT = 0,
-  LZO_TEXT = 1,
+  LZO_TEXT = 1, // Deprecated
   RC_FILE = 2,
   // THdfsFileFormat is only used to represent FileFormat, not SerializeFormat,
   // so there is no need to split it into RC_BINARY and RC_TEXT.
