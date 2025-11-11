@@ -574,6 +574,9 @@ public:
 
     DebugActionMgr& debug_action_mgr() { return _debug_action_mgr; }
 
+    bool fragment_prepared() const { return _fragment_prepared; }
+    void set_fragment_prepared(bool prepared) { _fragment_prepared = prepared; }
+
 private:
     // Set per-query state.
     void _init(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
@@ -719,6 +722,8 @@ private:
     DebugActionMgr _debug_action_mgr;
 
     bool _enable_event_scheduler = false;
+
+    bool _fragment_prepared = false;
 };
 
 #define RETURN_IF_LIMIT_EXCEEDED(state, msg)                                                \
