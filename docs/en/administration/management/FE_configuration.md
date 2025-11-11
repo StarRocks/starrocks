@@ -113,6 +113,78 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The retention period of system log files. The default value `7d` specifies that each system log file can be retained for 7 days. StarRocks checks each system log file and deletes those that were generated 7 days ago.
 - Introduced in: -
 
+##### sys_log_enable_compress
+
+- Default: false
+- Type: Boolean
+- Unit: N/A
+- Is mutable: No
+- Description: When true, the FE system (sys) RollingFile appenders are configured to produce compressed rollover files: Log4j template uses a ".gz" postfix for sys log rollovers (fe.log.*) so rolled files are created in compressed form. The setting is read during logging initialization (Log4jConfig.initLogging → generateActiveLog4jXmlConfig) and is applied to the generated Log4j configuration, so it only takes effect at startup. Enable this to reduce disk usage for retained log archives; be aware it adds CPU and I/O overhead for compression and that tooling or operators that inspect logs must handle the .gz files. Audit logs use a separate flag (audit_log_enable_compress).
+- Introduced in: 3.2.12
+
+##### sys_log_warn_modules
+
+- Default: {}
+- Type: String[]
+- Unit: N/A
+- Is mutable: No
+- Description: A list of Log4j logger names or package prefixes whose logging will be forced to WARN and routed to the dedicated warning appender (SysWF -> fe.warn.log). For each configured entry Log4jConfig adds a Logger entry like name='<entry>' level='WARN' with an AppenderRef to SysWF. These entries are appended to a built-in warn list (org.apache.kafka, org.apache.hudi, org.apache.hadoop.io.compress). Provide full logger names or package prefixes (e.g., org.foo.bar) to capture that package and its subpackages. This setting is read at FE startup (not mutable at runtime); update the configuration and restart the Frontend for changes to take effect. The warn appender exists even when sys_log_to_console is enabled, so configured modules always have their WARN+ output written to fe.warn.log.
+- Introduced in: 3.2.13
+
+##### sys_log_to_console
+
+- Default: ((System.getenv("SYS_LOG_TO_CONSOLE") != null) ? System.getenv("SYS_LOG_TO_CONSOLE").trim().equals("1") : false)
+- Type: boolean
+- Unit: N/A
+- Is mutable: No
+- Description: Controls whether StarRocks emits logs to the console (stdout/stderr) instead of rotating log files. When true, Log4j configuration uses console appenders (ConsoleErr) and the console logger template; when false (default) it uses file-based appenders and file logger templates. The default value is read once from the environment variable SYS_LOG_TO_CONSOLE at process start (set to "1" to enable). Because it is not mutable at runtime, you must set or unset SYS_LOG_TO_CONSOLE before starting the FE process. Use console logging for containerized deployments or when collecting stdout/stderr; use file logging to enable file rotation and on-disk retention.
+- Introduced in: 3.2.0
+
+##### sys_log_format
+
+- Default: "plaintext"
+- Type: String
+- Unit: N/A
+- Is mutable: No
+- Description: Controls the Log4j layout format used for FE system logs. Supported values (case-insensitive): "json" and "plaintext". If set to "json", Log4jConfig builds a JsonTemplateLayout (UTC timestamps and structured fields such as level, thread, file, method, line, message, exception) and uses Config.sys_log_json_max_string_length / sys_log_json_profile_max_string_length for max field lengths. Any other value (including invalid ones) falls back to plaintext PatternLayout, which emits human-readable lines with timestamp, level, thread, class.method:line and includes stack traces for warnings. This setting determines layouts applied to all main appenders (sys, warn, audit, dump, big_query, profile, internal, console). Because it is immutable, changes require restarting the FE process to take effect.
+- Introduced in: 3.2.10
+
+##### sys_log_json_max_string_length
+
+- Default: 1048576
+- Type: Int
+- Unit: Characters
+- Is mutable: No
+- Description: Sets the JsonTemplateLayout "maxStringLength" used when sys_log_format is "json". This limits the maximum length of string fields emitted in JSON-formatted log events (applies to default, warning, audit, dump and big_query layouts; profile logs use sys_log_json_profile_max_string_length). Values that exceed this limit are truncated according to Log4j's JsonTemplateLayout behavior. Use this to bound per-entry JSON size and avoid extremely large log lines; the default is 1,048,576 characters (≈1 MiB). Because the Log4j configuration is generated at startup, changes require a restart to take effect.
+- Introduced in: 3.2.11
+
+##### sys_log_json_profile_max_string_length
+
+- Default: 104857600 (100 MiB)
+- Type: Int
+- Unit: Characters
+- Is mutable: No
+- Description: When sys_log_format is set to "json", this value is written to the JsonTemplateLayout attribute maxStringLength for the profile logger. It caps the maximum length of string fields emitted in JSON profile logs (for example "message" and stringified "exception" stack traces) to avoid unbounded log records. This setting applies only to the profile logger layout; other loggers use sys_log_json_max_string_length. Set higher to preserve very large profile payloads, or lower to truncate long fields and limit log size/performance impact.
+- Introduced in: 3.2.11
+
+##### enable_audit_sql
+
+- Default: true
+- Type: Boolean
+- Unit: N/A
+- Is mutable: No
+- Description: When true (default) StarRocks includes the SQL text in FE audit events. The ConnectProcessor uses this flag to decide whether to record the statement text (formatStmt); if false the statement is replaced with a "?" placeholder in audit logs. Even when enabled, the recorded text may be redacted or replaced depending on AuditEncryptionChecker and enable_sql_desensitize_in_log. Disabling this option prevents SQL text from being stored (reducing audit detail for privacy/compliance) but audit metadata (user, host, timings, status, metrics) is still produced. This option is a startup-only setting; change requires restart. Consider related settings (audit_log_dir, qe_slow_log_ms, enable_sql_desensitize_in_log, enable_sql_digest, audit_log_delete_age) to control where, when and how audit data and slow-query information are kept.
+- Introduced in: -
+
+##### enable_sql_desensitize_in_log
+
+- Default: false
+- Type: Boolean
+- Unit: N/A
+- Is mutable: No
+- Description: When true, StarRocks replaces raw SQL text with a desensitized/formatted representation in places where queries are recorded or logged. It is used by ConnectProcessor.formatStmt (audit entries), StmtExecutor.addRunningQueryDetail (query detail collection) and SimpleExecutor.formatSQL (internal executor logging). Desensitization is produced via AstToSQLBuilder with options that hide credentials and can enable digest embedding; statements that require encryption still have credentials hidden regardless. If audit logging is disabled, audit output may still be suppressed ("?"). Enabling this reduces exposure of sensitive literals (usernames, passwords, credentials) in logs and query history but may make exact original SQLs unrecoverable for replay. This flag is not dynamically mutable — change requires restarting the FE process to take effect.
+- Introduced in: -
+
 ##### audit_log_dir
 
 - Default: StarRocksFE.STARROCKS_HOME_DIR + "/log"
@@ -149,6 +221,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The threshold used to determine whether a query is a slow query. If the response time of a query exceeds this threshold, it is recorded as a slow query in **fe.audit.log**.
 - Introduced in: -
 
+##### enable_qe_slow_log
+
+- Default: true
+- Type: Boolean
+- Unit: N/A
+- Is mutable: Yes
+- Description: When true, the builtin AuditLogBuilder plugin writes queries whose measured execution time (AuditEvent.Time) exceeds the qe_slow_log_ms threshold to the slow query audit log (AuditLog.getSlowAudit) during AFTER_QUERY events. When false, those slow-query entries are not emitted to the slow-audit channel (other audit outputs such as the regular query or big-query audits remain unaffected). This setting is evaluated together with qe_slow_log_ms (milliseconds) and audit_log_json_format (controls JSON/plain format). Enabling produces additional audit log volume and is useful for identifying slow queries; disable it to reduce slow-audit noise or if slow logging is handled externally.
+- Introduced in: 3.2.11
+
 ##### audit_log_roll_interval
 
 - Default: DAY
@@ -167,6 +248,114 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Unit: -
 - Is mutable: No
 - Description: The retention period of audit log files. The default value `30d` specifies that each audit log file can be retained for 30 days. StarRocks checks each audit log file and deletes those that were generated 30 days ago.
+- Introduced in: -
+
+##### audit_log_json_format
+
+- Default: false
+- Type: Boolean
+- Unit: N/A
+- Is mutable: Yes
+- Description: When enabled, audit events are emitted as structured JSON objects (serialized with Jackson) instead of the legacy pipe-separated "key=value" string. Fields included are those annotated with @AuditField on AuditEvent; fields related to very large-query thresholds are normally skipped but are added for big-query logs. The same setting controls connection, query, big-query, slow-query, and feature audit outputs. Enable this to make audit logs easier to parse by log collectors, SIEMs, or ELK stacks; be aware that switching format at runtime will change consumed log shape and may require updates to downstream parsers. The usual ignore_zero/-1 filtering still applies.
+- Introduced in: 3.2.7
+
+##### audit_log_enable_compress
+
+- Default: false
+- Type: Boolean
+- Unit: N/A
+- Is mutable: No
+- Description: When true, StarRocks appends a “.gz” postfix to rotated audit log filenames and instructs the Log4j configuration to produce GZIP-compressed audit log archives. The flag is read by Log4jConfig.initLogging() and sets the audit_file_postfix used when generating the runtime XML logger configuration, so enabling it reduces disk usage of rotated audit logs but requires decompression to view archived files. Because the value is loaded during logging initialization, changes do not take effect at runtime — a service restart is required to apply the setting.
+- Introduced in: 3.2.12
+
+##### slow_lock_threshold_ms
+
+- Default: 3000L
+- Type: long
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: The threshold (in milliseconds) used to classify lock operations as "slow". When the time to acquire a lock or the time a lock has been held exceeds this value, StarRocks will include that lock in slow-lock diagnostics and logging (used by LockUtils and QueryableReentrantReadWriteLock), include it in periodic reports (LockChecker), and influence LockManager's behavior for when to start deadlock detection and emit slow-lock traces. Lowering the value makes the system detect and log slow locks earlier (increasing logging and deadlock-check activity); raising it delays detection and reduces diagnostic noise. Values <= 0 disable the initial delay logic that postpones deadlock checks based on this threshold.
+- Introduced in: 3.2.0
+
+##### slow_lock_log_every_ms
+
+- Default: 3000L
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: Controls the minimum interval (in ms) between successive "slow lock" warning logs for the same SlowLockLogStats instance. In LockUtils.logSlowLockEventIfNeeded the code only emits a warning if the lock wait time exceeded slow_lock_threshold_ms and the current time is greater than lastSlowLockLogTime + slow_lock_log_every_ms. This effectively rate-limits repeated slow-lock warnings for the same lock owner/context. Tune up to reduce log noise on busy systems, or lower to get more frequent visibility into recurring lock contention. Note it works together with slow_lock_threshold_ms (which sets what counts as "slow").
+- Introduced in: 3.2.0
+
+##### slow_lock_stack_trace_reserve_levels
+
+- Default: 15
+- Type: Int
+- Unit: Stack frames (levels)
+- Is mutable: Yes
+- Description: Controls how many stack-trace levels (frames) are retained and emitted when QueryableReentrantReadWriteLock captures stack traces for debugging slow locks or contention. This value is passed to LogUtil.getStackTraceToJsonArray and affects owner, current-thread, and oldest-reader stack dumps produced by getLockInfoToJson, getCurrReadersInfoToJsonArray, and getOldestSharedLockHolderInfo. Increasing it provides deeper call stacks in the generated JSON (useful for diagnosis) but raises CPU, memory and payload size; decreasing it reduces overhead but may omit relevant frames. Changes take effect at runtime for subsequent lock dumps. Tune together with slow_lock_threshold_ms when investigating slow-lock issues.
+- Introduced in: 3.4.0, 3.5.0, 4.0.0
+
+##### slow_lock_print_stack
+
+- Default: true
+- Type: Boolean
+- Unit: N/A
+- Is mutable: Yes
+- Description: When true, LockManager includes the thread stack trace for each lock owner in the JSON emitted for slow-lock warnings (logSlowLockTrace). This makes slow-lock logs much more informative for diagnosing long-held locks and deadlocks. Capturing stack traces is relatively expensive and, on very large clusters or when many threads are involved, can add CPU pause or IO overhead — disable (set to false) to avoid that overhead. This flag is checked at runtime, so it can be toggled without restart. For finer control of stack depth, see slow_lock_stack_trace_reserve_levels; slow-lock detection itself is driven by slow_lock_threshold_ms.
+- Introduced in: 3.3.16, 3.4.5, 3.5.1, 4.0.0
+
+##### internal_log_dir
+
+- Default: Config.STARROCKS_HOME_DIR + "/log"
+- Type: String
+- Unit: N/A
+- Is mutable: No
+- Description: Filesystem directory where Frontend (FE) "internal" logs are written (default target for fe.internal.log). This directory is used by Log4j configuration for FE internal modules (MV/Statistics and other internal components) when file logging is enabled; if sys_log_to_console is true these internal logs may be written to console instead. Rotation and retention for files under this directory are governed by related settings (internal_roll_maxsize, internal_log_roll_num, internal_log_delete_age, internal_log_roll_interval). The directory must be writable by the FE process. Because the setting is not mutable at runtime, changing it requires updating configuration and restarting the FE.
+- Introduced in: 3.2.4
+
+##### internal_log_roll_num
+
+- Default: 90
+- Type: Int
+- Unit: Files (number of retained rotated log files)
+- Is mutable: No
+- Description: Maximum number of rotated FE internal log files (fe.internal.log.*) to retain. This value is written into the Log4j RollingFile appender's DefaultRolloverStrategy "max" parameter for the InternalFile appender; when rollovers occur, up to this many archived internal log files are kept and older ones become eligible for deletion (deletion also considers time-based rules configured by internal_log_delete_age). Applies only to the internal logs used for MV/statistics/internal modules and is applied at log configuration time (requires restart to change).
+- Introduced in: 3.2.4
+
+##### internal_log_modules
+
+- Default: {"base", "statistic"}
+- Type: String[]
+- Unit: N/A
+- Is mutable: No
+- Description: List of internal module names that Log4jConfig turns into dedicated logger entries named "internal.<module>" at level INFO with additivity="false". For each entry Log4jConfig creates a logger that writes to the InternalFile appender (Config.internal_log_dir) unless sys_log_to_console is enabled, in which case it writes to the console. Use this to route internal subsystem logs into the internal log file: either add module names here so Log4jConfig will create the logger, or ensure code obtains a logger whose name begins with "internal.<module>" (e.g., "internal.base.MyClass") so it is captured by that logger. Names are used verbatim (case-sensitive) and are applied as logger name prefixes, so package-style names are supported. This setting is read at startup (initLogging) and cannot be changed at runtime.
+- Introduced in: 3.2.4
+
+##### internal_log_roll_interval
+
+- Default: "DAY"
+- Type: String
+- Unit: N/A
+- Is mutable: No
+- Description: Controls the time granularity used to format the timestamp portion of internal log file names for the FE internal RollingFile appender. Accepted case-insensitive values are "HOUR" (hourly pattern -> %d{yyyyMMddHH}) and "DAY" (daily pattern -> %d{yyyyMMdd}). The selected pattern is substituted into the RollingFile filePattern and determines when time-based roll triggers; note that the appender also includes a size-based trigger, so rotation occurs when either condition is met. Invalid values cause Log4jConfig to fail generation (IOException), which can prevent logging reconfiguration or startup. Changing this requires a restart.
+- Introduced in: v3.2.4
+
+##### internal_log_delete_age
+
+- Default: "7d"
+- Type: String
+- Unit: Time duration string (supports suffixes d/h/m/s, e.g., 7d, 10h, 60m, 120s)
+- Is mutable: No
+- Description: Controls how long rolled internal log files (fe.internal.log.*) are retained before the Log4j rollover deletion policy removes them. The value is injected into Log4j's <IfLastModified age="..."/> clause by Log4jConfig, so files whose last-modified time is older than this duration become eligible for deletion. This works together with internal_log_roll_num and internal_log_roll_interval: roll_num limits count of recent files kept, while internal_log_delete_age enforces time-based expiry. Use shorter values to reduce disk usage or longer values to retain history. The string must use a supported time unit suffix (d/h/m/s). Changing this config requires restarting the FE to take effect.
+- Introduced in: 3.2.4
+
+##### internal_log_json_format
+
+- Default: false
+- Type: Boolean
+- Unit: N/A
+- Is mutable: Yes
+- Description: When true, internal statistic audit entries emitted by AuditInternalLog.handleInternalLog(...) are formatted as a single JSON object and written to the statistic audit logger; when false, the entries are written as a human‑readable plain text message. The JSON payload contains the keys: "executeType" (QUERY/DML), "queryId", "sql", and "time" (execution time in milliseconds). Use true to enable structured logging for log collectors and downstream parsers; use false for simpler, readable log lines. Note: the configuration only affects how subsequent internal statistic logs are formatted at runtime. Logged SQL may contain sensitive data; ensure appropriate log access controls and retention policies when enabling JSON output.
 - Introduced in: -
 
 ##### dump_log_dir
@@ -215,6 +404,132 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Is mutable: No
 - Description: The retention period of dump log files. The default value `7d` specifies that each dump log file can be retained for 7 days. StarRocks checks each dump log file and deletes those that were generated 7 days ago.
 - Introduced in: -
+
+##### big_query_log_dir
+
+- Default: Config.STARROCKS_HOME_DIR + "/log"
+- Type: String
+- Unit: Path
+- Is mutable: No
+- Description: Filesystem directory where FE big-query dump logs (fe.big_query.log) are written. Used by Log4jConfig to create the RollingFile appender for big query records; the appender writes fe.big_query.log and rotates files according to big_query_log_roll_interval, big_query_log_roll_num, and log_roll_size_mb, and deletes old files based on big_query_log_delete_age. Set this to a writable path (preferably on a volume with sufficient space and I/O) if you want big-query logs separated from general logs. Because the setting is not mutable at runtime, changing it requires updating configuration and restarting the FE process.
+- Introduced in: 3.2.0
+
+##### big_query_log_roll_num
+
+- Default: 10
+- Type: Int
+- Unit: Files
+- Is mutable: No
+- Description: Maximum number of rolled FE big query log files (fe.big_query.log.*) that Log4j's DefaultRolloverStrategy keeps per roll interval. This value sets the "max" attribute of the rollover strategy used by Log4j (see Log4jConfig), bounding how many indexed/archived files are retained when time- or size-based rollover occurs. Older files beyond this count become eligible for removal (deletion is additionally governed by big_query_log_delete_age and the configured roll interval/pattern). Changing this value affects disk usage and how much history is available for debugging large queries; because it is not mutable at runtime, update the configuration and restart FE to apply.
+- Introduced in: 3.2.0
+
+##### big_query_log_modules
+
+- Default: {"query"}
+- Type: String[]
+- Unit: N/A
+- Is mutable: No
+- Description: A list of module identifiers for which Log4j will create dedicated big_query loggers. For each entry X, Log4jConfig registers a logger named "big_query.X" at INFO level and routes its output to the BigQuery rolling file appender (fe.big_query.log). Use this to capture and isolate BigQuery-related logs from specific components (for example "query") into the big_query log file, subject to the BigQuery log rolling and retention settings. Because this setting is read during logging initialization, changes to the list require restarting the FE process to take effect.
+- Introduced in: 3.2.0
+
+##### big_query_log_roll_interval
+
+- Default: "DAY"
+- Type: String
+- Unit: N/A
+- Is mutable: No
+- Description: Controls the time granularity used to generate the time-based file pattern for the BigQuery logger (fe.big_query.log). Accepted case-insensitive values: "HOUR" -> pattern "%d{yyyyMMddHH}" (hourly roll), "DAY" -> pattern "%d{yyyyMMdd}" (daily roll). The configured pattern is combined with the RollingFile appender's size-based policy, so log files roll on the configured time boundary or when the size threshold is exceeded. If set to any other value, Log4jConfig will throw an IOException at startup when building the log configuration.
+- Introduced in: 3.2.0
+
+##### big_query_log_delete_age
+
+- Default: "7d"
+- Type: String
+- Unit: Duration string (e.g., "7d" for 7 days, "24h" for 24 hours)
+- Is mutable: No
+- Description: Specifies the retention age used by Log4j's Delete/IfLastModified check for big query rolling logs. This value is substituted into the RollingFile appender for fe.big_query.log (under big_query_log_dir) and instructs Log4j's DefaultRolloverStrategy to remove fe.big_query.log.* files older than the given duration. The deletion happens as part of rollover/cleanup operations performed by Log4j. Use standard Log4j duration syntax (for example "7d" to keep 7 days). Changing this config requires restarting the FE to take effect.
+- Introduced in: 3.2.0
+
+##### enable_profile_log
+
+- Default: true
+- Type: boolean
+- Unit: N/A
+- Is mutable: No
+- Description: When true, the FE will write per-query execution profiles / queryDetail records to the FE profile log (PROFILE_LOG). In StmtExecutor (fe-core), if enable_collect_query_detail_info is also enabled, the queryDetail object is serialized to JSON and logged; if enable_profile_log_compress is enabled the JSON is gzipped and the compressed bytes are logged instead. Enabling this produces detailed diagnostic logs useful for performance analysis and debugging but increases log volume and may expose query text or other sensitive details. Because this flag is not mutable, changing it requires restarting the FE. Log rotation, retention and storage location are controlled by related profile log settings (profile_log_dir, profile_log_roll_num, profile_log_roll_interval, profile_log_delete_age).
+- Introduced in: 3.2.5
+
+##### profile_log_dir
+
+- Default: Config.STARROCKS_HOME_DIR + "/log"
+- Type: String
+- Unit: N/A
+- Is mutable: No
+- Description: Directory path where FE profile logs are written. Log4j uses this value for the RollingFile appenders that produce fe.profile.log and fe.features.log; rotated files are placed under this directory and deletions use this path as basePath. Rotation behavior is controlled by related settings (profile_log_roll_interval -> DAY yields yyyyMMdd, HOUR yields yyyyMMddHH; profile_log_roll_num limits retained files; profile_log_roll_size_mb limits file size). profile_log_delete_age accepts time expressions such as 7d, 10h, 60m, 120s to control automatic deletion of old log files. Ensure the FE process can write to this directory. Because the setting is not mutable, changing it requires restarting FE.
+- Introduced in: 3.2.5
+
+##### profile_log_roll_num
+
+- Default: 5
+- Type: Int
+- Unit: Count (number of archived log files)
+- Is mutable: No
+- Description: Sets the maximum number of rolled (archived) profile log files (fe.profile.log.*) that the Log4j DefaultRolloverStrategy will keep. When the number of archived profile log files exceeds this value, the oldest files become eligible for deletion (also subject to profile_log_delete_age). This value works together with profile_log_roll_size_mb and profile_log_roll_interval to determine rollover frequency and retained history; increasing it preserves more historical profile logs at the cost of disk space. Because it is not mutable at runtime, changes require restarting the FE process (or redeploying logging configuration) to take effect.
+- Introduced in: 3.2.5
+
+##### profile_log_roll_interval
+
+- Default: "DAY"
+- Type: String
+- Unit: N/A
+- Is mutable: No
+- Description: Specifies the time interval used to build the time portion of the rolling filename for FE profile logs. Accepted (case-insensitive) values are "DAY" and "HOUR": "DAY" → "%d{yyyyMMdd}" (daily rollover, default), "HOUR" → "%d{yyyyMMddHH}" (hourly rollover). The resulting pattern is substituted as profile_file_pattern in the Log4j RollingFile appender for fe.profile.log and is used by the TimeBasedTriggeringPolicy; it works together with size-based rollover (profile_log_roll_size_mb) and the index token (%i) to control when and how profile log files are rotated and named. Providing any other value causes Log4jConfig.getIntervalPattern to throw an IOException during logging initialization/reconfiguration.
+- Introduced in: 3.2.5
+
+##### profile_log_delete_age
+
+- Default: "1d"
+- Type: String
+- Unit: Time duration (supports suffixes: d = days, h = hours, m = minutes, s = seconds)
+- Is mutable: No
+- Description: Controls how long rotated FE profile log files are retained before being deleted. The value is injected into Log4j's <IfLastModified age="..."/> delete policy (affecting files named fe.profile.log.* under profile_log_dir). Accepted formats include "7d" (7 days), "10h" (10 hours), "60m" (60 minutes) and "120s" (120 seconds). Changes are not dynamically applied (requires process restart) and interact with profile_log_roll_num and profile_log_roll_interval to determine final retention behavior.
+- Introduced in: 3.2.5
+
+##### profile_log_roll_size_mb
+
+- Default: 1024
+- Type: Int
+- Unit: MB
+- Is mutable: No
+- Description: Maximum file size in megabytes for the profile log appender (fe.profile.log) before Log4j triggers a size-based rollover. The RollingFile appender for profile logs uses both TimeBasedTriggeringPolicy and SizeBasedTriggeringPolicy, so rotation occurs when either the configured time interval elapses or this size threshold is exceeded. Increasing this value reduces rollover frequency and produces larger per-file logs; decreasing it increases the number of rotated files. Retention and cleanup are controlled separately by profile_log_roll_num (number of roll files) and profile_log_delete_age (age-based deletion).
+- Introduced in: 3.2.5
+
+##### enable_profile_log_compress
+
+- Default: false
+- Type: Boolean
+- Unit: N/A
+- Is mutable: No
+- Description: When true, StarRocks compresses the JSON-serialized query profile (queryDetail) with GZIP before writing it to the PROFILE_LOG. This option is effective only when both enable_collect_query_detail_info and enable_profile_log are enabled. Compression reduces log size but makes the logged payload non‑human‑readable; consumers of PROFILE_LOG must decode GZIP to retrieve the original JSON. If compression fails, the code logs a warning and the profile is not written (there is no automatic fallback to uncompressed output). Use this setting when downstream log processors expect gzip payloads and you want to save storage and I/O for large profile entries.
+- Introduced in: 3.2.7
+
+##### log_plan_cancelled_by_crash_be
+
+- Default: true
+- Type: Boolean
+- Unit: N/A
+- Is mutable: Yes
+- Description: When true, StarRocks logs the query execution plan (explain at TExplainLevel.COSTS) to FE logs at WARN level if a query is cancelled due to backend crash detection or an RpcException and query-detail collection is disabled. This logging occurs in the code paths that detect backend failures (StmtExecutor, TransactionStmtExecutor) and in ExecuteExceptionHandler (only on the first retry attempt, retryTime == 0). It is intended to aid debugging of failures where backends become unavailable. Enable_collect_query_detail_info supersedes this setting: when query detail collection is enabled, the plan is recorded in query detail and additional logging here is unnecessary. Note: enabling increases log volume and may expose SQL/plan details in logs.
+- Introduced in: 3.2.0
+
+##### log_register_and_unregister_query_id
+
+- Default: false
+- Type: Boolean
+- Unit: N/A
+- Is mutable: Yes
+- Description: When enabled, the Frontend will emit logs for register/unregister query ID events during query lifecycle tracking. The query is actually logged only when a ConnectContext is present and either the command is not a COM_STMT_EXECUTE (prepared-statement execute) or the session variable auditExecuteStmt is true (see QeProcessorImpl.java usage). In high-concurrency scenarios these logs can become a throughput bottleneck (I/O and synchronization); disabling this switch stops those specific lifecycle logs, reducing logging overhead and contention but also reducing visibility for query-audit/tracing. Toggle at runtime based on operational needs (enable for auditing/troubleshooting, disable for peak-performance/high-throughput workloads).
+- Introduced in: 3.3.0, 3.4.0, 3.5.0, 4.0.0
 
 ### Server
 
@@ -757,16 +1072,16 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
   - Currently, this feature does not support JDBC catalog and table names. Do not enable this feature if you want to perform case-insensitive processing on JDBC or ODBC data sources.
 - Introduced in: v4.0
 
-##### txn_latency_metric_report_groups
-
-- Default: An empty string
-- Type: String
-- Unit: -
-- Is mutable: Yes
-- Description: A comma-separated list of transaction latency metric groups to report. Load types are categorized into logical groups for monitoring. When a group is enabled, its name is added as a 'type' label to transaction metrics. Valid values: `stream_load`, `routine_load`, `broker_load`, `insert`, and `compaction` (availabl only for shared-data clusters). Example: `"stream_load,routine_load"`.
-- Introduced in: v4.0
-
 ### User, role, and privilege
+
+##### enable_internal_sql
+
+- Default: true
+- Type: boolean
+- Unit: N/A
+- Is mutable: No
+- Description: When true, internal SQL statements executed by StarRocks components (e.g., SimpleExecutor) are included in internal/audit logs and diagnostic messages. When false, the formatted SQL text is suppressed (SimpleExecutor replaces it with "?"), preventing internal queries from appearing in logs and reducing risk of exposing sensitive information. This flag interacts with enable_sql_desensitize_in_log: if SQL logging is enabled and desensitization is on, the system will log a desensitized form of the statement; if this flag is false the SQL will be hidden regardless. Use false for tighter privacy/compliance controls. Because it is not mutable at runtime, changes require a process restart to take effect.
+- Introduced in: -
 
 ##### privilege_max_total_roles_per_user
 
@@ -1060,6 +1375,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The interval for checking data updates during automatic collection.
 - Introduced in: -
 
+##### enable_predicate_columns_collection
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable predicate columns collection. If disabled, predicate columns will not be recorded during query optimization.
+- Introduced in: -
+
 ##### statistic_cache_columns
 
 - Default: 100000
@@ -1158,15 +1482,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Is mutable: Yes
 - Description: Whether to enable automatic collection for the NDV information of the ARRAY type.
 - Introduced in: v4.0
-
-##### enable_predicate_columns_collection
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether to enable predicate columns collection. If disabled, predicate columns will not be recorded during query optimization.
-- Introduced in: -
 
 ##### histogram_buckets_size
 
@@ -1377,6 +1692,24 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Is mutable: Yes
 - Description: The maximum number of load jobs that can be retained within a period of time. If this number is exceeded, the information of historical jobs will be deleted.
 - Introduced in: -
+
+##### stream_load_task_keep_max_num
+
+- Default: 1000
+- Type: Int
+- Unit: N/A
+- Is mutable: Yes
+- Description: Maximum number of StreamLoad tasks that StreamLoadMgr retains in memory (tracked in idToStreamLoadTask). When the in-memory count exceeds this value, StreamLoadMgr first invokes cleanSyncStreamLoadTasks() to remove completed synchronous stream-load tasks; if the count still remains above half of this threshold, it triggers cleanOldStreamLoadTasks(true) to force removal of older (including finished) tasks. Lowering this value reduces memory use and retention of historical load metadata but increases the likelihood that finished or committed tasks will be evicted and become unavailable for inspection; increasing it preserves more history at the cost of higher memory usage. Tune according to workload and memory budget.
+- Introduced in: 3.2.0
+
+##### stream_load_task_keep_max_second
+
+- Default: 3 * 24 * 3600 (259200)
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The retention window (in seconds) after a stream load task reaches a final state (COMMITED or CANCELLED) before StarRocks removes the task from in-memory management. StreamLoadMgr and StreamLoadTask/StreamLoadMultiStmtTask compare (current_time - end_time) against this value (internally multiplied by 1000 to convert to milliseconds) when deciding to garbage‑collect finished tasks. Note: tasks may be removed earlier when total tasks exceed stream_load_task_keep_max_num or when cleaning is forced. Lower values free memory sooner but reduce time available for debugging/inspection; higher values retain task history longer at the cost of memory.
+- Introduced in: 3.2.0
 
 ##### label_clean_interval_second
 
@@ -1798,6 +2131,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Introduced in: -
 
 ### Storage
+
+##### max_dynamic_partition_num
+
+- Default: 500
+- Type: int
+- Unit: Count (number of partitions)
+- Is mutable: Yes
+- Description: Upper bound on how many partitions a dynamic-partition operation may create at once. During dynamic-partition analysis (DynamicPartitionUtil.analyzeDynamicPartition), StarRocks computes expectCreatePartitionNum = dynamic_partition.end + history_partition_num and rejects the DDL if that value exceeds this setting with "Too many dynamic partitions" error. This protects the cluster from metadata explosion or excessive partition creation (and associated I/O/maintenance cost). The limit applies only to automatically created dynamic partitions, not to manual CREATE PARTITION operations. Because the setting is mutable, you can raise or lower it at runtime to permit larger or stricter dynamic partition ranges; changing it does not retroactively alter already-existing partitions.
+- Introduced in: 3.2.0
 
 ##### tablet_create_timeout_second
 
@@ -3198,6 +3540,10 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Is mutable: Yes
 - Description: Whether to allow the system to trace the historical nodes. By setting this item to `true`, you can enable the Cache Sharing feature and allow the system to choose the right cache nodes during elastic scaling.
 - Introduced in: v3.5.1
+
+
+
+<EditionSpecificFEItem />
 
 
 

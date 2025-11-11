@@ -113,6 +113,36 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: システムログファイルの保持期間。デフォルト値 `7d` は、各システムログファイルが 7 日間保持されることを指定します。StarRocks は各システムログファイルをチェックし、7 日前に生成されたものを削除します。
 - 導入バージョン: -
 
+
+
+
+
+
+
+
+
+##### sys_log_json_max_string_length
+
+- デフォルト: 1048576
+- 型: Int
+- 単位: Characters
+- 変更可能: いいえ
+- 説明: sys_log_format が "json" のときに JsonTemplateLayout の "maxStringLength" を設定します。これにより JSON 形式のログイベントで出力される文字列フィールドの最大長が制限されます（default、warning、audit、dump、および big_query レイアウトに適用されます；profile ログは sys_log_json_profile_max_string_length を使用します）。この制限を超える値は Log4j の JsonTemplateLayout の挙動に従って切り詰められます。エントリごとの JSON サイズを上限し、極端に長いログ行を避けるために使用してください。デフォルトは 1,048,576 文字（≈1 MiB）です。Log4j の設定は起動時に生成されるため、変更を反映するには再起動が必要です。
+- 導入バージョン: 3.2.11
+
+##### sys_log_json_profile_max_string_length
+
+- デフォルト: 104857600 (100 MiB)
+- 型: Int
+- 単位: Characters
+- 変更可能: いいえ
+- 説明: sys_log_format が "json" に設定されている場合、この値は profile ロガーの JsonTemplateLayout 属性 maxStringLength に書き込まれます。JSON のプロファイルログで出力される文字列フィールド（例："message" や文字列化された "exception" スタックトレース）の最大長を制限し、無制限のログレコードを回避します。この設定は profile ロガーのレイアウトにのみ適用され、他のロガーは sys_log_json_max_string_length を使用します。非常に大きなプロファイルペイロードを保持したい場合は値を大きく、長いフィールドを切り詰めてログサイズ／性能影響を抑えたい場合は値を小さく設定してください。
+- 導入バージョン: 3.2.11
+
+
+
+
+
 ##### audit_log_dir
 
 - デフォルト: StarRocksFE.STARROCKS_HOME_DIR + "/log"
@@ -149,6 +179,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: クエリがスロークエリであるかどうかを判断するために使用されるしきい値。クエリの応答時間がこのしきい値を超える場合、**fe.audit.log** にスロークエリとして記録されます。
 - 導入バージョン: -
 
+
+
 ##### audit_log_roll_interval
 
 - デフォルト: DAY
@@ -168,6 +200,44 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能: いいえ
 - 説明: 監査ログファイルの保持期間。デフォルト値 `30d` は、各監査ログファイルが 30 日間保持されることを指定します。StarRocks は各監査ログファイルをチェックし、30 日前に生成されたものを削除します。
 - 導入バージョン: -
+
+
+
+
+
+
+
+
+
+##### slow_lock_stack_trace_reserve_levels
+
+- デフォルト: 15
+- 型: Int
+- 単位: スタックフレーム（レベル）
+- 変更可能か: Yes
+- 説明: QueryableReentrantReadWriteLock がスローロックや競合のデバッグのためにスタックトレースを取得する際に、何レベル（フレーム）を保持して出力するかを制御します。この値は LogUtil.getStackTraceToJsonArray に渡され、getLockInfoToJson、getCurrReadersInfoToJsonArray、getOldestSharedLockHolderInfo が生成する owner、current-thread、oldest-reader のスタックダンプに影響します。値を大きくすると生成される JSON により深いコールスタックが含まれ（診断に有用）、ただし CPU、メモリ、ペイロードサイズが増加します。値を小さくするとオーバーヘッドは減りますが関連するフレームが欠落する可能性があります。変更はランタイムでの以降のロックダンプに即時反映されます。スローロック問題を調査する際は slow_lock_threshold_ms と合わせて調整してください。
+- 導入: 3.4.0, 3.5.0, 4.0.0
+
+##### slow_lock_print_stack
+
+- デフォルト: true
+- 型: Boolean
+- 単位: N/A
+- 変更可能か: Yes
+- 説明: true の場合、LockManager はスローロック警告（logSlowLockTrace）で出力する JSON に各ロック所有者のスレッドスタックトレースを含めます。これにより、長時間保持されているロックやデッドロックの診断においてスローロックログが格段に有用になります。スタックトレースの取得は比較的コストが高く、非常に大規模なクラスターや多数のスレッドが関与する環境では CPU 停止や IO オーバーヘッドを引き起こすことがあるため、そのオーバーヘッドを避けたい場合は無効（false に設定）にしてください。このフラグはランタイムで参照されるため再起動なしで切り替え可能です。スタック深度をより細かく制御するには slow_lock_stack_trace_reserve_levels を参照してください。スローロック検出自体は slow_lock_threshold_ms によって駆動されます。
+- 導入: 3.3.16, 3.4.5, 3.5.1, 4.0.0
+
+
+
+
+
+
+
+
+
+
+
+
 
 ##### dump_log_dir
 
@@ -215,6 +285,62 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能: いいえ
 - 説明: ダンプログファイルの保持期間。デフォルト値 `7d` は、各ダンプログファイルが 7 日間保持されることを指定します。StarRocks は各ダンプログファイルをチェックし、7 日前に生成されたものを削除します。
 - 導入バージョン: -
+
+
+
+
+
+##### big_query_log_modules
+
+- デフォルト: {"query"}
+- 型: String[]
+- 単位: N/A
+- 変更可能か: いいえ
+- 説明: Log4j が専用の big_query ロガーを作成するモジュール識別子のリスト。各エントリ X に対して、Log4jConfig は INFO レベルで "big_query.X" という名前のロガーを登録し、その出力を BigQuery のローテーションファイルアペンダー (fe.big_query.log) にルーティングします。これを使うと、特定コンポーネント（例: "query"）に関連する BigQuery ログを big_query ログファイルにキャプチャして分離できます（BigQuery ログのロールおよび保持設定に従います）。この設定はログ初期化時に読み込まれるため、リストを変更するには FE プロセスを再起動する必要があります。
+- 導入バージョン: 3.2.0
+
+##### big_query_log_roll_interval
+
+- デフォルト: "DAY"
+- 型: String
+- 単位: N/A
+- 変更可能か: いいえ
+- 説明: BigQuery ロガー (fe.big_query.log) の時間ベースのファイルパターンを生成する際に使用される時間粒度を制御します。大文字小文字を区別しない受け入れ値: "HOUR" -> パターン "%d{yyyyMMddHH}"（毎時ロール）, "DAY" -> パターン "%d{yyyyMMdd}"（毎日ロール）。設定されたパターンは RollingFile アペンダーのサイズベースポリシーと組み合わされるため、ログファイルは設定された時間境界でロールするか、サイズ閾値を超えたときにロールします。その他の値が設定された場合、Log4jConfig はログ構成のビルド時に起動時に IOException を投げます。
+- 導入バージョン: 3.2.0
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+##### log_plan_cancelled_by_crash_be
+
+- デフォルト: true
+- 型: Boolean
+- 単位: N/A
+- 変更可能: はい
+- 説明: true の場合、バックエンドのクラッシュ検出や RpcException によりクエリがキャンセルされ、かつ query-detail の収集が無効になっているときに、StarRocks はクエリ実行プラン（TExplainLevel.COSTS による explain）を FE のログに WARN レベルで出力します。このログ出力はバックエンド障害を検出するコード経路（StmtExecutor、TransactionStmtExecutor）および ExecuteExceptionHandler（最初のリトライ試行時のみ、retryTime == 0）で行われます。バックエンドが利用不能になるような障害のデバッグ支援を目的としています。Enable_collect_query_detail_info が有効な場合はこの設定より優先され、クエリ詳細が記録されるためここでの追加ログは不要です。注意: 有効にするとログ量が増加し、ログに SQL やプランの詳細が露出する可能性があります。
+- 導入: 3.2.0
+
+##### log_register_and_unregister_query_id
+
+- デフォルト: false
+- 型: Boolean
+- 単位: N/A
+- 変更可能: はい
+- 説明: 有効にすると、Frontend はクエリライフサイクル追跡中の register/unregister query ID イベントについてログを出力します。実際にログに記録されるのは ConnectContext が存在し、かつコマンドが COM_STMT_EXECUTE（prepared-statement execute）でないか、またはセッション変数 auditExecuteStmt が true の場合のみです（QeProcessorImpl.java の使用箇所を参照）。高並列環境ではこれらのログがスループットのボトルネック（I/O と同期）になることがあるため、このスイッチを無効にすると特定のライフサイクルログを停止してログオーバーヘッドと競合を減らせますが、クエリ監査/トレースの可視性は低下します。運用ニーズに応じてランタイムで切り替えてください（監査/トラブルシューティング時は有効に、ピーク性能/高スループット時は無効に）。
+- 導入: 3.3.0, 3.4.0, 3.5.0, 4.0.0
 
 ### サーバー
 
@@ -271,6 +397,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能: No
 - 説明: FEノードにおいて、HTTP サーバーと並行して HTTPS サーバーを有効化するかどうか。
 - 導入バージョン: v4.0
+
+##### ssl_cipher_whitelist
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: カンマ区切りのリスト。IANA 名による ssl cipher suites をホワイトリスト化するために regex をサポートします。whitelist と blacklist の両方が設定されている場合は blacklist が優先されます。
+- Introduced in: v4.0
+
+##### ssl_cipher_blacklist
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: カンマ区切りのリスト。IANA 名による ssl cipher suites をブラックリスト化するために regex をサポートします。whitelist と blacklist の両方が設定されている場合は blacklist が優先されます。
+- Introduced in: v4.0
 
 ##### http_worker_threads_num
 
@@ -741,6 +885,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ### ユーザー、ロール、および権限
 
+
+
 ##### privilege_max_total_roles_per_user
 
 - デフォルト: 64
@@ -968,6 +1114,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: データが初めてテーブルにロードされるときに自動的に統計を収集するかどうか。テーブルに複数のパーティションがある場合、このテーブルの空のパーティションにデータがロードされると、自動統計収集がトリガーされます。新しいテーブルが頻繁に作成され、データが頻繁にロードされる場合、メモリと CPU のオーバーヘッドが増加します。
 - 導入バージョン: v3.1
 
+##### semi_sync_collect_statistic_await_seconds
+
+- Default: 30
+- Type: Long
+- Unit: Seconds
+- Is mutable: Yes
+- Description: DML 操作（INSERT および INSERT OVERWRITE 文）中の semi-synchronous 統計収集に対する最大待機時間。Stream load と broker load は非同期モードを使用するため、この設定の影響を受けません。統計収集がこのタイムアウトを超えた場合、収集の完了を待たずにロードは継続されます。この設定は `enable_statistic_collect_on_first_load` と併用されます。
+- Introduced in: v3.1
+
 ##### statistic_auto_analyze_start_time
 
 - デフォルト: 00:00:00
@@ -1003,6 +1158,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能: はい
 - 説明: 自動収集中にデータの更新をチェックする間隔。
 - 導入バージョン: -
+
+##### enable_predicate_columns_collection
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: predicate columns collection を有効にするかどうか。無効にすると、query optimization 時に predicate columns は記録されません。
+- Introduced in: -
 
 ##### statistic_cache_columns
 
@@ -1312,6 +1476,10 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: 一定期間内に保持できるロードジョブの最大数。この数を超えると、履歴ジョブの情報が削除されます。
 - 導入バージョン: -
 
+
+
+
+
 ##### label_clean_interval_second
 
 - デフォルト: 4 * 3600
@@ -1429,6 +1597,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能: はい
 - 説明: 準備済みトランザクションのデフォルトのタイムアウト期間。
 - 導入バージョン: -
+
+
 
 ##### max_load_timeout_second
 
@@ -1724,6 +1894,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 導入バージョン: -
 
 ### ストレージ
+
+
 
 ##### tablet_create_timeout_second
 
@@ -2365,6 +2537,10 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: なりすましベースの認証を使用する場合、なりすます Service Account です。
 - 導入バージョン: v3.5.1
 
+
+
+
+
 ##### azure_use_native_sdk
 
 - デフォルト: true
@@ -2584,6 +2760,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能: いいえ
 - 説明: FE が使用する文字セット。
 - 導入バージョン: -
+
+
 
 ##### enable_metric_calculator
 
@@ -3088,6 +3266,12 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能: いいえ
 - 説明: JWT 内のオーディエンス (`aud`) を識別するために使用される文字列のリスト。リスト内のいずれかの値が JWT のオーディエンスと一致する場合にのみ、JWT は有効と見なされます。
 - 導入バージョン: v3.5.0
+
+
+
+<EditionSpecificFEItem />
+
+
 
 
 

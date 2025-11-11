@@ -114,6 +114,36 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：系统日志文件的保留时长。默认值 `7d` 表示系统日志文件可以保留 7 天，保留时长超过 7 天的系统日志文件会被删除。
 - 引入版本：-
 
+
+
+
+
+##### sys_log_to_console
+
+- 默认: ((System.getenv("SYS_LOG_TO_CONSOLE") != null) ? System.getenv("SYS_LOG_TO_CONSOLE").trim().equals("1") : false)
+- 类型: boolean
+- 单位: N/A
+- 是否可变: 否
+- 描述: 控制 StarRocks 是否将日志输出到控制台（stdout/stderr）而不是轮转日志文件。当为 true 时，Log4j 配置使用控制台 appender（ConsoleErr）和控制台 logger 模板；当为 false（默认）时，使用基于文件的 appender 和文件 logger 模板。默认值在进程启动时从环境变量 SYS_LOG_TO_CONSOLE 读取一次（设置为 "1" 以启用）。由于该项在运行时不可变，必须在启动 FE 进程之前设置或取消设置 SYS_LOG_TO_CONSOLE。对于容器化部署或收集 stdout/stderr 的场景使用控制台日志；需要文件轮转和磁盘保留时使用文件日志。
+- 引入版本: 3.2.0
+
+##### sys_log_format
+
+- 默认: "plaintext"
+- 类型: String
+- 单位: N/A
+- 是否可变: 否
+- 描述: 控制 FE 系统日志使用的 Log4j layout 格式。支持的值（不区分大小写）："json" 和 "plaintext"。如果设置为 "json"，Log4jConfig 会构建一个 JsonTemplateLayout（UTC 时间戳及结构化字段，如 level、thread、file、method、line、message、exception），并使用 Config.sys_log_json_max_string_length / sys_log_json_profile_max_string_length 作为字段最大长度。任何其他值（包括无效值）都会回退到 plaintext 的 PatternLayout，输出可读的行（包含时间戳、级别、线程、class.method:line）并在警告时包含堆栈跟踪。此设置决定应用于所有主要 appender（sys、warn、audit、dump、big_query、profile、internal、console）的 layout。因为该项不可变，修改需要重启 FE 进程才能生效。
+- 引入版本: 3.2.10
+
+
+
+
+
+
+
+
+
 ##### audit_log_dir
 
 - 默认值：StarRocksFE.STARROCKS_HOME_DIR + "/log"
@@ -150,6 +180,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：Slow query 的认定时长。如果查询的响应时间超过此阈值，则会在审计日志 `fe.audit.log` 中记录为 slow query。
 - 引入版本：-
 
+
+
 ##### audit_log_roll_interval
 
 - 默认值：DAY
@@ -169,6 +201,44 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否动态：否
 - 描述：审计日志文件的保留时长。默认值 `30d` 表示审计日志文件可以保留 30 天，保留时长超过 30 天的审计日志文件会被删除。
 - 引入版本：-
+
+
+
+
+
+##### slow_lock_threshold_ms
+
+- 默认: 3000L
+- 类型: long
+- 单位: Milliseconds
+- 是否可变: 是
+- 描述: 用于将锁操作归类为“慢”的阈值（毫秒）。当获取锁的时间或锁被持有的时间超过此值时，StarRocks 会将该锁纳入慢锁诊断和日志（由 LockUtils 和 QueryableReentrantReadWriteLock 使用）、包含在周期性报告中（LockChecker），并影响 LockManager 何时开始死锁检测和输出慢锁追踪。将此值降低会使系统更早检测并记录慢锁（增加日志与死锁检查活动）；提高此值会延迟检测并减少诊断噪音。值 <= 0 会禁用基于此阈值的延迟逻辑（即推迟死锁检查的初始延迟逻辑）。
+- 引入版本: 3.2.0
+
+##### slow_lock_log_every_ms
+
+- 默认: 3000L
+- 类型: Long
+- 单位: Milliseconds
+- 是否可变: 是
+- 描述: 控制对同一 SlowLockLogStats 实例连续输出“慢锁”警告日志之间的最小间隔（毫秒）。在 LockUtils.logSlowLockEventIfNeeded 中，代码仅在锁等待时间超过 slow_lock_threshold_ms 且当前时间大于 lastSlowLockLogTime + slow_lock_log_every_ms 时才发出警告。该参数有效地对同一锁拥有者/上下文的重复慢锁警告进行速率限制。在繁忙系统上可以调大以减少日志噪音，或调小以更频繁地观察重复的锁竞争。注意它与 slow_lock_threshold_ms（用于定义什么算“慢”）配合工作。
+- 引入版本: 3.2.0
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 ##### dump_log_dir
 
@@ -216,6 +286,62 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否动态：否
 - 描述：Dump 日志文件的保留时长。默认值 `7d` 表示 Dump 日志文件可以保留 7 天，保留时长超过 7 天的 Dump 日志文件会被删除。
 - 引入版本：-
+
+##### big_query_log_dir
+
+- 默认: Config.STARROCKS_HOME_DIR + "/log"
+- 类型: String
+- 单位: Path
+- 是否可变: 否
+- 描述: FE 将 FE 大查询转储日志 (fe.big_query.log) 写入的文件系统目录。Log4jConfig 使用此路径为大查询记录创建 RollingFile appender；该 appender 会写入 fe.big_query.log，并根据 big_query_log_roll_interval、big_query_log_roll_num 和 log_roll_size_mb 轮转文件，并根据 big_query_log_delete_age 删除旧文件。如果希望将大查询日志与常规日志分离，请将其设置为可写路径（最好位于具有足够空间和 I/O 的卷上）。由于此设置在运行时不可变，更改它需要更新配置并重启 FE 进程。
+- 引入于: 3.2.0
+
+##### big_query_log_roll_num
+
+- 默认: 10
+- 类型: Int
+- 单位: Files
+- 是否可变: 否
+- 描述: Log4j 的 DefaultRolloverStrategy 在每个轮转间隔内为 FE 大查询日志文件 (fe.big_query.log.*) 保留的最大已轮转文件数。该值设置为 Log4j 使用的 rollover 策略的 "max" 属性（参见 Log4jConfig），限定在基于时间或大小的轮转发生时会保留多少带索引/归档的文件。超过该计数的较旧文件将有资格被移除（删除还受 big_query_log_delete_age 和配置的轮转间隔/模式约束）。更改此值会影响磁盘使用量以及用于调试大查询的历史记录量；由于此设置在运行时不可变，更改需更新配置并重启 FE 以生效。
+- 引入于: 3.2.0
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+##### profile_log_roll_size_mb
+
+- 默认: 1024
+- 类型: Int
+- 单位: MB
+- 是否可变: No
+- 描述: profile 日志 appender (fe.profile.log) 在 Log4j 触发基于大小的轮转之前的最大文件大小（以兆字节为单位）。用于 profile 日志的 RollingFile appender 同时使用 TimeBasedTriggeringPolicy 和 SizeBasedTriggeringPolicy，因此当满足配置的时间间隔到达或超过此大小阈值时都会触发轮转。增大此值会减少轮转频率并产生更大的单文件日志；减小它会增加轮转文件的数量。保留与清理由 profile_log_roll_num（轮转文件数量）和 profile_log_delete_age（基于年龄的删除）单独控制。
+- 引入于: 3.2.5
+
+##### enable_profile_log_compress
+
+- 默认: false
+- 类型: Boolean
+- 单位: N/A
+- 是否可变: No
+- 描述: 为 true 时，StarRocks 在将 JSON 序列化的查询 profile (queryDetail) 写入 PROFILE_LOG 之前使用 GZIP 进行压缩。此选项仅在 enable_collect_query_detail_info 和 enable_profile_log 同时启用时生效。压缩可减小日志大小，但会使记录的负载不可读；PROFILE_LOG 的消费者必须解码 GZIP 才能还原原始 JSON。如果压缩失败，代码会记录警告并且不会写入该 profile（不会自动回退为未压缩输出）。当下游日志处理器期望 gzip 负载且希望为大型 profile 条目节省存储和 I/O 时使用此设置。
+- 引入于: 3.2.7
+
+
+
+
 
 ### 服务器
 
@@ -272,6 +398,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否动态：No
 - 描述：是否在 FE 节点上同时启用 HTTPS 服务器和 HTTP 服务器。
 - 引入版本：v4.0
+
+##### ssl_cipher_whitelist
+
+- 默认: Empty string
+- 类型: String
+- 单位: -
+- 是否可变: No
+- 描述: 以逗号分隔的列表，支持正则，通过 IANA 名称将 SSL cipher suites 列入白名单。如果同时设置了白名单和黑名单，以黑名单优先。
+- 引入版本: v4.0
+
+##### ssl_cipher_blacklist
+
+- 默认: Empty string
+- 类型: String
+- 单位: -
+- 是否可变: No
+- 描述: 以逗号分隔的列表，支持正则，通过 IANA 名称将 SSL cipher suites 列入黑名单。如果同时设置了白名单和黑名单，以黑名单优先。
+- 引入版本: v4.0
 
 ##### http_worker_threads_num
 
@@ -380,6 +524,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否动态：否
 - 描述：MySQL 服务器中用于处理 I/O 事件的最大线程数。
 - 引入版本：-
+
+
 
 ##### max_mysql_service_task_threads_num
 
@@ -731,16 +877,9 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
   - 目前，此功能不支持 JDBC Catalog 和表名。若需对 JDBC 或 ODBC 数据源进行大小写不敏感处理，请勿启用此功能。
 - 引入版本：v4.0
 
-##### txn_latency_metric_report_groups
-
-- 默认值：空字符串
-- 类型：String
-- 单位：-
-- 是否可变: 是
-- 描述：需要汇报的事务延迟监控指标组，多个指标组通过逗号分隔。导入类型基于监控组分类，被启用的组其名称会作为 'type' 标签添加到监控指标中。常见的组包括 `stream_load`、`routine_load`、`broker_load`、`insert`，以及 `compaction` (仅适用于存算分离集群)。示例：`"stream_load,routine_load"`。
-- 引入版本: v4.0
-
 ### 用户，角色及权限
+
+
 
 ##### privilege_max_total_roles_per_user
 
@@ -1034,6 +1173,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：自动定期采集任务中，检测数据更新的间隔时间。
 - 引入版本：-
 
+##### enable_predicate_columns_collection
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否启用 Predicate Column 采集。如果禁用，在查询优化期间将不会记录 Predicate Column。
+- 引入版本：-
+
 ##### statistic_cache_columns
 
 - 默认值：100000
@@ -1132,15 +1280,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否动态：是
 - 描述：是否允许自动采集 ARRAY 类型列的 NDV 信息。
 - 引入版本：v4.0
-
-##### enable_predicate_columns_collection
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：是否启用 Predicate Column 采集。如果禁用，在查询优化期间将不会记录 Predicate Column。
-- 引入版本：-
 
 ##### histogram_buckets_size
 
@@ -1352,6 +1491,10 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：一定时间内所保留导入任务的最大数量。超过之后历史导入作业的信息会被删除。
 - 引入版本：-
 
+
+
+
+
 ##### label_clean_interval_second
 
 - 默认值：4 * 3600
@@ -1468,6 +1611,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否动态：是
 - 描述：预提交事务的默认超时时间。
 - 引入版本：-
+
+
 
 ##### max_load_timeout_second
 
@@ -1763,6 +1908,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 引入版本：-
 
 ### 存储
+
+
 
 ##### tablet_create_timeout_second
 
@@ -2405,6 +2552,10 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：如果使用基于模拟身份的身份验证，需要要模拟的 Service Account。
 - 引入版本：v3.5.1
 
+
+
+
+
 ##### azure_use_native_sdk
 
 - 默认值：true
@@ -2630,6 +2781,8 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 是否动态：否
 - 描述：FE 所使用的字符集。
 - 引入版本：-
+
+
 
 ##### enable_metric_calculator
 
@@ -2901,6 +3054,8 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 描述：用于物化视图改写的 MV 计划缓存的最大大小。如果存在大量用于透明改写的物化视图，可以考虑增加此配置项的大小。默认1000个。
 - 引入版本： v3.2
 
+
+
 ##### allow_system_reserved_names
 
 - 默认值：false
@@ -3134,6 +3289,11 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 是否动态：是
 - 描述：是否允许系统跟踪历史节点。将此项设置为 `true`，就可以启用 Cache Sharing 功能，并允许系统在弹性扩展过程中选择正确的缓存节点。
 - 引入版本：v3.5.1
+
+
+
+
+<EditionSpecificFEItem />
 
 
 
