@@ -657,7 +657,9 @@ public class ConnectProcessor {
                 PrepareStmtContext prepareStmtContext = ctx.getPreparedStmt(executeStmt.getStmtName());
                 if (prepareStmtContext != null) {
                     if (prepareStmtContext.getStmt().getInnerStmt() instanceof QueryStatement) {
-                        originStmt = AstToSQLBuilder.toSQL(prepareStmtContext.getStmt().getInnerStmt());
+                        PrepareStmt prepareStmt = prepareStmtContext.getStmt();
+                        StatementBase deparameterizedStmt = prepareStmt.assignValues(executeStmt.getParamsExpr());
+                        originStmt = AstToSQLBuilder.toSQL(deparameterizedStmt);
                         executeStmt.setOrigStmt(new OriginStatement(originStmt, 0));
                     }
                 }
