@@ -961,25 +961,32 @@ jobs:
         id: fe-config-gen
         if: steps.path-filter.outputs.fe-config == 'true'
         run: |
-          ./ci-tool/bin/run-doc-gen.sh --type fe_config --sr starrocks --limit 5 >> $GITHUB_OUTPUT
-
+          ./ci-tool/bin/run-doc-gen.sh --type fe_config --sr starrocks --limit 5
+          result=$(grep -Eao 'Created Pull Request:.+' /root/DocsAgent/logs/*.log)
+          echo "PR_RESULT=${result}" >> $GITHUB_OUTPUT
       - name: BE config 
         id: be-config-gen
         if: steps.path-filter.outputs.be-config == 'true'
         run: |
-          ./ci-tool/bin/run-doc-gen.sh --type be_config --sr starrocks --limit 5 >> $GITHUB_OUTPUT
+          ./ci-tool/bin/run-doc-gen.sh --type be_config --sr starrocks --limit 5 
+          result=$(grep -Eao 'Created Pull Request:.+' /root/DocsAgent/logs/*.log)
+          echo "PR_RESULT=${result}" >> $GITHUB_OUTPUT
 
       - name: variables 
         id: variables-gen
         if: steps.path-filter.outputs.variable == 'true'
         run: |
-          ./ci-tool/bin/run-doc-gen.sh --type variables --sr starrocks --limit 5 >> $GITHUB_OUTPUT
+          ./ci-tool/bin/run-doc-gen.sh --type variables --sr starrocks --limit 5
+          result=$(grep -Eao 'Created Pull Request:.+' /root/DocsAgent/logs/*.log)
+          echo "PR_RESULT=${result}" >> $GITHUB_OUTPUT
 
       - name: function 
         id: function-gen
         if: steps.path-filter.outputs.function == 'true'
         run: |
-          ./ci-tool/bin/run-doc-gen.sh --type functions --sr starrocks --fe ${FE_NODE} --limit 5 >> $GITHUB_OUTPUT
+          ./ci-tool/bin/run-doc-gen.sh --type functions --sr starrocks --fe ${FE_NODE} --limit 5
+          result=$(grep -Eao 'Created Pull Request:.+' /root/DocsAgent/logs/*.log)
+          echo "PR_RESULT=${result}" >> $GITHUB_OUTPUT
 
       - name: Comment DocGen Result
         if: >
