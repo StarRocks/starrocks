@@ -2592,9 +2592,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：删除表/数据库之后，元数据在回收站中保留的时长，超过这个时长，数据就不可以通过[RECOVER](../../sql-reference/sql-statements/backup_restore/RECOVER.md) 语句恢复。
 - 引入版本：-
 
-<<<<<<< HEAD
-##### enable_auto_tablet_distribution
-=======
 ##### partition_recycle_retention_period_secs
 
 - 默认值：1800
@@ -2604,8 +2601,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：因 INSERT OVERWRITE 或物化视图刷新操作而被删除的分区的元数据保留时间。请注意，此类元数据无法通过执行 [RECOVER](../../sql-reference/sql-statements/backup_restore/RECOVER.md) 命令恢复。
 - 引入版本：v3.5.9
 
-##### check_consistency_default_timeout_second
->>>>>>> c6ffa5472e ([Enhancement] Retain partition for a while after insert overwrite happened (#64779))
+##### enable_auto_tablet_distribution
 
 - 默认值：true
 - 类型：Boolean
