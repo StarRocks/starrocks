@@ -132,7 +132,7 @@ public class TransactionMetricRegistryTest {
         setReportGroups(registry, "stream_load");
         setupVisibleTxn(s1, TransactionState.LoadJobSourceType.BACKEND_STREAMING, 10, 20, 30, 40, 50);
         setupVisibleTxn(s2, TransactionState.LoadJobSourceType.FRONTEND_STREAMING, 11, 21, 31, 41, 51);
-        setupVisibleTxn(s3, TransactionState.LoadJobSourceType.MULTI_STATEMENT_STREAMING, 12, 22, 32, 42, 52);
+        setupVisibleTxn(s3, TransactionState.LoadJobSourceType.BACKEND_STREAMING, 12, 22, 32, 42, 52);
         registry.update(s1);
         registry.update(s2);
         registry.update(s3);

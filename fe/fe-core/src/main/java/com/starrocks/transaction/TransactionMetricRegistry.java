@@ -51,8 +51,8 @@ import javax.annotation.Nullable;
  * This registry aggregates various transaction source types into logical groups for unified
  * reporting. By default, an "all" group is always enabled, which aggregates metrics
  * across all transaction types. Additionally, specific groups can be enabled via configuration.
- * For instance, transactions from {@code BACKEND_STREAMING}, {@code FRONTEND_STREAMING},
- * and {@code MULTI_STATEMENT_STREAMING} are all categorized under the "stream_load" group.
+ * For instance, transactions from {@code BACKEND_STREAMING} and {@code FRONTEND_STREAMING}
+ * are all categorized under the "stream_load" group.
  * When metrics are exported (e.g., to Prometheus), they will include a 'type' label
  * corresponding to the group name. A sample metric might look like:
  * <pre>
@@ -224,8 +224,8 @@ public class TransactionMetricRegistry {
         Map<String, TransactionMetricGroup> groups = new HashMap<>();
         for (TransactionState.LoadJobSourceType sourceType : TransactionState.LoadJobSourceType.values()) {
             String groupName = switch (sourceType) {
-                // normal stream load / transaction stream load / parallel transaction stream load / merge commit / multiple statement
-                case BACKEND_STREAMING, FRONTEND_STREAMING, MULTI_STATEMENT_STREAMING -> "stream_load";
+                // normal stream load / transaction stream load / parallel transaction stream load / merge commit
+                case BACKEND_STREAMING, FRONTEND_STREAMING -> "stream_load";
                 case ROUTINE_LOAD_TASK -> "routine_load";
                 case BATCH_LOAD_JOB -> "broker_load";
                 case INSERT_STREAMING -> "insert";
