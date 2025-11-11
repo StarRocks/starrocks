@@ -34,6 +34,13 @@
 
 package com.starrocks.transaction;
 
+import static org.hamcrest.CoreMatchers.containsString;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -41,10 +48,14 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FakeEditLog;
 import com.starrocks.catalog.FakeGlobalStateMgr;
 import com.starrocks.catalog.GlobalStateMgrTestUtil;
+import com.starrocks.catalog.LocalTablet;
+import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
@@ -60,13 +71,6 @@ import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.replication.ReplicationTxnCommitAttachment;
 import com.starrocks.server.GlobalStateMgr;
-import mockit.Mock;
-import mockit.MockUp;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -74,13 +78,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
-
-import static org.hamcrest.CoreMatchers.containsString;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import mockit.Mock;
+import mockit.MockUp;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 public class DatabaseTransactionMgrTest {
 
@@ -792,5 +795,74 @@ public class DatabaseTransactionMgrTest {
                 () -> masterTransMgr.finishTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId, null, 1000L));
         assertEquals(TransactionStatus.VISIBLE, txnState.getTransactionStatus());
         lockThread.join();
+    }
+
+    @Test
+    public void testMaterializedIndexRowCountUpdateAfterPublish() throws StarRocksException {
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
+
+        // Begin a transaction
+        long transactionId = masterTransMgr.beginTransaction(GlobalStateMgrTestUtil.testDbId1,
+                Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1), GlobalStateMgrTestUtil.testTxnLable1,
+                transactionSource, TransactionState.LoadJobSourceType.FRONTEND,
+                Config.stream_load_default_timeout_second);
+
+        // Get the table and index before commit
+        OlapTable table = (OlapTable) masterGlobalStateMgr.getLocalMetastore().getTable(
+                GlobalStateMgrTestUtil.testDbId1, GlobalStateMgrTestUtil.testTableId1);
+        Partition partition = table.getPartition(GlobalStateMgrTestUtil.testPartition1);
+        PhysicalPartition physicalPartition = partition.getDefaultPhysicalPartition();
+        MaterializedIndex index = physicalPartition.getIndex(GlobalStateMgrTestUtil.testIndexId1);
+        LocalTablet tablet = (LocalTablet) index.getTablet(GlobalStateMgrTestUtil.testTabletId1);
+
+        // Get initial state
+        long initialVisibleVersion = physicalPartition.getVisibleVersion();
+        long newVersion = initialVisibleVersion + 1;
+        long newRowCount = 1000L;
+
+        // Set replica rowCount and ensure version matches for publish to succeed
+        // The replica version should match the visible version for checkVersionCatchUp to return true
+        for (Replica replica : tablet.getImmutableReplicas()) {
+            if (replica.getBackendId() == GlobalStateMgrTestUtil.testBackendId1
+                    || replica.getBackendId() == GlobalStateMgrTestUtil.testBackendId2
+                    || replica.getBackendId() == GlobalStateMgrTestUtil.testBackendId3) {
+                // Set replica version to match visible version so it can catch up
+                replica.updateVersionInfo(initialVisibleVersion, -1, initialVisibleVersion);
+                // Update replica rowCount to simulate data loading
+                replica.updateRowCount(newVersion, replica.getDataSize(), newRowCount);
+            }
+        }
+
+        // Commit the transaction
+        List<TabletCommitInfo> transTablets = buildTabletCommitInfoList();
+        masterTransMgr.commitTransaction(
+                GlobalStateMgrTestUtil.testDbId1, transactionId, transTablets, Lists.newArrayList(), null);
+
+        // Get MaterializedIndex rowCount before publish
+        long rowCountBeforePublish = index.getRowCount();
+
+        // Finish the transaction (publish)
+        masterTransMgr.finishTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId, null);
+
+        // Verify MaterializedIndex rowCount is updated after publish
+        // The rowCount should be calculated from tablets' rowCount
+        long expectedRowCount = tablet.getRowCount(newVersion);
+        long actualIndexRowCount = index.getRowCount();
+
+        // MaterializedIndex rowCount should be updated to match the tablet rowCount
+        assertEquals(expectedRowCount, actualIndexRowCount,
+                "MaterializedIndex rowCount should be updated after publish to match tablet rowCount");
+
+        // Verify the rowCount actually changed (if it was different before)
+        if (rowCountBeforePublish != expectedRowCount) {
+            assertTrue(actualIndexRowCount != rowCountBeforePublish,
+                    "MaterializedIndex rowCount should be different after publish");
+        }
+
+        // Verify the transaction is visible
+        DatabaseTransactionMgr masterDbTransMgr =
+                masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        TransactionState txnState = masterDbTransMgr.getTransactionState(transactionId);
+        assertEquals(TransactionStatus.VISIBLE, txnState.getTransactionStatus());
     }
 }
