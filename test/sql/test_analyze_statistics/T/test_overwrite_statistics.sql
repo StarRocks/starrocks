@@ -42,6 +42,8 @@ INSERT INTO sales_data VALUES
 (8, '2024-04-18');
 select count(*) from _statistics_.column_statistics where table_name = 'test_overwrite_statistics.sales_data';
 
-INSERT OVERWRITE sales_data partition("p202401") VALUES (101, '2024-01-10');
+INSERT OVERWRITE test_overwrite_statistics.sales_data partition("p202401") VALUES (101, '2024-01-10');
 select count(*) from _statistics_.column_statistics where table_name = 'test_overwrite_statistics.sales_data';
+
+select * from information_schema.analyze_status where `Database`='test_overwrite_statistics' and `Table`='sales_data' and Status='FAILED';
 

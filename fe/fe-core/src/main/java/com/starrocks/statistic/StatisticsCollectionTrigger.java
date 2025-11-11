@@ -282,6 +282,12 @@ public class StatisticsCollectionTrigger {
                 if (partitionCommitInfo.getVersion() == Partition.PARTITION_INIT_VERSION + 1) {
                     PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
                     Long partitionId = table.getPartition(physicalPartition.getParentId()).getId();
+                    if (table.isNativeTableOrMaterializedView()) {
+                        OlapTable olapTable = (OlapTable) table;
+                        if (olapTable.isTempPartition(partitionId)) {
+                            continue;
+                        }
+                    }
                     partitionIds.add(partitionId);
                     tabletRows.forEach((tabletId, rowCount) -> partitionTabletRowCounts.put(partitionId, tabletId, rowCount));
                 }
