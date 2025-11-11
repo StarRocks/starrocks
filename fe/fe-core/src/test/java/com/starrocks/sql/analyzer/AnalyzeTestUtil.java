@@ -326,6 +326,15 @@ public class AnalyzeTestUtil {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ");");
+
+        starRocksAssert.withTable("CREATE TABLE test_using (" +
+                "v1 bigint," +
+                "v2 array<int>," +
+                "v3 int," +
+                "v4 json) " +
+                "DUPLICATE KEY (`v1`) " +
+                "DISTRIBUTED BY HASH(`v1`) BUCKETS 1 " +
+                "PROPERTIES(\"replication_num\" = \"1\");");
     }
 
     public static String getDbName() {
