@@ -1153,6 +1153,30 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The interval at which the Automated Cluster Snapshot tasks are triggered.
 - Introduced in: v3.4.2
 
+<<<<<<< HEAD
+=======
+##### enable_table_name_case_insensitive
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether to enable case-insensitive processing on catalog names, database names, table names, view names, and materialized view names. Currently, table names are case-sensitive by default.
+  - After enabling this feature, all related names will be stored in lowercase, and all SQL commands containing these names will automatically convert them to lowercase.
+  - You can enable this feature only when creating a cluster. **After the cluster is started, the value of this configuration cannot be modified by any means**. Any attempt to modify it will result in an error. FE will fail to start when it detects that the value of this configuration item is inconsistent with that when the cluster was first started.
+  - Currently, this feature does not support JDBC catalog and table names. Do not enable this feature if you want to perform case-insensitive processing on JDBC or ODBC data sources.
+- Introduced in: v4.0
+
+##### txn_latency_metric_report_groups
+
+- Default: An empty string
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: A comma-separated list of transaction latency metric groups to report. Load types are categorized into logical groups for monitoring. When a group is enabled, its name is added as a 'type' label to transaction metrics. Valid values: `stream_load`, `routine_load`, `broker_load`, `insert`, and `compaction` (availabl only for shared-data clusters). Example: `"stream_load,routine_load"`.
+- Introduced in: v4.0
+
+>>>>>>> 824fcb39cd ([Enhancement] Add FE transaction latency metrics (#64948))
 ### User, role, and privilege
 
 ##### privilege_max_total_roles_per_user
@@ -5600,4 +5624,9 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: Whether to allow the system to trace the historical nodes. By setting this item to `true`, you can enable the Cache Sharing feature and allow the system to choose the right cache nodes during elastic scaling.
 - Introduced in: v3.5.1
 
+<<<<<<< HEAD
+=======
+
+
+>>>>>>> 824fcb39cd ([Enhancement] Add FE transaction latency metrics (#64948))
 <EditionSpecificFEItem />
