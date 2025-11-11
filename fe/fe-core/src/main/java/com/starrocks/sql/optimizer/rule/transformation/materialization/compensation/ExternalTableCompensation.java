@@ -48,6 +48,7 @@ import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.PCell;
 import com.starrocks.sql.common.PCellSortedSet;
+import com.starrocks.sql.common.PCellWithName;
 import com.starrocks.sql.common.PListCell;
 import com.starrocks.sql.common.PRangeCell;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -329,16 +330,25 @@ public final class ExternalTableCompensation extends TableCompensation {
         if (!refBaseTablePartitionColumns.containsKey(refBaseTable)) {
             return null;
         }
+        Map<String, Map<Table, PCellSortedSet>> mvPartitionNameToBaseParts = mvUpdateInfo.getMvPartToBasePartNames();
         List<Column> partitionColumns = refBaseTablePartitionColumns.get(refBaseTable);
         try {
-            for (PCell pCell : toRefreshPartitionNames.getPCells()) {
-                if (pCell instanceof PRangeCell) {
-                    toRefreshPartitionKeys.add(((PRangeCell) pCell));
-                } else if (pCell instanceof PListCell) {
-                    final List<PartitionKey> keys = ((PListCell) pCell).toPartitionKeys(partitionColumns);
-                    keys.stream()
-                            .map(key -> PRangeCell.of(key))
-                            .forEach(toRefreshPartitionKeys::add);
+            for (PCellWithName pCellWithName : toRefreshPartitionNames.getPartitions()) {
+                String mvPartitionName = pCellWithName.name();
+                Map<Table, PCellSortedSet> refBaseTablesToRefreshPCells = mvPartitionNameToBaseParts.get(mvPartitionName);
+                if (refBaseTablesToRefreshPCells == null || !refBaseTablesToRefreshPCells.containsKey(refBaseTable)) {
+                    return null;
+                }
+                PCellSortedSet refBaseTableToRefreshPCells =  refBaseTablesToRefreshPCells.get(refBaseTable);
+                for (PCell refToRefreshPCell : refBaseTableToRefreshPCells.getPCells()) {
+                    if (refToRefreshPCell instanceof PRangeCell) {
+                        toRefreshPartitionKeys.add(((PRangeCell) refToRefreshPCell));
+                    } else if (refToRefreshPCell instanceof PListCell) {
+                        final List<PartitionKey> keys = ((PListCell) refToRefreshPCell).toPartitionKeys(partitionColumns);
+                        keys.stream()
+                                .map(key -> PRangeCell.of(key))
+                                .forEach(toRefreshPartitionKeys::add);
+                    }
                 }
             }
         } catch (Exception e) {

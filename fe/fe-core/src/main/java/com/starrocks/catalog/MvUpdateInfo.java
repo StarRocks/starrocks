@@ -18,6 +18,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
 import com.starrocks.sql.common.PCellSetMapping;
 import com.starrocks.sql.common.PCellSortedSet;
+import com.starrocks.sql.common.PCellUtils;
 import com.starrocks.sql.common.PCellWithName;
 import org.apache.commons.collections4.CollectionUtils;
 
@@ -134,10 +135,9 @@ public class MvUpdateInfo {
 
     @Override
     public String toString() {
-        int maxLength = Config.max_mv_task_run_meta_message_values_length;
         StringBuilder sb = new StringBuilder();
         sb.append("refreshType=").append(mvToRefreshType);
-        if (!CollectionUtils.sizeIsEmpty(mvToRefreshPartitionNames)) {
+        if (!PCellUtils.isNotEmpty(mvToRefreshPartitionNames)) {
             sb.append(", mvToRefreshPartitionNames=").append(mvToRefreshPartitionNames);
         }
         if (!CollectionUtils.sizeIsEmpty(basePartToMvPartNames)) {
