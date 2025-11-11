@@ -3464,7 +3464,7 @@ TEST_F(LakeColumnUpsertModeTest, memory_optimization_skip_column_reading) {
         CHECK_OK(st);
         total_rows += chunk->num_rows();
 
-        // Verify existing rows (pk 0-11) were updated to c0 * 9 (from step 4)
+        // Verify existing rows (pk 0-11) were updated to c1 = pk * 9 (from Step 3)
         // and new rows (pk 12-23) still have c1 = pk * 5 and c2 = 10
         for (int i = 0; i < chunk->num_rows(); i++) {
             int pk = chunk->get_column_by_index(0)->get(i).get_int32();
