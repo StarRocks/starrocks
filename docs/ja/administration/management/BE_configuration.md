@@ -126,6 +126,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: bRPC の bthreads の数。値 `-1` は CPU スレッドと同じ数を示します。
 - 導入バージョン: -
 
+##### brpc_stub_expire_s
+
+- Default: 3600
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: BRPC stub キャッシュの有効期限（秒）。デフォルトは60分。
+- Introduced in: -
+
 ##### priority_networks
 
 - デフォルト: 空の文字列
@@ -543,6 +552,8 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 可変: いいえ
 - 説明: Pipeline 実行エンジンの PREPARE Fragment スレッドプールの最大キュー長。
 - 導入バージョン: -
+
+
 
 ##### max_hdfs_file_handle
 
@@ -1772,6 +1783,24 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: 共有データクラスタでの主キーテーブルコンパクションタスクで許可される最大入力 rowset 数。このパラメータのデフォルト値は v3.2.4 および v3.1.10 以降 `5` から `1000` に、v3.3.1 および v3.2.9 以降 `500` に変更されました。主キーテーブルのためのサイズ階層型コンパクションポリシーが有効になった後 (`enable_pk_size_tiered_compaction_strategy` を `true` に設定することで)、StarRocks は各コンパクションの rowset 数を制限して書き込み増幅を減らす必要がなくなります。したがって、このパラメータのデフォルト値は増加しました。
 - 導入バージョン: v3.1.8, v3.2.3
 
+##### loop_count_wait_fragments_finish
+
+- デフォルト: 2
+- 型: Int
+- 単位: -
+- 変更可能: Yes
+- 説明: BE/CN プロセスが終了する際に待機するループの回数。各ループは固定間隔の10秒です。`0` を設定するとループ待機を無効にできます。v3.4以降、この項目は変更可能になり、デフォルト値は `0` から `2` に変更されました。
+- 導入バージョン: v2.5
+
+##### graceful_exit_wait_for_frontend_heartbeat
+
+- デフォルト: false
+- 型: Boolean
+- 単位: -
+- 変更可能: Yes
+- 説明: グレースフルシャットダウンを完了する前に、少なくとも1回のフロントエンドのハートビート応答が SHUTDOWN ステータスで返されるのを待つかどうかを決定します。有効にすると、heartbeat RPC による SHUTDOWN 確認が返されるまでグレースフルシャットダウン処理は継続され、フロントエンドが通常のハートビート間隔内で終了状態を検出するための十分な時間を確保します。
+- 導入バージョン: v3.4.5
+
 ### データレイク
 
 ##### disk_high_level
@@ -1945,6 +1974,10 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: Data Cache のエビクションポリシー。有効な値: `lru` (最も最近使用されていない) および `slru` (セグメント化された LRU)。
 - 導入バージョン: v3.4.0
 
+
+
+
+
 ##### lake_service_max_concurrency
 
 - デフォルト: 0
@@ -1994,6 +2027,17 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: ユーザー定義関数 (UDF) を保存するために使用されるディレクトリ。
 - 導入バージョン: -
 
+##### load_replica_status_check_interval_ms_on_success
+
+- Default: 15000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: 直近のチェック RPC が成功した場合に、secondary replica が primary replica 上のステータスを確認する間隔（ミリ秒）。
+- Introduced in: 3.5.1
+
+
+
 ##### enable_token_check
 
 - デフォルト: true
@@ -2011,6 +2055,8 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 可変: いいえ
 - 説明: ファイルマネージャーによってダウンロードされたファイルを保存するために使用されるディレクトリ。
 - 導入バージョン: -
+
+
 
 ##### max_length_for_to_base64
 
@@ -2065,3 +2111,4 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 可変: はい
 - 説明: リソースグループ `default_mv_wg` のマテリアライズドビューリフレッシュタスクで中間結果のスピリングをトリガーする前のメモリ使用量のしきい値。デフォルト値はメモリの 80% を示します。
 - 導入バージョン: v3.1
+
