@@ -992,36 +992,41 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Controls automatic statistics collection and maintenance triggered by data loading operations. This includes: (1) Statistics collection when data is first loaded into a partition (partition version equals 2). (2) Statistics collection when data is loaded into empty partitions of multi-partition tables. (3) Statistics copying and updating for INSERT OVERWRITE operations.
+- Description: Controls automatic statistics collection and maintenance triggered by data loading operations. This includes:
+  - Statistics collection when data is first loaded into a partition (partition version equals 2).
+  - Statistics collection when data is loaded into empty partitions of multi-partition tables.
+  - Statistics copying and updating for INSERT OVERWRITE operations.
 
   **Decision Policy for Statistics Collection Type:**
   
   - For INSERT OVERWRITE: `deltaRatio = |targetRows - sourceRows| / (sourceRows + 1)`
-    - If `deltaRatio < statistic_sample_collect_ratio_threshold_of_first_load` (default 0.1): No collection, copy existing statistics
-    - Else if `targetRows > statistic_sample_collect_rows` (default 200000): Use SAMPLE statistics
-    - Else: Use FULL statistics
+    - If `deltaRatio < statistic_sample_collect_ratio_threshold_of_first_load` (Default: 0.1), statistics collection will not be performed. Only the existing statistics will be copied.
+    - Else, if `targetRows > statistic_sample_collect_rows` (Default: 200000), SAMPLE statistics collection is used.
+    - Else, FULL statistics collection is used.
   
   - For First Load: `deltaRatio = loadRows / (totalRows + 1)`
-    - If `deltaRatio < statistic_sample_collect_ratio_threshold_of_first_load` (default 0.1): No collection
-    - Else if `loadRows > statistic_sample_collect_rows` (default 200000): Use SAMPLE statistics
-    - Else: Use FULL statistics
+    - If `deltaRatio < statistic_sample_collect_ratio_threshold_of_first_load` (Default: 0.1), statistics collection will not be performed.
+    - Else, if `loadRows > statistic_sample_collect_rows` (Default: 200000), SAMPLE statistics collection is used.
+    - Else, FULL statistics collection is used.
   
   **Synchronization Behavior:**
   
-  - DML statements (INSERT/INSERT OVERWRITE): Synchronous mode with table lock. Waits for statistics collection to complete (up to `semi_sync_collect_statistic_await_seconds`).
-  - Stream load and broker load: Asynchronous mode without lock. Statistics collection runs in background without blocking the load.
+  - For DML statements (INSERT INTO/INSERT OVERWRITE): Synchronous mode with table lock. The load operation waits for statistics collection to complete (up to `semi_sync_collect_statistic_await_seconds`).
+  - For Stream Load and Broker Load: Asynchronous mode without lock. Statistics collection runs in background without blocking the load operation.
   
-  **Note:** Disabling this configuration will prevent all loading-triggered statistics operations, including statistics maintenance for INSERT OVERWRITE, which may result in tables lacking statistics. If new tables are frequently created and data is frequently loaded, enabling this feature will increase memory and CPU overhead.
+  :::note
+  Disabling this configuration will prevent all loading-triggered statistics operations, including statistics maintenance for INSERT OVERWRITE, which may result in tables lacking statistics. If new tables are frequently created and data is frequently loaded, enabling this feature will increase memory and CPU overhead.
+  :::
 
 - Introduced in: v3.1
 
 ##### semi_sync_collect_statistic_await_seconds
 
 - Default: 30
-- Type: Long
+- Type: Int
 - Unit: Seconds
 - Is mutable: Yes
-- Description: Maximum wait time for semi-synchronous statistics collection during DML operations (INSERT and INSERT OVERWRITE statements). Stream load and broker load use asynchronous mode and are not affected by this setting. If statistics collection exceeds this timeout, the load continues without waiting for collection to complete. This setting works in conjunction with `enable_statistic_collect_on_first_load`.
+- Description: Maximum wait time for semi-synchronous statistics collection during DML operations (INSERT INTO and INSERT OVERWRITE statements). Stream Load and Broker Load use asynchronous mode and are not affected by this configuration. If statistics collection time exceeds this value, the load operation continues without waiting for collection to complete. This configuration works in conjunction with `enable_statistic_collect_on_first_load`.
 - Introduced in: v3.1
 
 ##### statistic_auto_analyze_start_time

@@ -966,36 +966,41 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：控制数据导入操作触发的自动统计信息采集和维护。包括：(1) 分区首次导入数据时的统计信息采集（分区版本号为 2）。(2) 多分区表的空分区导入数据时的统计信息采集。(3) INSERT OVERWRITE 操作的统计信息复制和更新。
+- 描述：控制数据导入操作触发的自动统计信息采集和维护。包括：
+  - 分区首次导入数据时的统计信息采集（分区版本号为 2）。
+  - 多分区表的空分区导入数据时的统计信息采集。
+  - INSERT OVERWRITE 操作的统计信息复制和更新。
 
   **统计信息采集类型的决策策略：**
   
   - 对于 INSERT OVERWRITE：`deltaRatio = |targetRows - sourceRows| / (sourceRows + 1)`
-    - 如果 `deltaRatio < statistic_sample_collect_ratio_threshold_of_first_load`（默认 0.1）：不采集，复制现有统计信息
-    - 否则如果 `targetRows > statistic_sample_collect_rows`（默认 200000）：使用抽样统计信息
-    - 否则：使用全量统计信息
+    - 如果 `deltaRatio < statistic_sample_collect_ratio_threshold_of_first_load`（默认：0.1），则不采集统计信息，仅复制现有统计信息。
+    - 否则，如果 `targetRows > statistic_sample_collect_rows`（默认：200000），则使用抽样统计信息。
+    - 否则，使用全量统计信息。
   
-  - 对于首次加载：`deltaRatio = loadRows / (totalRows + 1)`
-    - 如果 `deltaRatio < statistic_sample_collect_ratio_threshold_of_first_load`（默认 0.1）：不采集
-    - 否则如果 `loadRows > statistic_sample_collect_rows`（默认 200000）：使用抽样统计信息
-    - 否则：使用全量统计信息
+  - 对于首次导入：`deltaRatio = loadRows / (totalRows + 1)`
+    - 如果 `deltaRatio < statistic_sample_collect_ratio_threshold_of_first_load`（默认：0.1），则不采集统计信息。
+    - 否则，如果 `loadRows > statistic_sample_collect_rows`（默认：200000），则使用抽样统计信息。
+    - 否则，使用全量统计信息。
   
   **同步行为：**
   
-  - DML 语句（INSERT/INSERT OVERWRITE）：同步模式，带表锁。等待统计信息采集完成（最多等待 `semi_sync_collect_statistic_await_seconds` 秒）。
-  - Stream load 和 Broker load：异步模式，不加锁。统计信息采集在后台运行，不阻塞导入。
+  - DML 语句（INSERT INTO/INSERT OVERWRITE）：同步模式，带表锁。等待统计信息采集完成（最多等待 `semi_sync_collect_statistic_await_seconds` 秒）。
+  - Stream Load 和 Broker Load：异步模式，不加锁。统计信息采集在后台运行，不阻塞导入。
   
-  **注意：** 禁用此配置将阻止所有由导入触发的统计信息操作，包括 INSERT OVERWRITE 的统计信息维护，这可能导致表缺少统计信息。如果系统频繁创建新表并且导入数据，启用此功能会存在一定内存和 CPU 开销。
+  :::note
+  禁用此配置将阻止所有由导入触发的统计信息操作，包括 INSERT OVERWRITE 的统计信息维护，这可能导致表缺少统计信息。如果系统频繁创建新表并且导入数据，启用此功能会存在一定内存和 CPU 开销。
+  :::
 
 - 引入版本：v3.1
 
 ##### semi_sync_collect_statistic_await_seconds
 
 - 默认值：30
-- 类型：Long
+- 类型：Int
 - 单位：Seconds
 - 是否动态：是
-- 描述：DML 操作（INSERT 和 INSERT OVERWRITE 语句）期间半同步统计信息采集的最大等待时间。Stream load 和 Broker load 使用异步模式，不受此设置影响。如果统计信息采集超过此超时时间，导入将继续进行而不等待采集完成。此设置与 `enable_statistic_collect_on_first_load` 配合使用。
+- 描述：DML 操作（INSERT 和 INSERT OVERWRITE 语句）期间半同步统计信息采集的最大等待时间。Stream Load 和 Broker Load 使用异步模式，不受此设置影响。如果统计信息采集超过此超时时间，导入将继续进行而不等待采集完成。此设置与 `enable_statistic_collect_on_first_load` 配合使用。
 - 引入版本：v3.1
 
 ##### statistic_auto_analyze_start_time
