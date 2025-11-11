@@ -377,7 +377,7 @@ class StatementPlannerTest extends PlanTestBase {
     public void testTimeout() throws Exception {
         FeConstants.runningUnitTest = false;
         long oldValue = connectContext.getSessionVariable().getOptimizerExecuteTimeout();
-        connectContext.getSessionVariable().setOptimizerExecuteTimeout(-1);
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(Long.MIN_VALUE);
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
         Throwable exception = Assertions.assertThrows(StarRocksPlannerException.class, () ->
                 starRocksAssert.query("select * from t1").explainQuery());
