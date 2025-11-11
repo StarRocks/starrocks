@@ -1251,7 +1251,7 @@ public class ExpressionAnalyzer {
                         if (node.getChildren().size() == 3 || node.getChildren().size() == 4) {
                             if (!(node.getChild(2) instanceof IntLiteral)) {
                                 throw new SemanticException(
-                                        fnName + " requires step parameter must be a constant interval", node.getPos());
+                                        fnName + " requires step parameter must be a constant integer", node.getPos());
                             }
                             if (((IntLiteral) node.getChild(2)).getValue() < 0) {
                                 throw new SemanticException(
