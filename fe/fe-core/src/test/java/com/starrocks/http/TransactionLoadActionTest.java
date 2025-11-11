@@ -2143,4 +2143,46 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
             return failedTablets;
         }
     }
+
+    @Test
+    public void beginTransactionIdempotentTest() throws Exception {
+        String label = RandomStringUtils.randomAlphanumeric(32);
+
+        // Simulate the first TXN_BEGIN request, which should allocate a new node
+        Request request1 = newRequest(TransactionOperation.TXN_BEGIN, (uriBuilder, reqBuilder) -> {
+            reqBuilder.addHeader(DB_KEY, DB_NAME);
+            reqBuilder.addHeader(TABLE_KEY, TABLE_NAME);
+            reqBuilder.addHeader(LABEL_KEY, label);
+        });
+
+        try (Response response1 = networkClient.newCall(request1).execute()) {
+            Map<String, Object> body = parseResponseBody(response1);
+            assertEquals(OK, body.get(TransactionResult.STATUS_KEY));
+            assertTrue(Objects.toString(body.get(TransactionResult.MESSAGE_KEY)).contains("mock redirect to BE"));
+        }
+
+        // Verify that the label has been cached
+        ComputeNode node1 = TransactionLoadAction.getAction().getCoordinatorMgr().get(label, DB_NAME);
+        assertEquals(1234L, node1.getId());
+
+        // Simulate the second TXN_BEGIN request with the same label (network retry scenario),
+        // which should return the same node instead of reallocating
+        Request request2 = newRequest(TransactionOperation.TXN_BEGIN, (uriBuilder, reqBuilder) -> {
+            reqBuilder.addHeader(DB_KEY, DB_NAME);
+            reqBuilder.addHeader(TABLE_KEY, TABLE_NAME);
+            reqBuilder.addHeader(LABEL_KEY, label);
+        });
+
+        try (Response response2 = networkClient.newCall(request2).execute()) {
+            Map<String, Object> body = parseResponseBody(response2);
+            assertEquals(OK, body.get(TransactionResult.STATUS_KEY));
+            assertTrue(Objects.toString(body.get(TransactionResult.MESSAGE_KEY)).contains("mock redirect to BE"));
+        }
+
+        // Verify that both requests return the same node to ensure idempotency
+        ComputeNode node2 = TransactionLoadAction.getAction().getCoordinatorMgr().get(label, DB_NAME);
+        assertEquals(node1.getId(), node2.getId());
+        assertEquals(1234L, node2.getId());
+    }
+
 }
