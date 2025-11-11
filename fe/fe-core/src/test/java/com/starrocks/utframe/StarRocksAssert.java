@@ -1298,7 +1298,7 @@ public class StarRocksAssert {
             } catch (Exception ex) {
                 Assertions.fail();
             }
-            Assertions.fail();
+            Assertions.fail("expect error but actually succeed");
         }
     }
 
