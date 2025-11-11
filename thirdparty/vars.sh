@@ -477,10 +477,10 @@ FLAMEGRAPH_SOURCE="FlameGraph"
 FLAMEGRAPH_MD5SUM="bddefda5f1271a3dd5324b02ad61d4a5"
 
 # pprof
-PPROF_DOWNLOAD="https://github.com/murphyatwork/pprof/releases/download/20251014/pprof-linux-amd64.zip"
+PPROF_DOWNLOAD="https://github.com/murphyatwork/pprof/releases/download/20251111/pprof-linux-amd64.zip"
 PPROF_NAME="pprof.zip"
 PPROF_SOURCE="pprof"
-PPROF_MD5SUM="98f892dfc7925533bbd98ab927b4ca6b"
+PPROF_MD5SUM="577dd8a01845a13b3ba76719cc2edb28"
 
 # all thirdparties which need to be downloaded is set in array TP_ARCHIVES
 TP_ARCHIVES="CLUCENE LIBEVENT OPENSSL THRIFT PROTOBUF GFLAGS GLOG GTEST RAPIDJSON SIMDJSON SNAPPY GPERFTOOLS ZLIB LZ4 BZIP CURL \
