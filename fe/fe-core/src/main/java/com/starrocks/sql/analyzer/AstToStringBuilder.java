@@ -708,7 +708,15 @@ public class AstToStringBuilder {
             }
             sqlBuilder.append(visit(relation.getRight())).append(" ");
 
-            if (relation.getOnPredicate() != null) {
+            // Prioritize USING clause over ON predicate
+            // Even if onPredicate is set (by analyzeJoinUsing), output USING clause if it exists
+            if (relation.getUsingColNames() != null && !relation.getUsingColNames().isEmpty()) {
+                sqlBuilder.append("USING (");
+                sqlBuilder.append(relation.getUsingColNames().stream()
+                        .map(col -> "`" + col + "`")
+                        .collect(Collectors.joining(", ")));
+                sqlBuilder.append(")");
+            } else if (relation.getOnPredicate() != null) {
                 sqlBuilder.append("ON ").append(visit(relation.getOnPredicate()));
             }
             return sqlBuilder.toString();
