@@ -757,6 +757,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
   - Currently, this feature does not support JDBC catalog and table names. Do not enable this feature if you want to perform case-insensitive processing on JDBC or ODBC data sources.
 - Introduced in: v4.0
 
+##### txn_latency_metric_report_groups
+
+- Default: An empty string
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: A comma-separated list of transaction latency metric groups to report. Load types are categorized into logical groups for monitoring. When a group is enabled, its name is added as a 'type' label to transaction metrics. Valid values: `stream_load`, `routine_load`, `broker_load`, `insert`, and `compaction` (availabl only for shared-data clusters). Example: `"stream_load,routine_load"`.
+- Introduced in: v4.0
+
 ### User, role, and privilege
 
 ##### privilege_max_total_roles_per_user
