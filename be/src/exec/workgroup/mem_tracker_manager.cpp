@@ -27,8 +27,8 @@ MemTrackerManager::MemTrackerPtr MemTrackerManager::get_parent_mem_tracker(const
     }
 
     const double mem_limit_fraction = wg->mem_limit();
-    const uint64_t memory_limit_bytes =
-            static_cast<uint64_t>(GlobalEnv::GetInstance()->query_pool_mem_tracker()->limit() * mem_limit_fraction);
+    const int64_t memory_limit_bytes =
+            static_cast<int64_t>(GlobalEnv::GetInstance()->query_pool_mem_tracker()->limit() * mem_limit_fraction);
 
     // Frontend (FE) validation ensures that active resource groups (RGs) sharing
     // the same mem_pool also have the same mem_limit.
