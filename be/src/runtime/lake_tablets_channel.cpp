@@ -967,7 +967,8 @@ void LakeTabletsChannel::update_profile() {
     }
 }
 
-#define ADD_AND_SET_COUNTER(profile, name, type, val) COUNTER_SET(ADD_COUNTER(profile, name, type), static_cast<int64_t>(val))
+#define ADD_AND_SET_COUNTER(profile, name, type, val) \
+    COUNTER_SET(ADD_COUNTER(profile, name, type), static_cast<int64_t>(val))
 #define ADD_AND_SET_TIMER(profile, name, val) COUNTER_SET(ADD_TIMER(profile, name), static_cast<int64_t>(val))
 #define DEFAULT_IF_NULL(ptr, value, default_value) ((ptr) ? (value) : (default_value))
 
@@ -999,21 +1000,21 @@ void LakeTabletsChannel::_update_tablet_profile(const DeltaWriter* writer, Runti
     ADD_AND_SET_COUNTER(profile, "MemtableInsertCount", TUnit::UNIT,
                         DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.insert_count.load(), 0));
     ADD_AND_SET_TIMER(profile, "MemtableInsertTime",
-                         DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.insert_time_ns.load(), 0));
+                      DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.insert_time_ns.load(), 0));
     ADD_AND_SET_TIMER(profile, "MemtableFinalizeTime",
-                         DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.finalize_time_ns.load(), 0));
+                      DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.finalize_time_ns.load(), 0));
     ADD_AND_SET_COUNTER(profile, "MemtableSortCount", TUnit::UNIT,
-                           DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.sort_count.load(), 0));
+                        DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.sort_count.load(), 0));
     ADD_AND_SET_TIMER(profile, "MemtableSortTime",
-                         DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.sort_time_ns.load(), 0));
+                      DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.sort_time_ns.load(), 0));
     ADD_AND_SET_COUNTER(profile, "MemtableAggCount", TUnit::UNIT,
                         DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.agg_count.load(), 0));
     ADD_AND_SET_TIMER(profile, "MemtableAggTime",
-                        DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.agg_time_ns.load(), 0));
+                      DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.agg_time_ns.load(), 0));
     ADD_AND_SET_TIMER(profile, "MemtableFlushTime",
-                        DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.flush_time_ns.load(), 0));
+                      DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.flush_time_ns.load(), 0));
     ADD_AND_SET_TIMER(profile, "MemtableIOTime",
-                        DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.io_time_ns.load(), 0));
+                      DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.io_time_ns.load(), 0));
     ADD_AND_SET_COUNTER(profile, "MemtableMemorySize", TUnit::BYTES,
                         DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.flush_memory_size.load(), 0));
     ADD_AND_SET_COUNTER(profile, "MemtableDiskSize", TUnit::BYTES,

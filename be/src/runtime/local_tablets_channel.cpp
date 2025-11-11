@@ -1154,7 +1154,8 @@ void LocalTabletsChannel::get_load_replica_status(const std::string& remote_ip,
     }
 }
 
-#define ADD_AND_SET_COUNTER(profile, name, type, val) COUNTER_SET(ADD_COUNTER(profile, name, type), static_cast<int64_t>(val))
+#define ADD_AND_SET_COUNTER(profile, name, type, val) \
+    COUNTER_SET(ADD_COUNTER(profile, name, type), static_cast<int64_t>(val))
 #define ADD_AND_SET_TIMER(profile, name, val) COUNTER_SET(ADD_TIMER(profile, name), static_cast<int64_t>(val))
 
 void LocalTabletsChannel::_update_peer_replica_profile(DeltaWriter* writer, RuntimeProfile* profile) {
