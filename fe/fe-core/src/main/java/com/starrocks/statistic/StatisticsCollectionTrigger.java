@@ -268,11 +268,7 @@ public class StatisticsCollectionTrigger {
                 PartitionCommitInfo partitionCommitInfo = entry.getValue();
                 if (partitionCommitInfo.getVersion() == Partition.PARTITION_INIT_VERSION + 1) {
                     PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
-<<<<<<< HEAD
-                    Partition partition = table.getPartition(physicalPartition.getParentId());
-                    partitionIds.add(partition.getId());
-=======
-                    Long partitionId = table.getPartition(physicalPartition.getParentId()).getId();
+                    long partitionId = table.getPartition(physicalPartition.getParentId()).getId();
                     if (table.isNativeTableOrMaterializedView()) {
                         OlapTable olapTable = (OlapTable) table;
                         if (olapTable.isTempPartition(partitionId)) {
@@ -280,8 +276,6 @@ public class StatisticsCollectionTrigger {
                         }
                     }
                     partitionIds.add(partitionId);
-                    tabletRows.forEach((tabletId, rowCount) -> partitionTabletRowCounts.put(partitionId, tabletId, rowCount));
->>>>>>> f5df9bd638 ([BugFix] Do not collect statistics for temporary partitions after overwrite partition (#65298))
                 }
             }
         } finally {
