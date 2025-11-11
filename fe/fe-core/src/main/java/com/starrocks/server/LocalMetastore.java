@@ -523,7 +523,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             tasksParams.setDb(dbName);
             List<Long> dropTaskIdList = taskManager.filterTasks(tasksParams)
                     .stream().map(Task::getId).collect(Collectors.toList());
-            taskManager.dropTasks(dropTaskIdList, false);
+            taskManager.dropTasks(dropTaskIdList);
 
             DropDbInfo info = new DropDbInfo(db.getFullName(), isForceDrop);
             GlobalStateMgr.getCurrentState().getEditLog().logDropDb(info);
@@ -610,7 +610,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 if (refreshType != MaterializedViewRefreshType.SYNC) {
                     Task task = TaskBuilder.buildMvTask(materializedView, db.getFullName());
                     TaskBuilder.updateTaskInfo(task, materializedView);
-                    taskManager.createTask(task, false);
+                    taskManager.createTask(task);
                 }
             }
 
@@ -3272,7 +3272,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             }
 
             TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-            taskManager.createTask(task, false);
+            taskManager.createTask(task);
             if (refreshMoment.equals(MaterializedView.RefreshMoment.IMMEDIATE)) {
                 taskManager.executeTask(task.getName());
             }
@@ -3333,7 +3333,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             if (!taskManager.containTask(mvTaskName)) {
                 Task task = TaskBuilder.buildMvTask(materializedView, dbName);
                 TaskBuilder.updateTaskInfo(task, materializedView);
-                taskManager.createTask(task, false);
+                taskManager.createTask(task);
             }
             return taskManager.executeTask(mvTaskName, executeOption).getQueryId();
         }

@@ -389,7 +389,7 @@ public abstract class MVTestBase extends StarRocksTestBase {
         Task task = taskManager.getTask(mv);
         if (task == null) {
             task = TaskBuilder.buildMvTask(mv, dbName);
-            taskManager.createTask(task, false);
+            taskManager.createTask(task);
         }
 
         Map<String, String> testProperties = task.getProperties();

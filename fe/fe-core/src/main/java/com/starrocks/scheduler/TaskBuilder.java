@@ -247,13 +247,13 @@ public class TaskBuilder {
         if (currentTask == null) {
             task = TaskBuilder.buildMvTask(materializedView, dbName);
             TaskBuilder.updateTaskInfo(task, materializedView);
-            taskManager.createTask(task, false);
+            taskManager.createTask(task);
         } else {
             Map<String, String> previousTaskProperties = currentTask.getProperties() == null ?
                     Maps.newHashMap() : Maps.newHashMap(currentTask.getProperties());
             Task changedTask = TaskBuilder.rebuildMvTask(materializedView, dbName, previousTaskProperties, currentTask);
             TaskBuilder.updateTaskInfo(changedTask, materializedView);
-            taskManager.alterTask(currentTask, changedTask, false);
+            taskManager.alterTask(currentTask, changedTask);
             task = currentTask;
         }
 

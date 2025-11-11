@@ -114,7 +114,7 @@ public class PipeTaskDesc {
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
         Task task = taskManager.getTask(uniqueTaskName);
         if (task != null) {
-            taskManager.dropTasks(Lists.newArrayList(task.getId()), false);
+            taskManager.dropTasks(Lists.newArrayList(task.getId()));
         }
 
         this.state = PipeTaskState.RUNNABLE;
