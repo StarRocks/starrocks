@@ -368,6 +368,8 @@ public:
 
     EncodingTypePB encoding_type() const override { return BIT_SHUFFLE; }
 
+    bool supports_read_by_rowids() const override { return true; }
+
 private:
     void _copy_next_values(size_t n, void* data) {
         memcpy(data, get_data(_cur_index * SIZE_OF_TYPE), n * SIZE_OF_TYPE);

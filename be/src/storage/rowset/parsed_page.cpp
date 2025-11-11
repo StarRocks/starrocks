@@ -576,6 +576,7 @@ Status parse_page_v1(std::unique_ptr<ParsedPage>* result, PageHandle handle, con
                      uint32_t page_index) {
     auto page = std::make_unique<ParsedPageV1>();
     page->_page_handle = std::move(handle);
+    page->_version = 1;
 
     auto null_size = footer.nullmap_size();
     page->_has_null = null_size > 0;
@@ -605,6 +606,7 @@ Status parse_page_v2(std::unique_ptr<ParsedPage>* result, PageHandle handle, con
                      uint32_t page_index) {
     auto page = std::make_unique<ParsedPageV2>();
     page->_page_handle = std::make_shared<PageHandle>(std::move(handle));
+    page->_version = 2;
 
     // TODO: port the nulls decode to null pages
     auto null_size = footer.nullmap_size();

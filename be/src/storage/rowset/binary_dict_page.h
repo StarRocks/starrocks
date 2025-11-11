@@ -160,6 +160,8 @@ public:
 
     bool support_push_down_predicate() const override { return Type != TYPE_CHAR; }
 
+    bool supports_read_by_rowids() const override { return true; }
+
 private:
     Slice _data;
     std::unique_ptr<PageDecoder> _data_page_decoder;

@@ -1187,7 +1187,11 @@ void SegmentIterator::_init_column_predicates() {
 
 void SegmentIterator::_init_compound_and_predicates_for_predicate_col_late_material() {
     // don't support or predicate late materialize
-    if (_non_expr_pred_tree.has_or_predicate() || _expr_pred_tree.has_or_predicate() || !_context->_late_materialize) {
+    if (_non_expr_pred_tree.has_or_predicate() || _expr_pred_tree.has_or_predicate()) {
+        _enable_predicate_col_late_materialize = false;
+    }
+
+    if (!_context->_late_materialize && !(_context->_predicate_order.size() == 1 && _schema.num_fields() == 1)) {
         _enable_predicate_col_late_materialize = false;
     }
 
@@ -2041,7 +2045,7 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
 }
 
 StatusOr<size_t> SegmentIterator::_predicate_evaluate(vector<rowid_t>* rowid) {
-    if (_context->_late_materialize && _enable_predicate_col_late_materialize) {
+    if (_enable_predicate_col_late_materialize) {
         return _predicate_evaluate_late_materialize(rowid);
     } else {
         return _predicate_evaluate_without_late_materialize(rowid);
@@ -2069,9 +2073,9 @@ StatusOr<size_t> SegmentIterator::_predicate_evaluate_late_materialize(vector<ro
     const ColumnPredicateMap& non_expr_column_predicate_map = _non_expr_pred_tree.get_immediate_column_predicate_map();
     const ColumnPredicateMap& expr_column_predicate_map = _expr_pred_tree.get_immediate_column_predicate_map();
 
-    ColumnPtr rowid_column = chunk->get_column_by_id(_context->_row_id_column_id);
     current_columns.emplace_back(first_col);
     if (!(_context->_predicate_order.size() == 1 && _schema.num_fields() == 1)) {
+        ColumnPtr rowid_column = chunk->get_column_by_id(_context->_row_id_column_id);
         current_columns.emplace_back(rowid_column);
     }
     uint16_t chunk_start = first_col->size();
@@ -2123,6 +2127,7 @@ StatusOr<size_t> SegmentIterator::_predicate_evaluate_late_materialize(vector<ro
     bool may_has_del_row = chunk->delete_state() != DEL_NOT_SATISFIED;
     for (int i = 1; i < _context->_predicate_order.size(); i++) {
         const ColumnId current_column_id = _context->_predicate_order[i];
+        ColumnPtr rowid_column = chunk->get_column_by_id(_context->_row_id_column_id);
         // read column by row id if not read yet
         const auto* ordinals = down_cast<FixedLengthColumn<rowid_t>*>(rowid_column.get());
         ColumnPtr& col = chunk->get_column_by_id(current_column_id);
@@ -2157,7 +2162,8 @@ StatusOr<size_t> SegmentIterator::_predicate_evaluate_late_materialize(vector<ro
                                              _context->_column_predicate_map.at(current_column_id), current_columns));
     }
 
-    // DCHECK(current_columns.size() == chunk->num_columns());
+    DCHECK(current_columns.size() == chunk->num_columns())
+            << "current column size:" << current_columns.size() << ", chunk column size:" << chunk->num_columns();
 
     chunk->check_or_die();
 
@@ -2571,8 +2577,7 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
     }
 
     size_t build_read_index_size = ctx->_read_schema.num_fields();
-    if (late_materialization && (predicate_count < _schema.num_fields() || !ctx->_subfield_columns.empty() ||
-                                 _enable_predicate_col_late_materialize)) {
+    if (late_materialization && (predicate_count < _schema.num_fields() || !ctx->_subfield_columns.empty())) {
         // ordinal column
         ColumnId cid = -1;
         if (predicate_count < _schema.num_fields()) {
