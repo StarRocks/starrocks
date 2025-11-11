@@ -25,6 +25,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ConnectorView;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
@@ -109,6 +110,7 @@ import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.analyzer.AstToStringBuilder.getAliasName;
+import static com.starrocks.sql.common.TypeManager.canCastTo;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 import static com.starrocks.thrift.PlanNodesConstants.BINLOG_OP_COLUMN_NAME;
 import static com.starrocks.thrift.PlanNodesConstants.BINLOG_SEQ_ID_COLUMN_NAME;
@@ -859,14 +861,39 @@ public class QueryAnalyzer {
             }
 
             Expr joinEqual = join.getOnPredicate();
+            
+            boolean isFullOuterJoinUsing = join.getJoinOp().isFullOuterJoin() &&
+                    CollectionUtils.isNotEmpty(join.getUsingColNames());
+            
             if (join.getUsingColNames() != null) {
-                Expr resolvedUsing = analyzeJoinUsing(join.getUsingColNames(), leftScope, rightScope);
-                if (joinEqual == null) {
-                    joinEqual = resolvedUsing;
+                if (isFullOuterJoinUsing) {
+                    for (String colName : join.getUsingColNames()) {
+                        ResolvedField leftField = leftScope.resolveField(new SlotRef(null, colName));
+                        ResolvedField rightField = rightScope.resolveField(new SlotRef(null, colName));
+                        
+                        Type leftType = leftField.getField().getType();
+                        Type rightType = rightField.getField().getType();
+                        
+                        if (!leftType.canJoinOn() || !rightType.canJoinOn()) {
+                            throw new SemanticException(Type.NOT_SUPPORT_JOIN_ERROR_MSG);
+                        }
+                        
+                        Type compatibleType = TypeManager.getCompatibleTypeForBinary(true, leftType, rightType);
+                        if (!canCastTo(leftType, compatibleType) || !canCastTo(rightType, compatibleType)) {
+                            throw new SemanticException(
+                                    "USING column '%s' has incompatible types: %s and %s",
+                                    colName, leftType.toSql(), rightType.toSql());
+                        }
+                    }
                 } else {
-                    joinEqual = new CompoundPredicate(CompoundPredicate.Operator.AND, joinEqual, resolvedUsing);
+                    Expr resolvedUsing = analyzeJoinUsing(join.getUsingColNames(), leftScope, rightScope);
+                    if (joinEqual == null) {
+                        joinEqual = resolvedUsing;
+                    } else {
+                        joinEqual = new CompoundPredicate(CompoundPredicate.Operator.AND, joinEqual, resolvedUsing);
+                    }
+                    join.setOnPredicate(joinEqual);
                 }
-                join.setOnPredicate(joinEqual);
             }
 
             if (!join.getJoinHint().isEmpty()) {
@@ -903,8 +930,10 @@ public class QueryAnalyzer {
                 // and table_a.col_struct.a = table_b.col_struct.a
                 checkJoinEqual(joinEqual);
             } else {
-                if (join.getJoinOp().isOuterJoin() || join.getJoinOp().isSemiAntiJoin() || join.getJoinOp().isAsofJoin()) {
-                    throw new SemanticException(join.getJoinOp() + " requires an ON or USING clause.");
+                if (!isFullOuterJoinUsing) {
+                    if (join.getJoinOp().isOuterJoin() || join.getJoinOp().isSemiAntiJoin() || join.getJoinOp().isAsofJoin()) {
+                        throw new SemanticException(join.getJoinOp() + " requires an ON or USING clause.");
+                    }
                 }
             }
 
@@ -919,19 +948,28 @@ public class QueryAnalyzer {
             } else if (join.getJoinOp().isAnyLeftOuterJoin()) {
                 List<Field> rightFields = getFieldsWithNullable(rightScope);
                 RelationFields joinedFields = leftScope.getRelationFields().joinWith(new RelationFields(rightFields));
-                scope = new Scope(RelationId.of(join), createJoinRelationFields(joinedFields, join));
+                scope = new Scope(RelationId.of(join), createJoinRelationFields(joinedFields, join, leftScope, rightScope));
             } else if (join.getJoinOp().isRightOuterJoin()) {
                 List<Field> leftFields = getFieldsWithNullable(leftScope);
                 RelationFields joinedFields = new RelationFields(leftFields).joinWith(rightScope.getRelationFields());
-                scope = new Scope(RelationId.of(join), createJoinRelationFields(joinedFields, join));
+                scope = new Scope(RelationId.of(join), createJoinRelationFields(joinedFields, join, leftScope, rightScope));
             } else if (join.getJoinOp().isFullOuterJoin()) {
                 List<Field> rightFields = getFieldsWithNullable(rightScope);
                 List<Field> leftFields = getFieldsWithNullable(leftScope);
-                RelationFields joinedFields = new RelationFields(leftFields).joinWith(new RelationFields(rightFields));
-                scope = new Scope(RelationId.of(join), createJoinRelationFields(joinedFields, join));
+                if (CollectionUtils.isNotEmpty(join.getUsingColNames())) {
+                    Scope nullableLeftScope = new Scope(leftScope.getRelationId(), new RelationFields(leftFields));
+                    Scope nullableRightScope = new Scope(rightScope.getRelationId(), new RelationFields(rightFields));
+                    RelationFields joinedFields = nullableLeftScope.getRelationFields()
+                            .joinWith(nullableRightScope.getRelationFields());
+                    scope = new Scope(RelationId.of(join), 
+                            createJoinRelationFields(joinedFields, join, nullableLeftScope, nullableRightScope));
+                } else {
+                    RelationFields joinedFields = new RelationFields(leftFields).joinWith(new RelationFields(rightFields));
+                    scope = new Scope(RelationId.of(join), joinedFields);
+                }
             } else {
                 RelationFields joinedFields = leftScope.getRelationFields().joinWith(rightScope.getRelationFields());
-                scope = new Scope(RelationId.of(join), createJoinRelationFields(joinedFields, join));
+                scope = new Scope(RelationId.of(join), createJoinRelationFields(joinedFields, join, leftScope, rightScope));
             }
             join.setScope(scope);
 
@@ -981,13 +1019,135 @@ public class QueryAnalyzer {
             return joinEqual;
         }
 
-        private RelationFields createJoinRelationFields(RelationFields joinedFields, JoinRelation join) {
-            if (CollectionUtils.isNotEmpty(join.getUsingColNames()) && !join.getJoinOp().isFullOuterJoin()) {
-                return new CoalescedJoinFields(joinedFields.getAllFields(), join.getUsingColNames(), join.getJoinOp());
-            } else {
-                // TODO: Support FULL OUTER JOIN USING with proper COALESCE semantics
+        /**
+         * Creates the final RelationFields for a JOIN operation, handling both JOIN ON and JOIN USING.
+         * 
+         * For JOIN ON (no USING clause):
+         * - Returns the joinedFields as-is, containing all columns from both sides
+         * 
+         * For JOIN USING:
+         * - Deduplicates USING columns according to SQL standard (appear only once in result schema)
+         * - Column selection strategy differs by JOIN type:
+         *   * FULL OUTER JOIN: Create unqualified field with common compatible type
+         *     Note: The actual COALESCE expression is generated later in RelationTransformer
+         *     (e.g., if left.id is INT and right.id is BIGINT, creates "id BIGINT" field here,
+         *      and RelationTransformer generates "COALESCE(CAST(left.id AS BIGINT), right.id)")
+         *   * RIGHT OUTER JOIN: Use right-side field (preserves right table metadata)
+         *   * LEFT OUTER JOIN/INNER JOIN: Use left-side field (preserves left table metadata)
+         * 
+         * Output Column Order for JOIN USING (SQL standard):
+         * 1. USING columns (deduplicated, appear once)
+         * 2. Non-USING columns from left table
+         * 3. Non-USING columns from right table
+         * 
+         * Example:
+         * <pre>
+         * t1(id INT, name, val1) JOIN t2(id BIGINT, name, val2) USING(id, name)
+         * 
+         * Result schema at this stage:
+         * - FULL OUTER: [id BIGINT (unqualified), name (unqualified), val1, val2]
+         * - LEFT/INNER: [id INT (from t1), name (from t1), val1, val2]
+         * - RIGHT OUTER: [id BIGINT (from t2), name (from t2), val1, val2]
+         * 
+         * For FULL OUTER JOIN, RelationTransformer will later add a ProjectNode:
+         * - id → COALESCE(CAST(t1.id AS BIGINT), t2.id)
+         * - name → COALESCE(t1.name, t2.name)
+         * </pre>
+         * 
+         * Special Handling for FULL OUTER JOIN USING:
+         * Sets {@code fromFullOuterJoinUsing} flag to true, which affects downstream resolution:
+         * - Prevents ambiguity errors when unqualified USING columns are referenced in subsequent joins
+         * - The flag is propagated through join chains (e.g., t1 FULL JOIN t2 ... LEFT JOIN t3)
+         * 
+         * @param joinedFields Combined fields from left.joinWith(right), containing potential duplicates for USING columns
+         * @param join The JOIN relation, may or may not have USING clause
+         * @param leftScope Left side scope (for finding USING column fields)
+         * @param rightScope Right side scope (for finding USING column fields)
+         * @return Final RelationFields - deduplicated if USING clause present, original joinedFields otherwise
+         *
+         * @see com.starrocks.sql.optimizer.transformer.RelationTransformer#buildFullOuterJoinUsingPlan(
+         * JoinRelation, OptExprBuilder, ScalarOperator)
+         */
+        private RelationFields createJoinRelationFields(RelationFields joinedFields, JoinRelation join,
+                                                        Scope leftScope, Scope rightScope) {
+            if (CollectionUtils.isEmpty(join.getUsingColNames())) {
                 return joinedFields;
             }
+            
+            List<Field> outputFields = Lists.newArrayList();
+            Set<String> usingColSet = join.getUsingColNames().stream()
+                    .map(String::toLowerCase)
+                    .collect(Collectors.toSet());
+            
+            JoinOperator joinOp = join.getJoinOp();
+            List<Field> leftAllFields = leftScope.getRelationFields().getAllFields();
+            List<Field> rightAllFields = rightScope.getRelationFields().getAllFields();
+            
+            for (String colName : join.getUsingColNames()) {
+                String lowerColName = colName.toLowerCase();
+                List<Field> leftFields = leftAllFields.stream()
+                        .filter(f -> f.getName() != null && f.getName().toLowerCase().equals(lowerColName))
+                        .collect(Collectors.toList());
+                List<Field> rightFields = rightAllFields.stream()
+                        .filter(f -> f.getName() != null && f.getName().toLowerCase().equals(lowerColName))
+                        .collect(Collectors.toList());
+                
+                if (leftFields.isEmpty() || rightFields.isEmpty()) {
+                    throw new SemanticException("USING column '%s' not found in both tables", colName);
+                }
+                
+                Field usingField;
+                if (joinOp.isFullOuterJoin()) {
+                    // For FULL OUTER JOIN, create unqualified field with common type
+                    Type leftType = computeCompatibleType(leftFields);
+                    Type rightType = computeCompatibleType(rightFields);
+                    Type commonType = leftType.matchesType(rightType) ? leftType :
+                            TypeManager.getCompatibleTypeForBinary(false, leftType, rightType);
+
+                    Expr leftExpr = leftFields.get(0).getOriginExpression() != null 
+                            ? leftFields.get(0).getOriginExpression() 
+                            : new SlotRef(leftFields.get(0).getRelationAlias(), colName);
+                    Expr rightExpr = rightFields.get(0).getOriginExpression() != null 
+                            ? rightFields.get(0).getOriginExpression() 
+                            : new SlotRef(rightFields.get(0).getRelationAlias(), colName);
+                    
+                    FunctionCallExpr coalesceExpr = new FunctionCallExpr(FunctionSet.COALESCE,
+                            Lists.newArrayList(leftExpr, rightExpr));
+                    coalesceExpr.setType(commonType);
+                    
+                    usingField = new Field(colName, commonType, null, coalesceExpr, true);
+                } else if (joinOp.isRightOuterJoin()) {
+                    // For RIGHT OUTER JOIN, keep right-side field
+                    usingField = rightFields.get(0);
+                } else {
+                    // For LEFT OUTER JOIN and INNER JOIN, keep left-side field
+                    usingField = leftFields.get(0);
+                }
+                
+                outputFields.add(usingField);
+            }
+            
+            for (Field field : joinedFields.getAllFields()) {
+                if (field.getName() == null || !usingColSet.contains(field.getName().toLowerCase())) {
+                    outputFields.add(field);
+                }
+            }
+            
+            // Mark FULL OUTER JOIN USING to handle ambiguity in subsequent joins
+            boolean markFromFullOuterJoinUsing = joinOp.isFullOuterJoin()
+                    || leftScope.getRelationFields().isFromFullOuterJoinUsing();
+            return new RelationFields(outputFields, markFromFullOuterJoinUsing);
+        }
+
+        private Type computeCompatibleType(List<Field> fields) {
+            Type resultType = fields.get(0).getType();
+            for (int i = 1; i < fields.size(); i++) {
+                Type nextType = fields.get(i).getType();
+                if (!resultType.matchesType(nextType)) {
+                    resultType = TypeManager.getCompatibleTypeForBinary(false, resultType, nextType);
+                }
+            }
+            return resultType;
         }
 
         private void analyzeJoinHints(JoinRelation join) {
@@ -1307,7 +1467,7 @@ public class QueryAnalyzer {
                 for (int i = 0; i < pivotValue.getExprs().size(); i++) {
                     Expr expr = pivotValue.getExprs().get(i);
                     analyzeExpression(expr, analyzeState, queryScope);
-                    if (!TypeManager.canCastTo(expr.getType(), types.get(i))) {
+                    if (!canCastTo(expr.getType(), types.get(i))) {
                         throw new SemanticException("Pivot value type %s is not compatible with pivot column type %s",
                                 expr.getType(), types.get(i));
                     }

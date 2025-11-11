@@ -33,21 +33,34 @@ public class RelationFields {
     // NOTE: sort fields by name to speedup resolve performance
     private final Multimap<String, Field> names;
     private final boolean resolveStruct;
+    
+    // Track if this RelationFields comes from FULL OUTER JOIN USING
+    // Used to handle unqualified USING columns specially in resolveFields
+    private final boolean fromFullOuterJoinUsing;
 
     public RelationFields(Field... fields) {
         this(ImmutableList.copyOf(fields));
     }
 
     public RelationFields(List<Field> fields) {
+        this(fields, false);
+    }
+    
+    public RelationFields(List<Field> fields, boolean fromFullOuterJoinUsing) {
         requireNonNull(fields, "fields is null");
         this.allFields = ImmutableList.copyOf(fields);
         this.resolveStruct = fields.stream().anyMatch(x -> x.getType().isStructType());
+        this.fromFullOuterJoinUsing = fromFullOuterJoinUsing;
         if (!resolveStruct) {
             this.names = this.allFields.stream().collect(ImmutableListMultimap.toImmutableListMultimap(
                     x -> x.getName().toLowerCase(), x -> x));
         } else {
             this.names = null;
         }
+    }
+    
+    public boolean isFromFullOuterJoinUsing() {
+        return fromFullOuterJoinUsing;
     }
 
     /**
@@ -85,7 +98,15 @@ public class RelationFields {
         // but resolve by column name first could reduce it a lot
         List<Field> resolved =
                 names.get(name.getColumnName().toLowerCase()).stream().collect(ImmutableList.toImmutableList());
+        
         if (name.getTblNameWithoutAnalyzed() == null) {
+            // For unqualified column references in FULL OUTER JOIN USING scope,
+            // only return unqualified fields to avoid ambiguity
+            if (fromFullOuterJoinUsing && resolved.size() > 1) {
+                return resolved.stream()
+                        .filter(field -> field.getRelationAlias() == null)
+                        .collect(toImmutableList());
+            }
             return resolved;
         } else {
             return resolved.stream().filter(input -> input.canResolve(name)).collect(toImmutableList());
@@ -98,7 +119,8 @@ public class RelationFields {
                 .addAll(other.allFields)
                 .build();
 
-        return new RelationFields(fields);
+        boolean preserveFlag = this.fromFullOuterJoinUsing || other.fromFullOuterJoinUsing;
+        return new RelationFields(fields, preserveFlag);
     }
 
     public List<Field> resolveFieldsWithPrefix(TableName prefix) {
