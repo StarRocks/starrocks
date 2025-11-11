@@ -426,6 +426,12 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：false，表示不开启。
 * 引入版本：v3.1.4
 
+### enable_insert_partial_update
+
+* **描述**：是否为主键表的 INSERT 语句启用部分更新（Partial Update）。当设置为 `true`（默认）时，如果 INSERT 语句只指定了部分列（少于表中所有非生成列），系统会执行部分更新，即仅更新指定列，并保留其他列的现有值。当设置为 `false` 时，系统会对未指定的列使用默认值，而不是保留已有值。此功能特别适用于对主键表的特定列进行更新，而不影响其他列的值。
+* **默认值**：true
+* **引入版本**：v3.3.20、v3.4.9、v3.5.8、v4.0.2
+
 ### enable_insert_strict
 
 * 描述：是否在使用 INSERT from FILES() 导入数据时启用严格模式。有效值：`true` 和 `false`（默认值）。启用严格模式时，系统仅导入合格的数据行，过滤掉不合格的行，并返回不合格行的详细信息。更多信息请参见 [严格模式](../loading/load_concept/strict_mode.md)。在早于 v3.4.0 的版本中，当 `enable_insert_strict` 设置为 `true` 时，INSERT 作业会在出现不合格行时失败。
