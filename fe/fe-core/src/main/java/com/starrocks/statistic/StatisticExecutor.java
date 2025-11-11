@@ -14,7 +14,6 @@
 
 package com.starrocks.statistic;
 
-import com.google.common.base.Preconditions;
 import com.google.common.base.Stopwatch;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -473,7 +472,6 @@ public class StatisticExecutor {
                                                     long targetPartition) {
         List<String> sqlList =
                 FullStatisticsCollectJob.buildOverwritePartitionSQL(tableId, sourcePartition, targetPartition);
-        Preconditions.checkState(sqlList.size() == 2);
 
         // copy
         executeDML(context, sqlList.get(0));
