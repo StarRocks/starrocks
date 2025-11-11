@@ -113,13 +113,6 @@ public class ColocateTableBalancerTest {
         starRocksAssert = new StarRocksAssert(ctx);
         GlobalStateMgr.getCurrentState().getHeartbeatMgr().setStop();
         GlobalStateMgr.getCurrentState().getTabletScheduler().setStop();
-<<<<<<< HEAD
-        ColocateTableBalancer.getInstance().setStop();
-=======
-        TabletCollector collector = (TabletCollector) Deencapsulation.getField(GlobalStateMgr.getCurrentState(),
-                "tabletCollector");
-        collector.setStop();
->>>>>>> 3c92b030e1 ([UT] Fix unstable colocate balancer ut)
     }
 
     @Before
@@ -201,25 +194,9 @@ public class ColocateTableBalancerTest {
 
         // test if group is unstable when all its tablets are in TabletScheduler
         long tableId = table.getId();
-<<<<<<< HEAD
-        ColocateTableBalancer colocateTableBalancer = ColocateTableBalancer.getInstance();
-        colocateTableBalancer.runAfterCatalogReady();
+        Deencapsulation.invoke(balancer, "matchGroups");
         GroupId groupId = GlobalStateMgr.getCurrentState().getColocateTableIndex().getGroup(tableId);
         Assert.assertTrue(GlobalStateMgr.getCurrentState().getColocateTableIndex().isGroupUnstable(groupId));
-=======
-        Deencapsulation.invoke(balancer, "matchGroups");
-        GroupId groupId = globalStateMgr.getColocateTableIndex().getGroup(tableId);
-        Assertions.assertTrue(globalStateMgr.getColocateTableIndex().isGroupUnstable(groupId));
-
-        // check balance stat
-        Partition partition = table.getPartition("tbl");
-        PhysicalPartition physicalPartition = partition.getDefaultPhysicalPartition();
-        Assertions.assertFalse(physicalPartition.isTabletBalanced());
-        MaterializedIndex index = physicalPartition.getBaseIndex();
-        BalanceStat balanceStat = index.getBalanceStat();
-        Assertions.assertFalse(balanceStat.isBalanced());
-        Assertions.assertEquals(BalanceType.COLOCATION_GROUP, balanceStat.getBalanceType());
->>>>>>> 3c92b030e1 ([UT] Fix unstable colocate balancer ut)
 
         // clean
         colocateIndex.removeTable(table.getId(), table, false);
