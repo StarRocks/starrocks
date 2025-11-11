@@ -58,7 +58,7 @@ static std::string variant_test_data_dir = starrocks_home + "/be/test/formats/pa
 
 // Helper function to read variant test data from parquet test files
 static std::pair<std::string, std::string> load_variant_test_data(const std::string& metadata_file,
-                                                           const std::string& value_file) {
+                                                                  const std::string& value_file) {
     FileSystem* fs = FileSystem::Default();
 
     auto metadata_path = variant_test_data_dir + "/" + metadata_file;
@@ -75,7 +75,7 @@ static std::pair<std::string, std::string> load_variant_test_data(const std::str
 
 // Helper function to create VariantValue from test data files
 static void create_variant_from_test_data(const std::string& metadata_file, const std::string& value_file,
-                                         VariantValue& variant_value) {
+                                          VariantValue& variant_value) {
     auto [metadata, value] = load_variant_test_data(metadata_file, value_file);
     variant_value = VariantValue(metadata, value);
 }
@@ -108,7 +108,8 @@ TEST_P(VariantQueryTestFixture, variant_query_with_test_data) {
 
     Columns columns{variant_column, path_builder.build(true)};
     ctx->set_constant_columns(columns);
-    std::ignore = VariantFunctions::variant_segments_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+    std::ignore =
+            VariantFunctions::variant_segments_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
 
     ColumnPtr result = VariantFunctions::variant_query(ctx.get(), columns).value();
     ASSERT_TRUE(!!result);
@@ -128,8 +129,8 @@ TEST_P(VariantQueryTestFixture, variant_query_with_test_data) {
         ASSERT_EQ(param_result, variant_str);
     }
 
-    ASSERT_TRUE(VariantFunctions::variant_segments_close(
-            ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+    ASSERT_TRUE(VariantFunctions::variant_segments_close(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
 }
 
 // Test cases using real variant test data from parquet test files
