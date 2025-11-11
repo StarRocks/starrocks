@@ -35,6 +35,7 @@ import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.ast.expression.BoolLiteral;
 import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.sql.ast.expression.DecimalLiteral;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.FloatLiteral;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.LargeIntLiteral;
@@ -131,13 +132,15 @@ public class SetExecutorTest {
         executor = new SetExecutor(ctx, stmt);
         executor.execute();
         Assertions.assertEquals(2, ctx.getModifiedSessionVariables().getSetListItems().size());
-        Assertions.assertEquals("10", ctx.getModifiedSessionVariables().getSetListItems().get(1).toSql());
+
+        UserVariable userVariable = (UserVariable) ctx.getModifiedSessionVariables().getSetListItems().get(1);
+        Assertions.assertEquals("10", userVariable.toSql());
         ctx.getUserVariables().remove("test_b");
     }
 
     public void testUserVariableImp(LiteralExpr value, Type type) throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
-        String sql = String.format("set @var = cast(%s as %s)", value.toSql(), type.toSql());
+        String sql = String.format("set @var = cast(%s as %s)", ExprToSql.toSql(value), type.toSql());
         SetStmt stmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         SetExecutor executor = new SetExecutor(ctx, stmt);
         executor.execute();

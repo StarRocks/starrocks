@@ -41,6 +41,7 @@ import com.starrocks.sql.ast.ImportWhereStmt;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.RowDelimiter;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.SlotRef;
 
 import java.util.ArrayList;
@@ -137,7 +138,7 @@ public class RoutineLoadDesc {
         }
         if (wherePredicate != null) {
             castSlotRef(wherePredicate.getExpr());
-            subSQLs.add("WHERE " + wherePredicate.getExpr().toSql());
+            subSQLs.add("WHERE " + ExprToSql.toSql(wherePredicate.getExpr()));
         }
         return String.join(", ", subSQLs);
     }
@@ -161,7 +162,7 @@ public class RoutineLoadDesc {
     public String columnToString(ImportColumnDesc desc) {
         String str = pack(desc.getColumnName());
         if (desc.getExpr() != null) {
-            str += " = " + desc.getExpr().toSql();
+            str += " = " + ExprToSql.toSql(desc.getExpr());
         }
         return str;
     }

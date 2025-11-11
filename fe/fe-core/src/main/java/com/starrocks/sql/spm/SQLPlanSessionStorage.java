@@ -17,6 +17,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -55,7 +56,7 @@ class SQLPlanSessionStorage implements SQLPlanStorage {
             ScalarOperatorRewriter re = new ScalarOperatorRewriter();
             ScalarOperator result = re.rewrite(p, ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
             if (!result.isConstantRef()) {
-                throw UnsupportedException.unsupportedException("doesn't support predicate: " + where.toMySql());
+                throw UnsupportedException.unsupportedException("doesn't support predicate: " + ExprToSql.toMySql(where));
             } else if (result.isConstantTrue()) {
                 bps.add(baselinePlan);
             }

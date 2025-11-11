@@ -40,6 +40,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.VirtualSlotRef;
 import com.starrocks.sql.parser.NodePosition;
@@ -197,7 +198,6 @@ public class GroupByClause implements ParseNode {
         exprGenerated = true;
     }
 
-    @Override
     public String toSql() {
         if (needToSql) {
             return toViewSql();
@@ -208,7 +208,7 @@ public class GroupByClause implements ParseNode {
             case GROUP_BY:
                 if (oriGroupingExprs != null) {
                     for (int i = 0; i < oriGroupingExprs.size(); ++i) {
-                        strBuilder.append(oriGroupingExprs.get(i).toSql());
+                        strBuilder.append(ExprToSql.toSql(oriGroupingExprs.get(i)));
                         strBuilder.append((i + 1 != oriGroupingExprs.size()) ? ", " : "");
                     }
                 }
@@ -225,7 +225,7 @@ public class GroupByClause implements ParseNode {
                             strBuilder.append(", (");
                         }
                         for (int i = 0; i < groupingExprs.size(); ++i) {
-                            strBuilder.append(groupingExprs.get(i).toSql());
+                            strBuilder.append(ExprToSql.toSql(groupingExprs.get(i)));
                             strBuilder.append((i + 1 != groupingExprs.size()) ? ", " : "");
                         }
                         strBuilder.append(")");
@@ -237,7 +237,7 @@ public class GroupByClause implements ParseNode {
                 if (oriGroupingExprs != null) {
                     strBuilder.append("CUBE (");
                     for (int i = 0; i < oriGroupingExprs.size(); ++i) {
-                        strBuilder.append(oriGroupingExprs.get(i).toSql());
+                        strBuilder.append(ExprToSql.toSql(oriGroupingExprs.get(i)));
                         strBuilder.append((i + 1 != oriGroupingExprs.size()) ? ", " : "");
                     }
                     strBuilder.append(")");
@@ -247,7 +247,7 @@ public class GroupByClause implements ParseNode {
                 if (oriGroupingExprs != null) {
                     strBuilder.append("ROLLUP (");
                     for (int i = 0; i < oriGroupingExprs.size(); ++i) {
-                        strBuilder.append(oriGroupingExprs.get(i).toSql());
+                        strBuilder.append(ExprToSql.toSql(oriGroupingExprs.get(i)));
                         strBuilder.append((i + 1 != oriGroupingExprs.size()) ? ", " : "");
                     }
                     strBuilder.append(")");
@@ -269,7 +269,7 @@ public class GroupByClause implements ParseNode {
         switch (groupingType) {
             case GROUP_BY:
                 if (groupingExprs != null) {
-                    strBuilder.append(groupingExprs.stream().map(Expr::toSql).collect(Collectors.joining(", ")));
+                    strBuilder.append(groupingExprs.stream().map(ExprToSql::toSql).collect(Collectors.joining(", ")));
                 }
                 break;
             case GROUPING_SETS:
@@ -282,7 +282,7 @@ public class GroupByClause implements ParseNode {
                         rows.clear();
                         for (int j = 0; j < groupingSetList.get(i).size(); j++) {
                             Expr e = groupingExprs.get(groupingSetIndexToGroupingExprs.get(i, j));
-                            rows.add(e.toSql());
+                            rows.add(ExprToSql.toSql(e));
                         }
                         allExprs.add("(" + String.join(", ", rows) + ")");
                     }
@@ -294,7 +294,7 @@ public class GroupByClause implements ParseNode {
                 if (groupingExprs != null) {
                     strBuilder.append("CUBE (");
                     strBuilder.append(groupingExprs.stream().filter(e -> !(e instanceof VirtualSlotRef))
-                            .map(Expr::toSql).collect(Collectors.joining(", ")));
+                            .map(ExprToSql::toSql).collect(Collectors.joining(", ")));
                     strBuilder.append(")");
                 }
                 break;
@@ -302,7 +302,7 @@ public class GroupByClause implements ParseNode {
                 if (groupingExprs != null) {
                     strBuilder.append("ROLLUP (");
                     strBuilder.append(groupingExprs.stream().filter(e -> !(e instanceof VirtualSlotRef))
-                            .map(Expr::toSql).collect(Collectors.joining(", ")));
+                            .map(ExprToSql::toSql).collect(Collectors.joining(", ")));
                     strBuilder.append(")");
                 }
                 break;

@@ -43,6 +43,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
 import com.starrocks.sql.optimizer.operator.TopNType;
 import com.starrocks.thrift.TExplainLevel;
@@ -262,7 +263,7 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
             if (sqlSortKeysBuilder.length() > 0) {
                 sqlSortKeysBuilder.append(", ");
             }
-            sqlSortKeysBuilder.append(expr.next().toSql().replaceAll("<slot\\s[0-9]+>\\s+", "")).append(" ");
+            sqlSortKeysBuilder.append(ExprToSql.toSql(expr.next()).replaceAll("<slot\\s[0-9]+>\\s+", "")).append(" ");
             sqlSortKeysBuilder.append(direction.next() ? "ASC" : "DESC");
         }
         if (sqlSortKeysBuilder.length() > 0) {
@@ -338,9 +339,9 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
             for (Expr fnCall : preAggFnCalls) {
                 strings.add("[");
                 if (detailLevel.equals(TExplainLevel.NORMAL)) {
-                    strings.add(fnCall.toSql());
+                    strings.add(ExprToSql.toSql(fnCall));
                 } else {
-                    strings.add(fnCall.explain());
+                    strings.add(ExprToSql.explain(fnCall));
                 }
                 strings.add("]");
             }
@@ -358,9 +359,9 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
                     output.append(", ");
                 }
                 if (detailLevel.equals(TExplainLevel.NORMAL)) {
-                    output.append(expr.toSql());
+                    output.append(ExprToSql.toSql(expr));
                 } else {
-                    output.append(expr.explain());
+                    output.append(ExprToSql.explain(expr));
                 }
             }
             output.append("\n");

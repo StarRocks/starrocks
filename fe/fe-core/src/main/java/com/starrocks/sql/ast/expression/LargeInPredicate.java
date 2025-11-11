@@ -160,14 +160,13 @@ public class LargeInPredicate extends InPredicate {
                rawConstantList.equals(that.rawConstantList);
     }
 
-    @Override
     public String toSql() {
         String inClause = isNotIn() ? " NOT IN " : " IN ";
         if (constantCount > 100) {
             // For very large lists, show a summary
-            return getChild(0).toSql() + inClause + "(<" + constantCount + " values>)";
+            return ExprToSql.toSql(getChild(0)) + inClause + "(<" + constantCount + " values>)";
         } else {
-            return getChild(0).toSql() + inClause + "(" + rawText + ")";
+            return ExprToSql.toSql(getChild(0)) + inClause + "(" + rawText + ")";
         }
     }
 

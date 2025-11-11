@@ -110,6 +110,7 @@ import com.starrocks.sql.ast.StructFieldDesc;
 import com.starrocks.sql.ast.SyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.IntervalLiteral;
@@ -1482,7 +1483,7 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
         for (OrderByElement orderByElement : orderByElements) {
             String column = orderByElement.castAsSlotRef();
             if (column == null) {
-                throw new SemanticException("Unknown column '%s' in order by clause", orderByElement.getExpr().toSql());
+                throw new SemanticException("Unknown column '%s' in order by clause", ExprToSql.toSql(orderByElement.getExpr()));
             }
             sortKeys.add(column);
         }

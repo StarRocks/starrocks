@@ -32,6 +32,7 @@ import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.ast.expression.AnalyticExpr;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.FieldReference;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.TableName;
@@ -239,7 +240,7 @@ public class MVPartitionSlotRefResolver {
                     if (analyticExpr.getPartitionExprs() == null
                             || !analyticExpr.getPartitionExprs().contains(partitionByExpr)) {
                         String name = partitionByExpr instanceof SlotRef ?
-                                ((SlotRef) partitionByExpr).getColumnName() : partitionByExpr.toSql();
+                                ((SlotRef) partitionByExpr).getColumnName() : ExprToSql.toSql(partitionByExpr);
                         throw new SemanticException("window function %s ’s partition expressions" +
                                 " should contain the partition column %s of materialized view",
                                 analyticExpr.getFnCall().getFnName().getFunction(),

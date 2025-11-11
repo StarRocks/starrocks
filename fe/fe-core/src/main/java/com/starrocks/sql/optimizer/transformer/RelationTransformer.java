@@ -71,6 +71,7 @@ import com.starrocks.sql.ast.UnionRelation;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.InPredicate;
 import com.starrocks.sql.ast.expression.JoinOperator;
@@ -1274,7 +1275,7 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
         }
 
         if (subqueries.size() > 1) {
-            throw new SemanticException(PARSER_ERROR_MSG.unsupportedSubquery(joinOnConjunct.toSql(),
+            throw new SemanticException(PARSER_ERROR_MSG.unsupportedSubquery(ExprToSql.toSql(joinOnConjunct),
                     "contains more than one subquery"), joinOnConjunct.getPos());
         }
 
@@ -1326,14 +1327,14 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
 
         if (predicate instanceof InPredicate &&
                 (refLeftNodeCols || correlatedLeftNode) && (refRightNodeCols || correlatedRightNode)) {
-            throw new SemanticException(PARSER_ERROR_MSG.unsupportedSubquery(predicate.toSql(),
+            throw new SemanticException(PARSER_ERROR_MSG.unsupportedSubquery(ExprToSql.toSql(predicate),
                     "referencing columns from more than one table"), predicate.getPos());
         }
 
         if (correlatedFieldIds.isEmpty()) {
             usingLeftRelation = refLeftNodeCols;
         } else if (correlatedLeftNode && correlatedRightNode) {
-            throw new SemanticException(PARSER_ERROR_MSG.unsupportedSubquery(predicate.toSql(),
+            throw new SemanticException(PARSER_ERROR_MSG.unsupportedSubquery(ExprToSql.toSql(predicate),
                     "referencing columns from more than one table"), predicate.getPos());
         } else {
             usingLeftRelation = correlatedLeftNode;

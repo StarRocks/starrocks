@@ -75,6 +75,7 @@ import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SelectAnalyzer;
 import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
@@ -2110,7 +2111,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             for (Expr partitionExpr : partitionRefTableExprs) {
                 if (partitionExpr != null) {
                     serializedPartitionRefTableExprs.add(
-                            new ExpressionSerializedObject(partitionExpr.toSql()));
+                            new ExpressionSerializedObject(ExprToSql.toSql(partitionExpr)));
                 }
             }
         }
@@ -2119,8 +2120,8 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             for (Map.Entry<Expr, SlotRef> entry : partitionExprMaps.entrySet()) {
                 if (entry.getKey() != null && entry.getValue() != null) {
                     serializedPartitionExprMaps.put(
-                            new ExpressionSerializedObject(entry.getKey().toSql()),
-                            new ExpressionSerializedObject(entry.getValue().toSql())
+                            new ExpressionSerializedObject(ExprToSql.toSql(entry.getKey())),
+                            new ExpressionSerializedObject(ExprToSql.toSql(entry.getValue()))
                     );
                 }
             }

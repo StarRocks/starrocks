@@ -226,7 +226,7 @@ public class DDLStmtExecutor {
 
         @Override
         public ShowResultSet visitNode(ParseNode node, ConnectContext context) {
-            throw new RuntimeException(new DdlException("unsupported statement: " + node.toSql()));
+            throw new RuntimeException(new DdlException("unsupported statement"));
         }
 
         @Override

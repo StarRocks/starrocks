@@ -85,7 +85,7 @@ public class MultiInPredicate extends Predicate {
 
     @Override
     public String toString() {
-        return toSql();
+        return ExprToSql.toSql(this);
     }
 
     @Override

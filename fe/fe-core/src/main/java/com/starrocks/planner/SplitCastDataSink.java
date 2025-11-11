@@ -16,6 +16,7 @@ package com.starrocks.planner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TDataSinkType;
 import com.starrocks.thrift.TDataStreamSink;
@@ -42,7 +43,7 @@ public class SplitCastDataSink extends DataSink {
         sb.append(prefix).append("SplitCastDataSink\n");
         for (int i = 0; i < dataStreamSinks.size(); i++) {
             sb.append(dataStreamSinks.get(i).getExplainString(prefix, explainLevel));
-            sb.append(prefix + splitExprs.get(i).explain() + "\n");
+            sb.append(prefix + ExprToSql.explain(splitExprs.get(i)) + "\n");
         }
         return sb.toString();
     }
@@ -54,7 +55,7 @@ public class SplitCastDataSink extends DataSink {
         sb.append(prefix).append("SplitCastDataSink:\n");
         for (int i = 0; i < dataStreamSinks.size(); i++) {
             sb.append(dataStreamSinks.get(i).getVerboseExplain(prefix));
-            sb.append(prefix + "Split expr: " + splitExprs.get(i).explain() + "\n");
+            sb.append(prefix + "Split expr: " + ExprToSql.explain(splitExprs.get(i)) + "\n");
         }
 
         return sb.toString();

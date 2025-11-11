@@ -82,6 +82,7 @@ import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.CompoundPredicate;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.LikePredicate;
 import com.starrocks.sql.ast.expression.Predicate;
 import com.starrocks.sql.ast.expression.SlotRef;
@@ -578,18 +579,18 @@ public class ShowStmtAnalyzer {
                         !(expr instanceof LikePredicate)) {
                     throw new SemanticException(
                             "Invalid predicate in SHOW statement. Only '=' and 'LIKE' operators are supported. " +
-                                    "Found: '" + expr.toSql() + "'");
+                                    "Found: '" + ExprToSql.toSql(expr) + "'");
                 }
 
                 if (!(expr.getChild(0) instanceof SlotRef)) {
                     throw new SemanticException(
-                            "Invalid left operator in predicate '" + expr.toSql() + "'. " +
+                            "Invalid left operator in predicate '" + ExprToSql.toSql(expr) + "'. " +
                                     "Left side must be a column reference");
                 }
 
                 if (!(expr.getChild(1) instanceof StringLiteral)) {
                     throw new SemanticException(
-                            "Invalid right operator in predicate '" + expr.toSql() + "'. " +
+                            "Invalid right operator in predicate '" + ExprToSql.toSql(expr) + "'. " +
                                     "Right side must be a string literal. " +
                                     "Example: column = 'value' or column LIKE 'pattern%'");
                 }

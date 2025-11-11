@@ -52,13 +52,13 @@ public enum AggregateType {
         this.sqlName = sqlName;
     }
 
-    public String toSql() {
+    public String getSqlName() {
         return sqlName;
     }
 
     @Override
     public String toString() {
-        return toSql();
+        return getSqlName();
     }
 
     /**

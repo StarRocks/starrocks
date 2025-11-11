@@ -20,6 +20,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
 import com.starrocks.sql.ast.expression.JoinOperator;
 import com.starrocks.sql.ast.expression.SlotRef;
@@ -122,7 +123,7 @@ public class NestLoopJoinNode extends JoinNode implements RuntimeFilterBuildNode
             for (Expr e : otherJoinConjuncts) {
                 msg.nestloop_join_node.addToJoin_conjuncts(ExprToThriftVisitor.treeToThrift(e));
             }
-            String sqlJoinPredicate = otherJoinConjuncts.stream().map(Expr::toSql).collect(Collectors.joining(","));
+            String sqlJoinPredicate = otherJoinConjuncts.stream().map(ExprToSql::toSql).collect(Collectors.joining(","));
             msg.nestloop_join_node.setSql_join_conjuncts(sqlJoinPredicate);
         }
         SessionVariable sv = ConnectContext.get().getSessionVariable();

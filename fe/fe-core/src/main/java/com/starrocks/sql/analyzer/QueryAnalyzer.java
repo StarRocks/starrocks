@@ -80,6 +80,7 @@ import com.starrocks.sql.ast.expression.CaseExpr;
 import com.starrocks.sql.ast.expression.CaseWhenClause;
 import com.starrocks.sql.ast.expression.CompoundPredicate;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FieldReference;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
@@ -188,7 +189,7 @@ public class QueryAnalyzer {
                     continue;
                 }
 
-                slotRefToAlias.put(((SlotRef) item.getExpr()).toSql(), item.getAlias());
+                slotRefToAlias.put(ExprToSql.toSql(item.getExpr()), item.getAlias());
             }
             List<SlotRef> allRefSlotRefs = new ArrayList<>();
             for (Map.Entry<Expr, SlotRef> entry : generatedExprToColumnRef.entrySet()) {
@@ -200,7 +201,7 @@ public class QueryAnalyzer {
             }
             for (SlotRef slotRef : allRefSlotRefs) {
                 if (!slotRefToAlias.isEmpty()) {
-                    String alias = slotRefToAlias.get(slotRef.toSql());
+                    String alias = slotRefToAlias.get(ExprToSql.toSql(slotRef));
                     if (alias != null) {
                         slotRef.setColumnName(alias);
                     }
@@ -1880,7 +1881,7 @@ public class QueryAnalyzer {
             if (!isTemporalOrderingType(leftType) || !isTemporalOrderingType(rightType)) {
                 throw new SemanticException(
                         "ASOF JOIN temporal condition supports only BIGINT, DATE, or DATETIME types in join ON clause, found: " +
-                                leftType.toSql() + " and " + rightType.toSql() + ". predicate: " + predicate.toMySql()
+                                leftType.toSql() + " and " + rightType.toSql() + ". predicate: " + ExprToSql.toMySql(predicate)
                 );
             }
         }

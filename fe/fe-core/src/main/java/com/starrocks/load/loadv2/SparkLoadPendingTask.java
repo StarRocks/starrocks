@@ -85,6 +85,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
@@ -539,7 +540,7 @@ public class SparkLoadPendingTask extends LoadTask {
                 continue;
             }
             // the left must be column expr
-            columnMappings.put(columnDesc.getColumnName(), new EtlColumnMapping(columnDesc.getExpr().toSql()));
+            columnMappings.put(columnDesc.getColumnName(), new EtlColumnMapping(ExprToSql.toSql(columnDesc.getExpr())));
         }
 
         // partition ids
@@ -560,7 +561,7 @@ public class SparkLoadPendingTask extends LoadTask {
         // TODO: check
         String where = "";
         if (fileGroup.getWhereExpr() != null) {
-            where = fileGroup.getWhereExpr().toSql();
+            where = ExprToSql.toSql(fileGroup.getWhereExpr());
         }
 
         // load from table

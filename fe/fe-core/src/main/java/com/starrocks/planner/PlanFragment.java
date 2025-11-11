@@ -46,6 +46,7 @@ import com.starrocks.connector.BucketProperty;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.Utils;
@@ -567,7 +568,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
 
         StringBuilder outputBuilder = new StringBuilder();
         if (CollectionUtils.isNotEmpty(outputExprs)) {
-            outputBuilder.append(outputExprs.stream().map(Expr::toSql)
+            outputBuilder.append(outputExprs.stream().map(ExprToSql::toSql)
                     .collect(Collectors.joining(" | ")));
 
         }
@@ -605,7 +606,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         }
         if (CollectionUtils.isNotEmpty(outputExprs)) {
             str.append("  Output Exprs:");
-            str.append(outputExprs.stream().map(Expr::toSql)
+            str.append(outputExprs.stream().map(ExprToSql::toSql)
                     .collect(Collectors.joining(" | ")));
         }
         str.append("\n");
@@ -616,7 +617,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         if (MapUtils.isNotEmpty(queryGlobalDictExprs)) {
             str.append("  Global Dict Exprs:\n");
             queryGlobalDictExprs.entrySet().stream()
-                    .map(p -> "    " + p.getKey() + ": " + p.getValue().toMySql() + "\n").forEach(str::append);
+                    .map(p -> "    " + p.getKey() + ": " + ExprToSql.toMySql(p.getValue()) + "\n").forEach(str::append);
             str.append("\n");
         }
         if (planRoot != null) {
@@ -631,7 +632,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         StringBuilder outputBuilder = new StringBuilder();
         if (CollectionUtils.isNotEmpty(outputExprs)) {
             str.append("  Output Exprs:");
-            outputBuilder.append(outputExprs.stream().map(Expr::toSql)
+            outputBuilder.append(outputExprs.stream().map(ExprToSql::toSql)
                     .collect(Collectors.joining(" | ")));
         }
         str.append(outputBuilder.toString());

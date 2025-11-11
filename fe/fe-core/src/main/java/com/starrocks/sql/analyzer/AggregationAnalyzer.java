@@ -38,6 +38,7 @@ import com.starrocks.sql.ast.expression.DictQueryExpr;
 import com.starrocks.sql.ast.expression.DictionaryGetExpr;
 import com.starrocks.sql.ast.expression.ExistsPredicate;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.FieldReference;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.GroupingFunctionCallExpr;
@@ -104,7 +105,7 @@ public class AggregationAnalyzer {
 
     private void analyze(Expr expression) {
         if (!new VerifyExpressionVisitor().visit(expression)) {
-            throw new SemanticException(PARSER_ERROR_MSG.shouldBeAggFunc(expression.toSql()), expression.getPos());
+            throw new SemanticException(PARSER_ERROR_MSG.shouldBeAggFunc(ExprToSql.toSql(expression)), expression.getPos());
         }
     }
 
@@ -132,7 +133,8 @@ public class AggregationAnalyzer {
             if (node instanceof Parameter) {
                 return true;
             }
-            throw new SemanticException(node.toSql() + " must appear in the GROUP BY clause or be used in an aggregate function",
+            throw new SemanticException(
+                    ExprToSql.toSql(node) + " must appear in the GROUP BY clause or be used in an aggregate function",
                     node.getPos());
         }
 
@@ -264,7 +266,7 @@ public class AggregationAnalyzer {
         @Override
         public Boolean visitGroupingFunctionCall(GroupingFunctionCallExpr node, Void context) {
             if (orderByScope != null) {
-                throw new SemanticException(PARSER_ERROR_MSG.unsupportedExprWithInfo(node.toSql(), "ORDER BY"),
+                throw new SemanticException(PARSER_ERROR_MSG.unsupportedExprWithInfo(ExprToSql.toSql(node), "ORDER BY"),
                         node.getPos());
             }
 
@@ -329,7 +331,7 @@ public class AggregationAnalyzer {
                             SqlModeHelper.MODE_ONLY_FULL_GROUP_BY)) {
                         if (!analyzeState.getColumnNotInGroupBy().contains(expr)) {
                             throw new SemanticException(
-                                    PARSER_ERROR_MSG.unsupportedNoGroupBySubquery(expr.toSql(), node.toSql()),
+                                    PARSER_ERROR_MSG.unsupportedNoGroupBySubquery(ExprToSql.toSql(expr), ExprToSql.toSql(node)),
                                     expr.getPos());
                         }
                     } else {

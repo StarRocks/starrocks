@@ -90,6 +90,7 @@ import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.RowDelimiter;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.RoutineLoadDataSourceProperties;
 import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TLoadJobType;
@@ -1686,7 +1687,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         jobProperties.put("partitions",
                 partitions == null ? STAR_STRING : Joiner.on(",").join(partitions.getPartitionNames()));
         jobProperties.put("columnToColumnExpr", columnDescs == null ? STAR_STRING : Joiner.on(",").join(columnDescs));
-        jobProperties.put("whereExpr", whereExpr == null ? STAR_STRING : whereExpr.toSql());
+        jobProperties.put("whereExpr", whereExpr == null ? STAR_STRING : ExprToSql.toSql(whereExpr));
         if (getFormat().equalsIgnoreCase("json")) {
             jobProperties.put("dataFormat", "json");
         } else {

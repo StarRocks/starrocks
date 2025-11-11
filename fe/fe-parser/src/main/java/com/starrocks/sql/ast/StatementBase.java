@@ -167,4 +167,11 @@ public abstract class StatementBase implements ParseNode {
     public boolean isExistQueryScopeHint() {
         return allQueryScopeHints != null && !allQueryScopeHints.isEmpty();
     }
+
+    /**
+     * @return SQL syntax corresponding to this node.
+     */
+    public String toSql() {
+        throw new RuntimeException("New AST not implement toSql function");
+    }
 }

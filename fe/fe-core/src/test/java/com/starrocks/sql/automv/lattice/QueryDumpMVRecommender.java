@@ -32,9 +32,9 @@ import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.InPredicate;
 import com.starrocks.sql.ast.expression.IsNullPredicate;
-import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.automv.generator.QueryGenerateContext;
 import com.starrocks.sql.automv.generator.QueryGenerator;
@@ -395,12 +395,12 @@ public class QueryDumpMVRecommender {
                                 String tableName = scanNode.getTableName();
                                 List<String> usedColumns = expr.collectAllSlotRefs()
                                         .stream()
-                                        .map(SlotRef::toSql)
+                                        .map(ExprToSql::toSql)
                                         .map(trimIdColon)
                                         .sorted()
                                         .distinct()
                                         .collect(Collectors.toList());
-                                String pred = trimIdColon.apply(expr.toSql());
+                                String pred = trimIdColon.apply(ExprToSql.toSql(expr));
                                 String type = expr.getClass().getSimpleName();
                                 if (expr.getClass().equals(InPredicate.class)) {
                                     InPredicate inPred = (InPredicate) expr;
