@@ -552,8 +552,6 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：Pipeline 执行引擎在线程池中执行 PREPARE Fragment 的队列长度。
 - 引入版本：-
 
-
-
 ##### max_hdfs_file_handle
 
 - 默认值：1000
@@ -1581,8 +1579,6 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：在导入线程内存占用达到硬上限后，是否允许新的导入线程。`true` 表示允许新导入线程，`false` 表示拒绝新导入线程。
 - 引入版本：v3.3.2
 
-
-
 ##### tablet_stat_cache_update_interval_second
 
 - 默认值：300
@@ -2031,8 +2027,6 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Is mutable: Yes
 - Description: 当上一次检查 RPC 成功时，secondary replica 向 primary replica 检查其状态的间隔时间。
 - Introduced in: 3.5.1
-
-
 
 ##### enable_token_check
 

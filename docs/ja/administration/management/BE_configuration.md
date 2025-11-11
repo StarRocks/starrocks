@@ -553,8 +553,6 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: Pipeline 実行エンジンの PREPARE Fragment スレッドプールの最大キュー長。
 - 導入バージョン: -
 
-
-
 ##### max_hdfs_file_handle
 
 - デフォルト: 1000
@@ -1974,10 +1972,6 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: Data Cache のエビクションポリシー。有効な値: `lru` (最も最近使用されていない) および `slru` (セグメント化された LRU)。
 - 導入バージョン: v3.4.0
 
-
-
-
-
 ##### lake_service_max_concurrency
 
 - デフォルト: 0
@@ -2036,8 +2030,6 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Description: 直近のチェック RPC が成功した場合に、secondary replica が primary replica 上のステータスを確認する間隔（ミリ秒）。
 - Introduced in: 3.5.1
 
-
-
 ##### enable_token_check
 
 - デフォルト: true
@@ -2055,8 +2047,6 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 可変: いいえ
 - 説明: ファイルマネージャーによってダウンロードされたファイルを保存するために使用されるディレクトリ。
 - 導入バージョン: -
-
-
 
 ##### max_length_for_to_base64
 
