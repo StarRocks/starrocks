@@ -437,6 +437,12 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：false，表示不开启。
 * 引入版本：v3.1.4
 
+### enable_insert_partial_update
+
+* **描述**：是否为主键表的 INSERT 语句启用部分更新（Partial Update）。当设置为 `true`（默认）时，如果 INSERT 语句只指定了部分列（少于表中所有非生成列），系统会执行部分更新，即仅更新指定列，并保留其他列的现有值。当设置为 `false` 时，系统会对未指定的列使用默认值，而不是保留已有值。此功能特别适用于对主键表的特定列进行更新，而不影响其他列的值。
+* **默认值**：true
+* **引入版本**：v3.3.20、v3.4.9、v3.5.8、v4.0.2
+
 ### enable_iceberg_metadata_cache
 
 * 描述：是否缓存 Iceberg 表指针和分区名相关的数据。在 3.2.1 到 3.2.3 版本，该参数默认值统一为 `true`。自 3.2.4 版本起，如果 Iceberg 集群的元数据服务为 AWS Glue，该参数默认值仍为 `true`，如果 Iceberg 集群的元数据服务为 Hive Metastore（简称 HMS）或其他，则该参数默认值变更为 `false`。
