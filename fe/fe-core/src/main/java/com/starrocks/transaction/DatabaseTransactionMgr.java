@@ -1295,6 +1295,9 @@ public class DatabaseTransactionMgr {
                                     transactionState.addUnknownReplica(replicaId);
                                 }
                             }
+                            // Update MaterializedIndex rowCount after updating all replicas' rowCount
+                            // to keep consistency between replica rowCount and MaterializedIndex rowCount
+                            index.updateRowCount(partitionCommitInfo.getVersion());
                         }
                     }
                     for (Long partitionId : droppedPartitionIds) {

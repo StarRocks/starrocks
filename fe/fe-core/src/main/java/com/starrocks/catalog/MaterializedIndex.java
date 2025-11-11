@@ -243,6 +243,20 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
         this.rowCount = rowCount;
     }
 
+    /**
+     * Update rowCount by calculating from all tablets' rowCount for the given version.
+     * This method ensures consistency between replica rowCount and MaterializedIndex rowCount.
+     *
+     * @param version the version to use when getting rowCount from tablets
+     */
+    public void updateRowCount(long version) {
+        long indexRowCount = 0L;
+        for (Tablet tablet : getTablets()) {
+            indexRowCount += tablet.getRowCount(version);
+        }
+        this.rowCount = indexRowCount;
+    }
+
     public long getDataSize() {
         return getDataSize(false);
     }
