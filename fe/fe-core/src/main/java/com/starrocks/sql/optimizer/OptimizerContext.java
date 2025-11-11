@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ConnectProcessor;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.ErrorType;
@@ -32,6 +33,8 @@ import com.starrocks.sql.optimizer.rule.tvr.common.TvrOptContext;
 import com.starrocks.sql.optimizer.task.TaskContext;
 import com.starrocks.sql.optimizer.task.TaskScheduler;
 import com.starrocks.sql.optimizer.transformer.MVTransformerContext;
+import org.apache.spark.util.SizeEstimator;
+import oshi.util.FormatUtil;
 
 import java.util.List;
 import java.util.Map;
@@ -304,10 +307,19 @@ public class OptimizerContext {
     public void checkTimeout() {
         long timeout = getSessionVariable().getOptimizerExecuteTimeout();
         long now = optimizerTimer.elapsed(TimeUnit.MILLISECONDS);
-        if (timeout > 0 && now > timeout) {
+        // Use MIN to inject failure, which would not be used by normal case
+        if (timeout > 0 && now > timeout || timeout == Long.MIN_VALUE) {
+            ConnectContext context = ConnectContext.get();
+            long threadAllocatedBytes =
+                    ConnectProcessor.getThreadAllocatedBytes(Thread.currentThread().getId()) -
+                            context.getCurrentThreadAllocatedMemory();
+            long optimizerInUseBytes = SizeEstimator.estimate(this);
+            String memoryInfo = "current query allocated=" + FormatUtil.formatBytes(threadAllocatedBytes) +
+                    ", optimizerContextInUse=" + FormatUtil.formatBytes(optimizerInUseBytes);
+
             throw new StarRocksPlannerException("StarRocks planner use long time " + now +
                     " ms in " + (inMemoPhase ? "memo" : "logical") + " phase, This probably because " +
-                    "1. FE Full GC, " +
+                    "1. FE Full GC, " + memoryInfo +
                     "2. Hive external table fetch metadata took a long time, " +
                     "3. The SQL is very complex. " +
                     "You could " +
