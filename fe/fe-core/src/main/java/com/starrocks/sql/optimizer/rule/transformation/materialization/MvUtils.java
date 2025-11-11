@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Predicates;
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
@@ -574,7 +574,8 @@ public class MvUtils {
     public static Set<ScalarOperator> getAllValidPredicatesFromScans(OptExpression root) {
         List<LogicalScanOperator> scanOperators = getScanOperator(root);
         Set<ScalarOperator> predicates = Sets.newHashSet();
-        scanOperators.stream().forEach(scanOperator -> predicates.addAll(Utils.extractConjuncts(scanOperator.getPredicate())));
+        scanOperators.stream()
+                .forEach(scanOperator -> predicates.addAll(Utils.extractConjuncts(scanOperator.getPredicate())));
         return predicates.stream().filter(MvUtils::isValidPredicate).collect(Collectors.toSet());
     }
 
@@ -691,7 +692,8 @@ public class MvUtils {
                         IsNullPredicateOperator isNullPredicateOperator = conjunct.cast();
                         if (isNullPredicateOperator.isNotNull() && context != null
                                 && context.containsAll(isNullPredicateOperator.getUsedColumns())) {
-                            // if column ref is join key and column ref is not null can be ignored for inner and semi join
+                            // if column ref is join key and column ref is not null can be ignored for inner and semi
+                            // join
                             continue;
                         }
                     }
@@ -918,7 +920,7 @@ public class MvUtils {
     }
 
     public static Set<ColumnRefOperator> collectScanColumn(OptExpression optExpression,
-                                                            Predicate<LogicalScanOperator> predicate) {
+                                                           Predicate<LogicalScanOperator> predicate) {
 
         Set<ColumnRefOperator> columnRefOperators = Sets.newHashSet();
         OptExpressionVisitor visitor = new OptExpressionVisitor<Void, Void>() {
@@ -957,22 +959,26 @@ public class MvUtils {
                 continue;
             } else if (lowerExpr.isMinValue()) {
                 ConstantOperator upperBound =
-                        (ConstantOperator) SqlToScalarOperatorTranslator.translate(range.upperEndpoint().getKeys().get(0));
+                        (ConstantOperator) SqlToScalarOperatorTranslator.translate(
+                                range.upperEndpoint().getKeys().get(0));
                 BinaryPredicateOperator upperPredicate = new BinaryPredicateOperator(
                         BinaryType.LT, partitionScalar, upperBound);
                 rangeParts.add(upperPredicate);
             } else if (range.upperEndpoint().isMaxValue()) {
                 ConstantOperator lowerBound =
-                        (ConstantOperator) SqlToScalarOperatorTranslator.translate(range.lowerEndpoint().getKeys().get(0));
+                        (ConstantOperator) SqlToScalarOperatorTranslator.translate(
+                                range.lowerEndpoint().getKeys().get(0));
                 BinaryPredicateOperator lowerPredicate = new BinaryPredicateOperator(
                         BinaryType.GE, partitionScalar, lowerBound);
                 rangeParts.add(lowerPredicate);
             } else {
                 // close, open range
                 ConstantOperator lowerBound =
-                        (ConstantOperator) SqlToScalarOperatorTranslator.translate(range.lowerEndpoint().getKeys().get(0));
+                        (ConstantOperator) SqlToScalarOperatorTranslator.translate(
+                                range.lowerEndpoint().getKeys().get(0));
                 ConstantOperator upperBound =
-                        (ConstantOperator) SqlToScalarOperatorTranslator.translate(range.upperEndpoint().getKeys().get(0));
+                        (ConstantOperator) SqlToScalarOperatorTranslator.translate(
+                                range.upperEndpoint().getKeys().get(0));
                 BinaryPredicateOperator lowerPredicate = new BinaryPredicateOperator(
                         BinaryType.GE, partitionScalar, lowerBound);
                 BinaryPredicateOperator upperPredicate = new BinaryPredicateOperator(
@@ -1158,7 +1164,6 @@ public class MvUtils {
         return partitionKey;
     }
 
-
     public static String toString(Object o) {
         if (o == null) {
             return "";
@@ -1182,7 +1187,8 @@ public class MvUtils {
      * Returns the maximum refresh timestamp from a single partition info map.
      * If no valid refresh time is found, returns the current system time.
      */
-    public static long getMaxTablePartitionInfoRefreshTime(Map<String, MaterializedView.BasePartitionInfo> partitionInfos) {
+    public static long getMaxTablePartitionInfoRefreshTime(
+            Map<String, MaterializedView.BasePartitionInfo> partitionInfos) {
         return partitionInfos.values().stream()
                 .map(MaterializedView.BasePartitionInfo::getLastRefreshTime)
                 .filter(Objects::nonNull)
@@ -1283,7 +1289,8 @@ public class MvUtils {
                 Operator.Builder builder = OperatorBuilderFactory.build(inlineViewOp);
                 builder.withOperator(inlineViewOp);
                 if (viewScanOperator.getPredicate() != null) {
-                    // If viewScanOperator contains predicate, we need to rewrite them, otherwise predicate will be lost.
+                    // If viewScanOperator contains predicate, we need to rewrite them, otherwise predicate will be
+                    // lost.
                     ScalarOperator rewrittenPredicate = rewriter.rewrite(viewScanOperator.getPredicate());
                     builder.setPredicate(rewrittenPredicate);
                 }
@@ -1357,7 +1364,8 @@ public class MvUtils {
             return mvPlanContexts.get(0);
         }
         // step2: get from optimize
-        return new MaterializedViewOptimizer().optimize(mv, connectContext, isInlineView, isCheckNonDeterministicFunction);
+        return new MaterializedViewOptimizer().optimize(mv, connectContext, isInlineView,
+                isCheckNonDeterministicFunction);
     }
 
     /**
@@ -1398,6 +1406,9 @@ public class MvUtils {
     }
 
     public static ParseNode getQueryAst(String query, ConnectContext connectContext) {
+        if (Strings.isNullOrEmpty(query)) {
+            return null;
+        }
         try {
             List<StatementBase> statementBases =
                     com.starrocks.sql.parser.SqlParser.parse(query, connectContext.getSessionVariable());
@@ -1426,7 +1437,8 @@ public class MvUtils {
                                                         ColumnRefFactory queryColumnRefFactory,
                                                         ReplaceColumnRefRewriter queryColumnRefRewriter,
                                                         Rule rule) {
-        // Cache partition predicate predicates because it's expensive time costing if there are too many materialized views or
+        // Cache partition predicate predicates because it's expensive time costing if there are too many
+        // materialized views or
         // query expressions are too complex.
         final ScalarOperator queryPartitionPredicate = MvPartitionCompensator.compensateQueryPartitionPredicate(
                 mvContext, rule, queryColumnRefFactory, queryExpression);
@@ -1466,7 +1478,8 @@ public class MvUtils {
 
     public static Optional<Table> getTableWithIdentifier(BaseTableInfo baseTableInfo) {
         try {
-            return GlobalStateMgr.getCurrentState().getMetadataMgr().getTableWithIdentifier(new ConnectContext(), baseTableInfo);
+            return GlobalStateMgr.getCurrentState().getMetadataMgr()
+                    .getTableWithIdentifier(new ConnectContext(), baseTableInfo);
         } catch (Exception e) {
             // For hive catalog, when meets NoSuchObjectException, we should return empty
             //  msg: NoSuchObjectException: hive_db_8b48cd2f_4bfe_11f0_bc1a_00163e09349d.t1 table not found
@@ -1552,7 +1565,8 @@ public class MvUtils {
      */
     public static <K, V> Map<K, V> shrinkToSize(Map<K, V> map, int maxLength) {
         if (map != null && map.size() > maxLength) {
-            return map.entrySet().stream().limit(maxLength).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+            return map.entrySet().stream().limit(maxLength)
+                    .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
         }
         return map;
     }
@@ -1569,13 +1583,15 @@ public class MvUtils {
             return null;
         }
         return partitionExprMaps.entrySet().stream()
-                .filter(entry -> SRStringUtils.areTableNamesEqual(table, entry.getValue().getTblNameWithoutAnalyzed().getTbl()))
+                .filter(entry -> SRStringUtils.areTableNamesEqual(table,
+                        entry.getValue().getTblNameWithoutAnalyzed().getTbl()))
                 .map(entry -> new MVPartitionExpr(entry.getKey(), entry.getValue()))
                 .collect(Collectors.toList());
     }
 
     /**
      * Get the column by slot ref from table's columns.
+     *
      * @return the column if found, otherwise empty
      */
     public static Optional<Column> getColumnBySlotRef(List<Column> columns, SlotRef slotRef) {
@@ -1598,8 +1614,9 @@ public class MvUtils {
 
     /**
      * Convert partition range cells to predicates
+     *
      * @param partitionColRefs partition column refs
-     * @param pRangeCells  partition range cells to be converted
+     * @param pRangeCells      partition range cells to be converted
      * @return the converted predicates
      * @throws AnalysisException
      */
@@ -1658,7 +1675,8 @@ public class MvUtils {
                         // add is null to represent min value
                         subPredicates.add(new IsNullPredicateOperator(partitionColRef));
                     } else {
-                        ConstantOperator upperBound = (ConstantOperator) SqlToScalarOperatorTranslator.translate(literalExpr);
+                        ConstantOperator upperBound =
+                                (ConstantOperator) SqlToScalarOperatorTranslator.translate(literalExpr);
                         subPredicates.add(new BinaryPredicateOperator(BinaryType.EQ, partitionColRef, upperBound));
                     }
                 }
@@ -1669,7 +1687,7 @@ public class MvUtils {
     }
 
     private static ScalarOperator convertRangeKeysToPredicate(
-            List<? extends  ScalarOperator> partitionColRefs,
+            List<? extends ScalarOperator> partitionColRefs,
             List<Range<PartitionKey>> partitionRanges,
             boolean canConvertToInPredicate) throws AnalysisException {
         // can convert to in predicate when all ranges are singletons or canConvertToInPredicate is true
@@ -1719,9 +1737,10 @@ public class MvUtils {
 
     /**
      * Optimize the inlined view plan.
-     * @param logicalTree logical opt expression tree which has not been optimized
-     * @param connectContext connect context
-     * @param requiredColumns required columns
+     *
+     * @param logicalTree      logical opt expression tree which has not been optimized
+     * @param connectContext   connect context
+     * @param requiredColumns  required columns
      * @param columnRefFactory query column ref factory
      * @return optimized view plan which has been rule based optimized
      */
@@ -1741,7 +1760,8 @@ public class MvUtils {
 
     /**
      * Trim the input string if its length is larger than maxLength.
-     * @param input the input string
+     *
+     * @param input     the input string
      * @param maxLength the max length
      */
     public static String shrinkToSize(String input, int maxLength) {
