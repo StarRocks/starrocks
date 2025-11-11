@@ -202,6 +202,9 @@ public class ResourceGroupMgr implements Writable {
     }
 
     private boolean resourceGroupInMemPoolHaveSameMemLimit(ResourceGroup wg) {
+        if (wg.getMemPool() == null){
+            return true;
+        }
         return resourceGroupMap.entrySet().stream().allMatch(entry -> !wg.getMemPool().equals(entry.getValue().getMemPool()) ||
                 wg.getMemLimit().equals(entry.getValue().getMemLimit()));
     }
