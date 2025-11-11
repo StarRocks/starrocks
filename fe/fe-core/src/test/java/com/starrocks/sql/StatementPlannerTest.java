@@ -34,11 +34,14 @@ import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.ValuesRelation;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.type.Type;
+import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -368,5 +371,18 @@ class StatementPlannerTest extends PlanTestBase {
         PlanFragment fragment = plan.getFragments().get(0);
         OlapTableSink sink = (OlapTableSink) fragment.getSink();
         return sink.getPartialUpdateMode();
+    }
+
+    @Test
+    public void testTimeout() throws Exception {
+        FeConstants.runningUnitTest = false;
+        long oldValue = connectContext.getSessionVariable().getOptimizerExecuteTimeout();
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(Long.MIN_VALUE);
+        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+        Throwable exception = Assertions.assertThrows(StarRocksPlannerException.class, () ->
+                starRocksAssert.query("select * from t1").explainQuery());
+        Assertions.assertTrue(exception.getMessage().contains("current query allocated"));
+
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(oldValue);
     }
 }
