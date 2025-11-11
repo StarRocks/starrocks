@@ -128,11 +128,7 @@ public class ExecuteSqlAction extends RestBaseAction {
                 parsedStmt = parse(requestBody.query, context.getSessionVariable());
                 context.setStatement(parsedStmt);
 
-                // only register connectContext once for one channel
-                if (!context.isInitialized()) {
-                    context.setInitialized(true);
-                    registerContext(requestBody.query, context);
-                }
+                registerContextOnce(requestBody.query, context);
 
                 // store context in current thread, Executor rely on this thread local variable
                 context.setThreadLocalInfo();
@@ -226,8 +222,13 @@ public class ExecuteSqlAction extends RestBaseAction {
         return parsedStmt;
     }
 
+    // only register connectContext once for one channel
     // refer to AcceptListener.handleEvent
-    private void registerContext(String sql, HttpConnectContext context) throws StarRocksHttpException {
+    private void registerContextOnce(String sql, HttpConnectContext context) throws StarRocksHttpException {
+        if (context.isRegistered()) {
+            return;
+        }
+
         // now register this request in connectScheduler
         ConnectScheduler connectScheduler = ExecuteEnv.getInstance().getScheduler();
         context.setConnectionId(connectScheduler.getNextConnectionId());
@@ -238,6 +239,7 @@ public class ExecuteSqlAction extends RestBaseAction {
         if (!result.first) {
             throw new StarRocksHttpException(SERVICE_UNAVAILABLE, result.second);
         }
+        context.setRegistered(true);
         context.setStartTime();
         LogUtil.logConnectionInfoToAuditLogAndQueryQueue(context, null);
     }

@@ -55,7 +55,7 @@ public class HttpConnectContext extends ConnectContext {
 
     // for http sql, we need register connectContext to connectScheduler
     // when connection is established
-    private boolean initialized;
+    private boolean registered;
 
     // used for test. only output result raws
     private boolean onlyOutputResultRaw;
@@ -73,7 +73,7 @@ public class HttpConnectContext extends ConnectContext {
     public HttpConnectContext() {
         super();
         sendDate = false;
-        initialized = false;
+        registered = false;
         onlyOutputResultRaw = false;
     }
 
@@ -93,12 +93,12 @@ public class HttpConnectContext extends ConnectContext {
         this.forwardToLeader = forwardToLeader;
     }
 
-    public boolean isInitialized() {
-        return initialized;
+    public boolean isRegistered() {
+        return registered;
     }
 
-    public void setInitialized(boolean initialized) {
-        this.initialized = initialized;
+    public void setRegistered(boolean registered) {
+        this.registered = registered;
     }
 
     public boolean getSendDate() {

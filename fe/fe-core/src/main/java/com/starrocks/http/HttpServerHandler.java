@@ -168,7 +168,7 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
         HttpServerHandlerMetrics.getInstance().httpConnectionsNum.increase(-1L);
         HttpConnectContext context = ctx.channel().attr(HTTP_CONNECT_CONTEXT_ATTRIBUTE_KEY).get();
-        if (context != null && context.isInitialized()) {
+        if (context != null && context.isRegistered()) {
             // Context is registered in ExecuteSqlAction#executeWithoutPassword
             ExecuteEnv.getInstance().getScheduler().unregisterConnection(context);
         }
