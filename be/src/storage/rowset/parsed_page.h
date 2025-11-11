@@ -120,6 +120,16 @@ public:
 
     virtual Status read_dict_codes_by_rowids(Column* column, const rowid_t* rowids, size_t* count) = 0;
 
+    // Check if this page supports read_by_rowds efficiently.
+    // V1 format returns false due to null/non-null interleaving complexity.
+    // V2 format returns true if _data_decoder supports read_by_rowids.
+    bool supports_read_by_rowids() {
+        if (_version == 1) {
+            return false;
+        }
+        return _data_decoder->supports_read_by_rowids();
+    }
+
     virtual Status read_with_filter(Column* column, const SparseRange<>& range,
                                     const std::vector<const ColumnPredicate*>& compound_and_predicates,
                                     uint8_t* selection, uint16_t* selected_idx, bool* data_filtered) = 0;
@@ -143,6 +153,7 @@ protected:
     ordinal_t _corresponding_element_ordinal = 0;
     std::unique_ptr<PageDecoder> _data_decoder;
     PagePointer _page_pointer;
+    uint32_t _version;
 };
 
 Status parse_page(std::unique_ptr<ParsedPage>* result, PageHandle handle, const Slice& body,
