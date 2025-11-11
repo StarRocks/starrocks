@@ -95,8 +95,7 @@ public:
 
     size_t total_active_driver_size();
 
-    void prepare_active_drivers_parallel(RuntimeState* state,
-                                         std::shared_ptr<DriverPrepareSyncContext> sync_ctx);
+    void prepare_active_drivers_parallel(RuntimeState* state, std::shared_ptr<DriverPrepareSyncContext> sync_ctx);
 
     Status prepare_active_drivers_sequentially(RuntimeState* state);
 
