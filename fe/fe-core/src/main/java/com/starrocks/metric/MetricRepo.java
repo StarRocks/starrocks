@@ -84,6 +84,7 @@ import com.starrocks.staros.StarMgrServer;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.DatabaseTransactionMgr;
+import com.starrocks.transaction.TransactionMetricRegistry;
 import com.starrocks.warehouse.cngroup.CRAcquireContext;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
@@ -209,10 +210,6 @@ public final class MetricRepo {
     public static Histogram HISTO_JOURNAL_WRITE_BYTES;
     public static Histogram HISTO_SHORTCIRCUIT_RPC_LATENCY;
     public static Histogram HISTO_DEPLOY_PLAN_FRAGMENTS_LATENCY;
-
-    public static Histogram HISTO_TXN_WAIT_FOR_PUBLISH_LATENCY;
-    public static Histogram HISTO_TXN_FINISH_PUBLISH_LATENCY;
-    public static Histogram HISTO_TXN_PUBLISH_TOTAL_LATENCY;
 
     // following metrics will be updated by metric calculator
     public static GaugeMetricImpl<Double> GAUGE_QUERY_PER_SECOND;
@@ -644,13 +641,6 @@ public final class MetricRepo {
         HISTO_DEPLOY_PLAN_FRAGMENTS_LATENCY = METRIC_REGISTER.histogram(
                 MetricRegistry.name("deploy_plan_fragments", "latency", "ms"));
 
-        HISTO_TXN_WAIT_FOR_PUBLISH_LATENCY = METRIC_REGISTER.histogram(
-                MetricRegistry.name("txn", "wait_for_publish", "latency", "ms"));
-        HISTO_TXN_FINISH_PUBLISH_LATENCY = METRIC_REGISTER.histogram(
-                MetricRegistry.name("txn", "finish_publish", "latency", "ms"));
-        HISTO_TXN_PUBLISH_TOTAL_LATENCY = METRIC_REGISTER.histogram(
-                MetricRegistry.name("txn", "publish_total", "latency", "ms"));
-
         // init system metrics
         initSystemMetrics();
 
@@ -1051,6 +1041,8 @@ public final class MetricRepo {
 
         // collect merge commit metrics
         MergeCommitMetricRegistry.getInstance().visit(visitor);
+
+        TransactionMetricRegistry.getInstance().report(visitor);
 
         // node info
         visitor.getNodeInfo();
