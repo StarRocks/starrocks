@@ -20,6 +20,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Streams;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.InPredicate;
@@ -79,18 +80,6 @@ import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UnionRelation;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.ViewRelation;
-<<<<<<< HEAD
-=======
-import com.starrocks.sql.ast.expression.BinaryType;
-import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.ExprToSql;
-import com.starrocks.sql.ast.expression.FunctionCallExpr;
-import com.starrocks.sql.ast.expression.InPredicate;
-import com.starrocks.sql.ast.expression.JoinOperator;
-import com.starrocks.sql.ast.expression.LimitElement;
-import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.sql.ast.expression.Subquery;
->>>>>>> d98b04bb86 ([Enhancement] Support FULL OUTER JOIN USING with SQL standard semantics (#65122))
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -1287,7 +1276,7 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
             ScalarOperator rightExpr = rightExprMap.get(lowerColName);
             
             if (leftExpr != null && rightExpr != null) {
-                Type commonType = TypeManager.getCommonType(leftExpr.getType(), rightExpr.getType());
+                Type commonType = Type.getCommonType(leftExpr.getType(), rightExpr.getType());
                 if (!commonType.isValid()) {
                     commonType = leftExpr.getType();
                 }
@@ -1341,14 +1330,13 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
     private ScalarOperator createCoalesceOperator(ScalarOperator leftOp, ScalarOperator rightOp) {
         Type leftType = leftOp.getType();
         Type rightType = rightOp.getType();
-        Type commonType = TypeManager.getCommonType(leftType, rightType);
+        Type commonType = Type.getCommonType(leftType, rightType);
         if (!commonType.isValid()) {
             commonType = leftType;
         }
         
         Type[] argTypes = new Type[] {leftType, rightType};
-        com.starrocks.catalog.Function coalesceFunction =
-                com.starrocks.sql.ast.expression.ExprUtils.getBuiltinFunction(
+        com.starrocks.catalog.Function coalesceFunction = Expr.getBuiltinFunction(
                         FunctionSet.COALESCE, argTypes,
                         com.starrocks.catalog.Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
 

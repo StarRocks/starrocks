@@ -107,8 +107,8 @@ import java.util.Set;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
+import static com.starrocks.catalog.Type.canCastTo;
 import static com.starrocks.sql.analyzer.AstToStringBuilder.getAliasName;
-import static com.starrocks.sql.common.TypeManager.canCastTo;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 import static com.starrocks.thrift.PlanNodesConstants.BINLOG_OP_COLUMN_NAME;
 import static com.starrocks.thrift.PlanNodesConstants.BINLOG_SEQ_ID_COLUMN_NAME;
@@ -1464,11 +1464,7 @@ public class QueryAnalyzer {
                 for (int i = 0; i < pivotValue.getExprs().size(); i++) {
                     Expr expr = pivotValue.getExprs().get(i);
                     analyzeExpression(expr, analyzeState, queryScope);
-<<<<<<< HEAD
-                    if (!Type.canCastTo(expr.getType(), types.get(i))) {
-=======
                     if (!canCastTo(expr.getType(), types.get(i))) {
->>>>>>> d98b04bb86 ([Enhancement] Support FULL OUTER JOIN USING with SQL standard semantics (#65122))
                         throw new SemanticException("Pivot value type %s is not compatible with pivot column type %s",
                                 expr.getType(), types.get(i));
                     }
