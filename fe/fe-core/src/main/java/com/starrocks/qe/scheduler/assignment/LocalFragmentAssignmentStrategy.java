@@ -179,6 +179,13 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
         int expectedInstanceNum = Math.max(1, parallelExecInstanceNum);
         long instanceAvgScanRows = bucketScanRows / Math.max(1, workerIdToBucketSeqs.size() * expectedInstanceNum);
 
+        final Map<Long, FragmentInstance> fragmentInstanceMap = new HashMap<>();
+        if (!execFragment.getInstances().isEmpty()) {
+            for (FragmentInstance fragmentInstance : execFragment.getInstances()) {
+                fragmentInstanceMap.put(fragmentInstance.getWorkerId(), fragmentInstance);
+            }
+        }
+        
         workerIdToBucketSeqs.forEach((workerId, bucketSeqsOfWorker) -> {
             ComputeNode worker = workerProvider.getWorkerById(workerId);
 
@@ -187,8 +194,13 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
 
             // 3.construct instanceExecParam add the scanRange should be scanned by instance
             bucketSeqsPerInstance.forEach(bucketSeqsOfInstance -> {
-                FragmentInstance instance = new FragmentInstance(worker, execFragment);
-                execFragment.addInstance(instance);
+                final boolean reuse = useIncrementalScanRanges && !fragmentInstanceMap.isEmpty();
+                final FragmentInstance instance = reuse
+                        ? fragmentInstanceMap.get(workerId)
+                        : new FragmentInstance(workerProvider.getWorkerById(workerId), execFragment);
+                if (!reuse) {
+                    execFragment.addInstance(instance);
+                }
 
                 // record each instance replicate scan id in set, to avoid add replicate scan range repeatedly
                 // when they are in different buckets
