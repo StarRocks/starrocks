@@ -1,5 +1,6 @@
 #pragma once
 
+#include <condition_variable>
 #include <memory>
 #include <mutex>
 #include <shared_mutex>
@@ -76,6 +77,47 @@ private:
 class FailPointRegisterer {
 public:
     explicit FailPointRegisterer(FailPoint* fp);
+};
+
+// This class ONLY used in failpoint testing
+// This primitive is useful in scenarios where the B thread must wait for at least one
+// A thread to reach a synchronization point, but subsequent A threads should not be blocked
+// once B has arrived or the first A has been released.
+class OneToAnyBarrier {
+public:
+    OneToAnyBarrier() = default;
+    ~OneToAnyBarrier() = default;
+
+    void arrive_A() {
+        bool first = false;
+        {
+            std::lock_guard<std::mutex> lock(m_);
+            if (!a_triggered_) {
+                a_triggered_ = true;
+                first = true;
+            }
+        }
+        cv_.notify_all();
+
+        if (first) {
+            sem_B_.acquire();
+        }
+    }
+
+    void arrive_B() {
+        {
+            std::unique_lock<std::mutex> lock(m_);
+            cv_.wait(lock, [&] { return a_triggered_; });
+        }
+
+        sem_B_.release();
+    }
+
+private:
+    std::mutex m_;
+    std::condition_variable cv_;
+    std::counting_semaphore<1> sem_B_{0};
+    bool a_triggered_{};
 };
 
 #ifdef FIU_ENABLE
