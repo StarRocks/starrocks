@@ -509,6 +509,14 @@ public:
         return _query_options.__isset.lower_upper_support_utf8 && _query_options.lower_upper_support_utf8;
     }
 
+<<<<<<< HEAD
+=======
+    DebugActionMgr& debug_action_mgr() { return _debug_action_mgr; }
+
+    bool fragment_prepared() const { return _fragment_prepared; }
+    void set_fragment_prepared(bool prepared) { _fragment_prepared = prepared; }
+
+>>>>>>> f5b32a073e ([BugFix] Fix global RF race condition in event scheduler (#65200))
 private:
     // Set per-query state.
     void _init(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
@@ -650,6 +658,15 @@ private:
     BroadcastJoinRightOffsprings _broadcast_join_right_offsprings;
 
     std::optional<TSpillOptions> _spill_options;
+<<<<<<< HEAD
+=======
+
+    DebugActionMgr _debug_action_mgr;
+
+    bool _enable_event_scheduler = false;
+
+    bool _fragment_prepared = false;
+>>>>>>> f5b32a073e ([BugFix] Fix global RF race condition in event scheduler (#65200))
 };
 
 #define LIMIT_EXCEEDED(tracker, state, msg)                                                                         \

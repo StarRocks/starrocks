@@ -34,9 +34,24 @@
 #include "simd/simd.h"
 #include "types/logical_type.h"
 #include "types/logical_type_infra.h"
+#include "util/failpoint/fail_point.h"
 #include "util/time.h"
 
 namespace starrocks {
+<<<<<<< HEAD
+=======
+DEFINE_FAIL_POINT(global_runtime_filter_sync_B);
+
+RuntimeFilter* RuntimeFilterHelper::transmit_to_runtime_empty_filter(ObjectPool* pool, RuntimeFilter* rf) {
+    const auto* min_max_filter = rf->get_min_max_filter();
+    const auto* membership_filter = rf->get_membership_filter();
+    RuntimeFilter* filter = type_dispatch_filter(
+            membership_filter->logical_type(), static_cast<RuntimeFilter*>(nullptr),
+            [&]<LogicalType LT>() -> RuntimeFilter* {
+                return new ComposedRuntimeEmptyFilter<LT>(*down_cast<const MinMaxRuntimeFilter<LT>*>(min_max_filter),
+                                                          *membership_filter);
+            });
+>>>>>>> f5b32a073e ([BugFix] Fix global RF race condition in event scheduler (#65200))
 
 struct FilterBuilder {
     template <LogicalType ltype>
@@ -294,6 +309,7 @@ Status RuntimeFilterProbeDescriptor::init(int32_t filter_id, ExprContext* probe_
 }
 
 Status RuntimeFilterProbeDescriptor::prepare(RuntimeState* state, RuntimeProfile* p) {
+    _runtime_state = state;
     if (_probe_expr_ctx != nullptr) {
         RETURN_IF_ERROR(_probe_expr_ctx->prepare(state));
     }
@@ -780,8 +796,19 @@ void RuntimeFilterProbeCollector::wait(bool on_scan_node) {
     }
 }
 
+<<<<<<< HEAD
 void RuntimeFilterProbeDescriptor::set_runtime_filter(const JoinRuntimeFilter* rf) {
     const JoinRuntimeFilter* expected = nullptr;
+=======
+void RuntimeFilterProbeDescriptor::set_runtime_filter(const RuntimeFilter* rf) {
+    auto notify = DeferOp([this]() {
+        FAIL_POINT_TRIGGER_EXECUTE(global_runtime_filter_sync_B, { this->barrier.arrive_B(); });
+        if (_runtime_state && _runtime_state->fragment_prepared()) {
+            _observable.notify_source_observers();
+        }
+    });
+    const RuntimeFilter* expected = nullptr;
+>>>>>>> f5b32a073e ([BugFix] Fix global RF race condition in event scheduler (#65200))
     _runtime_filter.compare_exchange_strong(expected, rf, std::memory_order_seq_cst, std::memory_order_seq_cst);
     if (_ready_timestamp == 0 && rf != nullptr && _latency_timer != nullptr) {
         _ready_timestamp = UnixMillis();

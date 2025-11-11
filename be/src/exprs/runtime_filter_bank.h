@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <mutex>
+#include <semaphore>
 #include <set>
 
 #include "column/column.h"
@@ -34,6 +35,7 @@
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 #include "util/blocking_queue.hpp"
+#include "util/failpoint/fail_point.h"
 
 namespace starrocks::pipeline {
 class RuntimeBloomFilterBuildParam;
@@ -197,6 +199,10 @@ public:
     void set_runtime_filter(const JoinRuntimeFilter* rf);
     void set_shared_runtime_filter(const std::shared_ptr<const JoinRuntimeFilter>& rf);
 
+#ifdef FIU_ENABLE
+    failpoint::OneToAnyBarrier barrier;
+#endif
+
 private:
     friend class HashJoinNode;
     friend class hashJoiner;
@@ -218,8 +224,16 @@ private:
     bool _is_group_colocate_rf = false;
     std::vector<ExprContext*> _partition_by_exprs_contexts;
 
+<<<<<<< HEAD
     std::atomic<const JoinRuntimeFilter*> _runtime_filter = nullptr;
     std::shared_ptr<const JoinRuntimeFilter> _shared_runtime_filter = nullptr;
+=======
+    std::atomic<const RuntimeFilter*> _runtime_filter = nullptr;
+    std::shared_ptr<const RuntimeFilter> _shared_runtime_filter = nullptr;
+    RuntimeState* _runtime_state = nullptr;
+    pipeline::Observable _observable;
+    bool _has_push_down_to_storage = false;
+>>>>>>> f5b32a073e ([BugFix] Fix global RF race condition in event scheduler (#65200))
 };
 
 // RuntimeFilterProbeCollector::do_evaluate function apply runtime bloom filter to Operators to filter chunk.

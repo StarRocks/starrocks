@@ -44,6 +44,7 @@
 
 namespace starrocks::pipeline {
 DEFINE_FAIL_POINT(operator_return_large_column);
+DEFINE_FAIL_POINT(global_runtime_filter_sync_A);
 
 PipelineDriver::~PipelineDriver() noexcept {
     if (_workgroup != nullptr) {
@@ -159,6 +160,13 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
             for (const auto& [_, desc] : global_rf_collector->descriptors()) {
                 if (!desc->skip_wait()) {
                     _global_rf_descriptors.emplace_back(desc);
+<<<<<<< HEAD
+=======
+#ifdef FIU_ENABLE
+                    FAIL_POINT_TRIGGER_EXECUTE(global_runtime_filter_sync_A, { desc->barrier.arrive_A(); });
+#endif
+                    desc->add_observer(_runtime_state, &_observer);
+>>>>>>> f5b32a073e ([BugFix] Fix global RF race condition in event scheduler (#65200))
                 }
             }
 
