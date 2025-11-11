@@ -388,7 +388,6 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
         ConnectContext context = inf.getConnectContext();
         return Config.log_register_and_unregister_query_id &&
                 context != null &&
-                (context.getCommand() != COM_STMT_EXECUTE ||
-                        context.getSessionVariable().isAuditExecuteStmt());
+                (context.getCommand() != COM_STMT_EXECUTE || context.getSessionVariable().isAuditExecuteStmt());
     }
 }
