@@ -19,6 +19,8 @@ import com.starrocks.common.Config;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.persist.TaskRunStatus;
+import com.starrocks.scheduler.persist.TaskRunStatusChange;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.warehouse.WarehouseIdleChecker;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -51,9 +53,13 @@ public class TaskRunExecutor {
             return false;
         }
 
-        // Synchronously update the status, to make sure they can be persisted
-        status.setState(Constants.TaskRunState.RUNNING);
-        status.setProcessStartTime(System.currentTimeMillis());
+        // Persist state change
+        TaskRunStatusChange statusChange = new TaskRunStatusChange(taskRun.getTaskId(), taskRun.getStatus(),
+                Constants.TaskRunState.PENDING, Constants.TaskRunState.RUNNING);
+        GlobalStateMgr.getCurrentState().getEditLog().logUpdateTaskRun(statusChange, wal -> {
+            taskRun.getStatus().setState(Constants.TaskRunState.RUNNING);
+            taskRun.getStatus().setProcessStartTime(System.currentTimeMillis());
+        });
 
         CompletableFuture<Constants.TaskRunState> future = CompletableFuture.supplyAsync(() -> {
             try {

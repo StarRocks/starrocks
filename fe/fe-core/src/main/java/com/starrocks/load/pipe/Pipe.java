@@ -446,7 +446,7 @@ public class Pipe implements GsonPostProcessable {
             TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
             Task task = TaskBuilder.buildPipeTask(taskDesc);
             try {
-                taskManager.createTask(task, false);
+                taskManager.createTask(task);
             } catch (DdlException e) {
                 recordTaskError(taskDesc, "create task failed");
                 return;

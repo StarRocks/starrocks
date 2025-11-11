@@ -350,7 +350,7 @@ public class MaterializedViewTestBase extends PlanTestBase {
         if (task == null) {
             task = TaskBuilder.buildMvTask(mv, dbName);
             TaskBuilder.updateTaskInfo(task, mv);
-            taskManager.createTask(task, false);
+            taskManager.createTask(task);
         }
         taskManager.executeTaskSync(task);
     }
