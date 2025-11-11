@@ -1212,6 +1212,13 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int max_running_txn_num_per_db = 1000;
 
+    @ConfField(mutable = true, comment = "A comma-separated list of transaction latency metric groups to report. " +
+            "Load job source types (see TransactionState.LoadJobSourceType) are categorized into logical groups " +
+            "for monitoring. When a group is enabled, its name is added as a 'type' label to transaction metrics. " +
+            "Common groups include 'stream_load', 'routine_load', 'broker_load', 'insert', and 'compaction' " +
+            "(for shared-data clusters). e.g. \"stream_load,routine_load\"")
+    public static String txn_latency_metric_report_groups = "";
+
     /**
      * The load task executor pool size. This pool size limits the max running load tasks.
      * Currently, it only limits the load task of broker load, pending and loading phases.
@@ -3817,7 +3824,7 @@ public class Config extends ConfigBase {
     public static String jwt_principal_field = "sub";
 
     /**
-     * Specifies a list of string. One of that must match the value of the JWT’s issuer (iss) field in order to consider
+     * Specifies a list of string. One of that must match the value of the JWT's issuer (iss) field in order to consider
      * this JWT valid. The iss field in the JWT identifies the principal that issued the JWT.
      */
     @ConfField(mutable = false)
@@ -3831,7 +3838,7 @@ public class Config extends ConfigBase {
     public static String[] jwt_required_audience = {};
 
     /**
-     * The authorization URL. The URL a user’s browser will be redirected to in order to begin the OAuth2 authorization process
+     * The authorization URL. The URL a user's browser will be redirected to in order to begin the OAuth2 authorization process
      */
     @ConfField(mutable = false)
     public static String oauth2_auth_server_url = "";
@@ -3883,14 +3890,14 @@ public class Config extends ConfigBase {
     public static String oauth2_principal_field = "sub";
 
     /**
-     * Specifies a string that must match the value of the JWT’s issuer (iss) field in order to consider this JWT valid.
+     * Specifies a string that must match the value of the JWT's issuer (iss) field in order to consider this JWT valid.
      * The iss field in the JWT identifies the principal that issued the JWT.
      */
     @ConfField(mutable = false)
     public static String oauth2_required_issuer = "";
 
     /**
-     * Specifies a string that must match the value of the JWT’s Audience (aud) field in order to consider this JWT valid.
+     * Specifies a string that must match the value of the JWT's Audience (aud) field in order to consider this JWT valid.
      * The aud field in the JWT identifies the recipients that the JWT is intended for.
      */
     @ConfField(mutable = false)
