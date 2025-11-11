@@ -438,7 +438,7 @@ E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 64. D
 -- !result
 select array_generate("2025-10-01 14:28:32.800000", "2025-10-01 14:28:31",NULL);
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 78. Detail message: array_generate requires step parameter must be a constant interval.')
+E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 78. Detail message: array_generate requires step parameter must be a constant integer.')
 -- !result
 
 -- name: test_array_repeat
