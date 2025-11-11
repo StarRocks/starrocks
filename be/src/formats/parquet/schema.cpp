@@ -184,10 +184,10 @@ Status SchemaDescriptor::list_to_field(const std::vector<tparquet::SchemaElement
                 }
                 // LIST-annotated group with three-level encoding cannot be repeated.
                 if (is_group(repeated_field)) {
-                    ASSIGN_OR_RETURN(const auto* repeated_group_field, _get_schema_element(t_schemas, pos + 3));
-                    if (repeated_group_field->num_children == 0) {
+                    if (repeated_field->num_children == 0) {
                         return Status::InvalidArgument("LIST-annotated groups must have at least one child.");
                     }
+                    ASSIGN_OR_RETURN(const auto* repeated_group_field, _get_schema_element(t_schemas, pos + 3));
                     if (is_repeated(repeated_group_field)) {
                         return Status::InvalidArgument("LIST-annotated groups must not be repeated.");
                     }
