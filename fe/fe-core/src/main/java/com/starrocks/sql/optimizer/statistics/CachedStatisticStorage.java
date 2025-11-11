@@ -195,6 +195,13 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
     }
 
     @Override
+    public void overwritePartitionStatistics(Table table, long sourcePartition, long targetPartition) {
+        // Refresh table statistics (row count) for the new target partition
+        // Column statistics are stored by (tableId, columnName) and don't need refresh
+        refreshTableStatistic(table, true);
+    }
+
+    @Override
     public List<ConnectorTableColumnStats> getConnectorTableStatistics(Table table, List<String> columns) {
         Preconditions.checkState(table != null);
 

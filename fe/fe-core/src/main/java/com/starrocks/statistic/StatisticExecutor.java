@@ -670,12 +670,19 @@ public class StatisticExecutor {
         executeDML(context, sqlList.get(0));
 
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().recordDropPartition(sourcePartition);
-        // NOTE: why don't we refresh the statistics cache ?
-        // OVERWRITE will create a new partition and delete the existing one, so next time when consulting the stats
-        // cache, it would get a cache-miss so reload the cache. and also the cache of deleted partition would be
-        // vacuumed by background job. so to conclude we don't need to refresh the stats cache manually
-        GlobalStateMgr.getCurrentState().getStatisticStorage().overwritePartitionStatistics(
-                tableId, sourcePartition, targetPartition);
+        
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, tableId);
+        if (table != null) {
+            AnalyzeMgr analyzeMgr = GlobalStateMgr.getCurrentState().getAnalyzeMgr();
+            BasicStatsMeta basicStatsMeta = analyzeMgr.getTableBasicStatsMeta(table.getId());
+            if (basicStatsMeta != null) {
+                basicStatsMeta = basicStatsMeta.clone();
+                basicStatsMeta.setUpdateTime(LocalDateTime.now());
+                analyzeMgr.addBasicStatsMeta(basicStatsMeta);
+            }
+            GlobalStateMgr.getCurrentState().getStatisticStorage().overwritePartitionStatistics(
+                    table, sourcePartition, targetPartition);
+        }
     }
 
     private List<TResultBatch> executeDQL(ConnectContext context, String sql) {

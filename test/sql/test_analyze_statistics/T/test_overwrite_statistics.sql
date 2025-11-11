@@ -45,3 +45,9 @@ select count(*) from _statistics_.column_statistics where table_name = 'test_ove
 INSERT OVERWRITE sales_data partition("p202401") VALUES (101, '2024-01-10');
 select count(*) from _statistics_.column_statistics where table_name = 'test_overwrite_statistics.sales_data';
 
+insert overwrite test_overwrite_stats_table select generate_series from TABLE(generate_series(1,  5000));
+insert overwrite test_overwrite_stats_table select generate_series from TABLE(generate_series(1,  5000));
+insert overwrite test_overwrite_stats_table select generate_series from TABLE(generate_series(1,  5000));
+insert overwrite test_overwrite_stats_table select generate_series from TABLE(generate_series(1,  5000));
+function: assert_explain_contains('select * from test_overwrite_statistics.test_overwrite_stats_table;', 'cardinality=5000')
+

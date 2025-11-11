@@ -47,7 +47,7 @@ public interface StatisticStorage {
     /**
      * Overwrite the statistics of `targetPartition` with `sourcePartition`
      */
-    default void overwritePartitionStatistics(long tableId, long sourcePartition, long targetPartition) {
+    default void overwritePartitionStatistics(Table table, long sourcePartition, long targetPartition) {
     }
 
     default void updatePartitionStatistics(long tableId, long partition, long rows) {

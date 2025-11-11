@@ -47,11 +47,11 @@ public class InMemoryStatisticStorage implements StatisticStorage {
     }
 
     @Override
-    public void overwritePartitionStatistics(long tableId, long sourcePartition, long targetPartition) {
-        Long stats = partitionRowsTables.get(tableId, sourcePartition);
+    public void overwritePartitionStatistics(Table table, long sourcePartition, long targetPartition) {
+        Long stats = partitionRowsTables.get(table.getId(), sourcePartition);
         if (stats != null) {
-            partitionRowsTables.put(tableId, targetPartition, stats);
-            partitionRowsTables.remove(tableId, sourcePartition);
+            partitionRowsTables.put(table.getId(), targetPartition, stats);
+            partitionRowsTables.remove(table.getId(), sourcePartition);
         }
     }
 
