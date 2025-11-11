@@ -231,7 +231,12 @@ public class StatisticsCalcUtils {
             LocalDateTime updateDatetime = StatisticUtils.getPartitionLastUpdateTime(partition);
             if (tableStatistic.isEmpty()) {
                 partitionRowCount = partition.getRowCount();
-                if (updateDatetime.isAfter(lastWorkTimestamp)) {
+                // tablet stats collection is async on both FE and BE.  Each BE and leader FE synchronize every 5 minutes by default.
+                // That is, BE collects all tablet information in the BE node's cache every 5 minutes, and then FE accesses
+                // all BE nodes every 5 minutes to obtain tablet information. There is a situation where FE sends a tablet stats
+                // retrieval request before BE has collected tablet stats for its local node, resulting in tablet row count of 0.
+                // To prevent the occasional occurrence of cardinality being 0 in tables after overwrite, an adaptation has been made here.
+                if (updateDatetime.isAfter(lastWorkTimestamp) || partitionRowCount == 0) {
                     partitionRowCount += deltaRows;
                 }
             } else {
