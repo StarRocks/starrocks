@@ -99,6 +99,11 @@ public class ExecuteSqlAction extends RestBaseAction {
     }
 
     @Override
+    public boolean isSqlAction() {
+        return true;
+    }
+
+    @Override
     protected void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException {
         StatementBase parsedStmt;
 

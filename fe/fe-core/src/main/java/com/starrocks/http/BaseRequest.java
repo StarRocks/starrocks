@@ -59,10 +59,9 @@ public class BaseRequest {
     private boolean isAuthorized = false;
     private QueryStringDecoder decoder;
 
-    public BaseRequest(ChannelHandlerContext ctx, HttpRequest request, HttpConnectContext connectContext) {
+    public BaseRequest(ChannelHandlerContext ctx, HttpRequest request) {
         this.context = ctx;
         this.request = request;
-        this.connectContext = connectContext;
     }
 
     public ChannelHandlerContext getContext() {
@@ -187,5 +186,9 @@ public class BaseRequest {
 
     public HttpConnectContext getConnectContext() {
         return connectContext;
+    }
+
+    public void setConnectContext(HttpConnectContext connectContext) {
+        this.connectContext = connectContext;
     }
 }

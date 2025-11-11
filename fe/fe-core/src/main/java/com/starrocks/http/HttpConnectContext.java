@@ -53,8 +53,8 @@ public class HttpConnectContext extends ConnectContext {
     // we parse the sql at the beginning for validating, so keep it in context for handle_query
     private StatementBase statement;
 
-    // for http sql, we need register connectContext to connectScheduler
-    // when connection is established
+    // After the TCP connection is established, the first time `ExecuteSqlAction` runs it registers the `ConnectContext` to the
+    // `ConnectScheduler`.
     private boolean registered;
 
     // used for test. only output result raws

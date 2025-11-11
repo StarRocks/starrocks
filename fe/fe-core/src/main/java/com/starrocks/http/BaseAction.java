@@ -120,6 +120,10 @@ public abstract class BaseAction implements IAction {
 
     public abstract void execute(BaseRequest request, BaseResponse response) throws DdlException, AccessDeniedException;
 
+    public boolean isSqlAction() {
+        return false;
+    }
+
     protected void writeResponse(BaseRequest request, BaseResponse response, HttpResponseStatus status) {
         // if (HttpHeaders.is100ContinueExpected(request.getRequest())) {
         // ctx.write(new DefaultFullHttpResponse(HttpVersion.HTTP_1_1,

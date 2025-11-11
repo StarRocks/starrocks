@@ -59,8 +59,9 @@ import java.util.concurrent.Executor;
 
 public class HttpServerHandler extends ChannelInboundHandlerAdapter {
     private static final Logger LOG = LogManager.getLogger(HttpServerHandler.class);
-    // keep connectContext when channel is open
-    public static final AttributeKey<HttpConnectContext> HTTP_CONNECT_CONTEXT_ATTRIBUTE_KEY =
+    // All Execute SQL Actions within this channel share the same ConnectContext, while other Actions create a new ConnectContext
+    // each time. The lifecycle of the shared ConnectContext for Execute SQL Actions is the same as that of the channel.
+    public static final AttributeKey<HttpConnectContext> HTTP_SQL_CONNECT_CONTEXT_ATTRIBUTE_KEY =
             AttributeKey.valueOf("httpContextKey");
     protected HttpRequest request = null;
     private final ActionController controller;
@@ -97,10 +98,14 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
                 return;
             }
 
-            // get HttpConnectContext from channel, HttpConnectContext's lifetime is same as channel
-            HttpConnectContext connectContext = ctx.channel().attr(HTTP_CONNECT_CONTEXT_ATTRIBUTE_KEY).get();
-            BaseRequest req = new BaseRequest(ctx, request, connectContext);
+            BaseRequest req = new BaseRequest(ctx, request);
             action = getAction(req);
+            if (action.isSqlAction()) {
+                req.setConnectContext(ctx.channel().attr(HTTP_SQL_CONNECT_CONTEXT_ATTRIBUTE_KEY).get());
+            } else {
+                req.setConnectContext(new HttpConnectContext());
+            }
+
             if (action != null) {
                 if (LOG.isDebugEnabled()) {
                     LOG.debug("action: {} ", action.getClass().getName());
@@ -160,14 +165,14 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
     public void channelActive(ChannelHandlerContext ctx) throws Exception {
         HttpServerHandlerMetrics.getInstance().httpConnectionsNum.increase(1L);
         // create HttpConnectContext when channel is established, and store it in channel attr
-        ctx.channel().attr(HTTP_CONNECT_CONTEXT_ATTRIBUTE_KEY).setIfAbsent(new HttpConnectContext());
+        ctx.channel().attr(HTTP_SQL_CONNECT_CONTEXT_ATTRIBUTE_KEY).setIfAbsent(new HttpConnectContext());
         super.channelActive(ctx);
     }
 
     @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
         HttpServerHandlerMetrics.getInstance().httpConnectionsNum.increase(-1L);
-        HttpConnectContext context = ctx.channel().attr(HTTP_CONNECT_CONTEXT_ATTRIBUTE_KEY).get();
+        HttpConnectContext context = ctx.channel().attr(HTTP_SQL_CONNECT_CONTEXT_ATTRIBUTE_KEY).get();
         if (context != null && context.isRegistered()) {
             // Context is registered in ExecuteSqlAction#executeWithoutPassword
             ExecuteEnv.getInstance().getScheduler().unregisterConnection(context);
