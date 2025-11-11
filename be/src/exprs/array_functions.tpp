@@ -11,6 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+#include <chrono>
 #include <memory>
 
 #include "column/array_column.h"
@@ -1644,17 +1645,106 @@ private:
     }
 };
 
-// Define template function for array generation with different time units
-// Constants for time unit estimation
-constexpr int64_t DAYS_PER_YEAR = 365;
-constexpr int64_t DAYS_PER_QUARTER = 90;
-constexpr int64_t DAYS_PER_MONTH = 30;
-constexpr int64_t DAYS_PER_WEEK = 7;
-constexpr int64_t SECONDS_PER_DAY = 86400;
-constexpr int64_t SECONDS_PER_HOUR = 3600;
-constexpr int64_t SECONDS_PER_MINUTE = 60;
-constexpr int64_t MILLIS_PER_SECOND = 1000;
-constexpr int64_t MICROS_PER_SECOND = 1000000;
+// Helper template to map TimeUnit to chrono duration type
+template <TimeUnit UNIT>
+struct TimeUnitToDuration;
+
+template <>
+struct TimeUnitToDuration<TimeUnit::MICROSECOND> {
+    using type = std::chrono::microseconds;
+};
+template <>
+struct TimeUnitToDuration<TimeUnit::MILLISECOND> {
+    using type = std::chrono::milliseconds;
+};
+template <>
+struct TimeUnitToDuration<TimeUnit::SECOND> {
+    using type = std::chrono::seconds;
+};
+template <>
+struct TimeUnitToDuration<TimeUnit::MINUTE> {
+    using type = std::chrono::minutes;
+};
+template <>
+struct TimeUnitToDuration<TimeUnit::HOUR> {
+    using type = std::chrono::hours;
+};
+template <>
+struct TimeUnitToDuration<TimeUnit::DAY> {
+    using type = std::chrono::days;
+};
+template <>
+struct TimeUnitToDuration<TimeUnit::WEEK> {
+    using type = std::chrono::weeks;
+};
+
+// Helper function to accurately calculate step count for all time units
+// Uses C++20 chrono for precise, standard-compliant time arithmetic
+template <LogicalType LType, TimeUnit TIME_UNIT>
+inline size_t calculate_accurate_step_count(
+        const typename std::conditional_t<LType == TYPE_DATE, DateValue, TimestampValue>& start,
+        const typename std::conditional_t<LType == TYPE_DATE, DateValue, TimestampValue>& stop, int32_t step) {
+    using namespace std::chrono;
+
+    if (step == 0) return 0;
+
+    // For fixed-length time units, use chrono duration_cast for O(1) calculation
+    if constexpr (TIME_UNIT == TimeUnit::MICROSECOND || TIME_UNIT == TimeUnit::MILLISECOND ||
+                  TIME_UNIT == TimeUnit::SECOND || TIME_UNIT == TimeUnit::MINUTE || TIME_UNIT == TimeUnit::HOUR ||
+                  TIME_UNIT == TimeUnit::DAY || TIME_UNIT == TimeUnit::WEEK) {
+        // Get the time difference
+        auto diff = [&]() {
+            if constexpr (LType == TYPE_DATE) {
+                return stop.to_sys_days() - start.to_sys_days();
+            } else {
+                return stop.to_sys_time() - start.to_sys_time();
+            }
+        }();
+
+        // Convert to target time unit and calculate count
+        using TargetDuration = typename TimeUnitToDuration<TIME_UNIT>::type;
+        int64_t count = std::abs(duration_cast<TargetDuration>(diff).count());
+        return count / step + 1;
+    }
+
+    // For variable-length time units (MONTH, QUARTER, YEAR)
+    // Use C++20 chrono year_month_day for calendar arithmetic
+    if constexpr (TIME_UNIT == TimeUnit::MONTH || TIME_UNIT == TimeUnit::QUARTER || TIME_UNIT == TimeUnit::YEAR) {
+        // Convert to year_month_day using sys_days
+        year_month_day start_ymd, stop_ymd;
+        if constexpr (LType == TYPE_DATE) {
+            start_ymd = year_month_day{start.to_sys_days()};
+            stop_ymd = year_month_day{stop.to_sys_days()};
+        } else {
+            start_ymd = year_month_day{floor<days>(start.to_sys_time())};
+            stop_ymd = year_month_day{floor<days>(stop.to_sys_time())};
+        }
+
+        // Calculate difference based on time unit
+        int64_t diff = 0;
+        if constexpr (TIME_UNIT == TimeUnit::YEAR) {
+            // Year difference
+            int years_diff = static_cast<int>(stop_ymd.year()) - static_cast<int>(start_ymd.year());
+            diff = std::abs(years_diff);
+        } else if constexpr (TIME_UNIT == TimeUnit::QUARTER) {
+            // Quarter difference: years * 4 + quarter_offset
+            int years_diff = static_cast<int>(stop_ymd.year()) - static_cast<int>(start_ymd.year());
+            int start_quarter = (static_cast<unsigned>(start_ymd.month()) - 1) / 3;
+            int stop_quarter = (static_cast<unsigned>(stop_ymd.month()) - 1) / 3;
+            diff = std::abs(years_diff * 4 + (stop_quarter - start_quarter));
+        } else { // MONTH
+            // Month difference: years * 12 + month_offset
+            int years_diff = static_cast<int>(stop_ymd.year()) - static_cast<int>(start_ymd.year());
+            int months_diff = static_cast<unsigned>(stop_ymd.month()) - static_cast<unsigned>(start_ymd.month());
+            diff = std::abs(years_diff * 12 + months_diff);
+        }
+
+        return diff / step + 1;
+    }
+
+    return 0;
+}
+
 #define DEFINE_ARRAY_GENERATE_FN(NAME, TIME_UNIT)                                                                  \
     template <LogicalType LType, LogicalType ResultType>                                                           \
     static StatusOr<ColumnPtr> array_generate_function_##NAME(FunctionContext* ctx, const Columns& columns) {      \
@@ -1694,8 +1784,7 @@ constexpr int64_t MICROS_PER_SECOND = 1000000;
         ColumnViewer<LType> stop_viewer = ColumnViewer<LType>(columns[1]);                                         \
         ColumnViewer<TYPE_INT> step_viewer = ColumnViewer<TYPE_INT>(columns[2]);                                   \
                                                                                                                    \
-        constexpr size_t RESERVE_THRESHOLD = 64;                                                                   \
-        size_t estimated_total_elements = 0;                                                                       \
+        size_t total_elements = 0;                                                                                 \
         for (size_t cur_row = 0; cur_row < num_rows_to_process; cur_row++) {                                       \
             if (nulls && nulls->get_data()[cur_row]) {                                                             \
                 continue;                                                                                          \
@@ -1708,62 +1797,11 @@ constexpr int64_t MICROS_PER_SECOND = 1000000;
                 continue;                                                                                          \
             }                                                                                                      \
                                                                                                                    \
-            int64_t diff = 0;                                                                                      \
-            if constexpr (LType == TYPE_DATE) {                                                                    \
-                diff = std::abs(stop.julian() - start.julian());                                                   \
-            } else if constexpr (LType == TYPE_DATETIME) {                                                         \
-                diff = std::abs(stop.to_unix_second() - start.to_unix_second());                                   \
-            }                                                                                                      \
-                                                                                                                   \
-            size_t estimated_count = 1;                                                                            \
-            if constexpr (TIME_UNIT == TimeUnit::YEAR) {                                                           \
-                if constexpr (LType == TYPE_DATE) {                                                                \
-                    estimated_count = diff / DAYS_PER_YEAR / step + 2;                                             \
-                } else {                                                                                           \
-                    estimated_count = diff / SECONDS_PER_DAY / DAYS_PER_YEAR / step + 2;                           \
-                }                                                                                                  \
-            } else if constexpr (TIME_UNIT == TimeUnit::QUARTER) {                                                 \
-                if constexpr (LType == TYPE_DATE) {                                                                \
-                    estimated_count = diff / DAYS_PER_QUARTER / step + 2;                                          \
-                } else {                                                                                           \
-                    estimated_count = diff / SECONDS_PER_DAY / DAYS_PER_QUARTER / step + 2;                        \
-                }                                                                                                  \
-            } else if constexpr (TIME_UNIT == TimeUnit::MONTH) {                                                   \
-                if constexpr (LType == TYPE_DATE) {                                                                \
-                    estimated_count = diff / DAYS_PER_MONTH / step + 2;                                            \
-                } else {                                                                                           \
-                    estimated_count = diff / SECONDS_PER_DAY / DAYS_PER_MONTH / step + 2;                          \
-                }                                                                                                  \
-            } else if constexpr (TIME_UNIT == TimeUnit::WEEK) {                                                    \
-                if constexpr (LType == TYPE_DATE) {                                                                \
-                    estimated_count = diff / DAYS_PER_WEEK / step + 2;                                             \
-                } else {                                                                                           \
-                    estimated_count = diff / SECONDS_PER_DAY / DAYS_PER_WEEK / step + 2;                           \
-                }                                                                                                  \
-            } else if constexpr (TIME_UNIT == TimeUnit::DAY) {                                                     \
-                if constexpr (LType == TYPE_DATE) {                                                                \
-                    estimated_count = diff / step + 1;                                                             \
-                } else {                                                                                           \
-                    estimated_count = diff / SECONDS_PER_DAY / step + 1;                                           \
-                }                                                                                                  \
-            } else if constexpr (TIME_UNIT == TimeUnit::HOUR) {                                                    \
-                estimated_count = diff / SECONDS_PER_HOUR / step + 2;                                              \
-            } else if constexpr (TIME_UNIT == TimeUnit::MINUTE) {                                                  \
-                estimated_count = diff / SECONDS_PER_MINUTE / step + 2;                                            \
-            } else if constexpr (TIME_UNIT == TimeUnit::SECOND) {                                                  \
-                estimated_count = diff / step + 2;                                                                 \
-            } else if constexpr (TIME_UNIT == TimeUnit::MILLISECOND) {                                             \
-                estimated_count = diff * MILLIS_PER_SECOND / step + 2;                                             \
-            } else if constexpr (TIME_UNIT == TimeUnit::MICROSECOND) {                                             \
-                estimated_count = diff * MICROS_PER_SECOND / step + 2;                                             \
-            }                                                                                                      \
-                                                                                                                   \
-            estimated_total_elements += estimated_count;                                                           \
+            size_t accurate_count = calculate_accurate_step_count<LType, TIME_UNIT>(start, stop, step);            \
+            total_elements += accurate_count;                                                                      \
         }                                                                                                          \
                                                                                                                    \
-        if (estimated_total_elements >= RESERVE_THRESHOLD) {                                                       \
-            TRY_CATCH_BAD_ALLOC(data_column->reserve(estimated_total_elements));                                   \
-        }                                                                                                          \
+        TRY_CATCH_BAD_ALLOC(data_column->reserve(total_elements));                                                 \
                                                                                                                    \
         size_t total_elements_num = 0;                                                                             \
         for (size_t cur_row = 0; cur_row < num_rows_to_process; cur_row++) {                                       \
@@ -1776,12 +1814,7 @@ constexpr int64_t MICROS_PER_SECOND = 1000000;
             auto stop = stop_viewer.value(cur_row);                                                                \
             auto step = step_viewer.value(cur_row);                                                                \
                                                                                                                    \
-            if (step == 0) {                                                                                       \
-                offsets->append(offsets->get_data().back());                                                       \
-                continue;                                                                                          \
-            }                                                                                                      \
-                                                                                                                   \
-            if (!start.is_valid_non_strict() || !stop.is_valid_non_strict()) {                                     \
+            if (step == 0 || !start.is_valid_non_strict() || !stop.is_valid_non_strict()) {                        \
                 offsets->append(offsets->get_data().back());                                                       \
                 continue;                                                                                          \
             }                                                                                                      \

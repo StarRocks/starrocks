@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <chrono>
 #include <cstdint>
 #include <string>
 
@@ -100,6 +101,9 @@ public:
 
     JulianDate julian() const { return _julian; }
 
+    // Convert to C++20 chrono sys_days for time arithmetic
+    inline std::chrono::sys_days to_sys_days() const;
+
     template <TimeUnit UNIT>
     inline DateValue add(int count) const;
 
@@ -125,6 +129,14 @@ DateValue DateValue::from_days_since_unix_epoch(int days_since_unix_epoch) {
     DateValue dv;
     dv._julian = days_since_unix_epoch + date::UNIX_EPOCH_JULIAN;
     return dv;
+}
+
+std::chrono::sys_days DateValue::to_sys_days() const {
+    int year, month, day;
+    to_date(&year, &month, &day);
+    return std::chrono::sys_days{std::chrono::year_month_day{std::chrono::year{year},
+                                                             std::chrono::month{static_cast<unsigned>(month)},
+                                                             std::chrono::day{static_cast<unsigned>(day)}}};
 }
 
 template <TimeUnit UNIT>
