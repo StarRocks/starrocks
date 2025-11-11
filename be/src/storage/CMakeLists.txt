@@ -284,6 +284,6 @@ if (NOT BUILD_FORMAT_LIB)
     list(APPEND STORAGE_FILES  lake/starlet_location_provider.cpp)
 endif()
 
-add_library(Storage STATIC
+ADD_BE_LIB(Storage
     ${STORAGE_FILES}
 )

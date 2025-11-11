@@ -18,10 +18,11 @@ package com.starrocks.sql.ast;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.type.Type;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -50,7 +51,7 @@ public class ExpressionPartitionDesc extends PartitionDesc {
 
     @Override
     public String toString() {
-        return "PARTITION BY " + expr.toSql();
+        return "PARTITION BY " + ExprToSql.toSql(expr);
     }
 
     public RangePartitionDesc getRangePartitionDesc() {

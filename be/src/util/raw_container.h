@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "runtime/memory/column_allocator.h"
+#include "util/bit_util.h"
 
 namespace starrocks::raw {
 
@@ -101,10 +102,8 @@ public:
     const_pointer adress(const_reference r) const { return &r; }
 
     pointer allocate(size_type n) {
-        if (n * sizeof(value_type) < N) {
-            return (pointer)std::aligned_alloc(N, N);
-        }
-        return (pointer)std::aligned_alloc(N, n * sizeof(value_type));
+        size_t size = (n * sizeof(value_type) < N) ? N : (n * sizeof(value_type));
+        return (pointer)BitUtil::safe_aligned_alloc(N, size);
     }
 
     void deallocate(pointer p, size_type) { free(p); }

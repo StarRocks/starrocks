@@ -34,7 +34,6 @@ import com.starrocks.thrift.TFunctionVersion;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TPlanFragmentDestination;
 import com.starrocks.thrift.TPlanFragmentExecParams;
-import com.starrocks.thrift.TPredicateTreeParams;
 import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TQueryQueueOptions;
 import org.apache.commons.collections4.CollectionUtils;
@@ -181,9 +180,7 @@ public class TFragmentInstanceFactory {
                     queryOptions.setQuery_queue_options(queryQueueOptions);
                 }
 
-                result.setPred_tree_params(new TPredicateTreeParams());
-                result.pred_tree_params.setEnable_or(sessionVariable.isEnablePushdownOrPredicate());
-                result.pred_tree_params.setEnable_show_in_profile(sessionVariable.isEnableShowPredicateTreeInProfile());
+                result.setPred_tree_params(sessionVariable.getPredicateTreeParams());
 
                 if (CollectionUtils.isNotEmpty(fragment.getCollectExecStatsIds())) {
                     result.setExec_stats_node_ids(fragment.getCollectExecStatsIds());

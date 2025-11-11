@@ -14,6 +14,11 @@
 
 package com.starrocks.scheduler.mv.ivm;
 
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.common.AnalysisException;
+import com.starrocks.scheduler.MVTaskRunProcessor;
+import com.starrocks.scheduler.mv.hybrid.MVHybridBasedRefreshProcessor;
+import com.starrocks.scheduler.mv.pct.MVPCTBasedRefreshProcessor;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TExplainLevel;
 import org.junit.jupiter.api.Assertions;
@@ -29,6 +34,8 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
     public static void beforeClass() throws Exception {
         MVIVMIcebergTestBase.beforeClass();
         starRocksAssert.useDatabase("test");
+        starRocksAssert.withTable(cluster, "depts");
+        starRocksAssert.withTable(cluster, "emps");
     }
 
     @Test
@@ -380,5 +387,172 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
                 }
         );
         connectContext.getSessionVariable().setEnableMaterializedViewTextMatchRewrite(false);
+    }
+
+    @Test
+    public void testIncrementalRefreshWithBadJoinOperator() {
+        Assertions.assertThrowsExactly(AnalysisException.class, () -> {
+            String query = "SELECT a.id * 2 + 1, b.data FROM `iceberg0`.`unpartitioned_db`.`t0` a full join " +
+                    "`iceberg0`.`partitioned_db`.`t1` b on a.id=b.id where a.id > 10;";
+            MaterializedView mv = createMaterializedViewWithRefreshMode(query, "incremental");
+        });
+    }
+
+    @Test
+    public void testIncrementalRefreshWithBadJoinAggOperator() {
+        Assertions.assertThrowsExactly(AnalysisException.class, () -> {
+            String query = "SELECT a.id * 2 + 1, b.data FROM " +
+                    " (select id, count(*) from `iceberg0`.`unpartitioned_db`.`t0` group by id) a inner join " +
+                    "`iceberg0`.`partitioned_db`.`t1` b on a.id=b.id where a.id > 10;";
+            MaterializedView mv = createMaterializedViewWithRefreshMode(query, "incremental");
+        });
+    }
+
+    @Test
+    public void testIncrementalRefreshWithBadSetOperator() {
+        Assertions.assertThrowsExactly(AnalysisException.class, () -> {
+            String query = "SELECT id, data, date FROM `iceberg0`.`partitioned_db`.`t1` as a " +
+                    " UNION SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0` as b;";
+            MaterializedView mv = createMaterializedViewWithRefreshMode(query, "incremental");
+        });
+
+        Assertions.assertThrowsExactly(AnalysisException.class, () -> {
+            String query = "SELECT id, data, date FROM `iceberg0`.`partitioned_db`.`t1` as a " +
+                    " MINUS SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0` as b;";
+            MaterializedView mv = createMaterializedViewWithRefreshMode(query, "incremental");
+        });
+
+        Assertions.assertThrowsExactly(AnalysisException.class, () -> {
+            String query = "SELECT id, data, date FROM `iceberg0`.`partitioned_db`.`t1` as a " +
+                    " EXCEPT SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0` as b;";
+            MaterializedView mv = createMaterializedViewWithRefreshMode(query, "incremental");
+        });
+    }
+
+    @Test
+    public void testIncrementalRefreshWithWindowOperator() {
+        Assertions.assertThrowsExactly(AnalysisException.class, () -> {
+            String query = "SELECT id, count(data) over (partition by date)  FROM `iceberg0`.`unpartitioned_db`.`t0` as a;";
+            MaterializedView mv = createMaterializedViewWithRefreshMode(query, "incremental");
+        });
+    }
+
+    @Test
+    public void testIncrementalRefreshWithOrderOperator() {
+        Assertions.assertThrowsExactly(AnalysisException.class, () -> {
+            String query = "SELECT id, count(data) FROM `iceberg0`.`unpartitioned_db`.`t0` as a group by id order by id;";
+            MaterializedView mv = createMaterializedViewWithRefreshMode(query, "incremental");
+        });
+    }
+
+    @Test
+    public void testIncrementalRefreshWithTableFunctionOperator() {
+        Assertions.assertThrowsExactly(AnalysisException.class, () -> {
+            String query = "SELECT id, unnest FROM `iceberg0`.`unpartitioned_db`.`t0` as a, unnest(split(data, ','));";
+            createMaterializedViewWithRefreshMode(query, "incremental");
+        });
+    }
+
+    @Test
+    public void testAutoRefreshWithTableFunctionOperator() throws Exception {
+        String query = "SELECT id, unnest FROM `iceberg0`.`unpartitioned_db`.`t0` as a, unnest(split(data, ','));";
+        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "auto");
+        Assertions.assertEquals(MaterializedView.RefreshMode.PCT, mv.getCurrentRefreshMode());
+    }
+
+    @Test
+    public void testIncrementalRefreshWithScanOperator() throws Exception {
+        String query = "SELECT id, data, date  FROM `iceberg0`.`unpartitioned_db`.`t0` as a;";
+        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "incremental");
+        Assertions.assertEquals(MaterializedView.RefreshMode.INCREMENTAL, mv.getCurrentRefreshMode());
+    }
+
+    @Test
+    public void testFullRefreshWithScanOperator() throws Exception {
+        String query = "SELECT id, data, date  FROM `iceberg0`.`unpartitioned_db`.`t0` as a;";
+        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "full");
+        Assertions.assertEquals(MaterializedView.RefreshMode.FULL, mv.getCurrentRefreshMode());
+    }
+
+    @Test
+    public void testFullRefreshWithTableFunctionOperator() throws Exception {
+        String query = "SELECT id, unnest FROM `iceberg0`.`unpartitioned_db`.`t0` as a, unnest(split(data, ','));";
+        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "full");
+        Assertions.assertEquals(MaterializedView.RefreshMode.FULL, mv.getCurrentRefreshMode());
+    }
+
+    @Test
+    public void testAutoRefreshWithScanOperator() throws Exception {
+        String query = "SELECT id, data, date  FROM `iceberg0`.`unpartitioned_db`.`t0` as a;";
+        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "auto");
+        Assertions.assertEquals(MaterializedView.RefreshMode.AUTO, mv.getCurrentRefreshMode());
+    }
+
+    @Test
+    public void testIncrementalRefreshWithOlapScanOperator() throws Exception {
+        Assertions.assertThrowsExactly(AnalysisException.class, () -> {
+            String query = "SELECT * from emps;";
+            createMaterializedViewWithRefreshMode(query, "incremental");
+        });
+    }
+
+    @Test
+    public void testFullRefreshWithOlapScanOperator() throws Exception {
+        String query = "SELECT * from emps;";
+        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "full");
+        Assertions.assertEquals(MaterializedView.RefreshMode.FULL, mv.getCurrentRefreshMode());
+    }
+
+    @Test
+    public void testAutoRefreshWithOlapScanOperator() throws Exception {
+        String query = "SELECT * from emps;";
+        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "auto");
+        Assertions.assertEquals(MaterializedView.RefreshMode.PCT, mv.getCurrentRefreshMode());
+    }
+
+    @Test
+    public void testAutoRefreshWithRetractableChanges1() throws Exception {
+        String query = "SELECT id, data, date  FROM `iceberg0`.`unpartitioned_db`.`t0` as a;";
+        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "auto");
+        Assertions.assertEquals(MaterializedView.RefreshMode.AUTO, mv.getCurrentRefreshMode());
+
+        // if the base table has no retractable changes, the refresh processor should be full refresh
+        {
+            advanceTableVersionTo(2);
+            MVTaskRunProcessor mvTaskRunProcessor = getMVTaskRunProcessor(mv);
+            Assertions.assertTrue(mvTaskRunProcessor.getMVRefreshProcessor() instanceof MVHybridBasedRefreshProcessor);
+            MVHybridBasedRefreshProcessor hybridBasedRefreshProcessor =
+                    (MVHybridBasedRefreshProcessor) mvTaskRunProcessor.getMVRefreshProcessor();
+            Assertions.assertTrue(hybridBasedRefreshProcessor.getCurrentProcessor() instanceof MVIVMBasedRefreshProcessor);
+        }
+        // if the base table has retractable changes, the refresh processor should be full refresh
+        {
+            mockListTableDeltaTraits();
+            MVTaskRunProcessor mvTaskRunProcessor = getMVTaskRunProcessor(mv);
+            Assertions.assertTrue(mvTaskRunProcessor.getMVRefreshProcessor() instanceof MVHybridBasedRefreshProcessor);
+            MVHybridBasedRefreshProcessor hybridBasedRefreshProcessor =
+                    (MVHybridBasedRefreshProcessor) mvTaskRunProcessor.getMVRefreshProcessor();
+            Assertions.assertTrue(hybridBasedRefreshProcessor.getCurrentProcessor() instanceof MVPCTBasedRefreshProcessor);
+        }
+    }
+
+    @Test
+    public void testAutoRefreshWithRetractableChanges2() throws Exception {
+        String query = "SELECT id, count(data) over (partition by date)  FROM `iceberg0`.`unpartitioned_db`.`t0` as a;";
+        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "auto");
+        Assertions.assertEquals(MaterializedView.RefreshMode.PCT, mv.getCurrentRefreshMode());
+
+        // if the base table has no retractable changes, the refresh processor should be full refresh
+        {
+            advanceTableVersionTo(2);
+            MVTaskRunProcessor mvTaskRunProcessor = getMVTaskRunProcessor(mv);
+            Assertions.assertTrue(mvTaskRunProcessor.getMVRefreshProcessor() instanceof MVPCTBasedRefreshProcessor);
+        }
+        // if the base table has retractable changes, the refresh processor should be full refresh
+        {
+            mockListTableDeltaTraits();
+            MVTaskRunProcessor mvTaskRunProcessor = getMVTaskRunProcessor(mv);
+            Assertions.assertTrue(mvTaskRunProcessor.getMVRefreshProcessor() instanceof MVPCTBasedRefreshProcessor);
+        }
     }
 }

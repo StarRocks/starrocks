@@ -19,8 +19,6 @@ import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.google.common.io.CharStreams;
 import com.starrocks.catalog.PartitionKey;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
@@ -30,6 +28,8 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.util.Util;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.thrift.TCacheParam;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.Type;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import kotlin.text.Charsets;
@@ -1560,5 +1560,19 @@ public class QueryCacheTest {
                 .map(Optional::get)
                 .collect(Collectors.toSet());
         Assertions.assertEquals(digests.size(), columnNames.length);
+    }
+
+    @Test
+    public void testQueryCacheWithHeavyExprPushDown() {
+        String sql0 = "select (ifnull(sum(murmur_hash3_32(k)), 0)+" +
+                "ifnull(sum(murmur_hash3_32(l)), 0)+" +
+                "ifnull(sum(murmur_hash3_32(c)), 0)+" +
+                "ifnull(sum(murmur_hash3_32(__c_0)), 0)) as fingerprint " +
+                "from (SELECT REGEXP_REPLACE(Referer,'^https?://(?:www\\.)?([^/]+)/.*$','\\1') AS k," +
+                "left(AVG(length(Referer)),6) AS l,COUNT(*) AS c," +
+                "(min(Referer)) as __c_0  FROM hits WHERE Referer <> '' " +
+                "GROUP BY k HAVING COUNT(*) > 100000 ORDER BY l DESC LIMIT 25) as t";
+        Optional<PlanFragment> frag = getCachedFragment(sql0);
+        Assertions.assertTrue(frag.isPresent());
     }
 }

@@ -18,6 +18,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.scheduler.MvTaskRunContext;
 import com.starrocks.scheduler.TaskRunContext;
+import com.starrocks.scheduler.mv.pct.MVPCTRefreshNonPartitioner;
 import com.starrocks.sql.common.PCellSortedSet;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;

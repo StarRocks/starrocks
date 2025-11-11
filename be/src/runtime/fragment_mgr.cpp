@@ -76,8 +76,10 @@ std::string to_load_error_http_path(const std::string& file_name) {
     if (file_name.empty()) {
         return "";
     }
+    std::string resolved_ip = BackendOptions::get_resolved_ip();
+
     std::stringstream url;
-    url << "http://" << get_host_port(BackendOptions::get_localhost(), config::be_http_port) << "/api/_load_error_log?"
+    url << "http://" << get_host_port(resolved_ip, config::be_http_port) << "/api/_load_error_log?"
         << "file=" << file_name;
     return url.str();
 }
@@ -353,9 +355,11 @@ FragmentMgr::FragmentMgr(ExecEnv* exec_env)
 }
 
 FragmentMgr::~FragmentMgr() {
-    // stop thread
+    // stop thread if not already stopped in close()
     _stop = true;
-    _cancel_thread.join();
+    if (_cancel_thread.joinable()) {
+        _cancel_thread.join();
+    }
     // Stop all the worker, should wait for a while?
     // _thread_pool->wait_for();
     _thread_pool->shutdown();
@@ -538,6 +542,11 @@ void FragmentMgr::close() {
     for (auto& id : frag_instance_ids) {
         WARN_IF_ERROR(cancel(id, PPlanFragmentCancelReason::USER_CANCEL),
                       strings::Substitute("Fail to cancel fragment $0", print_id(id)));
+    }
+    // Stop cancel_worker thread to avoid waiting in destructor
+    _stop = true;
+    if (_cancel_thread.joinable()) {
+        _cancel_thread.join();
     }
 }
 

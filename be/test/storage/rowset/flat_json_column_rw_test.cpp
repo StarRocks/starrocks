@@ -65,11 +65,11 @@ protected:
     void SetUp() override {
         config::enable_json_flat_complex_type = true;
         _meta = std::make_shared<ColumnMetaPB>();
+        config::json_flat_sparsity_factor = 0.9;
     }
 
     void TearDown() override {
         config::enable_json_flat_complex_type = false;
-        config::json_flat_sparsity_factor = 0.9;
         config::json_flat_null_factor = 0.3;
     }
 
@@ -828,7 +828,7 @@ TEST_F(FlatJsonColumnRWTest, testHyperFlatJson) {
     EXPECT_EQ("b.b2.b3", writer_opts.meta->children_columns(index++).name());
     EXPECT_EQ("b.b2.c1.c2", writer_opts.meta->children_columns(index++).name());
     EXPECT_EQ("b.b4", writer_opts.meta->children_columns(index++).name());
-    EXPECT_EQ("ff.f1", writer_opts.meta->children_columns(index++).name());
+    EXPECT_EQ("ff", writer_opts.meta->children_columns(index++).name());
     EXPECT_EQ("gg", writer_opts.meta->children_columns(index++).name());
     EXPECT_EQ("remain", writer_opts.meta->children_columns(index++).name());
 
@@ -882,7 +882,7 @@ TEST_F(FlatJsonColumnRWTest, testHyperFlatJsonWithConfig) {
     EXPECT_EQ("b.b2.b3", writer_opts.meta->children_columns(index++).name());
     EXPECT_EQ("b.b2.c1.c2", writer_opts.meta->children_columns(index++).name());
     EXPECT_EQ("b.b4", writer_opts.meta->children_columns(index++).name());
-    EXPECT_EQ("ff.f1", writer_opts.meta->children_columns(index++).name());
+    EXPECT_EQ("ff", writer_opts.meta->children_columns(index++).name());
     EXPECT_EQ("gg", writer_opts.meta->children_columns(index++).name());
     EXPECT_EQ("remain", writer_opts.meta->children_columns(index++).name());
 
@@ -1707,7 +1707,7 @@ TEST_F(FlatJsonColumnRWTest, testHyperNullFlatJson) {
     EXPECT_EQ("b.b2.b3", writer_opts.meta->children_columns(index++).name());
     EXPECT_EQ("b.b2.c1.c2", writer_opts.meta->children_columns(index++).name());
     EXPECT_EQ("b.b4", writer_opts.meta->children_columns(index++).name());
-    EXPECT_EQ("ff.f1", writer_opts.meta->children_columns(index++).name());
+    EXPECT_EQ("ff", writer_opts.meta->children_columns(index++).name());
     EXPECT_EQ("gg", writer_opts.meta->children_columns(index++).name());
     EXPECT_EQ("remain", writer_opts.meta->children_columns(index++).name());
 

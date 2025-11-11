@@ -17,9 +17,6 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.expression.BoolLiteral;
 import com.starrocks.sql.ast.expression.DateLiteral;
@@ -30,6 +27,10 @@ import com.starrocks.sql.ast.expression.LargeIntLiteral;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.MaxLiteral;
 import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -66,36 +67,36 @@ public class LiteralExprCompareTest {
 
     @Test
     public void dateFormat1Test() throws AnalysisException {
-        LiteralExpr date = new DateLiteral("2015-02-15 12:12:12", ScalarType.DATE);
+        LiteralExpr date = new DateLiteral("2015-02-15 12:12:12", Type.DATE);
     }
 
     @Test
     public void dateFormat2Test() throws AnalysisException {
-        LiteralExpr datetime = new DateLiteral("2015-02-15", ScalarType.DATETIME);
+        LiteralExpr datetime = new DateLiteral("2015-02-15", Type.DATETIME);
     }
 
     @Test
     public void dateTest() throws AnalysisException {
-        LiteralExpr date1 = new DateLiteral("2015-02-15", ScalarType.DATE);
-        LiteralExpr date1Same = new DateLiteral("2015-02-15", ScalarType.DATE);
-        LiteralExpr date1Large = new DateLiteral("2015-02-16", ScalarType.DATE);
-        LiteralExpr datetime1 = new DateLiteral("2015-02-15 13:14:00", ScalarType.DATETIME);
-        LiteralExpr datetime1Same = new DateLiteral("2015-02-15 13:14:00", ScalarType.DATETIME);
-        LiteralExpr datetime1Large = new DateLiteral("2015-02-15 13:14:15", ScalarType.DATETIME);
+        LiteralExpr date1 = new DateLiteral("2015-02-15", Type.DATE);
+        LiteralExpr date1Same = new DateLiteral("2015-02-15", Type.DATE);
+        LiteralExpr date1Large = new DateLiteral("2015-02-16", Type.DATE);
+        LiteralExpr datetime1 = new DateLiteral("2015-02-15 13:14:00", Type.DATETIME);
+        LiteralExpr datetime1Same = new DateLiteral("2015-02-15 13:14:00", Type.DATETIME);
+        LiteralExpr datetime1Large = new DateLiteral("2015-02-15 13:14:15", Type.DATETIME);
 
         // infinity
-        LiteralExpr maxDate1 = new DateLiteral(ScalarType.DATE, true);
-        LiteralExpr maxDate1Same = new DateLiteral(ScalarType.DATE, true);
-        LiteralExpr minDate1 = new DateLiteral(ScalarType.DATE, false);
-        LiteralExpr minDate1Same = new DateLiteral(ScalarType.DATE, false);
-        LiteralExpr maxDatetime1 = new DateLiteral(ScalarType.DATETIME, true);
-        LiteralExpr maxDatetime1Same = new DateLiteral(ScalarType.DATETIME, true);
-        LiteralExpr minDatetime1 = new DateLiteral(ScalarType.DATETIME, false);
-        LiteralExpr minDatetime1Same = new DateLiteral(ScalarType.DATETIME, false);
-        LiteralExpr date8 = new DateLiteral("9999-12-31", ScalarType.DATE);
-        LiteralExpr date9 = new DateLiteral("9999-12-31 23:59:59.999999", ScalarType.DATETIME);
-        LiteralExpr date10 = new DateLiteral("0000-01-01", ScalarType.DATE);
-        LiteralExpr date11 = new DateLiteral("0000-01-01 00:00:00", ScalarType.DATETIME);
+        LiteralExpr maxDate1 = new DateLiteral(Type.DATE, true);
+        LiteralExpr maxDate1Same = new DateLiteral(Type.DATE, true);
+        LiteralExpr minDate1 = new DateLiteral(Type.DATE, false);
+        LiteralExpr minDate1Same = new DateLiteral(Type.DATE, false);
+        LiteralExpr maxDatetime1 = new DateLiteral(Type.DATETIME, true);
+        LiteralExpr maxDatetime1Same = new DateLiteral(Type.DATETIME, true);
+        LiteralExpr minDatetime1 = new DateLiteral(Type.DATETIME, false);
+        LiteralExpr minDatetime1Same = new DateLiteral(Type.DATETIME, false);
+        LiteralExpr date8 = new DateLiteral("9999-12-31", Type.DATE);
+        LiteralExpr date9 = new DateLiteral("9999-12-31 23:59:59.999999", Type.DATETIME);
+        LiteralExpr date10 = new DateLiteral("0000-01-01", Type.DATE);
+        LiteralExpr date11 = new DateLiteral("0000-01-01 00:00:00", Type.DATETIME);
 
         Assertions.assertTrue(date1.equals(date1Same) && date1.compareLiteral(date1Same) == 0);
         Assertions.assertTrue(date1.equals(date1Same) && date1.compareLiteral(date1Same) == 0);
@@ -152,15 +153,15 @@ public class LiteralExprCompareTest {
 
     @Test
     public void floatAndDoubleExpr() throws AnalysisException {
-        LiteralExpr float1 = new FloatLiteral(1.12345, ScalarType.FLOAT);
-        LiteralExpr float2 = new FloatLiteral(1.12345, ScalarType.FLOAT);
-        LiteralExpr float3 = new FloatLiteral(1.12346, ScalarType.FLOAT);
-        LiteralExpr float4 = new FloatLiteral(2.12345, ScalarType.FLOAT);
+        LiteralExpr float1 = new FloatLiteral(1.12345, Type.FLOAT);
+        LiteralExpr float2 = new FloatLiteral(1.12345, Type.FLOAT);
+        LiteralExpr float3 = new FloatLiteral(1.12346, Type.FLOAT);
+        LiteralExpr float4 = new FloatLiteral(2.12345, Type.FLOAT);
 
-        LiteralExpr double1 = new FloatLiteral(1.12345, ScalarType.DOUBLE);
-        LiteralExpr double2 = new FloatLiteral(1.12345, ScalarType.DOUBLE);
-        LiteralExpr double3 = new FloatLiteral(1.12346, ScalarType.DOUBLE);
-        LiteralExpr double4 = new FloatLiteral(2.12345, ScalarType.DOUBLE);
+        LiteralExpr double1 = new FloatLiteral(1.12345, Type.DOUBLE);
+        LiteralExpr double2 = new FloatLiteral(1.12345, Type.DOUBLE);
+        LiteralExpr double3 = new FloatLiteral(1.12346, Type.DOUBLE);
+        LiteralExpr double4 = new FloatLiteral(2.12345, Type.DOUBLE);
 
         // float
         // value equal
@@ -274,10 +275,10 @@ public class LiteralExprCompareTest {
 
     @Test
     public void intTest() throws AnalysisException {
-        intTestInternal(ScalarType.createType(PrimitiveType.TINYINT));
-        intTestInternal(ScalarType.createType(PrimitiveType.SMALLINT));
-        intTestInternal(ScalarType.createType(PrimitiveType.INT));
-        intTestInternal(ScalarType.createType(PrimitiveType.BIGINT));
+        intTestInternal(TypeFactory.createType(PrimitiveType.TINYINT));
+        intTestInternal(TypeFactory.createType(PrimitiveType.SMALLINT));
+        intTestInternal(TypeFactory.createType(PrimitiveType.INT));
+        intTestInternal(TypeFactory.createType(PrimitiveType.BIGINT));
     }
 
     @Test

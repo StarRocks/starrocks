@@ -1,4 +1,4 @@
--- name: test_ivm_with_iceberg_complex
+-- name: test_ivm_with_iceberg_complex @slow
 create external catalog mv_iceberg_${uuid0}
 properties
 (

@@ -38,7 +38,7 @@ import com.google.common.base.Joiner;
 import com.google.common.base.MoreObjects;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Table;
-import com.starrocks.sql.ast.expression.TableRefPersist;
+import com.starrocks.persist.TableRefPersist;
 import com.starrocks.thrift.TTupleDescriptor;
 
 import java.util.ArrayList;

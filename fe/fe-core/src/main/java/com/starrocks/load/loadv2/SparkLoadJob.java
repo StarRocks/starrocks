@@ -48,13 +48,10 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
-import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Resource;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.SparkResource;
 import com.starrocks.catalog.Tablet;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DataQualityException;
@@ -91,6 +88,7 @@ import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.ResourceDesc;
 import com.starrocks.sql.ast.expression.CastExpr;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
@@ -120,6 +118,9 @@ import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.LoadJobSourceType;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import com.starrocks.warehouse.WarehouseIdleChecker;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -1042,7 +1043,7 @@ public class SparkLoadJob extends BulkLoadJob {
                 Type type = column.getType();
                 if (type.isLargeIntType() || type.isBoolean() || type.isBitmapType() || type.isHllType()) {
                     // largeint, boolean, bitmap, hll type using varchar in spark dpp parquet file
-                    srcSlotDesc.setType(ScalarType.createType(PrimitiveType.VARCHAR));
+                    srcSlotDesc.setType(TypeFactory.createType(PrimitiveType.VARCHAR));
                     srcSlotDesc.setColumn(new Column(column.getName(), Type.VARCHAR));
                 } else {
                     srcSlotDesc.setType(type);
@@ -1062,7 +1063,7 @@ public class SparkLoadJob extends BulkLoadJob {
                 destSidToSrcSidWithoutTrans.put(destSlotDesc.getId().asInt(), srcSlotDesc.getId().asInt());
                 Expr expr = new SlotRef(srcSlotDesc);
                 expr = castToSlot(destSlotDesc, expr);
-                params.putToExpr_of_dest_slot(destSlotDesc.getId().asInt(), expr.treeToThrift());
+                params.putToExpr_of_dest_slot(destSlotDesc.getId().asInt(), ExprToThriftVisitor.treeToThrift(expr));
             }
             params.setDest_sid_to_src_sid_without_trans(destSidToSrcSidWithoutTrans);
             params.setSrc_tuple_id(srcTupleDesc.getId().asInt());

@@ -34,16 +34,13 @@
 
 package com.starrocks.sql.ast.expression;
 
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.thrift.TExprNode;
-import com.starrocks.thrift.TExprNodeType;
-import com.starrocks.thrift.TFloatLiteral;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.Type;
 
 import java.math.BigDecimal;
 import java.nio.ByteBuffer;
@@ -173,11 +170,6 @@ public class FloatLiteral extends LiteralExpr {
         return value;
     }
 
-    @Override
-    protected void toThrift(TExprNode msg) {
-        msg.node_type = TExprNodeType.FLOAT_LITERAL;
-        msg.float_literal = new TFloatLiteral(value);
-    }
 
     public double getValue() {
         return value;

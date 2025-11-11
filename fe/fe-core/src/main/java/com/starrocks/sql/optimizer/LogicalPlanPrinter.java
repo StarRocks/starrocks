@@ -28,6 +28,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalRawValuesOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
@@ -43,6 +44,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMysqlScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalRawValuesOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalRepeatOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalSchemaScanOperator;
@@ -243,6 +245,19 @@ public class LogicalPlanPrinter {
             return new OperatorStr("logical value(" + valuesOperator.getColumnRefSet()
                     .stream().map(col -> "" + col).collect(Collectors.joining(", ")) + ")",
                     step, Collections.emptyList());
+        }
+
+        @Override
+        public OperatorStr visitLogicalRawValues(OptExpression optExpression, Integer step) {
+            LogicalRawValuesOperator rawValuesOperator = optExpression.getOp().cast();
+            String desc = String.format("logical raw values(constantType=%s, count=%d)",
+                    rawValuesOperator.getConstantType(),
+                    rawValuesOperator.getConstantCount());
+            if (isPrintColumnRef) {
+                desc += " [" + rawValuesOperator.getColumnRefSet()
+                        .stream().map(col -> "" + col).collect(Collectors.joining(", ")) + "]";
+            }
+            return new OperatorStr(desc, step, Collections.emptyList());
         }
 
         @Override
@@ -588,6 +603,20 @@ public class LogicalPlanPrinter {
             valuesStr.delete(valuesStr.length() - 1, valuesStr.length());
 
             return new OperatorStr(valuesStr.toString(), step, Collections.emptyList());
+        }
+
+        @Override
+        public OperatorStr visitPhysicalRawValues(OptExpression optExpression, Integer step) {
+            PhysicalRawValuesOperator rawValuesOperator = optExpression.getOp().cast();
+            String sample = rawValuesOperator.getRawText();
+            if (sample.length() > 50) {
+                sample = sample.substring(0, 47) + "...";
+            }
+            String desc = String.format("RAW_VALUES(constantType=%s, count=%d, sample=%s)",
+                    rawValuesOperator.getConstantType(),
+                    rawValuesOperator.getConstantCount(),
+                    sample);
+            return new OperatorStr(desc, step, Collections.emptyList());
         }
 
         @Override

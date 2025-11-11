@@ -17,7 +17,6 @@ package com.starrocks.connector.partitiontraits;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
@@ -25,7 +24,6 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.NullablePartitionKey;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorPartitionTraits;
@@ -35,7 +33,8 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.NullLiteral;
-import com.starrocks.sql.common.PCell;
+import com.starrocks.sql.common.PCellSortedSet;
+import com.starrocks.type.Type;
 import org.apache.commons.lang.NotImplementedException;
 
 import java.time.Clock;
@@ -101,14 +100,14 @@ public abstract class DefaultTraits extends ConnectorPartitionTraits {
     }
 
     @Override
-    public Map<String, Range<PartitionKey>> getPartitionKeyRange(Column partitionColumn, Expr partitionExpr)
+    public PCellSortedSet getPartitionKeyRange(Column partitionColumn, Expr partitionExpr)
             throws AnalysisException {
         return PartitionUtil.getRangePartitionMapOfExternalTable(
                 table, partitionColumn, getPartitionNames(), partitionExpr);
     }
 
     @Override
-    public Map<String, PCell> getPartitionCells(List<Column> partitionColumns) throws AnalysisException {
+    public PCellSortedSet getPartitionCells(List<Column> partitionColumns) throws AnalysisException {
         return PartitionUtil.getMVPartitionToCells(table, partitionColumns, getPartitionNames());
     }
 

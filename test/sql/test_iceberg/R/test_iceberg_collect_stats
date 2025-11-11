@@ -22,12 +22,15 @@ create table iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t1
 ) partition by c1,c2,c3,c4;
 -- result:
 -- !result
+set disable_table_stats_from_metadata_for_single_table = false;
+-- result:
+-- !result
 insert into iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t1 values(1, 2, '2022-01-01', 10.23);
 -- result:
 -- !result
 [UC] analyze table iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t1;
 -- result:
-iceberg_collect_stats_d5e9d38ec7144c578e456e16e1134134.iceberg_collect_stats_db_d5e9d38ec7144c578e456e16e1134134.t1	analyze	status	OK
+iceberg_collect_stats_52fe0835d4494e38b253b24d82123cd3.iceberg_collect_stats_db_52fe0835d4494e38b253b24d82123cd3.t1	analyze	status	OK
 -- !result
 function: assert_explain_costs_contains('select * from iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t1', 'cardinality=1')
 -- result:
@@ -48,7 +51,7 @@ insert into iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t2 
 -- !result
 [UC] analyze table iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t2;
 -- result:
-iceberg_collect_stats_d5e9d38ec7144c578e456e16e1134134.iceberg_collect_stats_db_d5e9d38ec7144c578e456e16e1134134.t2	analyze	status	OK
+iceberg_collect_stats_52fe0835d4494e38b253b24d82123cd3.iceberg_collect_stats_db_52fe0835d4494e38b253b24d82123cd3.t2	analyze	status	OK
 -- !result
 function: assert_explain_costs_contains('select * from iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t2', 'cardinality=2')
 -- result:
@@ -70,7 +73,7 @@ insert into iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t3 
 -- !result
 [UC] analyze table iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t3;
 -- result:
-iceberg_collect_stats_d5e9d38ec7144c578e456e16e1134134.iceberg_collect_stats_db_d5e9d38ec7144c578e456e16e1134134.t3	analyze	status	OK
+iceberg_collect_stats_52fe0835d4494e38b253b24d82123cd3.iceberg_collect_stats_db_52fe0835d4494e38b253b24d82123cd3.t3	analyze	status	OK
 -- !result
 function: assert_explain_costs_contains('select * from iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t3', 'cardinality=3')
 -- result:
@@ -89,7 +92,7 @@ insert into iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t4 
 -- !result
 [UC] analyze table iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t4;
 -- result:
-iceberg_collect_stats_d5e9d38ec7144c578e456e16e1134134.iceberg_collect_stats_db_d5e9d38ec7144c578e456e16e1134134.t4	analyze	status	OK
+iceberg_collect_stats_52fe0835d4494e38b253b24d82123cd3.iceberg_collect_stats_db_52fe0835d4494e38b253b24d82123cd3.t4	analyze	status	OK
 -- !result
 function: assert_explain_costs_contains('select * from iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t4', 'cardinality: 3')
 -- result:
@@ -108,7 +111,7 @@ insert into iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t5 
 -- !result
 [UC] analyze table iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t5;
 -- result:
-iceberg_collect_stats_d5e9d38ec7144c578e456e16e1134134.iceberg_collect_stats_db_d5e9d38ec7144c578e456e16e1134134.t5	analyze	status	OK
+iceberg_collect_stats_52fe0835d4494e38b253b24d82123cd3.iceberg_collect_stats_db_52fe0835d4494e38b253b24d82123cd3.t5	analyze	error	Error statistic type : varbinary
 -- !result
 function: assert_explain_costs_contains('select * from iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t5', 'cardinality: 2')
 -- result:

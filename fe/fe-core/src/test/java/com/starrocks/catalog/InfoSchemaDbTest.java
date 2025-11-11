@@ -44,6 +44,7 @@ import com.starrocks.thrift.TGetGrantsToRolesOrUserItem;
 import com.starrocks.thrift.TGetGrantsToRolesOrUserRequest;
 import com.starrocks.thrift.TGetGrantsToRolesOrUserResponse;
 import com.starrocks.thrift.TGrantsToType;
+import com.starrocks.type.Type;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;

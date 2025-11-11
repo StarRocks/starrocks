@@ -264,8 +264,8 @@ if [[ ! -d "$GENSRC_TARGET_DIR" ]] || [[ -z "$(ls -A "$GENSRC_TARGET_DIR" 2>/dev
     GENSRC_NEEDS_BUILD=1
 else
     # Check if any .proto or .thrift files are newer than generated files
-    newest_generated=$(find "$GENSRC_TARGET_DIR" -type f -name "*.cc" -o -name "*.h" | xargs stat -f "%m" 2>/dev/null | sort -n | tail -1)
-    newest_source=$(find "$ROOT_DIR/gensrc" -name "*.proto" -o -name "*.thrift" | xargs stat -f "%m" 2>/dev/null | sort -n | tail -1)
+    newest_generated=$(find "$GENSRC_TARGET_DIR" -type f \( -name "*.cc" -o -name "*.cpp" -o -name "*.h" \) | xargs stat -f "%m" 2>/dev/null | sort -n | tail -1)
+    newest_source=$(find "$ROOT_DIR/gensrc" \( -name "*.proto" -o -name "*.thrift" \) | xargs stat -f "%m" 2>/dev/null | sort -n | tail -1)
 
     if [[ -n "$newest_source" ]] && [[ -n "$newest_generated" ]] && [[ $newest_source -gt $newest_generated ]]; then
         GENSRC_NEEDS_BUILD=1
@@ -288,8 +288,8 @@ if [[ $GENSRC_NEEDS_BUILD -eq 1 ]]; then
     fi
 
     # Verify that both protobuf and thrift files were generated
-    PROTO_FILES=$(find "$ROOT_DIR/gensrc/build/gen_cpp" -name "*.pb.cc" -o -name "*.pb.h" | wc -l)
-    THRIFT_FILES=$(find "$ROOT_DIR/gensrc/build/gen_cpp" -name "*_types.cc" -o -name "*_types.h" -o -name "*_service.cc" -o -name "*_service.h" | wc -l)
+    PROTO_FILES=$(find "$ROOT_DIR/gensrc/build/gen_cpp" \( -name "*.pb.cc" -o -name "*.pb.h" \) | wc -l)
+    THRIFT_FILES=$(find "$ROOT_DIR/gensrc/build/gen_cpp" \( -name "*_types.cpp" -o -name "*_types.h" -o -name "*_service.cpp" -o -name "*_service.h" \) | wc -l)
 
     log_info "Generated $PROTO_FILES protobuf files and $THRIFT_FILES thrift files"
 
@@ -313,36 +313,36 @@ else
     log_info "Generated code is up to date, skipping build"
 fi
 
-# Copy generated files to BE source directory (only if needed)
-# Note: Files should be copied to be/src/gen_cpp for direct inclusion
 BE_GEN_CPP_DIR="$ROOT_DIR/be/src/gen_cpp"
-BE_GEN_BUILD_DIR="$BE_GEN_CPP_DIR/build"
+BE_GEN_CPP_BUILD_DIR="$BE_GEN_CPP_DIR/build"
+BE_GEN_CPP_BUILD_GEN_DIR="$BE_GEN_CPP_BUILD_DIR/gen_cpp"
 BE_GEN_OPCODE_DIR="$BE_GEN_CPP_DIR/opcode"
 
 # Always create target directories
-mkdir -p "$BE_GEN_BUILD_DIR"
+mkdir -p "$BE_GEN_CPP_DIR"
+mkdir -p "$BE_GEN_CPP_BUILD_GEN_DIR"
 mkdir -p "$BE_GEN_OPCODE_DIR"
 
-if [[ $GENSRC_NEEDS_BUILD -eq 1 ]] || [[ $CLEAN_BUILD -eq 1 ]]; then
     log_info "Copying generated files to BE source directory..."
 
-    # Copy protobuf and thrift generated files to be/src/gen_cpp/build/
-    # Use -f flag to force overwrite and avoid hanging on identical files
-    cp -rf "$ROOT_DIR/gensrc/build/gen_cpp/"* "$BE_GEN_BUILD_DIR/" 2>/dev/null || true
+    if [[ -d "$ROOT_DIR/gensrc/build/gen_cpp" ]]; then
+        # Copy without --delete to preserve existing files that might not be in gensrc
+        rsync -a "$ROOT_DIR/gensrc/build/gen_cpp/" "$BE_GEN_CPP_DIR/"
+        rsync -a "$ROOT_DIR/gensrc/build/gen_cpp/" "$BE_GEN_CPP_BUILD_GEN_DIR/"
+    else
+        log_warn "gensrc/build/gen_cpp directory not found; skipping thrift/protobuf copy"
+    fi
 
-    # Copy opcode files to be/src/gen_cpp/opcode/
-    cp -rf "$ROOT_DIR/gensrc/build/opcode/"* "$BE_GEN_OPCODE_DIR/" 2>/dev/null || true
-
-    # Also copy to the nested build/gen_cpp structure for compatibility
-    # This is needed for some include paths in the source code
-    BE_NESTED_GEN_DIR="$BE_GEN_BUILD_DIR/gen_cpp"
-    mkdir -p "$BE_NESTED_GEN_DIR"
-    # Copy from gensrc directly to avoid copying from a directory we just copied to
-    cp -rf "$ROOT_DIR/gensrc/build/gen_cpp/"* "$BE_NESTED_GEN_DIR/" 2>/dev/null || true
+    if [[ -d "$ROOT_DIR/gensrc/build/opcode" ]]; then
+        # Copy without --delete to preserve existing files that might not be in gensrc
+        rsync -a "$ROOT_DIR/gensrc/build/opcode/" "$BE_GEN_OPCODE_DIR/"
+    else
+        log_warn "gensrc/build/opcode directory not found; skipping opcode copy"
+    fi
 
     # Verify files were copied
-    COPIED_PROTO_FILES=$(find "$BE_GEN_BUILD_DIR" -name "*.pb.cc" -o -name "*.pb.h" | wc -l)
-    COPIED_THRIFT_FILES=$(find "$BE_GEN_BUILD_DIR" -name "*_types.cc" -o -name "*_types.h" -o -name "*_service.cc" -o -name "*_service.h" | wc -l)
+    COPIED_PROTO_FILES=$(find "$BE_GEN_CPP_DIR" -maxdepth 1 \( -name "*.pb.cc" -o -name "*.pb.h" \) | wc -l)
+    COPIED_THRIFT_FILES=$(find "$BE_GEN_CPP_DIR" -maxdepth 1 \( -name "*_types.cpp" -o -name "*_types.h" -o -name "*_service.cpp" -o -name "*_service.h" -o -name "*_constants.cpp" -o -name "*_constants.h" \) | wc -l)
     COPIED_OPCODE_FILES=$(find "$BE_GEN_OPCODE_DIR" -name "*.inc" | wc -l)
 
     log_info "Copied $COPIED_PROTO_FILES protobuf files, $COPIED_THRIFT_FILES thrift files, and $COPIED_OPCODE_FILES opcode files"
@@ -352,13 +352,11 @@ if [[ $GENSRC_NEEDS_BUILD -eq 1 ]] || [[ $CLEAN_BUILD -eq 1 ]]; then
     fi
 
     if [[ $COPIED_THRIFT_FILES -eq 0 ]]; then
-        log_warn "No thrift files were copied to BE source directory"
+        log_error "No thrift/thrift-related files were copied to BE source directory; please re-run without --skip-codegen and ensure gensrc builds succeed"
+        exit 1
     fi
 
     log_success "Generated files copied to BE source directory"
-else
-    log_info "Generated files are up to date, skipping copy"
-fi
 
 else
     log_info "Skipping code generation step (--skip-codegen specified)"

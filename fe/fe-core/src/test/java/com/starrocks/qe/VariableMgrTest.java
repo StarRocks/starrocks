@@ -35,8 +35,6 @@
 package com.starrocks.qe;
 
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.persist.EditLog;
@@ -51,6 +49,8 @@ import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.VariableExpr;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.TypeFactory;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.utframe.UtFrameUtils.PseudoImage;
 import mockit.Expectations;
@@ -331,7 +331,7 @@ public class VariableMgrTest {
         ExpressionAnalyzer.analyzeExpressionIgnoreSlot(desc, UtFrameUtils.createDefaultCtx());
 
         Assertions.assertEquals("autocommit", desc.getName());
-        Assertions.assertEquals(ScalarType.createType(PrimitiveType.BIGINT), desc.getType());
+        Assertions.assertEquals(TypeFactory.createType(PrimitiveType.BIGINT), desc.getType());
         Assertions.assertEquals((long) desc.getValue(), 1);
     }
 }

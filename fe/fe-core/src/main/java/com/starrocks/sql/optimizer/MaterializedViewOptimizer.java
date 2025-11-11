@@ -108,6 +108,10 @@ public class MaterializedViewOptimizer {
         if (originalSemiJoinDeduplicateMode != -1) {
             connectContext.getSessionVariable().setSemiJoinDeduplicateMode(-1);
         }
+        final boolean originalEnableLocalShuffleAgg = connectContext.getSessionVariable().isEnableLocalShuffleAgg();
+        if (originalEnableLocalShuffleAgg) {
+            connectContext.getSessionVariable().setEnableLocalShuffleAgg(false);
+        }
 
         MVTransformerContext mvTransformerContext = new MVTransformerContext(connectContext, inlineView);
         try {
@@ -131,6 +135,7 @@ public class MaterializedViewOptimizer {
             connectContext.getSessionVariable().setDisableFunctionFoldConstants(originDisableFunctionFoldConstants);
             connectContext.getSessionVariable().setEnableInnerJoinToSemi(originalEnableInnerToSemi);
             connectContext.getSessionVariable().setSemiJoinDeduplicateMode(originalSemiJoinDeduplicateMode);
+            connectContext.getSessionVariable().setEnableLocalShuffleAgg(originalEnableLocalShuffleAgg);
         }
     }
 }

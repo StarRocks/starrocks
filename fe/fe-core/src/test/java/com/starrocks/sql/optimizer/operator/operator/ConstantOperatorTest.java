@@ -14,8 +14,8 @@
 
 package com.starrocks.sql.optimizer.operator.operator;
 
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.type.Type;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 

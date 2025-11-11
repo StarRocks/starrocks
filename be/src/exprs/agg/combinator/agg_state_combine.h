@@ -56,10 +56,9 @@ public:
         _serialize_to_column_nullable(ctx, state, to);
     }
 
-    void convert_to_serialize_format([[maybe_unused]] FunctionContext* ctx, const Columns& srcs, size_t chunk_size,
+    void convert_to_serialize_format(FunctionContext* ctx, const Columns& srcs, size_t chunk_size,
                                      ColumnPtr* dst) const override {
-        DCHECK_EQ(1, srcs.size());
-        *dst = srcs[0];
+        _function->convert_to_serialize_format(ctx, srcs, chunk_size, dst);
     }
 
     void finalize_to_column(FunctionContext* ctx __attribute__((unused)), ConstAggDataPtr __restrict state,

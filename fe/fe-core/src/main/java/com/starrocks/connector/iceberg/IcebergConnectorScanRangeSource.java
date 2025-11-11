@@ -23,7 +23,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Timer;
@@ -41,7 +40,7 @@ import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.SlotId;
 import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TExprMinMaxValue;
@@ -53,6 +52,7 @@ import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
+import com.starrocks.type.Type;
 import org.apache.hadoop.fs.Path;
 import org.apache.iceberg.ContentFile;
 import org.apache.iceberg.DataFile;
@@ -321,7 +321,7 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
 
         THdfsPartition tPartition = new THdfsPartition();
         tPartition.setPartition_key_exprs(referencedPartitionInfo.getKey().getKeys().stream()
-                .map(Expr::treeToThrift)
+                .map(ExprToThriftVisitor::treeToThrift)
                 .collect(Collectors.toList()));
 
         hdfsScanRange.setPartition_value(tPartition);
@@ -340,7 +340,7 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
                     value = LiteralExpr.create(String.valueOf(file.specId()), Type.INT);
                 }
 
-                extendedColumns.put(slot.getId().asInt(), value.treeToThrift());
+                extendedColumns.put(slot.getId().asInt(), ExprToThriftVisitor.treeToThrift(value));
                 if (!extendedColumnSlotIds.contains(slot.getId().asInt())) {
                     extendedColumnSlotIds.add(slot.getId().asInt());
                 }

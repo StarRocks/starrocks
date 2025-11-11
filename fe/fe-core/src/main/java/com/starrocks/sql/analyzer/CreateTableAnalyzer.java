@@ -21,14 +21,12 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnBuilder;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
@@ -61,6 +59,7 @@ import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.sql.ast.expression.DictionaryGetExpr;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
@@ -68,6 +67,10 @@ import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.sql.common.EngineType;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import org.apache.commons.collections.CollectionUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -275,7 +278,12 @@ public class CreateTableAnalyzer {
                 throw new SemanticException("BITMAP_UNION must be used in AGG_KEYS", keysDesc.getPos());
             }
 
-            Column col = Column.fromColumnDef(null, columnDef);
+            Column col;
+            if (columnDef.getGeneratedColumnExpr() != null) {
+                col = ColumnBuilder.buildGeneratedColumn(null, columnDef);
+            } else {
+                col = ColumnBuilder.buildColumn(columnDef);
+            }
             if (keysDesc != null && (keysDesc.getKeysType() == KeysType.UNIQUE_KEYS
                     || keysDesc.getKeysType() == KeysType.PRIMARY_KEYS ||
                     keysDesc.getKeysType() == KeysType.DUP_KEYS)) {
@@ -441,7 +449,8 @@ public class CreateTableAnalyzer {
                 for (OrderByElement orderByElement : orderByElements) {
                     String column = orderByElement.castAsSlotRef();
                     if (column == null) {
-                        throw new SemanticException("Unknown column '%s' in order by clause", orderByElement.getExpr().toSql());
+                        throw new SemanticException("Unknown column '%s' in order by clause",
+                                ExprToSql.toSql(orderByElement.getExpr()));
                     }
                     int idx = columnNames.indexOf(column);
                     if (idx == -1) {
@@ -461,7 +470,8 @@ public class CreateTableAnalyzer {
                 for (OrderByElement orderByElement : orderByElements) {
                     String column = orderByElement.castAsSlotRef();
                     if (column == null) {
-                        throw new SemanticException("Unknown column '%s' in order by clause", orderByElement.getExpr().toSql());
+                        throw new SemanticException("Unknown column '%s' in order by clause",
+                                ExprToSql.toSql(orderByElement.getExpr()));
                     }
                     int idx = columnNames.indexOf(column);
                     if (idx == -1) {
@@ -532,9 +542,9 @@ public class CreateTableAnalyzer {
                 if (type.isScalarType()) {
                     ScalarType scalarType = (ScalarType) type;
                     if (scalarType.isWildcardChar()) {
-                        type = ScalarType.createCharType(ScalarType.getOlapMaxVarcharLength());
+                        type = TypeFactory.createCharType(TypeFactory.getOlapMaxVarcharLength());
                     } else if (scalarType.isWildcardVarchar()) {
-                        type = ScalarType.createVarcharType(ScalarType.getOlapMaxVarcharLength());
+                        type = TypeFactory.createVarcharType(TypeFactory.getOlapMaxVarcharLength());
                     }
                 }
                 TypeDef typeDef = new TypeDef(type);

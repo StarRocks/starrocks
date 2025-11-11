@@ -889,7 +889,7 @@ void TabletUpdatesTest::test_pk_dump(size_t rowset_cnt) {
         starrocks::PrimaryKeyDumpPB dump_pb;
         ASSERT_TRUE(PrimaryKeyDump::read_deserialize_from_file(dump_filepath, &dump_pb).ok());
         ASSERT_TRUE(PrimaryKeyDump::deserialize_pkcol_pkindex_from_meta(
-                            dump_filepath, dump_pb, [&](const starrocks::Chunk& chunk) {},
+                            dump_filepath, dump_pb, [&](uint32_t segment_id, const starrocks::Chunk& chunk) {},
                             [&](const std::string& filename, const starrocks::PartialKVsPB& kvs) {})
                             .ok());
         ASSERT_TRUE(dump_pb.tablet_meta().tablet_id() == _tablet->tablet_id());

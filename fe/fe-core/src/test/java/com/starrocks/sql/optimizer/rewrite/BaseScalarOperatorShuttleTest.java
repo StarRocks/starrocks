@@ -17,7 +17,6 @@ package com.starrocks.sql.optimizer.rewrite;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.operator.scalar.ArrayOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ArraySliceOperator;
@@ -41,6 +40,7 @@ import com.starrocks.sql.optimizer.operator.scalar.MultiInPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.sql.optimizer.rewrite.scalar.NegateFilterShuttle;
+import com.starrocks.type.Type;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -50,10 +50,10 @@ import java.util.List;
 import java.util.Optional;
 import java.util.stream.Stream;
 
-import static com.starrocks.catalog.Type.ARRAY_TINYINT;
-import static com.starrocks.catalog.Type.INT;
-import static com.starrocks.catalog.Type.STRING;
-import static com.starrocks.catalog.Type.TINYINT;
+import static com.starrocks.type.Type.ARRAY_TINYINT;
+import static com.starrocks.type.Type.INT;
+import static com.starrocks.type.Type.STRING;
+import static com.starrocks.type.Type.TINYINT;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 

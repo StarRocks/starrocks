@@ -18,10 +18,10 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.type.Type;
 
 import java.util.ArrayList;
 import java.util.List;

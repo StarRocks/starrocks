@@ -17,7 +17,6 @@ package com.starrocks.qe;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.planner.AggregateInfo;
 import com.starrocks.planner.BinlogScanNode;
@@ -46,6 +45,7 @@ import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TPartitionType;
 import com.starrocks.thrift.TScanRangeParams;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.type.Type;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
@@ -75,7 +75,7 @@ public class CoordinatorTest extends PlanTestBase {
         ConnectContext.threadLocalInfo.set(ctx);
 
         coordinator = new DefaultCoordinator.Factory().createQueryScheduler(ctx, Lists.newArrayList(), Lists.newArrayList(),
-                new TDescriptorTable());
+                new TDescriptorTable(), null);
         coordinatorPreprocessor = coordinator.getPrepareInfo();
     }
 
@@ -141,7 +141,7 @@ public class CoordinatorTest extends PlanTestBase {
         OlapTable olapTable = getOlapTable("t0");
         List<Long> olapTableTabletIds =
                 olapTable.getAllPartitions().stream().flatMap(x -> x.getDefaultPhysicalPartition().getBaseIndex()
-                                .getTabletIds().stream())
+                                .getTabletIdsInOrder().stream())
                         .collect(Collectors.toList());
         Assertions.assertFalse(olapTableTabletIds.isEmpty());
         tupleDesc.setTable(olapTable);

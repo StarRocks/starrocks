@@ -17,16 +17,9 @@ package com.starrocks.connector.iceberg;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.IcebergView;
-import com.starrocks.catalog.MapType;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.StructField;
-import com.starrocks.catalog.StructType;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
@@ -46,6 +39,13 @@ import com.starrocks.thrift.TIcebergColumnStats;
 import com.starrocks.thrift.TIcebergDataFile;
 import com.starrocks.thrift.TIcebergSchema;
 import com.starrocks.thrift.TIcebergSchemaField;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.MapType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.StructField;
+import com.starrocks.type.StructType;
+import com.starrocks.type.Type;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.FileFormat;
@@ -79,7 +79,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -98,7 +97,6 @@ import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ICEBERG_C
 import static com.starrocks.connector.iceberg.IcebergMetadata.COMPRESSION_CODEC;
 import static com.starrocks.connector.iceberg.IcebergMetadata.FILE_FORMAT;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.toResourceName;
-import static com.starrocks.sql.ast.OutFileClause.PARQUET_COMPRESSION_TYPE_MAP;
 import static java.lang.String.format;
 import static org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap.copyOf;
 import static org.apache.iceberg.view.ViewProperties.COMMENT;
@@ -445,31 +443,27 @@ public class IcebergApiConverter {
         ImmutableMap.Builder<String, String> tableProperties = ImmutableMap.builder();
         createProperties.entrySet().forEach(tableProperties::put);
         String fileFormat = createProperties.getOrDefault(FILE_FORMAT, TableProperties.DEFAULT_FILE_FORMAT_DEFAULT);
-        String compressionCodec = null;
+        String compressionCodec = createProperties.get(COMPRESSION_CODEC);
 
         if ("parquet".equalsIgnoreCase(fileFormat)) {
             tableProperties.put(TableProperties.DEFAULT_FILE_FORMAT, "parquet");
-            compressionCodec =
-                    createProperties.getOrDefault(COMPRESSION_CODEC, TableProperties.PARQUET_COMPRESSION_DEFAULT);
-            tableProperties.put(TableProperties.PARQUET_COMPRESSION, compressionCodec);
+            if (compressionCodec != null) {
+                tableProperties.put(TableProperties.PARQUET_COMPRESSION, compressionCodec);
+            }
         } else if ("avro".equalsIgnoreCase(fileFormat)) {
             tableProperties.put(TableProperties.DEFAULT_FILE_FORMAT, "avro");
-            compressionCodec =
-                    createProperties.getOrDefault(COMPRESSION_CODEC, TableProperties.AVRO_COMPRESSION_DEFAULT);
-            tableProperties.put(TableProperties.AVRO_COMPRESSION, compressionCodec);
+            if (compressionCodec != null) {
+                tableProperties.put(TableProperties.AVRO_COMPRESSION, compressionCodec);
+            }
         } else if ("orc".equalsIgnoreCase(fileFormat)) {
             tableProperties.put(TableProperties.DEFAULT_FILE_FORMAT, "orc");
-            compressionCodec =
-                    createProperties.getOrDefault(COMPRESSION_CODEC, TableProperties.ORC_COMPRESSION_DEFAULT);
-            tableProperties.put(TableProperties.ORC_COMPRESSION, compressionCodec);
+            if (compressionCodec != null) {
+                tableProperties.put(TableProperties.ORC_COMPRESSION, compressionCodec);
+            }
         } else if (fileFormat != null) {
             throw new IllegalArgumentException("Unsupported format in USING: " + fileFormat);
         }
-
-        if (!PARQUET_COMPRESSION_TYPE_MAP.containsKey(compressionCodec.toLowerCase(Locale.ROOT))) {
-            throw new IllegalArgumentException("Unsupported compression codec in USING: " + compressionCodec);
-        }
-        tableProperties.put(TableProperties.FORMAT_VERSION, "1");
+        tableProperties.put(TableProperties.FORMAT_VERSION, "2");
 
         return tableProperties.build();
     }

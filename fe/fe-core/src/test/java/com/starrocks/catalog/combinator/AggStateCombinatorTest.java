@@ -20,20 +20,11 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Streams;
 import com.starrocks.catalog.AggregateFunction;
-import com.starrocks.catalog.AnyArrayType;
-import com.starrocks.catalog.AnyElementType;
-import com.starrocks.catalog.AnyMapType;
-import com.starrocks.catalog.AnyStructType;
-import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
@@ -45,6 +36,15 @@ import com.starrocks.sql.optimizer.statistics.EmptyStatisticStorage;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.statistic.StatisticsMetaManager;
+import com.starrocks.type.AnyArrayType;
+import com.starrocks.type.AnyElementType;
+import com.starrocks.type.AnyMapType;
+import com.starrocks.type.AnyStructType;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.MapType;
+import com.starrocks.type.StructType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.assertj.core.util.Sets;
@@ -115,11 +115,11 @@ public class AggStateCombinatorTest extends MVTestBase {
 
     private Type mockType(Type type) {
         if (type.isDecimalOfAnyVersion()) {
-            return ScalarType.createDecimalV3NarrowestType(10, 2);
+            return TypeFactory.createDecimalV3NarrowestType(10, 2);
         } else if (type.isChar()) {
-            return ScalarType.createCharType(100);
+            return TypeFactory.createCharType(100);
         } else if (type.isVarchar()) {
-            return ScalarType.createVarcharType(100);
+            return TypeFactory.createVarcharType(100);
         } else if (type instanceof AnyElementType) {
             return Type.STRING;
         } else if (type instanceof AnyArrayType) {

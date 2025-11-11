@@ -64,6 +64,12 @@ std::string StreamLoadContext::to_resp_json(const std::string& txn_op, const Sta
     std::string_view msg = st.message();
     writer.Key("Message");
     writer.String(msg.data(), msg.size());
+    // db
+    writer.Key("Db");
+    writer.String(db.c_str());
+    // table
+    writer.Key("Table");
+    writer.String(table.c_str());
 
     if (st.ok()) {
         // label
@@ -144,6 +150,14 @@ std::string StreamLoadContext::to_json() const {
     writer.Key("Label");
     writer.String(label.c_str());
 
+    // db
+    writer.Key("Db");
+    writer.String(db.c_str());
+
+    // table
+    writer.Key("Table");
+    writer.String(table.c_str());
+
     // status
     writer.Key("Status");
     switch (status.code()) {
@@ -216,6 +230,10 @@ std::string StreamLoadContext::to_merge_commit_json() const {
     writer.Int64(txn_id);
     writer.Key("Label");
     writer.String(batch_write_label.c_str());
+    writer.Key("Db");
+    writer.String(db.c_str());
+    writer.Key("Table");
+    writer.String(table.c_str());
 
     writer.Key("Status");
     switch (status.code()) {

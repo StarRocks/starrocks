@@ -55,7 +55,7 @@
 #include "runtime/types.h"
 #include "storage/column_predicate.h"
 #include "storage/index/index_descriptor.h"
-#ifndef MACOS_DISABLE_CLUCENE
+#ifndef __APPLE__
 #include "storage/index/inverted/inverted_plugin_factory.h"
 #endif
 #include "storage/rowset/array_column_iterator.h"
@@ -395,9 +395,17 @@ Status ColumnReader::_parse_zone_map(LogicalType type, const ZoneMapPB& zm, Zone
     // DECIMAL32/DECIMAL64/DECIMAL128 stored as INT32/INT64/INT128
     // The DECIMAL type will be delegated to INT type.
     TypeInfoPtr type_info = get_type_info(delegate_type(type));
+    return _parse_zone_map(type_info, zm, detail);
+}
+
+Status ColumnReader::_parse_zone_map(const TypeInfoPtr& type_info, const ZoneMapPB& zm, ZoneMapDetail* detail) const {
     detail->set_has_null(zm.has_null());
 
     if (zm.has_not_null()) {
+        if (UNLIKELY(!zm.has_min() || !zm.has_max())) {
+            LOG(ERROR) << "Corrupted zone map protobuf detected: " << zm.ShortDebugString();
+            return Status::Corruption("Corrupted zone map data: missing min or max values");
+        }
         RETURN_IF_ERROR(datum_from_string(type_info.get(), &(detail->min_value()), zm.min(), nullptr));
         RETURN_IF_ERROR(datum_from_string(type_info.get(), &(detail->max_value()), zm.max(), nullptr));
     }
@@ -536,7 +544,7 @@ Status ColumnReader::_load_inverted_index(const std::shared_ptr<TabletIndex>& in
         return Status::OK();
     }
 
-#ifndef MACOS_DISABLE_CLUCENE
+#ifndef __APPLE__
     SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
     return success_once(_inverted_index_load_once,
                         [&]() {
@@ -607,16 +615,16 @@ Status ColumnReader::zone_map_filter(const std::vector<const ColumnPredicate*>& 
                                      const ColumnPredicate* del_predicate,
                                      std::unordered_set<uint32_t>* del_partial_filtered_pages,
                                      SparseRange<>* row_ranges, const IndexReadOptions& opts,
-                                     CompoundNodeType pred_relation) {
+                                     CompoundNodeType pred_relation, const Range<>* src_range) {
     RETURN_IF_ERROR(_load_zonemap_index(opts));
 
     std::vector<uint32_t> page_indexes;
     if (pred_relation == CompoundNodeType::AND) {
         RETURN_IF_ERROR(_zone_map_filter<CompoundNodeType::AND>(predicates, del_predicate, del_partial_filtered_pages,
-                                                                &page_indexes));
+                                                                &page_indexes, src_range));
     } else {
         RETURN_IF_ERROR(_zone_map_filter<CompoundNodeType::OR>(predicates, del_predicate, del_partial_filtered_pages,
-                                                               &page_indexes));
+                                                               &page_indexes, src_range));
     }
 
     RETURN_IF_ERROR(_calculate_row_ranges(page_indexes, row_ranges));
@@ -645,7 +653,7 @@ template <CompoundNodeType PredRelation>
 Status ColumnReader::_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
                                       const ColumnPredicate* del_predicate,
                                       std::unordered_set<uint32_t>* del_partial_filtered_pages,
-                                      std::vector<uint32_t>* pages) {
+                                      std::vector<uint32_t>* pages, const Range<>* src_range) {
     const ColumnPredicate* predicate;
     if (!predicates.empty()) {
         predicate = predicates[0];
@@ -665,12 +673,25 @@ Status ColumnReader::_zone_map_filter(const std::vector<const ColumnPredicate*>&
         }
     };
 
+    const TypeInfoPtr type_info = get_type_info(delegate_type(lt));
+
     const std::vector<ZoneMapPB>& zone_maps = _zonemap_index->page_zone_maps();
-    int32_t page_size = _zonemap_index->num_pages();
-    for (int32_t i = 0; i < page_size; ++i) {
+    const int32_t num_pages = _zonemap_index->num_pages();
+
+    int32_t i = 0;
+    int32_t end_page = num_pages;
+    if (src_range != nullptr && src_range->end() != 0) {
+        i = _ordinal_index->seek_at_or_before(src_range->begin()).page_index();
+        end_page = _ordinal_index->seek_at_or_before(src_range->end() - 1).page_index();
+        if (end_page + 1 <= num_pages) {
+            end_page++;
+        }
+    }
+
+    for (; i < end_page; ++i) {
         const ZoneMapPB& zm = zone_maps[i];
         ZoneMapDetail detail;
-        RETURN_IF_ERROR(_parse_zone_map(lt, zm, &detail));
+        RETURN_IF_ERROR(_parse_zone_map(type_info, zm, &detail));
 
         if (!page_satisfies_zone_map_filter(detail)) {
             continue;

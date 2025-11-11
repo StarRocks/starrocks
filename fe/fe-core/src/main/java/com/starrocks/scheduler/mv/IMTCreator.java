@@ -201,9 +201,13 @@ class IMTCreator {
                 }
 
                 TypeDef typeDef = TypeDef.create(refOp.getType().getPrimitiveType());
-                ColumnDef columnDef = new ColumnDef(refOp.getName(), typeDef);
-                columnDef.setIsKey(isKey);
-                columnDef.setAllowNull(!isKey);
+                ColumnDef columnDef = new ColumnDef(refOp.getName(), typeDef,
+                        /* isKey */ isKey,
+                        /* aggregateType */ null,
+                        /* aggStateDesc */ null,
+                        /* isAllowNull */ !isKey,
+                        /* defaultValueDef */ ColumnDef.DefaultValueDef.NOT_SET,
+                        /* comment */ "");
                 columnDefs.add(columnDef);
             }
 

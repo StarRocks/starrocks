@@ -121,7 +121,7 @@ public class LakeRestoreJob extends RestoreJob {
             LakeTablet tablet = null;
             try {
                 OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                            .getTable(db.getId(), idChain.getTblId());
+                        .getTable(db.getId(), idChain.getTblId());
                 Partition part = tbl.getPartition(idChain.getPartId());
                 MaterializedIndex index = part.getDefaultPhysicalPartition().getIndex(idChain.getIdxId());
                 tablet = (LakeTablet) index.getTablet(idChain.getTabletId());
@@ -153,7 +153,7 @@ public class LakeRestoreJob extends RestoreJob {
         request.restoreInfos = Lists.newArrayList();
         for (SnapshotInfo info : beSnapshotInfos) {
             OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                        .getTable(db.getId(), info.getTblId());
+                    .getTable(db.getId(), info.getTblId());
             if (tbl == null) {
                 status = new Status(Status.ErrCode.NOT_FOUND, "restored table "
                         + info.getTblId() + " does not exist");
@@ -261,9 +261,6 @@ public class LakeRestoreJob extends RestoreJob {
         // It is no need to release snapshots for lake table.
     }
 
-
-
-
     @Override
     protected void modifyInvertedIndex(OlapTable restoreTbl, Partition restorePart) {
         for (MaterializedIndex restoredIdx : restorePart.getDefaultPhysicalPartition()
@@ -282,7 +279,7 @@ public class LakeRestoreJob extends RestoreJob {
     protected void addRestoredPartitions(Database db, boolean modify) {
         for (Pair<String, Partition> entry : restoredPartitions) {
             OlapTable localTbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                        .getTable(db.getFullName(), entry.first);
+                    .getTable(db.getFullName(), entry.first);
             Partition restorePart = entry.second;
             OlapTable remoteTbl = (OlapTable) backupMeta.getTable(entry.first);
             RangePartitionInfo localPartitionInfo = (RangePartitionInfo) localTbl.getPartitionInfo();
@@ -311,7 +308,7 @@ public class LakeRestoreJob extends RestoreJob {
             LakeTable remoteLakeTbl = (LakeTable) remoteOlapTbl;
             StorageInfo storageInfo = remoteLakeTbl.getTableProperty().getStorageInfo();
             remoteLakeTbl.setStorageInfo(pathInfo, storageInfo.getDataCacheInfo());
-            remoteLakeTbl.resetIdsForRestore(globalStateMgr, db, restoreReplicationNum, new MvRestoreContext());
+            resetIdsForRestore(globalStateMgr, remoteOlapTbl, db, restoreReplicationNum, new MvRestoreContext());
         } catch (DdlException e) {
             return new Status(Status.ErrCode.COMMON_ERROR, e.getMessage());
         }

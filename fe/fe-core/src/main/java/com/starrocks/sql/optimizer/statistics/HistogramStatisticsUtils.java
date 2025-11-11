@@ -14,10 +14,10 @@
 
 package com.starrocks.sql.optimizer.statistics;
 
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.statistic.StatisticUtils;
+import com.starrocks.type.Type;
 import org.apache.commons.math3.util.Precision;
 
 import java.util.ArrayList;

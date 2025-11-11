@@ -17,15 +17,15 @@
 
 #ifdef __APPLE__
 
-#include <string>
-#include <vector>
-#include <memory>
+#include <cstdint>
 #include <functional>
 #include <iostream>
-#include <stdexcept>
 #include <map>
+#include <memory>
 #include <set>
-#include <cstdint>
+#include <stdexcept>
+#include <string>
+#include <vector>
 
 // ============================================================================
 // FORWARD DECLARATIONS AND BASIC TYPES
@@ -40,12 +40,8 @@ public:
     Status(int code, const std::string& msg) : _code(code), _msg(msg) {}
 
     static Status OK() { return Status(); }
-    static Status NotSupported(const std::string& msg) {
-        return Status(-1, "Not supported on macOS: " + msg);
-    }
-    static Status InternalError(const std::string& msg) {
-        return Status(-1, "Internal error: " + msg);
-    }
+    static Status NotSupported(const std::string& msg) { return Status(-1, "Not supported on macOS: " + msg); }
+    static Status InternalError(const std::string& msg) { return Status(-1, "Internal error: " + msg); }
 
     std::string message() const { return _msg; }
     bool ok() const { return _code == 0; }
@@ -118,10 +114,7 @@ class IOStatEntry;
 
 // Snapshot types
 class SnapshotMeta;
-enum SnapshotTypePB {
-    SNAPSHOT_TYPE_FULL = 0,
-    SNAPSHOT_TYPE_INCREMENTAL = 1
-};
+enum SnapshotTypePB { SNAPSHOT_TYPE_FULL = 0, SNAPSHOT_TYPE_INCREMENTAL = 1 };
 class Version;
 
 // OlapTuple
@@ -163,7 +156,7 @@ namespace starrocks {
 
 // S2 debug flag referenced in code but S2 is disabled
 namespace fLB {
-    bool FLAGS_s2debug = false;
+bool FLAGS_s2debug = false;
 }
 
 namespace starrocks {
@@ -176,52 +169,28 @@ namespace starrocks {
 
 // ORC LZO decompression - ORC is disabled on macOS
 namespace orc {
-    void lzoDecompress(const char* inputAddress, const char* inputLimit,
-                      char* outputAddress, char* outputLimit) {
-        throw std::runtime_error("LZO decompression not supported on macOS (ORC disabled)");
-    }
+void lzoDecompress(const char* inputAddress, const char* inputLimit, char* outputAddress, char* outputLimit) {
+    throw std::runtime_error("LZO decompression not supported on macOS (ORC disabled)");
 }
+} // namespace orc
 
 namespace starrocks {
 
 // ============================================================================
-// 5. THRIFT UUID STUBS
+// 5. THRIFT UUID STUBS - REMOVED
 // ============================================================================
 
 } // namespace starrocks
 
-// Thrift UUID support - not compiled into thrift-0.20.0
-namespace apache {
-namespace thrift {
-
-// TUuid struct is defined here to be used in the TJSONProtocol methods
-struct TUuid {
-    std::string uuid;
-};
-
-namespace protocol {
-
-// The linker is complaining about missing UUID methods for TJSONProtocol.
-// The thrift library was likely compiled without UUID support.
-// We define a dummy class here with the missing methods to satisfy the linker.
-// The return type is assumed to be uint32_t based on other thrift protocol methods.
-class TJSONProtocol {
-public:
-    uint32_t readUUID(apache::thrift::TUuid& uuid);
-    uint32_t writeUUID(const apache::thrift::TUuid& uuid);
-};
-
-uint32_t TJSONProtocol::readUUID(apache::thrift::TUuid& uuid) {
-    throw std::runtime_error("Thrift UUID not supported on macOS");
-}
-
-uint32_t TJSONProtocol::writeUUID(const apache::thrift::TUuid& uuid) {
-    throw std::runtime_error("Thrift UUID not supported on macOS");
-}
-
-} // namespace protocol
-} // namespace thrift
-} // namespace apache
+// The UUID stub code has been removed because it was causing ODR violations
+// and breaking JSON parsing. The linker errors for UUID methods will be
+// resolved by checking if they are actually needed in the codebase.
+//
+// If UUID link errors occur, we need to investigate which code paths require
+// UUID support and either:
+// 1. Disable/stub those specific code paths
+// 2. Patch the thrift library to add proper UUID support
+// 3. Use a different approach that doesn't violate ODR
 
 namespace starrocks {
 
@@ -243,10 +212,10 @@ const char* STARROCKS_BUILD_DISTRO_ID = "macOS";
 // ============================================================================
 
 // Cow template forward declaration
-template<typename T>
+template <typename T>
 class Cow {
 public:
-    template<typename U>
+    template <typename U>
     using ImmutPtr = std::shared_ptr<const U>;
 };
 
@@ -254,36 +223,25 @@ class Column;
 
 class ParquetScanner {
 public:
-    ParquetScanner(RuntimeState* state, RuntimeProfile* profile,
-                  const TBrokerScanRange& scan_range,
-                  ScannerCounter* counter, bool schema_only = false);
+    ParquetScanner(RuntimeState* state, RuntimeProfile* profile, const TBrokerScanRange& scan_range,
+                   ScannerCounter* counter, bool schema_only = false);
 
     ~ParquetScanner();
 
-    static Status convert_array_to_column(ConvertFuncTree* func_tree,
-                                         size_t num_elements,
-                                         const arrow::Array* array,
-                                         Cow<Column>::ImmutPtr<Column>& column,
-                                         size_t start_index,
-                                         size_t end_index,
-                                         std::vector<uint8_t>* null_data,
-                                         ArrowConvertContext* context);
+    static Status convert_array_to_column(ConvertFuncTree* func_tree, size_t num_elements, const arrow::Array* array,
+                                          Cow<Column>::ImmutPtr<Column>& column, size_t start_index, size_t end_index,
+                                          std::vector<uint8_t>* null_data, ArrowConvertContext* context);
 };
 
 // Out-of-line definitions
-ParquetScanner::ParquetScanner(RuntimeState* state, RuntimeProfile* profile,
-                              const TBrokerScanRange& scan_range,
-                              ScannerCounter* counter, bool schema_only) {}
+ParquetScanner::ParquetScanner(RuntimeState* state, RuntimeProfile* profile, const TBrokerScanRange& scan_range,
+                               ScannerCounter* counter, bool schema_only) {}
 
 ParquetScanner::~ParquetScanner() {}
 
-Status ParquetScanner::convert_array_to_column(ConvertFuncTree* func_tree,
-                                               size_t num_elements,
-                                               const arrow::Array* array,
-                                               Cow<Column>::ImmutPtr<Column>& column,
-                                               size_t start_index,
-                                               size_t end_index,
-                                               std::vector<uint8_t>* null_data,
+Status ParquetScanner::convert_array_to_column(ConvertFuncTree* func_tree, size_t num_elements,
+                                               const arrow::Array* array, Cow<Column>::ImmutPtr<Column>& column,
+                                               size_t start_index, size_t end_index, std::vector<uint8_t>* null_data,
                                                ArrowConvertContext* context) {
     return Status::NotSupported("ParquetScanner not available on macOS");
 }
@@ -340,13 +298,10 @@ class KafkaDataConsumer {
 public:
     Status get_partition_meta(std::vector<int32_t>* partition_ids, int timeout_ms);
 
-    Status get_partition_offset(std::vector<int32_t>* partition_ids,
-                               std::vector<int64_t>* beginning_offsets,
-                               std::vector<int64_t>* latest_offsets,
-                               int timeout_ms);
+    Status get_partition_offset(std::vector<int32_t>* partition_ids, std::vector<int64_t>* beginning_offsets,
+                                std::vector<int64_t>* latest_offsets, int timeout_ms);
 
-    Status commit(const std::string& group_id,
-                 const std::map<int32_t, int64_t>& offset_map);
+    Status commit(const std::string& group_id, const std::map<int32_t, int64_t>& offset_map);
 };
 
 // Out-of-line definitions
@@ -355,14 +310,12 @@ Status KafkaDataConsumer::get_partition_meta(std::vector<int32_t>* partition_ids
 }
 
 Status KafkaDataConsumer::get_partition_offset(std::vector<int32_t>* partition_ids,
-                                              std::vector<int64_t>* beginning_offsets,
-                                              std::vector<int64_t>* latest_offsets,
-                                              int timeout_ms) {
+                                               std::vector<int64_t>* beginning_offsets,
+                                               std::vector<int64_t>* latest_offsets, int timeout_ms) {
     return Status::NotSupported("Kafka not available on macOS");
 }
 
-Status KafkaDataConsumer::commit(const std::string& group_id,
-                                const std::map<int32_t, int64_t>& offset_map) {
+Status KafkaDataConsumer::commit(const std::string& group_id, const std::map<int32_t, int64_t>& offset_map) {
     return Status::NotSupported("Kafka not available on macOS");
 }
 
@@ -377,9 +330,7 @@ class MessageId;
 
 class PulsarDataConsumer {
 public:
-    Status assign_partition(const std::string& partition,
-                           StreamLoadContext* ctx,
-                           int64_t initial_position);
+    Status assign_partition(const std::string& partition, StreamLoadContext* ctx, int64_t initial_position);
 
     Status get_topic_partition(std::vector<std::string>* partitions);
 
@@ -389,9 +340,8 @@ public:
 };
 
 // Out-of-line definitions
-Status PulsarDataConsumer::assign_partition(const std::string& partition,
-                                           StreamLoadContext* ctx,
-                                           int64_t initial_position) {
+Status PulsarDataConsumer::assign_partition(const std::string& partition, StreamLoadContext* ctx,
+                                            int64_t initial_position) {
     return Status::NotSupported("Pulsar not available on macOS");
 }
 
@@ -416,9 +366,8 @@ class ResultFileOptions;
 
 class FileResultWriter {
 public:
-    FileResultWriter(const ResultFileOptions* options,
-                    const std::vector<ExprContext*>& output_expr_ctxs,
-                    RuntimeProfile* parent_profile);
+    FileResultWriter(const ResultFileOptions* options, const std::vector<ExprContext*>& output_expr_ctxs,
+                     RuntimeProfile* parent_profile);
 
     ~FileResultWriter();
 
@@ -429,9 +378,8 @@ public:
 };
 
 // Out-of-line definitions
-FileResultWriter::FileResultWriter(const ResultFileOptions* options,
-                                  const std::vector<ExprContext*>& output_expr_ctxs,
-                                  RuntimeProfile* parent_profile) {}
+FileResultWriter::FileResultWriter(const ResultFileOptions* options, const std::vector<ExprContext*>& output_expr_ctxs,
+                                   RuntimeProfile* parent_profile) {}
 
 FileResultWriter::~FileResultWriter() {}
 
@@ -527,11 +475,8 @@ void* getJavaUDTFFunction() {
 }
 
 // Init UDAF context stub
-Status init_udaf_context(int64_t fid,
-                        const std::string& url,
-                        const std::string& checksum,
-                        const std::string& symbol,
-                        FunctionContext* context) {
+Status init_udaf_context(int64_t fid, const std::string& url, const std::string& checksum, const std::string& symbol,
+                         FunctionContext* context) {
     return Status::NotSupported("Java UDAF not available on macOS");
 }
 
@@ -584,39 +529,29 @@ VariantMetadata::VariantMetadata(std::string_view data) {}
 
 class BlockCache {
 public:
-    static Status read(const std::string& cache_key,
-                      int64_t offset,
-                      size_t size,
-                      class IOBuffer* buffer,
-                      struct DiskCacheReadOptions* options);
+    static Status read(const std::string& cache_key, int64_t offset, size_t size, class IOBuffer* buffer,
+                       struct DiskCacheReadOptions* options);
 };
 
 // Out-of-line definitions
-Status BlockCache::read(const std::string& cache_key,
-                       int64_t offset,
-                       size_t size,
-                       class IOBuffer* buffer,
-                       struct DiskCacheReadOptions* options) {
+Status BlockCache::read(const std::string& cache_key, int64_t offset, size_t size, class IOBuffer* buffer,
+                        struct DiskCacheReadOptions* options) {
     return Status::NotSupported("BlockCache not available on macOS");
 }
 
 class DataCacheUtils {
 public:
-    static void set_metrics_to_thrift(TDataCacheMetrics& metrics,
-                                     const DataCacheMemMetrics& mem_metrics);
+    static void set_metrics_to_thrift(TDataCacheMetrics& metrics, const DataCacheMemMetrics& mem_metrics);
 
-    static void set_metrics_to_thrift(TDataCacheMetrics& metrics,
-                                     const DataCacheDiskMetrics& disk_metrics);
+    static void set_metrics_to_thrift(TDataCacheMetrics& metrics, const DataCacheDiskMetrics& disk_metrics);
 };
 
 // Out-of-line definitions
-void DataCacheUtils::set_metrics_to_thrift(TDataCacheMetrics& metrics,
-                                          const DataCacheMemMetrics& mem_metrics) {
+void DataCacheUtils::set_metrics_to_thrift(TDataCacheMetrics& metrics, const DataCacheMemMetrics& mem_metrics) {
     // No-op
 }
 
-void DataCacheUtils::set_metrics_to_thrift(TDataCacheMetrics& metrics,
-                                          const DataCacheDiskMetrics& disk_metrics) {
+void DataCacheUtils::set_metrics_to_thrift(TDataCacheMetrics& metrics, const DataCacheDiskMetrics& disk_metrics) {
     // No-op
 }
 
@@ -629,18 +564,14 @@ struct MemCacheWriteOptions;
 
 class StoragePageCache {
 public:
-    Status insert(const std::string& key,
-                 std::vector<uint8_t>* data,
-                 const MemCacheWriteOptions& options,
-                 PageCacheHandle* handle);
+    Status insert(const std::string& key, std::vector<uint8_t>* data, const MemCacheWriteOptions& options,
+                  PageCacheHandle* handle);
 
     bool lookup(const std::string& key, PageCacheHandle* handle);
 };
 
 // Out-of-line definitions
-Status StoragePageCache::insert(const std::string& key,
-                                std::vector<uint8_t>* data,
-                                const MemCacheWriteOptions& options,
+Status StoragePageCache::insert(const std::string& key, std::vector<uint8_t>* data, const MemCacheWriteOptions& options,
                                 PageCacheHandle* handle) {
     return Status::NotSupported("StoragePageCache not available on macOS");
 }
@@ -707,7 +638,7 @@ struct EndPoint {
     std::string ip;
     int port = 0;
 };
-}
+} // namespace butil
 
 class LakeService_RecoverableStub {
 public:
@@ -724,38 +655,26 @@ class SeekRange;
 
 class TabletReaderParams {
 public:
-    enum RangeStartOperation {
-        GT = 0,
-        GE = 1
-    };
+    enum RangeStartOperation { GT = 0, GE = 1 };
 
-    enum RangeEndOperation {
-        LT = 0,
-        LE = 1
-    };
+    enum RangeEndOperation { LT = 0, LE = 1 };
 };
 
 namespace lake {
 
 class TabletReader {
 public:
-    static Status parse_seek_range(const TabletSchema& schema,
-                                   TabletReaderParams::RangeStartOperation start_op,
+    static Status parse_seek_range(const TabletSchema& schema, TabletReaderParams::RangeStartOperation start_op,
                                    TabletReaderParams::RangeEndOperation end_op,
-                                   const std::vector<OlapTuple>& start_keys,
-                                   const std::vector<OlapTuple>& end_keys,
-                                   std::vector<SeekRange>* ranges,
-                                   class MemPool* pool);
+                                   const std::vector<OlapTuple>& start_keys, const std::vector<OlapTuple>& end_keys,
+                                   std::vector<SeekRange>* ranges, class MemPool* pool);
 };
 
 // Out-of-line definitions
-Status TabletReader::parse_seek_range(const TabletSchema& schema,
-                                      TabletReaderParams::RangeStartOperation start_op,
+Status TabletReader::parse_seek_range(const TabletSchema& schema, TabletReaderParams::RangeStartOperation start_op,
                                       TabletReaderParams::RangeEndOperation end_op,
-                                      const std::vector<OlapTuple>& start_keys,
-                                      const std::vector<OlapTuple>& end_keys,
-                                      std::vector<SeekRange>* ranges,
-                                      class MemPool* pool) {
+                                      const std::vector<OlapTuple>& start_keys, const std::vector<OlapTuple>& end_keys,
+                                      std::vector<SeekRange>* ranges, class MemPool* pool) {
     return Status::NotSupported("Lake storage not available on macOS");
 }
 
@@ -764,18 +683,14 @@ class FileSystem;
 
 class TabletManager {
 public:
-    std::shared_ptr<const TabletMetadata> get_tablet_metadata(int64_t tablet_id,
-                                                              int64_t version,
-                                                              bool fill_cache,
+    std::shared_ptr<const TabletMetadata> get_tablet_metadata(int64_t tablet_id, int64_t version, bool fill_cache,
                                                               int64_t timeout_us,
                                                               const std::shared_ptr<FileSystem>& fs);
 };
 
 // Out-of-line definitions
-std::shared_ptr<const TabletMetadata> TabletManager::get_tablet_metadata(int64_t tablet_id,
-                                                                         int64_t version,
-                                                                         bool fill_cache,
-                                                                         int64_t timeout_us,
+std::shared_ptr<const TabletMetadata> TabletManager::get_tablet_metadata(int64_t tablet_id, int64_t version,
+                                                                         bool fill_cache, int64_t timeout_us,
                                                                          const std::shared_ptr<FileSystem>& fs) {
     return nullptr;
 }
@@ -794,24 +709,21 @@ namespace google {
 namespace protobuf {
 class RpcController;
 class Closure;
-}
-}
+} // namespace protobuf
+} // namespace google
 
-template<typename T>
+template <typename T>
 class PInternalServiceImplBase {
 public:
-    void _fetch_datacache(google::protobuf::RpcController* controller,
-                         const PFetchDataCacheRequest* request,
-                         PFetchDataCacheResponse* response,
-                         google::protobuf::Closure* done);
+    void _fetch_datacache(google::protobuf::RpcController* controller, const PFetchDataCacheRequest* request,
+                          PFetchDataCacheResponse* response, google::protobuf::Closure* done);
 };
 
 // Out-of-line template definition
-template<typename T>
+template <typename T>
 void PInternalServiceImplBase<T>::_fetch_datacache(google::protobuf::RpcController* controller,
-                                                    const PFetchDataCacheRequest* request,
-                                                    PFetchDataCacheResponse* response,
-                                                    google::protobuf::Closure* done) {
+                                                   const PFetchDataCacheRequest* request,
+                                                   PFetchDataCacheResponse* response, google::protobuf::Closure* done) {
     // No-op - data cache not supported on macOS
 }
 

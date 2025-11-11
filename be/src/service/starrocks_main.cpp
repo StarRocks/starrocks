@@ -32,7 +32,6 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include <aws/core/Aws.h>
 #include <gperftools/malloc_extension.h>
 #include <sys/file.h>
 #include <unistd.h>
@@ -43,6 +42,12 @@
 
 #include <curl/curl.h>
 #include <thrift/TOutput.h>
+
+#ifndef __APPLE__
+#include <aws/core/Aws.h>
+
+#include "fs/s3/poco_http_client_factory.h"
+#endif
 
 #include <boost/algorithm/string.hpp>
 
@@ -55,7 +60,6 @@
 #include "common/process_exit.h"
 #include "common/status.h"
 #include "exec/pipeline/query_context.h"
-#include "fs/s3/poco_http_client_factory.h"
 #include "runtime/exec_env.h"
 #include "runtime/heartbeat_flags.h"
 #include "runtime/jdbc_driver_manager.h"
@@ -92,6 +96,7 @@ static void thrift_output(const char* x) {
 }
 } // namespace starrocks
 
+#ifndef __APPLE__
 static Aws::Utils::Logging::LogLevel parse_aws_sdk_log_level(const std::string& s) {
     Aws::Utils::Logging::LogLevel levels[] = {
             Aws::Utils::Logging::LogLevel::Off,   Aws::Utils::Logging::LogLevel::Fatal,
@@ -110,6 +115,7 @@ static Aws::Utils::Logging::LogLevel parse_aws_sdk_log_level(const std::string& 
     }
     return level;
 }
+#endif
 
 extern int meta_tool_main(int argc, char** argv);
 
@@ -201,6 +207,7 @@ int main(int argc, char** argv) {
         exit(-1);
     }
 
+#ifndef __APPLE__
     Aws::SDKOptions aws_sdk_options;
     // it is already initialized beforehead
     aws_sdk_options.httpOptions.initAndCleanupCurl = false;
@@ -217,6 +224,7 @@ int main(int argc, char** argv) {
     if (starrocks::config::enable_poco_client_for_aws_sdk) {
         Aws::Http::SetHttpClientFactory(std::make_shared<starrocks::poco::PocoHttpClientFactory>());
     }
+#endif
 
     std::vector<starrocks::StorePath> paths;
     auto olap_res = starrocks::parse_conf_store_paths(starrocks::config::storage_root_path, &paths);
@@ -262,7 +270,9 @@ int main(int argc, char** argv) {
         exit(0);
     }
 
+#ifndef __APPLE__
     Aws::ShutdownAPI(aws_sdk_options);
+#endif
 
     return 0;
 }

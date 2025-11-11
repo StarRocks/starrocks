@@ -84,6 +84,7 @@ import com.starrocks.staros.StarMgrServer;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.DatabaseTransactionMgr;
+import com.starrocks.transaction.TransactionMetricRegistry;
 import com.starrocks.warehouse.cngroup.CRAcquireContext;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
@@ -97,7 +98,6 @@ import java.util.Set;
 import java.util.SortedMap;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import javax.management.Attribute;
 import javax.management.AttributeList;
@@ -210,10 +210,6 @@ public final class MetricRepo {
     public static Histogram HISTO_JOURNAL_WRITE_BYTES;
     public static Histogram HISTO_SHORTCIRCUIT_RPC_LATENCY;
     public static Histogram HISTO_DEPLOY_PLAN_FRAGMENTS_LATENCY;
-
-    public static Histogram HISTO_TXN_WAIT_FOR_PUBLISH_LATENCY;
-    public static Histogram HISTO_TXN_FINISH_PUBLISH_LATENCY;
-    public static Histogram HISTO_TXN_PUBLISH_TOTAL_LATENCY;
 
     // following metrics will be updated by metric calculator
     public static GaugeMetricImpl<Double> GAUGE_QUERY_PER_SECOND;
@@ -645,13 +641,6 @@ public final class MetricRepo {
         HISTO_DEPLOY_PLAN_FRAGMENTS_LATENCY = METRIC_REGISTER.histogram(
                 MetricRegistry.name("deploy_plan_fragments", "latency", "ms"));
 
-        HISTO_TXN_WAIT_FOR_PUBLISH_LATENCY = METRIC_REGISTER.histogram(
-                MetricRegistry.name("txn", "wait_for_publish", "latency", "ms"));
-        HISTO_TXN_FINISH_PUBLISH_LATENCY = METRIC_REGISTER.histogram(
-                MetricRegistry.name("txn", "finish_publish", "latency", "ms"));
-        HISTO_TXN_PUBLISH_TOTAL_LATENCY = METRIC_REGISTER.histogram(
-                MetricRegistry.name("txn", "publish_total", "latency", "ms"));
-
         // init system metrics
         initSystemMetrics();
 
@@ -1038,8 +1027,8 @@ public final class MetricRepo {
         HttpMetricRegistry.getInstance().visit(visitor);
 
 
-        //collect connections for per user
-        collectUserConnMetrics(visitor);
+        // collect connection metrics
+        collectConnectionMetrics(visitor, requestParams.isCollectUserConnMetrics());
 
         // collect runnning txns of per db
         collectDbRunningTxnMetrics(visitor);
@@ -1052,6 +1041,8 @@ public final class MetricRepo {
 
         // collect merge commit metrics
         MergeCommitMetricRegistry.getInstance().visit(visitor);
+
+        TransactionMetricRegistry.getInstance().report(visitor);
 
         // node info
         visitor.getNodeInfo();
@@ -1199,19 +1190,21 @@ public final class MetricRepo {
         }
     }
 
-    // collect connections of per user
-    private static void collectUserConnMetrics(MetricVisitor visitor) {
-
-        Map<String, AtomicInteger> userConnectionMap = ExecuteEnv.getInstance().getScheduler().getUserConnectionMap();
-
-        userConnectionMap.forEach((username, connValue) -> {
-            GaugeMetricImpl<Integer> metricConnect =
-                    new GaugeMetricImpl<>("connection_total", MetricUnit.CONNECTIONS,
-                        "total connection");
-            metricConnect.addLabel(new MetricLabel("user", username));
-            metricConnect.setValue(connValue.get());
-            visitor.visit(metricConnect);
-        });
+    private static void collectConnectionMetrics(MetricVisitor visitor, boolean collectUserConnMetrics) {
+        if (collectUserConnMetrics) {
+            ExecuteEnv.getInstance().getScheduler().getUserConnectionMap().forEach((user, count) -> {
+                GaugeMetricImpl<Integer> metric = new GaugeMetricImpl<>("connection_total",
+                        MetricUnit.CONNECTIONS, "total connection");
+                metric.addLabel(new MetricLabel("user", user));
+                metric.setValue(count.get());
+                visitor.visit(metric);
+            });
+        } else {
+            GaugeMetricImpl<Integer> metric = new GaugeMetricImpl<>("connection_total",
+                    MetricUnit.CONNECTIONS, "total connections");
+            metric.setValue(ExecuteEnv.getInstance().getScheduler().getConnectionNum());
+            visitor.visit(metric);
+        }
     }
 
     // collect running txns of per db

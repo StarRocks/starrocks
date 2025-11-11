@@ -16,17 +16,13 @@ package com.starrocks.sql.ast.expression;
 
 import com.google.common.base.CharMatcher;
 import com.google.common.io.BaseEncoding;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.ParsingException;
-import com.starrocks.thrift.TBinaryLiteral;
-import com.starrocks.thrift.TExprNode;
-import com.starrocks.thrift.TExprNodeType;
+import com.starrocks.type.Type;
 
-import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Objects;
@@ -125,16 +121,15 @@ public class VarBinaryLiteral extends LiteralExpr {
         return value;
     }
 
+    public byte[] getValue() {
+        return value;
+    }
+
     @Override
     public boolean isMinValue() {
         return false;
     }
 
-    @Override
-    protected void toThrift(TExprNode msg) {
-        msg.node_type = TExprNodeType.BINARY_LITERAL;
-        msg.binary_literal = new TBinaryLiteral(ByteBuffer.wrap(value));
-    }
 
     @Override
     public String getStringValue() {

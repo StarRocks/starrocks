@@ -17,7 +17,6 @@ package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerFactory;
@@ -29,6 +28,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.type.Type;
 import mockit.Mocked;
 import org.junit.jupiter.api.Test;
 

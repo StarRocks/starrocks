@@ -46,7 +46,6 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
@@ -75,6 +74,8 @@ import com.starrocks.sql.ast.expression.CastExpr;
 import com.starrocks.sql.ast.expression.DictQueryExpr;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
+import com.starrocks.sql.ast.expression.ExprToSql;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.sql.ast.expression.FunctionParams;
@@ -90,6 +91,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.thrift.TBrokerScanRangeParams;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TOpType;
+import com.starrocks.type.Type;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -401,7 +403,7 @@ public class Load {
                             throw new AnalysisException("const load op type column should only be upsert(0)/delete(1)");
                         }
                     }
-                    LOG.info("load __op column expr: " + (expr != null ? expr.toSql() : "null"));
+                    LOG.info("load __op column expr: " + (expr != null ? ExprToSql.toSql(expr) : "null"));
                     break;
                 }
             }
@@ -737,7 +739,7 @@ public class Load {
             }
 
             List<CastExpr> casts = Lists.newArrayList();
-            entry.getValue().collect(Expr.IS_VARCHAR_SLOT_REF_IMPLICIT_CAST, casts);
+            entry.getValue().collect(ExprUtils.IS_VARCHAR_SLOT_REF_IMPLICIT_CAST, casts);
             if (casts.isEmpty()) {
                 continue;
             }
@@ -807,7 +809,7 @@ public class Load {
             try {
                 java.util.function.Function<SlotRef, ColumnRefOperator> resolveSlotFunc =
                         (slotRef) -> resolveSlotRef(descriptorTable, srcTupleDesc, slotDescByName, slotRef);
-                expr = Expr.analyzeLoadExpr(expr, resolveSlotFunc);
+                expr = ExprUtils.analyzeLoadExpr(expr, resolveSlotFunc);
             } catch (SemanticException e) {
                 ErrorReport.reportAnalysisException(ERR_MAPPING_EXPR_INVALID, AstToSQLBuilder.toSQL(entry.getValue()),
                         e.getDetailMsg(), entry.getKey());
@@ -864,7 +866,7 @@ public class Load {
             }
             Expr expr = entry.getValue().clone(smap);
 
-            expr = Expr.analyzeAndCastFold(expr);
+            expr = ExprUtils.analyzeAndCastFold(expr);
 
             // check if contain aggregation
             List<FunctionCallExpr> funcs = Lists.newArrayList();
@@ -902,7 +904,7 @@ public class Load {
                 }
             }
             Expr expr = entry.getValue().clone(smap);
-            expr = Expr.analyzeAndCastFold(expr);
+            expr = ExprUtils.analyzeAndCastFold(expr);
 
             exprsByName.put(entry.getKey(), expr);
         }
@@ -921,7 +923,7 @@ public class Load {
         if (!node.isFromLambda() && !node.isAnalyzed()) {
             // The SlotRef for non-lambda argument is analyzed manually before using Analyzer
             // TODO: delete old analyze in Load
-            String errMsg = String.format("The SlotRef not from lambda is not analyzed, %s", node.toSql());
+            String errMsg = String.format("The SlotRef not from lambda is not analyzed, %s", ExprToSql.toSql(node));
             LOG.warn(errMsg);
             throw unsupportedException(errMsg);
         }

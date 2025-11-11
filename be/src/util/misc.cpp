@@ -19,7 +19,7 @@
 namespace starrocks {
 
 #ifdef BE_TEST
-static constexpr int sleep_interval = 100 * 1000; // 100ms
+static constexpr int sleep_interval = 10 * 1000; // 10ms for faster shutdown in test environment
 #else
 static constexpr int sleep_interval = 1 * 1000 * 1000; // 1 seconds
 #endif

@@ -17,13 +17,11 @@ package com.starrocks.connector;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Range;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.connector.partitiontraits.CachedPartitionTraits;
@@ -38,8 +36,9 @@ import com.starrocks.connector.partitiontraits.OlapPartitionTraits;
 import com.starrocks.connector.partitiontraits.PaimonPartitionTraits;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.common.PCell;
+import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
+import com.starrocks.type.Type;
 import org.apache.commons.lang.NotImplementedException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -184,7 +183,7 @@ public abstract class ConnectorPartitionTraits {
      *
      * @apiNote it must be a range-partitioned table
      */
-    public abstract Map<String, Range<PartitionKey>> getPartitionKeyRange(Column partitionColumn, Expr partitionExpr)
+    public abstract PCellSortedSet getPartitionKeyRange(Column partitionColumn, Expr partitionExpr)
             throws AnalysisException;
 
     /**
@@ -192,7 +191,7 @@ public abstract class ConnectorPartitionTraits {
      *
      * @apiNote it must be a list-partitioned table
      */
-    public abstract Map<String, PCell> getPartitionCells(List<Column> partitionColumns) throws AnalysisException;
+    public abstract PCellSortedSet getPartitionCells(List<Column> partitionColumns) throws AnalysisException;
 
     public abstract Map<String, PartitionInfo> getPartitionNameWithPartitionInfo();
 

@@ -967,6 +967,10 @@ under the License.
                             </includes>
                             <excludes>
                                 <exclude>com/starrocks/proto/**</exclude>
+                                <exclude>com/starrocks/rpc/**</exclude>
+                                <exclude>com/starrocks/server/**</exclude>
+                                <exclude>**/*$$JProtoBufClass</exclude>
+                                <exclude>**/*$$JProtoBuf*</exclude>
                             </excludes>
                             <append>true</append>
                         </configuration>
@@ -1045,6 +1049,7 @@ under the License.
                     <forkNode implementation="org.apache.maven.plugin.surefire.extensions.SurefireForkNodeFactory"/>
                     <!-->not reuse forked jvm, so that each unit test will run in separate jvm. to avoid singleton confict<-->
                     <reuseForks>false</reuseForks>
+
                     <argLine>
                         -javaagent:${settings.localRepository}/com/github/hazendaz/jmockit/jmockit/1.49.4/jmockit-1.49.4.jar
                         ${async.profiler.arg}
