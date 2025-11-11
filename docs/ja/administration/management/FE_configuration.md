@@ -739,6 +739,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
   - 現在は、この機能は JDBC カタログ名とテーブル名をサポートしていません。JDBC または ODBC データソースで大文字小文字を区別しない処理を実行したい場合は、この機能を有効にしないでください。
 - 導入バージョン: v4.0
 
+##### txn_latency_metric_report_groups
+
+- デフォルト: 空の文字列
+- タイプ: String
+- Unit: -
+- 変更可能: はい
+- 説明: カンマ区切りで指定する、レポート対象のトランザクション遅延メトリックグループのリスト。 ロードタイプは監視用に論理グループに分類されます。 グループを有効化すると、その名前がトランザクションメトリックの 'type' ラベルとして追加されます。 有効な値: `stream_load`, `routine_load`, `broker_load`, `insert`, `compaction` (共有データクラスタでのみ利用可能)。 例: `"stream_load,routine_load"`。
+- 導入バージョン: v4.0
+
 ### ユーザー、ロール、および権限
 
 ##### privilege_max_total_roles_per_user
@@ -965,7 +974,41 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ: Boolean
 - 単位: -
 - 変更可能: はい
-- 説明: データが初めてテーブルにロードされるときに自動的に統計を収集するかどうか。テーブルに複数のパーティションがある場合、このテーブルの空のパーティションにデータがロードされると、自動統計収集がトリガーされます。新しいテーブルが頻繁に作成され、データが頻繁にロードされる場合、メモリと CPU のオーバーヘッドが増加します。
+- 説明: データロード操作によってトリガーされる自動統計情報の収集とメンテナンスを制御します。これには以下が含まれます：
+  - データがパーティションに初めてロードされる際の統計情報収集（パーティションバージョンが 2 の場合）。
+  - マルチパーティションテーブルの空のパーティションにデータがロードされる際の統計情報収集。
+  - INSERT OVERWRITE 操作における統計情報のコピーと更新。
+
+  **統計収集タイプの決定方針：**
+  
+  - INSERT OVERWRITE の場合: `deltaRatio = |targetRows - sourceRows| / (sourceRows + 1)`
+    - `deltaRatio < statistic_sample_collect_ratio_threshold_of_first_load` (デフォルト: 0.1) の場合、統計情報の収集は行われません。既存の統計情報のみがコピーされます。
+    - それ以外の場合、`targetRows > statistic_sample_collect_rows` (デフォルト: 200000) であれば、SAMPLE 統計収集が使用されます。
+    - それ以外の場合、FULL 統計収集が使用されます。
+  
+  - 初回ロードの場合: `deltaRatio = loadRows / (totalRows + 1)`
+    - `deltaRatio < statistic_sample_collect_ratio_threshold_of_first_load` (デフォルト: 0.1) の場合、統計情報の収集は行われません。
+    - それ以外の場合、`loadRows > statistic_sample_collect_rows` (デフォルト: 200000) であれば、SAMPLE 統計収集が使用されます。
+    - それ以外の場合、FULL 統計収集が使用されます。
+  
+  **同期の動作:**
+  
+  - DML ステートメント（INSERT INTO/INSERT OVERWRITE）の場合：テーブルロックを伴う同期モード。ロード操作は統計情報の収集が完了するまで待機します（最大 `semi_sync_collect_statistic_await_seconds` 秒間）。
+  - Stream Load および Broker Load の場合：ロックなしの非同期モード。統計情報の収集はバックグラウンドで実行され、ロード操作をブロックしません。
+  
+  :::note
+  この設定を無効にすると、INSERT OVERWRITE の統計情報メンテナンスを含む、ロードによってトリガーされるすべての統計情報操作が防止されます。これにより、テーブルに統計情報が不足する可能性があります。新しいテーブルが頻繁に作成され、データが頻繁にロードされる場合、この機能を有効にするとメモリと CPU のオーバーヘッドが増加します。
+  :::
+
+- 導入バージョン: v3.1
+
+##### semi_sync_collect_statistic_await_seconds
+
+- デフォルト: 30
+- タイプ: Int
+- 単位: 秒
+- 変更可能: はい
+- 説明: DML 操作（INSERT INTO および INSERT OVERWRITE ステートメント）中の半同期統計収集の最大待機時間。Stream Load および Broker Load は非同期モードを使用するため、この設定の影響を受けません。統計収集時間がこの値を超える場合、ロード操作は収集完了を待たずに続行されます。この設定は `enable_statistic_collect_on_first_load` と連動して機能します。
 - 導入バージョン: v3.1
 
 ##### statistic_auto_analyze_start_time
