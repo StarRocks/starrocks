@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.hive;
 
+import com.google.common.collect.ImmutableMap;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.thrift.THdfsFileFormat;
 
@@ -79,13 +80,29 @@ public enum HiveStorageFormat {
     private final String inputFormat;
     private final String outputFormat;
 
-    public static HiveStorageFormat get(String format) {
-        for (HiveStorageFormat storageFormat : HiveStorageFormat.values()) {
-            if (storageFormat.name().equalsIgnoreCase(format)) {
-                return storageFormat;
-            }
+    private static final ImmutableMap<String, HiveStorageFormat> FORMAT_MAP;
+    private static final ImmutableMap<String, HiveStorageFormat> FORMAT_SERDE_MAP;
+
+    static {
+        ImmutableMap.Builder<String, HiveStorageFormat> formatMapBuilder = ImmutableMap.builder();
+        for (HiveStorageFormat format : values()) {
+            formatMapBuilder.put(format.name().toLowerCase(), format);
         }
-        return UNSUPPORTED;
+        FORMAT_MAP = formatMapBuilder.build();
+
+        ImmutableMap.Builder<String, HiveStorageFormat> formatSerdeMapBuilder = ImmutableMap.builder();
+        for (HiveStorageFormat format : values()) {
+            formatSerdeMapBuilder.put(format.inputFormat + ":" + format.serde, format);
+        }
+        FORMAT_SERDE_MAP = formatSerdeMapBuilder.build();
+    }
+
+    public static HiveStorageFormat get(String name) {
+        return FORMAT_MAP.getOrDefault(name.toLowerCase(), UNSUPPORTED);
+    }
+
+    public static HiveStorageFormat get(String inputFormat, String serde) {
+        return FORMAT_SERDE_MAP.getOrDefault(inputFormat + ":" + serde, UNSUPPORTED);
     }
 
     public static void check(Map<String, String> properties) {
@@ -94,7 +111,7 @@ public enum HiveStorageFormat {
                     "Please use 'file_format' instead of 'format' in the table properties");
         }
 
-        String fileFormat = properties.getOrDefault(FILE_FORMAT, "parquet");
+        String fileFormat = properties.getOrDefault(FILE_FORMAT, PARQUET.name());
         HiveStorageFormat storageFormat = get(fileFormat);
         if (storageFormat == UNSUPPORTED) {
             throw new StarRocksConnectorException("Unsupported hive storage format %s", fileFormat);

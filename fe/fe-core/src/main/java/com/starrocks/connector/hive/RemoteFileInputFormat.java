@@ -30,8 +30,7 @@ public enum RemoteFileInputFormat {
     ORC,
     TEXTFILE,
     AVRO,
-    RCBINARY,
-    RCTEXT,
+    RCFILE,
     SEQUENCE,
     UNKNOWN;
     private static final ImmutableMap<String, RemoteFileInputFormat> CLASS_NAME_TO_INPUT_FORMAT =
@@ -40,7 +39,7 @@ public enum RemoteFileInputFormat {
                     .put(ORC_INPUT_FORMAT_CLASS, ORC)
                     .put(TEXT_INPUT_FORMAT_CLASS, TEXTFILE)
                     .put(AVRO_INPUT_FORMAT_CLASS, AVRO)
-                    .put(RCFILE_INPUT_FORMAT_CLASS, RCBINARY)
+                    .put(RCFILE_INPUT_FORMAT_CLASS, RCFILE)
                     .put(SEQUENCE_INPUT_FORMAT_CLASS, SEQUENCE)
                     .build();
     private static final ImmutableMap<String, Boolean> INPUT_FORMAT_SPLITTABLE =
@@ -82,7 +81,7 @@ public enum RemoteFileInputFormat {
             case ORC -> THdfsFileFormat.ORC;
             case TEXTFILE -> THdfsFileFormat.TEXT;
             case AVRO -> THdfsFileFormat.AVRO;
-            case RCBINARY, RCTEXT -> THdfsFileFormat.RC_FILE;
+            case RCFILE -> THdfsFileFormat.RC_FILE;
             case SEQUENCE -> THdfsFileFormat.SEQUENCE_FILE;
             default -> THdfsFileFormat.UNKNOWN;
         };
