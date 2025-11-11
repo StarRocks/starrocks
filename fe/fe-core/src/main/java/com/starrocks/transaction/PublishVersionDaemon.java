@@ -483,6 +483,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
             return CompletableFuture.completedFuture(null);
         }
 
+        txnState.setHasSendTask(true);
         CompletableFuture<Boolean> publishFuture;
         Collection<TableCommitInfo> tableCommitInfos = txnState.getIdToTableCommitInfos().values();
         if (tableCommitInfos.size() == 1) {
@@ -501,6 +502,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
         return publishFuture.thenAccept(success -> {
             if (success) {
                 try {
+                    txnState.updatePublishTaskFinishTime();
                     globalTransactionMgr.finishTransaction(dbId, txnId, null);
                 } catch (StarRocksException e) {
                     throw new RuntimeException(e);
@@ -726,6 +728,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
         List<TransactionState> states = txnStateBatch.getTransactionStates();
         Map<Long, PartitionPublishVersionData> publishVersionDataMap = new HashMap<>();
 
+        states.forEach(state -> state.setHasSendTask(true));
         for (TransactionState state : states) {
             TableCommitInfo tableCommitInfo = Objects.requireNonNull(state.getTableCommitInfo(tableId));
             Map<Long, PartitionCommitInfo> partitionCommitInfoMap = tableCommitInfo.getIdToPartitionCommitInfo();
@@ -783,6 +786,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
         return publishFuture.thenAccept(success -> {
             if (success) {
                 try {
+                    states.forEach(TransactionState::updatePublishTaskFinishTime);
                     globalTransactionMgr.finishTransactionBatch(dbId, txnStateBatch, null);
                     // here create the job to drop txnLog, for the visibleVersion has been updated
                     submitDeleteTxnLogJob(txnStateBatch);
