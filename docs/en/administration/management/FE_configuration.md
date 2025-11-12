@@ -117,37 +117,37 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 - Default: false
 - Type: boolean
-- Unit: N/A
+- Unit: -
 - Is mutable: No
-- Description: When true, StarRocks appends a ".gz" postfix to rotated system log filenames so Log4j will produce gzipped (gzip-compressed) rotated FE system logs (e.g., fe.log.*). The value is read during Log4j configuration generation (Log4jConfig.initLogging / generateActiveLog4jXmlConfig) and controls the sys_file_postfix property used in the RollingFile filePattern. Enabling reduces disk usage for retained logs but increases CPU and I/O during rollovers and changes log filenames (tools/scripts that read logs must handle .gz). Audit logs use a separate flag (audit_log_enable_compress).
-- Introduced in: 3.2.12
+- Description: When this item is set to `true`, the system appends a ".gz" postfix to rotated system log filenames so Log4j will produce gzip-compressed rotated FE system logs (for example, fe.log.*). This value is read during Log4j configuration generation (Log4jConfig.initLogging / generateActiveLog4jXmlConfig) and controls the `sys_file_postfix` property used in the RollingFile filePattern. Enabling this feature reduces disk usage for retained logs but increases CPU and I/O during rollovers and changes log filenames, so that tools or scripts that read logs must be able to handle .gz files. Note that audit logs use a separate configuration for compression, that is, `audit_log_enable_compress`.
+- Introduced in: v3.2.12
 
 ##### sys_log_warn_modules
 
 - Default: {}
 - Type: String[]
-- Unit: N/A
+- Unit: -
 - Is mutable: No
-- Description: A list of logger names or package prefixes that StarRocks will configure at startup as WARN-level loggers and route to the warning appender (SysWF) — the fe.warn.log file. Entries are inserted into the generated Log4j configuration (alongside builtin warn modules such as org.apache.kafka, org.apache.hudi, org.apache.hadoop.io.compress) and produce logger elements like <Logger name="... " level="WARN"><AppenderRef ref="SysWF"/></Logger>. Use fully-qualified package/class prefixes (e.g., "com.example.lib") to suppress noisy INFO/DEBUG output into the regular log and capture warnings separately. Because the setting is not mutable, changes require a process restart to take effect.
-- Introduced in: 3.2.13
+- Description: A list of logger names or package prefixes that the system will configure at startup as WARN-level loggers and route to the warning appender (SysWF) — the `fe.warn.log` file. Entries are inserted into the generated Log4j configuration (alongside builtin warn modules such as org.apache.kafka, org.apache.hudi, and org.apache.hadoop.io.compress) and produce logger elements like `<Logger name="... " level="WARN"><AppenderRef ref="SysWF"/></Logger>`. Fully-qualified package and class prefixes (for example, "com.example.lib") are recommended to suppress noisy INFO/DEBUG output into the regular log and to allow warnings to be captured separately.
+- Introduced in: v3.2.13
 
 ##### sys_log_to_console
 
-- Default: ((System.getenv("SYS_LOG_TO_CONSOLE") != null) ? System.getenv("SYS_LOG_TO_CONSOLE").trim().equals("1") : false) — false unless environment variable SYS_LOG_TO_CONSOLE is set to "1"
+- Default: false (unless the environment variable `SYS_LOG_TO_CONSOLE` is set to "1")
 - Type: Boolean
-- Unit: N/A
+- Unit: -
 - Is mutable: No
-- Description: When true, StarRocks configures Log4j to send all logs to the console (ConsoleErr appender) instead of the file-based appenders. This flag is consulted when generating the active Log4j XML configuration (affects the root logger and per-module logger appender selection). It is evaluated from the SYS_LOG_TO_CONSOLE environment variable at process startup; changing it at runtime has no effect. Commonly used in containerized or CI environments where stdout/stderr log collection is preferred over writing log files.
-- Introduced in: 3.2.0
+- Description: When this item is set to `true`, the system configures Log4j to send all logs to the console (ConsoleErr appender) instead of the file-based appenders. This value is read when generating the active Log4j XML configuration (which affects the root logger and per-module logger appender selection). Its value is captured from the `SYS_LOG_TO_CONSOLE` environment variable at process startup. Changing it at runtime has no effect. This configuration is commonly used in containerized or CI environments where stdout/stderr log collection is preferred over writing log files.
+- Introduced in: v3.2.0
 
 ##### sys_log_format
 
 - Default: "plaintext"
 - Type: String
-- Unit: N/A
+- Unit: -
 - Is mutable: No
-- Description: Selects the Log4j layout used for FE logs. Valid, case-insensitive values are "plaintext" and "json". "plaintext" (default) configures PatternLayout with human-readable timestamps, level, thread, class.method:line and stack traces for WARN/ERROR. "json" configures JsonTemplateLayout and emits structured JSON events (UTC timestamps, level, thread id/name, source file/method/line, message, exception stackTrace) suitable for log aggregators (ELK, Splunk). JSON output honors sys_log_json_max_string_length and sys_log_json_profile_max_string_length for maximum string lengths. This setting is read at startup and is not changeable at runtime; changing it requires restarting the FE process.
-- Introduced in: 3.2.10
+- Description: Selects the Log4j layout used for FE logs. Valid values: `"plaintext"` (Default) and `"json"`. The values are case-insensitive. `"plaintext"` configures PatternLayout with human-readable timestamps, level, thread, class.method:line and stack traces for WARN/ERROR. `"json"` configures JsonTemplateLayout and emits structured JSON events (UTC timestamps, level, thread id/name, source file/method/line, message, exception stackTrace) suitable for log aggregators (ELK, Splunk). JSON output abides by `sys_log_json_max_string_length` and `sys_log_json_profile_max_string_length` for maximum string lengths.
+- Introduced in: v3.2.10
 
 ##### sys_log_json_max_string_length
 
@@ -155,7 +155,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: Bytes
 - Is mutable: No
-- Description: Sets the JsonTemplateLayout "maxStringLength" value used for StarRocks' JSON-formatted system logs. When sys_log_format is set to "json", string-valued fields (for example "message" and stringified exception stack traces) are truncated if their length exceeds this limit. The value is injected into the generated Log4j XML in Log4jConfig.generateActiveLog4jXmlConfig(), and is applied to default, warning, audit, dump and bigquery layouts; the profile layout uses a separate config (sys_log_json_profile_max_string_length). Lowering this value reduces log size but can truncate useful information. Because the setting is immutable, changes require restarting or reconfiguring the process that regenerates the Log4j configuration.
+- Description: Sets the JsonTemplateLayout "maxStringLength" value used for the JSON-formatted system logs. When `sys_log_format` is set to `"json"`, string-valued fields (for example "message" and stringified exception stack traces) are truncated if their length exceeds this limit. The value is injected into the generated Log4j XML in `Log4jConfig.generateActiveLog4jXmlConfig()`, and is applied to default, warning, audit, dump and bigquery layouts. The profile layout uses a separate configuration (`sys_log_json_profile_max_string_length`). Lowering this value reduces log size but can truncate useful information.
 - Introduced in: 3.2.11
 
 ##### sys_log_json_profile_max_string_length
@@ -164,25 +164,25 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: Bytes
 - Is mutable: No
-- Description: Sets the JsonTemplateLayout maxStringLength for profile (and related feature) log appenders when sys_log_format is "json". String field values in JSON-formatted profile logs will be truncated to this byte length; non-string fields are unaffected. This setting is applied in Log4jConfig (JsonTemplateLayout maxStringLength) and is ignored when plaintext logging is used. Because it is not mutable at runtime, changing it requires updating the configuration and restarting the process. Keep the value large enough for full messages you need, but note larger values increase log size and I/O.
-- Introduced in: 3.2.11
+- Description: Sets the maxStringLength of JsonTemplateLayout for profile (and related feature) log appenders when `sys_log_format` is "json". String field values in JSON-formatted profile logs will be truncated to this byte length; non-string fields are unaffected. This item is applied in Log4jConfig `JsonTemplateLayout maxStringLength` and is ignored when `plaintext` logging is used. Keep the value large enough for full messages you need, but note larger values increase log size and I/O.
+- Introduced in: v3.2.11
 
 ##### enable_audit_sql
 
 - Default: true
 - Type: Boolean
-- Unit: N/A
+- Unit: -
 - Is mutable: No
-- Description: When true, the Frontend audit subsystem records the SQL text of statements into FE audit logs (fe.audit.log) processed by ConnectProcessor. The stored statement respects other controls: encrypted statements are redacted (AuditEncryptionChecker), sensitive credentials may be redacted or desensitized if enable_sql_desensitize_in_log is set, and digest recording is controlled by enable_sql_digest. When false, ConnectProcessor replaces the statement text with "?" in audit events — other audit fields (user, host, duration, status, slow-query detection via qe_slow_log_ms, metrics) are still recorded. Enabling SQL audit increases forensic and troubleshooting visibility but may expose sensitive SQL content and increase log volume and I/O; disabling it improves privacy at the cost of losing full-statement visibility in audit logs. This option is not changeable at runtime.
+- Description: When this item is set to `true`, the FE audit subsystem records the SQL text of statements into FE audit logs (`fe.audit.log`) processed by ConnectProcessor. The stored statement respects other controls: encrypted statements are redacted (`AuditEncryptionChecker`), sensitive credentials may be redacted or desensitized if `enable_sql_desensitize_in_log` is set, and digest recording is controlled by `enable_sql_digest`. When it is set to `false`, ConnectProcessor replaces the statement text with "?" in audit events — other audit fields (user, host, duration, status, slow-query detection via `qe_slow_log_ms`, and metrics) are still recorded. Enabling SQL audit increases forensic and troubleshooting visibility but may expose sensitive SQL content and increase log volume and I/O; disabling it improves privacy at the cost of losing full-statement visibility in audit logs.
 - Introduced in: -
 
 ##### enable_sql_desensitize_in_log
 
 - Default: false
 - Type: Boolean
-- Unit: N/A
+- Unit: -
 - Is mutable: No
-- Description: When true, StarRocks replaces or hides sensitive SQL content before it is written to logs and query-detail records. Code paths that honor this flag include ConnectProcessor.formatStmt (audit logs), StmtExecutor.addRunningQueryDetail (query details), and SimpleExecutor.formatSQL (internal executor logs). With the flag enabled, invalid SQLs may be replaced with a fixed desensitized message, credentials (user/password) are hidden, and the SQL formatter is asked to produce a sanitized representation (it can also enable digest-style output). This reduces leakage of sensitive literals and credentials in audit/internal logs but also means logs and query details no longer contain the original full SQL text (which can affect replay or debugging).
+- Description: When this item is set to `true`, the system replaces or hides sensitive SQL content before it is written to logs and query-detail records. Code paths that honor this configuration include ConnectProcessor.formatStmt (audit logs), StmtExecutor.addRunningQueryDetail (query details), and SimpleExecutor.formatSQL (internal executor logs). With the feature enabled, invalid SQLs may be replaced with a fixed desensitized message, credentials (user/password) are hidden, and the SQL formatter is required to produce a sanitized representation (it can also enable digest-style output). This reduces leakage of sensitive literals and credentials in audit/internal logs but also means logs and query details no longer contain the original full SQL text (which can affect replay or debugging).
 - Introduced in: -
 
 ##### audit_log_dir
@@ -578,9 +578,9 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 - Default: true
 - Type: Boolean
-- Unit: N/A
+- Unit: -
 - Is mutable: No
-- Description: When enabled, internal SQL statements executed by internal components (for example, SimpleExecutor) are preserved and written into internal audit/log outputs (and can be further desensitized if enable_sql_desensitize_in_log is set). When disabled, internal SQL text is suppressed: formatting code (SimpleExecutor.formatSQL) returns "?" and the actual statement is not emitted to internal audit/log messages. This flag does not change execution semantics of internal statements — it only controls logging and visibility of internal SQL for privacy/security. Because the flag is not mutable, changing it requires a restart.
+- Description: When this item is set to `true`, internal SQL statements executed by internal components (for example, SimpleExecutor) are preserved and written into internal audit or log messages (and can be further desensitized if `enable_sql_desensitize_in_log` is set). When it is set to `false`, internal SQL text is suppressed: formatting code (SimpleExecutor.formatSQL) returns "?" and the actual statement is not emitted to internal audit or log messages. This configuration does not change execution semantics of internal statements — it only controls logging and visibility of internal SQL for privacy or security.
 - Introduced in: -
 
 ##### meta_dir
