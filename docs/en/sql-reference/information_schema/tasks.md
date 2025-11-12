@@ -16,3 +16,12 @@ The following fields are provided in `tasks`:
 | DATABASE    | Database where the task belongs.                             |
 | DEFINITION  | SQL definition of the task.                                  |
 | EXPIRE_TIME | Time when the task expires.                                  |
+
+## Syntax
+
+```SQL
+SUBMIT TASK task_example
+SCHEDULE EVERY(INTERVAL 300 SECOND)
+AS
+INSERT INTO
+```
