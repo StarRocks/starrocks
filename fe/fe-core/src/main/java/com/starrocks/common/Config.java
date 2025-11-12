@@ -3955,12 +3955,6 @@ public class Config extends ConfigBase {
     public static long default_statistics_output_row_count = 1L;
 
     /**
-     * Whether enable dynamic tablet.
-     */
-    @ConfField(mutable = true, comment = "Whether enable dynamic tablet.")
-    public static boolean enable_dynamic_tablet = false;
-
-    /**
      * The default scheduler interval for dynamic tablet jobs.
      */
     @ConfField(mutable = false, comment = "The default scheduler interval for dynamic tablet jobs.")
