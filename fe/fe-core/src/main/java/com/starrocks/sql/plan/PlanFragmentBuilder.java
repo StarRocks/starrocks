@@ -39,6 +39,7 @@ import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.catalog.system.information.FeMetricsSystemTable;
+import com.starrocks.catalog.system.information.FeThreadsSystemTable;
 import com.starrocks.catalog.system.information.LoadTrackingLogsSystemTable;
 import com.starrocks.catalog.system.information.LoadsSystemTable;
 import com.starrocks.catalog.system.information.TaskRunsSystemTable;
@@ -1868,7 +1869,8 @@ public class PlanFragmentBuilder {
                 scanNode.setFrontendPort(ipPort.second.intValue());
             }
 
-            if (scanNode.getTableName().equalsIgnoreCase(FeMetricsSystemTable.NAME)) {
+            if (scanNode.getTableName().equalsIgnoreCase(FeMetricsSystemTable.NAME)
+                    || scanNode.getTableName().equalsIgnoreCase(FeThreadsSystemTable.NAME)) {
                 scanNode.computeFeNodes();
             }
 
