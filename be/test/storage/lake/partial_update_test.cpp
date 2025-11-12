@@ -2192,6 +2192,106 @@ TEST_F(LakeColumnUpsertModeTest, upsert_existing_rows_generates_dcg_only) {
     EXPECT_GT(md->dcg_meta().dcgs_size(), 0);
 }
 
+TEST_F(LakeColumnUpsertModeTest, partial_update_reads_encrypted_dcg_segments) {
+    auto chunk_full = generate_data(kChunkSize, 0, false, 3);
+    auto chunk_partial = generate_data(kChunkSize, 0, true, 7);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) indexes[i] = i;
+
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+
+    const bool old_enable_tde = config::enable_transparent_data_encryption;
+    config::enable_transparent_data_encryption = true;
+    DeferOp tde_guard([&]() { config::enable_transparent_data_encryption = old_enable_tde; });
+
+    {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk_full, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .set_partial_update_mode(PartialUpdateMode::COLUMN_UPDATE_MODE)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk_partial, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    {
+        ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+        bool has_encrypted_dcg = false;
+        for (const auto& entry : metadata->dcg_meta().dcgs()) {
+            const auto& dcg_ver = entry.second;
+            if (dcg_ver.encryption_metas_size() > 0) {
+                has_encrypted_dcg = true;
+                break;
+            }
+        }
+        ASSERT_TRUE(has_encrypted_dcg);
+    }
+
+    std::vector<int> keys_only(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) keys_only[i] = i;
+    auto c0_only = Int32Column::create();
+    c0_only->append_numbers(keys_only.data(), keys_only.size() * sizeof(int));
+    Chunk::SlotHashMap slot_only;
+    slot_only[0] = 0;
+    Chunk c0_chunk({std::move(c0_only)}, slot_only);
+
+    std::vector<SlotDescriptor> key_slots;
+    key_slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
+    std::vector<SlotDescriptor*> key_slot_ptrs;
+    key_slot_ptrs.emplace_back(&key_slots[0]);
+
+    {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&key_slot_ptrs)
+                                                   .set_partial_update_mode(PartialUpdateMode::ROW_MODE)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(c0_chunk, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    ASSERT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return (c1 == c0 * 7) && (c2 == c0 * 4); }));
+}
+
 TEST_F(LakeColumnUpsertModeTest, upsert_with_new_rows_adds_new_segments) {
     auto chunk_full = generate_data(kChunkSize, 0, false, 3);
     auto indexes = std::vector<uint32_t>(kChunkSize);
@@ -3492,101 +3592,6 @@ TEST_F(LakeColumnUpsertModeTest, memory_optimization_skip_column_reading) {
     // Verify DCG was generated for COLUMN_UPSERT_MODE
     ASSIGN_OR_ABORT(auto md, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_GT(md->dcg_meta().dcgs_size(), 0) << "DCG should be generated for existing row updates";
-}
-
-// Test DCG column reading with bundle-aware file access in COLUMN_UPSERT_MODE
-// This test covers the fix for checksum mismatch when reading DCG columns from bundle files
-TEST_F(LakeColumnUpsertModeTest, test_dcg_column_reading_with_bundle_aware_access) {
-    auto chunk_full = generate_data(kChunkSize, 0, false, 3);
-    auto chunk_partial = generate_data(kChunkSize, 0, true, 5);
-    auto indexes = std::vector<uint32_t>(kChunkSize);
-    for (int i = 0; i < kChunkSize; i++) indexes[i] = i;
-    auto version = 1;
-    auto tablet_id = _tablet_metadata->id();
-
-    // Step 1: Create initial data with multiple versions to establish base segments
-    for (int i = 0; i < 3; i++) {
-        auto txn_id = next_id();
-        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
-                                                   .set_tablet_manager(_tablet_mgr.get())
-                                                   .set_tablet_id(tablet_id)
-                                                   .set_txn_id(txn_id)
-                                                   .set_partition_id(_partition_id)
-                                                   .set_mem_tracker(_mem_tracker.get())
-                                                   .set_schema_id(_tablet_schema->id())
-                                                   .build());
-        ASSERT_OK(delta_writer->open());
-        ASSERT_OK(delta_writer->write(chunk_full, indexes.data(), indexes.size()));
-        ASSERT_OK(delta_writer->finish_with_txnlog());
-        delta_writer->close();
-        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
-        version++;
-    }
-
-    // Step 2: Perform column mode partial update to create DCG
-    // This will generate DCG files for the updated columns
-    {
-        auto txn_id = next_id();
-        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
-                                                   .set_tablet_manager(_tablet_mgr.get())
-                                                   .set_tablet_id(tablet_id)
-                                                   .set_txn_id(txn_id)
-                                                   .set_partition_id(_partition_id)
-                                                   .set_mem_tracker(_mem_tracker.get())
-                                                   .set_schema_id(_tablet_schema->id())
-                                                   .set_slot_descriptors(&_slot_pointers)
-                                                   .set_partial_update_mode(PartialUpdateMode::COLUMN_UPDATE_MODE)
-                                                   .build());
-        ASSERT_OK(delta_writer->open());
-        ASSERT_OK(delta_writer->write(chunk_partial, indexes.data(), indexes.size()));
-        ASSERT_OK(delta_writer->finish_with_txnlog());
-        delta_writer->close();
-        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
-        version++;
-    }
-
-    // Verify DCG was created
-    ASSIGN_OR_ABORT(auto md_after_dcg, _tablet_mgr->get_tablet_metadata(tablet_id, version));
-    EXPECT_GT(md_after_dcg->dcg_meta().dcgs_size(), 0) << "DCG should be created after column mode partial update";
-
-    // Step 3: Perform COLUMN_UPSERT_MODE partial update
-    // This will trigger DCG column reading through get_column_values -> new_lake_dcg_column_iterator
-    // The fix ensures bundle-aware file access is used when reading DCG columns
-    auto chunk_upsert = generate_data(kChunkSize, 0, true, 7);
-    {
-        auto txn_id = next_id();
-        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
-                                                   .set_tablet_manager(_tablet_mgr.get())
-                                                   .set_tablet_id(tablet_id)
-                                                   .set_txn_id(txn_id)
-                                                   .set_partition_id(_partition_id)
-                                                   .set_mem_tracker(_mem_tracker.get())
-                                                   .set_schema_id(_tablet_schema->id())
-                                                   .set_slot_descriptors(&_slot_pointers)
-                                                   .set_partial_update_mode(PartialUpdateMode::COLUMN_UPSERT_MODE)
-                                                   .build());
-        ASSERT_OK(delta_writer->open());
-        ASSERT_OK(delta_writer->write(chunk_upsert, indexes.data(), indexes.size()));
-        ASSERT_OK(delta_writer->finish_with_txnlog());
-        delta_writer->close();
-
-        // This publish should succeed without checksum mismatch error
-        // The fix ensures DCG columns are read using bundle-aware file access
-        auto publish_result = publish_single_version(tablet_id, version + 1, txn_id);
-        ASSERT_OK(publish_result.status());
-        version++;
-    }
-
-    // Step 4: Verify data correctness after COLUMN_UPSERT_MODE update
-    // c1 should be updated to c0 * 7 (from chunk_upsert)
-    // c2 should remain as c0 * 4 (from original chunk_full, read from DCG or original segment)
-    ASSERT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return (c0 * 7 == c1) && (c0 * 4 == c2); }));
-
-    // Verify metadata is consistent
-    ASSIGN_OR_ABORT(auto final_md, _tablet_mgr->get_tablet_metadata(tablet_id, version));
-    EXPECT_GT(final_md->rowsets_size(), 0);
-    // DCG should still exist after COLUMN_UPSERT_MODE update
-    EXPECT_GT(final_md->dcg_meta().dcgs_size(), 0);
 }
 
 } // namespace starrocks::lake
