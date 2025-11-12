@@ -61,6 +61,7 @@ jobs:
         env:
           SHA: ${{ steps.upload_info.outputs.SHA }}
         run: |
+          set -x
           round_limit=12
           while [[ $round_limit -gt 0 ]]
           do
