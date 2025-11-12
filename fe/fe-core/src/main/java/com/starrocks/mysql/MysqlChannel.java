@@ -37,6 +37,7 @@ package com.starrocks.mysql;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.mysql.nio.MySQLReadListener;
 import com.starrocks.mysql.ssl.SSLChannel;
+import com.starrocks.mysql.ssl.SSLDecoder;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
 import org.apache.logging.log4j.LogManager;
@@ -141,6 +142,13 @@ public class MysqlChannel {
 
     public void setSSLChannel(SSLChannel sslChannel) {
         this.sslChannel = sslChannel;
+    }
+
+    public SSLDecoder getSSLDecoder() {
+        if (this.sslChannel == null) {
+            return null;
+        }
+        return this.sslChannel.createDecoder();
     }
 
     protected int readAll(ByteBuffer dstBuf) throws IOException {
