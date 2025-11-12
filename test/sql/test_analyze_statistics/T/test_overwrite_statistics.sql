@@ -12,7 +12,6 @@ select count(*) from _statistics_.column_statistics where table_name = 'test_ove
 insert overwrite test_overwrite_stats_table select 123;
 select count(*) from _statistics_.column_statistics where table_name = 'test_overwrite_statistics.test_overwrite_stats_table';
 
-
 CREATE TABLE sales_data (
     id BIGINT,
     sale_date DATE
@@ -47,3 +46,9 @@ select count(*) from _statistics_.column_statistics where table_name = 'test_ove
 
 select * from information_schema.analyze_status where `Database`='test_overwrite_statistics' and `Table`='sales_data' and Status='FAILED';
 
+delete from _statistics_.column_statistics where table_name='test_overwrite_statistics.test_overwrite_with_full';
+create table test_overwrite_statistics.test_overwrite_with_full (k1 int) properties("replication_num"="1");
+insert overwrite test_overwrite_statistics.test_overwrite_with_full select generate_series from table(generate_series(1, 5000));
+function: assert_explain_costs_contains("select * from test_overwrite_statistics.test_overwrite_with_full;","cardinality: 5000", "ESTIMATE")
+insert overwrite test_overwrite_statistics.test_overwrite_with_full select generate_series from table(generate_series(1, 5000));
+function: assert_explain_costs_contains("select * from test_overwrite_statistics.test_overwrite_with_full;","cardinality: 5000", "ESTIMATE")

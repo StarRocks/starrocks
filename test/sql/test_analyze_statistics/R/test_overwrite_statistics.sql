@@ -73,3 +73,23 @@ select count(*) from _statistics_.column_statistics where table_name = 'test_ove
 select * from information_schema.analyze_status where `Database`='test_overwrite_statistics' and `Table`='sales_data' and Status='FAILED';
 -- result:
 -- !result
+delete from _statistics_.column_statistics where table_name='test_overwrite_statistics.test_overwrite_with_full';
+-- result:
+-- !result
+create table test_overwrite_statistics.test_overwrite_with_full (k1 int) properties("replication_num"="1");
+-- result:
+-- !result
+insert overwrite test_overwrite_statistics.test_overwrite_with_full select generate_series from table(generate_series(1, 5000));
+-- result:
+-- !result
+function: assert_explain_costs_contains("select * from test_overwrite_statistics.test_overwrite_with_full;","cardinality: 5000", "ESTIMATE")
+-- result:
+None
+-- !result
+insert overwrite test_overwrite_statistics.test_overwrite_with_full select generate_series from table(generate_series(1, 5000));
+-- result:
+-- !result
+function: assert_explain_costs_contains("select * from test_overwrite_statistics.test_overwrite_with_full;","cardinality: 5000", "ESTIMATE")
+-- result:
+None
+-- !result
