@@ -90,7 +90,7 @@ public class OptExpressionDuplicator {
         this.columnMapping = Maps.newHashMap();
         this.rewriter = new ReplaceColumnRefRewriter(columnMapping);
         this.mvRefBaseTableColumns = materializationContext.getMv().getRefBaseTablePartitionColumns();
-        this.partialPartitionRewrite = !materializationContext.getMvUpdateInfo().getMvToRefreshPartitionNames().isEmpty();
+        this.partialPartitionRewrite = !materializationContext.getMvUpdateInfo().getMVToRefreshPCells().isEmpty();
         this.optimizerContext = materializationContext.getOptimizerContext();
     }
 

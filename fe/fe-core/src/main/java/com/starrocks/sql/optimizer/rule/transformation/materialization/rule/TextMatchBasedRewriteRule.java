@@ -259,7 +259,7 @@ public class TextMatchBasedRewriteRule extends Rule {
                 final List<ColumnRefOperator>  mvScanOutputColumns = MvUtils.getMvScanOutputColumnRefs(mv, mvScanOperator);
 
                 // if mv is partitioned, and some partitions are outdated, then compensate it
-                final PCellSortedSet partitionNamesToRefresh = mvUpdateInfo.getMvToRefreshPartitionNames();
+                final PCellSortedSet partitionNamesToRefresh = mvUpdateInfo.getMVToRefreshPCells();
                 OptExpression mvCompensatePlan = null;
                 if (PCellUtils.isEmpty(partitionNamesToRefresh)) {
                     mvCompensatePlan = OptExpression.create(mvScanOperator);

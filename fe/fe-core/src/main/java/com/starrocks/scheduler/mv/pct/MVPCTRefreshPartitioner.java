@@ -521,7 +521,7 @@ public abstract class MVPCTRefreshPartitioner {
                         "%s failed, current mv partitions:%s", baseTable.getName(), mv.getName(), toRefreshPartitions));
             }
 
-            PCellSortedSet refBaseTablePartitionNames = mvBaseTableUpdateInfo.getToRefreshPartitionNames();
+            PCellSortedSet refBaseTablePartitionNames = mvBaseTableUpdateInfo.getToRefreshPCells();
             if (refBaseTablePartitionNames.isEmpty()) {
                 logger.info("The ref base table {} has no updated partitions, and no update related mv partitions: {}",
                         baseTable.getName(), toRefreshPartitions);

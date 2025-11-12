@@ -58,6 +58,10 @@ public abstract class PartitionDiffer {
                                                              Map<Table, PCellSortedSet> refBaseTablePartitionMap);
     /**
      * Generate the reference map between the base table and the mv.
+     *
+     * NOTE: the result with base table's partition cell is not the normalized cell by mv's partition exprs, but the exact base
+     * tables' partition cell.
+     *
      * @param basePartitionMaps src partition sorted set of the base table
      * @param mvPartitionMap mv partition sorted set
      * @return base table -> <partition name, mv partition names> mapping
@@ -67,6 +71,10 @@ public abstract class PartitionDiffer {
 
     /**
      * Generate the mapping from materialized view partition to base table partition.
+     *
+     * NOTE: the result with base table's partition cell is not the normalized cell by mv's partition exprs, but the exact base
+     * tables' partition cell.
+     *
      * @param mvPCells : materialized view partition sorted set
      * @param baseTablePCells: base table partition sorted set map
      * @return mv partition name -> <base table, base partition names> mapping

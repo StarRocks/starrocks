@@ -307,7 +307,7 @@ public class RefreshMaterializedViewTest extends MVTestBase {
         Partition p2 = table.getPartition("p2");
         if (p2.getDefaultPhysicalPartition().getVisibleVersion() == 3) {
             MvUpdateInfo mvUpdateInfo = getMvUpdateInfo(mv1);
-            Assertions.assertTrue(mvUpdateInfo.getMvToRefreshType() == MvUpdateInfo.MvToRefreshType.FULL);
+            Assertions.assertTrue(mvUpdateInfo.getMVToRefreshType() == MvUpdateInfo.MvToRefreshType.FULL);
             Assertions.assertTrue(!mvUpdateInfo.isValidRewrite());
             partitionsToRefresh1 = getPartitionNamesToRefreshForMv(mv1);
             Assertions.assertTrue(partitionsToRefresh1.isEmpty());
