@@ -230,7 +230,7 @@ public class StatisticsSQLTest extends PlanTestBase {
 
         for (String col : columnNames) {
             String sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
-                    db, t0, 0.1, 10L, ImmutableMap.of("d.c.a", "100"), col, Type.INT);
+                    db, t0, 0.1, 10L, ImmutableMap.of("d.c.a", "100"), col, Type.INT, false);
             sql = sql.substring(sql.indexOf("SELECT"));
             starRocksAssert.useDatabase("_statistics_");
             String plan = getFragmentPlan(sql);
