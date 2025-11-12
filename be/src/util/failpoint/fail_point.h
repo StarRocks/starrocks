@@ -3,6 +3,7 @@
 #include <condition_variable>
 #include <memory>
 #include <mutex>
+#include <semaphore>
 #include <shared_mutex>
 #include <unordered_map>
 
