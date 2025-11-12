@@ -47,7 +47,6 @@ import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.PCell;
-import com.starrocks.sql.common.PCellSetMapping;
 import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.PCellWithName;
 import com.starrocks.sql.common.PListCell;
@@ -323,12 +322,12 @@ public final class ExternalTableCompensation extends TableCompensation {
      *
      * @param refBaseTable the specific ref base table of mv
      * @param mvUpdateInfo the mv's update info
-     * @param toRefreshPartitionNames the ref base table's partition cells. NOTE: this is not mv's partition cells.
+     * @param refToRefreshPCells the ref base table's partition cells. NOTE: this is not mv's partition cells.
      * @param toRefreshPartitionKeys partition range result to update for the ref base table
      */
     private static MVTransparentState getToRefreshPartitionKeysWithoutPruner(Table refBaseTable,
                                                                              MvUpdateInfo mvUpdateInfo,
-                                                                             PCellSortedSet toRefreshPartitionNames,
+                                                                             PCellSortedSet refToRefreshPCells,
                                                                              final List<PRangeCell> toRefreshPartitionKeys) {
         // use update info's partition to cells since it's accurate.
         MaterializedView mv = mvUpdateInfo.getMv();
@@ -336,27 +335,17 @@ public final class ExternalTableCompensation extends TableCompensation {
         if (!refBaseTablePartitionColumns.containsKey(refBaseTable)) {
             return null;
         }
-        PCellSetMapping refBaseTablePCellSetMapping = mvUpdateInfo.getBasePartToMvPartNames().get(refBaseTable);
-        if (refBaseTablePCellSetMapping == null) {
-            return null;
-        }
         List<Column> partitionColumns = refBaseTablePartitionColumns.get(refBaseTable);
         try {
-            for (PCellWithName pCellWithName : toRefreshPartitionNames.getPartitions()) {
-                String mvPartitionName = pCellWithName.name();
-                PCellSortedSet refBaseTableToRefreshPCells = refBaseTablePCellSetMapping.get(mvPartitionName);
-                if (refBaseTableToRefreshPCells == null) {
-                    return null;
-                }
-                for (PCell refToRefreshPCell : refBaseTableToRefreshPCells.getPCells()) {
-                    if (refToRefreshPCell instanceof PRangeCell) {
-                        toRefreshPartitionKeys.add(((PRangeCell) refToRefreshPCell));
-                    } else if (refToRefreshPCell instanceof PListCell) {
-                        final List<PartitionKey> keys = ((PListCell) refToRefreshPCell).toPartitionKeys(partitionColumns);
-                        keys.stream()
-                                .map(key -> PRangeCell.of(key))
-                                .forEach(toRefreshPartitionKeys::add);
-                    }
+            for (PCellWithName pCellWithName : refToRefreshPCells.getPartitions()) {
+                PCell refToRefreshPCell = pCellWithName.cell();
+                if (refToRefreshPCell instanceof PRangeCell) {
+                    toRefreshPartitionKeys.add(((PRangeCell) refToRefreshPCell));
+                } else if (refToRefreshPCell instanceof PListCell) {
+                    final List<PartitionKey> keys = ((PListCell) refToRefreshPCell).toPartitionKeys(partitionColumns);
+                    keys.stream()
+                            .map(key -> PRangeCell.of(key))
+                            .forEach(toRefreshPartitionKeys::add);
                 }
             }
         } catch (Exception e) {
