@@ -24,6 +24,7 @@ import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.CompoundPredicate;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
+import com.starrocks.sql.ast.expression.ExprSubstitutionVisitor;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.TableName;
@@ -132,20 +133,20 @@ public class ShowMaterializedViewsStmt extends EnhancedShowStmt {
         }
         // Columns
         SelectList selectList = new SelectList();
-        ExprSubstitutionMap aliasMap = new ExprSubstitutionMap(false);
+        ExprSubstitutionMap aliasMap = new ExprSubstitutionMap();
         for (String column : META_DATA) {
             if (ALIAS_MAP.containsKey(column)) {
                 SelectListItem item = new SelectListItem(new SlotRef(TABLE_NAME, ALIAS_MAP.get(column)),
                         column);
                 selectList.addItem(item);
-                aliasMap.put(new SlotRef(null, column), item.getExpr().clone(null));
+                aliasMap.put(new SlotRef(null, column), item.getExpr().clone());
             } else {
                 SelectListItem item = new SelectListItem(new SlotRef(TABLE_NAME, column), column);
                 selectList.addItem(item);
-                aliasMap.put(new SlotRef(null, column), item.getExpr().clone(null));
+                aliasMap.put(new SlotRef(null, column), item.getExpr().clone());
             }
         }
-        where = where.substitute(aliasMap);
+        where = ExprSubstitutionVisitor.rewrite(where, aliasMap);
 
         // where databases_name = currentdb
         Expr whereDbEQ = new BinaryPredicate(

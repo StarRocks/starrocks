@@ -161,7 +161,8 @@ public class ExprUtils {
         Preconditions.checkNotNull(l);
         ArrayList<C> result = new ArrayList<C>();
         for (C element : l) {
-            result.add((C) element.clone(sMap));
+            C cloned = (C) (sMap == null ? element.clone() : ExprSubstitutionVisitor.rewrite(element, sMap));
+            result.add(cloned);
         }
         return result;
     }
