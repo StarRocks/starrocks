@@ -148,7 +148,7 @@ public class MvPartitionCompensator {
                                                    MaterializationContext mvContext) {
         SessionVariable sessionVariable = mvContext.getOptimizerContext().getSessionVariable();
         MvUpdateInfo mvUpdateInfo = mvContext.getMvUpdateInfo();
-        PCellSortedSet mvPartitionNameToRefresh = mvUpdateInfo.getMvToRefreshPartitionNames();
+        PCellSortedSet mvPartitionNameToRefresh = mvUpdateInfo.getMVToRefreshPCells();
         // If mv contains no partitions to refresh, no need compensate
         if (PCellUtils.isEmpty(mvPartitionNameToRefresh)) {
             logMVRewrite(mvContext, "MV has no partitions to refresh, no need compensate");

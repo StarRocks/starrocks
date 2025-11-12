@@ -387,8 +387,8 @@ public class MvRewriteHiveTest extends MVTestBase {
                 "`l_orderkey`, `l_suppkey`, `l_shipdate`;");
         MaterializedView mv1 = getMv("test", "hive_unpartitioned_mv");
         MvUpdateInfo mvUpdateInfo = getMvUpdateInfo(mv1);
-        Set<String> toRefreshPartitions = mvUpdateInfo.getMvToRefreshPartitionNames().getPartitionNames();
-        Assertions.assertTrue(mvUpdateInfo.getMvToRefreshType() == MvUpdateInfo.MvToRefreshType.FULL);
+        Set<String> toRefreshPartitions = mvUpdateInfo.getMVToRefreshPCells().getPartitionNames();
+        Assertions.assertTrue(mvUpdateInfo.getMVToRefreshType() == MvUpdateInfo.MvToRefreshType.FULL);
         Assertions.assertTrue(!mvUpdateInfo.isValidRewrite());
         Assertions.assertEquals(0, toRefreshPartitions.size());
 

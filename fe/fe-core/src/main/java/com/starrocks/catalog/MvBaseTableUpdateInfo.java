@@ -15,37 +15,39 @@
 package com.starrocks.catalog;
 
 import com.starrocks.sql.common.PCellSortedSet;
-import com.starrocks.sql.common.PRangeCell;
 
 /**
  * Store the update information of base table for MV
  */
 public class MvBaseTableUpdateInfo {
     // The partition names of base table that have been updated
-    private final PCellSortedSet toRefreshPartitionNames = PCellSortedSet.of();
-    // The mapping of partition name to partition range
-    private final PCellSortedSet partitionToCells = PCellSortedSet.of();
-
+    private final PCellSortedSet toRefreshPCells = PCellSortedSet.of();
+    // The base table partition cells snapshot
+    private final PCellSortedSet refBaseTablePCells = PCellSortedSet.of();
     // If the base table is a mv, needs to record the mapping of mv partition name to partition range
-    private final PCellSortedSet mvPartitionNameToCellMap = PCellSortedSet.of();
+    private final PCellSortedSet refBaseNestedMVPCells = PCellSortedSet.of();
 
     public MvBaseTableUpdateInfo() {
     }
 
-    public PCellSortedSet getMvPartitionNameToCellMap() {
-        return mvPartitionNameToCellMap;
+    public static MvBaseTableUpdateInfo of() {
+        return new MvBaseTableUpdateInfo();
+    }
+
+    public PCellSortedSet getRefBaseNestedMVPCells() {
+        return refBaseNestedMVPCells;
     }
 
     public void addMVPartitionNameToCellMap(PCellSortedSet partitionNameToRangeMap) {
-        mvPartitionNameToCellMap.addAll(partitionNameToRangeMap);
+        refBaseNestedMVPCells.addAll(partitionNameToRangeMap);
     }
 
-    public PCellSortedSet getToRefreshPartitionNames() {
-        return toRefreshPartitionNames;
+    public PCellSortedSet getToRefreshPCells() {
+        return toRefreshPCells;
     }
 
-    public PCellSortedSet getPartitionToCells() {
-        return partitionToCells;
+    public PCellSortedSet getRefBaseTablePCells() {
+        return refBaseTablePCells;
     }
 
     /**
@@ -53,31 +55,13 @@ public class MvBaseTableUpdateInfo {
      * @param toRefreshPartitionNames the partition names that need to be refreshed
      */
     public void addToRefreshPartitionNames(PCellSortedSet toRefreshPartitionNames) {
-        this.toRefreshPartitionNames.addAll(toRefreshPartitionNames);
-    }
-
-    /**
-     * Add partition name that needs to be refreshed and its associated range partition key
-     * @param partitionName mv partition name
-     * @param rangeCell the associated range partition
-     */
-    public void addRangePartitionKeys(String partitionName,
-                                      PRangeCell rangeCell) {
-        partitionToCells.add(partitionName, rangeCell);
-    }
-
-    /**
-     * Add partition name that needs to be refreshed and its associated list partition key
-     */
-    public void addPartitionCells(PCellSortedSet cells) {
-        partitionToCells.addAll(cells);
+        this.toRefreshPCells.addAll(toRefreshPartitionNames);
     }
 
     @Override
     public String toString() {
         return "{" +
-                ", toRefreshPartitionNames=" + toRefreshPartitionNames +
-                ", nameToPartKeys=" + partitionToCells +
+                ", toRefreshPartitionNames=" + toRefreshPCells +
                 '}';
     }
 }

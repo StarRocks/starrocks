@@ -225,7 +225,7 @@ public class MaterializedViewTransparentRewriteRule extends TransformationRule {
                                                    LogicalOlapScanOperator olapScanOperator,
                                                    Set<Table> queryTables) {
         MvUpdateInfo mvUpdateInfo = MvUpdateInfo.fullRefresh(mv);
-        mvUpdateInfo.addMvToRefreshPartitionNames(mv.getPartitionCells(Optional.empty()));
+        mvUpdateInfo.addMVToRefreshPartitionNames(mv.getPartitionCells(Optional.empty()));
 
         MaterializationContext mvContext = MvRewritePreprocessor.buildMaterializationContext(context,
                 mv, mvPlanContext, mvUpdateInfo, queryTables, 0);
