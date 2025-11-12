@@ -585,9 +585,8 @@ public class FileScanNode extends LoadScanNode {
             long rangeBytes = 0;
             // The rest of the file belongs to one range
             boolean isEndOfFile = false;
-            if (smallestLocations.second + leftBytes > bytesPerInstance &&
-                    ((formatType == TFileFormatType.FORMAT_CSV_PLAIN || formatType == TFileFormatType.FORMAT_PARQUET)
-                            && fileStatus.isSplitable)) {
+            if (smallestLocations.second + leftBytes > bytesPerInstance && isFileFormatSupportSplit(formatType)
+                            && fileStatus.isSplitable) {
                 rangeBytes = bytesPerInstance - smallestLocations.second;
             } else {
                 rangeBytes = leftBytes;
@@ -616,6 +615,17 @@ public class FileScanNode extends LoadScanNode {
             if (brokerScanRange(locations).isSetRanges()) {
                 locationsList.add(locations);
             }
+        }
+    }
+    
+    private boolean isFileFormatSupportSplit(TFileFormatType format) {
+        switch (format) {
+            case FORMAT_CSV_PLAIN:
+            case FORMAT_PARQUET:
+            case FORMAT_ORC:
+                return true;
+            default:
+                return false;
         }
     }
 
