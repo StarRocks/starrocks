@@ -232,7 +232,8 @@ public:
         } else {
             buff = write_little_endian_64(bytes_size, buff);
         }
-        if (EncodeContext::enable_encode_string(encode_level) && bytes_size >= ENCODE_SIZE_LIMIT) {
+        if (EncodeContext::enable_encode_string(encode_level) && bytes_size >= ENCODE_SIZE_LIMIT &&
+            bytes_size <= LZ4_MAX_INPUT_SIZE) {
             buff = encode_string_lz4(bytes.data(), bytes_size, buff, encode_level);
         } else {
             buff = write_raw(bytes.data(), bytes_size, buff);
@@ -266,7 +267,8 @@ public:
             buff = read_little_endian_64(buff, &bytes_size);
         }
         column->get_bytes().resize(bytes_size);
-        if (EncodeContext::enable_encode_string(encode_level) && bytes_size >= ENCODE_SIZE_LIMIT) {
+        if (EncodeContext::enable_encode_string(encode_level) && bytes_size >= ENCODE_SIZE_LIMIT &&
+            bytes_size <= LZ4_MAX_INPUT_SIZE) {
             buff = decode_string_lz4(buff, column->get_bytes().data(), bytes_size);
         } else {
             buff = read_raw(buff, column->get_bytes().data(), bytes_size);

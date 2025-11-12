@@ -34,6 +34,7 @@
 #include "exec/workgroup/scan_task_queue.h"
 #include "exec/workgroup/work_group.h"
 #include "exec/workgroup/work_group_fwd.h"
+#include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
 #include "util/bit_util.h"
 #include "util/runtime_profile.h"
@@ -474,6 +475,8 @@ void PartitionedSpillerWriter::shuffle(std::vector<uint32_t>& dst, const SpillHa
 
 Status PartitionedSpillerWriter::spill_partition(workgroup::YieldContext& yield_ctx, SerdeContext& ctx,
                                                  SpilledPartition* partition) {
+    TRY_CATCH_ALLOC_SCOPE_START()
+
     auto mem_table = partition->spill_writer->mem_table();
     auto mem_table_mem_usage = mem_table->mem_usage();
     if (partition->spill_output_stream == nullptr) {
@@ -497,6 +500,7 @@ Status PartitionedSpillerWriter::spill_partition(workgroup::YieldContext& yield_
 
     mem_table->reset();
     TRACE_SPILL_LOG << fmt::format("spill partition[{}] done ", partition->debug_string());
+    TRY_CATCH_ALLOC_SCOPE_END()
     return Status::OK();
 }
 
