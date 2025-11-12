@@ -660,13 +660,22 @@ Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, co
         // check crc32c
         uint32_t crc32c = crc32c::Value(buf.data(), delvec_page.size());
         if (crc32c != crc32c::Unmask(delvec_page.crc32c())) {
+            // NOTICE : In some ABA upgrade/downgrade scenarios, misjudgments may occur.
+            // For example, version A includes the code for generating and verifying the CRC32 of delete vectors,
+            // while version B does not yet support it.
+            // Consider a situation where a delete vector and its corresponding CRC32 are correctly generated in version A.
+            // After downgrading to version B, the delete vector is updated, but since version B does not support
+            // CRC32-related logic, the CRC32 is not updated. Later, when upgrading back to version A,
+            // the CRC32 verification fails.
             LOG(ERROR) << fmt::format(
                     "delvec crc32c mismatch, tabletid {}, delvecfile {}, offset {}, size {}, expect crc32c {}, actual "
                     "crc32c {}",
                     metadata.id(), delvec_name, delvec_page.offset(), delvec_page.size(),
                     crc32c::Unmask(delvec_page.crc32c()), crc32c);
-            return Status::Corruption(fmt::format("delvec crc32c mismatch. expect crc32c {}, actual {}",
-                                                  crc32c::Unmask(delvec_page.crc32c()), crc32c));
+            if (config::enable_strict_delvec_crc_check) {
+                return Status::Corruption(fmt::format("delvec crc32c mismatch. expect crc32c {}, actual {}",
+                                                      crc32c::Unmask(delvec_page.crc32c()), crc32c));
+            }
         }
     }
     // parse delvec
