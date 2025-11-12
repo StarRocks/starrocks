@@ -600,7 +600,6 @@ Default value: `true`.
 
 * **Description**: Whether to enable Parallel Scan for Cloud-native tables in a shared-data cluster.
 * **Default**: true
-<<<<<<< HEAD
 * **Data type**: Boolean
 * **Introduced in**: v3.3.0
 
@@ -612,11 +611,6 @@ Default value: `true`.
 * **Default**: auto
 * **Data type**: String
 * **Introduced in**: v2.5.0
-=======
-* **Type**: Boolean
-* **Description**: Whether to enable query-trigger ANALYZE tasks on tables under external catalogs.
-* **Introduced in**: v3.4.0
->>>>>>> 7640962c1b ([Doc]Update System_variable.md (#65362))
 
 ### enable_scan_datacache
 
@@ -721,7 +715,7 @@ If a Join (other than Broadcast Join and Replicated Join) has multiple equi-join
 
 * **Default**: true
 * **Type**: Boolean
-* **Description**: Whether to enable query-trigger ANALYZE tasks.
+* **Description**: Whether to enable query-trigger ANALYZE tasks on tables under external catalogs.
 * **Introduced in**: v3.4.0
 
 ### event_scheduler
