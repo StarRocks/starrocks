@@ -65,17 +65,18 @@ jobs:
           while [[ $round_limit -gt 0 ]]
           do
             pr_check_run_info=$(gh run list -R ${{ github.repository }} -c ${SHA} --json status,name,startedAt,conclusion | jq '[.[] | select(.name == "PR CHECKER")] | sort_by(.startedAt)| last')
-            if [[ $pr_check_run_info == 'null' ]] || [[ $(echo $pr_check_run_info | jq -r .status) != 'completed' ]] || [[ $(echo $pr_check_run_info | jq -r .conclusion) != 'success' ]]
+            if [[ "$pr_check_run_info" == 'null' ]] || [[ $(echo "$pr_check_run_info" | jq -r .status) != 'completed' ]] || [[ $(echo "$pr_check_run_info" | jq -r .conclusion) != 'success' ]]
             then
               break
             fi
+            echo "$pr_check_run_info"
             round_limit=$((round_limit-1))
             sleep 10
           done
 
           if [[ $round_limit -le 0 ]]
           then
-            echo "::error::PR CHECKER is failed, please check and then you can re-execute by commenting on `rerun`!"
+            echo "::error::PR CHECKER is failed, please check and then you can re-execute by commenting on rerun!"
             exit 1
           fi
 
