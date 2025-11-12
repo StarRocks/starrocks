@@ -17,6 +17,7 @@ package com.starrocks.mysql.nio;
 import com.starrocks.common.Config;
 import com.starrocks.mysql.MysqlPackageDecoder;
 import com.starrocks.mysql.RequestPackage;
+import com.starrocks.mysql.ssl.SSLDecoder;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
 import com.starrocks.rpc.RpcException;
@@ -31,14 +32,16 @@ public class MySQLReadListener implements ChannelListener<ConduitStreamSourceCha
     private static final Logger LOG = LogManager.getLogger(MySQLReadListener.class);
     private final ConnectContext ctx;
     private final ConnectProcessor connectProcessor;
-    private final MysqlPackageDecoder decoder = new MysqlPackageDecoder();
+    private final MysqlPackageDecoder packageDecoder = new MysqlPackageDecoder();
 
     protected static final int DEFAULT_BUFFER_SIZE = 16 * 1024;
     private final ByteBuffer readBuffer = ByteBuffer.allocate(DEFAULT_BUFFER_SIZE);
+    private final SSLDecoder sslDecoder;
 
     public MySQLReadListener(ConnectContext connectContext, ConnectProcessor connectProcessor) {
         this.ctx = connectContext;
         this.connectProcessor = connectProcessor;
+        this.sslDecoder = this.ctx.getMysqlChannel().getSSLDecoder();
     }
 
     @Override
@@ -65,11 +68,18 @@ public class MySQLReadListener implements ChannelListener<ConduitStreamSourceCha
                 }
 
                 readBuffer.flip();
-                decoder.consume(readBuffer);
+
+                if (sslDecoder != null) {
+                    sslDecoder.feed(readBuffer);
+                    packageDecoder.consume(sslDecoder.decode());
+                } else {
+                    packageDecoder.consume(readBuffer);
+                }
+
                 readBuffer.compact();
 
                 RequestPackage pkg;
-                while ((pkg = decoder.poll()) != null) {
+                while ((pkg = packageDecoder.poll()) != null) {
                     final RequestPackage req = pkg;
                     channel.getWorker().execute(() -> {
                         handleRequest(req);
