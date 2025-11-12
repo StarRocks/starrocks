@@ -1067,9 +1067,6 @@ public class ExpressionAnalyzer {
             Type[] argumentTypes = node.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
             // check fn & throw exception direct if analyze failed
             checkFunction(fnName, node, argumentTypes);
-            // checkFunction may modify node's children (e.g., add default parameters for array_generate),
-            // so we need to update argumentTypes after checkFunction
-            argumentTypes = node.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
             // get function by function expression and argument types
             Function fn = FunctionAnalyzer.getAnalyzedFunction(session, node, argumentTypes);
             if (fn == null) {
@@ -1232,22 +1229,9 @@ public class ExpressionAnalyzer {
                     if (node.getChildren().size() < 1 || node.getChildren().size() > 4) {
                         throw new SemanticException(fnName + " has wrong input numbers");
                     }
-                    boolean hasDateFunctionSignatureOverloading = false;
-                    if (node.getChildren().size() >= 2) {
-                        if (node.getChild(0).getType().isDateType() || node.getChild(1).getType().isDateType()) {
-                            hasDateFunctionSignatureOverloading = true;
-                        } else if (node.getChild(0).getType().isStringType() || node.getChild(1).getType().isStringType()) {
-                            hasDateFunctionSignatureOverloading = true;
-                        }
-                    }
+                    boolean hasDateFunctionSignatureOverloading = FunctionAnalyzer.isArrayGenerateDateSignature(node);
 
                     if (hasDateFunctionSignatureOverloading) {
-                        if (node.getChildren().size() == 2) {
-                            IntLiteral e3 = new IntLiteral(1, Type.INT);
-                            node.addChild(e3);
-                            node.addChild(new StringLiteral("day"));
-                        }
-
                         if (node.getChildren().size() == 3 || node.getChildren().size() == 4) {
                             if (!(node.getChild(2) instanceof IntLiteral)) {
                                 throw new SemanticException(
@@ -1256,10 +1240,6 @@ public class ExpressionAnalyzer {
                             if (((IntLiteral) node.getChild(2)).getValue() < 0) {
                                 throw new SemanticException(
                                         fnName + " requires step parameter must be non-negative", node.getPos());
-                            }
-
-                            if (node.getChildren().size() == 3) {
-                                node.addChild(new StringLiteral("day"));
                             }
                         }
                     } else {
