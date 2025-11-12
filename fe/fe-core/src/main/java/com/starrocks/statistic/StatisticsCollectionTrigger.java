@@ -268,8 +268,14 @@ public class StatisticsCollectionTrigger {
                 PartitionCommitInfo partitionCommitInfo = entry.getValue();
                 if (partitionCommitInfo.getVersion() == Partition.PARTITION_INIT_VERSION + 1) {
                     PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
-                    Partition partition = table.getPartition(physicalPartition.getParentId());
-                    partitionIds.add(partition.getId());
+                    long partitionId = table.getPartition(physicalPartition.getParentId()).getId();
+                    if (table.isNativeTableOrMaterializedView()) {
+                        OlapTable olapTable = (OlapTable) table;
+                        if (olapTable.isTempPartition(partitionId)) {
+                            continue;
+                        }
+                    }
+                    partitionIds.add(partitionId);
                 }
             }
         } finally {
