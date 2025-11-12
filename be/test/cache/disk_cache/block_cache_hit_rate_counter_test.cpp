@@ -52,6 +52,6 @@ TEST_F(BlockCacheHitRateCounterTest, app_hit_rate) {
 
     EXPECT_EQ(4, counter.page_cache_hit_count());
     EXPECT_EQ(6, counter.page_cache_miss_count());
-    EXPECT_EQ(0.5, counter.page_cache_hit_rate());
+    EXPECT_EQ(0.4, counter.page_cache_hit_rate());
 }
 } // namespace starrocks
