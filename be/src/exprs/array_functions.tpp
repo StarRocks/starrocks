@@ -1749,7 +1749,7 @@ inline size_t calculate_accurate_step_count(
     template <LogicalType LType, LogicalType ResultType>                                                           \
     static StatusOr<ColumnPtr> array_generate_function_##NAME(FunctionContext* ctx, const Columns& columns) {      \
         RETURN_IF_COLUMNS_ONLY_NULL(columns);                                                                      \
-        DCHECK(columns.size() == 4);                                                                               \
+        RETURN_IF(columns.size() != 4, Status::InvalidArgument("expect 4 arguments"));                             \
                                                                                                                    \
         auto num_rows = columns[0]->size();                                                                        \
                                                                                                                    \
