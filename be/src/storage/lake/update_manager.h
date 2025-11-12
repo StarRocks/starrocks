@@ -90,6 +90,24 @@ public:
                                       const TabletMetadataPtr& metadata, Tablet* tablet, IndexEntry* index_entry,
                                       MetaFileBuilder* builder, int64_t base_version, bool batch_apply = false);
 
+<<<<<<< HEAD
+=======
+    Status _read_chunk_for_upsert(const TxnLogPB_OpWrite& op_write, const TabletSchemaCSPtr& tschema, Tablet* tablet,
+                                  const std::shared_ptr<FileSystem>& fs, uint32_t seg,
+                                  const std::vector<uint32_t>& insert_rowids, const std::vector<uint32_t>& update_cids,
+                                  ChunkPtr* out_chunk);
+
+    Status _handle_column_upsert_mode(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
+                                      const TabletMetadataPtr& metadata, Tablet* tablet, LakePrimaryIndex& index,
+                                      MetaFileBuilder* builder, int64_t base_version, uint32_t rowset_id,
+                                      const std::vector<std::vector<uint32_t>>& insert_rowids_by_segment);
+
+    Status _handle_delete_files(const TxnLogPB_OpWrite& op_write, int64_t txn_id, const TabletMetadataPtr& metadata,
+                                Tablet* tablet, LakePrimaryIndex& index, IndexEntry* index_entry,
+                                MetaFileBuilder* builder, int64_t base_version, uint32_t del_rebuild_rssid,
+                                const RowsetUpdateStateParams& params);
+
+>>>>>>> 4e0f25b814 ([BugFix] Fix OOM issue in column upsert mode when inserting millions of rows (#64289))
     Status publish_column_mode_partial_update(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
                                               const TabletMetadataPtr& metadata, Tablet* tablet,
                                               MetaFileBuilder* builder, int64_t base_version);

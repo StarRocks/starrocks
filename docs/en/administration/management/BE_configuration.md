@@ -407,6 +407,822 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Description: The strategy for flushing logs. The default value indicates that logs are buffered in memory. Valid values are `-1` and `0`. `-1` indicates that logs are not buffered in memory.
 - Introduced in: -
 
+<<<<<<< HEAD
+=======
+### Server
+
+##### be_port
+
+- Default: 9060
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: The BE thrift server port, which is used to receive requests from FEs.
+- Introduced in: -
+
+##### brpc_port
+
+- Default: 8060
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: The BE bRPC port, which is used to view the network statistics of bRPCs.
+- Introduced in: -
+
+##### brpc_num_threads
+
+- Default: -1
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: The number of bthreads of a bRPC. The value `-1` indicates the same number with the CPU threads.
+- Introduced in: -
+
+##### brpc_stub_expire_s
+
+- Default: 3600
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The expire time of BRPC stub cache, default 60 minutes.
+- Introduced in: -
+
+##### priority_networks
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: Declares a selection strategy for servers that have multiple IP addresses. Note that at most one IP address must match the list specified by this parameter. The value of this parameter is a list that consists of entries, which are separated with semicolons (;) in CIDR notation, such as `10.10.10.0/24`. If no IP address matches the entries in this list, an available IP address of the server will be randomly selected. From v3.3.0, StarRocks supports deployment based on IPv6. If the server has both IPv4 and IPv6 addresses, and this parameter is not specified, the system uses an IPv4 address by default. You can change this behavior by setting `net_use_ipv6_when_priority_networks_empty` to `true`.
+- Introduced in: -
+
+##### net_use_ipv6_when_priority_networks_empty
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: A boolean value to control whether to use IPv6 addresses preferentially when `priority_networks` is not specified. `true` indicates to allow the system to use an IPv6 address preferentially when the server that hosts the node has both IPv4 and IPv6 addresses and `priority_networks` is not specified.
+- Introduced in: v3.3.0
+
+##### mem_limit
+
+- Default: 90%
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: BE process memory upper limit. You can set it as a percentage ("80%") or a physical limit ("100G"). The default hard limit is 90% of the server's memory size, and the soft limit is 80%. You need to configure this parameter if you want to deploy StarRocks with other memory-intensive services on a same server.
+- Introduced in: -
+
+##### heartbeat_service_port
+
+- Default: 9050
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: The BE heartbeat service port, which is used to receive heartbeats from FEs.
+- Introduced in: -
+
+##### heartbeat_service_thread_count
+
+- Default: 1
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: The thread count of the BE heartbeat service.
+- Introduced in: -
+
+##### compress_rowbatches
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: A boolean value to control whether to compress the row batches in RPCs between BEs. `true` indicates compressing the row batches, and `false` indicates not compressing them.
+- Introduced in: -
+
+##### thrift_client_retry_interval_ms
+
+- Default: 100
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: The time interval at which a thrift client retries.
+- Introduced in: -
+
+##### be_http_port
+
+- Default: 8040
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: The BE HTTP server port.
+- Introduced in: -
+
+##### be_http_num_workers
+
+- Default: 48
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: The number of threads used by the HTTP server.
+- Introduced in: -
+
+##### be_exit_after_disk_write_hang_second
+
+- Default: 60
+- Type: Int
+- Unit: Seconds
+- Is mutable: No
+- Description: The length of time that the BE waits to exit after the disk hangs.
+- Introduced in: -
+
+##### thrift_rpc_timeout_ms
+
+- Default: 5000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: The timeout for a thrift RPC.
+- Introduced in: -
+
+##### thrift_rpc_strict_mode
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether thrift's strict execution mode is enabled. For more information on thrift strict mode, see [Thrift Binary protocol encoding](https://github.com/apache/thrift/blob/master/doc/specs/thrift-binary-protocol.md).
+- Introduced in: -
+
+##### thrift_rpc_max_body_size
+
+- Default: 0
+- Type: Int
+- Unit:
+- Is mutable: No
+- Description: The maximum string body size of RPC. `0` indicates the size is unlimited.
+- Introduced in: -
+
+##### thrift_rpc_connection_max_valid_time_ms
+
+- Default: 5000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: No
+- Description: Maximum valid time for a thrift RPC connection. A connection will be closed if it has existed in the connection pool for longer than this value. It must be set consistent with FE configuration `thrift_client_timeout_ms`.
+- Introduced in: -
+
+##### brpc_max_body_size
+
+- Default: 2147483648
+- Type: Int
+- Unit: Bytes
+- Is mutable: No
+- Description: The maximum body size of a bRPC.
+- Introduced in: -
+
+### Query engine
+
+##### scanner_thread_pool_thread_num
+
+- Default: 48
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The number of threads which the storage engine used for concurrent storage volume scanning. All threads are managed in the thread pool.
+- Introduced in: -
+
+##### scanner_thread_pool_queue_size
+
+- Default: 102400
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: The number of scan tasks supported by the storage engine.
+- Introduced in: -
+
+##### scanner_row_num
+
+- Default: 16384
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum row count returned by each scan thread in a scan.
+- Introduced in: -
+
+##### max_scan_key_num
+
+- Default: 1024
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of scan keys segmented by each query.
+- Introduced in: -
+
+##### max_pushdown_conditions_per_column
+
+- Default: 1024
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of conditions that allow pushdown in each column. If the number of conditions exceeds this limit, the predicates are not pushed down to the storage layer.
+- Introduced in: -
+
+##### exchg_node_buffer_size_bytes
+
+- Default: 10485760
+- Type: Int
+- Unit: Bytes
+- Is mutable: Yes
+- Description: The maximum buffer size on the receiver end of an exchange node for each query. This configuration item is a soft limit. A backpressure is triggered when data is sent to the receiver end with an excessive speed.
+- Introduced in: -
+
+##### file_descriptor_cache_capacity
+
+- Default: 16384
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: The number of file descriptors that can be cached.
+- Introduced in: -
+
+##### min_file_descriptor_number
+
+- Default: 60000
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: The minimum number of file descriptors in the BE process.
+- Introduced in: -
+
+##### disable_storage_page_cache
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: A boolean value to control whether to disable PageCache.
+  - When PageCache is enabled, StarRocks caches the recently scanned data.
+  - PageCache can significantly improve the query performance when similar queries are repeated frequently.
+  - `true` indicates disabling PageCache.
+  - The default value of this item has been changed from `true` to `false` since StarRocks v2.4.
+- Introduced in: -
+
+##### enable_bitmap_index_memory_page_cache
+
+- Default: true 
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable memory cache for Bitmap index. Memory cache is recommended if you want to use Bitmap indexes to accelerate point queries.
+- Introduced in: v3.1
+
+##### enable_zonemap_index_memory_page_cache
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable memory cache for zonemap index. Memory cache is recommended if you want to use zonemap indexes to accelerate scan.
+- Introduced in: -
+
+##### enable_ordinal_index_memory_page_cache
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable memory cache for ordinal index. Ordinal index is a mapping from row IDs to data page positions, and it can be used to accelerate scans.
+- Introduced in: -
+
+##### enable_string_prefix_zonemap
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable ZoneMap for string (CHAR/VARCHAR) columns using prefix-based min/max. For non-key string columns, the min/max values are truncated to a fixed prefix length configured by `string_prefix_zonemap_prefix_len`.
+- Introduced in: -
+
+##### string_prefix_zonemap_prefix_len
+
+- Default: 16
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Prefix length used for string ZoneMap min/max when `enable_string_prefix_zonemap` is enabled.
+- Introduced in: -
+
+##### fragment_pool_thread_num_min
+
+- Default: 64
+- Type: Int
+- Unit: Minutes -
+- Is mutable: No
+- Description: The minimum number of threads used for query.
+- Introduced in: -
+
+##### fragment_pool_thread_num_max
+
+- Default: 4096
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: The maximum number of threads used for query.
+- Introduced in: -
+
+##### fragment_pool_queue_size
+
+- Default: 2048
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: The upper limit of the query number that can be processed on each BE node.
+- Introduced in: -
+
+##### flamegraph_tool_dir
+
+- Default: `${STARROCKS_HOME}/bin/flamegraph`
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: Directory of the flamegraph tool, which should contain pprof, stackcollapse-go.pl, and flamegraph.pl scripts for generating flame graphs from profile data.
+- Introduced in: -
+
+##### query_pool_spill_mem_limit_threshold
+
+- Default: 1.0
+- Type: Double
+- Unit: -
+- Is mutable: No
+- Description: If automatic spilling is enabled, when the memory usage of all queries exceeds `query_pool memory limit * query_pool_spill_mem_limit_threshold`, intermediate result spilling will be triggered.
+- Introduced in: v3.2.7
+
+##### result_buffer_cancelled_interval_time
+
+- Default: 300
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The wait time before BufferControlBlock releases data.
+- Introduced in: -
+
+##### max_memory_sink_batch_count
+
+- Default: 20
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of Scan Cache batches.
+- Introduced in: -
+
+##### scan_context_gc_interval_min
+
+- Default: 5
+- Type: Int
+- Unit: Minutes
+- Is mutable: Yes
+- Description: The time interval at which to clean the Scan Context.
+- Introduced in: -
+
+##### path_gc_check_step
+
+- Default: 1000
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of files that can be scanned continuously each time.
+- Introduced in: -
+
+##### path_gc_check_step_interval_ms
+
+- Default: 10
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: The time interval between file scans.
+- Introduced in: -
+
+##### path_scan_interval_second
+
+- Default: 86400
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The time interval at which GC cleans expired data.
+- Introduced in: -
+
+##### pipeline_poller_timeout_guard_ms
+
+- Default: -1
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: When this item is set to greater than `0`, if a driver takes longer than `pipeline_poller_timeout_guard_ms` for a single dispatch in the poller, then the information of the driver and operator is printed.
+- Introduced in: -
+
+##### pipeline_prepare_timeout_guard_ms
+
+- Default: -1
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: When this item is set to greater than `0`, if a plan fragment exceeds `pipeline_prepare_timeout_guard_ms` during the PREPARE process, a stack trace of the plan fragment is printed.
+- Introduced in: -
+
+##### pipeline_connector_scan_thread_num_per_cpu
+
+- Default: 8
+- Type: Double
+- Unit: -
+- Is mutable: Yes
+- Description: The number of scan threads assigned to Pipeline Connector per CPU core in the BE node. This configuration is changed to dynamic from v3.1.7 onwards.
+- Introduced in: -
+
+##### pipeline_scan_thread_pool_queue_size
+
+- Default: 102400
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: The maximum task queue length of SCAN thread pool for Pipeline execution engine.
+- Introduced in: -
+
+##### pipeline_prepare_thread_pool_thread_num
+
+- Default: 0
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: Number of threads in the pipeline execution engine PREPARE fragment thread pool. `0` indicates the value is equal to the number of system VCPU core number.
+- Introduced in: -
+
+##### pipeline_prepare_thread_pool_queue_size
+
+- Default: 102400
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: The maximum queue lenggth of PREPARE fragment thread pool for Pipeline execution engine.
+- Introduced in: -
+
+##### lake_tablet_ignore_invalid_delete_predicate
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: A boolean value to control whether ignore invalid delete predicates in tablet rowset metadata which may be introduced by logic deletion to a duplicate key table after the column name renamed.
+- Introduced in: v4.0
+
+##### max_hdfs_file_handle
+
+- Default: 1000
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of HDFS file descriptors that can be opened.
+- Introduced in: -
+
+##### object_storage_connect_timeout_ms
+
+- Default: -1
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: No
+- Description: Timeout duration to establish socket connections with object storage. `-1` indicates to use the default timeout duration of the SDK configurations.
+- Introduced in: v3.0.9
+
+##### object_storage_request_timeout_ms
+
+- Default: -1
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: No
+- Description: Timeout duration to establish HTTP connections with object storage. `-1` indicates to use the default timeout duration of the SDK configurations.
+- Introduced in: v3.0.9
+
+##### parquet_late_materialization_enable
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: A boolean value to control whether to enable the late materialization of Parquet reader to improve performance. `true` indicates enabling late materialization, and `false` indicates disabling it.
+- Introduced in: -
+
+##### parquet_page_index_enable
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: A boolean value to control whether to enable the pageindex of Parquet file to improve performance. `true` indicates enabling pageindex, and `false` indicates disabling it.
+- Introduced in: v3.3
+
+##### parquet_reader_bloom_filter_enable
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: A boolean value to control whether to enable the bloom filter of Parquet file to improve performance. `true` indicates enabling the bloom filter, and `false` indicates disabling it. You can also control this behavior on session level using the system variable `enable_parquet_reader_bloom_filter`. Bloom filters in Parquet are maintained **at the column level within each row group**. If a Parquet file contains bloom filters for certain columns, queries can use predicates on those columns to efficiently skip row groups.
+- Introduced in: v3.5
+
+##### io_coalesce_adaptive_lazy_active
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Based on the selectivity of predicates, adaptively determines whether to combine the I/O of predicate columns and non-predicate columns.
+- Introduced in: v3.2
+
+##### hdfs_client_enable_hedged_read
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Specifies whether to enable the hedged read feature.
+- Introduced in: v3.0
+
+##### hdfs_client_hedged_read_threadpool_size
+
+- Default: 128
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: Specifies the size of the Hedged Read thread pool on your HDFS client. The thread pool size limits the number of threads to dedicate to the running of hedged reads in your HDFS client. It is equivalent to the `dfs.client.hedged.read.threadpool.size` parameter in the **hdfs-site.xml** file of your HDFS cluster.
+- Introduced in: v3.0
+
+##### hdfs_client_hedged_read_threshold_millis
+
+- Default: 2500
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: No
+- Description: Specifies the number of milliseconds to wait before starting up a hedged read. For example, you have set this parameter to `30`. In this situation, if a read from a block has not returned within 30 milliseconds, your HDFS client immediately starts up a new read against a different block replica. It is equivalent to the `dfs.client.hedged.read.threshold.millis` parameter in the **hdfs-site.xml** file of your HDFS cluster.
+- Introduced in: v3.0
+
+##### query_cache_capacity
+
+- Default: 536870912
+- Type: Int
+- Unit: Bytes
+- Is mutable: No
+- Description: The size of the query cache in the BE. The default size is 512 MB. The size cannot be less than 4 MB. If the memory capacity of the BE is insufficient to provision your expected query cache size, you can increase the memory capacity of the BE.
+- Introduced in: -
+
+##### enable_json_flat
+
+- Default: false
+- Type: Boolean
+- Unit:
+- Is mutable: Yes
+- Description: Whether to enable the Flat JSON feature. After this feature is enabled, newly loaded JSON data will be automatically flattened, improving JSON query performance.
+- Introduced in: v3.3.0
+
+##### enable_compaction_flat_json
+
+- Default: True
+- Type: Boolean
+- Unit:
+- Is mutable: Yes
+- Description: Whether to enable compaction for Flat JSON data.
+- Introduced in: v3.3.3
+
+##### enable_lazy_dynamic_flat_json
+
+- Default: True
+- Type: Boolean
+- Unit:
+- Is mutable: Yes
+- Description: Whether to enable Lazy Dyamic Flat JSON when a query misses Flat JSON schema in read process. When this item is set to `true`, StarRocks will postpone the Flat JSON operation to calculation process instead of read process.
+- Introduced in: v3.3.3
+
+##### json_flat_create_zonemap
+
+- Default: true
+- Type: Boolean
+- Unit:
+- Is mutable: Yes
+- Description: Whether to create ZoneMaps for flattened JSON sub-columns during write. This parameter takes effect only when `enable_json_flat` is set to `true`.
+- Introduced in: -
+
+##### json_flat_null_factor
+
+- Default: 0.3
+- Type: Double
+- Unit:
+- Is mutable: Yes
+- Description: The proportion of NULL values in the column to extract for Flat JSON. A column will not be extracted if its proportion of NULL value is higher than this threshold. This parameter takes effect only when `enable_json_flat` is set to `true`.
+- Introduced in: v3.3.0
+
+##### json_flat_sparsity_factor
+
+- Default: 0.3
+- Type: Double
+- Unit:
+- Is mutable: Yes
+- Description: The proportion of columns with the same name for Flat JSON. Extraction is not performed if the proportion of columns with the same name is lower than this value. This parameter takes effect only when `enable_json_flat` is set to `true`.
+- Introduced in: v3.3.0
+
+##### json_flat_column_max
+
+- Default: 100
+- Type: Int
+- Unit:
+- Is mutable: Yes
+- Description: The maximum number of sub-fields that can be extracted by Flat JSON. This parameter takes effect only when `enable_json_flat` is set to `true`.
+- Introduced in: v3.3.0
+
+##### jit_lru_cache_size
+
+- Default: 0
+- Type: Int
+- Unit: Bytes
+- Is mutable: Yes
+- Description: The LRU cache size for JIT compilation. It represents the actual size of the cache if it is set to greater than 0. If it is set to less than or equal to 0, the system will adaptively set the cache using the formula `jit_lru_cache_size = min(mem_limit*0.01, 1GB)` (while `mem_limit` of the node must be greater or equal to 16 GB).
+- Introduced in: -
+
+### Loading
+
+##### push_worker_count_normal_priority
+
+- Default: 3
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: The number of threads used to handle a load task with NORMAL priority.
+- Introduced in: -
+
+##### push_worker_count_high_priority
+
+- Default: 3
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: The number of threads used to handle a load task with HIGH priority.
+- Introduced in: -
+
+##### transaction_publish_version_worker_count
+
+- Default: 0
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of threads used to publish a version. When this value is set to less than or equal to `0`, the system uses the CPU core count as the value, so as to avoid insufficient thread resources when import concurrency is high but only a fixed number of threads are used. From v2.5, the default value has been changed from `8` to `0`.
+- Introduced in: -
+
+##### transaction_publish_version_thread_pool_idle_time_ms
+
+- Default: 60000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: No
+- Description: The idle time before a thread is reclaimed by the Publish Version thread pool.
+- Introduced in: -
+
+##### clear_transaction_task_worker_count
+
+- Default: 1
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: The number of threads used for clearing transaction.
+- Introduced in: -
+
+##### load_data_reserve_hours
+
+- Default: 4
+- Type: Int
+- Unit: Hours
+- Is mutable: No
+- Description: The reservation time for the files produced by small-scale loadings.
+- Introduced in: -
+
+##### load_error_log_reserve_hours
+
+- Default: 48
+- Type: Int
+- Unit: Hours
+- Is mutable: Yes
+- Description: The time for which data loading logs are reserved.
+- Introduced in: -
+
+##### number_tablet_writer_threads
+
+- Default: 0
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The number of tablet writer threads used in ingestion, such as Stream Load, Broker Load and Insert. When the parameter is set to less than or equal to 0, the system uses half of the number of CPU cores, with a minimum of 16. When the parameter is set to greater than 0, the system uses that value. This configuration is changed to dynamic from v3.1.7 onwards.
+- Introduced in: -
+
+##### streaming_load_max_mb
+
+- Default: 102400
+- Type: Int
+- Unit: MB
+- Is mutable: Yes
+- Description: The maximum size of a file that can be streamed into StarRocks. From v3.0, the default value has been changed from `10240` to `102400`.
+- Introduced in: -
+
+##### streaming_load_max_batch_size_mb
+
+- Default: 100
+- Type: Int
+- Unit: MB
+- Is mutable: Yes
+- Description: The maximum size of a JSON file that can be streamed into StarRocks.
+- Introduced in: -
+
+##### streaming_load_rpc_max_alive_time_sec
+
+- Default: 1200
+- Type: Int
+- Unit: Seconds
+- Is mutable: No
+- Description: The RPC timeout for Stream Load.
+- Introduced in: -
+
+##### write_buffer_size
+
+- Default: 104857600
+- Type: Int
+- Unit: Bytes
+- Is mutable: Yes
+- Description: The buffer size of MemTable in the memory. This configuration item is the threshold to trigger a flush.
+- Introduced in: -
+
+##### load_process_max_memory_limit_bytes
+
+- Default: 107374182400
+- Type: Int
+- Unit: Bytes
+- Is mutable: No
+- Description: The maximum size limit of memory resources that can be taken up by all load processes on a BE node.
+- Introduced in: -
+
+##### max_consumer_num_per_group
+
+- Default: 3
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of consumers in a consumer group of Routine Load.
+- Introduced in: -
+
+##### flush_thread_num_per_store
+
+- Default: 2
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Number of threads that are used for flushing MemTable in each store.
+- Introduced in: -
+
+##### lake_flush_thread_num_per_store
+
+- Default: 0
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Number of threads that are used for flushing MemTable in each store in shared-data mode. 
+When this value is set to `0`, the system uses twice of the CPU core count as the value.
+When this value is set to less than `0`, the system uses the product of its absolute value and the CPU core count as the value.
+- Introduced in: 3.1.12, 3.2.7
+
+##### column_mode_partial_update_insert_batch_size
+
+- Default: 4096
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Batch size for column mode partial update when processing inserted rows. If this item is set to `0` or negative, it will be clamped to `1` to avoid infinite loop. This item controls the number of newly inserted rows processed in each batch. Larger values can improve write performance but will consume more memory.
+- Introduced in: v3.5.10, v4.0.2
+
+##### max_runnings_transactions_per_txn_map
+
+- Default: 100
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of transactions that can run concurrently in each partition.
+- Introduced in: -
+
+##### enable_stream_load_verbose_log
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Specifies whether to log the HTTP requests and responses for Stream Load jobs.
+- Introduced in: v2.5.17, v3.0.9, v3.1.6, v3.2.1
+
+>>>>>>> 4e0f25b814 ([BugFix] Fix OOM issue in column upsert mode when inserting millions of rows (#64289))
 ### Statistic report
 
 ##### report_task_interval_seconds

@@ -403,6 +403,803 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：日志落盘的策略。默认值表示日志缓存在内存中。有效值为 `-1` 和 `0`。`-1` 表示日志不在内存中缓存。
 - 引入版本：-
 
+<<<<<<< HEAD
+=======
+### 服务器
+
+##### be_port
+
+- 默认值：9060
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：BE 上 Thrift Server 的端口，用于接收来自 FE 的请求。
+- 引入版本：-
+
+##### brpc_port
+
+- 默认值：8060
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：bRPC 的端口，可以查看 bRPC 的一些网络统计信息。
+- 引入版本：-
+
+##### brpc_num_threads
+
+- 默认值：-1
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：bRPC 的 bthread 线程数量，`-1` 表示和 CPU 核数一样。
+- 引入版本：-
+
+##### brpc_stub_expire_s
+
+- 默认值: 3600
+- 类型: Int
+- 単位: Seconds
+- 是否可变: Yes
+- 描述: BRPC stub 缓存的过期时间，默认 60 minutes。
+- 引入版本: -
+
+##### priority_networks
+
+- 默认值：空字符串
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：为有多个 IP 地址的服务器声明 IP 选择策略。请注意，最多应该有一个 IP 地址与此列表匹配。此参数的值是一个以分号分隔格式的列表，用 CIDR 表示法，例如 `10.10.10.0/24`。如果没有 IP 地址匹配此列表中的条目，系统将随机选择服务器的一个可用 IP 地址。从 v3.3.0 开始，StarRocks 支持基于 IPv6 的部署。如果服务器同时具有 IPv4 和 IPv6 地址，并且未指定此参数，系统将默认使用 IPv4 地址。您可以通过将 `net_use_ipv6_when_priority_networks_empty` 设置为 `true` 来更改此行为。
+- 引入版本：-
+
+##### net_use_ipv6_when_priority_networks_empty
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：用于控制在未指定 `priority_networks` 时是否优先使用 IPv6 地址的布尔值。`true` 表示当托管节点的服务器同时具有 IPv4 和 IPv6 地址且未指定 `priority_networks` 时，允许系统优先使用 IPv6 地址。
+- 引入版本：-
+
+##### mem_limit
+
+- 默认值：90%
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：BE 进程内存上限。可设为比例上限（如 "80%"）或物理上限（如 "100G"）。默认的硬限制为服务器内存大小的 90%，软限制为 80%。如果您希望在同一台服务器上同时部署 StarRocks 和其他内存密集型服务，则需要配置此参数。
+- 引入版本：-
+
+##### heartbeat_service_port
+
+- 默认值：9050
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：BE 心跳服务端口，用于接收来自 FE 的心跳。
+- 引入版本：-
+
+##### heartbeat_service_thread_count
+
+- 默认值：1
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：心跳线程数。
+- 引入版本：-
+
+##### compress_rowbatches
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：BE 之间 RPC 通信是否压缩 RowBatch，用于查询层之间的数据传输。`true` 表示压缩，`false` 表示不压缩。
+- 引入版本：-
+
+##### thrift_client_retry_interval_ms
+
+- 默认值：100
+- 类型：Int
+- 单位：Milliseconds
+- 是否动态：是
+- 描述：Thrift Client 默认的重试时间间隔。
+- 引入版本：-
+
+##### be_http_port
+
+- 默认值：8040
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：BE HTTP Server 端口。
+- 引入版本：-
+
+##### be_http_num_workers
+
+- 默认值：48
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：HTTP Server 线程数。
+- 引入版本：-
+
+##### be_exit_after_disk_write_hang_second
+
+- 默认值：60
+- 类型：Int
+- 单位：Seconds
+- 是否动态：否
+- 描述：磁盘挂起后触发 BE 进程退出的等待时间。
+- 引入版本：-
+
+##### thrift_rpc_timeout_ms
+
+- 默认值：5000
+- 类型：Int
+- 单位：Milliseconds
+- 是否动态：是
+- 描述：Thrift RPC 超时的时长。
+- 引入版本：-
+
+##### thrift_rpc_strict_mode
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：是否启用了 Thrift 的严格执行模式。 Thrift 严格模式，参见 [Thrift Binary protocol encoding](https://github.com/apache/thrift/blob/master/doc/specs/thrift-binary-protocol.md)。
+- 引入版本：-
+
+##### thrift_rpc_max_body_size
+
+- 默认值：0
+- 类型：Int
+- 单位：单位：Milliseconds
+- 是否动态：否
+- 描述：RPC 最大字符串体大小。`0` 表示无限制。
+- 引入版本：-
+
+##### thrift_rpc_connection_max_valid_time_ms
+
+- 默认值：5000
+- 类型：Int
+- 单位：
+- 是否动态：否
+- 描述：Thrift RPC 连接的最长有效时间。如果连接池中存在的时间超过此值，连接将被关闭。需要与 FE 配置项 `thrift_client_timeout_ms` 保持一致。
+- 引入版本：-
+
+##### brpc_max_body_size
+
+- 默认值：2147483648
+- 类型：Int
+- 单位：Bytes
+- 是否动态：否
+- 描述：bRPC 最大的包容量。
+- 引入版本：-
+
+### 查询引擎
+
+##### scanner_thread_pool_thread_num
+
+- 默认值：48
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：存储引擎并发扫描磁盘的线程数，统一管理在线程池中。
+- 引入版本：-
+
+##### scanner_thread_pool_queue_size
+
+- 默认值：102400
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：存储引擎支持的扫描任务数。
+- 引入版本：-
+
+##### scanner_row_num
+
+- 默认值：16384
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：每个扫描线程单次执行最多返回的数据行数。
+- 引入版本：-
+
+##### max_scan_key_num
+
+- 默认值：1024
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：查询最多拆分的 Scan Key 数目。
+- 引入版本：-
+
+##### max_pushdown_conditions_per_column
+
+- 默认值：1024
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：单列上允许下推的最大谓词数量，如果超出数量限制，谓词不会下推到存储层。
+- 引入版本：-
+
+##### exchg_node_buffer_size_bytes
+
+- 默认值：10485760
+- 类型：Int
+- 单位：Bytes
+- 是否动态：是
+- 描述：Exchange 算子中，单个查询在接收端的 Buffer 容量。这是一个软限制，如果数据的发送速度过快，接收端会触发反压来限制发送速度。
+- 引入版本：-
+
+##### file_descriptor_cache_capacity
+
+- 默认值：16384
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：文件描述符缓存的容量。
+- 引入版本：-
+
+##### min_file_descriptor_number
+
+- 默认值：60000
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：BE 进程中文件描述符的最小数量。
+- 引入版本：-
+
+##### disable_storage_page_cache
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否开启 PageCache。
+  - 开启 PageCache 后，StarRocks 会缓存最近扫描过的数据，
+  - 对于查询重复性高的场景，会大幅提升查询效率。
+  - `true` 表示不开启。
+  - 自 2.4 版本起，该参数默认值由 `true` 变更为 `false`。自 3.1 版本起，该参数由静态变为动态。
+- 引入版本：-
+
+##### enable_bitmap_index_memory_page_cache
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否为 Bitmap index 开启 Memory Cache。使用 Bitmap index 加速点查时，可以考虑开启。
+- 引入版本：v3.1
+
+##### enable_zonemap_index_memory_page_cache
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否为 Zonemap index 开启 Memory Cache。使用 Zonemap index 加速 Scan 时，可以考虑开启。
+- 引入版本：-
+
+##### enable_ordinal_index_memory_page_cache
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否为 Ordinal index 开启 Memory Cache。Ordinal index 是行号到数据 page position 的映射，可以加速 Scan。
+- 引入版本：-
+
+##### enable_string_prefix_zonemap
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否为字符串（CHAR/VARCHAR）列启用基于前缀的 Zonemap 索引。对于非键列，最小值/最大值会截断到由 `string_prefix_zonemap_prefix_len` 配置的前缀长度。
+- 引入版本：-
+
+##### string_prefix_zonemap_prefix_len
+
+- 默认值：16
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：启用 `enable_string_prefix_zonemap` 时用于字符串 Zonemap 最小值/最大值的前缀长度。
+- 引入版本：-
+
+##### fragment_pool_thread_num_min
+
+- 默认值：64
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：最小查询线程数。
+- 引入版本：-
+
+##### fragment_pool_thread_num_max
+
+- 默认值：4096
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：最大查询线程数。
+- 引入版本：-
+
+##### fragment_pool_queue_size
+
+- 默认值：2048
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：单 BE 节点上能够处理的查询请求上限。
+- 引入版本：-
+
+##### flamegraph_tool_dir
+
+- 默认值：`${STARROCKS_HOME}/bin/flamegraph`
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：火焰图工具的目录，该目录应包含 pprof、stackcollapse-go.pl 和 flamegraph.pl 脚本，用于从性能分析数据生成火焰图。
+- 引入版本：-
+
+##### query_pool_spill_mem_limit_threshold
+
+- 默认值：1.0
+- 类型：Double
+- 单位：-
+- 是否动态：否
+- 描述：如果开启自动落盘功能, 当所有查询使用的内存超过 `query_pool memory limit * query_pool_spill_mem_limit_threshold` 时，系统触发中间结果落盘。
+- 引入版本：3.2.7
+
+##### result_buffer_cancelled_interval_time
+
+- 默认值：300
+- 类型：Int
+- 单位：Seconds
+- 是否动态：是
+- 描述：BufferControlBlock 释放数据的等待时间。
+- 引入版本：-
+
+##### max_memory_sink_batch_count
+
+- 默认值：20
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：Scan Cache 的最大缓存批次数量。
+- 引入版本：-
+
+##### scan_context_gc_interval_min
+
+- 默认值：5
+- 类型：Int
+- 单位：Minutes
+- 是否动态：是
+- 描述：Scan Context 的清理间隔。
+- 引入版本：-
+
+##### path_gc_check_step
+
+- 默认值：1000
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：：单次连续 Scan 最大的文件数量。
+- 引入版本：-
+
+##### path_gc_check_step_interval_ms
+
+- 默认值：10
+- 类型：Int
+- 单位：Milliseconds
+- 是否动态：是
+- 描述：多次连续 Scan 文件间隔时间。
+- 引入版本：-
+
+##### path_scan_interval_second
+
+- 默认值：86400
+- 类型：Int
+- 单位：Seconds
+- 是否动态：是
+- 描述：GC 线程清理过期数据的间隔时间。
+- 引入版本：-
+
+##### pipeline_poller_timeout_guard_ms
+
+- 默认值：-1
+- 类型：Int
+- 单位：Milliseconds
+- 是否动态：是
+- 描述：当该值大于 `0` 时，则在轮询器中，如果某个 Driver 的单次调度时间超过了 `pipeline_poller_timeout_guard_ms` 的时间，则会打印该 Driver 以及 Operator 信息。
+- 引入版本：-
+
+##### pipeline_prepare_timeout_guard_ms
+
+- 默认值：-1
+- 类型：Int
+- 单位：Milliseconds
+- 是否动态：是
+- 描述：当该值大于 `0` 时，如果 PREPARE 过程中 Plan Fragment 超过 `pipeline_prepare_timeout_guard_ms` 的时间，则会打印 Plan Fragment 的堆栈跟踪。
+- 引入版本：-
+
+##### pipeline_connector_scan_thread_num_per_cpu
+
+- 默认值：8
+- 类型：Double
+- 单位：-
+- 是否动态：是
+- 描述：BE 节点中每个 CPU 核心分配给 Pipeline Connector 的扫描线程数量。自 v3.1.7 起变为动态参数。
+- 引入版本：-
+
+##### pipeline_scan_thread_pool_queue_size
+
+- 默认值：102400
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：Pipeline 执行引擎扫描线程池任务队列的最大队列长度。
+- 引入版本：-
+
+##### pipeline_prepare_thread_pool_thread_num
+
+- 默认值：0
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：Pipeline 执行引擎准备片段线程池中的线程数。`0` 表示等于系统 VCPU 数量。
+- 引入版本：-
+
+##### pipeline_prepare_thread_pool_queue_size
+
+- 默认值：102400
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：Pipeline 执行引擎在线程池中执行 PREPARE Fragment 的队列长度。
+- 引入版本：-
+
+##### max_hdfs_file_handle
+
+- 默认值：1000
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：最多可以打开的 HDFS 文件描述符数量。
+- 引入版本：-
+
+##### object_storage_connect_timeout_ms
+
+- 默认值：-1
+- 类型：Int
+- 单位：Milliseconds
+- 是否动态：否
+- 描述：对象存储 Socket 连接的超时时间。`-1` 表示使用 SDK 中的默认时间。
+- 引入版本：v3.0.9
+
+##### object_storage_request_timeout_ms
+
+- 默认值：-1
+- 类型：Int
+- 单位：Milliseconds
+- 是否动态：否
+- 描述：对象存储 HTTP 连接的超时时间。`-1` 表示使用 SDK 中的默认时间。
+- 引入版本：v3.0.9
+
+##### parquet_late_materialization_enable
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：是否使用延迟物化优化 Parquet 读性能。
+- 引入版本：-
+
+##### parquet_page_index_enable
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否启用 Parquet 文件的 Bloom Filter 以提高性能。`true` 表示启用 Bloom Filter，`false` 表示禁用。还可以使用系统变量 `enable_parquet_reader_bloom_filter` 在 Session 级别上控制这一行为。Parquet 中的 Bloom Filter 是在**每个行组的列级维护的**。如果 Parquet 文件包含某些列的 Bloom Filter，查询就可以使用这些列上的谓词来有效地跳过行组。
+- 引入版本：v3.5
+
+##### io_coalesce_adaptive_lazy_active
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：根据谓词选择度，自适应决定是否将谓词列 IO 和非谓词列 IO 进行合并。
+- 引入版本：v3.2
+
+##### hdfs_client_enable_hedged_read
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：是否开启 Hedged Read 功能。`true` 表示开启，`false` 表示不开启。
+- 引入版本：v3.0
+
+##### hdfs_client_hedged_read_threadpool_size
+
+- 默认值：128
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：HDFS 客户端侧 Hedged Read 线程池的大小，即 HDFS 客户端侧允许有多少个线程用于服务 Hedged Read。该参数对应 HDFS 集群配置文件 **hdfs-site.xml** 中的 `dfs.client.hedged.read.threadpool.size` 参数。
+- 引入版本：v3.0
+
+##### hdfs_client_hedged_read_threshold_millis
+
+- 默认值：2500
+- 类型：Int
+- 单位：Milliseconds
+- 是否动态：否
+- 描述：发起 Hedged Read 请求前需要等待多少毫秒。例如，假设该参数设置为 `30`，那么如果一个 Read 任务未能在 30 毫秒内返回结果，则 HDFS 客户端会立即发起一个 Hedged Read，从目标数据块的副本上读取数据。该参数对应 HDFS 集群配置文件 **hdfs-site.xml** 中的 `dfs.client.hedged.read.threshold.millis` 参数。
+- 引入版本：v3.0
+
+##### query_cache_capacity
+
+- 默认值：536870912
+- 类型：Int
+- 单位：Bytes
+- 是否动态：否
+- 描述：指定 Query Cache 的大小。默认为 512 MB。最小不低于 4 MB。如果当前的 BE 内存容量无法满足您期望的 Query Cache 大小，可以增加 BE 的内存容量，然后再设置合理的 Query Cache 大小。每个 BE 都有自己私有的 Query Cache 存储空间，BE 只 Populate 或 Probe 自己本地的 Query Cache 存储空间。
+- 引入版本：-
+
+##### enable_json_flat
+
+- 默认值：false
+- 类型：Boolean
+- 单位：
+- 是否动态：是
+- 描述：是否开启 Flat JSON 特性。开启后新导入的 JSON 数据会自动打平，提升 JSON 数据查询性能。
+- 引入版本：v3.3.0
+
+##### enable_compaction_flat_json
+
+- 默认值：True
+- 类型：Bool
+- 单位：
+- 是否动态：是
+- 描述：控制是否为 Flat Json 数据进行 Compaction。
+- 引入版本：v3.3.3
+
+##### enable_lazy_dynamic_flat_json
+
+- 默认值：True
+- 类型：Bool
+- 单位：
+- 是否动态：是
+- 描述：当查询在读过程中未命中 Flat JSON Schema 时，是否启用 Lazy Dynamic Flat JSON。当此项设置为 `true` 时，StarRocks 将把 Flat JSON 操作推迟到计算流程，而不是读取流程。
+- 引入版本：v3.3.3
+
+##### json_flat_create_zonemap
+
+- 默认值：true
+- 类型：Boolean
+- 单位：
+- 是否动态：是
+- 描述：是否为打平后的 JSON 子列创建 Zonemap。仅当 `enable_json_flat` 为 `true` 时生效。
+- 引入版本：-
+
+##### json_flat_null_factor
+
+- 默认值：0.3
+- 类型：Double
+- 单位：
+- 是否动态：是
+- 描述：控制 Flat JSON 时，提取列的 NULL 值占比阈值，高于该比例不对该列进行提取，默认为 0.3。该参数仅在 `enable_json_flat` 为 `true` 时生效。
+- 引入版本：v3.3.0
+
+##### json_flat_sparsity_factor
+
+- 默认值：0.9
+- 类型：Double
+- 单位：
+- 是否动态：是
+- 描述：控制 Flat JSON 时，同名列的占比阈值，当同名列占比低于该值时不进行提取，默认为 0.9。该参数仅在 `enable_json_flat` 为 `true` 时生效。
+- 引入版本：v3.3.0
+
+##### json_flat_column_max
+
+- 默认值：100
+- 类型：Int
+- 单位：
+- 是否动态：是
+- 描述：控制 Flat JSON 时，最多提取的子列数量。该参数仅在 `enable_json_flat` 为 `true` 时生效。
+- 引入版本：v3.3.0
+
+##### jit_lru_cache_size
+
+- 默认值：0
+- 类型：Int
+- 单位：Bytes
+- 是否动态：是
+- 描述：JIT 编译的 LRU 缓存大小。如果设置为大于 0，则表示实际的缓存大小。如果设置为小于或等于 0，系统将自适应设置缓存大小，使用的公式为 `jit_lru_cache_size = min(mem_limit*0.01, 1GB)` （节点的 `mem_limit` 必须大于或等于 16 GB）。
+- 引入版本：-
+
+### 导入
+
+##### push_worker_count_normal_priority
+
+- 默认值：3
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：导入线程数，用于处理 NORMAL 优先级任务。
+- 引入版本：-
+
+##### push_worker_count_high_priority
+
+- 默认值：3
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：导入线程数，用于处理 HIGH 优先级任务。
+- 引入版本：-
+
+##### transaction_publish_version_worker_count
+
+- 默认值：0
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：生效版本的最大线程数。当该参数被设置为小于或等于 `0` 时，系统默认使用当前节点的 CPU 核数，以避免因使用固定值而导致在导入并行较高时线程资源不足。自 2.5 版本起，默认值由 `8` 变更为 `0`。
+- 引入版本：-
+
+##### transaction_publish_version_thread_pool_idle_time_ms
+
+- 默认值：60000
+- 类型：Int
+- 单位：毫秒
+- 是否动态：否
+- 描述：线程被 Publish Version 线程池回收前的 Idle 时间。
+- 引入版本：-
+
+##### clear_transaction_task_worker_count
+
+- 默认值：1
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：清理事务的线程数。
+- 引入版本：-
+
+##### load_data_reserve_hours
+
+- 默认值：4
+- 类型：Int
+- 单位：Hours
+- 是否动态：否
+- 描述：小批量导入生成的文件保留的时长。
+- 引入版本：-
+
+##### load_error_log_reserve_hours
+
+- 默认值：48
+- 类型：Int
+- 单位：Hours
+- 是否动态：是
+- 描述：导入数据信息保留的时长。
+- 引入版本：-
+
+##### number_tablet_writer_threads
+
+- 默认值：0
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：导入用的 tablet writer 线程数, 用于 Stream Load、Broker Load、Insert 等。当参数设置为小于等于 0 时，系统使用 CPU 核数的二分之一，最小为 16。当参数设置为大于 0 时，系统使用该值。自 v3.1.7 起变为动态参数。
+- 引入版本：-
+
+##### streaming_load_max_mb
+
+- 默认值：102400
+- 类型：Int
+- 单位：MB
+- 是否动态：是
+- 描述：流式导入单个文件大小的上限。自 3.0 版本起，默认值由 10240 变为 102400。
+- 引入版本：-
+
+##### streaming_load_max_batch_size_mb
+
+- 默认值：100
+- 类型：Int
+- 单位：MB
+- 是否动态：是
+- 描述：流式导入单个 JSON 文件大小的上限。
+- 引入版本：-
+
+##### streaming_load_rpc_max_alive_time_sec
+
+- 默认值：1200
+- 类型：Int
+- 单位：Seconds
+- 是否动态：否
+- 描述：Stream Load 的 RPC 超时时长。
+- 引入版本：-
+
+##### write_buffer_size
+
+- 默认值：104857600
+- 类型：Int
+- 单位：Bytes
+- 是否动态：是
+- 描述：MemTable 在内存中的 Buffer 大小，超过这个限制会触发 Flush。
+- 引入版本：-
+
+##### load_process_max_memory_limit_bytes
+
+- 默认值：107374182400
+- 类型：Int
+- 单位：Bytes
+- 是否动态：否
+- 描述：单节点上所有的导入线程占据的内存上限。
+- 引入版本：-
+
+##### max_consumer_num_per_group
+
+- 默认值：3
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：Routine load 中，每个 Consumer Group 内最大的 Consumer 数量。
+- 引入版本：-
+
+##### flush_thread_num_per_store
+
+- 默认值：2
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：每个 Store 用以 Flush MemTable 的线程数。
+- 引入版本：-
+
+##### lake_flush_thread_num_per_store
+
+- 默认值：0
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：在存算分离模式下，每个 Store 用以 Flush MemTable 的线程数。当该参数被设置为 `0` 时，系统使用 CPU 核数的两倍。
+当该参数被设置为小于 `0` 时，系统使用该参数的绝对值与 CPU 核数的乘积。
+- 引入版本：3.1.12, 3.2.7
+
+##### column_mode_partial_update_insert_batch_size
+
+- 默认值：4096
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：列模式部分更新中处理插入行时的批次大小。如果设置为 `0` 或负数，将会被限制为 `1` 以避免无限循环。该参数控制每次批量处理新插入行的数量，较大的值可以提高写入性能但会占用更多内存。
+- 引入版本：v3.5.10, v4.0.2
+
+##### max_runnings_transactions_per_txn_map
+
+- 默认值：100
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：每个分区内部同时运行的最大事务数量。
+- 引入版本：-
+
+##### enable_stream_load_verbose_log
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否在日志中记录 Stream Load 的 HTTP 请求和响应信息。`true` 表示启用，`false` 表示不启用。
+- 引入版本：v2.5.17, v3.0.9, v3.1.6, v3.2.1
+
+>>>>>>> 4e0f25b814 ([BugFix] Fix OOM issue in column upsert mode when inserting millions of rows (#64289))
 ### 统计信息
 
 ##### report_task_interval_seconds
