@@ -247,6 +247,10 @@ public class PrivilegeCheckerTest {
             public Status list(String remotePath, List<RemoteFile> result) {
                 return Status.OK;
             }
+            @Mock
+            public Map<String, String> getProperties() {
+                return new HashMap<>();
+            }
         };
     }
 
@@ -2526,7 +2530,7 @@ public class PrivilegeCheckerTest {
 
     @Test
     public void testRestoreStmt() throws Exception {
-
+        mockRepository();
         ctxToTestUser();
         String restoreSql = "RESTORE SNAPSHOT db1.`snapshot_1` FROM `example_repo` " +
                 "ON ( `tbl1` ) " +

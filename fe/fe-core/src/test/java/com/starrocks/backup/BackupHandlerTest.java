@@ -310,6 +310,12 @@ public class BackupHandlerTest {
 
         // add repo
         BackupHandler handler = new BackupHandler(globalStateMgr);
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public BackupHandler getBackupHandler() {
+                return handler;
+            }
+        };
         CreateRepositoryStmt stmt = new CreateRepositoryStmt(false, "repo", "broker", "bos://location",
                 Maps.newHashMap());
         try {
