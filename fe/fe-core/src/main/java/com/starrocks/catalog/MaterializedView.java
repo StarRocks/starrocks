@@ -1013,6 +1013,46 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
     @Override
     public void onReload() {
+<<<<<<< HEAD
+=======
+        onReload(false);
+    }
+
+    /**
+     * This is method is called in mv creating, if error is met, throw exception to fail the creating operation.
+     * @param database database where the table is created
+     * @throws DdlException
+     */
+    @Override
+    public void onCreate(Database database) throws DdlException {
+        super.onCreate(database);
+        onReload(false, isActive(), true);
+    }
+
+    /**
+     * Reload the materialized view with original active state.
+     * NOTE: This method will not try to activate the materialized view.
+     * @param isReloadAsync whether reload mv asynchronously when it is desired to be active.
+     */
+    public void onReload(boolean isReloadAsync) {
+        onReload(isReloadAsync, isActive(), false);
+    }
+
+    /**
+     * `isReLoadAsync` is used to distinct wether it's called after FE's image loading process,
+     * such as FE startup or checkpointing.
+     * <p>
+     * Note!! The `onReload` method is called in some other scenarios such as - schema change of a materialize view.
+     * The reloaded flag was introduced only to increase the speed of FE startup and checkpointing.
+     * It shouldn't affect the behavior of other operations which might indeed need to do a reload process.
+     *
+     * @param isReloadAsync whether this reload is called after FE's image loading process.
+     * @param desiredActive whether the materialized view should be active after reload.
+     */
+    private void onReload(boolean isReloadAsync,
+                          boolean desiredActive,
+                          boolean isThrowException) {
+>>>>>>> 6464e35b40 ([BugFix] Fix MaterializedView colocate metadata not persisted to EditLog (#65394))
         try {
             boolean desiredActive = active;
             active = false;
