@@ -288,40 +288,55 @@ public class MetaFunctions {
     }
 
     /**
-     * Return related materialized-views of a table, in JSON array format
+     * Return related materialized-views of a table, in nested JSON array format
+     * This function recursively traverses the MV hierarchy to get all nested MVs
      */
     @ConstantFunction(name = "inspect_related_mv", argTypes = {VARCHAR}, returnType = VARCHAR, isMetaFunction = true)
     public static ConstantOperator inspectRelatedMv(ConstantOperator name) {
         TableName tableName = TableName.fromString(name.getVarchar());
-        Optional<Database> mayDb;
         Table table = inspectExternalTable(tableName);
-        if (table.isNativeTableOrMaterializedView()) {
-            mayDb = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetDb(tableName.getDb());
-        } else {
-            mayDb = Optional.empty();
-        }
+        JsonArray array = new JsonArray();
+        collectRelatedMvsRecursively(table, array, 0);
 
-        Locker locker = new Locker();
-        try {
-            mayDb.ifPresent(database -> locker.lockDatabase(database.getId(), LockType.READ));
+        String json = array.toString();
+        return ConstantOperator.createVarchar(json);
+    }
 
-            Set<MvId> relatedMvs = table.getRelatedMaterializedViews();
-            JsonArray array = new JsonArray();
-            for (MvId mv : SetUtils.emptyIfNull(relatedMvs)) {
-                String mvName = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetTable(mv.getDbId(), mv.getId())
-                        .map(Table::getName)
-                        .orElse(null);
-                JsonObject obj = new JsonObject();
-                obj.add("id", new JsonPrimitive(mv.getId()));
-                obj.add("name", mvName != null ? new JsonPrimitive(mvName) : JsonNull.INSTANCE);
-
-                array.add(obj);
+    /**
+     * Helper method to recursively collect all related MVs in nested structure
+     * @param table The table to get related MVs from
+     * @param array The JSON array to add results to
+     * @param level The depth level in the MV hierarchy (0 for direct, 1 for nested, etc.)
+     */
+    private static void collectRelatedMvsRecursively(Table table, JsonArray array, int level) {
+        Set<MvId> relatedMvs = table.getRelatedMaterializedViews();
+        for (MvId mv : SetUtils.emptyIfNull(relatedMvs)) {
+            // Get the database for this MV using its dbId from mvId
+            long mvDbId = mv.getDbId();
+            Optional<Database> mayMvDb = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetDb(mvDbId);
+            if (!mayMvDb.isPresent()) {
+                continue;
             }
 
-            String json = array.toString();
-            return ConstantOperator.createVarchar(json);
-        } finally {
-            mayDb.ifPresent(database -> locker.unLockDatabase(database.getId(), LockType.READ));
+            Optional<Table> mayMvTable = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .mayGetTable(mvDbId, mv.getId());
+            if (!mayMvTable.isPresent()) {
+                continue;
+            }
+
+            Table mvTable = mayMvTable.get();
+
+            String mvName = mvTable.getName();
+            JsonObject obj = new JsonObject();
+            obj.add("id", new JsonPrimitive(mv.getId()));
+            obj.add("name", mvName != null ? new JsonPrimitive(mvName) : JsonNull.INSTANCE);
+            obj.add("level", new JsonPrimitive(level));
+
+            // Create nested related_mvs array
+            JsonArray nestedMvs = new JsonArray();
+            collectRelatedMvsRecursively(mvTable, nestedMvs, level + 1);
+            obj.add("related_mvs", nestedMvs);
+            array.add(obj);
         }
     }
 
