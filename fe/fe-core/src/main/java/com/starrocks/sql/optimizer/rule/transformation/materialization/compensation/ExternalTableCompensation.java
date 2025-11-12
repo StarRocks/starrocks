@@ -285,7 +285,7 @@ public final class ExternalTableCompensation extends TableCompensation {
         }
 
         final List<PRangeCell> toRefreshPartitionKeys = Lists.newArrayList();
-        MVTransparentState state = getToRefreshPartitionKeysWithoutPruner(refBaseTable, mvUpdateInfo, toRefreshPartitionNames,
+        MVTransparentState state = getToRefreshPartitionKeys(refBaseTable, mvUpdateInfo, toRefreshPartitionNames,
                     toRefreshPartitionKeys);
         if (state == null) {
             logMVRewrite(mv.getName(), "Failed to get partition keys for ref base table: {}", refBaseTable.getName());
@@ -310,10 +310,10 @@ public final class ExternalTableCompensation extends TableCompensation {
      * @param refToRefreshPCells the ref base table's partition cells. NOTE: this is not mv's partition cells.
      * @param toRefreshPartitionKeys partition range result to update for the ref base table
      */
-    private static MVTransparentState getToRefreshPartitionKeysWithoutPruner(Table refBaseTable,
-                                                                             MvUpdateInfo mvUpdateInfo,
-                                                                             PCellSortedSet refToRefreshPCells,
-                                                                             final List<PRangeCell> toRefreshPartitionKeys) {
+    private static MVTransparentState getToRefreshPartitionKeys(Table refBaseTable,
+                                                                MvUpdateInfo mvUpdateInfo,
+                                                                PCellSortedSet refToRefreshPCells,
+                                                                final List<PRangeCell> toRefreshPartitionKeys) {
         // use update info's partition to cells since it's accurate.
         MaterializedView mv = mvUpdateInfo.getMv();
         Map<Table, List<Column>> refBaseTablePartitionColumns = mv.getRefBaseTablePartitionColumns();
