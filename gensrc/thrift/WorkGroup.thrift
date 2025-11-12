@@ -40,7 +40,7 @@ struct TWorkGroup {
   14: optional double spill_mem_limit_threshold
 
   15: optional i32 exclusive_cpu_cores
-
+  16: optional string mem_pool
   100: optional i32 max_cpu_cores
 }
 
