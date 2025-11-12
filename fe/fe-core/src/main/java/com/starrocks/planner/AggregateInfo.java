@@ -36,10 +36,8 @@ package com.starrocks.planner;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 
@@ -66,15 +64,6 @@ public final class AggregateInfo extends AggregateInfoBase {
     private AggregateInfo secondPhaseDistinctAggInfo_;
 
     private final AggPhase aggPhase_;
-
-    // Map from all grouping and aggregate exprs to a SlotRef referencing the corresp. slot
-    // in the intermediate tuple. Identical to outputTupleSmap_ if no aggregateExpr has an
-    // output type that is different from its intermediate type.
-    protected ExprSubstitutionMap intermediateTupleSmap_ = new ExprSubstitutionMap();
-
-    // Map from all grouping and aggregate exprs to a SlotRef referencing the corresp. slot
-    // in the output tuple.
-    protected ExprSubstitutionMap outputTupleSmap_ = new ExprSubstitutionMap();
 
     // if set, a subset of groupingExprs_; set and used during planning
     private List<Expr> partitionExprs_;
@@ -106,13 +95,6 @@ public final class AggregateInfo extends AggregateInfoBase {
             secondPhaseDistinctAggInfo_ = other.secondPhaseDistinctAggInfo_.clone();
         }
         aggPhase_ = other.aggPhase_;
-        outputTupleSmap_ = other.outputTupleSmap_.clone();
-        if (other.requiresIntermediateTuple()) {
-            intermediateTupleSmap_ = other.intermediateTupleSmap_.clone();
-        } else {
-            Preconditions.checkState(other.intermediateTupleDesc_ == other.outputTupleDesc_);
-            intermediateTupleSmap_ = outputTupleSmap_;
-        }
         partitionExprs_ =
                 (other.partitionExprs_ != null) ? ExprUtils.cloneList(other.partitionExprs_) : null;
     }
@@ -148,8 +130,6 @@ public final class AggregateInfo extends AggregateInfoBase {
         StringBuilder out = new StringBuilder(super.debugString());
         out.append(MoreObjects.toStringHelper(this)
                 .add("phase", aggPhase_)
-                .add("intermediate_smap", intermediateTupleSmap_.debugString())
-                .add("output_smap", outputTupleSmap_.debugString())
                 .toString());
         if (mergeAggInfo_ != this && mergeAggInfo_ != null) {
             out.append("\nmergeAggInfo:\n" + mergeAggInfo_.debugString());

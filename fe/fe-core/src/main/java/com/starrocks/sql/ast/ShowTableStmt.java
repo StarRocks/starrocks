@@ -21,6 +21,7 @@ import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.CompoundPredicate;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
+import com.starrocks.sql.ast.expression.ExprSubstitutionVisitor;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.TableName;
@@ -84,18 +85,18 @@ public class ShowTableStmt extends EnhancedShowStmt {
         }
         // Columns
         SelectList selectList = new SelectList();
-        ExprSubstitutionMap aliasMap = new ExprSubstitutionMap(false);
+        ExprSubstitutionMap aliasMap = new ExprSubstitutionMap();
         SelectListItem item = new SelectListItem(new SlotRef(TABLE_NAME, "TABLE_NAME"),
                 NAME_COL_PREFIX + db);
         selectList.addItem(item);
         aliasMap.put(new SlotRef(null, NAME_COL_PREFIX + db),
-                item.getExpr().clone(null));
+                item.getExpr().clone());
         if (isVerbose) {
             item = new SelectListItem(new SlotRef(TABLE_NAME, "TABLE_TYPE"), TYPE_COL);
             selectList.addItem(item);
-            aliasMap.put(new SlotRef(null, TYPE_COL), item.getExpr().clone(null));
+            aliasMap.put(new SlotRef(null, TYPE_COL), item.getExpr().clone());
         }
-        where = where.substitute(aliasMap);
+        where = ExprSubstitutionVisitor.rewrite(where, aliasMap);
         // where databases_name = currentdb
         Expr whereDbEQ = new BinaryPredicate(
                 BinaryType.EQ,

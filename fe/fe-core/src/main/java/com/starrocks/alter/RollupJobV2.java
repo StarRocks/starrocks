@@ -81,6 +81,7 @@ import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.expression.CastExpr;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
+import com.starrocks.sql.ast.expression.ExprSubstitutionVisitor;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.TableName;
@@ -452,12 +453,11 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         for (SlotRef slot : slots) {
             SlotDescriptor slotDesc = slotDescByName.get(slot.getColumnName());
             Preconditions.checkNotNull(slotDesc);
-            smap.getLhs().add(slot);
             SlotRef slotRef = new SlotRef(slotDesc);
             slotRef.setColumnName(slot.getColumnName());
-            smap.getRhs().add(slotRef);
+            smap.put(slot, slotRef);
         }
-        Expr newExpr = defineExpr.clone(smap);
+        Expr newExpr = ExprSubstitutionVisitor.rewrite(defineExpr, smap);
         newExpr = newExpr.accept(visitor, null);
         newExpr = ExprUtils.analyzeAndCastFold(newExpr);
         Type newType = newExpr.getType();

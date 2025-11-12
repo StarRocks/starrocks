@@ -17,6 +17,7 @@ package com.starrocks.sql.ast;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
+import com.starrocks.sql.ast.expression.ExprSubstitutionVisitor;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.parser.NodePosition;
@@ -69,7 +70,7 @@ public class ShowVariablesStmt extends EnhancedShowStmt {
         }
         // Columns
         SelectList selectList = new SelectList();
-        ExprSubstitutionMap aliasMap = new ExprSubstitutionMap(false);
+        ExprSubstitutionMap aliasMap = new ExprSubstitutionMap();
         TableName tableName;
         if (type == SetType.GLOBAL) {
             tableName = new TableName(InfoSchemaDb.DATABASE_NAME, "GLOBAL_VARIABLES");
@@ -81,23 +82,23 @@ public class ShowVariablesStmt extends EnhancedShowStmt {
         // name
         SelectListItem item = new SelectListItem(new SlotRef(tableName, "VARIABLE_NAME"), NAME_COL);
         selectList.addItem(item);
-        aliasMap.put(new SlotRef(null, NAME_COL), item.getExpr().clone(null));
+        aliasMap.put(new SlotRef(null, NAME_COL), item.getExpr().clone());
         // value
         item = new SelectListItem(new SlotRef(tableName, "VARIABLE_VALUE"), VALUE_COL);
         selectList.addItem(item);
-        aliasMap.put(new SlotRef(null, VALUE_COL), item.getExpr().clone(null));
+        aliasMap.put(new SlotRef(null, VALUE_COL), item.getExpr().clone());
         if (type == SetType.VERBOSE) {
             // default_value
             item = new SelectListItem(new SlotRef(tableName, DEFAULT_VALUE), DEFAULT_VALUE);
             selectList.addItem(item);
-            aliasMap.put(new SlotRef(null, DEFAULT_VALUE), item.getExpr().clone(null));
+            aliasMap.put(new SlotRef(null, DEFAULT_VALUE), item.getExpr().clone());
             // is_changed
             item = new SelectListItem(new SlotRef(tableName, IS_CHANGED), IS_CHANGED);
             selectList.addItem(item);
-            aliasMap.put(new SlotRef(null, IS_CHANGED), item.getExpr().clone(null));
+            aliasMap.put(new SlotRef(null, IS_CHANGED), item.getExpr().clone());
         }
 
-        where = where.substitute(aliasMap);
+        where = ExprSubstitutionVisitor.rewrite(where, aliasMap);
 
         return new QueryStatement(new SelectRelation(selectList, new TableRelation(tableName),
                 where, null, null), this.origStmt);

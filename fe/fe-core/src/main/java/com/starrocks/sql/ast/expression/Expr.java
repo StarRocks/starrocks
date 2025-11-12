@@ -345,47 +345,6 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     }
 
     /**
-     * Create a deep copy of 'this'. If sMap is non-null,
-     * use it to substitute 'this' or its subnodes.
-     * <p/>
-     * Expr subclasses that add non-value-type members must override this.
-     */
-    public Expr clone(ExprSubstitutionMap sMap) {
-        if (sMap != null) {
-            for (int i = 0; i < sMap.getLhs().size(); ++i) {
-                if (this.equals(sMap.getLhs().get(i))) {
-                    return sMap.getRhs().get(i).clone(null);
-                }
-            }
-        }
-        Expr result = (Expr) this.clone();
-        result.children = Lists.newArrayList();
-        for (Expr child : children) {
-            result.children.add(((Expr) child).clone(sMap));
-        }
-        return result;
-    }
-
-    /**
-     * Return 'this' with all sub-exprs substituted according to
-     * sMap. Ids of 'this' and its children are retained.
-     */
-    @Deprecated
-    public Expr substitute(ExprSubstitutionMap sMap) {
-        Preconditions.checkNotNull(sMap);
-        for (int i = 0; i < sMap.getLhs().size(); ++i) {
-            if (this.equals(sMap.getLhs().get(i))) {
-                Expr result = sMap.getRhs().get(i).clone(null);
-                return result;
-            }
-        }
-        for (int i = 0; i < children.size(); ++i) {
-            children.set(i, children.get(i).substitute(sMap));
-        }
-        return this;
-    }
-
-    /**
      * Returns true if expr is fully bound by tids, otherwise false.
      */
     public boolean isBoundByTupleIds(List<TupleId> tids) {

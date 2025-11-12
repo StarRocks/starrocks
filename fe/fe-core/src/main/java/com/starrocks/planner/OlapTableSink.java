@@ -87,6 +87,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.IndexDef.IndexType;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
+import com.starrocks.sql.ast.expression.ExprSubstitutionVisitor;
 import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
 import com.starrocks.sql.ast.expression.ExprUtils;
@@ -453,12 +454,11 @@ public class OlapTableSink extends DataSink {
                 for (SlotRef slot : slots) {
                     SlotDescriptor slotDesc = descMap.get(slot.getColumnName());
                     Preconditions.checkNotNull(slotDesc);
-                    smap.getLhs().add(slot);
                     SlotRef slotRef = new SlotRef(slotDesc);
                     slotRef.setColumnName(slot.getColumnName());
-                    smap.getRhs().add(slotRef);
+                    smap.put(slot, slotRef);
                 }
-                whereClause = whereClause.clone(smap);
+                whereClause = ExprSubstitutionVisitor.rewrite(whereClause, smap);
 
                 // sourceScope must be set null tableName for its Field in RelationFields
                 // because we hope slotRef can not be resolved in sourceScope but can be
@@ -1002,4 +1002,3 @@ public class OlapTableSink extends DataSink {
         this.automaticBucketSize = automaticBucketSize;
     }
 }
-

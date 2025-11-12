@@ -51,6 +51,7 @@ import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
+import com.starrocks.sql.ast.expression.ExprSubstitutionVisitor;
 import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
@@ -839,13 +840,13 @@ public class PartitionSelector {
         if (partitionsMetaTbl == null) {
             return null;
         }
-        ExprSubstitutionMap aliasMap = new ExprSubstitutionMap(false);
+        ExprSubstitutionMap aliasMap = new ExprSubstitutionMap();
         List<Column> partitionCols = olapTable.getPartitionColumns();
         for (Map.Entry<Expr, Integer> e : exprToColumnIdxes.entrySet()) {
             Expr alias = buildJsonQuery(partitionCols, e.getValue());
             aliasMap.put(e.getKey(), alias);
         }
-        Expr newExpr = whereExpr.substitute(aliasMap);
+        Expr newExpr = ExprSubstitutionVisitor.rewrite(whereExpr, aliasMap);
         String newWhereSql = ExprToSql.toSql(newExpr);
         String sql = String.format(PARTITIONS_META_TEMPLATE, dbName, olapTable.getName(), newWhereSql);
         LOG.info("Get partition ids by sql: {}", sql);
