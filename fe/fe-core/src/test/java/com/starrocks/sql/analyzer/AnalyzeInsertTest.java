@@ -305,7 +305,8 @@ public class AnalyzeInsertTest {
             }
         };
 
-        analyzeFail("insert into hive_catalog.db.tbl select 1, 2, 3");
+        analyzeFail("insert into hive_catalog.db.tbl select 1, 2, 3", 
+                "Only support to write hive managed table");
     }
 
     @Test
