@@ -1274,10 +1274,10 @@ public class ResourceGroupStmtTest {
                 "   'concurrency_limit' = '31'," +
                 "   'type' = 'normal'" +
                 "   );";
-        String showResult = "default_mv_wg|1|0|80.0%|null|0|0|0|null|80%|NORMAL|(weight=0.0)\n" +
-                "default_wg|32|0|100.0%|null|0|0|0|null|100%|NORMAL|(weight=0.0)\n" +
-                "rg1|17|0|20.0%|null|0|0|0|11|100%|NORMAL|(weight=3.0, user=rg1_user, plan_cpu_cost_range=[1.0, 2.0), plan_mem_cost_range=[-100.0, 1000.0))\n" +
-                "rg2|32|0|30.0%|null|0|0|0|31|100%|NORMAL|(weight=2.0, user=rg1_user, plan_mem_cost_range=[0.0, 2000.0))";
+        String showResult = "default_mv_wg|1|0|80.0%|null|0|0|0|null|80%|NORMAL|(weight=0.0)|default_mem_pool\n" +
+                "default_wg|32|0|100.0%|null|0|0|0|null|100%|NORMAL|(weight=0.0)|default_mem_pool\n" +
+                "rg1|17|0|20.0%|null|0|0|0|11|100%|NORMAL|(weight=3.0, user=rg1_user, plan_cpu_cost_range=[1.0, 2.0), plan_mem_cost_range=[-100.0, 1000.0))|default_mem_pool\n" +
+                "rg2|32|0|30.0%|null|0|0|0|31|100%|NORMAL|(weight=2.0, user=rg1_user, plan_mem_cost_range=[0.0, 2000.0))|default_mem_pool";
 
         starRocksAssert.executeResourceGroupDdlSql(createSQL1);
         starRocksAssert.executeResourceGroupDdlSql(createSQL2);
