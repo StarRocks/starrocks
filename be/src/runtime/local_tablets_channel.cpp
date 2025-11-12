@@ -1091,45 +1091,101 @@ void LocalTabletsChannel::update_profile() {
     }
 }
 
+<<<<<<< HEAD
 #define ADD_AND_SET_COUNTER(profile, name, type, val) (ADD_COUNTER(profile, name, type))->set(val)
 #define ADD_AND_UPDATE_COUNTER(profile, name, type, val) (ADD_COUNTER(profile, name, type))->update(val)
 #define ADD_AND_UPDATE_TIMER(profile, name, val) (ADD_TIMER(profile, name))->update(val)
+=======
+void LocalTabletsChannel::get_load_replica_status(const std::string& remote_ip,
+                                                  const PLoadReplicaStatusRequest* request,
+                                                  PLoadReplicaStatusResult* response) const {
+    std::shared_lock<bthreads::BThreadSharedMutex> lk(_rw_mtx);
+    for (int64_t tablet_id : request->tablet_ids()) {
+        LoadReplicaStatePB replica_state;
+        std::string message;
+        auto it = _delta_writers.find(tablet_id);
+        if (it == _delta_writers.end()) {
+            replica_state = LoadReplicaStatePB::NOT_PRESENT;
+            message = "can't find delta writer";
+        } else {
+            auto writer = it->second.get()->writer();
+            if (writer->replica_state() != Primary) {
+                // getting replica status from a none primary replica should not happen unless
+                // the secondary replica has some errors, so the secondary should fail
+                replica_state = LoadReplicaStatePB::FAILED;
+                message = fmt::format("not a primary replica, replica state is {}",
+                                      DeltaWriter::replica_state_name(writer->replica_state()));
+            } else {
+                auto writer_state = writer->get_state();
+                if (writer_state == kCommitted) {
+                    auto status = writer->replicate_token()->get_replica_status(request->node_id());
+                    if (status.ok()) {
+                        replica_state = LoadReplicaStatePB::SUCCESS;
+                    } else {
+                        replica_state = LoadReplicaStatePB::FAILED;
+                        message = "primary replica is committed, but replica failed, " + status.to_string();
+                    }
+                } else if (writer_state == kAborted) {
+                    replica_state = LoadReplicaStatePB::FAILED;
+                    message = "primary replica is aborted, " + writer->get_err_status().to_string();
+                } else {
+                    replica_state = LoadReplicaStatePB::IN_PROCESSING;
+                    message = fmt::format("primary replica state is {}", DeltaWriter::state_name(writer_state));
+                }
+            }
+        }
+        auto state = response->add_replica_statuses();
+        state->set_tablet_id(tablet_id);
+        state->set_state(replica_state);
+        state->set_message(message);
+    }
+}
+
+#define ADD_AND_SET_COUNTER(profile, name, type, val) \
+    COUNTER_SET(ADD_COUNTER(profile, name, type), static_cast<int64_t>(val))
+#define ADD_AND_SET_TIMER(profile, name, val) COUNTER_SET(ADD_TIMER(profile, name), static_cast<int64_t>(val))
+>>>>>>> a8dc330a7e ([BugFix] Fix load profile counters update duplicated (#65252))
 
 void LocalTabletsChannel::_update_peer_replica_profile(DeltaWriter* writer, RuntimeProfile* profile) {
     const DeltaWriterStat& writer_stat = writer->get_writer_stat();
-    ADD_AND_UPDATE_COUNTER(profile, "WriterTaskCount", TUnit::UNIT, writer_stat.task_count);
-    ADD_AND_UPDATE_TIMER(profile, "WriterTaskPendingTime", writer_stat.pending_time_ns);
-    ADD_AND_UPDATE_COUNTER(profile, "WriteCount", TUnit::UNIT, writer_stat.write_count);
-    ADD_AND_UPDATE_COUNTER(profile, "RowCount", TUnit::UNIT, writer_stat.row_count);
-    ADD_AND_UPDATE_TIMER(profile, "WriteTime", writer_stat.write_time_ns);
-    ADD_AND_UPDATE_COUNTER(profile, "MemtableFullCount", TUnit::UNIT, writer_stat.memtable_full_count);
-    ADD_AND_UPDATE_COUNTER(profile, "MemoryExceedCount", TUnit::UNIT, writer_stat.memory_exceed_count);
-    ADD_AND_UPDATE_TIMER(profile, "WriteWaitFlushTime", writer_stat.write_wait_flush_time_ns);
-    ADD_AND_UPDATE_TIMER(profile, "CloseTime", writer_stat.close_time_ns);
-    ADD_AND_UPDATE_TIMER(profile, "CommitTime", writer_stat.commit_time_ns);
-    ADD_AND_UPDATE_TIMER(profile, "CommitWaitFlushTime", writer_stat.commit_wait_flush_time_ns);
-    ADD_AND_UPDATE_TIMER(profile, "CommitRowsetBuildTime", writer_stat.commit_rowset_build_time_ns);
-    ADD_AND_UPDATE_TIMER(profile, "CommitPkPreloadTime", writer_stat.commit_pk_preload_time_ns);
-    ADD_AND_UPDATE_TIMER(profile, "CommitWaitReplicaTime", writer_stat.commit_wait_replica_time_ns);
-    ADD_AND_UPDATE_TIMER(profile, "CommitTxnCommitTime", writer_stat.commit_txn_commit_time_ns);
+    ADD_AND_SET_COUNTER(profile, "WriterTaskCount", TUnit::UNIT, writer_stat.task_count.load());
+    ADD_AND_SET_TIMER(profile, "WriterTaskPendingTime", writer_stat.pending_time_ns.load());
+    ADD_AND_SET_COUNTER(profile, "WriteCount", TUnit::UNIT, writer_stat.write_count.load());
+    ADD_AND_SET_COUNTER(profile, "RowCount", TUnit::UNIT, writer_stat.row_count.load());
+    ADD_AND_SET_TIMER(profile, "WriteTime", writer_stat.write_time_ns.load());
+    ADD_AND_SET_COUNTER(profile, "MemtableFullCount", TUnit::UNIT, writer_stat.memtable_full_count.load());
+    ADD_AND_SET_COUNTER(profile, "MemoryExceedCount", TUnit::UNIT, writer_stat.memory_exceed_count.load());
+    ADD_AND_SET_TIMER(profile, "WriteWaitFlushTime", writer_stat.write_wait_flush_time_ns.load());
+    ADD_AND_SET_TIMER(profile, "CloseTime", writer_stat.close_time_ns.load());
+    ADD_AND_SET_TIMER(profile, "CommitTime", writer_stat.commit_time_ns.load());
+    ADD_AND_SET_TIMER(profile, "CommitWaitFlushTime", writer_stat.commit_wait_flush_time_ns.load());
+    ADD_AND_SET_TIMER(profile, "CommitRowsetBuildTime", writer_stat.commit_rowset_build_time_ns.load());
+    ADD_AND_SET_TIMER(profile, "CommitPkPreloadTime", writer_stat.commit_pk_preload_time_ns.load());
+    ADD_AND_SET_TIMER(profile, "CommitWaitReplicaTime", writer_stat.commit_wait_replica_time_ns.load());
+    ADD_AND_SET_TIMER(profile, "CommitTxnCommitTime", writer_stat.commit_txn_commit_time_ns.load());
 
     const FlushStatistic& flush_stat = writer->get_flush_stats();
-    ADD_AND_UPDATE_COUNTER(profile, "MemtableFlushedCount", TUnit::UNIT, flush_stat.flush_count);
+    ADD_AND_SET_COUNTER(profile, "MemtableFlushedCount", TUnit::UNIT, flush_stat.flush_count);
     ADD_AND_SET_COUNTER(profile, "MemtableFlushingCount", TUnit::UNIT, flush_stat.cur_flush_count);
+<<<<<<< HEAD
     ADD_AND_SET_COUNTER(profile, "MemtableQueueCount", TUnit::UNIT, flush_stat.queueing_memtable_num);
     ADD_AND_UPDATE_TIMER(profile, "FlushTaskPendingTime", flush_stat.pending_time_ns);
+=======
+    ADD_AND_SET_COUNTER(profile, "MemtableQueueCount", TUnit::UNIT, flush_stat.queueing_memtable_num.load());
+    ADD_AND_SET_TIMER(profile, "FlushTaskPendingTime", flush_stat.pending_time_ns);
+>>>>>>> a8dc330a7e ([BugFix] Fix load profile counters update duplicated (#65252))
     auto& memtable_stat = flush_stat.memtable_stats;
-    ADD_AND_UPDATE_COUNTER(profile, "MemtableInsertCount", TUnit::UNIT, memtable_stat.insert_count);
-    ADD_AND_UPDATE_TIMER(profile, "MemtableInsertTime", memtable_stat.insert_time_ns);
-    ADD_AND_UPDATE_TIMER(profile, "MemtableFinalizeTime", memtable_stat.finalize_time_ns);
-    ADD_AND_UPDATE_COUNTER(profile, "MemtableSortCount", TUnit::UNIT, memtable_stat.sort_count);
-    ADD_AND_UPDATE_TIMER(profile, "MemtableSortTime", memtable_stat.sort_time_ns);
-    ADD_AND_UPDATE_COUNTER(profile, "MemtableAggCount", TUnit::UNIT, memtable_stat.agg_count);
-    ADD_AND_UPDATE_TIMER(profile, "MemtableAggTime", memtable_stat.agg_time_ns);
-    ADD_AND_UPDATE_TIMER(profile, "MemtableFlushTime", memtable_stat.flush_time_ns);
-    ADD_AND_UPDATE_TIMER(profile, "MemtableIOTime", memtable_stat.io_time_ns);
-    ADD_AND_UPDATE_COUNTER(profile, "MemtableMemorySize", TUnit::BYTES, memtable_stat.flush_memory_size);
-    ADD_AND_UPDATE_COUNTER(profile, "MemtableDiskSize", TUnit::BYTES, memtable_stat.flush_disk_size);
+    ADD_AND_SET_COUNTER(profile, "MemtableInsertCount", TUnit::UNIT, memtable_stat.insert_count.load());
+    ADD_AND_SET_TIMER(profile, "MemtableInsertTime", memtable_stat.insert_time_ns.load());
+    ADD_AND_SET_TIMER(profile, "MemtableFinalizeTime", memtable_stat.finalize_time_ns.load());
+    ADD_AND_SET_COUNTER(profile, "MemtableSortCount", TUnit::UNIT, memtable_stat.sort_count.load());
+    ADD_AND_SET_TIMER(profile, "MemtableSortTime", memtable_stat.sort_time_ns.load());
+    ADD_AND_SET_COUNTER(profile, "MemtableAggCount", TUnit::UNIT, memtable_stat.agg_count.load());
+    ADD_AND_SET_TIMER(profile, "MemtableAggTime", memtable_stat.agg_time_ns.load());
+    ADD_AND_SET_TIMER(profile, "MemtableFlushTime", memtable_stat.flush_time_ns.load());
+    ADD_AND_SET_TIMER(profile, "MemtableIOTime", memtable_stat.io_time_ns.load());
+    ADD_AND_SET_COUNTER(profile, "MemtableMemorySize", TUnit::BYTES, memtable_stat.flush_memory_size.load());
+    ADD_AND_SET_COUNTER(profile, "MemtableDiskSize", TUnit::BYTES, memtable_stat.flush_disk_size.load());
 }
 
 void LocalTabletsChannel::_update_primary_replica_profile(DeltaWriter* writer, RuntimeProfile* profile) {
@@ -1140,36 +1196,36 @@ void LocalTabletsChannel::_update_primary_replica_profile(DeltaWriter* writer, R
     }
     auto& replicate_stat = replicate_token->get_stat();
     ADD_AND_SET_COUNTER(profile, "ReplicatePendingTaskCount", TUnit::UNIT,
-                        static_cast<int64_t>(replicate_stat.num_pending_tasks));
+                        static_cast<int64_t>(replicate_stat.num_pending_tasks.load()));
     ADD_AND_SET_COUNTER(profile, "ReplicateExecutingTaskCount", TUnit::UNIT,
-                        static_cast<int64_t>(replicate_stat.num_running_tasks));
-    ADD_AND_UPDATE_COUNTER(profile, "ReplicateFinishedTaskCount", TUnit::UNIT, replicate_stat.num_finished_tasks);
-    ADD_AND_UPDATE_TIMER(profile, "ReplicateTaskPendingTime", replicate_stat.pending_time_ns);
-    ADD_AND_UPDATE_TIMER(profile, "ReplicateTaskExecuteTime", replicate_stat.execute_time_ns);
+                        static_cast<int64_t>(replicate_stat.num_running_tasks.load()));
+    ADD_AND_SET_COUNTER(profile, "ReplicateFinishedTaskCount", TUnit::UNIT, replicate_stat.num_finished_tasks.load());
+    ADD_AND_SET_TIMER(profile, "ReplicateTaskPendingTime", replicate_stat.pending_time_ns.load());
+    ADD_AND_SET_TIMER(profile, "ReplicateTaskExecuteTime", replicate_stat.execute_time_ns.load());
 }
 
 void LocalTabletsChannel::_update_secondary_replica_profile(DeltaWriter* writer, RuntimeProfile* profile) {
     const DeltaWriterStat& writer_stat = writer->get_writer_stat();
-    ADD_AND_UPDATE_COUNTER(profile, "RowCount", TUnit::UNIT, writer_stat.row_count);
-    ADD_AND_UPDATE_COUNTER(profile, "DataSize", TUnit::BYTES, writer_stat.add_segment_data_size);
-    ADD_AND_UPDATE_COUNTER(profile, "AddSegmentCount", TUnit::UNIT, writer_stat.add_segment_count);
-    ADD_AND_UPDATE_TIMER(profile, "AddSegmentTime", writer_stat.add_segment_time_ns);
-    ADD_AND_UPDATE_TIMER(profile, "AddSegmentIOTime", writer_stat.add_segment_io_time_ns);
-    ADD_AND_UPDATE_TIMER(profile, "CommitTime", writer_stat.commit_time_ns);
-    ADD_AND_UPDATE_TIMER(profile, "CommitRowsetBuildTime", writer_stat.commit_rowset_build_time_ns);
-    ADD_AND_UPDATE_TIMER(profile, "CommitPkPreloadTime", writer_stat.commit_pk_preload_time_ns);
-    ADD_AND_UPDATE_TIMER(profile, "CommitTxnCommitTime", writer_stat.commit_txn_commit_time_ns);
+    ADD_AND_SET_COUNTER(profile, "RowCount", TUnit::UNIT, writer_stat.row_count.load());
+    ADD_AND_SET_COUNTER(profile, "DataSize", TUnit::BYTES, writer_stat.add_segment_data_size.load());
+    ADD_AND_SET_COUNTER(profile, "AddSegmentCount", TUnit::UNIT, writer_stat.add_segment_count.load());
+    ADD_AND_SET_TIMER(profile, "AddSegmentTime", writer_stat.add_segment_time_ns.load());
+    ADD_AND_SET_TIMER(profile, "AddSegmentIOTime", writer_stat.add_segment_io_time_ns.load());
+    ADD_AND_SET_TIMER(profile, "CommitTime", writer_stat.commit_time_ns.load());
+    ADD_AND_SET_TIMER(profile, "CommitRowsetBuildTime", writer_stat.commit_rowset_build_time_ns.load());
+    ADD_AND_SET_TIMER(profile, "CommitPkPreloadTime", writer_stat.commit_pk_preload_time_ns.load());
+    ADD_AND_SET_TIMER(profile, "CommitTxnCommitTime", writer_stat.commit_txn_commit_time_ns.load());
 
     auto* segment_flush_token = writer->segment_flush_token();
     if (segment_flush_token == nullptr) {
         return;
     }
     auto& stat = segment_flush_token->get_stat();
-    ADD_AND_SET_COUNTER(profile, "FlushPendingTaskCount", TUnit::UNIT, static_cast<int64_t>(stat.num_pending_tasks));
-    ADD_AND_SET_COUNTER(profile, "FlushExecutingTaskCount", TUnit::UNIT, static_cast<int64_t>(stat.num_running_tasks));
-    ADD_AND_UPDATE_COUNTER(profile, "FlushFinishedTaskCount", TUnit::UNIT, stat.num_finished_tasks);
-    ADD_AND_UPDATE_TIMER(profile, "FlushTaskPendingTime", stat.pending_time_ns);
-    ADD_AND_UPDATE_TIMER(profile, "FlushTaskExecuteTime", stat.execute_time_ns);
+    ADD_AND_SET_COUNTER(profile, "FlushPendingTaskCount", TUnit::UNIT, stat.num_pending_tasks.load());
+    ADD_AND_SET_COUNTER(profile, "FlushExecutingTaskCount", TUnit::UNIT, stat.num_running_tasks.load());
+    ADD_AND_SET_COUNTER(profile, "FlushFinishedTaskCount", TUnit::UNIT, stat.num_finished_tasks.load());
+    ADD_AND_SET_TIMER(profile, "FlushTaskPendingTime", stat.pending_time_ns.load());
+    ADD_AND_SET_TIMER(profile, "FlushTaskExecuteTime", stat.execute_time_ns.load());
 }
 
 std::shared_ptr<TabletsChannel> new_local_tablets_channel(LoadChannel* load_channel, const TabletsChannelKey& key,
