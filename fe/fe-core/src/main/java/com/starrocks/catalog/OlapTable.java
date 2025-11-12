@@ -2032,7 +2032,7 @@ public class OlapTable extends Table {
             LOG.debug("signature. partition name: {}", partName);
             DistributionInfo distributionInfo = partition.getDistributionInfo();
             adler32.update(distributionInfo.getType().name().getBytes(StandardCharsets.UTF_8));
-            if (distributionInfo.getType() == DistributionInfoType.HASH) {
+            if (distributionInfo.getType() == DistributionInfo.DistributionInfoType.HASH) {
                 HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) distributionInfo;
                 List<Column> distributionColumns = MetaUtils.getColumnsByColumnIds(
                         this, hashDistributionInfo.getDistributionColumns());
@@ -2107,7 +2107,7 @@ public class OlapTable extends Table {
             checkSumList.add(new Pair(Math.abs((int) adler32.getValue()), "partition name is inconsistent"));
             DistributionInfo distributionInfo = partition.getDistributionInfo();
             adler32.update(distributionInfo.getType().name().getBytes(StandardCharsets.UTF_8));
-            if (distributionInfo.getType() == DistributionInfoType.HASH) {
+            if (distributionInfo.getType() == DistributionInfo.DistributionInfoType.HASH) {
                 HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) distributionInfo;
                 List<Column> distributionColumns = MetaUtils.getColumnsByColumnIds(
                         this, hashDistributionInfo.getDistributionColumns());
