@@ -18,10 +18,10 @@ import com.google.common.collect.Lists;
 import com.starrocks.type.AnyMapType;
 import com.starrocks.type.MapType;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.ScalarType;
 import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -77,11 +77,11 @@ public class StructTypeTest {
     public void testStructMatchType() throws Exception {
         // "struct<struct_test:int,c1:struct<c1:int,cc1:string>>"
         StructType c1 = new StructType(Lists.newArrayList(
-                new StructField("c1", ScalarType.createType(PrimitiveType.INT)),
-                new StructField("cc1", ScalarType.createDefaultCatalogString())
+                new StructField("c1", TypeFactory.createType(PrimitiveType.INT)),
+                new StructField("cc1", TypeFactory.createDefaultCatalogString())
         ));
         StructType root = new StructType(Lists.newArrayList(
-                new StructField("struct_test", ScalarType.createType(PrimitiveType.INT)),
+                new StructField("struct_test", TypeFactory.createType(PrimitiveType.INT)),
                 new StructField("c1", c1)
         ));
 
@@ -90,50 +90,50 @@ public class StructTypeTest {
         Assertions.assertFalse(root.matchesType(t));
 
         // MapType
-        Type keyType = ScalarType.createType(PrimitiveType.INT);
-        Type valueType = ScalarType.createCharType(10);
+        Type keyType = TypeFactory.createType(PrimitiveType.INT);
+        Type valueType = TypeFactory.createCharType(10);
         Type mapType = new MapType(keyType, valueType);
 
         Assertions.assertFalse(root.matchesType(mapType));
 
         // Different fields length
         StructType c = new StructType(Lists.newArrayList(
-                new StructField("c1", ScalarType.createType(PrimitiveType.INT))));
+                new StructField("c1", TypeFactory.createType(PrimitiveType.INT))));
         Assertions.assertFalse(root.matchesType(c));
 
         // Types will match with different field names
         StructType diffName = new StructType(Lists.newArrayList(
-                new StructField("st", ScalarType.createType(PrimitiveType.INT)),
+                new StructField("st", TypeFactory.createType(PrimitiveType.INT)),
                 new StructField("cc", c1)
         ));
         Assertions.assertFalse(root.matchesType(diffName));
 
         // Different field type
         StructType diffType = new StructType(Lists.newArrayList(
-                new StructField("struct_test", ScalarType.createType(PrimitiveType.INT)),
-                new StructField("c1", ScalarType.createType(PrimitiveType.INT))
+                new StructField("struct_test", TypeFactory.createType(PrimitiveType.INT)),
+                new StructField("c1", TypeFactory.createType(PrimitiveType.INT))
         ));
         Assertions.assertFalse(root.matchesType(diffType));
 
         // matched
         StructType mc1 = new StructType(Lists.newArrayList(
-                new StructField("c1", ScalarType.createType(PrimitiveType.INT)),
-                new StructField("cc1", ScalarType.createDefaultCatalogString())
+                new StructField("c1", TypeFactory.createType(PrimitiveType.INT)),
+                new StructField("cc1", TypeFactory.createDefaultCatalogString())
         ));
         StructType matched = new StructType(Lists.newArrayList(
-                new StructField("struct_test", ScalarType.createType(PrimitiveType.INT)),
+                new StructField("struct_test", TypeFactory.createType(PrimitiveType.INT)),
                 new StructField("c1", mc1)
         ));
         Assertions.assertTrue(root.matchesType(matched));
 
         // Won't match with different subfield order
         StructType mc2 = new StructType(Lists.newArrayList(
-                new StructField("cc1", ScalarType.createDefaultCatalogString()),
-                new StructField("c1", ScalarType.createType(PrimitiveType.INT))
+                new StructField("cc1", TypeFactory.createDefaultCatalogString()),
+                new StructField("c1", TypeFactory.createType(PrimitiveType.INT))
         ));
         StructType matchedDiffOrder = new StructType(Lists.newArrayList(
                 new StructField("c1", mc2),
-                new StructField("struct_test", ScalarType.createType(PrimitiveType.INT))
+                new StructField("struct_test", TypeFactory.createType(PrimitiveType.INT))
         ));
         Assertions.assertFalse(root.matchesType(matchedDiffOrder));
     }

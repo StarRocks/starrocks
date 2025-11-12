@@ -25,6 +25,7 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 
 import java.sql.Connection;
 import java.sql.ResultSet;
@@ -109,18 +110,18 @@ public class PostgresSchemaResolver extends JDBCSchemaResolver {
                 primitiveType = PrimitiveType.DECIMAL32;
                 break;
             case Types.CHAR:
-                return ScalarType.createCharType(columnSize);
+                return TypeFactory.createCharType(columnSize);
             case Types.VARCHAR:
                 if (typeName.equalsIgnoreCase("varchar")) {
-                    return ScalarType.createVarcharType(columnSize);
+                    return TypeFactory.createVarcharType(columnSize);
                 } else if (typeName.equalsIgnoreCase("text")) {
-                    return ScalarType.createVarcharType(ScalarType.getOlapMaxVarcharLength());
+                    return TypeFactory.createVarcharType(TypeFactory.getOlapMaxVarcharLength());
                 }
                 primitiveType = PrimitiveType.UNKNOWN_TYPE;
                 break;
             case Types.BINARY:
             case Types.VARBINARY:
-                return ScalarType.createVarbinary(ScalarType.CATALOG_MAX_VARCHAR_LENGTH);
+                return TypeFactory.createVarbinary(ScalarType.CATALOG_MAX_VARCHAR_LENGTH);
             case Types.DATE:
                 primitiveType = PrimitiveType.DATE;
                 break;
@@ -133,19 +134,19 @@ public class PostgresSchemaResolver extends JDBCSchemaResolver {
         }
 
         if (typeName.equalsIgnoreCase("uuid")) {
-            return ScalarType.createVarbinary(columnSize);
+            return TypeFactory.createVarbinary(columnSize);
         }
 
         if (primitiveType != PrimitiveType.DECIMAL32) {
-            return ScalarType.createType(primitiveType);
+            return TypeFactory.createType(primitiveType);
         } else {
             int precision = columnSize + max(-digits, 0);
             // if user not specify numeric precision and scale, the default value is 0,
             // we can't defer the precision and scale, can only deal it as string.
             if (precision == 0) {
-                return ScalarType.createVarcharType(ScalarType.getOlapMaxVarcharLength());
+                return TypeFactory.createVarcharType(TypeFactory.getOlapMaxVarcharLength());
             }
-            return ScalarType.createUnifiedDecimalType(precision, max(digits, 0));
+            return TypeFactory.createUnifiedDecimalType(precision, max(digits, 0));
         }
     }
 

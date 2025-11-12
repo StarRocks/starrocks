@@ -16,8 +16,8 @@ package com.starrocks.connector.kudu;
 
 import com.starrocks.connector.ColumnTypeConverter;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import org.apache.kudu.ColumnSchema;
 import org.apache.kudu.ColumnTypeAttributes;
 import org.junit.jupiter.api.Assertions;
@@ -95,7 +95,7 @@ public class KuduColumnConverterTest {
     public void testConvertString() {
         ColumnSchema columnSchema = genColumnSchema("test", org.apache.kudu.Type.STRING);
         Type result = ColumnTypeConverter.fromKuduType(columnSchema);
-        Assertions.assertEquals(result, ScalarType.createVarcharType(CATALOG_MAX_VARCHAR_LENGTH));
+        Assertions.assertEquals(result, TypeFactory.createVarcharType(CATALOG_MAX_VARCHAR_LENGTH));
     }
 
     @Test
@@ -105,7 +105,7 @@ public class KuduColumnConverterTest {
                         .typeAttributes(new ColumnTypeAttributes.ColumnTypeAttributesBuilder().length(len).build())
                         .build();
         Type result = ColumnTypeConverter.fromKuduType(columnSchema);
-        Assertions.assertEquals(result, ScalarType.createVarcharType(len));
+        Assertions.assertEquals(result, TypeFactory.createVarcharType(len));
     }
 
     @Test
@@ -123,6 +123,6 @@ public class KuduColumnConverterTest {
                 .typeAttributes(new ColumnTypeAttributes.ColumnTypeAttributesBuilder().precision(p).scale(s).build())
                 .build();
         Type result = ColumnTypeConverter.fromKuduType(columnSchema);
-        Assertions.assertEquals(result, ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, p, s));
+        Assertions.assertEquals(result, TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, p, s));
     }
 }

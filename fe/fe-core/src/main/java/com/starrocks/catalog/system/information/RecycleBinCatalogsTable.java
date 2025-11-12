@@ -20,6 +20,7 @@ import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.thrift.TSchemaTableType;
 import com.starrocks.type.ScalarType;
+import com.starrocks.type.TypeFactory;
 
 public class RecycleBinCatalogsTable {
     public static final String NAME = "recyclebin_catalogs";
@@ -27,8 +28,8 @@ public class RecycleBinCatalogsTable {
     public static SystemTable create() {
         return new SystemTable(SystemId.RECYCLEBIN_CATALOGS, NAME, Table.TableType.SCHEMA,
                 SystemTable.builder()
-                        .column("TYPE", ScalarType.createVarcharType(SystemTable.NAME_CHAR_LEN))
-                        .column("NAME", ScalarType.createVarcharType(SystemTable.NAME_CHAR_LEN))
+                        .column("TYPE", TypeFactory.createVarcharType(SystemTable.NAME_CHAR_LEN))
+                        .column("NAME", TypeFactory.createVarcharType(SystemTable.NAME_CHAR_LEN))
                         .column("DB_ID", ScalarType.BIGINT)
                         .column("TABLE_ID", ScalarType.BIGINT)
                         .column("PARTITION_ID", ScalarType.BIGINT)

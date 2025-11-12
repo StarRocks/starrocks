@@ -50,8 +50,8 @@ import com.starrocks.sql.optimizer.operator.scalar.MapOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -78,9 +78,9 @@ public class OpTest {
             Stream.of(
                             IntStream.range(0, 3).boxed().map(i -> Pair.create(i, Type.VARCHAR)),
                             IntStream.range(3, 6).boxed().map(i -> Pair.create(i, Type.INT)),
-                            Stream.of(Pair.create(6, ScalarType.createDecimalV3NarrowestType(38, 9))),
-                            Stream.of(Pair.create(7, ScalarType.createDecimalV3NarrowestType(15, 3))),
-                            Stream.of(Pair.create(8, ScalarType.createDecimalV3NarrowestType(7, 2))),
+                            Stream.of(Pair.create(6, TypeFactory.createDecimalV3NarrowestType(38, 9))),
+                            Stream.of(Pair.create(7, TypeFactory.createDecimalV3NarrowestType(15, 3))),
+                            Stream.of(Pair.create(8, TypeFactory.createDecimalV3NarrowestType(7, 2))),
                             Stream.of(Pair.create(9, Type.DOUBLE)))
                     .flatMap(Function.identity())
                     .map(p -> new ColumnRefOperator(p.first, p.second, "c" + p.first, false))
@@ -362,7 +362,7 @@ public class OpTest {
                 {ConstantOperator.createInt(10), "10"},
                 {ConstantOperator.createVarchar("abcd"), "\"abcd\""},
                 {ConstantOperator.createDecimal(new BigDecimal("3.14"),
-                        ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 2)), "3.14"},
+                        TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 2)), "3.14"},
                 {columnRefs.get(0), "`test_db`.`t`.c0"},
                 {arrayOp, "[\"abcd\", `test_db`.`t`.c0, \"defg\", `test_db`.`t`.c1]"},
                 {arraySliceOp, "[\"abcd\", `test_db`.`t`.c0, \"defg\", `test_db`.`t`.c1][1:3]"},

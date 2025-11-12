@@ -35,6 +35,7 @@ import com.starrocks.type.MapType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -97,7 +98,7 @@ public class ExprToThriftVisitorTest {
             cases.add(nodeCase("DecimalLiteral", ExprCaseFactory::buildDecimalLiteral,
                     TExprNodeType.DECIMAL_LITERAL));
             cases.add(nodeCase("StringLiteral", () -> withType(new StringLiteral("starrocks"),
-                    ScalarType.createVarchar(16)), TExprNodeType.STRING_LITERAL));
+                    TypeFactory.createVarchar(16)), TExprNodeType.STRING_LITERAL));
             cases.add(nodeCase("BoolLiteral", () -> withType(new BoolLiteral(true), Type.BOOLEAN),
                     TExprNodeType.BOOL_LITERAL));
             cases.add(nodeCase("VarBinaryLiteral", () -> withType(new VarBinaryLiteral(new byte[] {1, 2}),
@@ -216,7 +217,7 @@ public class ExprToThriftVisitorTest {
         private static Expr buildDecimalLiteral() {
             try {
                 DecimalLiteral literal = new DecimalLiteral("1.23");
-                ScalarType type = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 6, 2);
+                ScalarType type = TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 6, 2);
                 literal.setType(type);
                 literal.setOriginType(type);
                 return literal;
@@ -265,11 +266,11 @@ public class ExprToThriftVisitorTest {
 
         private static Expr buildMapExpr() {
             List<Expr> children = List.of(
-                    withType(new StringLiteral("k"), ScalarType.createVarchar(8)),
+                    withType(new StringLiteral("k"), TypeFactory.createVarchar(8)),
                     withType(new IntLiteral(1), Type.INT),
-                    withType(new StringLiteral("k2"), ScalarType.createVarchar(8)),
+                    withType(new StringLiteral("k2"), TypeFactory.createVarchar(8)),
                     withType(new IntLiteral(2), Type.INT));
-            MapExpr mapExpr = new MapExpr(new MapType(ScalarType.createVarchar(8), Type.INT), children);
+            MapExpr mapExpr = new MapExpr(new MapType(TypeFactory.createVarchar(8), Type.INT), children);
             mapExpr.setOriginType(mapExpr.getType());
             return mapExpr;
         }
@@ -278,7 +279,7 @@ public class ExprToThriftVisitorTest {
             MapExpr mapExpr = (MapExpr) buildMapExpr();
             CollectionElementExpr expr =
                     new CollectionElementExpr(Type.INT, mapExpr, withType(new StringLiteral("k"),
-                            ScalarType.createVarchar(8)), true);
+                            TypeFactory.createVarchar(8)), true);
             expr.setOriginType(Type.INT);
             return expr;
         }
@@ -309,8 +310,8 @@ public class ExprToThriftVisitorTest {
 
         private static Expr buildDictMappingExpr() {
             DictMappingExpr expr = new DictMappingExpr(buildSlotRef(), withType(new StringLiteral("expr"),
-                    ScalarType.createVarchar(16)));
-            expr.setType(ScalarType.createVarchar(16));
+                    TypeFactory.createVarchar(16)));
+            expr.setType(TypeFactory.createVarchar(16));
             expr.setOriginType(expr.getType());
             return expr;
         }
@@ -327,7 +328,7 @@ public class ExprToThriftVisitorTest {
             CaseExpr expr = new CaseExpr(new IntLiteral(1),
                     List.of(new CaseWhenClause(new IntLiteral(1), new StringLiteral("x"))),
                     new StringLiteral("y"));
-            expr.setType(ScalarType.createVarchar(8));
+            expr.setType(TypeFactory.createVarchar(8));
             expr.setOriginType(expr.getType());
             return expr;
         }
@@ -368,7 +369,7 @@ public class ExprToThriftVisitorTest {
 
         private static Expr buildInformationFunction() {
             InformationFunction infoFunction = new InformationFunction("CURRENT_CATALOG", "cluster", 11);
-            infoFunction.setType(ScalarType.createVarchar(16));
+            infoFunction.setType(TypeFactory.createVarchar(16));
             infoFunction.setOriginType(infoFunction.getType());
             return infoFunction;
         }
@@ -518,7 +519,7 @@ public class ExprToThriftVisitorTest {
 
         private static Expr buildArrowExpr() {
             ArrowExpr arrowExpr = new ArrowExpr(new StringLiteral("k"), new StringLiteral("v"));
-            ScalarType varchar = ScalarType.createVarchar(8);
+            ScalarType varchar = TypeFactory.createVarchar(8);
             arrowExpr.setType(varchar);
             arrowExpr.setOriginType(varchar);
             return arrowExpr;

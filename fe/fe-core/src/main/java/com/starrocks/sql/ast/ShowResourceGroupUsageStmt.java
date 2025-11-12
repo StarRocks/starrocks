@@ -19,7 +19,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.system.ComputeNode;
-import com.starrocks.type.ScalarType;
+import com.starrocks.type.TypeFactory;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.Comparator;
@@ -30,17 +30,17 @@ import java.util.stream.Collectors;
 public class ShowResourceGroupUsageStmt extends ShowStmt {
     private static final List<Pair<Column, Function<ShowItem, String>>> META_DATA =
             ImmutableList.of(
-                    Pair.create(new Column("Name", ScalarType.createVarchar(64)),
+                    Pair.create(new Column("Name", TypeFactory.createVarchar(64)),
                             item -> item.usage.getGroup().getName()),
-                    Pair.create(new Column("Id", ScalarType.createVarchar(64)),
+                    Pair.create(new Column("Id", TypeFactory.createVarchar(64)),
                             item -> Long.toString(item.usage.getGroup().getId())),
-                    Pair.create(new Column("Backend", ScalarType.createVarchar(64)),
+                    Pair.create(new Column("Backend", TypeFactory.createVarchar(64)),
                             item -> item.worker.getHost()),
-                    Pair.create(new Column("BEInUseCpuCores", ScalarType.createVarchar(64)),
+                    Pair.create(new Column("BEInUseCpuCores", TypeFactory.createVarchar(64)),
                             item -> Double.toString(item.usage.getCpuCoreUsagePermille() / 1000.0D)),
-                    Pair.create(new Column("BEInUseMemBytes", ScalarType.createVarchar(64)),
+                    Pair.create(new Column("BEInUseMemBytes", TypeFactory.createVarchar(64)),
                             item -> Long.toString(item.usage.getMemUsageBytes())),
-                    Pair.create(new Column("BERunningQueries", ScalarType.createVarchar(64)),
+                    Pair.create(new Column("BERunningQueries", TypeFactory.createVarchar(64)),
                             item -> Integer.toString(item.usage.getNumRunningQueries()))
             );
 

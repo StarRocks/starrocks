@@ -18,7 +18,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.type.ScalarType;
+import com.starrocks.type.TypeFactory;
 
 import java.util.Collection;
 import java.util.List;
@@ -26,19 +26,19 @@ import java.util.stream.Collectors;
 
 public class ShowFailoverGroupsStmt extends ShowStmt {
     private static final ShowResultSetMetaData META_DATA = ShowResultSetMetaData.builder()
-            .addColumn(new Column("Id", ScalarType.createVarchar(20)))
-            .addColumn(new Column("Name", ScalarType.createVarchar(20)))
-            .addColumn(new Column("Role", ScalarType.createVarchar(20)))
-            .addColumn(new Column("State", ScalarType.createVarchar(20)))
-            .addColumn(new Column("Schedule", ScalarType.createVarchar(32)))
-            .addColumn(new Column("IsSuspended", ScalarType.createVarchar(20)))
-            .addColumn(new Column("ScheduledTime", ScalarType.createVarchar(20)))
-            .addColumn(new Column("FinishedTime", ScalarType.createVarchar(20)))
-            .addColumn(new Column("FinishedRound", ScalarType.createVarchar(20)))
-            .addColumn(new Column("ReplicatedJournalId", ScalarType.createVarchar(20)))
-            .addColumn(new Column("LastScheduledTime", ScalarType.createVarchar(20)))
-            .addColumn(new Column("LastFinishedTime", ScalarType.createVarchar(20)))
-            .addColumn(new Column("Errors", ScalarType.createVarchar(1024)))
+            .addColumn(new Column("Id", TypeFactory.createVarchar(20)))
+            .addColumn(new Column("Name", TypeFactory.createVarchar(20)))
+            .addColumn(new Column("Role", TypeFactory.createVarchar(20)))
+            .addColumn(new Column("State", TypeFactory.createVarchar(20)))
+            .addColumn(new Column("Schedule", TypeFactory.createVarchar(32)))
+            .addColumn(new Column("IsSuspended", TypeFactory.createVarchar(20)))
+            .addColumn(new Column("ScheduledTime", TypeFactory.createVarchar(20)))
+            .addColumn(new Column("FinishedTime", TypeFactory.createVarchar(20)))
+            .addColumn(new Column("FinishedRound", TypeFactory.createVarchar(20)))
+            .addColumn(new Column("ReplicatedJournalId", TypeFactory.createVarchar(20)))
+            .addColumn(new Column("LastScheduledTime", TypeFactory.createVarchar(20)))
+            .addColumn(new Column("LastFinishedTime", TypeFactory.createVarchar(20)))
+            .addColumn(new Column("Errors", TypeFactory.createVarchar(1024)))
             .build();
 
     private final String pattern;

@@ -20,6 +20,7 @@ import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.thrift.TSchemaTableType;
 import com.starrocks.type.ScalarType;
+import com.starrocks.type.TypeFactory;
 
 public class PipeFileSystemTable {
     public static final String NAME = "pipe_files";
@@ -27,23 +28,23 @@ public class PipeFileSystemTable {
     public static SystemTable create() {
         return new SystemTable(SystemId.PIPE_FILES_ID, NAME, Table.TableType.SCHEMA,
                 SystemTable.builder()
-                        .column("DATABASE_NAME", ScalarType.createVarcharType(SystemTable.NAME_CHAR_LEN))
+                        .column("DATABASE_NAME", TypeFactory.createVarcharType(SystemTable.NAME_CHAR_LEN))
                         .column("PIPE_ID", ScalarType.BIGINT)
-                        .column("PIPE_NAME", ScalarType.createVarcharType(SystemTable.NAME_CHAR_LEN))
+                        .column("PIPE_NAME", TypeFactory.createVarcharType(SystemTable.NAME_CHAR_LEN))
 
-                        .column("FILE_NAME", ScalarType.createVarcharType(SystemTable.NAME_CHAR_LEN))
-                        .column("FILE_VERSION", ScalarType.createVarcharType(SystemTable.NAME_CHAR_LEN))
+                        .column("FILE_NAME", TypeFactory.createVarcharType(SystemTable.NAME_CHAR_LEN))
+                        .column("FILE_VERSION", TypeFactory.createVarcharType(SystemTable.NAME_CHAR_LEN))
                         // TODO
                         // .column("FILE_ROWS", ScalarType.BIGINT)
                         .column("FILE_SIZE", ScalarType.BIGINT)
-                        .column("LAST_MODIFIED", ScalarType.createVarcharType(16))
+                        .column("LAST_MODIFIED", TypeFactory.createVarcharType(16))
 
-                        .column("LOAD_STATE", ScalarType.createVarcharType(8))
-                        .column("STAGED_TIME", ScalarType.createVarcharType(16))
-                        .column("START_LOAD_TIME", ScalarType.createVarcharType(16))
-                        .column("FINISH_LOAD_TIME", ScalarType.createVarcharType(16))
+                        .column("LOAD_STATE", TypeFactory.createVarcharType(8))
+                        .column("STAGED_TIME", TypeFactory.createVarcharType(16))
+                        .column("START_LOAD_TIME", TypeFactory.createVarcharType(16))
+                        .column("FINISH_LOAD_TIME", TypeFactory.createVarcharType(16))
 
-                        .column("ERROR_MSG", ScalarType.createVarcharType(512))
+                        .column("ERROR_MSG", TypeFactory.createVarcharType(512))
                         // TODO
                         // .column("ERROR_COUNT", ScalarType.BIGINT)
                         // .column("ERROR_LINE", ScalarType.BIGINT)

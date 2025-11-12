@@ -27,9 +27,9 @@ import com.starrocks.catalog.Column;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.MapType;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.ScalarType;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -77,7 +77,7 @@ public class EntityConvertUtilsTest {
     public void testConvertTypeCaseDecimalLessThanOrEqualMaxDecimal32Precision() {
         DecimalTypeInfo decimalTypeInfo = TypeInfoFactory.getDecimalTypeInfo(5, 2);
         Type result = EntityConvertUtils.convertType(decimalTypeInfo);
-        Type expectedType = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 5, 2);
+        Type expectedType = TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 5, 2);
         assertEquals(expectedType, result);
     }
 
@@ -85,7 +85,7 @@ public class EntityConvertUtilsTest {
     public void testConvertTypeCaseDecimalLessThanOrEqualMaxDecimal64Precision() {
         DecimalTypeInfo decimalTypeInfo = TypeInfoFactory.getDecimalTypeInfo(12, 4);
         Type result = EntityConvertUtils.convertType(decimalTypeInfo);
-        Type expectedType = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 12, 4);
+        Type expectedType = TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 12, 4);
         assertEquals(expectedType, result);
     }
 
@@ -93,7 +93,7 @@ public class EntityConvertUtilsTest {
     public void testConvertTypeCaseDecimalGreaterThanMaxDecimal64Precision() {
         DecimalTypeInfo decimalTypeInfo = TypeInfoFactory.getDecimalTypeInfo(20, 6);
         Type result = EntityConvertUtils.convertType(decimalTypeInfo);
-        Type expectedType = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 20, 6);
+        Type expectedType = TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 20, 6);
         assertEquals(expectedType, result);
     }
 
@@ -108,7 +108,7 @@ public class EntityConvertUtilsTest {
     public void testConvertTypeCaseChar() {
         CharTypeInfo charTypeInfo = TypeInfoFactory.getCharTypeInfo(10);
         Type result = EntityConvertUtils.convertType(charTypeInfo);
-        Type expectedType = ScalarType.createCharType(10);
+        Type expectedType = TypeFactory.createCharType(10);
         assertEquals(expectedType, result);
     }
 
@@ -116,7 +116,7 @@ public class EntityConvertUtilsTest {
     public void testConvertTypeCaseVarchar() {
         VarcharTypeInfo varcharTypeInfo = TypeInfoFactory.getVarcharTypeInfo(20);
         Type result = EntityConvertUtils.convertType(varcharTypeInfo);
-        Type expectedType = ScalarType.createVarcharType(20);
+        Type expectedType = TypeFactory.createVarcharType(20);
         assertEquals(expectedType, result);
     }
 
@@ -124,7 +124,7 @@ public class EntityConvertUtilsTest {
     public void testConvertTypeCaseStringAndJson() {
         TypeInfo typeInfo = TypeInfoFactory.STRING;
         Type result = EntityConvertUtils.convertType(typeInfo);
-        Type expectedType = ScalarType.createDefaultCatalogString();
+        Type expectedType = TypeFactory.createDefaultCatalogString();
         assertEquals(expectedType, result);
     }
 
@@ -162,7 +162,7 @@ public class EntityConvertUtilsTest {
         TypeInfo valueTypeInfo = TypeInfoFactory.INT;
         MapTypeInfo mapTypeInfo = TypeInfoFactory.getMapTypeInfo(keyTypeInfo, valueTypeInfo);
         Type result = EntityConvertUtils.convertType(mapTypeInfo);
-        Type expectedType = new MapType(ScalarType.createDefaultCatalogString(), Type.INT);
+        Type expectedType = new MapType(TypeFactory.createDefaultCatalogString(), Type.INT);
         assertEquals(expectedType, result);
     }
 
@@ -183,7 +183,7 @@ public class EntityConvertUtilsTest {
                 TypeInfoFactory.getStructTypeInfo(ImmutableList.of("fieldTypeInfo1", "fieldTypeInfo2"),
                         ImmutableList.of(fieldTypeInfo1, fieldTypeInfo2));
         Type result = EntityConvertUtils.convertType(structTypeInfo);
-        Type expectedType1 = ScalarType.createDefaultCatalogString();
+        Type expectedType1 = TypeFactory.createDefaultCatalogString();
         Type expectedType2 = Type.INT;
         Type expectedType = new StructType(ImmutableList.of(expectedType1, expectedType2));
         assertEquals(expectedType, result);

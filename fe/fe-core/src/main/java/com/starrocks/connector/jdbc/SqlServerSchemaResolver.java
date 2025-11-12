@@ -21,6 +21,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 
 import java.sql.Connection;
 import java.sql.ResultSet;
@@ -94,13 +95,13 @@ public class SqlServerSchemaResolver extends JDBCSchemaResolver {
             // UNIQUEIDENTIFIER
             case Types.CHAR:
             case Types.NCHAR:
-                return ScalarType.createCharType(columnSize);
+                return TypeFactory.createCharType(columnSize);
             case Types.VARCHAR:
             case Types.NVARCHAR:
                 if (columnSize > 0) {
-                    return ScalarType.createVarcharType(columnSize);
+                    return TypeFactory.createVarcharType(columnSize);
                 } else {
-                    return ScalarType.createVarcharType(ScalarType.getOlapMaxVarcharLength());
+                    return TypeFactory.createVarcharType(TypeFactory.getOlapMaxVarcharLength());
                 }
             // DATETIMEOFFSET
             case -155:
@@ -110,9 +111,9 @@ public class SqlServerSchemaResolver extends JDBCSchemaResolver {
             case Types.LONGNVARCHAR:
                 if (typeName.equalsIgnoreCase("text") || typeName.equalsIgnoreCase("ntext") ||
                         typeName.equalsIgnoreCase("xml")) {
-                    return ScalarType.createVarcharType(ScalarType.getOlapMaxVarcharLength());
+                    return TypeFactory.createVarcharType(TypeFactory.getOlapMaxVarcharLength());
                 } else if (typeName.equalsIgnoreCase("datetimeoffset")) {
-                    return ScalarType.createVarcharType(columnSize);
+                    return TypeFactory.createVarcharType(columnSize);
                 }
                 primitiveType = PrimitiveType.UNKNOWN_TYPE;
                 break;
@@ -121,9 +122,9 @@ public class SqlServerSchemaResolver extends JDBCSchemaResolver {
             case Types.BINARY:
             case Types.VARBINARY:
                 if (columnSize > 0) {
-                    return ScalarType.createVarbinary(columnSize);
+                    return TypeFactory.createVarbinary(columnSize);
                 } else {
-                    return ScalarType.createVarbinary(ScalarType.CATALOG_MAX_VARCHAR_LENGTH);
+                    return TypeFactory.createVarbinary(ScalarType.CATALOG_MAX_VARCHAR_LENGTH);
                 }
             case Types.DATE:
                 primitiveType = PrimitiveType.DATE;
@@ -141,16 +142,16 @@ public class SqlServerSchemaResolver extends JDBCSchemaResolver {
         }
 
         if (primitiveType != PrimitiveType.DECIMAL32) {
-            ScalarType scalarType = ScalarType.createType(primitiveType);
+            ScalarType scalarType = TypeFactory.createType(primitiveType);
             return scalarType;
         } else {
             int precision = columnSize + max(-digits, 0);
             // if user not specify numeric precision and scale, the default value is 0,
             // we can't defer the precision and scale, can only deal it as string.
             if (precision == 0) {
-                return ScalarType.createVarcharType(ScalarType.CATALOG_MAX_VARCHAR_LENGTH);
+                return TypeFactory.createVarcharType(ScalarType.CATALOG_MAX_VARCHAR_LENGTH);
             }
-            return ScalarType.createUnifiedDecimalType(precision, max(digits, 0));
+            return TypeFactory.createUnifiedDecimalType(precision, max(digits, 0));
 
         }
 

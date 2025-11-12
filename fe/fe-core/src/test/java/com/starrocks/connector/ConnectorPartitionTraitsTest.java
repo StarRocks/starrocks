@@ -34,7 +34,7 @@ import com.starrocks.connector.partitiontraits.OdpsPartitionTraits;
 import com.starrocks.connector.partitiontraits.OlapPartitionTraits;
 import com.starrocks.connector.partitiontraits.PaimonPartitionTraits;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.ScalarType;
+import com.starrocks.type.TypeFactory;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
@@ -126,9 +126,9 @@ public class ConnectorPartitionTraitsTest {
         Assertions.assertEquals(connectorPartitionTraits.getTableName(), "icebergTable");
         try {
             PartitionKey key = connectorPartitionTraits.createPartitionKeyWithType(Lists.newArrayList("123.3"), 
-                    Lists.newArrayList(ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 6)));
+                    Lists.newArrayList(TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 6)));
             Assertions.assertEquals(key.getKeys().get(0).getType(), 
-                    ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 6));
+                    TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 6));
         } catch (Exception e) {
             throw new RuntimeException("createPartitionKeyWithType failed", e);
         }

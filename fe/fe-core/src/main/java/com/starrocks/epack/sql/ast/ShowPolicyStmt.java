@@ -7,7 +7,7 @@ import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.type.ScalarType;
+import com.starrocks.type.TypeFactory;
 
 public class ShowPolicyStmt extends ShowStmt {
     private static final ShowResultSetMetaData META_DATA;
@@ -17,10 +17,10 @@ public class ShowPolicyStmt extends ShowStmt {
 
     static {
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
-        builder.addColumn(new Column("Name", ScalarType.createVarchar(100)));
-        builder.addColumn(new Column("Type", ScalarType.createVarchar(100)));
-        builder.addColumn(new Column("Catalog", ScalarType.createVarchar(100)));
-        builder.addColumn(new Column("Database", ScalarType.createVarchar(100)));
+        builder.addColumn(new Column("Name", TypeFactory.createVarchar(100)));
+        builder.addColumn(new Column("Type", TypeFactory.createVarchar(100)));
+        builder.addColumn(new Column("Catalog", TypeFactory.createVarchar(100)));
+        builder.addColumn(new Column("Database", TypeFactory.createVarchar(100)));
         META_DATA = builder.build();
     }
 

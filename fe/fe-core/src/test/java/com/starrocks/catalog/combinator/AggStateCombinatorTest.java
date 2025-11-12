@@ -42,9 +42,9 @@ import com.starrocks.type.AnyMapType;
 import com.starrocks.type.AnyStructType;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.MapType;
-import com.starrocks.type.ScalarType;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.assertj.core.util.Sets;
@@ -115,11 +115,11 @@ public class AggStateCombinatorTest extends MVTestBase {
 
     private Type mockType(Type type) {
         if (type.isDecimalOfAnyVersion()) {
-            return ScalarType.createDecimalV3NarrowestType(10, 2);
+            return TypeFactory.createDecimalV3NarrowestType(10, 2);
         } else if (type.isChar()) {
-            return ScalarType.createCharType(100);
+            return TypeFactory.createCharType(100);
         } else if (type.isVarchar()) {
-            return ScalarType.createVarcharType(100);
+            return TypeFactory.createVarcharType(100);
         } else if (type instanceof AnyElementType) {
             return Type.STRING;
         } else if (type instanceof AnyArrayType) {

@@ -23,7 +23,7 @@ import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.optimizer.MaterializedViewOptimizer;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.ScalarType;
+import com.starrocks.type.TypeFactory;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -109,7 +109,7 @@ public class MaterializedViewAnalyzerWithPaimonTest {
                     result = "dt";
 
                     table.getColumn("dt");
-                    result = new Column("dt", ScalarType.createType(PrimitiveType.DATE));
+                    result = new Column("dt", TypeFactory.createType(PrimitiveType.DATE));
                 }
             };
             try {

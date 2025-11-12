@@ -26,6 +26,7 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -106,29 +107,29 @@ public class OracleSchemaResolver extends JDBCSchemaResolver {
                 break;
             case Types.CHAR:
             case Types.NCHAR:
-                return ScalarType.createCharType(columnSize);
+                return TypeFactory.createCharType(columnSize);
             case Types.VARCHAR:
             // NVARCHAR2
             case Types.NVARCHAR:
                 if (columnSize > 0) {
-                    return ScalarType.createVarcharType(columnSize);
+                    return TypeFactory.createVarcharType(columnSize);
                 } else {
-                    return ScalarType.createVarcharType(ScalarType.CATALOG_MAX_VARCHAR_LENGTH);
+                    return TypeFactory.createVarcharType(ScalarType.CATALOG_MAX_VARCHAR_LENGTH);
                 }
             case Types.CLOB:
             case Types.NCLOB:
             // LONG
             case Types.LONGVARCHAR:
-                return ScalarType.createVarcharType(ScalarType.CATALOG_MAX_VARCHAR_LENGTH);
+                return TypeFactory.createVarcharType(ScalarType.CATALOG_MAX_VARCHAR_LENGTH);
             case Types.BLOB:
             case Types.BINARY:
             case Types.VARBINARY:
             // raw
             case 23:
                 if (columnSize > 0) {
-                    return ScalarType.createVarbinary(columnSize);
+                    return TypeFactory.createVarbinary(columnSize);
                 } else {
-                    return ScalarType.createVarbinary(ScalarType.CATALOG_MAX_VARCHAR_LENGTH);
+                    return TypeFactory.createVarbinary(ScalarType.CATALOG_MAX_VARCHAR_LENGTH);
                 }
             case Types.DATE:
                 primitiveType = PrimitiveType.DATE;
@@ -139,22 +140,22 @@ public class OracleSchemaResolver extends JDBCSchemaResolver {
             case -102:
             // TIMESTAMP WITH TIME ZONE
             case -101:
-                return ScalarType.createVarcharType(ScalarType.CATALOG_MAX_VARCHAR_LENGTH);
+                return TypeFactory.createVarcharType(ScalarType.CATALOG_MAX_VARCHAR_LENGTH);
             default:
                 primitiveType = PrimitiveType.UNKNOWN_TYPE;
                 break;
         }
 
         if (primitiveType != PrimitiveType.DECIMAL32) {
-            return ScalarType.createType(primitiveType);
+            return TypeFactory.createType(primitiveType);
         } else {
             int precision = columnSize + max(-digits, 0);
             // if user not specify numeric precision and scale, the default value is 0,
             // we can't defer the precision and scale, can only deal it as string.
             if (precision == 0) {
-                return ScalarType.createVarcharType(ScalarType.CATALOG_MAX_VARCHAR_LENGTH);
+                return TypeFactory.createVarcharType(ScalarType.CATALOG_MAX_VARCHAR_LENGTH);
             }
-            return ScalarType.createUnifiedDecimalType(precision, max(digits, 0));
+            return TypeFactory.createUnifiedDecimalType(precision, max(digits, 0));
         }
     }
 

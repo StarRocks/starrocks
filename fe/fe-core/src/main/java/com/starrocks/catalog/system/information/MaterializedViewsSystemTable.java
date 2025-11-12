@@ -45,8 +45,8 @@ import com.starrocks.thrift.TMaterializedViewStatus;
 import com.starrocks.thrift.TSchemaTableType;
 import com.starrocks.thrift.TUserIdentity;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import org.apache.commons.lang3.NotImplementedException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -74,34 +74,34 @@ public class MaterializedViewsSystemTable extends SystemTable {
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("MATERIALIZED_VIEW_ID", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("TABLE_SCHEMA", ScalarType.createVarchar(20))
-                        .column("TABLE_NAME", ScalarType.createVarchar(50))
-                        .column("REFRESH_TYPE", ScalarType.createVarchar(20))
-                        .column("IS_ACTIVE", ScalarType.createVarchar(10))
-                        .column("INACTIVE_REASON", ScalarType.createVarcharType(1024))
-                        .column("PARTITION_TYPE", ScalarType.createVarchar(16))
-                        .column("TASK_ID", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("TASK_NAME", ScalarType.createVarchar(50))
-                        .column("LAST_REFRESH_START_TIME", ScalarType.createType(PrimitiveType.DATETIME))
-                        .column("LAST_REFRESH_FINISHED_TIME", ScalarType.createType(PrimitiveType.DATETIME))
-                        .column("LAST_REFRESH_DURATION", ScalarType.createType(PrimitiveType.DOUBLE))
-                        .column("LAST_REFRESH_STATE", ScalarType.createVarchar(20))
-                        .column("LAST_REFRESH_FORCE_REFRESH", ScalarType.createVarchar(8))
-                        .column("LAST_REFRESH_START_PARTITION", ScalarType.createVarchar(1024))
-                        .column("LAST_REFRESH_END_PARTITION", ScalarType.createVarchar(1024))
-                        .column("LAST_REFRESH_BASE_REFRESH_PARTITIONS", ScalarType.createVarchar(1024))
-                        .column("LAST_REFRESH_MV_REFRESH_PARTITIONS", ScalarType.createVarchar(1024))
-                        .column("LAST_REFRESH_ERROR_CODE", ScalarType.createVarchar(20))
-                        .column("LAST_REFRESH_ERROR_MESSAGE", ScalarType.createVarchar(1024))
-                        .column("TABLE_ROWS", ScalarType.createType(PrimitiveType.BIGINT))
+                        .column("MATERIALIZED_VIEW_ID", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("TABLE_SCHEMA", TypeFactory.createVarchar(20))
+                        .column("TABLE_NAME", TypeFactory.createVarchar(50))
+                        .column("REFRESH_TYPE", TypeFactory.createVarchar(20))
+                        .column("IS_ACTIVE", TypeFactory.createVarchar(10))
+                        .column("INACTIVE_REASON", TypeFactory.createVarcharType(1024))
+                        .column("PARTITION_TYPE", TypeFactory.createVarchar(16))
+                        .column("TASK_ID", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("TASK_NAME", TypeFactory.createVarchar(50))
+                        .column("LAST_REFRESH_START_TIME", TypeFactory.createType(PrimitiveType.DATETIME))
+                        .column("LAST_REFRESH_FINISHED_TIME", TypeFactory.createType(PrimitiveType.DATETIME))
+                        .column("LAST_REFRESH_DURATION", TypeFactory.createType(PrimitiveType.DOUBLE))
+                        .column("LAST_REFRESH_STATE", TypeFactory.createVarchar(20))
+                        .column("LAST_REFRESH_FORCE_REFRESH", TypeFactory.createVarchar(8))
+                        .column("LAST_REFRESH_START_PARTITION", TypeFactory.createVarchar(1024))
+                        .column("LAST_REFRESH_END_PARTITION", TypeFactory.createVarchar(1024))
+                        .column("LAST_REFRESH_BASE_REFRESH_PARTITIONS", TypeFactory.createVarchar(1024))
+                        .column("LAST_REFRESH_MV_REFRESH_PARTITIONS", TypeFactory.createVarchar(1024))
+                        .column("LAST_REFRESH_ERROR_CODE", TypeFactory.createVarchar(20))
+                        .column("LAST_REFRESH_ERROR_MESSAGE", TypeFactory.createVarchar(1024))
+                        .column("TABLE_ROWS", TypeFactory.createType(PrimitiveType.BIGINT))
                         .column("MATERIALIZED_VIEW_DEFINITION",
-                                ScalarType.createVarchar(MAX_FIELD_VARCHAR_LENGTH))
-                        .column("EXTRA_MESSAGE", ScalarType.createVarchar(1024))
-                        .column("QUERY_REWRITE_STATUS", ScalarType.createVarcharType(64))
-                        .column("CREATOR", ScalarType.createVarchar(64))
-                        .column("LAST_REFRESH_PROCESS_TIME", ScalarType.createType(PrimitiveType.DATETIME))
-                        .column("LAST_REFRESH_JOB_ID", ScalarType.createVarchar(64))
+                                TypeFactory.createVarchar(MAX_FIELD_VARCHAR_LENGTH))
+                        .column("EXTRA_MESSAGE", TypeFactory.createVarchar(1024))
+                        .column("QUERY_REWRITE_STATUS", TypeFactory.createVarcharType(64))
+                        .column("CREATOR", TypeFactory.createVarchar(64))
+                        .column("LAST_REFRESH_PROCESS_TIME", TypeFactory.createType(PrimitiveType.DATETIME))
+                        .column("LAST_REFRESH_JOB_ID", TypeFactory.createVarchar(64))
                         .build(), TSchemaTableType.SCH_MATERIALIZED_VIEWS);
     }
 

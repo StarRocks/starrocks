@@ -19,10 +19,10 @@ import com.starrocks.catalog.Column;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.ScalarType;
 import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -45,7 +45,7 @@ public class StructFieldDescTest {
 
         Column structCol1 = new Column("structCol1", type);
 
-        Type addType = ScalarType.createType(PrimitiveType.INT);
+        Type addType = TypeFactory.createType(PrimitiveType.INT);
         TypeDef addTypeDef = new TypeDef(addType);
         Column intCol1 = new Column("intCol1", addType);
 

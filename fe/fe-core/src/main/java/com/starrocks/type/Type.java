@@ -101,44 +101,44 @@ public abstract class Type implements Cloneable {
     public static final ScalarType DATE = new ScalarType(PrimitiveType.DATE);
     public static final ScalarType DATETIME = new ScalarType(PrimitiveType.DATETIME);
     public static final ScalarType TIME = new ScalarType(PrimitiveType.TIME);
-    public static final ScalarType DEFAULT_DECIMALV2 = ScalarType.createDecimalV2Type(ScalarType.DEFAULT_PRECISION,
+    public static final ScalarType DEFAULT_DECIMALV2 = TypeFactory.createDecimalV2Type(ScalarType.DEFAULT_PRECISION,
             ScalarType.DEFAULT_SCALE);
     public static final ScalarType DEFAULT_DECIMAL32 =
-            ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL32, 9, 3);
+            TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL32, 9, 3);
     public static final ScalarType DEFAULT_DECIMAL64 =
-            ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 6);
+            TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 6);
     public static final ScalarType DEFAULT_DECIMAL128 =
-            ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 9);
+            TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 9);
     public static final ScalarType DEFAULT_DECIMAL256 =
-            ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL256, 76, 12);
+            TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL256, 76, 12);
 
     public static final ScalarType DECIMALV2 = DEFAULT_DECIMALV2;
 
-    public static final ScalarType DECIMAL32 = ScalarType.createWildcardDecimalV3Type(PrimitiveType.DECIMAL32);
-    public static final ScalarType DECIMAL64 = ScalarType.createWildcardDecimalV3Type(PrimitiveType.DECIMAL64);
-    public static final ScalarType DECIMAL128 = ScalarType.createWildcardDecimalV3Type(PrimitiveType.DECIMAL128);
-    public static final ScalarType DECIMAL256 = ScalarType.createWildcardDecimalV3Type(PrimitiveType.DECIMAL256);
+    public static final ScalarType DECIMAL32 = TypeFactory.createWildcardDecimalV3Type(PrimitiveType.DECIMAL32);
+    public static final ScalarType DECIMAL64 = TypeFactory.createWildcardDecimalV3Type(PrimitiveType.DECIMAL64);
+    public static final ScalarType DECIMAL128 = TypeFactory.createWildcardDecimalV3Type(PrimitiveType.DECIMAL128);
+    public static final ScalarType DECIMAL256 = TypeFactory.createWildcardDecimalV3Type(PrimitiveType.DECIMAL256);
 
     // DECIMAL64_INT and DECIMAL128_INT for integer casting to decimal
     public static final ScalarType DECIMAL_ZERO =
-            ScalarType.createDecimalV3TypeForZero(0);
+            TypeFactory.createDecimalV3TypeForZero(0);
     public static final ScalarType DECIMAL32_INT =
-            ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 9, 0);
+            TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 9, 0);
     public static final ScalarType DECIMAL64_INT =
-            ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 0);
+            TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 0);
     public static final ScalarType DECIMAL128_INT =
-            ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 0);
+            TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 0);
 
-    public static final ScalarType VARCHAR = ScalarType.createVarcharType(-1);
-    public static final ScalarType STRING = ScalarType.createVarcharType(ScalarType.getOlapMaxVarcharLength());
-    public static final ScalarType DEFAULT_STRING = ScalarType.createDefaultString();
-    public static final ScalarType HLL = ScalarType.createHllType();
-    public static final ScalarType CHAR = ScalarType.createCharType(-1);
+    public static final ScalarType VARCHAR = TypeFactory.createVarcharType(-1);
+    public static final ScalarType STRING = TypeFactory.createVarcharType(TypeFactory.getOlapMaxVarcharLength());
+    public static final ScalarType DEFAULT_STRING = TypeFactory.createDefaultString();
+    public static final ScalarType HLL = TypeFactory.createHllType();
+    public static final ScalarType CHAR = TypeFactory.createCharType(-1);
     public static final ScalarType BITMAP = new ScalarType(PrimitiveType.BITMAP);
     public static final ScalarType PERCENTILE = new ScalarType(PrimitiveType.PERCENTILE);
     public static final ScalarType JSON = new ScalarType(PrimitiveType.JSON);
     public static final ScalarType VARIANT = new ScalarType(PrimitiveType.VARIANT);
-    public static final ScalarType UNKNOWN_TYPE = ScalarType.createUnknownType();
+    public static final ScalarType UNKNOWN_TYPE = TypeFactory.createUnknownType();
     public static final ScalarType FUNCTION = new ScalarType(PrimitiveType.FUNCTION);
     public static final ScalarType VARBINARY = new ScalarType(PrimitiveType.VARBINARY);
 

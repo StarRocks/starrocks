@@ -14,7 +14,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.type.ScalarType;
+import com.starrocks.type.TypeFactory;
 
 import java.util.Collection;
 import java.util.List;
@@ -22,14 +22,14 @@ import java.util.Map;
 
 public class DescribeFailoverGroupStmt extends ShowStmt {
     private static final ShowResultSetMetaData META_DATA = ShowResultSetMetaData.builder()
-            .addColumn(new Column("Id", ScalarType.createVarchar(20)))
-            .addColumn(new Column("Name", ScalarType.createVarchar(20)))
-            .addColumn(new Column("Include Tables", ScalarType.createVarchar(256)))
-            .addColumn(new Column("Exclude Tables", ScalarType.createVarchar(256)))
-            .addColumn(new Column("Members", ScalarType.createVarchar(256)))
-            .addColumn(new Column("Schedule", ScalarType.createVarchar(32)))
-            .addColumn(new Column("Comment", ScalarType.createVarchar(256)))
-            .addColumn(new Column("Properties", ScalarType.createVarchar(256)))
+            .addColumn(new Column("Id", TypeFactory.createVarchar(20)))
+            .addColumn(new Column("Name", TypeFactory.createVarchar(20)))
+            .addColumn(new Column("Include Tables", TypeFactory.createVarchar(256)))
+            .addColumn(new Column("Exclude Tables", TypeFactory.createVarchar(256)))
+            .addColumn(new Column("Members", TypeFactory.createVarchar(256)))
+            .addColumn(new Column("Schedule", TypeFactory.createVarchar(32)))
+            .addColumn(new Column("Comment", TypeFactory.createVarchar(256)))
+            .addColumn(new Column("Properties", TypeFactory.createVarchar(256)))
             .build();
 
     private final String failoverGroupName;

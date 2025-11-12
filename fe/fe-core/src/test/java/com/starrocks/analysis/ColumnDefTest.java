@@ -51,8 +51,8 @@ import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -69,11 +69,11 @@ public class ColumnDefTest {
 
     @BeforeEach
     public void setUp() {
-        intCol = new TypeDef(ScalarType.createType(PrimitiveType.INT));
-        BigIntCol = new TypeDef(ScalarType.createType(PrimitiveType.BIGINT));
-        stringCol = new TypeDef(ScalarType.createCharType(10));
-        floatCol = new TypeDef(ScalarType.createType(PrimitiveType.FLOAT));
-        booleanCol = new TypeDef(ScalarType.createType(PrimitiveType.BOOLEAN));
+        intCol = new TypeDef(TypeFactory.createType(PrimitiveType.INT));
+        BigIntCol = new TypeDef(TypeFactory.createType(PrimitiveType.BIGINT));
+        stringCol = new TypeDef(TypeFactory.createCharType(10));
+        floatCol = new TypeDef(TypeFactory.createType(PrimitiveType.FLOAT));
+        booleanCol = new TypeDef(TypeFactory.createType(PrimitiveType.BOOLEAN));
         arrayIntCol = new TypeDef(new ArrayType(Type.INT));
     }
 
@@ -320,7 +320,7 @@ public class ColumnDefTest {
     @Test
     public void testInvalidVarcharInsideArray() {
         assertThrows(SemanticException.class, () -> {
-            Type tooLongVarchar = ScalarType.createVarchar(ScalarType.getOlapMaxVarcharLength() + 1);
+            Type tooLongVarchar = TypeFactory.createVarchar(TypeFactory.getOlapMaxVarcharLength() + 1);
             ColumnDef column = new ColumnDef("col", new TypeDef(new ArrayType(tooLongVarchar)), false, null, null, true,
                     DefaultValueDef.NOT_SET, "");
             ColumnDefAnalyzer.analyze(column, true);
@@ -330,7 +330,7 @@ public class ColumnDefTest {
     @Test
     public void testInvalidDecimalInsideArray() {
         assertThrows(SemanticException.class, () -> {
-            Type invalidDecimal = ScalarType.createDecimalV2Type(100, -1);
+            Type invalidDecimal = TypeFactory.createDecimalV2Type(100, -1);
             ColumnDef column = new ColumnDef("col", new TypeDef(new ArrayType(invalidDecimal)), false, null, null, true,
                     DefaultValueDef.NOT_SET, "");
             ColumnDefAnalyzer.analyze(column, true);

@@ -39,6 +39,7 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -330,11 +331,11 @@ public class RewriteSumByAssociativeRule extends TransformationRule {
                 switch (primitiveType) {
                     case DECIMAL128:
                         countOperator = new CastOperator(
-                                ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 18, 0),
+                                TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 18, 0),
                                 newAggRef, false);
                         int precision = ((ScalarType) arg0.getType()).getScalarPrecision();
                         int scale = ((ScalarType) arg0.getType()).getScalarScale();
-                        Type constType = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, precision, scale);
+                        Type constType = TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, precision, scale);
                         constOperator = arg0.isConstantNull() ? ConstantOperator.createNull(constType) :
                                 ConstantOperator.createDecimal(new BigDecimal(arg0.toString()), constType);
                         break;
@@ -379,7 +380,7 @@ public class RewriteSumByAssociativeRule extends TransformationRule {
                 if (returnType.isDecimalV3()) {
                     // for decimal type, we should keep the result's scale same as the input's scale
                     int argScale = ((ScalarType) arg0.getType()).getScalarScale();
-                    sumFunctionType = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, argScale);
+                    sumFunctionType = TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, argScale);
                 }
 
                 AggregateFunction sumFunction = AggregateFunction.createBuiltin(

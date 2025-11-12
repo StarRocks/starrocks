@@ -23,7 +23,7 @@ import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.ScalarType;
+import com.starrocks.type.TypeFactory;
 import com.zaxxer.hikari.HikariDataSource;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -205,21 +205,21 @@ public class JDBCMetadataTest {
         Table table = jdbcMetadata.getTable(new ConnectContext(), "test", "tbl1");
         List<Column> columns = table.getColumns();
         Assertions.assertEquals(columns.size(), columnResult.getRowCount());
-        Assertions.assertTrue(columns.get(0).getType().equals(ScalarType.createType(PrimitiveType.INT)));
-        Assertions.assertTrue(columns.get(1).getType().equals(ScalarType.createUnifiedDecimalType(10, 2)));
-        Assertions.assertTrue(columns.get(2).getType().equals(ScalarType.createCharType(10)));
-        Assertions.assertTrue(columns.get(3).getType().equals(ScalarType.createVarcharType(10)));
-        Assertions.assertTrue(columns.get(4).getType().equals(ScalarType.createType(PrimitiveType.SMALLINT)));
-        Assertions.assertTrue(columns.get(5).getType().equals(ScalarType.createType(PrimitiveType.INT)));
-        Assertions.assertTrue(columns.get(6).getType().equals(ScalarType.createType(PrimitiveType.BIGINT)));
-        Assertions.assertTrue(columns.get(7).getType().equals(ScalarType.createType(PrimitiveType.LARGEINT)));
-        Assertions.assertTrue(columns.get(8).getType().equals(ScalarType.createType(PrimitiveType.TINYINT)));
-        Assertions.assertTrue(columns.get(9).getType().equals(ScalarType.createType(PrimitiveType.SMALLINT)));
-        Assertions.assertTrue(columns.get(10).getType().equals(ScalarType.createType(PrimitiveType.INT)));
-        Assertions.assertTrue(columns.get(11).getType().equals(ScalarType.createType(PrimitiveType.BIGINT)));
-        Assertions.assertTrue(columns.get(12).getType().equals(ScalarType.createType(PrimitiveType.DATE)));
-        Assertions.assertTrue(columns.get(13).getType().equals(ScalarType.createType(PrimitiveType.TIME)));
-        Assertions.assertTrue(columns.get(14).getType().equals(ScalarType.createType(PrimitiveType.DATETIME)));
+        Assertions.assertTrue(columns.get(0).getType().equals(TypeFactory.createType(PrimitiveType.INT)));
+        Assertions.assertTrue(columns.get(1).getType().equals(TypeFactory.createUnifiedDecimalType(10, 2)));
+        Assertions.assertTrue(columns.get(2).getType().equals(TypeFactory.createCharType(10)));
+        Assertions.assertTrue(columns.get(3).getType().equals(TypeFactory.createVarcharType(10)));
+        Assertions.assertTrue(columns.get(4).getType().equals(TypeFactory.createType(PrimitiveType.SMALLINT)));
+        Assertions.assertTrue(columns.get(5).getType().equals(TypeFactory.createType(PrimitiveType.INT)));
+        Assertions.assertTrue(columns.get(6).getType().equals(TypeFactory.createType(PrimitiveType.BIGINT)));
+        Assertions.assertTrue(columns.get(7).getType().equals(TypeFactory.createType(PrimitiveType.LARGEINT)));
+        Assertions.assertTrue(columns.get(8).getType().equals(TypeFactory.createType(PrimitiveType.TINYINT)));
+        Assertions.assertTrue(columns.get(9).getType().equals(TypeFactory.createType(PrimitiveType.SMALLINT)));
+        Assertions.assertTrue(columns.get(10).getType().equals(TypeFactory.createType(PrimitiveType.INT)));
+        Assertions.assertTrue(columns.get(11).getType().equals(TypeFactory.createType(PrimitiveType.BIGINT)));
+        Assertions.assertTrue(columns.get(12).getType().equals(TypeFactory.createType(PrimitiveType.DATE)));
+        Assertions.assertTrue(columns.get(13).getType().equals(TypeFactory.createType(PrimitiveType.TIME)));
+        Assertions.assertTrue(columns.get(14).getType().equals(TypeFactory.createType(PrimitiveType.DATETIME)));
     }
 
     @Test

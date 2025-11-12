@@ -47,6 +47,7 @@ import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.thrift.TSlotDescriptor;
 import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import com.starrocks.type.TypeSerializer;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -165,14 +166,14 @@ public class SlotDescriptor {
         if (this.originType.isScalarType()) {
             ScalarType scalarType = (ScalarType) this.originType;
             if (this.originType.isDecimalV3()) {
-                this.type = ScalarType.createDecimalV3Type(
+                this.type = TypeFactory.createDecimalV3Type(
                         scalarType.getPrimitiveType(),
                         scalarType.getScalarPrecision(),
                         scalarType.getScalarScale());
             } else if (this.originType.isVarchar() && FeConstants.setLengthForVarchar) {
-                this.type = ScalarType.createVarcharType(scalarType.getLength());
+                this.type = TypeFactory.createVarcharType(scalarType.getLength());
             } else {
-                this.type = ScalarType.createType(this.originType.getPrimitiveType());
+                this.type = TypeFactory.createType(this.originType.getPrimitiveType());
             }
         } else {
             this.type = this.originType.clone();

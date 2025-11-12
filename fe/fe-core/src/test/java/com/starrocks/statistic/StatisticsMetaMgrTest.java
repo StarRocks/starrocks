@@ -30,7 +30,7 @@ import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.sql.common.EngineType;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.ScalarType;
+import com.starrocks.type.TypeFactory;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -55,11 +55,11 @@ public class StatisticsMetaMgrTest extends PlanTestBase  {
         CreateTableStmt stmt = new CreateTableStmt(false, false,
                 tableName,
                 ImmutableList.of(
-                        new ColumnDef("table_id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
-                        new ColumnDef("partition_id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
-                        new ColumnDef("column_name", new TypeDef(ScalarType.createVarcharType(65530))),
-                        new ColumnDef("db_id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
-                        new ColumnDef("table_name", new TypeDef(ScalarType.createVarcharType(65530)))),
+                        new ColumnDef("table_id", new TypeDef(TypeFactory.createType(PrimitiveType.BIGINT))),
+                        new ColumnDef("partition_id", new TypeDef(TypeFactory.createType(PrimitiveType.BIGINT))),
+                        new ColumnDef("column_name", new TypeDef(TypeFactory.createVarcharType(65530))),
+                        new ColumnDef("db_id", new TypeDef(TypeFactory.createType(PrimitiveType.BIGINT))),
+                        new ColumnDef("table_name", new TypeDef(TypeFactory.createVarcharType(65530)))),
                 EngineType.defaultEngine().name(),
                 new KeysDesc(KeysType.UNIQUE_KEYS, ImmutableList.of("table_id", "partition_id", "column_name")),
                 null,

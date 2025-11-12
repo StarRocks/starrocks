@@ -29,6 +29,7 @@ import com.starrocks.type.ScalarType;
 import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -323,7 +324,7 @@ public class TypeManager {
             ScalarType resultType = (ScalarType) compatibleType;
             // If result type is varchar with length, it may cause the case when result type is not compatible.
             if (isContainVarcharWithoutLength && resultType.getLength() > 0) {
-                return ScalarType.createVarcharType(ScalarType.getOlapMaxVarcharLength());
+                return TypeFactory.createVarcharType(TypeFactory.getOlapMaxVarcharLength());
             } else {
                 return compatibleType;
             }

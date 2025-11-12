@@ -32,8 +32,8 @@ import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.MapType;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -53,8 +53,8 @@ public class ExpressionAnalyzerTest extends PlanTestBase {
     public void testMapElementAnalyzer() {
         ExpressionAnalyzer.Visitor visitor = new ExpressionAnalyzer.Visitor(new AnalyzeState(), new ConnectContext());
         SlotRef slot = new SlotRef(null, "col", "col");
-        Type keyType = ScalarType.createType(PrimitiveType.INT);
-        Type valueType = ScalarType.createCharType(10);
+        Type keyType = TypeFactory.createType(PrimitiveType.INT);
+        Type valueType = TypeFactory.createCharType(10);
         Type mapType = new MapType(keyType, valueType);
         slot.setType(mapType);
 
@@ -83,8 +83,8 @@ public class ExpressionAnalyzerTest extends PlanTestBase {
                 () -> visitor.visitCollectionElementExpr(collectionElementExpr2,
                         new Scope(RelationId.anonymous(), new RelationFields())));
 
-        Type keyTypeChar = ScalarType.createCharType(10);
-        Type valueTypeInt = ScalarType.createType(PrimitiveType.INT);
+        Type keyTypeChar = TypeFactory.createCharType(10);
+        Type valueTypeInt = TypeFactory.createType(PrimitiveType.INT);
         mapType = new MapType(keyTypeChar, valueTypeInt);
         slot.setType(mapType);
         StringLiteral subString = new StringLiteral("aaa");
@@ -105,7 +105,7 @@ public class ExpressionAnalyzerTest extends PlanTestBase {
     public void testArraySubscriptAnalyzer() {
         ExpressionAnalyzer.Visitor visitor = new ExpressionAnalyzer.Visitor(new AnalyzeState(), new ConnectContext());
         SlotRef slot = new SlotRef(null, "col", "col");
-        Type elementType = ScalarType.createCharType(10);
+        Type elementType = TypeFactory.createCharType(10);
         Type arrayType = new ArrayType(elementType);
         slot.setType(arrayType);
 
@@ -140,7 +140,7 @@ public class ExpressionAnalyzerTest extends PlanTestBase {
     public void testNoSubscriptAnalyzer() {
         ExpressionAnalyzer.Visitor visitor = new ExpressionAnalyzer.Visitor(new AnalyzeState(), new ConnectContext());
         SlotRef slot = new SlotRef(null, "col", "col");
-        slot.setType(ScalarType.createType(PrimitiveType.INT));
+        slot.setType(TypeFactory.createType(PrimitiveType.INT));
 
         IntLiteral sub = new IntLiteral(10);
 
@@ -152,8 +152,8 @@ public class ExpressionAnalyzerTest extends PlanTestBase {
 
     @Test
     public void testMapFunctionsAnalyzer() {
-        Type keyType = ScalarType.createType(PrimitiveType.INT);
-        Type valueType = ScalarType.createCharType(10);
+        Type keyType = TypeFactory.createType(PrimitiveType.INT);
+        Type valueType = TypeFactory.createCharType(10);
         Type mapType = new MapType(keyType, valueType);
 
         String mapKeys = "map_keys";
@@ -201,8 +201,8 @@ public class ExpressionAnalyzerTest extends PlanTestBase {
 
     @Test
     public void testDateCoalesceAnalyzer() {
-        Type dateType = ScalarType.createType(PrimitiveType.DATE);
-        Type dateTimeType = ScalarType.createType(PrimitiveType.DATETIME);
+        Type dateType = TypeFactory.createType(PrimitiveType.DATE);
+        Type dateTimeType = TypeFactory.createType(PrimitiveType.DATETIME);
 
         {
             Type[] argumentTypes = {dateType, dateTimeType};

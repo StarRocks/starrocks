@@ -32,6 +32,7 @@ import com.starrocks.sql.automv.util.PrettyPrinter;
 import com.starrocks.sql.automv.util.TestUtil;
 import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import com.starrocks.utframe.StarRocksAssert;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -196,7 +197,7 @@ public class PlanPieceTest {
 
     @Test
     public void testTypePlus() {
-        Type type = ScalarType.createDecimalV3NarrowestType(21, 3);
+        Type type = TypeFactory.createDecimalV3NarrowestType(21, 3);
         TypePlus typePlus = TypePlus.of(type, -1, 21, 3);
         Assert.assertEquals(typePlus.getDecayedType(), ScalarType.DECIMAL128);
         Assert.assertEquals(typePlus.getLen(), -1);

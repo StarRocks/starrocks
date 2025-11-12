@@ -27,7 +27,7 @@ import com.starrocks.thrift.TGetUsersResponse;
 import com.starrocks.thrift.TGetUsersResponseItem;
 import com.starrocks.thrift.TSchemaTableType;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.ScalarType;
+import com.starrocks.type.TypeFactory;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -40,12 +40,12 @@ public class SysUsers {
     public static SystemTable create() {
         return new SystemTable(SystemId.USERS_ID, "users", Table.TableType.SCHEMA,
                 builder()
-                        .column("HOST", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("USER", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("PASSWORD_EXPIRED", ScalarType.createType(PrimitiveType.BOOLEAN))
-                        .column("PASSWORD_POLICY", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("PASSWORD_LAST_CHANGED", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("IS_LOCKED", ScalarType.createType(PrimitiveType.BOOLEAN))
+                        .column("HOST", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("USER", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("PASSWORD_EXPIRED", TypeFactory.createType(PrimitiveType.BOOLEAN))
+                        .column("PASSWORD_POLICY", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("PASSWORD_LAST_CHANGED", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("IS_LOCKED", TypeFactory.createType(PrimitiveType.BOOLEAN))
                         .build(),
                 TSchemaTableType.SYS_USERS);
     }

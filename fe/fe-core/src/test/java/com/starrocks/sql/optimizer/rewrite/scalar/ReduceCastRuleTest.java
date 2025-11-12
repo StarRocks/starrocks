@@ -23,8 +23,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -178,11 +178,11 @@ public class ReduceCastRuleTest {
     @Test
     public void testBinaryPredicateInvolvingDecimalSuccess() {
         Type[][] typeListList = new Type[][] {
-                {Type.TINYINT, Type.SMALLINT, ScalarType.createDecimalV3NarrowestType(16, 9)},
-                {Type.TINYINT, Type.SMALLINT, ScalarType.createDecimalV3NarrowestType(9, 0)},
-                {ScalarType.createDecimalV3NarrowestType(4, 0), Type.SMALLINT, Type.BIGINT},
-                {ScalarType.createDecimalV3NarrowestType(18, 0), Type.BIGINT, Type.LARGEINT},
-                {ScalarType.createDecimalV3NarrowestType(2, 0), Type.TINYINT, Type.INT},
+                {Type.TINYINT, Type.SMALLINT, TypeFactory.createDecimalV3NarrowestType(16, 9)},
+                {Type.TINYINT, Type.SMALLINT, TypeFactory.createDecimalV3NarrowestType(9, 0)},
+                {TypeFactory.createDecimalV3NarrowestType(4, 0), Type.SMALLINT, Type.BIGINT},
+                {TypeFactory.createDecimalV3NarrowestType(18, 0), Type.BIGINT, Type.LARGEINT},
+                {TypeFactory.createDecimalV3NarrowestType(2, 0), Type.TINYINT, Type.INT},
         };
 
         ScalarOperatorRewriteRule reduceCastRule = new ReduceCastRule();
@@ -202,8 +202,8 @@ public class ReduceCastRuleTest {
     @Test
     public void testBinaryPredicateInvolvingDecimalFail() {
         Type[][] typeListList = new Type[][] {
-                {Type.TINYINT, Type.SMALLINT, ScalarType.createDecimalV3NarrowestType(13, 9)},
-                {Type.INT, Type.SMALLINT, ScalarType.createDecimalV3NarrowestType(9, 0)},
+                {Type.TINYINT, Type.SMALLINT, TypeFactory.createDecimalV3NarrowestType(13, 9)},
+                {Type.INT, Type.SMALLINT, TypeFactory.createDecimalV3NarrowestType(9, 0)},
         };
 
         ScalarOperatorRewriteRule reduceCastRule = new ReduceCastRule();
@@ -220,9 +220,9 @@ public class ReduceCastRuleTest {
         }
 
         typeListList = new Type[][] {
-                {ScalarType.createDecimalV3NarrowestType(6, 0), Type.SMALLINT, Type.BIGINT},
-                {ScalarType.createDecimalV3NarrowestType(19, 0), Type.BIGINT, Type.LARGEINT},
-                {ScalarType.createDecimalV3NarrowestType(10, 0), Type.TINYINT, Type.INT},
+                {TypeFactory.createDecimalV3NarrowestType(6, 0), Type.SMALLINT, Type.BIGINT},
+                {TypeFactory.createDecimalV3NarrowestType(19, 0), Type.BIGINT, Type.LARGEINT},
+                {TypeFactory.createDecimalV3NarrowestType(10, 0), Type.TINYINT, Type.INT},
         };
 
         for (Type[] types : typeListList) {

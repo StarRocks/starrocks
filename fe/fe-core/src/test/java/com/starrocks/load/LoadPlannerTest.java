@@ -61,8 +61,8 @@ import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TPrimitiveType;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TUniqueId;
-import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Injectable;
@@ -247,7 +247,7 @@ public class LoadPlannerTest {
         List<Column> columns = Lists.newArrayList();
         columns.add(new Column("k1", Type.TINYINT, true, null, true, null, ""));
         columns.add(new Column("k2", Type.INT, true, null, false, null, ""));
-        columns.add(new Column("k3", ScalarType.createVarchar(50), true, null, true, null, ""));
+        columns.add(new Column("k3", TypeFactory.createVarchar(50), true, null, true, null, ""));
         columns.add(new Column("v", Type.BIGINT, false, AggregateType.SUM, false, null, ""));
 
         Function f1 = new Function(new FunctionName(FunctionSet.SUBSTR), new Type[] {Type.VARCHAR, Type.INT, Type.INT},
@@ -381,7 +381,7 @@ public class LoadPlannerTest {
         List<Column> columns = Lists.newArrayList();
         columns.add(new Column("k1", Type.TINYINT, true, null, true, null, ""));
         columns.add(new Column("k2", Type.INT, true, null, false, null, ""));
-        columns.add(new Column("k3", ScalarType.createVarchar(50), true, null, true, null, ""));
+        columns.add(new Column("k3", TypeFactory.createVarchar(50), true, null, true, null, ""));
         columns.add(new Column("v", Type.BIGINT, false, AggregateType.SUM, false, null, ""));
 
         Function f1 = new Function(new FunctionName(FunctionSet.SUBSTR), new Type[] {Type.VARCHAR, Type.INT, Type.INT},
@@ -539,7 +539,7 @@ public class LoadPlannerTest {
         List<Column> columns = Lists.newArrayList();
         columns.add(new Column("pk", Type.BIGINT, true, null, false, null, ""));
         columns.add(new Column("v1", Type.INT, false, null, false, null, ""));
-        columns.add(new Column("v2", ScalarType.createVarchar(50), false, null, true, null, ""));
+        columns.add(new Column("v2", TypeFactory.createVarchar(50), false, null, true, null, ""));
 
         new Expectations() {
             {
@@ -628,7 +628,7 @@ public class LoadPlannerTest {
         List<Column> columns = Lists.newArrayList();
         columns.add(new Column("pk", Type.BIGINT, true, null, false, null, ""));
         columns.add(new Column("v1", Type.INT, false, null, false, null, ""));
-        columns.add(new Column("v2", ScalarType.createVarchar(50), false, null, true, null, ""));
+        columns.add(new Column("v2", TypeFactory.createVarchar(50), false, null, true, null, ""));
 
         new Expectations() {
             {
@@ -719,7 +719,7 @@ public class LoadPlannerTest {
         List<Column> columns = Lists.newArrayList();
         columns.add(new Column("pk", Type.BIGINT, true, null, false, null, ""));
         columns.add(new Column("v1", Type.INT, false, null, false, null, ""));
-        columns.add(new Column("v2", ScalarType.createVarchar(50), false, null, true, null, ""));
+        columns.add(new Column("v2", TypeFactory.createVarchar(50), false, null, true, null, ""));
 
         Function f1 = new Function(new FunctionName("casttobigint"), new Type[] {Type.VARCHAR},
                 Type.BIGINT, true);
@@ -830,7 +830,7 @@ public class LoadPlannerTest {
                 new ColumnDef.DefaultValueDef(true, new StringLiteral("123")), ""));
         columns.add(new Column("v1", Type.INT, false, null, false,
                 new ColumnDef.DefaultValueDef(true, new StringLiteral("231")), ""));
-        columns.add(new Column("v2", ScalarType.createVarchar(50), false, null, true,
+        columns.add(new Column("v2", TypeFactory.createVarchar(50), false, null, true,
                 new ColumnDef.DefaultValueDef(true, new StringLiteral("asdf")), ""));
 
         Function f1 = new Function(new FunctionName("casttobigint"), new Type[] {Type.VARCHAR},
@@ -925,7 +925,7 @@ public class LoadPlannerTest {
         List<Column> columns = Lists.newArrayList();
         columns.add(new Column("k1", Type.TINYINT, true, null, true, null, ""));
         columns.add(new Column("k2", Type.INT, true, null, false, null, ""));
-        columns.add(new Column("k3", ScalarType.createVarchar(50), true, null, true, null, ""));
+        columns.add(new Column("k3", TypeFactory.createVarchar(50), true, null, true, null, ""));
         columns.add(new Column("v", Type.BIGINT, false, AggregateType.SUM, false, null, ""));
 
         List<Column> keyColumns = Lists.newArrayList();
@@ -1039,7 +1039,7 @@ public class LoadPlannerTest {
         List<Column> columns = Lists.newArrayList();
         columns.add(new Column("k1", Type.TINYINT, true, null, true, null, ""));
         columns.add(new Column("k2", Type.INT, true, null, false, null, ""));
-        columns.add(new Column("k3", ScalarType.createVarchar(50), true, null, true, null, ""));
+        columns.add(new Column("k3", TypeFactory.createVarchar(50), true, null, true, null, ""));
         columns.add(new Column("v", Type.BIGINT, false, AggregateType.REPLACE, false, null, ""));
 
         List<Column> keyColumns = Lists.newArrayList();

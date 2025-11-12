@@ -7,7 +7,7 @@ import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.type.ScalarType;
+import com.starrocks.type.TypeFactory;
 
 public class ShowRoleMappingStatement extends ShowStmt {
     private static final ShowResultSetMetaData META_DATA;
@@ -15,11 +15,11 @@ public class ShowRoleMappingStatement extends ShowStmt {
     static {
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
 
-        builder.addColumn(new Column("Name", ScalarType.createVarchar(50)));
-        builder.addColumn(new Column("IntegrationName", ScalarType.createVarchar(50)));
-        builder.addColumn(new Column("Role", ScalarType.createVarchar(50)));
-        builder.addColumn(new Column("LdapGroupList", ScalarType.createVarchar(300)));
-        builder.addColumn(new Column("LastRefreshCompleteTime", ScalarType.createVarchar(50)));
+        builder.addColumn(new Column("Name", TypeFactory.createVarchar(50)));
+        builder.addColumn(new Column("IntegrationName", TypeFactory.createVarchar(50)));
+        builder.addColumn(new Column("Role", TypeFactory.createVarchar(50)));
+        builder.addColumn(new Column("LdapGroupList", TypeFactory.createVarchar(300)));
+        builder.addColumn(new Column("LastRefreshCompleteTime", TypeFactory.createVarchar(50)));
 
 
         META_DATA = builder.build();

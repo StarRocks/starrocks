@@ -18,7 +18,7 @@ import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.thrift.TSchemaTableType;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.ScalarType;
+import com.starrocks.type.TypeFactory;
 
 import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
 import static com.starrocks.catalog.system.SystemTable.builder;
@@ -31,32 +31,32 @@ public class FeTabletSchedulesSystemTable {
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("TABLET_ID", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("TABLE_ID", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("PARTITION_ID", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("TYPE", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("STATE", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("SCHEDULE_REASON", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("MEDIUM", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("PRIORITY", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("ORIG_PRIORITY", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("LAST_PRIORITY_ADJUST_TIME", ScalarType.createType(PrimitiveType.DATETIME))
-                        .column("VISIBLE_VERSION", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("COMMITTED_VERSION", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("SRC_BE_ID", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("SRC_PATH", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("DEST_BE_ID", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("DEST_PATH", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("TIMEOUT", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("CREATE_TIME", ScalarType.createType(PrimitiveType.DATETIME))
-                        .column("SCHEDULE_TIME", ScalarType.createType(PrimitiveType.DATETIME))
-                        .column("FINISH_TIME", ScalarType.createType(PrimitiveType.DATETIME))
-                        .column("CLONE_BYTES", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("CLONE_DURATION", ScalarType.createType(PrimitiveType.DOUBLE))
-                        .column("CLONE_RATE", ScalarType.createType(PrimitiveType.DOUBLE))
-                        .column("FAILED_SCHEDULE_COUNT", ScalarType.createType(PrimitiveType.INT))
-                        .column("FAILED_RUNNING_COUNT", ScalarType.createType(PrimitiveType.INT))
-                        .column("MSG", ScalarType.createVarchar(NAME_CHAR_LEN))
+                        .column("TABLET_ID", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("TABLE_ID", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("PARTITION_ID", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("TYPE", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("STATE", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("SCHEDULE_REASON", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("MEDIUM", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("PRIORITY", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("ORIG_PRIORITY", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("LAST_PRIORITY_ADJUST_TIME", TypeFactory.createType(PrimitiveType.DATETIME))
+                        .column("VISIBLE_VERSION", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("COMMITTED_VERSION", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("SRC_BE_ID", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("SRC_PATH", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("DEST_BE_ID", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("DEST_PATH", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("TIMEOUT", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("CREATE_TIME", TypeFactory.createType(PrimitiveType.DATETIME))
+                        .column("SCHEDULE_TIME", TypeFactory.createType(PrimitiveType.DATETIME))
+                        .column("FINISH_TIME", TypeFactory.createType(PrimitiveType.DATETIME))
+                        .column("CLONE_BYTES", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("CLONE_DURATION", TypeFactory.createType(PrimitiveType.DOUBLE))
+                        .column("CLONE_RATE", TypeFactory.createType(PrimitiveType.DOUBLE))
+                        .column("FAILED_SCHEDULE_COUNT", TypeFactory.createType(PrimitiveType.INT))
+                        .column("FAILED_RUNNING_COUNT", TypeFactory.createType(PrimitiveType.INT))
+                        .column("MSG", TypeFactory.createVarchar(NAME_CHAR_LEN))
                         .build(), TSchemaTableType.SCH_FE_TABLET_SCHEDULES);
     }
 }

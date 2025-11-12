@@ -32,7 +32,7 @@ import com.starrocks.thrift.TGetPolicyReferenceItem;
 import com.starrocks.thrift.TGetPolicyReferenceResponse;
 import com.starrocks.thrift.TGetPolicyReferencesRequest;
 import com.starrocks.thrift.TSchemaTableType;
-import com.starrocks.type.ScalarType;
+import com.starrocks.type.TypeFactory;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -49,14 +49,14 @@ public class PolicyReferences {
     public static SystemTable createPolicyReferences() {
         return new SystemTable(SystemIdEPack.POLICY_REFERENCES_ID, "policy_references", Table.TableType.SCHEMA,
                 builder()
-                        .column("POLICY_DATABASE", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("POLICY_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("POLICY_TYPE", ScalarType.createVarchar(NAME_CHAR_LEN))
+                        .column("POLICY_DATABASE", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("POLICY_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("POLICY_TYPE", TypeFactory.createVarchar(NAME_CHAR_LEN))
 
-                        .column("REF_CATALOG", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("REF_DATABASE", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("REF_OBJECT_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("REF_COLUMN", ScalarType.createVarchar(NAME_CHAR_LEN))
+                        .column("REF_CATALOG", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("REF_DATABASE", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("REF_OBJECT_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("REF_COLUMN", TypeFactory.createVarchar(NAME_CHAR_LEN))
                         .build(),
                 TSchemaTableType.STARROCKS_POLICY_REFERENCES);
     }

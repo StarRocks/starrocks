@@ -18,15 +18,15 @@ import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.type.ScalarType;
+import com.starrocks.type.TypeFactory;
 
 public class ShowPasswordPolicyStmt extends ShowStmt {
     private static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
-                    .addColumn(new Column("Policy", ScalarType.createVarchar(60)))
-                    .addColumn(new Column("Comment", ScalarType.createVarchar(60)))
-                    .addColumn(new Column("Properties", ScalarType.createVarchar(200)))
-                    .addColumn(new Column("IS_SYSTEM_DEFAULT_POLICY", ScalarType.createVarchar(60)))
+                    .addColumn(new Column("Policy", TypeFactory.createVarchar(60)))
+                    .addColumn(new Column("Comment", TypeFactory.createVarchar(60)))
+                    .addColumn(new Column("Properties", TypeFactory.createVarchar(200)))
+                    .addColumn(new Column("IS_SYSTEM_DEFAULT_POLICY", TypeFactory.createVarchar(60)))
                     .build();
 
     public ShowPasswordPolicyStmt(NodePosition pos) {

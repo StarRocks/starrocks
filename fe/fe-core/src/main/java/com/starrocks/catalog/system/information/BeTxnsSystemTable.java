@@ -18,7 +18,7 @@ import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.thrift.TSchemaTableType;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.ScalarType;
+import com.starrocks.type.TypeFactory;
 
 import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
 import static com.starrocks.catalog.system.SystemTable.builder;
@@ -31,20 +31,20 @@ public class BeTxnsSystemTable {
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("BE_ID", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("LOAD_ID", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("TXN_ID", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("PARTITION_ID", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("TABLET_ID", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("CREATE_TIME", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("COMMIT_TIME", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("PUBLISH_TIME", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("ROWSET_ID", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("NUM_SEGMENT", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("NUM_DELFILE", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("NUM_ROW", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("DATA_SIZE", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("VERSION", ScalarType.createType(PrimitiveType.BIGINT))
+                        .column("BE_ID", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("LOAD_ID", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("TXN_ID", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("PARTITION_ID", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("TABLET_ID", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("CREATE_TIME", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("COMMIT_TIME", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("PUBLISH_TIME", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("ROWSET_ID", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("NUM_SEGMENT", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("NUM_DELFILE", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("NUM_ROW", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("DATA_SIZE", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("VERSION", TypeFactory.createType(PrimitiveType.BIGINT))
                         .build(), TSchemaTableType.SCH_BE_TXNS);
     }
 }

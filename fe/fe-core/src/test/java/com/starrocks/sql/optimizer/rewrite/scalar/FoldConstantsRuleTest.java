@@ -30,8 +30,8 @@ import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import mockit.Expectations;
 import org.junit.jupiter.api.Test;
 
@@ -148,9 +148,9 @@ public class FoldConstantsRuleTest {
         CastOperator cast6 = new CastOperator(Type.BIGINT, ConstantOperator.createDate(LocalDateTime.of(2020, 2, 12, 0, 0, 0)));
         assertEquals(ConstantOperator.createBigint(20200212), rule.apply(cast6, null));
 
-        CastOperator cast7 = new CastOperator(ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 1, 1),
+        CastOperator cast7 = new CastOperator(TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 1, 1),
                 ConstantOperator.createDecimal(BigDecimal.valueOf(0.00008),
-                ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 6, 6))
+                TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 6, 6))
         );
         assertEquals("0.0", rule.apply(cast7, null).toString());
 
