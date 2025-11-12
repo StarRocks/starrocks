@@ -238,20 +238,22 @@ TEST_F(LocalTabletsChannelTest, test_profile) {
             << add_chunk_response.status().error_msgs(0);
     ASSERT_TRUE(close_channel);
 
-    _tablets_channel->update_profile();
-    auto* profile = _root_profile->get_child(fmt::format("Index (id={})", _index_id));
-    ASSERT_NE(nullptr, profile);
-    ASSERT_EQ(1, profile->get_counter("OpenRpcCount")->value());
-    ASSERT_TRUE(profile->get_counter("OpenRpcTime")->value() > 0);
-    ASSERT_EQ(1, profile->get_counter("AddChunkRpcCount")->value());
-    ASSERT_TRUE(profile->get_counter("AddChunkRpcTime")->value() > 0);
-    ASSERT_TRUE(profile->get_counter("SubmitWriteTaskTime")->value() > 0);
-    ASSERT_TRUE(profile->get_counter("SubmitCommitTaskTime")->value() > 0);
-    ASSERT_EQ(0, profile->get_counter("WaitDrainSenderTime")->value());
-    ASSERT_EQ(chunk.num_rows(), profile->get_counter("AddRowNum")->value());
-    auto* primary_replicas_profile = profile->get_child("PrimaryReplicas");
-    ASSERT_NE(nullptr, primary_replicas_profile);
-    ASSERT_EQ(1, primary_replicas_profile->get_counter("TabletsNum")->value());
+    // profile should be same if there is no new data no matter how many times we update the profile
+    for (int i = 0; i < 3; i++) {
+        _tablets_channel->update_profile();
+        auto* profile = _root_profile->get_child(fmt::format("Index (id={})", _index_id));
+        ASSERT_NE(nullptr, profile);
+        ASSERT_EQ(1, profile->get_counter("OpenRpcCount")->value());
+        ASSERT_EQ(1, profile->get_counter("AddChunkRpcCount")->value());
+        ASSERT_EQ(chunk.num_rows(), profile->get_counter("AddRowNum")->value());
+        auto* primary_replicas_profile = profile->get_child("PrimaryReplicas");
+        ASSERT_NE(nullptr, primary_replicas_profile);
+        ASSERT_EQ(1, primary_replicas_profile->get_counter("TabletsNum")->value());
+        ASSERT_EQ(2, primary_replicas_profile->get_counter("WriterTaskCount")->value());
+        ASSERT_EQ(chunk.num_rows(), primary_replicas_profile->get_counter("RowCount")->value());
+        ASSERT_EQ(1, primary_replicas_profile->get_counter("MemtableInsertCount")->value());
+        ASSERT_EQ(1, primary_replicas_profile->get_counter("MemtableFlushedCount")->value());
+    }
 }
 
 TEST_F(LocalTabletsChannelTest, test_add_chunk_not_exist_tablet) {
