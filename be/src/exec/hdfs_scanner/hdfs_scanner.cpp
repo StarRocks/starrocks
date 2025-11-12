@@ -505,7 +505,6 @@ void HdfsScanner::update_counter() {
     DataCacheHitRateCounter::instance()->update_page_cache_stat(_app_stats.page_cache_read_counter,
                                                                 _app_stats.page_read_counter);
 
-    LOG(ERROR) << "LXH: UPDATE CONUTER: " << _app_stats.page_cache_read_counter << ":" << _app_stats.page_read_counter;
     if (_scanner_params.datacache_options.enable_datacache && _cache_input_stream) {
         const io::CacheInputStream::Stats& stats = _cache_input_stream->stats();
         COUNTER_UPDATE(profile->datacache_read_counter, stats.read_block_cache_count);
@@ -538,7 +537,6 @@ void HdfsScanner::update_counter() {
             _runtime_state->update_num_datacache_write_time_ns(stats.write_block_cache_ns);
             _runtime_state->update_num_datacache_count(1);
         } else {
-            LOG(ERROR) << "LXH: HIT REATE UPDATE: " << stats.read_block_cache_bytes << ":" << _fs_stats.bytes_read;
             // For none cache select sql, we will update DataCache app hit rate
             DataCacheHitRateCounter::instance()->update_block_cache_stat(stats.read_block_cache_bytes,
                                                                          _fs_stats.bytes_read);
