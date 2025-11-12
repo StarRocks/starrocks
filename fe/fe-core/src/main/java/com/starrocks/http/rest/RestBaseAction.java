@@ -58,11 +58,8 @@ import com.starrocks.http.rest.v2.RestBaseResultV2;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectScheduler;
 import com.starrocks.server.GlobalStateMgr;
-<<<<<<< HEAD
-import com.starrocks.sql.ast.UserIdentity;
-=======
 import com.starrocks.service.ExecuteEnv;
->>>>>>> a1c98e031f ([BugFix] Fix HTTP context leak on TCP reuse (#65203))
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.system.Frontend;
 import com.starrocks.thrift.TNetworkAddress;
 import io.netty.handler.codec.http.HttpHeaderNames;
@@ -143,7 +140,7 @@ public class RestBaseAction extends BaseAction {
                 List<String> activatedRoles = authorizationMgr.getRoleNamesByRoleIds(context.getCurrentRoleIds());
                 List<String> inactivatedRoles =
                         authorizationMgr.getInactivatedRoleNamesByUser(userIdentity, activatedRoles);
-                return "Access denied for user " + userIdentity  + ". " +
+                return "Access denied for user " + userIdentity + ". " +
                         String.format(ErrorCode.ERR_ACCESS_DENIED_HINT_MSG_FORMAT, activatedRoles, inactivatedRoles);
             }
             return "Access denied.";
