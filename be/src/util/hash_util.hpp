@@ -50,9 +50,7 @@
 #include "gen_cpp/Types_types.h"
 #include "storage/decimal12.h"
 #include "storage/uint24.h"
-#include "util/cpu_info.h"
 #include "util/int96.h"
-#include "util/murmur_hash3.h"
 
 namespace starrocks {
 
@@ -62,73 +60,21 @@ public:
     static uint32_t zlib_crc_hash(const void* data, int32_t bytes, uint32_t hash) {
         return crc32(hash, (const unsigned char*)data, bytes);
     }
-#ifdef __SSE4_2__
-    // Compute the Crc32 hash for data using SSE4 instructions.  The input hash parameter is
-    // the current hash/seed value.
-    // This should only be called if SSE is supported.
-    // This is ~4x faster than Fnv/Boost Hash.
+
+    // Compute the Crc32 hash for data. Uses SSE4 instructions when available, otherwise falls back to zlib.
+    // The input hash parameter is the current hash/seed value.
+    // This is ~4x faster than Fnv/Boost Hash when SSE4.2 is available.
     // NOTE: DO NOT use this method for checksum! This does not generate the standard CRC32 checksum!
     //       For checksum, use CRC-32C algorithm from crc32c.h
     // NOTE: Any changes made to this function need to be reflected in Codegen::GetHashFn.
     // TODO: crc32 hashes with different seeds do not result in different hash functions.
     // The resulting hashes are correlated.
-    static uint32_t crc_hash(const void* data, int32_t bytes, uint32_t hash) {
-        if (!CpuInfo::is_supported(CpuInfo::SSE4_2)) {
-            return zlib_crc_hash(data, bytes, hash);
-        }
-        uint32_t words = bytes / sizeof(uint32_t);
-        bytes = bytes % sizeof(uint32_t);
+    // Public interface - uses function pointer initialized at program startup
+    static uint32_t crc_hash(const void* data, int32_t bytes, uint32_t hash);
 
-        const uint32_t* p = reinterpret_cast<const uint32_t*>(data);
-
-        while (words--) {
-            hash = _mm_crc32_u32(hash, *p);
-            ++p;
-        }
-
-        const uint8_t* s = reinterpret_cast<const uint8_t*>(p);
-
-        while (bytes--) {
-            hash = _mm_crc32_u8(hash, *s);
-            ++s;
-        }
-
-        // The lower half of the CRC hash has has poor uniformity, so swap the halves
-        // for anyone who only uses the first several bits of the hash.
-        hash = (hash << 16) | (hash >> 16);
-        return hash;
-    }
-
-    static uint64_t crc_hash64(const void* data, int32_t bytes, uint64_t hash) {
-        uint32_t words = bytes / sizeof(uint32_t);
-        bytes = bytes % sizeof(uint32_t);
-
-        uint32_t h1 = hash >> 32;
-        uint32_t h2 = (hash << 32) >> 32;
-
-        const uint32_t* p = reinterpret_cast<const uint32_t*>(data);
-        while (words--) {
-            (words & 1) ? (h1 = _mm_crc32_u32(h1, *p)) : (h2 = _mm_crc32_u32(h2, *p));
-            ++p;
-        }
-
-        const uint8_t* s = reinterpret_cast<const uint8_t*>(p);
-        while (bytes--) {
-            (bytes & 1) ? (h1 = _mm_crc32_u8(h1, *s)) : (h2 = _mm_crc32_u8(h2, *s));
-            ++s;
-        }
-
-        h1 = (h1 << 16) | (h1 >> 16);
-        h2 = (h2 << 16) | (h2 >> 16);
-        ((uint32_t*)(&hash))[0] = h1;
-        ((uint32_t*)(&hash))[1] = h2;
-        return hash;
-    }
-#else
-    static uint32_t crc_hash(const void* data, int32_t bytes, uint32_t hash) {
-        return zlib_crc_hash(data, bytes, hash);
-    }
-#endif
+    // Public interface for 64-bit hash - uses function pointer initialized at program startup
+    // Uses SSE4 instructions when available, otherwise falls back to zlib-based implementation
+    static uint64_t crc_hash64(const void* data, int32_t bytes, uint64_t hash);
 
     // refer to https://github.com/apache/commons-codec/blob/master/src/main/java/org/apache/commons/codec/digest/MurmurHash3.java
     static const uint32_t MURMUR3_32_SEED = 104729;
@@ -274,36 +220,11 @@ public:
     // depending on hardware capabilities.
     // Seed values for different steps of the query execution should use different seeds
     // to prevent accidental key collisions. (See IMPALA-219 for more details).
-    static uint32_t hash(const void* data, int32_t bytes, uint32_t seed) {
-#ifdef __SSE4_2__
+    // Uses function pointers initialized at program startup to avoid runtime CPU checks.
+    static uint32_t hash(const void* data, int32_t bytes, uint32_t seed);
 
-        if (LIKELY(CpuInfo::is_supported(CpuInfo::SSE4_2))) {
-            return crc_hash(data, bytes, seed);
-        } else {
-            return fnv_hash(data, bytes, seed);
-        }
-
-#else
-        return fnv_hash(data, bytes, seed);
-#endif
-    }
-
-    static uint64_t hash64(const void* data, int32_t bytes, uint64_t seed) {
-#ifdef _SSE4_2_
-        if (LIKELY(CpuInfo::is_supported(CpuInfo::SSE4_2))) {
-            return crc_hash64(data, bytes, seed);
-
-        } else {
-            uint64_t hash = 0;
-            murmur_hash3_x64_64(data, bytes, seed, &hash);
-            return hash;
-        }
-#else
-        uint64_t hash = 0;
-        murmur_hash3_x64_64(data, bytes, seed, &hash);
-        return hash;
-#endif
-    }
+    // Uses function pointers initialized at program startup to avoid runtime CPU checks.
+    static uint64_t hash64(const void* data, int32_t bytes, uint64_t seed);
 
     template <typename T>
     static inline void hash_combine(std::size_t& seed, const T& v) {
@@ -329,6 +250,9 @@ public:
         x ^= x << 5;
         return x;
     }
+
+    // Static helper function for hash64 fallback (non-SSE4.2 case)
+    static uint64_t hash64_fallback(const void* data, int32_t bytes, uint64_t seed);
 };
 
 struct ModuloOp {
