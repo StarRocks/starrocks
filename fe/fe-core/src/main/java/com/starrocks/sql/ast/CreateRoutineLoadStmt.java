@@ -487,6 +487,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         ColumnSeparator columnSeparator = null;
         RowDelimiter rowDelimiter = null;
         ImportColumnsStmt importColumnsStmt = null;
+        ImportWhereStmt precedingFilterStmt = null;
         ImportWhereStmt importWhereStmt = null;
         PartitionNames partitionNames = null;
         for (ParseNode parseNode : loadPropertyList) {
@@ -510,12 +511,23 @@ public class CreateRoutineLoadStmt extends DdlStmt {
                 importColumnsStmt = (ImportColumnsStmt) parseNode;
             } else if (parseNode instanceof ImportWhereStmt) {
                 // check where expr
-                if (importWhereStmt != null) {
-                    throw new AnalysisException("repeat setting of where predicate");
-                }
-                importWhereStmt = (ImportWhereStmt) parseNode;
-                if (importWhereStmt.isContainSubquery()) {
-                    throw new AnalysisException("the predicate cannot contain subqueries");
+                ImportWhereStmt node = (ImportWhereStmt) parseNode;
+                if (node.isPrecedingFilter()) {
+                    if (precedingFilterStmt != null) {
+                        throw new AnalysisException("repeat setting of preceding where predicate");
+                    }
+                    precedingFilterStmt = node;
+                    if (precedingFilterStmt.isContainSubquery()) {
+                        throw new AnalysisException("the preceding filter cannot contain subqueries");
+                    }
+                } else {
+                    if (importWhereStmt != null) {
+                        throw new AnalysisException("repeat setting of where predicate");
+                    }
+                    importWhereStmt = node;
+                    if (importWhereStmt.isContainSubquery()) {
+                        throw new AnalysisException("the predicate cannot contain subqueries");
+                    }
                 }
             } else if (parseNode instanceof PartitionNames) {
                 // check partition names
@@ -527,7 +539,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
             }
         }
         return new RoutineLoadDesc(columnSeparator, rowDelimiter, importColumnsStmt, importWhereStmt,
-                partitionNames);
+                precedingFilterStmt, partitionNames);
     }
 
     public void checkJobProperties() throws StarRocksException {

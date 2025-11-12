@@ -36,6 +36,7 @@ package com.starrocks.planner;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.MoreObjects;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.ColumnAccessPath;
 import com.starrocks.common.StarRocksException;
@@ -78,6 +79,8 @@ public abstract class ScanNode extends PlanNode {
     protected ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
 
     private Map<SlotId, Expr> heavyExprs = Maps.newHashMap();
+
+    protected List<Expr> precedingFilterConjuncts = Lists.newArrayList();
 
     public ScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc.getId().asList(), planNodeName);
@@ -146,6 +149,13 @@ public abstract class ScanNode extends PlanNode {
     }
 
     public void setReachLimit() {
+    }
+
+    public void addPreFilterConjuncts(List<Expr> conjuncts) {
+        if (conjuncts == null) {
+            return;
+        }
+        this.precedingFilterConjuncts.addAll(conjuncts);
     }
 
     /**

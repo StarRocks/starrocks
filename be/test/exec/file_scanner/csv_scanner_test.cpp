@@ -96,7 +96,8 @@ protected:
                                                    const std::string& multi_row_delimiter = "\n",
                                                    const std::string& multi_column_separator = "|",
                                                    const int64_t skip_header = 0, const bool trim_space = false,
-                                                   const char enclose = 0, const char escape = 0) {
+                                                   const char enclose = 0, const char escape = 0,
+                                                   const std::vector<TExpr>& preceding_filter_exprs = {}) {
         /// TBrokerScanRangeParams
         TBrokerScanRangeParams* params = _obj_pool.add(new TBrokerScanRangeParams());
         params->__set_multi_row_delimiter(multi_row_delimiter);
@@ -105,6 +106,9 @@ protected:
         params->__set_trim_space(trim_space);
         params->__set_enclose(enclose);
         params->__set_escape(escape);
+        if (!preceding_filter_exprs.empty()) {
+            params->__set_preceding_filter_exprs(std::move(preceding_filter_exprs));
+        }
 
         return create_csv_scanner(types, ranges, params);
     }
@@ -117,6 +121,85 @@ private:
 };
 
 class CSVScannerTrimSpaceTest : public CSVScannerTest {};
+
+// Tests for preceding filters: simulate filtering rows based on a condition
+// e.g., filter WHERE col0 > 1
+TEST_P(CSVScannerTest, test_preceding_filter) {
+    // Define input schema: INT, VARCHAR
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TYPE_INT);
+    types.emplace_back(TYPE_VARCHAR);
+    types[1].len = 10;
+
+    // Set up file range
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.__set_path("./be/test/exec/test_data/csv_scanner/csv_file24"); // Assume this file exists
+    range.__set_start_offset(0);
+    range.__set_num_of_columns_from_file(types.size());
+    ranges.push_back(range);
+
+    // Create dummy preceding filter expression list (we assume it’s passed from planner)
+    // In real case, this would be built from TExpr trees representing "col0 > 1"
+    std::vector<TExpr> preceding_filter_exprs;
+
+    // Build minimal TExpr structure for filter (just placeholder shape — actual eval happens elsewhere)
+    TExprNode predicate;
+    predicate.__set_type(gen_type_desc(TPrimitiveType::INT));
+    predicate.__set_num_children(2);
+    predicate.__set_node_type(TExprNodeType::BINARY_PRED);
+    predicate.__set_child_type(TPrimitiveType::INT);
+    predicate.__set_opcode(TExprOpcode::GT);
+
+    // Slot ref for first column (col0)
+    TSlotRef t_slot_ref;
+    t_slot_ref.__set_slot_id(0);
+    TExprNode slot_ref;
+    slot_ref.__set_node_type(TExprNodeType::SLOT_REF);
+    slot_ref.__set_type(gen_type_desc(TPrimitiveType::INT));
+    slot_ref.__set_slot_ref(t_slot_ref);
+    slot_ref.__set_num_children(0);
+
+    // Constant for value '1'
+    TIntLiteral int_literal;
+    int_literal.__set_value(1);
+    TExprNode constant;
+    constant.__set_node_type(TExprNodeType::INT_LITERAL);
+    constant.__set_type(gen_type_desc(TPrimitiveType::INT));
+    constant.__set_int_literal(int_literal);
+    constant.__set_num_children(0);
+
+    // Build expr tree: col0 > 1
+    TExpr filter_expr;
+    filter_expr.__set_nodes({predicate, slot_ref, constant});
+
+    preceding_filter_exprs.push_back(filter_expr);
+
+    // Create scanner with preceding filter
+    auto scanner = create_csv_scanner(types, ranges, "\n", "|", 0, false, 0, 0, preceding_filter_exprs);
+    ASSERT_NE(scanner, nullptr);
+
+    Status status = scanner->open();
+    ASSERT_TRUE(status.ok()) << status.to_string();
+
+    scanner->use_v2(_use_v2);
+
+    // Read result chunk(s)
+    ASSIGN_OR_ABORT(auto chunk, scanner->get_next());
+
+    // Expected data in csv_file24:
+    // 1|apple       --> filtered out (1 > 1 → false)
+    // 2|banana      --> kept
+    // 3|cherry      --> kept
+    // -1|null_val   --> filtered out (-1 > 1 → false)
+
+    ASSERT_EQ(chunk->num_rows(), 2);
+    EXPECT_EQ(2, chunk->get(0)[0].get_int32()); // second row
+    EXPECT_EQ(Slice("banana"), chunk->get(0)[1].get_slice());
+
+    EXPECT_EQ(3, chunk->get(1)[0].get_int32()); // third row
+    EXPECT_EQ(Slice("cherry"), chunk->get(1)[1].get_slice());
+}
 
 TEST_P(CSVScannerTest, test_scalar_types) {
     std::vector<TypeDescriptor> types;

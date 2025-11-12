@@ -53,6 +53,7 @@ public class RoutineLoadDesc {
     private RowDelimiter rowDelimiter;
     private ImportColumnsStmt columnsInfo;
     private ImportWhereStmt wherePredicate;
+    private ImportWhereStmt precedingFilter;
     // nullable
     private PartitionNames partitionNames;
 
@@ -60,11 +61,12 @@ public class RoutineLoadDesc {
     }
 
     public RoutineLoadDesc(ColumnSeparator columnSeparator, RowDelimiter rowDelimiter, ImportColumnsStmt columnsInfo,
-                           ImportWhereStmt wherePredicate, PartitionNames partitionNames) {
+                           ImportWhereStmt wherePredicate, ImportWhereStmt precedingFilter, PartitionNames partitionNames) {
         this.columnSeparator = columnSeparator;
         this.rowDelimiter = rowDelimiter;
         this.columnsInfo = columnsInfo;
         this.wherePredicate = wherePredicate;
+        this.precedingFilter = precedingFilter;
         this.partitionNames = partitionNames;
     }
 
@@ -98,6 +100,14 @@ public class RoutineLoadDesc {
 
     public void setWherePredicate(ImportWhereStmt wherePredicate) {
         this.wherePredicate = wherePredicate;
+    }
+
+    public ImportWhereStmt getPrecedingFilter() {
+        return precedingFilter;
+    }
+
+    public void setPrecedingFilter(ImportWhereStmt precedingFilter) {
+        this.precedingFilter = precedingFilter;
     }
 
     // nullable

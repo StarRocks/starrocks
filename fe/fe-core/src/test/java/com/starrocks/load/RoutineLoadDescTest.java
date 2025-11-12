@@ -17,8 +17,16 @@ package com.starrocks.load;
 
 import com.starrocks.persist.OriginStatementInfo;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
+import com.starrocks.sql.ast.ImportWhereStmt;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.SlotRef;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+
+import java.util.List;
 
 public class RoutineLoadDescTest {
     @Test
@@ -60,5 +68,34 @@ public class RoutineLoadDescTest {
                         "TEMPORARY PARTITION(`p1`, `p2`), " +
                         "WHERE `a` = 1",
                 desc.toSql());
+    }
+
+    @Test
+    public void testPrecedingFilter() {
+        String sql = "CREATE ROUTINE LOAD job ON tbl " +
+                "COLUMNS TERMINATED BY ';', " +
+                "ROWS TERMINATED BY '\n', " +
+                "COLUMNS(`a`, `b`, `c`=1), " +
+                "TEMPORARY PARTITION(`p1`, `p2`), " +
+                "PRECEDING FILTER a = 1 " +
+                "PROPERTIES (\"desired_concurrent_number\"=\"3\") " +
+                "FROM KAFKA\n"
+                + "(\n"
+                + "\"kafka_broker_list\" = \"kafkahost1:9092,kafkahost2:9092\",\n"
+                + "\"kafka_topic\" = \"topictest\"\n"
+                + ");";
+        RoutineLoadDesc originLoad = CreateRoutineLoadStmt.getLoadDesc(new OriginStatementInfo(sql), null);
+        Assertions.assertNotNull(originLoad);
+        ImportWhereStmt precedingFilter = originLoad.getPrecedingFilter();
+        Assertions.assertTrue(precedingFilter.isPrecedingFilter());
+        Expr expr = precedingFilter.getExpr();
+        Assertions.assertInstanceOf(BinaryPredicate.class, expr);
+        Assertions.assertEquals(BinaryType.EQ, ((BinaryPredicate) expr).getOp());
+        List<Expr> children = expr.getChildren();
+        Assertions.assertEquals(2, children.size());
+        Assertions.assertInstanceOf(SlotRef.class, children.get(0));
+        Assertions.assertEquals("a", ((SlotRef) children.get(0)).getColName());
+        Assertions.assertInstanceOf(IntLiteral.class, children.get(1));
+        Assertions.assertEquals(1, ((IntLiteral) children.get(1)).getValue());
     }
 }
