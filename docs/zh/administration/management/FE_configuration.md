@@ -120,8 +120,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 単位: Bytes
 - 是否可变: 否
-- 描述: 设置用于 StarRocks JSON 格式系统日志的 JsonTemplateLayout 的 "maxStringLength" 值。当 sys_log_format 被设置为 "json" 时，如果字符串类型字段（例如 "message" 和字符串化的异常堆栈跟踪）的长度超过此限制则会被截断。该值在 Log4jConfig.generateActiveLog4jXmlConfig() 中注入到生成的 Log4j XML，并应用于 default、warning、audit、dump 和 bigquery 布局；profile 布局使用单独的配置（sys_log_json_profile_max_string_length）。降低此值可减少日志大小，但可能截断有用信息。由于此设置不可变，更改需要重启或重新配置负责重新生成 Log4j 配置的进程。
-- 引入版本: 3.2.11
+- 描述: 设置用于系统 JSON 格式系统日志的 JsonTemplateLayout 的 "maxStringLength" 值。当 `sys_log_format` 被设置为 `"json"` 时，如果字符串类型字段（例如 "message" 和字符串化的异常堆栈跟踪）的长度超过此限制则会被截断。该值在 `Log4jConfig.generateActiveLog4jXmlConfig()` 中注入到生成的 Log4j XML，并应用于 default、warning、audit、dump 和 bigquery 布局；Profile 布局使用单独的配置（`sys_log_json_profile_max_string_length`）。降低此值可减少日志大小，但可能截断有用信息。由于此设置不可变，更改需要重启或重新配置负责重新生成 Log4j 配置的进程。
+- 引入版本: v3.2.11
 
 ##### sys_log_json_profile_max_string_length
 
@@ -129,8 +129,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 単位: Bytes
 - 是否可变: 否
-- 描述: 当 sys_log_format 为 "json" 时，为 profile（及相关功能）日志 appender 设置 JsonTemplateLayout 的 maxStringLength。JSON 格式的 profile 日志中的字符串字段值将被截断到此字节长度；非字符串字段不受影响。此设置在 Log4jConfig（JsonTemplateLayout 的 maxStringLength）中应用，在使用纯文本日志时被忽略。由于该设置在运行时不可变，更改它需要更新配置并重启进程。请将值保持为能够包含所需完整消息的足够大值，但注意更大的值会增加日志大小和 I/O。
-- 引入版本: 3.2.11
+- 描述: 当 `sys_log_format` 为 `"json"` 时，为 Profile（及相关功能）日志 Appender 设置 JsonTemplateLayout 的 maxStringLength。JSON 格式的 Profile 日志中的字符串字段值将被截断到此字节长度；非字符串字段不受影响。此设置在 Log4jConfig（JsonTemplateLayout 的 maxStringLength）中应用，在使用纯文本日志时被忽略。请将值设置为能够包含所需完整消息的足够大值，但注意过大的值会增加日志大小和 I/O。
+- 引入版本: v3.2.11
 
 ##### audit_log_dir
 
@@ -297,7 +297,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: String
 - 単位: -
 - 是否可变: No
-- 描述: 以逗号分隔的列表，支持正则表达式，通过 IANA 名称将 ssl 密码套件列入白名单。如果同时设置了白名单和黑名单，则黑名单优先。
+- 描述: 基于 IANA 名称的 SSL 密文 Suite 白名单，多项以逗号分隔，支持正则表达式。如果同时设置了白名单和黑名单，则黑名单优先。
 - 引入版本: v4.0
 
 ##### ssl_cipher_blacklist
@@ -306,7 +306,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: String
 - 単位: -
 - 是否可变: No
-- 描述: 以逗号分隔的列表，支持正则表达式，通过 IANA 名称将 ssl 密码套件列入黑名单。如果同时设置了白名单和黑名单，则黑名单优先。
+- 描述:基于 IANA 名称的 SSL 密文 Suite 黑名单，多项以逗号分隔，支持正则表达式。如果同时设置了白名单和黑名单，则黑名单优先。
 - 引入版本: v4.0
 
 ##### http_worker_threads_num
@@ -423,7 +423,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Boolean
 - 单位: -
 - 是否可变: 否
-- 描述: 为 MySQL 连接启用 TCP Keep-Alive。适用于位于负载均衡器后且长时间空闲的连接。
+- 描述: 是否为 MySQL 连接启用 TCP Keep-Alive。适用于位于负载均衡器后且长时间空闲的连接。
 - 引入版本: -
 
 ##### max_mysql_service_task_threads_num
