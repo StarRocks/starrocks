@@ -69,6 +69,7 @@ jobs:
               if [[ $(echo "$pr_check_run_info" | jq -r .conclusion) == 'success' ]]; then
                 exit 0
               fi
+              echo "$pr_check_run_info"
               echo "::error::PR CHECKER is failed, please check and then you can re-execute by commenting on rerun!"
               exit 1
             else
