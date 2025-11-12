@@ -43,6 +43,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -648,6 +649,13 @@ public final class RangePartitionDiffer extends PartitionDiffer {
         return rangeMap.getPartitions()
                 .stream()
                 .map(pCell -> PCellWithNorm.of(pCell, toNormalizedCell(pCell, expr)))
+                // sort by normalized pcell
+                .sorted(new Comparator<PCellWithNorm>() {
+                    @Override
+                    public int compare(PCellWithNorm o1, PCellWithNorm o2) {
+                        return o1.normalized.compareTo(o2.normalized);
+                    }
+                })
                 .collect(Collectors.toList());
     }
 

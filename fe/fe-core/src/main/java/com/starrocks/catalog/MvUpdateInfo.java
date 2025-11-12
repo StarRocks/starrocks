@@ -162,6 +162,7 @@ public class MvUpdateInfo {
                 sb.append("[").append(entry.getKey()).append(":");
                 sb.append(entry.getValue());
                 sb.append("]");
+                i++;
             }
         }
         return sb.toString();
