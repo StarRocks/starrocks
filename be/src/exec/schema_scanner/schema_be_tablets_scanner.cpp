@@ -19,8 +19,8 @@
 #include "gen_cpp/Types_types.h" // for TStorageMedium::type
 #include "gutil/strings/substitute.h"
 #include "runtime/exec_env.h"
-#include "storage/lake/tablet_manager.h"
 #include "runtime/string_value.h"
+#include "storage/lake/tablet_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
