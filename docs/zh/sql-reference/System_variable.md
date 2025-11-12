@@ -583,7 +583,7 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：true
 * 类型：Boolean
 * 单位：-
-* 描述：是否开启查询触发 ANALYZE 任务。
+* 描述：是否开启查询触发 ANALYZE 外表任务。
 * 引入版本：v3.4.0
 
 ### enable_scan_datacache
