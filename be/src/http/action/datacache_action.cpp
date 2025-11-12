@@ -21,7 +21,7 @@
 
 #include <string>
 
-#include "cache/disk_cache/block_cache_hit_rate_counter.hpp"
+#include "cache/data_cache_hit_rate_counter.hpp"
 #include "cache/disk_cache/local_disk_cache_engine.h"
 #include "cache/mem_cache/local_mem_cache_engine.h"
 #include "http/http_channel.h"
@@ -170,15 +170,30 @@ void DataCacheAction::_handle_app_stat(HttpRequest* req) {
     _handle(req, [=](rapidjson::Document& root) {
 #ifdef WITH_STARCACHE
         auto& allocator = root.GetAllocator();
-        BlockCacheHitRateCounter* hit_rate_counter = BlockCacheHitRateCounter::instance();
-        root.AddMember("hit_bytes", rapidjson::Value(hit_rate_counter->get_hit_bytes()), allocator);
-        root.AddMember("miss_bytes", rapidjson::Value(hit_rate_counter->get_miss_bytes()), allocator);
-        root.AddMember("hit_rate", rapidjson::Value(hit_rate_counter->hit_rate()), allocator);
-        root.AddMember("hit_bytes_last_minute", rapidjson::Value(hit_rate_counter->get_hit_bytes_last_minute()),
+        DataCacheHitRateCounter* hit_rate_counter = DataCacheHitRateCounter::instance();
+
+        root.AddMember("block_cache_hit_bytes", rapidjson::Value(hit_rate_counter->block_cache_hit_bytes()), allocator);
+        root.AddMember("block_cache_miss_bytes", rapidjson::Value(hit_rate_counter->block_cache_miss_bytes()),
                        allocator);
-        root.AddMember("miss_bytes_last_minute", rapidjson::Value(hit_rate_counter->get_miss_bytes_last_minute()),
-                       allocator);
-        root.AddMember("hit_rate_last_minute", rapidjson::Value(hit_rate_counter->hit_rate_last_minute()), allocator);
+        root.AddMember("block_cache_hit_rate", rapidjson::Value(hit_rate_counter->block_cache_hit_rate()), allocator);
+
+        root.AddMember("block_cache_hit_bytes_last_minute",
+                       rapidjson::Value(hit_rate_counter->block_cache_hit_bytes_last_minute()), allocator);
+        root.AddMember("block_cache_miss_bytes_last_minute",
+                       rapidjson::Value(hit_rate_counter->block_cache_miss_bytes_last_minute()), allocator);
+        root.AddMember("block_cache_hit_rate_last_minute",
+                       rapidjson::Value(hit_rate_counter->block_cache_hit_rate_last_minute()), allocator);
+
+        root.AddMember("page_cache_hit_count", rapidjson::Value(hit_rate_counter->page_cache_hit_count()), allocator);
+        root.AddMember("page_cache_miss_count", rapidjson::Value(hit_rate_counter->page_cache_miss_count()), allocator);
+        root.AddMember("page_cache_hit_rate", rapidjson::Value(hit_rate_counter->page_cache_hit_rate()), allocator);
+
+        root.AddMember("page_cache_hit_count_last_minute",
+                       rapidjson::Value(hit_rate_counter->page_cache_hit_count_last_minute()), allocator);
+        root.AddMember("page_cache_miss_count_last_minute",
+                       rapidjson::Value(hit_rate_counter->page_cache_miss_count_last_minute()), allocator);
+        root.AddMember("page_cache_hit_rate_last_minute",
+                       rapidjson::Value(hit_rate_counter->page_cache_hit_rate_last_minute()), allocator);
 #endif
     });
 }

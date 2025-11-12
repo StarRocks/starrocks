@@ -177,11 +177,11 @@ Status CacheInputStream::_read_from_cache(const int64_t offset, const int64_t si
                 _cache->record_read_remote_cache(read_size, read_peer_cache_ns / 1000);
             }
         } else {
-            _stats.read_cache_bytes += read_size;
-            _stats.read_cache_count += 1;
+            _stats.read_block_cache_bytes += read_size;
+            _stats.read_block_cache_count += 1;
             _stats.read_mem_cache_bytes += options.stats.read_mem_bytes;
             _stats.read_disk_cache_bytes += options.stats.read_disk_bytes;
-            _stats.read_cache_ns += read_local_cache_ns;
+            _stats.read_block_cache_ns += read_local_cache_ns;
             if (_enable_cache_io_adaptor) {
                 _cache->record_read_local_cache(read_size, read_local_cache_ns / 1000);
             }
@@ -479,15 +479,15 @@ void CacheInputStream::_write_cache(int64_t offset, const IOBuffer& iobuf, DiskC
         return;
     }
 
-    SCOPED_RAW_TIMER(&_stats.write_cache_ns);
+    SCOPED_RAW_TIMER(&_stats.write_block_cache_ns);
     Status r = _cache->write(_cache_key, offset, iobuf, options);
     if (r.ok() || r.is_already_exist()) {
         _already_populated_blocks.emplace(offset / _block_size);
     }
 
     if (r.ok()) {
-        _stats.write_cache_count += 1;
-        _stats.write_cache_bytes += iobuf.size();
+        _stats.write_block_cache_count += 1;
+        _stats.write_block_cache_bytes += iobuf.size();
         _stats.write_mem_cache_bytes += options->stats.write_mem_bytes;
         _stats.write_disk_cache_bytes += options->stats.write_disk_bytes;
     } else if (!_can_ignore_populate_error(r)) {
