@@ -359,6 +359,26 @@ message VacuumFullResponse {
     optional int64 vacuumed_file_size = 3;
 }
 
+message FindSplitPointRequest {
+    message TabletSplitInfo {
+        optional int64 tablet_id = 1;
+        // How many new tablets should this tablet be split into
+        optional int32 split_count = 2;
+    }
+
+    repeated TabletSplitInfo tablet_split_infos = 1;
+}
+
+message FindSplitPointResponse {
+    message TabletSplitResult {
+        optional int64 tablet_id = 1;
+        repeated TabletRangePB split_ranges = 2;
+    }
+
+    optional StatusPB status = 1;
+    repeated TabletSplitResult tablet_split_results = 2;
+}
+
 service LakeService {
     rpc publish_version(PublishVersionRequest) returns (PublishVersionResponse);
     rpc aggregate_publish_version(AggregatePublishVersionRequest) returns (PublishVersionResponse);
@@ -379,5 +399,6 @@ service LakeService {
     rpc vacuum(VacuumRequest) returns (VacuumResponse);
     rpc vacuum_full(VacuumFullRequest) returns (VacuumFullResponse);
     rpc aggregate_compact(AggregateCompactRequest) returns (CompactResponse);
+    rpc find_split_point(FindSplitPointRequest) returns (FindSplitPointResponse);
 }
 
