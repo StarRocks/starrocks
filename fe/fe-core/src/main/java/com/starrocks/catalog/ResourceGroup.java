@@ -44,12 +44,14 @@ public class ResourceGroup {
     public static final String EXCLUSIVE_CPU_CORES = "exclusive_cpu_cores";
     public static final String MAX_CPU_CORES = "max_cpu_cores";
     public static final String MEM_LIMIT = "mem_limit";
+    public static final String MEM_POOL = "mem_pool";
     public static final String BIG_QUERY_MEM_LIMIT = "big_query_mem_limit";
     public static final String BIG_QUERY_SCAN_ROWS_LIMIT = "big_query_scan_rows_limit";
     public static final String BIG_QUERY_CPU_SECOND_LIMIT = "big_query_cpu_second_limit";
     public static final String CONCURRENCY_LIMIT = "concurrency_limit";
     public static final String DEFAULT_RESOURCE_GROUP_NAME = "default_wg";
     public static final String DISABLE_RESOURCE_GROUP_NAME = "disable_resource_group";
+    public static final String DEFAULT_MEM_POOL = "default_mem_pool";
     public static final String DEFAULT_MV_RESOURCE_GROUP_NAME = "default_mv_wg";
     public static final String SPILL_MEM_LIMIT_THRESHOLD = "spill_mem_limit_threshold";
 
@@ -123,7 +125,10 @@ public class ResourceGroup {
                     (rg, classifier) -> rg.getResourceGroupType().name().substring("WG_".length()), false),
             new ColumnMeta(
                     new Column("classifiers", ScalarType.createVarchar(1024)),
-                    (rg, classifier) -> classifier.toString())
+                    (rg, classifier) -> classifier.toString()),
+            new ColumnMeta(
+                    new Column(MEM_POOL, ScalarType.createVarchar(200)),
+                    (rg, classifier) -> rg.getMemPool(), false)
     );
 
     public static final ShowResultSetMetaData META_DATA;
@@ -158,6 +163,9 @@ public class ResourceGroup {
 
     @SerializedName(value = "memLimit")
     private Double memLimit;
+
+    @SerializedName(value = "memPool")
+    private String memPool;
     @SerializedName(value = "bigQueryMemLimit")
     private Long bigQueryMemLimit;
     @SerializedName(value = "bigQueryScanRowsLimit")
@@ -260,7 +268,9 @@ public class ResourceGroup {
         if (resourceGroupType != null) {
             twg.setWorkgroup_type(resourceGroupType);
         }
-
+        if (memPool != null) {
+            twg.setMem_pool(memPool);
+        }
         twg.setExclusive_cpu_cores(getNormalizedExclusiveCpuCores());
 
         twg.setVersion(version);
@@ -296,6 +306,7 @@ public class ResourceGroup {
     public Integer getExclusiveCpuCores() {
         return exclusiveCpuCores;
     }
+
     public int getNormalizedExclusiveCpuCores() {
         if (exclusiveCpuCores != null && exclusiveCpuCores > 0) {
             return exclusiveCpuCores;
@@ -390,6 +401,14 @@ public class ResourceGroup {
 
     public void setClassifiers(List<ResourceGroupClassifier> classifiers) {
         this.classifiers = classifiers;
+    }
+
+    public String getMemPool() {
+        return memPool;
+    }
+
+    public void setMemPool(String memPool) {
+        this.memPool = memPool;
     }
 
     @Override
