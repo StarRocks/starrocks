@@ -1909,76 +1909,76 @@ public class EditLog {
         logJsonObject(OperationType.OP_SWAP_TABLE, log);
     }
 
-    public void logAddAnalyzeJob(AnalyzeJob job) {
+    public void logAddAnalyzeJob(AnalyzeJob job, WALApplier walApplier) {
         if (job.isNative()) {
-            logJsonObject(OperationType.OP_ADD_ANALYZER_JOB, (NativeAnalyzeJob) job);
+            logJsonObject(OperationType.OP_ADD_ANALYZER_JOB, job, walApplier);
         } else {
-            logJsonObject(OperationType.OP_ADD_EXTERNAL_ANALYZER_JOB, (ExternalAnalyzeJob) job);
+            logJsonObject(OperationType.OP_ADD_EXTERNAL_ANALYZER_JOB, job, walApplier);
         }
     }
 
-    public void logRemoveAnalyzeJob(AnalyzeJob job) {
+    public void logRemoveAnalyzeJob(AnalyzeJob job, WALApplier walApplier) {
         if (job.isNative()) {
-            logJsonObject(OperationType.OP_REMOVE_ANALYZER_JOB, (NativeAnalyzeJob) job);
+            logJsonObject(OperationType.OP_REMOVE_ANALYZER_JOB, job, walApplier);
         } else {
-            logJsonObject(OperationType.OP_REMOVE_EXTERNAL_ANALYZER_JOB, (ExternalAnalyzeJob) job);
+            logJsonObject(OperationType.OP_REMOVE_EXTERNAL_ANALYZER_JOB, job, walApplier);
         }
     }
 
-    public void logAddAnalyzeStatus(AnalyzeStatus status) {
+    public void logAddAnalyzeStatus(AnalyzeStatus status, WALApplier walApplier) {
         if (status.isNative()) {
-            logJsonObject(OperationType.OP_ADD_ANALYZE_STATUS, (NativeAnalyzeStatus) status);
+            logJsonObject(OperationType.OP_ADD_ANALYZE_STATUS, status, walApplier);
         } else {
-            logJsonObject(OperationType.OP_ADD_EXTERNAL_ANALYZE_STATUS, (ExternalAnalyzeStatus) status);
+            logJsonObject(OperationType.OP_ADD_EXTERNAL_ANALYZE_STATUS, status, walApplier);
         }
     }
 
-    public void logRemoveAnalyzeStatus(AnalyzeStatus status) {
+    public void logRemoveAnalyzeStatus(AnalyzeStatus status, WALApplier walApplier) {
         if (status.isNative()) {
-            logJsonObject(OperationType.OP_REMOVE_ANALYZE_STATUS, (NativeAnalyzeStatus) status);
+            logJsonObject(OperationType.OP_REMOVE_ANALYZE_STATUS, status, walApplier);
         } else {
-            logJsonObject(OperationType.OP_REMOVE_EXTERNAL_ANALYZE_STATUS, (ExternalAnalyzeStatus) status);
+            logJsonObject(OperationType.OP_REMOVE_EXTERNAL_ANALYZE_STATUS, status, walApplier);
         }
     }
 
-    public void logAddBasicStatsMeta(BasicStatsMeta meta) {
-        logJsonObject(OperationType.OP_ADD_BASIC_STATS_META, meta);
+    public void logAddBasicStatsMeta(BasicStatsMeta meta, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_ADD_BASIC_STATS_META, meta, walApplier);
     }
 
-    public void logRemoveBasicStatsMeta(BasicStatsMeta meta) {
-        logJsonObject(OperationType.OP_REMOVE_BASIC_STATS_META, meta);
+    public void logRemoveBasicStatsMeta(BasicStatsMeta meta, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_REMOVE_BASIC_STATS_META, meta, walApplier);
     }
 
-    public void logAddHistogramStatsMeta(HistogramStatsMeta meta) {
-        logJsonObject(OperationType.OP_ADD_HISTOGRAM_STATS_META, meta);
+    public void logAddHistogramStatsMeta(HistogramStatsMeta meta, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_ADD_HISTOGRAM_STATS_META, meta, walApplier);
     }
 
-    public void logRemoveHistogramStatsMeta(HistogramStatsMeta meta) {
-        logJsonObject(OperationType.OP_REMOVE_HISTOGRAM_STATS_META, meta);
+    public void logRemoveHistogramStatsMeta(HistogramStatsMeta meta, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_REMOVE_HISTOGRAM_STATS_META, meta, walApplier);
     }
 
-    public void logAddMultiColumnStatsMeta(MultiColumnStatsMeta meta) {
-        logJsonObject(OperationType.OP_ADD_MULTI_COLUMN_STATS_META, meta);
+    public void logAddMultiColumnStatsMeta(MultiColumnStatsMeta meta, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_ADD_MULTI_COLUMN_STATS_META, meta, walApplier);
     }
 
-    public void logRemoveMultiColumnStatsMeta(MultiColumnStatsMeta meta) {
-        logJsonObject(OperationType.OP_REMOVE_MULTI_COLUMN_STATS_META, meta);
+    public void logRemoveMultiColumnStatsMeta(MultiColumnStatsMeta meta, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_REMOVE_MULTI_COLUMN_STATS_META, meta, walApplier);
     }
 
-    public void logAddExternalBasicStatsMeta(ExternalBasicStatsMeta meta) {
-        logJsonObject(OperationType.OP_ADD_EXTERNAL_BASIC_STATS_META, meta);
+    public void logAddExternalBasicStatsMeta(ExternalBasicStatsMeta meta, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_ADD_EXTERNAL_BASIC_STATS_META, meta, walApplier);
     }
 
-    public void logRemoveExternalBasicStatsMeta(ExternalBasicStatsMeta meta) {
-        logJsonObject(OperationType.OP_REMOVE_EXTERNAL_BASIC_STATS_META, meta);
+    public void logRemoveExternalBasicStatsMeta(ExternalBasicStatsMeta meta, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_REMOVE_EXTERNAL_BASIC_STATS_META, meta, walApplier);
     }
 
-    public void logAddExternalHistogramStatsMeta(ExternalHistogramStatsMeta meta) {
-        logJsonObject(OperationType.OP_ADD_EXTERNAL_HISTOGRAM_STATS_META, meta);
+    public void logAddExternalHistogramStatsMeta(ExternalHistogramStatsMeta meta, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_ADD_EXTERNAL_HISTOGRAM_STATS_META, meta, walApplier);
     }
 
-    public void logRemoveExternalHistogramStatsMeta(ExternalHistogramStatsMeta meta) {
-        logJsonObject(OperationType.OP_REMOVE_EXTERNAL_HISTOGRAM_STATS_META, meta);
+    public void logRemoveExternalHistogramStatsMeta(ExternalHistogramStatsMeta meta, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_REMOVE_EXTERNAL_HISTOGRAM_STATS_META, meta, walApplier);
     }
 
     public void logModifyTableColumn(ModifyTableColumnOperationLog log) {
