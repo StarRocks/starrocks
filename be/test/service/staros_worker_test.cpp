@@ -58,6 +58,7 @@ TEST_F(StarOSWorkerTest, test_add_listener) {
 
     info.id = 1;
     EXPECT_TRUE(worker->add_shard(info).ok());
+    EXPECT_EQ(1, worker->shard_ids().size());
 
     // no shard registered, counter and ids will not be modified
     EXPECT_EQ(0, counter);
@@ -68,6 +69,7 @@ TEST_F(StarOSWorkerTest, test_add_listener) {
 
     info.id = 2;
     EXPECT_TRUE(worker->add_shard(info).ok());
+    EXPECT_EQ(2, worker->shard_ids().size());
 
     // shard:2 added
     EXPECT_EQ(1, counter);
