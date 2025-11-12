@@ -56,8 +56,8 @@ class PlanFeaturesTest extends PlanTestBase {
             "select count(*) from t0 a join t0 b on a.v1 = b.v2" +
                     "| tables=[0,0,10003] " +
                     "| 40,2,0,16,2,4,0,4;41,2,0,16,2,2,0,0,0,2,2;45,2,0,16,0,4,0,0,0,2,0",
-
     })
+
     public void testBasic(String query, String expectedTables, String expected) throws Exception {
         expectedTables = StringUtils.trim(expectedTables);
         expected = StringUtils.trim(expected);

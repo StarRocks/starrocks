@@ -29,6 +29,7 @@ import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Type;
@@ -37,10 +38,12 @@ import com.starrocks.common.TreeNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.FieldReference;
+import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import org.apache.commons.collections.CollectionUtils;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -49,6 +52,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -202,9 +206,16 @@ public class SelectAnalyzer {
 
         for (SelectListItem item : selectList.getItems()) {
             if (item.isStar()) {
-                List<Field> fields = (item.getTblName() == null ? scope.getRelationFields().getAllFields()
-                        : scope.getRelationFields().resolveFieldsWithPrefix(item.getTblName()))
-                        .stream().filter(Field::isVisible)
+                List<Field> fields;
+
+                if (getJoinRelationWithUsing(fromRelation) != null) {
+                    fields = getFieldsForJoinUsingStar(fromRelation, scope, item.getTblName());
+                } else {
+                    fields = (item.getTblName() == null ? scope.getRelationFields().getAllFields()
+                            : scope.getRelationFields().resolveFieldsWithPrefix(item.getTblName()));
+                }
+
+                fields = fields.stream().filter(Field::isVisible)
                         .filter(field -> !field.getName().startsWith(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX))
                         .collect(Collectors.toList());
                 List<String> unknownTypeFields = fields.stream()
@@ -770,4 +781,87 @@ public class SelectAnalyzer {
         }
         return allFields;
     }
+
+    private JoinRelation getJoinRelationWithUsing(Relation relation) {
+        if (relation instanceof JoinRelation) {
+            JoinRelation joinRelation = (JoinRelation) relation;
+            if (CollectionUtils.isNotEmpty(joinRelation.getUsingColNames())) {
+                return joinRelation;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Constructs field list for SELECT * in JOIN USING context per SQL standard.
+     * 
+     * SQL standard specifies that JOIN USING columns should appear only once in SELECT *,
+     * unlike JOIN ON where both L.col and R.col would appear.
+     * 
+     * SQL Standard column order for all JOIN types:
+     * - [USING columns (in declaration order), left non-USING, right non-USING]
+     * 
+     * This method performs deduplication and reordering to ensure correctness:
+     * 1. Extract USING columns in declaration order (take first occurrence of each)
+     * 2. Append non-USING columns in their original order (left table first, then right table)
+     * 
+     * USING column selection by JOIN type (handled by QueryAnalyzer):
+     * - FULL OUTER JOIN: Unqualified field with common type (will be converted to COALESCE in optimizer)
+     * - RIGHT OUTER JOIN: Field from right table (right table is preserved)
+     * - LEFT OUTER/INNER JOIN: Field from left table (left table is preserved)
+     * 
+     * Examples:
+     * - SELECT * FROM t1(a,b,c) JOIN t2(a,d) USING(a)
+     *   Result: [a, b, c, d]  (a is from t1)
+     * 
+     * - SELECT * FROM t1(a,b,c) RIGHT JOIN t2(a,d) USING(a)
+     *   Result: [a, b, c, d]  (a is from t2, same order but different source)
+     * 
+     * - SELECT * FROM t1(a INT, b, c) FULL OUTER JOIN t2(a BIGINT, d) USING(a)
+     *   Result: [a BIGINT, b, c, d]  (a is unqualified with common type BIGINT)
+     * 
+     * @param fromRelation The JOIN relation containing USING clause
+     * @param scope Current scope with fields from QueryAnalyzer (may have duplicates or wrong order)
+     * @param tblName Optional table qualifier (e.g., t1.* vs *), if specified returns only that table's fields
+     * @return Field list with USING columns deduplicated and in SQL standard order
+     */
+    private List<Field> getFieldsForJoinUsingStar(Relation fromRelation, Scope scope, TableName tblName) {
+        if (tblName != null) {
+            // Qualified SELECT (e.g., SELECT t1.* FROM t1 JOIN t2 USING(id))
+            // Return only fields from specified table, no special USING handling needed
+            return scope.getRelationFields().resolveFieldsWithPrefix(tblName);
+        }
+
+        JoinRelation joinRelation = getJoinRelationWithUsing(fromRelation);
+        List<String> usingColNames = joinRelation.getUsingColNames();
+        Set<String> usingColSet = usingColNames.stream()
+                .map(String::toLowerCase)
+                .collect(Collectors.toSet());
+
+        List<Field> allFields = scope.getRelationFields().getAllFields();
+        List<Field> result = new ArrayList<>();
+
+        // Step 1: Add USING columns in order (deduplicated)
+        // For each USING column, find the first matching field and add it once
+        for (String usingCol : usingColNames) {
+            String lowerUsingCol = usingCol.toLowerCase();
+            for (Field field : allFields) {
+                if (field.getName() != null && field.getName().toLowerCase().equals(lowerUsingCol)) {
+                    // Add first occurrence only
+                    result.add(field);
+                    break;
+                }
+            }
+        }
+
+        // Step 2: Add non-USING columns in order (left first, then right)
+        for (Field field : allFields) {
+            if (field.getName() == null || !usingColSet.contains(field.getName().toLowerCase())) {
+                result.add(field);
+            }
+        }
+
+        return result;
+    }
 }
+
