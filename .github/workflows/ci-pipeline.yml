@@ -61,15 +61,14 @@ jobs:
         env:
           SHA: ${{ steps.upload_info.outputs.SHA }}
         run: |
-          set -x
           round_limit=12
           while [[ $round_limit -gt 0 ]]
           do
             pr_check_run_info=$(gh run list -R ${{ github.repository }} -c ${SHA} --json status,name,startedAt,conclusion | jq '[.[] | select(.name == "PR CHECKER")] | sort_by(.startedAt)| last')
-            if [[ "$pr_check_run_info" == 'null' ]] || [[ $(echo "$pr_check_run_info" | jq -r .status) != 'completed' ]]; then
+            if [[ "$pr_check_run_info" != 'null' ]] && [[ $(echo "$pr_check_run_info" | jq -r .status) == 'completed' ]]; then
               status=$(echo "$pr_check_run_info" | jq -r .conclusion)
               if [[ "$status" == 'success' ]]; then
-                break
+                exit 0
               else
                 echo "::warning::The latest PR CHECKER status: ${status}!"
               fi
@@ -78,10 +77,8 @@ jobs:
             sleep 10
           done
           
-          if [[ $round_limit -eq 0 ]]; then
-            echo "::error::PR CHECKER is timeout, please check and then you can re-execute by commenting on rerun!"
-            exit 1
-          fi
+          echo "::error::PR CHECKER is timeout, please check and then you can re-execute by commenting on rerun!"
+          exit 1
 
       - name: Check Blacklist
         id: check_blacklist
