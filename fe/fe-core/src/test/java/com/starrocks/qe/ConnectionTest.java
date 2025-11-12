@@ -167,12 +167,12 @@ public class ConnectionTest {
         ExecuteEnv.setup();
 
         Deencapsulation.invoke(executeSqlAction,
-                "registerContext",
+                "registerContextOnce",
                 "select 1",
                 createHttpConnectContextForUser("test"));
         try {
             Deencapsulation.invoke(executeSqlAction,
-                    "registerContext",
+                    "registerContextOnce",
                     "select 1",
                     createHttpConnectContextForUser("test"));
         } catch (StarRocksHttpException e) {

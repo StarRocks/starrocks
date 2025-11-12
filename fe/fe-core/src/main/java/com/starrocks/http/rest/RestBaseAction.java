@@ -57,7 +57,9 @@ import com.starrocks.http.HttpUtils;
 import com.starrocks.http.WebUtils;
 import com.starrocks.http.rest.v2.RestBaseResultV2;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ConnectScheduler;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.service.ExecuteEnv;
 import com.starrocks.system.Frontend;
 import com.starrocks.thrift.TNetworkAddress;
 import io.netty.handler.codec.http.HttpHeaderNames;
@@ -75,6 +77,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+
+import static io.netty.handler.codec.http.HttpResponseStatus.SERVICE_UNAVAILABLE;
 
 public class RestBaseAction extends BaseAction {
 
@@ -150,11 +154,24 @@ public class RestBaseAction extends BaseAction {
         ActionAuthorizationInfo authInfo = getAuthorizationInfo(request);
         // check password
         UserIdentity currentUser = checkPassword(authInfo);
-        // ctx lifetime is the same as the channel
+
         HttpConnectContext ctx = request.getConnectContext();
+
+        // Change user for ConnectContext if necessary
+        String prevUserName = ctx.getQualifiedUser();
+        ctx.setQualifiedUser(authInfo.fullUserName);
+        if (ctx.isRegistered() && prevUserName != null && !prevUserName.equals(authInfo.fullUserName)) {
+            ConnectScheduler connectScheduler = ExecuteEnv.getInstance().getScheduler();
+            Pair<Boolean, String> userChangeRes = connectScheduler.onUserChanged(ctx, prevUserName, ctx.getQualifiedUser());
+            if (!userChangeRes.first) {
+                ctx.setQualifiedUser(prevUserName);
+                throw new StarRocksHttpException(SERVICE_UNAVAILABLE, userChangeRes.second);
+            }
+        }
+
+        // ctx lifetime is the same as the channel
         ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         ctx.setNettyChannel(request.getContext());
-        ctx.setQualifiedUser(authInfo.fullUserName);
         ctx.setQueryId(UUIDUtil.genUUID());
         ctx.setRemoteIP(authInfo.remoteIp);
         ctx.setCurrentUserIdentity(currentUser);
@@ -377,7 +394,7 @@ public class RestBaseAction extends BaseAction {
     }
 
     protected void sendSuccessResponse(BaseResponse response, String content, BaseRequest request) {
-        sendResult(request, response,  RestBaseResultV2.ok(content));
+        sendResult(request, response, RestBaseResultV2.ok(content));
     }
 
     protected void sendErrorResponse(BaseResponse response, String message, HttpResponseStatus status, BaseRequest request) {
