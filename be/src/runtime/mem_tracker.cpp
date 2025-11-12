@@ -172,7 +172,14 @@ std::string MemTracker::err_msg(const std::string& msg) const {
                 << "You can change the limit by modifying [mem_limit] of this group";
         }
         break;
+<<<<<<< HEAD
     case MemTracker::RESOURCE_GROUP_BIG_QUERY:
+=======
+    case MemTrackerType::RESOURCE_GROUP_SHARED_MEMORY_POOL:
+        str << "Mem usage has exceed the limit of resource group memory pool [" << label() << "]. ";
+        break;
+    case MemTrackerType::RESOURCE_GROUP_BIG_QUERY:
+>>>>>>> 47e49db400 ([Feature] Use mem_pool property to create shared mem_tracker across resource groups (#64112))
         str << "Mem usage has exceed the big query limit of the resource group [" << label() << "]. "
             << "You can change the limit by modifying [big_query_mem_limit] of this group";
         break;

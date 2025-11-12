@@ -77,6 +77,51 @@ class RuntimeState;
 /// call back into MemTrackers, except to release memory.
 //
 /// This class is thread-safe.
+<<<<<<< HEAD
+=======
+
+enum class MemTrackerType {
+    NO_SET,
+    PROCESS,
+    QUERY,
+    QUERY_POOL,
+    LOAD,
+    CONSISTENCY,
+    COMPACTION_TASK,
+    COMPACTION,
+    SCHEMA_CHANGE_TASK,
+    SCHEMA_CHANGE,
+    RESOURCE_GROUP,
+    RESOURCE_GROUP_SHARED_MEMORY_POOL,
+    RESOURCE_GROUP_BIG_QUERY,
+    JEMALLOC,
+    PASSTHROUGH,
+    CONNECTOR_SCAN,
+    METADATA,
+    TABLET_METADATA,
+    ROWSET_METADATA,
+    SEGMENT_METADATA,
+    COLUMN_METADATA,
+    TABLET_SCHEMA,
+    SEGMENT_ZONEMAP,
+    SHORT_KEY_INDEX,
+    COLUMN_ZONEMAP_INDEX,
+    ORDINAL_INDEX,
+    BITMAP_INDEX,
+    BLOOM_FILTER_INDEX,
+    PAGE_CACHE,
+    JIT_CACHE,
+    UPDATE,
+    CLONE,
+    DATACACHE,
+    REPLICATION,
+    ROWSET_UPDATE_STATE,
+    INDEX_CACHE,
+    DEL_VEC_CACHE,
+    COMPACTION_STATE
+};
+
+>>>>>>> 47e49db400 ([Feature] Use mem_pool property to create shared mem_tracker across resource groups (#64112))
 class MemTracker {
 public:
     // I want to get a snapshot of the mem_tracker, but don't want to copy all the field of MemTracker.

@@ -48,6 +48,12 @@ set(EXEC_FILES
         ./exec/paimon/paimon_delete_file_builder_test.cpp
         ./exec/workgroup/scan_task_queue_test.cpp
         ./exec/workgroup/pipeline_executor_set_test.cpp
+<<<<<<< HEAD
+=======
+        ./exec/workgroup/work_group_manager_test.cpp
+        ./exec/workgroup/mem_tracker_manager_test.cpp
+        ./exec/pipeline/schedule/observer_test.cpp
+>>>>>>> 47e49db400 ([Feature] Use mem_pool property to create shared mem_tracker across resource groups (#64112))
         ./exec/pipeline/pipeline_control_flow_test.cpp
         ./exec/pipeline/pipeline_driver_queue_test.cpp
         ./exec/pipeline/pipeline_file_scan_node_test.cpp
