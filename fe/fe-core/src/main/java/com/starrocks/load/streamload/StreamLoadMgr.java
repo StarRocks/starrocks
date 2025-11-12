@@ -185,9 +185,9 @@ public class StreamLoadMgr implements MemoryTrackable {
                     computeResource);
             LOG.info(new LogBuilder(LogKey.STREAM_LOAD_TASK, task.getId())
                     .add("msg", "create load task").build());
+            task.beginTxnFromFrontend(channelId, channelNum, resp);
             GlobalStateMgr.getCurrentState().getEditLog().logCreateStreamLoadJob(
                     (StreamLoadTask) task, wal -> addLoadTask((StreamLoadTask) wal));
-            task.beginTxnFromFrontend(channelId, channelNum, resp);
         } finally {
             writeUnlock();
         }
