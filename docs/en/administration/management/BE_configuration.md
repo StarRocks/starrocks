@@ -884,6 +884,15 @@ When this value is set to `0`, the system uses twice of the CPU core count as th
 When this value is set to less than `0`, the system uses the product of its absolute value and the CPU core count as the value.
 - Introduced in: 3.1.12, 3.2.7
 
+##### column_mode_partial_update_insert_batch_size
+
+- Default: 4096
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Batch size for column mode partial update when processing inserted rows. If this item is set to `0` or negative, it will be clamped to `1` to avoid infinite loop. This item controls the number of newly inserted rows processed in each batch. Larger values can improve write performance but will consume more memory.
+- Introduced in: v3.5.10, v4.0.2
+
 ##### max_runnings_transactions_per_txn_map
 
 - Default: 100
