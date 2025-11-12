@@ -155,7 +155,7 @@ TEST_F(PkTabletSSTWriterTest, test_pk_tablet_sst_writer_basic_operations) {
     const int64_t tablet_id = 12345;
 
     // Create PkTabletSSTWriter
-    auto pk_sst_writer = std::make_unique<PkTabletSSTWriter>(_tablet_schema, _tablet_mgr.get(), tablet_id);
+    auto pk_sst_writer = std::make_unique<PkTabletSSTWriter>(false, _tablet_schema, _tablet_mgr.get(), tablet_id);
 
     // Test reset_sst_writer
     auto location_provider = std::make_shared<FixedLocationProvider>(kTestDirectory);
@@ -184,7 +184,7 @@ TEST_F(PkTabletSSTWriterTest, test_pk_tablet_sst_writer_basic_operations) {
 TEST_F(PkTabletSSTWriterTest, test_pk_tablet_sst_writer_multiple_chunks) {
     const int64_t tablet_id = 67890;
 
-    auto pk_sst_writer = std::make_unique<PkTabletSSTWriter>(_tablet_schema, _tablet_mgr.get(), tablet_id);
+    auto pk_sst_writer = std::make_unique<PkTabletSSTWriter>(false, _tablet_schema, _tablet_mgr.get(), tablet_id);
 
     // Reset writer
     auto location_provider = std::make_shared<FixedLocationProvider>(kTestDirectory);
@@ -210,7 +210,7 @@ TEST_F(PkTabletSSTWriterTest, test_pk_tablet_sst_writer_multiple_chunks) {
 TEST_F(PkTabletSSTWriterTest, test_pk_tablet_sst_writer_error_handling) {
     const int64_t tablet_id = 11111;
 
-    auto pk_sst_writer = std::make_unique<PkTabletSSTWriter>(_tablet_schema, _tablet_mgr.get(), tablet_id);
+    auto pk_sst_writer = std::make_unique<PkTabletSSTWriter>(false, _tablet_schema, _tablet_mgr.get(), tablet_id);
 
     // Test append_sst_record before reset - should fail
     auto chunk = generate_data(10);
@@ -232,7 +232,7 @@ TEST_F(PkTabletSSTWriterTest, test_pk_tablet_sst_writer_error_handling) {
 TEST_F(PkTabletSSTWriterTest, test_pk_tablet_sst_writer_empty_chunk) {
     const int64_t tablet_id = 22222;
 
-    auto pk_sst_writer = std::make_unique<PkTabletSSTWriter>(_tablet_schema, _tablet_mgr.get(), tablet_id);
+    auto pk_sst_writer = std::make_unique<PkTabletSSTWriter>(false, _tablet_schema, _tablet_mgr.get(), tablet_id);
 
     // Reset writer
     auto location_provider = std::make_shared<FixedLocationProvider>(kTestDirectory);
@@ -255,7 +255,7 @@ TEST_F(PkTabletSSTWriterTest, test_pk_tablet_sst_writer_empty_chunk) {
 TEST_F(PkTabletSSTWriterTest, test_pk_tablet_sst_writer_reuse) {
     const int64_t tablet_id = 33333;
 
-    auto pk_sst_writer = std::make_unique<PkTabletSSTWriter>(_tablet_schema, _tablet_mgr.get(), tablet_id);
+    auto pk_sst_writer = std::make_unique<PkTabletSSTWriter>(false, _tablet_schema, _tablet_mgr.get(), tablet_id);
 
     // First use
     auto location_provider = std::make_shared<FixedLocationProvider>(kTestDirectory);

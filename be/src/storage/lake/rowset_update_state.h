@@ -84,7 +84,7 @@ struct RowsetUpdateStateParams {
 
 class SegmentPKEncodeResult {
 public:
-    SegmentPKEncodeResult() = default;
+    SegmentPKEncodeResult(bool enable_null_primary_key) : _enable_null_primary_key(enable_null_primary_key) {}
     ~SegmentPKEncodeResult() { close(); }
     Status init(const ChunkIteratorPtr& iter, const Schema& pkey_schema, bool load_whole);
     void next();
@@ -104,6 +104,7 @@ public:
 private:
     Status _load();
 
+    bool _enable_null_primary_key;
     // Iterator of this segment file.
     ChunkIteratorPtr _iter;
     // The PK schema of this segment file.
@@ -217,6 +218,8 @@ private:
     // Because we can load partial segments when preload, so need vector to track their version.
     std::vector<int64_t> _base_versions;
     int64_t _schema_version = 0;
+
+    bool _enable_null_primary_key = false;
 
     // TODO: dump to disk if memory usage is too large
     std::vector<PartialUpdateState> _partial_update_states;

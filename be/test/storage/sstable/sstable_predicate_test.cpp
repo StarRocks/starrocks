@@ -86,7 +86,7 @@ TEST_F(SstablePredicateTest, basicSstablePredicateTest) {
         column_hash_is_congruent_pb->set_modulus(2);
         column_hash_is_congruent_pb->set_remainder(0);
         column_hash_is_congruent_pb->add_column_names("col1");
-        ASSIGN_OR_ABORT(auto sstable_predicate, SstablePredicate::create(_schema_pb_1, sstable_predicate_pb));
+        ASSIGN_OR_ABORT(auto sstable_predicate, SstablePredicate::create(false, _schema_pb_1, sstable_predicate_pb));
 
         std::shared_ptr<TabletSchema> tablet_schema_1 = std::make_shared<TabletSchema>(_schema_pb_1);
         ASSERT_EQ(tablet_schema_1->num_key_columns(), 1);
@@ -104,9 +104,9 @@ TEST_F(SstablePredicateTest, basicSstablePredicateTest) {
         bool expected = (hashes % 2 == 0);
 
         MutableColumnPtr encoded_columns;
-        ASSERT_OK(PrimaryKeyEncoder::create_column(pkey_schema, &encoded_columns));
-        PrimaryKeyEncoder::encode(pkey_schema, *pk_chunk, 0, 1, encoded_columns.get());
-        auto key_size = PrimaryKeyEncoder::get_encoded_fixed_size(pkey_schema);
+        ASSERT_OK(PrimaryKeyEncoder::create_column(pkey_schema, &encoded_columns, false));
+        PrimaryKeyEncoder::encode(pkey_schema, *pk_chunk, 0, 1, encoded_columns.get(), false);
+        auto key_size = PrimaryKeyEncoder::get_encoded_fixed_size(pkey_schema, false);
         Slice key(encoded_columns->continuous_data(), key_size);
         std::string row = key.to_string();
 
@@ -124,7 +124,7 @@ TEST_F(SstablePredicateTest, basicSstablePredicateTest) {
         column_hash_is_congruent_pb->set_remainder(0);
         column_hash_is_congruent_pb->add_column_names("col1");
         column_hash_is_congruent_pb->add_column_names("col2");
-        ASSIGN_OR_ABORT(auto sstable_predicate, SstablePredicate::create(_schema_pb_2, sstable_predicate_pb));
+        ASSIGN_OR_ABORT(auto sstable_predicate, SstablePredicate::create(false, _schema_pb_2, sstable_predicate_pb));
 
         std::shared_ptr<TabletSchema> tablet_schema_2 = std::make_shared<TabletSchema>(_schema_pb_2);
         ASSERT_EQ(tablet_schema_2->num_key_columns(), 2);
@@ -144,8 +144,8 @@ TEST_F(SstablePredicateTest, basicSstablePredicateTest) {
         bool expected = (hashes % 2 == 0);
 
         MutableColumnPtr encoded_columns;
-        ASSERT_OK(PrimaryKeyEncoder::create_column(pkey_schema, &encoded_columns));
-        PrimaryKeyEncoder::encode(pkey_schema, *pk_chunk, 0, 1, encoded_columns.get());
+        ASSERT_OK(PrimaryKeyEncoder::create_column(pkey_schema, &encoded_columns, false));
+        PrimaryKeyEncoder::encode(pkey_schema, *pk_chunk, 0, 1, encoded_columns.get(), false);
         ASSERT_TRUE(encoded_columns->is_binary() || encoded_columns->is_large_binary());
         std::string row = reinterpret_cast<const Slice*>(encoded_columns->raw_data())->to_string();
 

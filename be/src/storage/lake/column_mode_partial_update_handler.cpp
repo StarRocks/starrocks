@@ -100,9 +100,14 @@ Status ColumnModePartialUpdateHandler::_load_upserts(const RowsetUpdateStatePara
         return Status::OK();
     }
 
+    bool enable_null_primary_key = config::enable_null_primary_key;
+    if (params.metadata->has_enable_null_primary_key()) {
+        enable_null_primary_key = params.metadata->enable_null_primary_key();
+    }
+
     // 2. build schema.
     MutableColumnPtr pk_column;
-    if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
+    if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, enable_null_primary_key).ok()) {
         std::string err_msg =
                 fmt::format("create column for primary key encoder failed, tablet_id: {}", params.tablet->id());
         DCHECK(false) << err_msg;
@@ -134,7 +139,8 @@ Status ColumnModePartialUpdateHandler::_load_upserts(const RowsetUpdateStatePara
                 } else if (!st.ok()) {
                     return st;
                 } else {
-                    PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), col.get());
+                    PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), col.get(),
+                                              enable_null_primary_key);
                 }
             }
         }

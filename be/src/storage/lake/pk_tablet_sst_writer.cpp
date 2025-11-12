@@ -43,11 +43,12 @@ Status PkTabletSSTWriter::append_sst_record(const Chunk& data) {
             pk_columns.push_back((uint32_t)i);
         }
         _pkey_schema = ChunkHelper::convert_schema(_tablet_schema_ptr, pk_columns);
-        RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(_pkey_schema, &_pk_column));
-        _key_size = PrimaryKeyEncoder::get_encoded_fixed_size(_pkey_schema);
+        RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(_pkey_schema, &_pk_column, enable_null_primary_key()));
+        _key_size = PrimaryKeyEncoder::get_encoded_fixed_size(_pkey_schema, enable_null_primary_key());
     }
     auto clone_pk_column = _pk_column->clone_empty();
-    TRY_CATCH_BAD_ALLOC(PrimaryKeyEncoder::encode(_pkey_schema, data, 0, data.num_rows(), clone_pk_column.get()));
+    TRY_CATCH_BAD_ALLOC(PrimaryKeyEncoder::encode(_pkey_schema, data, 0, data.num_rows(), clone_pk_column.get(),
+                                                  enable_null_primary_key()));
     std::vector<Slice> keys;
     const Slice* vkeys =
             PrimaryIndex::build_persistent_keys(*clone_pk_column, _key_size, 0, clone_pk_column->size(), &keys);

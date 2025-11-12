@@ -250,6 +250,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     private boolean isInMemory = false;
 
+    private boolean enableNullPrimaryKey = false;
     private boolean enablePersistentIndex = false;
 
     // Only meaningful when enablePersistentIndex = true.
@@ -790,6 +791,15 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
+    public TableProperty buildEnableNullPrimaryKey() {
+        enableNullPrimaryKey = Config.enable_null_primary_key;
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_NULL_PRIMARY_KEY)) {
+            enableNullPrimaryKey = Boolean.parseBoolean(
+                    properties.get(PropertyAnalyzer.PROPERTIES_ENABLE_NULL_PRIMARY_KEY));
+        }
+        return this;
+    }
+
     public TableProperty buildPrimaryIndexCacheExpireSec() {
         primaryIndexCacheExpireSec = Integer.parseInt(properties.getOrDefault(
                 PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC, "0"));
@@ -1085,6 +1095,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return enablePersistentIndex;
     }
 
+    public boolean enableNullPrimaryKey() {
+        return enableNullPrimaryKey;
+    }
+
     public boolean isFileBundling() {
         return fileBundling;
     }
@@ -1241,6 +1255,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildStorageVolume();
         buildStorageCoolDownTTL();
         buildEnablePersistentIndex();
+        buildEnableNullPrimaryKey();
         buildPersistentIndexType();
         buildPrimaryIndexCacheExpireSec();
         buildCompressionType();

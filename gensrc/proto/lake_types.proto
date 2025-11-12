@@ -201,6 +201,7 @@ message TabletMetadataPB {
     optional CompactionStrategyPB compaction_strategy = 20;
     // flat json
     optional FlatJsonConfigPB flat_json_config = 21;
+    optional bool enable_null_primary_key = 22;
 }
 
 message MetadataUpdateInfoPB {

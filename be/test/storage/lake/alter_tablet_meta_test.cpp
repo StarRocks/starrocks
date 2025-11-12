@@ -102,7 +102,7 @@ TEST_F(AlterTabletMetaTest, test_alter_enable_persistent_index) {
     auto rowset_txn_meta = std::make_unique<RowsetTxnMetaPB>();
     ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
     std::shared_ptr<const TabletSchema> const_schema = _tablet_schema;
-    ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, txn_id));
+    ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, txn_id, false));
     ASSERT_OK(writer->open());
     // write segment #1
     ASSERT_OK(writer->write(chunk0));
@@ -522,7 +522,7 @@ TEST_F(AlterTabletMetaTest, test_alter_persistent_index_type) {
         auto rowset_txn_meta = std::make_unique<RowsetTxnMetaPB>();
         ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
         std::shared_ptr<const TabletSchema> const_schema = _tablet_schema;
-        ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, txn_id));
+        ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, txn_id, false));
         ASSERT_OK(writer->open());
         // write segment #1
         ASSERT_OK(writer->write(chunk0));

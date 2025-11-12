@@ -370,6 +370,13 @@ public class CreateTableAnalyzer {
             throw new SemanticException("The number of key columns should be less than the number of columns.");
         }
 
+        boolean enableNullPrimaryKey = Config.enable_null_primary_key;
+        if (stmt.getProperties() != null
+                && stmt.getProperties().containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_NULL_PRIMARY_KEY)) {
+            enableNullPrimaryKey = Boolean.parseBoolean(
+                    stmt.getProperties().get(PropertyAnalyzer.PROPERTIES_ENABLE_NULL_PRIMARY_KEY));
+        }
+
         for (int i = 0; i < keysColumnNames.size(); ++i) {
             String colName = columnDefs.get(i).getName();
             if (!keysColumnNames.get(i).equalsIgnoreCase(colName)) {
@@ -389,7 +396,7 @@ public class CreateTableAnalyzer {
             if (keysType == KeysType.PRIMARY_KEYS) {
                 ColumnDef cd = columnDefs.get(i);
                 cd.setPrimaryKeyNonNullable();
-                if (cd.isAllowNull()) {
+                if (!enableNullPrimaryKey && cd.isAllowNull()) {
                     throw new SemanticException("primary key column[" + colName + "] cannot be nullable");
                 }
                 Type t = cd.getType();

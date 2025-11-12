@@ -66,7 +66,8 @@ struct DictionaryCacheHashTraits<TYPE_VARCHAR> {
 
 class DictionaryCache {
 public:
-    DictionaryCache(DictionaryCacheEncoderType type) : _type(type) {}
+    DictionaryCache(DictionaryCacheEncoderType type, bool enable_null_primary_key)
+            : _type(type), _enable_null_primary_key(enable_null_primary_key) {}
     virtual ~DictionaryCache() = default;
 
     virtual inline Status insert(const Datum& k, const Datum& v, const uint8_t& flag) = 0;
@@ -78,8 +79,11 @@ public:
 
     virtual std::mutex& lock() = 0;
 
+    virtual bool enable_null_primary_key() { return _enable_null_primary_key; }
+
 protected:
     DictionaryCacheEncoderType _type;
+    bool _enable_null_primary_key;
 };
 
 class DictionaryCacheUtil;
@@ -88,7 +92,8 @@ class DictionaryCacheImpl final : public DictionaryCache {
 public:
     static constexpr uint8_t PREFETCHN = 8;
 
-    DictionaryCacheImpl(DictionaryCacheEncoderType type) : DictionaryCache(type), _estimated_memory_useage(0) {}
+    DictionaryCacheImpl(DictionaryCacheEncoderType type, bool enable_null_primary_key)
+            : DictionaryCache(type, enable_null_primary_key), _estimated_memory_useage(0) {}
     virtual ~DictionaryCacheImpl() override = default;
 
     using KeyCppType = typename DictionaryCacheTypeTraits<KeyLogicalType>::CppType;
@@ -362,19 +367,20 @@ public:
     ~DictionaryCacheUtil();
 
     // using primary key encoding function
-    static MutableColumnPtr encode_columns(const Schema& schema, const Chunk* chunk,
+    static MutableColumnPtr encode_columns(const Schema& schema, const Chunk* chunk, bool enable_null_primary_key,
                                            const DictionaryCacheEncoderType& encoder_type = PK_ENCODE) {
         switch (encoder_type) {
         case PK_ENCODE: {
             MutableColumnPtr encoded_columns;
-            if (!PrimaryKeyEncoder::create_column(schema, &encoded_columns).ok()) {
+            if (!PrimaryKeyEncoder::create_column(schema, &encoded_columns, enable_null_primary_key).ok()) {
                 std::stringstream ss;
                 ss << "create column for primary key encoder failed";
                 LOG(WARNING) << ss.str();
                 return nullptr;
             }
             if (chunk->num_rows() > 0) {
-                PrimaryKeyEncoder::encode(schema, *chunk, 0, chunk->num_rows(), encoded_columns.get());
+                PrimaryKeyEncoder::encode(schema, *chunk, 0, chunk->num_rows(), encoded_columns.get(),
+                                          enable_null_primary_key);
             }
             return encoded_columns;
         }
@@ -385,11 +391,12 @@ public:
     }
 
     static Status decode_columns(const Schema& schema, Column* column, Chunk* decoded_chunk,
-                                 std::vector<uint8_t>* value_encode_flags,
+                                 std::vector<uint8_t>* value_encode_flags, bool enable_null_primary_key,
                                  const DictionaryCacheEncoderType& encoder_type = PK_ENCODE) {
         switch (encoder_type) {
         case PK_ENCODE: {
-            return PrimaryKeyEncoder::decode(schema, *column, 0, column->size(), decoded_chunk, value_encode_flags);
+            return PrimaryKeyEncoder::decode(schema, *column, 0, column->size(), decoded_chunk, enable_null_primary_key,
+                                             value_encode_flags);
         }
         default:
             break;
@@ -452,12 +459,13 @@ public:
     }
 
     static DictionaryCachePtr create_dictionary_cache(const std::pair<LogicalType, LogicalType>& type,
+                                                      bool enable_null_primary_key,
                                                       const DictionaryCacheEncoderType& encoder_type = PK_ENCODE) {
         switch (encoder_type) {
         case PK_ENCODE: {
 #define IF_TYPE(key_type, value_type)                 \
     if (type == std::make_pair(key_type, value_type)) \
-    return std::make_shared<DictionaryCacheImpl<key_type, value_type>>(encoder_type)
+    return std::make_shared<DictionaryCacheImpl<key_type, value_type>>(encoder_type, enable_null_primary_key)
 
             IF_TYPE(TYPE_BOOLEAN, TYPE_BOOLEAN);
             IF_TYPE(TYPE_BOOLEAN, TYPE_TINYINT);
@@ -601,8 +609,11 @@ public:
         DCHECK(value_chunk->num_rows() == 0);
         size_t size = key_chunk->num_rows();
 
-        auto encoded_key_column = DictionaryCacheUtil::encode_columns(key_schema, key_chunk.get());
-        auto encoded_value_column = DictionaryCacheUtil::encode_columns(value_schema, value_chunk.get());
+        bool enable_null_pk = dictionary->enable_null_primary_key();
+
+        auto encoded_key_column = DictionaryCacheUtil::encode_columns(key_schema, key_chunk.get(), enable_null_pk);
+        auto encoded_value_column =
+                DictionaryCacheUtil::encode_columns(value_schema, value_chunk.get(), enable_null_pk);
 
         if (encoded_key_column == nullptr || encoded_value_column == nullptr) {
             return Status::InternalError("encode dictionary cache column failed when probing the dictionary cache");
@@ -614,14 +625,14 @@ public:
         DCHECK(encoded_value_column->size() == size);
 
         return DictionaryCacheUtil::decode_columns(value_schema, encoded_value_column.get(), value_chunk.get(),
-                                                   &value_encode_flags);
+                                                   &value_encode_flags, enable_null_pk);
     }
 
 private:
     Status _refresh_encoded_chunk(DictionaryId dict_id, DictionaryCacheTxnId txn_id, const Column* encoded_key_column,
                                   const Column* encoded_value_column, const SchemaPtr& schema,
                                   LogicalType key_encoded_type, LogicalType value_encoded_type, long memory_limit,
-                                  const std::vector<uint8_t>& value_encode_flags);
+                                  const std::vector<uint8_t>& value_encode_flags, bool enable_null_primary_key);
 
     // dictionary id -> DictionaryCache
     std::unordered_map<DictionaryId, DictionaryCachePtr> _dict_cache;

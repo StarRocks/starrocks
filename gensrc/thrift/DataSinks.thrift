@@ -236,6 +236,7 @@ struct TOlapTableSink {
     32: optional bool dynamic_overwrite
     33: optional bool enable_data_file_bundling
     34: optional bool is_multi_statements_txn
+    35: optional bool enable_null_primary_key
 }
 
 struct TSchemaTableSink {

@@ -382,6 +382,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                                     .setVersion(Partition.PARTITION_INIT_VERSION)
                                     .setStorageMedium(storageMedium)
                                     .setLatch(countDownLatch)
+                                    .setEnableNullPrimaryKey(tbl.enableNullPrimaryKey())
                                     .setEnablePersistentIndex(tbl.enablePersistentIndex())
                                     .setPrimaryIndexCacheExpireSec(tbl.primaryIndexCacheExpireSec())
                                     .setTabletType(tbl.getPartitionInfo().getTabletType(partition.getParentId()))

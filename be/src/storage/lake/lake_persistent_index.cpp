@@ -513,8 +513,13 @@ Status LakePersistentIndex::prepare_merging_iterator(
         // Pass `max_rss_rowid` to iterator, will be used when compaction.
         read_options.max_rss_rowid = sstable_pb.max_rss_rowid();
         if (sstable_pb.has_predicate()) {
+            bool enable_null_primary_key = config::enable_null_primary_key;
+            if (metadata->has_enable_null_primary_key()) {
+                enable_null_primary_key = metadata->enable_null_primary_key();
+            }
             ASSIGN_OR_RETURN(read_options.predicate,
-                             sstable::SstablePredicate::create(metadata->schema(), sstable_pb.predicate()));
+                             sstable::SstablePredicate::create(enable_null_primary_key, metadata->schema(),
+                                                               sstable_pb.predicate()));
         }
         read_options.shared_rssid = sstable_pb.shared_rssid();
         read_options.shared_version = sstable_pb.shared_version();
@@ -660,11 +665,12 @@ Status LakePersistentIndex::commit(MetaFileBuilder* builder) {
 
 // Rebuild index's memtable via del files, it will read from del file and write to index.
 // If it fail, SR will retry publish txn, and this index's memtable will be release and rebuild again.
-Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pkey_schema, int64_t rowset_version) {
+Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pkey_schema, int64_t rowset_version,
+                                      bool enable_null_primary_key) {
     TRACE_COUNTER_SCOPE_LATENCY_US("rebuild_index_del_cost_us");
     // Build pk column struct from schema
     MutableColumnPtr pk_column;
-    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
+    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, enable_null_primary_key));
     // Iterate all del files and insert into index.
     for (int del_idx = 0; del_idx < rowset->metadata().del_files_size(); ++del_idx) {
         TRACE_COUNTER_INCREMENT("rebuild_index_del_cnt", 1);
@@ -785,8 +791,13 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
 
     _need_rebuild_file_cnt = need_rebuild_file_cnt(*metadata, metadata->sstable_meta());
 
+    bool enable_null_primary_key = config::enable_null_primary_key;
+    if (metadata->has_enable_null_primary_key()) {
+        enable_null_primary_key = metadata->enable_null_primary_key();
+    }
+
     // Init PersistentIndex
-    _key_size = PrimaryKeyEncoder::get_encoded_fixed_size(pkey_schema);
+    _key_size = PrimaryKeyEncoder::get_encoded_fixed_size(pkey_schema, enable_null_primary_key);
 
     const auto& sstables = metadata->sstable_meta().sstables();
     // Rebuild persistent index from `rebuild_rss_rowid_point`
@@ -794,12 +805,13 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
     const uint32_t rebuild_rss_id = rebuild_rss_rowid_point >> 32;
     OlapReaderStatistics stats;
     MutableColumnPtr pk_column;
-    if (pk_columns.size() > 1) {
-        // more than one key column
-        if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
+    if (pk_columns.size() > 1 || enable_null_primary_key) {
+        // more than one key column or has enabled null primary key
+        if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, enable_null_primary_key).ok()) {
             CHECK(false) << "create column for primary key encoder failed";
         }
     }
+
     vector<uint32_t> rowids;
     rowids.reserve(4096);
     auto chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, 4096);
@@ -845,7 +857,8 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
                     Column* pkc = nullptr;
                     if (pk_column) {
                         pk_column->reset_column();
-                        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get());
+                        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get(),
+                                                  enable_null_primary_key);
                         pkc = pk_column.get();
                     } else {
                         pkc = chunk->columns()[0].get();
@@ -882,7 +895,7 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
         }
         // Rebuild from del files
         if (rowset->metadata().del_files_size() > 0) {
-            RETURN_IF_ERROR(load_dels(rowset, pkey_schema, rowset_version));
+            RETURN_IF_ERROR(load_dels(rowset, pkey_schema, rowset_version, enable_null_primary_key));
         }
     }
     return Status::OK();

@@ -1302,6 +1302,7 @@ public class RestoreJob extends AbstractJob {
                                 .setTabletId(restoreTablet.getId())
                                 .setVersion(restoreReplica.getVersion())
                                 .setStorageMedium(TStorageMedium.HDD) /* all restored replicas will be saved to HDD */
+                                .setEnableNullPrimaryKey(localTbl.enableNullPrimaryKey())
                                 .setEnablePersistentIndex(localTbl.enablePersistentIndex())
                                 .setPrimaryIndexCacheExpireSec(localTbl.primaryIndexCacheExpireSec())
                                 .setTabletType(localTbl.getPartitionInfo().getTabletType(restorePart.getId()))

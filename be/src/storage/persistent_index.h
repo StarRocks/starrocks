@@ -51,6 +51,8 @@ public:
 
     virtual void set_write_amp_score(double score) = 0;
 
+    virtual bool enable_null_primary_key() = 0;
+
     size_t total_data_size() const { return _total_data_size; }
     size_t total_segments() const { return _total_segments; }
     size_t rowset_num() const { return _rowset_num; };
@@ -903,7 +905,7 @@ private:
     // Calculate total memory usage after index been modified.
     void _calc_memory_usage();
 
-    size_t _get_encoded_fixed_size(const Schema& schema);
+    size_t _get_encoded_fixed_size(const Schema& schema, bool enable_null_primary_key);
 
 protected:
     // index storage directory

@@ -52,8 +52,8 @@ Status SegmentPKEncodeResult::_load() {
             } else if (!st.ok()) {
                 return st;
             } else {
-                TRY_CATCH_BAD_ALLOC(
-                        PrimaryKeyEncoder::encode(_pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get()));
+                TRY_CATCH_BAD_ALLOC(PrimaryKeyEncoder::encode(_pkey_schema, *chunk, 0, chunk->num_rows(),
+                                                              pk_column.get(), _enable_null_primary_key));
                 if (_lazy_load && pk_column->memory_usage() >= config::pk_column_lazy_load_threshold_bytes) {
                     break;
                 }
@@ -73,7 +73,7 @@ Status SegmentPKEncodeResult::init(const ChunkIteratorPtr& iter, const Schema& p
     _pkey_schema = pkey_schema;
     _lazy_load = lazy_load;
     _begin_rowid_offsets.push_back(0);
-    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(_pkey_schema, &pk_column));
+    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(_pkey_schema, &pk_column, _enable_null_primary_key));
     _status = _load();
     if (_status.ok()) {
         TRY_CATCH_BAD_ALLOC(pk_column->raw_data());
@@ -133,6 +133,11 @@ void RowsetUpdateState::init(const RowsetUpdateStateParams& params) {
                   << " new base version: " << params.metadata->version();
         // The data has been loaded, but the schema has changed and needs to be reloaded according to the new schema
         _reset();
+    }
+    if (params.metadata->has_enable_null_primary_key()) {
+        _enable_null_primary_key = params.metadata->enable_null_primary_key();
+    } else {
+        _enable_null_primary_key = config::enable_null_primary_key;
     }
     _tablet_id = params.metadata->id();
     _schema_version = params.metadata->schema().schema_version();
@@ -278,7 +283,7 @@ Status RowsetUpdateState::_do_load_upserts(uint32_t segment_id, const RowsetUpda
     }
     RETURN_ERROR_IF_FALSE(_segment_iters.size() == _rowset_ptr->num_segments());
     auto& iter = _segment_iters[segment_id];
-    SegmentPKEncodeResultPtr result = std::make_unique<SegmentPKEncodeResult>();
+    SegmentPKEncodeResultPtr result = std::make_unique<SegmentPKEncodeResult>(_enable_null_primary_key);
     // If this txn contains partial update or auto increment partial update, can't support lazy load now.
     RETURN_IF_ERROR(result->init(iter, pkey_schema, !params.op_write.has_txn_meta()));
     _upserts[segment_id] = std::move(result);
@@ -797,7 +802,7 @@ Status RowsetUpdateState::load_delete(uint32_t del_id, const RowsetUpdateStatePa
     }
     Schema pkey_schema = ChunkHelper::convert_schema(params.tablet_schema, pk_columns);
     MutableColumnPtr pk_column;
-    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
+    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, _enable_null_primary_key));
 
     auto root_path = params.tablet->metadata_root_location();
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_path));

@@ -178,7 +178,8 @@ private:
                              int64_t version) const;
 
     // rebuild delete operation from rowset.
-    Status load_dels(const RowsetPtr& rowset, const Schema& pkey_schema, int64_t rowset_version);
+    Status load_dels(const RowsetPtr& rowset, const Schema& pkey_schema, int64_t rowset_version,
+                     bool enable_null_primary_key);
 
     static void set_difference(KeyIndexSet* key_indexes, const KeyIndexSet& found_key_indexes);
 

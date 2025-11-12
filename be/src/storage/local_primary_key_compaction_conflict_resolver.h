@@ -15,6 +15,7 @@
 #pragma once
 
 #include "storage/primary_key_compaction_conflict_resolver.h"
+#include "tablet.h"
 
 namespace starrocks {
 
@@ -48,6 +49,8 @@ public:
                     Status(const CompactConflictResolveParams&, const std::vector<std::shared_ptr<Segment>>&,
                            const std::function<void(uint32_t, const DelVectorPtr&, uint32_t)>&)>& handler) override;
     Status breakpoint_check() override;
+
+    bool enable_null_primary_key() override { return _tablet->get_enable_null_primary_key(); }
 
 private:
     // input

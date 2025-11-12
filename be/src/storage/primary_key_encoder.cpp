@@ -49,6 +49,7 @@
 #include "storage/dictionary_cache_manager.h"
 #include "storage/tablet_schema.h"
 #include "types/date_value.hpp"
+#include "util/stack_util.h"
 
 namespace starrocks {
 
@@ -248,7 +249,7 @@ LogicalType PrimaryKeyEncoder::encoded_primary_key_type(const Schema& schema, co
     return TYPE_VARCHAR;
 }
 
-size_t PrimaryKeyEncoder::get_encoded_fixed_size(const Schema& schema) {
+size_t PrimaryKeyEncoder::get_encoded_fixed_size(const Schema& schema, bool enable_null_primary_key) {
     size_t ret = 0;
     size_t n = schema.num_key_fields();
     for (size_t i = 0; i < n; i++) {
@@ -258,26 +259,31 @@ size_t PrimaryKeyEncoder::get_encoded_fixed_size(const Schema& schema) {
         }
         ret += TabletColumn::get_field_length_by_type(t, 0);
     }
+    if (enable_null_primary_key) {
+        ret += n;
+    }
     return ret;
 }
 
-Status PrimaryKeyEncoder::create_column(const Schema& schema, MutableColumnPtr* pcolumn, bool large_column) {
+Status PrimaryKeyEncoder::create_column(const Schema& schema, MutableColumnPtr* pcolumn, bool enable_null_primary_key,
+                                        bool large_column) {
     std::vector<ColumnId> key_idxes(schema.num_key_fields());
     for (ColumnId i = 0; i < schema.num_key_fields(); ++i) {
         key_idxes[i] = i;
     }
-    return PrimaryKeyEncoder::create_column(schema, pcolumn, key_idxes, large_column);
+    return PrimaryKeyEncoder::create_column(schema, pcolumn, key_idxes, enable_null_primary_key, large_column);
 }
 
 Status PrimaryKeyEncoder::create_column(const Schema& schema, MutableColumnPtr* pcolumn,
-                                        const std::vector<ColumnId>& key_idxes, bool large_column) {
+                                        const std::vector<ColumnId>& key_idxes, bool enable_null_primary_key,
+                                        bool large_column) {
     if (!is_supported(schema, key_idxes)) {
         return Status::NotSupported("type not supported for primary key encoding");
     }
     // TODO: let `Chunk::column_from_field_type` and `Chunk::column_from_field` return a
     // `MutableColumnPtr` instead of `std::shared_ptr<Column>`, in order to reuse
     // its code here.
-    if (key_idxes.size() == 1) {
+    if (!enable_null_primary_key && key_idxes.size() == 1) {
         // simple encoding
         // integer's use fixed length original column
         // varchar use binary
@@ -329,7 +335,30 @@ Status PrimaryKeyEncoder::create_column(const Schema& schema, MutableColumnPtr* 
     return Status::OK();
 }
 
-typedef void (*EncodeOp)(const void*, int, std::string*);
+typedef std::function<void(const void*, int, std::string*, bool)> EncodeOp;
+
+template <LogicalType type>
+void encodeOpImpl(ColumnPtr col, const void* data, int idx, std::string* buff, const bool enable_null_primary_key,
+                  const bool is_last) {
+    if (enable_null_primary_key && col->is_null(idx)) {
+        buff->push_back(KEY_NULL_FIRST_MARKER);
+        return;
+    }
+
+    if (enable_null_primary_key) {
+        buff->push_back(KEY_NORMAL_MARKER);
+    }
+
+    if constexpr (type == TYPE_VARCHAR) {
+        encode_slice(static_cast<const typename RunTimeTypeTraits<type>::CppType*>(data)[idx], buff, is_last);
+    } else if constexpr (type == TYPE_DATE) {
+        encode_integral(static_cast<const int32_t*>(data)[idx], buff);
+    } else if constexpr (type == TYPE_DATETIME) {
+        encode_integral(static_cast<const int64_t*>(data)[idx], buff);
+    } else {
+        encode_integral(static_cast<const typename RunTimeTypeTraits<type>::CppType*>(data)[idx], buff);
+    }
+}
 
 static void prepare_ops_datas(const Schema& schema, const std::vector<ColumnId>& sort_key_idxes, const Chunk& chunk,
                               std::vector<EncodeOp>* pops, std::vector<const void*>* pdatas) {
@@ -338,57 +367,58 @@ static void prepare_ops_datas(const Schema& schema, const std::vector<ColumnId>&
     auto& ops = *pops;
     auto& datas = *pdatas;
     for (int j = 0; j < ncol; j++) {
-        datas[j] = chunk.get_column_by_index(sort_key_idxes[j])->raw_data();
+        const auto& col = chunk.get_column_by_index(sort_key_idxes[j]);
+        datas[j] = col->raw_data();
         switch (schema.field(sort_key_idxes[j])->type()->type()) {
         case TYPE_BOOLEAN:
-            ops[j] = [](const void* data, int idx, std::string* buff) {
-                encode_integral(((const uint8_t*)data)[idx], buff);
+            ops[j] = [col](const void* data, int idx, std::string* buff, bool enable_null_primary_key) {
+                encodeOpImpl<TYPE_BOOLEAN>(col, data, idx, buff, enable_null_primary_key, false);
             };
             break;
         case TYPE_TINYINT:
-            ops[j] = [](const void* data, int idx, std::string* buff) {
-                encode_integral(((const int8_t*)data)[idx], buff);
+            ops[j] = [col](const void* data, int idx, std::string* buff, bool enable_null_primary_key) {
+                encodeOpImpl<TYPE_TINYINT>(col, data, idx, buff, enable_null_primary_key, false);
             };
             break;
         case TYPE_SMALLINT:
-            ops[j] = [](const void* data, int idx, std::string* buff) {
-                encode_integral(((const int16_t*)data)[idx], buff);
+            ops[j] = [col](const void* data, int idx, std::string* buff, bool enable_null_primary_key) {
+                encodeOpImpl<TYPE_SMALLINT>(col, data, idx, buff, enable_null_primary_key, false);
             };
             break;
         case TYPE_INT:
-            ops[j] = [](const void* data, int idx, std::string* buff) {
-                encode_integral(((const int32_t*)data)[idx], buff);
+            ops[j] = [col](const void* data, int idx, std::string* buff, bool enable_null_primary_key) {
+                encodeOpImpl<TYPE_INT>(col, data, idx, buff, enable_null_primary_key, false);
             };
             break;
         case TYPE_BIGINT:
-            ops[j] = [](const void* data, int idx, std::string* buff) {
-                encode_integral(((const int64_t*)data)[idx], buff);
+            ops[j] = [col](const void* data, int idx, std::string* buff, bool enable_null_primary_key) {
+                encodeOpImpl<TYPE_BIGINT>(col, data, idx, buff, enable_null_primary_key, false);
             };
             break;
         case TYPE_LARGEINT:
-            ops[j] = [](const void* data, int idx, std::string* buff) {
-                encode_integral(((const int128_t*)data)[idx], buff);
+            ops[j] = [col](const void* data, int idx, std::string* buff, bool enable_null_primary_key) {
+                encodeOpImpl<TYPE_LARGEINT>(col, data, idx, buff, enable_null_primary_key, false);
             };
             break;
         case TYPE_VARCHAR:
             if (j + 1 == ncol) {
-                ops[j] = [](const void* data, int idx, std::string* buff) {
-                    encode_slice(((const Slice*)data)[idx], buff, true);
+                ops[j] = [col](const void* data, int idx, std::string* buff, bool enable_null_primary_key) {
+                    encodeOpImpl<TYPE_VARCHAR>(col, data, idx, buff, enable_null_primary_key, true);
                 };
             } else {
-                ops[j] = [](const void* data, int idx, std::string* buff) {
-                    encode_slice(((const Slice*)data)[idx], buff, false);
+                ops[j] = [col](const void* data, int idx, std::string* buff, bool enable_null_primary_key) {
+                    encodeOpImpl<TYPE_VARCHAR>(col, data, idx, buff, enable_null_primary_key, false);
                 };
             }
             break;
         case TYPE_DATE:
-            ops[j] = [](const void* data, int idx, std::string* buff) {
-                encode_integral(((const int32_t*)data)[idx], buff);
+            ops[j] = [col](const void* data, int idx, std::string* buff, bool enable_null_primary_key) {
+                encodeOpImpl<TYPE_DATE>(col, data, idx, buff, enable_null_primary_key, false);
             };
             break;
         case TYPE_DATETIME:
-            ops[j] = [](const void* data, int idx, std::string* buff) {
-                encode_integral(((const int64_t*)data)[idx], buff);
+            ops[j] = [col](const void* data, int idx, std::string* buff, bool enable_null_primary_key) {
+                encodeOpImpl<TYPE_DATETIME>(col, data, idx, buff, enable_null_primary_key, false);
             };
             break;
         default:
@@ -398,8 +428,24 @@ static void prepare_ops_datas(const Schema& schema, const std::vector<ColumnId>&
     }
 }
 
-void PrimaryKeyEncoder::encode(const Schema& schema, const Chunk& chunk, size_t offset, size_t len, Column* dest) {
-    if (schema.num_key_fields() == 1) {
+std::string to_hex_string(const uint8_t* data, int len) {
+    static const std::string hex_str = "0123456789ABCDEF";
+    std::string res;
+    for (int i = 0; i < len; i++) {
+        const uint8_t byte = data[i];
+        const uint8_t high = byte >> 4 & 0x0f;
+        const uint8_t low = byte & 0x0f;
+        res.push_back(hex_str[high]);
+        res.push_back(hex_str[low]);
+    }
+    return res;
+}
+
+void PrimaryKeyEncoder::encode(const Schema& schema, const Chunk& chunk, size_t offset, size_t len, Column* dest,
+                               bool enable_null_primary_key) {
+    VLOG(10) << "Call PrimaryKeyEncoder::encode with enable_null_primary_key " << enable_null_primary_key
+             << ", current stack: " << get_stack_trace();
+    if (!enable_null_primary_key && schema.num_key_fields() == 1) {
         // simple encoding, src & dest should have same type
         auto& src = chunk.get_column_by_index(0);
         if (dest->is_large_binary() && src->is_binary()) {
@@ -432,8 +478,10 @@ void PrimaryKeyEncoder::encode(const Schema& schema, const Chunk& chunk, size_t 
             for (size_t i = 0; i < len; i++) {
                 buff.clear();
                 for (int j = 0; j < ncol; j++) {
-                    ops[j](datas[j], offset + i, &buff);
+                    ops[j](datas[j], offset + i, &buff, enable_null_primary_key);
                 }
+                VLOG(10) << "Encoded primary key is "
+                         << to_hex_string(reinterpret_cast<const uint8_t*>(buff.c_str()), buff.size());
                 bdest.append(buff);
             }
         } else {
@@ -443,8 +491,10 @@ void PrimaryKeyEncoder::encode(const Schema& schema, const Chunk& chunk, size_t 
             for (size_t i = 0; i < len; i++) {
                 buff.clear();
                 for (int j = 0; j < ncol; j++) {
-                    ops[j](datas[j], offset + i, &buff);
+                    ops[j](datas[j], offset + i, &buff, enable_null_primary_key);
                 }
+                VLOG(10) << "Encoded primary key is "
+                         << to_hex_string(reinterpret_cast<const uint8_t*>(buff.c_str()), buff.size());
                 bdest.append(buff);
             }
         }
@@ -452,7 +502,7 @@ void PrimaryKeyEncoder::encode(const Schema& schema, const Chunk& chunk, size_t 
 }
 
 Status PrimaryKeyEncoder::encode_sort_key(const Schema& schema, const Chunk& chunk, size_t offset, size_t len,
-                                          Column* dest) {
+                                          Column* dest, bool enable_null_primary_key) {
     RETURN_ERROR_IF_FALSE(dest->is_binary() || dest->is_large_binary());
     int ncol = schema.sort_key_idxes().size();
     std::vector<EncodeOp> ops(ncol);
@@ -477,7 +527,7 @@ Status PrimaryKeyEncoder::encode_sort_key(const Schema& schema, const Chunk& chu
             for (size_t i = 0; i < len; i++) {
                 buff.clear();
                 for (int j = 0; j < ncol; j++) {
-                    ops[j](datas[j], offset + i, &buff);
+                    ops[j](datas[j], offset + i, &buff, enable_null_primary_key);
                 }
                 bdest.append(buff);
             }
@@ -489,7 +539,7 @@ Status PrimaryKeyEncoder::encode_sort_key(const Schema& schema, const Chunk& chu
                         buff.push_back(SORT_KEY_NULL_FIRST_MARKER);
                     } else {
                         buff.push_back(SORT_KEY_NORMAL_MARKER);
-                        ops[j](datas[j], offset + i, &buff);
+                        ops[j](datas[j], offset + i, &buff, enable_null_primary_key);
                     }
                 }
                 bdest.append(buff);
@@ -503,7 +553,7 @@ Status PrimaryKeyEncoder::encode_sort_key(const Schema& schema, const Chunk& chu
             for (size_t i = 0; i < len; i++) {
                 buff.clear();
                 for (int j = 0; j < ncol; j++) {
-                    ops[j](datas[j], offset + i, &buff);
+                    ops[j](datas[j], offset + i, &buff, enable_null_primary_key);
                 }
                 bdest.append(buff);
             }
@@ -515,7 +565,7 @@ Status PrimaryKeyEncoder::encode_sort_key(const Schema& schema, const Chunk& chu
                         buff.push_back(SORT_KEY_NULL_FIRST_MARKER);
                     } else {
                         buff.push_back(SORT_KEY_NORMAL_MARKER);
-                        ops[j](datas[j], offset + i, &buff);
+                        ops[j](datas[j], offset + i, &buff, enable_null_primary_key);
                     }
                 }
                 bdest.append(buff);
@@ -527,8 +577,8 @@ Status PrimaryKeyEncoder::encode_sort_key(const Schema& schema, const Chunk& chu
 }
 
 void PrimaryKeyEncoder::encode_selective(const Schema& schema, const Chunk& chunk, const uint32_t* indexes, size_t len,
-                                         Column* dest) {
-    if (schema.num_key_fields() == 1) {
+                                         Column* dest, bool enable_null_primary_key) {
+    if (!enable_null_primary_key && schema.num_key_fields() == 1) {
         // simple encoding, src & dest should have same type
         auto& src = chunk.get_column_by_index(0);
         dest->append_selective(*src, indexes, 0, len);
@@ -548,7 +598,7 @@ void PrimaryKeyEncoder::encode_selective(const Schema& schema, const Chunk& chun
                 uint32_t idx = indexes[i];
                 buff.clear();
                 for (int j = 0; j < ncol; j++) {
-                    ops[j](datas[j], idx, &buff);
+                    ops[j](datas[j], idx, &buff, enable_null_primary_key);
                 }
                 bdest.append(buff);
             }
@@ -560,7 +610,7 @@ void PrimaryKeyEncoder::encode_selective(const Schema& schema, const Chunk& chun
                 uint32_t idx = indexes[i];
                 buff.clear();
                 for (int j = 0; j < ncol; j++) {
-                    ops[j](datas[j], idx, &buff);
+                    ops[j](datas[j], idx, &buff, enable_null_primary_key);
                 }
                 bdest.append(buff);
             }
@@ -623,56 +673,72 @@ bool PrimaryKeyEncoder::encode_exceed_limit(const Schema& schema, const Chunk& c
 
 template <class T>
 Status decode_internal(const Schema& schema, const T& bkeys, size_t offset, size_t len, Chunk* dest,
-                       std::vector<uint8_t>* value_encode_flags) {
+                       std::vector<uint8_t>* value_encode_flags, bool enable_null_primary_key) {
     const int ncol = schema.num_key_fields();
     for (int i = 0; i < len; i++) {
         Slice s = bkeys.get_slice(offset + i);
         bool skip_decode = (value_encode_flags != nullptr && (*value_encode_flags)[i] == SKIP_DECODE_FLAG);
         for (int j = 0; j < ncol; j++) {
-            auto& column = *(dest->get_column_by_index(j));
+            auto col = dest->get_column_by_index(j);
             if (skip_decode) {
-                column.append_default();
+                col->append_default();
                 continue;
             }
+
+            auto column = col;
+            if (enable_null_primary_key) {
+                uint8_t flag = s.get_data()[0];
+                s.remove_prefix(1);
+
+                if (col->is_nullable() && flag == KEY_NULL_FIRST_MARKER) {
+                    col->append_nulls(1);
+                    continue;
+                }
+
+                if (col->is_nullable()) {
+                    column = down_cast<NullableColumn&>(*col).data_column();
+                }
+            }
+
             switch (schema.field(j)->type()->type()) {
             case TYPE_BOOLEAN: {
-                auto& tc = down_cast<UInt8Column&>(column);
+                auto& tc = down_cast<UInt8Column&>(*column);
                 uint8_t v;
                 decode_integral(&s, &v);
                 tc.append((int8_t)v);
             } break;
             case TYPE_TINYINT: {
-                auto& tc = down_cast<Int8Column&>(column);
+                auto& tc = down_cast<Int8Column&>(*column);
                 int8_t v;
                 decode_integral(&s, &v);
                 tc.append(v);
             } break;
             case TYPE_SMALLINT: {
-                auto& tc = down_cast<Int16Column&>(column);
+                auto& tc = down_cast<Int16Column&>(*column);
                 int16_t v;
                 decode_integral(&s, &v);
                 tc.append(v);
             } break;
             case TYPE_INT: {
-                auto& tc = down_cast<Int32Column&>(column);
+                auto& tc = down_cast<Int32Column&>(*column);
                 int32_t v;
                 decode_integral(&s, &v);
                 tc.append(v);
             } break;
             case TYPE_BIGINT: {
-                auto& tc = down_cast<Int64Column&>(column);
+                auto& tc = down_cast<Int64Column&>(*column);
                 int64_t v;
                 decode_integral(&s, &v);
                 tc.append(v);
             } break;
             case TYPE_LARGEINT: {
-                auto& tc = down_cast<Int128Column&>(column);
+                auto& tc = down_cast<Int128Column&>(*column);
                 int128_t v;
                 decode_integral(&s, &v);
                 tc.append(v);
             } break;
             case TYPE_VARCHAR: {
-                auto& tc = down_cast<BinaryColumn&>(column);
+                auto& tc = down_cast<BinaryColumn&>(*column);
                 bool fast_decode = value_encode_flags != nullptr ? (bool)((*value_encode_flags)[i]) : false;
                 if (!fast_decode) {
                     std::string v;
@@ -685,13 +751,13 @@ Status decode_internal(const Schema& schema, const T& bkeys, size_t offset, size
                 }
             } break;
             case TYPE_DATE: {
-                auto& tc = down_cast<DateColumn&>(column);
+                auto& tc = down_cast<DateColumn&>(*column);
                 DateValue v;
                 decode_integral(&s, &v._julian);
                 tc.append(v);
             } break;
             case TYPE_DATETIME: {
-                auto& tc = down_cast<TimestampColumn&>(column);
+                auto& tc = down_cast<TimestampColumn&>(*column);
                 TimestampValue v;
                 decode_integral(&s, &v._timestamp);
                 tc.append(v);
@@ -705,18 +771,18 @@ Status decode_internal(const Schema& schema, const T& bkeys, size_t offset, size
 }
 
 Status PrimaryKeyEncoder::decode(const Schema& schema, const Column& keys, size_t offset, size_t len, Chunk* dest,
-                                 std::vector<uint8_t>* value_encode_flags) {
-    if (schema.num_key_fields() == 1) {
+                                 bool enable_null_primary_key, std::vector<uint8_t>* value_encode_flags) {
+    if (!enable_null_primary_key && schema.num_key_fields() == 1) {
         // simple decoding, src & dest should have same type
         dest->get_column_by_index(0)->append(keys, offset, len);
     } else {
         RETURN_ERROR_IF_FALSE(keys.is_binary() || keys.is_large_binary());
         if (keys.is_binary()) {
             auto& bkeys = down_cast<const BinaryColumn&>(keys);
-            return decode_internal(schema, bkeys, offset, len, dest, value_encode_flags);
+            return decode_internal(schema, bkeys, offset, len, dest, value_encode_flags, enable_null_primary_key);
         } else {
             auto& bkeys = down_cast<const LargeBinaryColumn&>(keys);
-            return decode_internal(schema, bkeys, offset, len, dest, value_encode_flags);
+            return decode_internal(schema, bkeys, offset, len, dest, value_encode_flags, enable_null_primary_key);
         }
     }
     return Status::OK();

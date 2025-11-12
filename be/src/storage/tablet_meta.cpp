@@ -55,11 +55,16 @@ Status TabletMeta::create(const TCreateTabletReq& request, const TabletUid& tabl
                           uint32_t next_unique_id,
                           const std::unordered_map<uint32_t, uint32_t>& col_ordinal_to_unique_id,
                           TabletMetaSharedPtr* tablet_meta) {
+    bool enable_null_primary_key = config::enable_null_primary_key;
+    if (request.__isset.enable_null_primary_key) {
+        enable_null_primary_key = request.enable_null_primary_key;
+    }
     *tablet_meta = std::make_shared<TabletMeta>(
             request.table_id, request.partition_id, request.tablet_id, request.tablet_schema.schema_hash, shard_id,
             request.tablet_schema, next_unique_id,
-            request.__isset.enable_persistent_index && request.enable_persistent_index, col_ordinal_to_unique_id,
-            tablet_uid, request.__isset.tablet_type ? request.tablet_type : TTabletType::TABLET_TYPE_DISK,
+            request.__isset.enable_persistent_index && request.enable_persistent_index, enable_null_primary_key,
+            col_ordinal_to_unique_id, tablet_uid,
+            request.__isset.tablet_type ? request.tablet_type : TTabletType::TABLET_TYPE_DISK,
             request.__isset.compression_type ? request.compression_type : TCompressionType::LZ4_FRAME,
             request.__isset.primary_index_cache_expire_sec ? request.primary_index_cache_expire_sec : 0,
             request.tablet_schema.storage_type, request.__isset.compression_level ? request.compression_level : -1);
@@ -101,7 +106,7 @@ const RowsetMetaPB& TabletMeta::rowset_meta_pb_with_max_rowset_version(const std
 
 TabletMeta::TabletMeta(int64_t table_id, int64_t partition_id, int64_t tablet_id, int32_t schema_hash,
                        uint64_t shard_id, const TTabletSchema& tablet_schema, uint32_t next_unique_id,
-                       bool enable_persistent_index,
+                       bool enable_persistent_index, bool enable_null_primary_key,
                        const std::unordered_map<uint32_t, uint32_t>& col_ordinal_to_unique_id,
                        const TabletUid& tablet_uid, TTabletType::type tabletType,
                        TCompressionType::type compression_type, int32_t primary_index_cache_expire_sec,
@@ -120,6 +125,7 @@ TabletMeta::TabletMeta(int64_t table_id, int64_t partition_id, int64_t tablet_id
     EnumToString(TStorageType, storage_type, storage_type_str);
     tablet_meta_pb.set_storage_type(storage_type_str);
     tablet_meta_pb.set_enable_persistent_index(enable_persistent_index);
+    tablet_meta_pb.set_enable_null_primary_key(enable_null_primary_key);
     *(tablet_meta_pb.mutable_tablet_uid()) = tablet_uid.to_proto();
     tablet_meta_pb.set_tablet_type(tabletType == TTabletType::TABLET_TYPE_MEMORY ? TabletTypePB::TABLET_TYPE_MEMORY
                                                                                  : TabletTypePB::TABLET_TYPE_DISK);
@@ -294,6 +300,12 @@ void TabletMeta::init_from_pb(TabletMetaPB* ptablet_meta_pb, bool use_tablet_sch
         _enable_persistent_index = false;
     }
 
+    if (tablet_meta_pb.has_enable_null_primary_key()) {
+        _enable_null_primary_key = tablet_meta_pb.enable_null_primary_key();
+    } else {
+        _enable_null_primary_key = config::enable_null_primary_key;
+    }
+
     _storage_type = "column";
     if (tablet_meta_pb.has_storage_type() && !tablet_meta_pb.storage_type().empty()) {
         _storage_type = tablet_meta_pb.storage_type();
@@ -392,6 +404,7 @@ void TabletMeta::to_meta_pb(TabletMetaPB* tablet_meta_pb, bool skip_tablet_schem
     tablet_meta_pb->set_creation_time(creation_time());
     tablet_meta_pb->set_cumulative_layer_point(cumulative_layer_point());
     tablet_meta_pb->set_enable_persistent_index(get_enable_persistent_index());
+    tablet_meta_pb->set_enable_null_primary_key(get_enable_null_primary_key());
     if (!_storage_type.empty()) {
         tablet_meta_pb->set_storage_type(_storage_type);
     }
