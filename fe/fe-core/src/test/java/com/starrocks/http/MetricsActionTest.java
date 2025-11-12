@@ -30,7 +30,7 @@ public class MetricsActionTest {
             super(controller);
         }
 
-        public MetricsAction.RequestParams  callParseRequestParams(BaseRequest request) {
+        public MetricsAction.RequestParams callParseRequestParams(BaseRequest request) {
             return this.parseRequestParams(request);
         }
     }
@@ -42,7 +42,7 @@ public class MetricsActionTest {
         }
         DefaultHttpRequest rawRequest =
                 new DefaultHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, uri, headers);
-        return new BaseRequest(null, rawRequest, null);
+        return new BaseRequest(null, rawRequest);
     }
 
     @Test
