@@ -316,6 +316,7 @@ public class LoadPlannerTest {
         fileStatusesList.add(fileStatusList);
 
         // plan
+        Config.load_parallel_instance_num = 1;
         LoadPlanner planner = new LoadPlanner(jobId, loadId, txnId, db.getId(), table, strictMode,
                 timezone, timeoutS, startTime, partialUpdate, ctx, sessionVariables, loadMemLimit, execMemLimit,
                 brokerDesc, fileGroups, fileStatusesList, 1);
@@ -334,7 +335,7 @@ public class LoadPlannerTest {
         // 2. check scan node column expr
         FileScanNode scanNode = (FileScanNode) planner.getScanNodes().get(0);
         List<TScanRangeLocations> locationsList = scanNode.getScanRangeLocations(0);
-        Assertions.assertEquals(1, locationsList.size());
+        Assertions.assertEquals(2, locationsList.size());
         TScanRangeLocations location = locationsList.get(0);
         TBrokerScanRangeParams params = location.scan_range.broker_scan_range.params;
         Map<Integer, TExpr> exprOfDestSlot = params.expr_of_dest_slot;
