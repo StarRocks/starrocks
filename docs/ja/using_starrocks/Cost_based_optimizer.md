@@ -326,13 +326,13 @@ ANALYZE TABLE tbl_name UPDATE HISTOGRAM ON col_name [, col_name]
 
 - PROPERTIES: カスタムパラメータ。`PROPERTIES` が指定されていない場合、`fe.conf` のデフォルト設定が使用されます。
 
-| **PROPERTIES**                 | **タイプ** | **デフォルト値** | **説明**                                              |
-| ------------------------------ | -------- | ----------------- | ------------------------------------------------------------ |
-| statistic_sample_collect_rows  | INT      | 200000            | 収集する最小行数。パラメータ値がテーブルの実際の行数を超える場合、完全収集が実行されます。 |
-| histogram_buckets_size         | LONG     | 64                | ヒストグラムのデフォルトバケット数。                   |
-| histogram_mcv_size             | INT      | 100               | ヒストグラムの最も一般的な値 (MCV) の数。      |
-| histogram_sample_ratio         | FLOAT    | 0.1               | ヒストグラムのサンプリング比率。                          |
-| histogram_max_sample_row_count | LONG     | 10000000          | ヒストグラムのために収集する最大行数。       |
+| **PROPERTIES**                    | **タイプ** | **デフォルト値** | **説明**                                              |
+| --------------------------------- | -------- | ----------------- | ------------------------------------------------------------ |
+| statistic_sample_collect_rows     | INT      | 200000            | 収集する最小行数。パラメータ値がテーブルの実際の行数を超える場合、完全収集が実行されます。 |
+| histogram_buckets_size            | LONG     | 64                | ヒストグラムのデフォルトバケット数。                   |
+| histogram_mcv_size                | INT      | 100               | ヒストグラムの最も一般的な値 (MCV) の数。      |
+| histogram_sample_ratio            | FLOAT    | 0.1               | ヒストグラムのサンプリング比率。                          |
+| histogram_max_sample_row_count    | LONG     | 10000000          | ヒストグラムのために収集する最大行数。       |
 | histogram_collect_bucket_ndv_mode | STRING   | none              | ヒストグラムバケットごとの重複排除カウント (NDV) を推定するモード。`none` (デフォルト、重複排除カウントは収集されません)、`hll` (HyperLogLog を使用して正確に推定)、または `sample` (低オーバーヘッドのサンプルベースの推定器を使用)。 |
 
 ヒストグラムのために収集する行数は、複数のパラメータによって制御されます。それは `statistic_sample_collect_rows` とテーブル行数 * `histogram_sample_ratio` の間の大きい値です。この数は `histogram_max_sample_row_count` で指定された値を超えることはできません。値を超えた場合、`histogram_max_sample_row_count` が優先されます。
