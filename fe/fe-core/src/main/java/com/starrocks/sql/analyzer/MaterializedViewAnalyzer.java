@@ -92,6 +92,7 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
+import com.starrocks.sql.ast.expression.ExprSubstitutionVisitor;
 import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
@@ -2018,7 +2019,7 @@ public class MaterializedViewAnalyzer {
         if (CollectionUtils.sizeIsEmpty(partitionByExprMap)) {
             return expr;
         }
-        ExprSubstitutionMap exprSubstitutionMap = new ExprSubstitutionMap(false);
+        ExprSubstitutionMap exprSubstitutionMap = new ExprSubstitutionMap();
         partitionByExprMap.entrySet().forEach(e -> {
             Expr lExpr = e.getKey();
             Expr rExpr = e.getValue();
@@ -2026,7 +2027,7 @@ public class MaterializedViewAnalyzer {
             ExpressionAnalyzer.analyzeExpression(rExpr, new AnalyzeState(), scope, context);
             exprSubstitutionMap.put(lExpr, rExpr);
         });
-        return expr.substitute(exprSubstitutionMap);
+        return ExprSubstitutionVisitor.rewrite(expr, exprSubstitutionMap);
     }
 
     /**
