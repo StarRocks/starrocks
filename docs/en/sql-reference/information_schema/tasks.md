@@ -19,9 +19,4 @@ The following fields are provided in `tasks`:
 
 ## Syntax
 
-```SQL
-SUBMIT TASK task_example
-SCHEDULE EVERY(INTERVAL 300 SECOND)
-AS
-INSERT INTO
-```
+[StarRocks SUBMIT_TASK Documentation](https://docs.starrocks.io/docs/sql-reference/sql-statements/loading_unloading/ETL/SUBMIT_TASK/)
