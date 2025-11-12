@@ -68,7 +68,7 @@ jobs:
             if [[ "$pr_check_run_info" == 'null' ]] || [[ $(echo "$pr_check_run_info" | jq -r .status) != 'completed' ]]; then
               status=$(echo "$pr_check_run_info" | jq -r .conclusion)
               if [[ "$status" == 'success' ]]; then
-                exit 0
+                break
               else
                 echo "::warning::The latest PR CHECKER status: ${status}!"
               fi
@@ -76,9 +76,11 @@ jobs:
             round_limit=$((round_limit-1))
             sleep 10
           done
-
-          echo "::error::PR CHECKER is timeout, please check and then you can re-execute by commenting on rerun!"
-          exit 1
+          
+          if [[ $round_limit -eq 0 ]]; then
+            echo "::error::PR CHECKER is timeout, please check and then you can re-execute by commenting on rerun!"
+            exit 1
+          fi
 
       - name: Check Blacklist
         id: check_blacklist
