@@ -67,18 +67,16 @@ jobs:
             pr_check_run_info=$(gh run list -R ${{ github.repository }} -c ${SHA} --json status,name,startedAt,conclusion | jq '[.[] | select(.name == "PR CHECKER")] | sort_by(.startedAt)| last')
             if [[ "$pr_check_run_info" == 'null' ]] || [[ $(echo "$pr_check_run_info" | jq -r .status) != 'completed' ]] || [[ $(echo "$pr_check_run_info" | jq -r .conclusion) != 'success' ]]
             then
-              break
+              echo "$pr_check_run_info"
+              round_limit=$((round_limit-1))
+              sleep 10
+            else
+               exit 0
             fi
-            echo "$pr_check_run_info"
-            round_limit=$((round_limit-1))
-            sleep 10
           done
 
-          if [[ $round_limit -le 0 ]]
-          then
-            echo "::error::PR CHECKER is failed, please check and then you can re-execute by commenting on rerun!"
-            exit 1
-          fi
+          echo "::error::PR CHECKER is failed, please check and then you can re-execute by commenting on rerun!"
+          exit 1
 
       - name: Check Blacklist
         id: check_blacklist
