@@ -65,10 +65,18 @@ public class HistogramUtils {
                     high = Double.parseDouble(bucketJsonArray.get(1).getAsString());
                 }
 
-                Bucket bucket = new Bucket(low, high,
-                        Long.parseLong(bucketJsonArray.get(2).getAsString()),
-                        Long.parseLong(bucketJsonArray.get(3).getAsString()));
-                buckets.add(bucket);
+                if (bucketJsonArray.size() == 5) {
+                    Bucket bucket = new Bucket(low, high,
+                            Long.parseLong(bucketJsonArray.get(2).getAsString()),
+                            Long.parseLong(bucketJsonArray.get(3).getAsString()),
+                            Long.parseLong(bucketJsonArray.get(4).getAsString()));
+                    buckets.add(bucket);
+                } else {
+                    Bucket bucket = new Bucket(low, high,
+                            Long.parseLong(bucketJsonArray.get(2).getAsString()),
+                            Long.parseLong(bucketJsonArray.get(3).getAsString()));
+                    buckets.add(bucket);
+                }
             } catch (Exception e) {
                 LOG.warn("Failed to parse histogram bucket: {}", bucketJsonArray, e);
             }
