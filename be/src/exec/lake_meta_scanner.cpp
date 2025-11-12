@@ -44,6 +44,10 @@ Status LakeMetaScanner::_real_init() {
     reader_params.low_card_threshold = _parent->_meta_scan_node.__isset.low_cardinality_threshold
                                                ? _parent->_meta_scan_node.low_cardinality_threshold
                                                : DICT_DECODE_MAX_SIZE;
+    // Pass column access paths and extend schema similar to OLAP path
+    if (_parent->_meta_scan_node.__isset.column_access_paths && !_parent->_column_access_paths.empty()) {
+        reader_params.column_access_paths = &_parent->_column_access_paths;
+    }
 
     _reader = std::make_unique<LakeMetaReader>();
     TEST_SYNC_POINT_CALLBACK("lake_meta_scanner:open_mock_reader", &_reader);

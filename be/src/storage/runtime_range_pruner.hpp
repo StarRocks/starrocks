@@ -39,8 +39,8 @@ struct RuntimeColumnPredicateBuilder {
                                                              const SlotDescriptor* slot, int32_t driver_sequence,
                                                              ObjectPool* pool) {
         // keep consistent with ColumnRangeBuilder
-        if constexpr (ltype == TYPE_TIME || ltype == TYPE_NULL || ltype == TYPE_JSON || lt_is_float<ltype> ||
-                      lt_is_binary<ltype>) {
+        if constexpr (ltype == TYPE_TIME || ltype == TYPE_NULL || ltype == TYPE_JSON || ltype == TYPE_VARIANT ||
+                      lt_is_float<ltype> || lt_is_binary<ltype>) {
             DCHECK(false) << "unreachable path";
             return Status::NotSupported("unreachable path");
         } else {

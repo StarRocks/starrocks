@@ -50,14 +50,15 @@ import com.starrocks.load.RoutineLoadDesc;
 import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.metric.TableMetricsRegistry;
 import com.starrocks.persist.EditLog;
+import com.starrocks.persist.OriginStatementInfo;
 import com.starrocks.persist.RoutineLoadOperation;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.AlterRoutineLoadStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.thrift.TKafkaRLTaskProgress;
 import com.starrocks.thrift.TRoutineLoadJobInfo;
 import com.starrocks.transaction.TransactionState;
@@ -567,7 +568,7 @@ public class RoutineLoadJobTest {
             System.out.println("Value: " + stmt.getAnalyzedJobProperties().get(key));
         }
         routineLoadJob.modifyJob(stmt.getRoutineLoadDesc(), stmt.getAnalyzedJobProperties(),
-                stmt.getDataSourceProperties(), new OriginStatement(originStmt, 0), true);
+                stmt.getDataSourceProperties(), new OriginStatementInfo(originStmt, 0), true);
         Assertions.assertEquals(Integer.parseInt(desiredConcurrentNumber),
                 (int) Deencapsulation.getField(routineLoadJob, "desireTaskConcurrentNum"));
         Assertions.assertEquals(Long.parseLong(maxBatchInterval),
@@ -604,10 +605,10 @@ public class RoutineLoadJobTest {
                 "   \"property.client.id\" = \"" + clientId + "\"," +
                 "   \"property.kafka_default_offsets\" = \"" + defaultOffsets + "\"" +
                 ")";
-        routineLoadJob.setOrigStmt(new OriginStatement(originStmt, 0));
+        routineLoadJob.setOrigStmt(new OriginStatementInfo(originStmt, 0));
         AlterRoutineLoadStmt stmt = (AlterRoutineLoadStmt) UtFrameUtils.parseStmtWithNewParser(originStmt, connectContext);
         routineLoadJob.modifyJob(stmt.getRoutineLoadDesc(), stmt.getAnalyzedJobProperties(),
-                stmt.getDataSourceProperties(), new OriginStatement(originStmt, 0), true);
+                stmt.getDataSourceProperties(), new OriginStatementInfo(originStmt, 0), true);
         routineLoadJob.convertCustomProperties(true);
         Map<String, String> properties = routineLoadJob.getConvertedCustomProperties();
         Assertions.assertEquals(groupId, properties.get("group.id"));
@@ -627,12 +628,12 @@ public class RoutineLoadJobTest {
                 "COLUMNS TERMINATED BY \",\"," +
                 "PARTITION(p1, p2, p3)," +
                 "ROWS TERMINATED BY \"A\"";
-        routineLoadJob.setOrigStmt(new OriginStatement(originStmt, 0));
+        routineLoadJob.setOrigStmt(new OriginStatementInfo(originStmt, 0));
         AlterRoutineLoadStmt stmt = (AlterRoutineLoadStmt) UtFrameUtils.parseStmtWithNewParser(originStmt, connectContext);
         routineLoadJob.modifyJob(stmt.getRoutineLoadDesc(), stmt.getAnalyzedJobProperties(),
-                stmt.getDataSourceProperties(), new OriginStatement(originStmt, 0), true);
+                stmt.getDataSourceProperties(), new OriginStatementInfo(originStmt, 0), true);
         Assertions.assertEquals("a,b,c,d=a", Joiner.on(",").join(routineLoadJob.getColumnDescs()));
-        Assertions.assertEquals("`a` = 1", routineLoadJob.getWhereExpr().toSql());
+        Assertions.assertEquals("`a` = 1", ExprToSql.toSql(routineLoadJob.getWhereExpr()));
         Assertions.assertEquals("','", routineLoadJob.getColumnSeparator().toString());
         Assertions.assertEquals("'A'", routineLoadJob.getRowDelimiter().toString());
         Assertions.assertEquals("p1,p2,p3", Joiner.on(",").join(routineLoadJob.getPartitions().getPartitionNames()));
@@ -646,12 +647,12 @@ public class RoutineLoadJobTest {
 
         String validStmt = "alter routine load for db.job1 " +
                 "FROM KAFKA (\"kafka_broker_list\" = \"192.168.1.2:9092,192.168.1.3:9092\")";
-        routineLoadJob.setOrigStmt(new OriginStatement(validStmt, 0));
+        routineLoadJob.setOrigStmt(new OriginStatementInfo(validStmt, 0));
 
         try {
             AlterRoutineLoadStmt stmt = (AlterRoutineLoadStmt) UtFrameUtils.parseStmtWithNewParser(validStmt, connectContext);
             routineLoadJob.modifyJob(stmt.getRoutineLoadDesc(), stmt.getAnalyzedJobProperties(),
-                    stmt.getDataSourceProperties(), new OriginStatement(validStmt, 0), true);
+                    stmt.getDataSourceProperties(), new OriginStatementInfo(validStmt, 0), true);
 
             // Verify broker list was updated successfully
             Assertions.assertEquals("192.168.1.2:9092,192.168.1.3:9092", routineLoadJob.getBrokerList());
@@ -668,12 +669,12 @@ public class RoutineLoadJobTest {
 
         String invalidStmt = "alter routine load for db.job1 " +
                 "FROM KAFKA (\"kafka_broker_list\" = \"invalid_broker_format\")";
-        routineLoadJob.setOrigStmt(new OriginStatement(invalidStmt, 0));
+        routineLoadJob.setOrigStmt(new OriginStatementInfo(invalidStmt, 0));
 
         try {
             AlterRoutineLoadStmt stmt = (AlterRoutineLoadStmt) UtFrameUtils.parseStmtWithNewParser(invalidStmt, connectContext);
             routineLoadJob.modifyJob(stmt.getRoutineLoadDesc(), stmt.getAnalyzedJobProperties(),
-                    stmt.getDataSourceProperties(), new OriginStatement(invalidStmt, 0), false);
+                    stmt.getDataSourceProperties(), new OriginStatementInfo(invalidStmt, 0), false);
             Assertions.fail("Invalid broker list should throw DdlException");
         } catch (Exception e) {
             // This should trigger the catch block on line 841-842
@@ -689,10 +690,10 @@ public class RoutineLoadJobTest {
         String originStmt = "CREATE ROUTINE LOAD job ON unknown " +
                 "PROPERTIES (\"desired_concurrent_number\"=\"1\") " +
                 "FROM KAFKA (\"kafka_topic\" = \"my_topic\")";
-        routineLoadJob.setOrigStmt(new OriginStatement(originStmt, 0));
+        routineLoadJob.setOrigStmt(new OriginStatementInfo(originStmt, 0));
 
         // alter columns terminator
-        RoutineLoadDesc loadDesc = CreateRoutineLoadStmt.getLoadDesc(new OriginStatement(
+        RoutineLoadDesc loadDesc = CreateRoutineLoadStmt.getLoadDesc(new OriginStatementInfo(
                 "ALTER ROUTINE LOAD FOR job " +
                         "COLUMNS TERMINATED BY ';'", 0), null);
         routineLoadJob.mergeLoadDescToOriginStatement(loadDesc);
@@ -702,7 +703,7 @@ public class RoutineLoadJobTest {
                 "FROM KAFKA (\"kafka_topic\" = \"my_topic\")", routineLoadJob.getOrigStmt().originStmt);
 
         // alter rows terminator
-        loadDesc = CreateRoutineLoadStmt.getLoadDesc(new OriginStatement(
+        loadDesc = CreateRoutineLoadStmt.getLoadDesc(new OriginStatementInfo(
                 "ALTER ROUTINE LOAD FOR job " +
                         "ROWS TERMINATED BY '\n'", 0), null);
         routineLoadJob.mergeLoadDescToOriginStatement(loadDesc);
@@ -713,7 +714,7 @@ public class RoutineLoadJobTest {
                 "FROM KAFKA (\"kafka_topic\" = \"my_topic\")", routineLoadJob.getOrigStmt().originStmt);
 
         // alter columns
-        loadDesc = CreateRoutineLoadStmt.getLoadDesc(new OriginStatement(
+        loadDesc = CreateRoutineLoadStmt.getLoadDesc(new OriginStatementInfo(
                 "ALTER ROUTINE LOAD FOR job " +
                         "COLUMNS(`a`, `b`, `c`=1)", 0), null);
         routineLoadJob.mergeLoadDescToOriginStatement(loadDesc);
@@ -725,7 +726,7 @@ public class RoutineLoadJobTest {
                 "FROM KAFKA (\"kafka_topic\" = \"my_topic\")", routineLoadJob.getOrigStmt().originStmt);
 
         // alter partition
-        loadDesc = CreateRoutineLoadStmt.getLoadDesc(new OriginStatement(
+        loadDesc = CreateRoutineLoadStmt.getLoadDesc(new OriginStatementInfo(
                 "ALTER ROUTINE LOAD FOR job " +
                         "TEMPORARY PARTITION(`p1`, `p2`)", 0), null);
         routineLoadJob.mergeLoadDescToOriginStatement(loadDesc);
@@ -738,7 +739,7 @@ public class RoutineLoadJobTest {
                 "FROM KAFKA (\"kafka_topic\" = \"my_topic\")", routineLoadJob.getOrigStmt().originStmt);
 
         // alter where
-        loadDesc = CreateRoutineLoadStmt.getLoadDesc(new OriginStatement(
+        loadDesc = CreateRoutineLoadStmt.getLoadDesc(new OriginStatementInfo(
                 "ALTER ROUTINE LOAD FOR job " +
                         "WHERE a = 1", 0), null);
         routineLoadJob.mergeLoadDescToOriginStatement(loadDesc);
@@ -752,7 +753,7 @@ public class RoutineLoadJobTest {
                 "FROM KAFKA (\"kafka_topic\" = \"my_topic\")", routineLoadJob.getOrigStmt().originStmt);
 
         // alter columns terminator again
-        loadDesc = CreateRoutineLoadStmt.getLoadDesc(new OriginStatement(
+        loadDesc = CreateRoutineLoadStmt.getLoadDesc(new OriginStatementInfo(
                 "ALTER ROUTINE LOAD FOR job " +
                         "COLUMNS TERMINATED BY '\t'", 0), null);
         routineLoadJob.mergeLoadDescToOriginStatement(loadDesc);
@@ -766,7 +767,7 @@ public class RoutineLoadJobTest {
                 "FROM KAFKA (\"kafka_topic\" = \"my_topic\")", routineLoadJob.getOrigStmt().originStmt);
 
         // alter rows terminator again
-        loadDesc = CreateRoutineLoadStmt.getLoadDesc(new OriginStatement(
+        loadDesc = CreateRoutineLoadStmt.getLoadDesc(new OriginStatementInfo(
                 "ALTER ROUTINE LOAD FOR job " +
                         "ROWS TERMINATED BY 'a'", 0), null);
         routineLoadJob.mergeLoadDescToOriginStatement(loadDesc);
@@ -780,7 +781,7 @@ public class RoutineLoadJobTest {
                 "FROM KAFKA (\"kafka_topic\" = \"my_topic\")", routineLoadJob.getOrigStmt().originStmt);
 
         // alter columns again
-        loadDesc = CreateRoutineLoadStmt.getLoadDesc(new OriginStatement(
+        loadDesc = CreateRoutineLoadStmt.getLoadDesc(new OriginStatementInfo(
                 "ALTER ROUTINE LOAD FOR job " +
                         "COLUMNS(`a`)", 0), null);
         routineLoadJob.mergeLoadDescToOriginStatement(loadDesc);
@@ -793,7 +794,7 @@ public class RoutineLoadJobTest {
                 "PROPERTIES (\"desired_concurrent_number\"=\"1\") " +
                 "FROM KAFKA (\"kafka_topic\" = \"my_topic\")", routineLoadJob.getOrigStmt().originStmt);
         // alter partition again
-        loadDesc = CreateRoutineLoadStmt.getLoadDesc(new OriginStatement(
+        loadDesc = CreateRoutineLoadStmt.getLoadDesc(new OriginStatementInfo(
                 "ALTER ROUTINE LOAD FOR job " +
                         " PARTITION(`p1`, `p2`)", 0), null);
         routineLoadJob.mergeLoadDescToOriginStatement(loadDesc);
@@ -807,7 +808,7 @@ public class RoutineLoadJobTest {
                 "FROM KAFKA (\"kafka_topic\" = \"my_topic\")", routineLoadJob.getOrigStmt().originStmt);
 
         // alter where again
-        loadDesc = CreateRoutineLoadStmt.getLoadDesc(new OriginStatement(
+        loadDesc = CreateRoutineLoadStmt.getLoadDesc(new OriginStatementInfo(
                 "ALTER ROUTINE LOAD FOR job " +
                         "WHERE a = 5", 0), null);
         routineLoadJob.mergeLoadDescToOriginStatement(loadDesc);
@@ -821,7 +822,7 @@ public class RoutineLoadJobTest {
                 "FROM KAFKA (\"kafka_topic\" = \"my_topic\")", routineLoadJob.getOrigStmt().originStmt);
 
         // alter where again
-        loadDesc = CreateRoutineLoadStmt.getLoadDesc(new OriginStatement(
+        loadDesc = CreateRoutineLoadStmt.getLoadDesc(new OriginStatementInfo(
                 "ALTER ROUTINE LOAD FOR job " +
                         "WHERE a = 5 and b like 'c1%' and c between 1 and 100 and substring(d,1,5) = 'cefd' ", 0), null);
         routineLoadJob.mergeLoadDescToOriginStatement(loadDesc);

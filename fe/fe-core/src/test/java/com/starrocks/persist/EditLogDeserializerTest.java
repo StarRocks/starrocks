@@ -15,7 +15,9 @@
 package com.starrocks.persist;
 
 import com.starrocks.common.io.DataOutputBuffer;
+import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.persist.gson.GsonUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -34,9 +36,11 @@ public class EditLogDeserializerTest {
         WarehouseInternalOpLog log = new WarehouseInternalOpLog(warehouseName, payload);
 
         buffer.writeShort(OperationType.OP_WAREHOUSE_INTERNAL_OP);
-        log.write(buffer);
+        Text.writeString(buffer, GsonUtils.GSON.toJson(log, WarehouseInternalOpLog.class));
 
         DataInputStream inStream = new DataInputStream(new ByteArrayInputStream(buffer.getData()));
+        buffer.flush();
+        buffer.close();
 
         short opCode = inStream.readShort();
         Assertions.assertEquals(OperationType.OP_WAREHOUSE_INTERNAL_OP, opCode);

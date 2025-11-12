@@ -389,7 +389,6 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "join t0 on t1.v4 = t0.v2 " +
                 "join t2 on t1.v5 = t2.v8 ";
         String planFragment = getFragmentPlan(sql);
-        System.out.println(planFragment);
         Assertions.assertTrue(planFragment.contains("2:OlapScanNode\n" +
                 "     TABLE: t0"));
         Assertions.assertTrue(planFragment.contains("|----3:EXCHANGE\n" +

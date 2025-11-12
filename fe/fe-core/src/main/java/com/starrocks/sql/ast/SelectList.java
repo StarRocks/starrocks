@@ -16,7 +16,6 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.HintNode;
 
 import java.util.List;
 
@@ -60,6 +59,11 @@ public class SelectList {
 
     public void addItem(SelectListItem item) {
         items.add(item);
+    }
+
+    public void setItems(List<SelectListItem> items) {
+        this.items.clear();
+        this.items.addAll(items);
     }
 
     public boolean isDistinct() {

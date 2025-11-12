@@ -55,7 +55,7 @@ ${license}
 package com.starrocks.builtins;
 
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.Type;
+import com.starrocks.type.Type;
 
 public class VectorizedBuiltinFunctions {
     public static void initBuiltins(FunctionSet functionSet) {
@@ -210,6 +210,7 @@ def generate_cpp(path):
         "ArrayFunctions",
         "MapFunctions",
         "GinFunctions",
+        "AiFunctions",
     ]
 
     modules_contents = dict()
@@ -286,12 +287,10 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     be_functions_dir = args.cpp_path + "/opcode"
-    if not os.path.exists(be_functions_dir):
-        os.makedirs(be_functions_dir)
+    os.makedirs(be_functions_dir, exist_ok=True)
 
     fe_functions_dir = args.java_path + "/com/starrocks/builtins"
-    if not os.path.exists(fe_functions_dir):
-        os.makedirs(fe_functions_dir)
+    os.makedirs(fe_functions_dir, exist_ok=True)
 
     # Read the function metadata inputs
     for function in functions.vectorized_functions:

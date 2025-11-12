@@ -513,6 +513,13 @@ Status Expr::prepare(const std::vector<ExprContext*>& ctxs, RuntimeState* state)
     return Status::OK();
 }
 
+Status Expr::prepare(const std::map<SlotId, ExprContext*>& ctxs, RuntimeState* state) {
+    for (const auto& [_, ctx] : ctxs) {
+        RETURN_IF_ERROR(ctx->prepare(state));
+    }
+    return Status::OK();
+}
+
 Status Expr::prepare(RuntimeState* state, ExprContext* context) {
     FAIL_POINT_TRIGGER_RETURN_ERROR(randome_error);
     DCHECK(_type.type != TYPE_UNKNOWN);
@@ -529,6 +536,13 @@ Status Expr::open(const std::vector<ExprContext*>& ctxs, RuntimeState* state) {
     return Status::OK();
 }
 
+Status Expr::open(const std::map<SlotId, ExprContext*>& ctxs, RuntimeState* state) {
+    for (const auto& [_, ctx] : ctxs) {
+        RETURN_IF_ERROR(ctx->open(state));
+    }
+    return Status::OK();
+}
+
 Status Expr::open(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) {
     FAIL_POINT_TRIGGER_RETURN_ERROR(random_error);
     DCHECK(_type.type != TYPE_UNKNOWN);
@@ -540,6 +554,14 @@ Status Expr::open(RuntimeState* state, ExprContext* context, FunctionContext::Fu
 
 void Expr::close(const std::vector<ExprContext*>& ctxs, RuntimeState* state) {
     for (auto ctx : ctxs) {
+        if (ctx != nullptr) {
+            ctx->close(state);
+        }
+    }
+}
+
+void Expr::close(const std::map<SlotId, ExprContext*>& ctxs, RuntimeState* state) {
+    for (const auto& [_, ctx] : ctxs) {
         if (ctx != nullptr) {
             ctx->close(state);
         }

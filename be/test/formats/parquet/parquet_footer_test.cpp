@@ -17,7 +17,7 @@
 #include <filesystem>
 
 #include "common/statusor.h"
-#include "exec/hdfs_scanner.h"
+#include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "formats/parquet/file_reader.h"
 
 namespace starrocks::parquet {

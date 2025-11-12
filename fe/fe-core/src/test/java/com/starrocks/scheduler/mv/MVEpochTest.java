@@ -47,7 +47,7 @@ class MVEpochTest {
 
         assertEquals(MVEpoch.EpochState.COMMITTED, epoch.getState());
         DataOutputBuffer buffer = new DataOutputBuffer(1024);
-        epoch.write(buffer);
+        Text.writeString(buffer, GsonUtils.GSON.toJson(epoch, MVEpoch.class));
         byte[] bytes = buffer.getData();
 
         DataInput input = new DataInputStream(new ByteArrayInputStream(buffer.getData()));

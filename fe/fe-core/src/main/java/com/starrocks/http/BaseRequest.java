@@ -59,10 +59,9 @@ public class BaseRequest {
     private boolean isAuthorized = false;
     private QueryStringDecoder decoder;
 
-    public BaseRequest(ChannelHandlerContext ctx, HttpRequest request, HttpConnectContext connectContext) {
+    public BaseRequest(ChannelHandlerContext ctx, HttpRequest request) {
         this.context = ctx;
         this.request = request;
-        this.connectContext = connectContext;
     }
 
     public ChannelHandlerContext getContext() {
@@ -132,6 +131,20 @@ public class BaseRequest {
         return params.get(key);
     }
 
+    public String getSingleParameter(String key, String defaultValue) {
+        String uri = request.uri();
+        if (decoder == null) {
+            decoder = new QueryStringDecoder(uri);
+        }
+
+        List<String> values = decoder.parameters().get(key);
+        if (values != null && !values.isEmpty()) {
+            return values.get(0);
+        }
+
+        return params.get(key) != null ? params.get(key) : defaultValue;
+    }
+
     public String getContent() throws DdlException {
         if (request instanceof FullHttpRequest) {
             FullHttpRequest fullHttpRequest = (FullHttpRequest) request;
@@ -173,5 +186,9 @@ public class BaseRequest {
 
     public HttpConnectContext getConnectContext() {
         return connectContext;
+    }
+
+    public void setConnectContext(HttpConnectContext connectContext) {
+        this.connectContext = connectContext;
     }
 }

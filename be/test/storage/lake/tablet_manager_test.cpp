@@ -27,6 +27,7 @@
 #include "storage/lake/join_path.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/metacache.h"
+#include "storage/lake/options.h"
 #include "storage/lake/update_manager.h"
 #include "storage/lake/versioned_tablet.h"
 #include "storage/options.h"
@@ -101,6 +102,41 @@ TEST_F(LakeTabletManagerTest, tablet_meta_write_and_read) {
     EXPECT_OK(_tablet_manager->delete_tablet_metadata(tablet_id, 2));
     res = _tablet_manager->get_tablet_metadata(tablet_id, 2);
     EXPECT_TRUE(res.status().is_not_found());
+}
+
+TEST_F(LakeTabletManagerTest, tablet_meta_read_corrupted_and_recover) {
+    starrocks::TabletMetadata metadata;
+    auto tablet_id = next_id();
+    metadata.set_id(tablet_id);
+    metadata.set_version(2);
+    auto rowset_meta_pb = metadata.add_rowsets();
+    rowset_meta_pb->set_id(2);
+    rowset_meta_pb->set_overlapped(false);
+    rowset_meta_pb->set_data_size(1024);
+    rowset_meta_pb->set_num_rows(5);
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(metadata));
+    auto res = _tablet_manager->get_tablet_metadata(tablet_id, 2);
+    EXPECT_TRUE(res.ok());
+    _tablet_manager->metacache()->prune();
+    bool is_first_time = true;
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("ProtobufFile::load::corruption");
+        SyncPoint::GetInstance()->ClearCallBack("TabletManager::corrupted_tablet_meta_handler");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    SyncPoint::GetInstance()->SetCallBack("ProtobufFile::load::corruption", [&](void* arg) {
+        if (is_first_time) {
+            *(Status*)arg = Status::Corruption("injected error");
+            is_first_time = false;
+        }
+    });
+    SyncPoint::GetInstance()->SetCallBack("TabletManager::corrupted_tablet_meta_handler",
+                                          [](void* arg) { *(Status*)arg = Status::OK(); });
+    res = _tablet_manager->get_tablet_metadata(tablet_id, 2);
+    EXPECT_TRUE(res.ok());
+    EXPECT_EQ(res.value()->id(), tablet_id);
+    EXPECT_EQ(res.value()->version(), 2);
 }
 
 // NOLINTNEXTLINE
@@ -690,6 +726,32 @@ TEST_F(LakeTabletManagerTest, put_bundle_tablet_metadata) {
         ASSERT_EQ(metadata->historical_schemas_size(), 2);
     }
 
+    {
+        _tablet_manager->metacache()->prune();
+        // inject corruption error
+        SyncPoint::GetInstance()->EnableProcessing();
+        bool is_first_time = true;
+        DeferOp defer([]() {
+            SyncPoint::GetInstance()->ClearCallBack("TabletManager::parse_bundle_tablet_metadata::corruption");
+            SyncPoint::GetInstance()->ClearCallBack("TabletManager::corrupted_tablet_meta_handler");
+            SyncPoint::GetInstance()->DisableProcessing();
+        });
+        SyncPoint::GetInstance()->SetCallBack("TabletManager::parse_bundle_tablet_metadata::corruption",
+                                              [&](void* arg) {
+                                                  if (is_first_time) {
+                                                      *(bool*)arg = true;
+                                                      is_first_time = false;
+                                                  }
+                                              });
+        SyncPoint::GetInstance()->SetCallBack("TabletManager::corrupted_tablet_meta_handler",
+                                              [](void* arg) { *(Status*)arg = Status::OK(); });
+        auto res = _tablet_manager->get_tablet_metadata(1, 2);
+        EXPECT_TRUE(res.ok()) << res.status().to_string();
+        TabletMetadataPtr metadata = std::move(res).value();
+        ASSERT_EQ(metadata->schema().id(), 10);
+        ASSERT_EQ(metadata->historical_schemas_size(), 2);
+    }
+
     // multi thread read
     {
         std::vector<std::thread> threads;
@@ -772,6 +834,28 @@ TEST_F(LakeTabletManagerTest, cache_tablet_metadata) {
     ASSERT_TRUE(_tablet_manager->cache_tablet_metadata(metadata).ok());
     auto path = _tablet_manager->tablet_metadata_location(tablet_id, 2);
     ASSERT_TRUE(_tablet_manager->metacache()->lookup_tablet_metadata(path) != nullptr);
+}
+
+TEST_F(LakeTabletManagerTest, get_tablet_metadata_cache_options) {
+    auto metadata = std::make_shared<TabletMetadata>();
+    auto tablet_id = next_id();
+    metadata->set_id(tablet_id);
+    metadata->set_version(2);
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(metadata));
+
+    auto path = _tablet_manager->tablet_metadata_location(tablet_id, 2);
+
+    // 1. fill_meta_cache=true
+    _tablet_manager->metacache()->prune();
+    auto res = _tablet_manager->get_tablet_metadata(tablet_id, 2, {true, true});
+    EXPECT_TRUE(res.ok());
+    EXPECT_TRUE(_tablet_manager->metacache()->lookup_tablet_metadata(path) != nullptr);
+
+    // 2. fill_meta_cache=false
+    _tablet_manager->metacache()->prune();
+    res = _tablet_manager->get_tablet_metadata(tablet_id, 2, {false, true});
+    EXPECT_TRUE(res.ok());
+    EXPECT_TRUE(_tablet_manager->metacache()->lookup_tablet_metadata(path) == nullptr);
 }
 
 TEST_F(LakeTabletManagerTest, get_tablet_metadata) {}

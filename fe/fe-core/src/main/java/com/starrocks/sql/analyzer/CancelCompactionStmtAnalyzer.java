@@ -14,16 +14,16 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.BinaryPredicate;
-import com.starrocks.analysis.BinaryType;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.IntLiteral;
-import com.starrocks.analysis.SlotRef;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.CancelCompactionStmt;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.SlotRef;
 
 public class CancelCompactionStmtAnalyzer {
 
@@ -31,7 +31,7 @@ public class CancelCompactionStmtAnalyzer {
         new CancelCompactionStmtAnalyzerVisitor().analyze(statement, context);
     }
 
-    static class CancelCompactionStmtAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+    static class CancelCompactionStmtAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
 
         public void analyze(CancelCompactionStmt statement, ConnectContext context) {
             visit(statement, context);

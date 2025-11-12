@@ -63,6 +63,9 @@ public class SessionAction extends WebBaseAction {
         SESSION_TABLE_HEADER.add("Info");
         SESSION_TABLE_HEADER.add("IsPending");
         SESSION_TABLE_HEADER.add("Warehouse");
+        SESSION_TABLE_HEADER.add("CNGroup");
+        SESSION_TABLE_HEADER.add("Catalog");
+        SESSION_TABLE_HEADER.add("QueryId");
     }
 
     public SessionAction(ActionController controller) {

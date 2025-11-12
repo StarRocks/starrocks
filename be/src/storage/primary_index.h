@@ -127,11 +127,12 @@ public:
 
     Status prepare(const EditVersion& version, size_t n);
 
-    Status commit(PersistentIndexMetaPB* index_meta);
+    Status commit(PersistentIndexMetaPB* index_meta, IOStat* stat = nullptr);
 
     Status on_commited();
 
-    Status major_compaction(DataDir* data_dir, int64_t tablet_id, std::shared_timed_mutex* mutex);
+    Status major_compaction(DataDir* data_dir, int64_t tablet_id, std::shared_timed_mutex* mutex,
+                            IOStat* stat = nullptr);
 
     Status abort();
 
@@ -164,11 +165,12 @@ public:
         _status = st;
     }
 
+    // Return the pointer of specific position of slice array.
+    static const Slice* build_persistent_keys(const Column& pks, size_t key_size, uint32_t idx_begin, uint32_t idx_end,
+                                              std::vector<Slice>* key_slices);
+
 protected:
     void _set_schema(const Schema& pk_schema);
-    // Return the pointer of specific position of slice array.
-    const Slice* _build_persistent_keys(const Column& pks, uint32_t idx_begin, uint32_t idx_end,
-                                        std::vector<Slice>* key_slices) const;
 
 private:
     Status _do_load(Tablet* tablet);
@@ -205,9 +207,9 @@ protected:
     Status _status;
     int64_t _tablet_id = 0;
     std::shared_ptr<PersistentIndex> _persistent_index;
+    size_t _key_size = 0;
 
 private:
-    size_t _key_size = 0;
     int64_t _table_id = 0;
     Schema _pk_schema;
     LogicalType _enc_pk_type = TYPE_UNKNOWN;

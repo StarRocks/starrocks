@@ -15,18 +15,18 @@
 package com.starrocks.qe.feedback;
 
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.Type;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.feedback.AddPlanAdvisorStmt;
 import com.starrocks.sql.ast.feedback.ClearPlanAdvisorStmt;
 import com.starrocks.sql.ast.feedback.DelPlanAdvisorStmt;
 import com.starrocks.sql.ast.feedback.ShowPlanAdvisorStmt;
+import com.starrocks.type.Type;
 
 import java.util.List;
 import java.util.UUID;
@@ -54,7 +54,7 @@ public class PlanAdvisorExecutor {
         return INSTANCE.visit(stmt, context);
     }
 
-    public static final class PlanAdvisorExecutorVisitor implements AstVisitor<ShowResultSet, ConnectContext> {
+    public static final class PlanAdvisorExecutorVisitor implements AstVisitorExtendInterface<ShowResultSet, ConnectContext> {
 
         @Override
         public ShowResultSet visitAddPlanAdvisorStatement(AddPlanAdvisorStmt stmt, ConnectContext context) {

@@ -17,8 +17,8 @@ package com.starrocks.sql.optimizer.rule.transformation;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.BinaryType;
-import com.starrocks.analysis.JoinOperator;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.JoinOperator;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
@@ -84,7 +84,7 @@ public class OnPredicateMoveAroundRule extends TransformationRule {
         DomainProperty rightDomainProperty = rightChild.getDomainProperty();
 
         OptExpression result = null;
-        if (joinOperator.getJoinType().isInnerJoin() || joinOperator.getJoinType().isSemiJoin()) {
+        if (joinOperator.getJoinType().isAnyInnerJoin() || joinOperator.getJoinType().isSemiJoin()) {
             List<ScalarOperator> toLeftPredicates = binaryPredicates.stream()
                     .map(e -> derivePredicate(e, rightDomainProperty, leftDomainProperty, true))
                     .filter(Objects::nonNull)
@@ -129,7 +129,7 @@ public class OnPredicateMoveAroundRule extends TransformationRule {
                         Lists.newArrayList(input.inputAt(0), OptExpression.create(filter, input.inputAt(1)))
                 );
             }
-        } else if (joinOperator.getJoinType().isLeftOuterJoin()) {
+        } else if (joinOperator.getJoinType().isAnyLeftOuterJoin()) {
             List<ScalarOperator> toRightPredicates = binaryPredicates.stream()
                     .map(e -> derivePredicate(e, leftDomainProperty, rightDomainProperty, false))
                     .collect(Collectors.toList());

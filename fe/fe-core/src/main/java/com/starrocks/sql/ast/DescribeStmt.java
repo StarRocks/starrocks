@@ -16,9 +16,9 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.analysis.TableName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.proc.ProcNodeInterface;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;
@@ -149,6 +149,6 @@ public class DescribeStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitDescTableStmt(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitDescTableStmt(this, context);
     }
 }

@@ -130,7 +130,7 @@ public class MvRewritePartitionTest extends MVTestBase {
     @Test
     public void testPartitionPrune1() throws Exception {
         Tracers.register(connectContext);
-        Tracers.init(connectContext, Tracers.Mode.LOGS, "MV");
+        Tracers.init(connectContext, "LOGS", "MV");
         createAndRefreshMv("CREATE MATERIALIZED VIEW test_partition_tbl_mv1\n" +
                         " PARTITION BY k1\n" +
                         " DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
@@ -636,7 +636,7 @@ public class MvRewritePartitionTest extends MVTestBase {
                     cluster.runSql("test", String.format("refresh materialized view %s partition " +
                             "start('%s') end('%s') with sync mode;", mvName, param.refreshStart, param.refreshEnd));
                     for (PCompensateExpect expect : param.expectPartitionPredicates) {
-                        System.out.println(expect);
+                        logSysInfo(expect);
                         if (!Strings.isNullOrEmpty(expect.partitionPredicate)) {
                             String query = String.format("select a.t1a, a.id_date, sum(a.t1b), sum(b.t1b) \n" +
                                     "from table_with_day_partition a\n" +
@@ -705,7 +705,7 @@ public class MvRewritePartitionTest extends MVTestBase {
                 )
         );
         for (PartitionCompensateParam param : params) {
-            System.out.println(param);
+            logSysInfo(param);
             testRefreshAndRewriteWithMultiJoinMV(param);
         }
         connectContext.getSessionVariable().setEnableMaterializedViewTransparentUnionRewrite(true);

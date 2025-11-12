@@ -14,7 +14,7 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.TableName;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 // SHOW CREATE TABLE statement.
@@ -65,6 +65,6 @@ public class ShowCreateTableStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowCreateTableStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowCreateTableStatement(this, context);
     }
 }

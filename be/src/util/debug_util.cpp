@@ -77,7 +77,9 @@ size_t get_build_version(char* buffer, size_t max_size) {
     size_t length = 0;
     length = snprintf(buffer + length, max_size - length, "%s ", STARROCKS_VERSION) + length;
     length = snprintf(buffer + length, max_size - length, "%s ", STARROCKS_BUILD_TYPE) + length;
-    length = snprintf(buffer + length, max_size - length, "(build %s)\n", STARROCKS_COMMIT_HASH) + length;
+    length = snprintf(buffer + length, max_size - length, "(build %s ", STARROCKS_COMMIT_HASH) + length;
+    length = snprintf(buffer + length, max_size - length, "distro %s ", STARROCKS_BUILD_DISTRO_ID) + length;
+    length = snprintf(buffer + length, max_size - length, "arch %s)\n", STARROCKS_BUILD_ARCH) + length;
     return length;
 }
 

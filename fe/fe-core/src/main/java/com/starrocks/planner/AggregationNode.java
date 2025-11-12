@@ -38,24 +38,19 @@ import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.AggregateInfo;
-import com.starrocks.analysis.DecimalLiteral;
-import com.starrocks.analysis.DescriptorTable;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.SlotDescriptor;
-import com.starrocks.analysis.SlotId;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.TupleId;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.ast.expression.DecimalLiteral;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
+import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
@@ -68,6 +63,8 @@ import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TRuntimeFilterDescription;
 import com.starrocks.thrift.TStreamingPreaggregationMode;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.Type;
 import org.apache.commons.collections.CollectionUtils;
 
 import java.nio.ByteBuffer;
@@ -179,6 +176,7 @@ public class AggregationNode extends PlanNode implements RuntimeFilterBuildNode 
         this.groupByMinMaxStats = groupByMinMaxStats;
     }
 
+    @Override
     public void disablePhysicalPropertyOptimize() {
         setUseSortAgg(false);
         setUsePerBucketOptimize(false);
@@ -228,11 +226,11 @@ public class AggregationNode extends PlanNode implements RuntimeFilterBuildNode 
         StringBuilder sqlAggFuncBuilder = new StringBuilder();
         // only serialize agg exprs that are being materialized
         for (FunctionCallExpr e : aggInfo.getMaterializedAggregateExprs()) {
-            aggregateFunctions.add(e.treeToThrift());
+            aggregateFunctions.add(ExprToThriftVisitor.treeToThrift(e));
             if (sqlAggFuncBuilder.length() > 0) {
                 sqlAggFuncBuilder.append(", ");
             }
-            sqlAggFuncBuilder.append(e.toSql());
+            sqlAggFuncBuilder.append(ExprToSql.toSql(e));
         }
 
         msg.agg_node =
@@ -249,13 +247,13 @@ public class AggregationNode extends PlanNode implements RuntimeFilterBuildNode 
 
         List<Expr> groupingExprs = aggInfo.getGroupingExprs();
         if (groupingExprs != null) {
-            msg.agg_node.setGrouping_exprs(Expr.treesToThrift(groupingExprs));
+            msg.agg_node.setGrouping_exprs(ExprToThriftVisitor.treesToThrift(groupingExprs));
             StringBuilder sqlGroupingKeysBuilder = new StringBuilder();
             for (Expr e : groupingExprs) {
                 if (sqlGroupingKeysBuilder.length() > 0) {
                     sqlGroupingKeysBuilder.append(", ");
                 }
-                sqlGroupingKeysBuilder.append(e.toSql());
+                sqlGroupingKeysBuilder.append(ExprToSql.toSql(e));
             }
             if (sqlGroupingKeysBuilder.length() > 0) {
                 msg.agg_node.setSql_grouping_keys(sqlGroupingKeysBuilder.toString());
@@ -287,13 +285,13 @@ public class AggregationNode extends PlanNode implements RuntimeFilterBuildNode 
             }
 
             if (minMaxStats.size() == 2 * groupingExprs.size()) {
-                msg.agg_node.setGroup_by_min_max(Expr.treesToThrift(minMaxStats));
+                msg.agg_node.setGroup_by_min_max(ExprToThriftVisitor.treesToThrift(minMaxStats));
             }
         }
 
         List<Expr> intermediateAggrExprs = aggInfo.getIntermediateAggrExprs();
         if (intermediateAggrExprs != null && !intermediateAggrExprs.isEmpty()) {
-            msg.agg_node.setIntermediate_aggr_exprs(Expr.treesToThrift(intermediateAggrExprs));
+            msg.agg_node.setIntermediate_aggr_exprs(ExprToThriftVisitor.treesToThrift(intermediateAggrExprs));
         }
 
         if (!buildRuntimeFilters.isEmpty()) {
@@ -334,27 +332,27 @@ public class AggregationNode extends PlanNode implements RuntimeFilterBuildNode 
         if (nameDetail != null) {
             output.append(detailPrefix).append(nameDetail).append("\n");
         }
-        if (aggInfo.getAggregateExprs() != null && aggInfo.getMaterializedAggregateExprs().size() > 0) {
+        if (aggInfo.getAggregateExprs() != null && !aggInfo.getMaterializedAggregateExprs().isEmpty()) {
             if (detailLevel == TExplainLevel.VERBOSE) {
                 output.append(detailPrefix).append("aggregate: ");
             } else {
                 output.append(detailPrefix).append("output: ");
             }
-            output.append(getVerboseExplain(aggInfo.getAggregateExprs(), detailLevel)).append("\n");
+            output.append(explainExpr(detailLevel, aggInfo.getAggregateExprs())).append("\n");
         }
         // TODO: unify them
         if (detailLevel == TExplainLevel.VERBOSE) {
             if (CollectionUtils.isNotEmpty(aggInfo.getGroupingExprs())) {
                 output.append(detailPrefix).append("group by: ").append(
-                        getVerboseExplain(aggInfo.getGroupingExprs(), detailLevel)).append("\n");
+                        explainExpr(detailLevel, aggInfo.getGroupingExprs())).append("\n");
             }
         } else {
             output.append(detailPrefix).append("group by: ").append(
-                    getVerboseExplain(aggInfo.getGroupingExprs(), detailLevel)).append("\n");
+                    explainExpr(detailLevel, aggInfo.getGroupingExprs())).append("\n");
         }
 
         if (!conjuncts.isEmpty()) {
-            output.append(detailPrefix).append("having: ").append(getVerboseExplain(conjuncts, detailLevel))
+            output.append(detailPrefix).append("having: ").append(explainExpr(detailLevel, conjuncts))
                     .append("\n");
         }
         if (useSortAgg) {

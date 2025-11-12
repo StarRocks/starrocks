@@ -1,4 +1,4 @@
--- name: test_add_drop_field_struct
+-- name: test_add_drop_field_struct @mac
 create database test_add_drop_field_struct;
 -- result:
 -- !result

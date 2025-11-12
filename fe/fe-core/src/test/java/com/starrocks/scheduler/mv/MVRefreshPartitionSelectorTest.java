@@ -18,14 +18,16 @@ import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
+import com.starrocks.sql.common.PCellNone;
+import com.starrocks.sql.common.PCellSortedSet;
+import com.starrocks.sql.common.PCellWithName;
+import com.starrocks.sql.common.PartitionNameSetMap;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
-import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -38,7 +40,7 @@ public class MVRefreshPartitionSelectorTest {
     public static void setUp() throws Exception {
     }
 
-    private Map<Table, Set<String>> mockPartitionSet(long rows, long bytes) {
+    private Map<Table, PCellSortedSet> mockPartitionSet(long rows, long bytes) {
         OlapTable table = Mockito.mock(OlapTable.class);
         Partition partition = Mockito.mock(Partition.class);
 
@@ -46,8 +48,10 @@ public class MVRefreshPartitionSelectorTest {
         Mockito.when(partition.getDataSize()).thenReturn(bytes);
         Mockito.when(table.getPartition(anyString())).thenReturn(partition);
 
-        Map<Table, Set<String>> map = new HashMap<>();
-        map.put(table, new HashSet<>(Collections.singleton("p1")));
+        Map<Table, PCellSortedSet> map = new HashMap<>();
+        PCellSortedSet set = PCellSortedSet.of();
+        set.add(PCellWithName.of("p1", new PCellNone()));
+        map.put(table, set);
         return map;
     }
 
@@ -115,20 +119,21 @@ public class MVRefreshPartitionSelectorTest {
 
     @Test
     public void testExternalTablePartitionsStatistics() throws Exception {
-        Map<Table, Map<String, Set<String>>> externalPartitionMap = new HashMap<>();
-        HashMap<String, Set<String>> partitionMap1 = new HashMap<>();
+        Map<Table, PartitionNameSetMap> externalPartitionMap = new HashMap<>();
+        PartitionNameSetMap partitionMap1 = PartitionNameSetMap.of();
         partitionMap1.put("p1", Set.of("dt=p1"));
         partitionMap1.put("p2", Set.of("dt=p2", "dt=p3"));
         externalPartitionMap.put(mockExternalTable(), partitionMap1);
-        HashMap<String, Set<String>> partitionMap2 = new HashMap<>();
+        PartitionNameSetMap partitionMap2 = PartitionNameSetMap.of();
         partitionMap2.put("p1", Set.of("dt=p1"));
         partitionMap2.put("p2", Set.of("dt=p2"));
         externalPartitionMap.put(mockExternalTable(), partitionMap2);
 
         MVRefreshPartitionSelector selector = new MVRefreshPartitionSelector(1000, 10000,
                 10, externalPartitionMap);
-        HashMap<Table, Set<String>> toSelectedPartitionMap = new HashMap<>();
-        toSelectedPartitionMap.put(mockExternalTable(), Set.of("p1"));
+        HashMap<Table, PCellSortedSet> toSelectedPartitionMap = new HashMap<>();
+        toSelectedPartitionMap.put(mockExternalTable(),
+                PCellSortedSet.of(Set.of(new PCellWithName("p1", new PCellNone()))));
         Assertions.assertTrue(selector.canAddPartition(toSelectedPartitionMap));
     }
 }

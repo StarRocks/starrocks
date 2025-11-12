@@ -26,20 +26,20 @@ import java.util.Optional;
 
 public class SlotTracker extends BaseSlotTracker {
 
-    public SlotTracker(ResourceUsageMonitor resourceUsageMonitor) {
+    public SlotTracker(SlotManager slotManager, ResourceUsageMonitor resourceUsageMonitor) {
         super(resourceUsageMonitor, WarehouseManager.DEFAULT_WAREHOUSE_ID);
 
-        this.slotSelectionStrategy = createSlotSelectionStrategy(resourceUsageMonitor);
+        this.slotSelectionStrategy = createSlotSelectionStrategy(slotManager, resourceUsageMonitor);
         this.listeners = ImmutableList.of(slotSelectionStrategy,
                 new SlotListenerForPipelineDriverAllocator());
     }
 
     @VisibleForTesting
-    public SlotTracker(List<Listener> listeners) {
+    public SlotTracker(BaseSlotManager slotManager, List<Listener> listeners) {
         super(GlobalStateMgr.getCurrentState().getResourceUsageMonitor(), WarehouseManager.DEFAULT_WAREHOUSE_ID);
         this.listeners = listeners;
         if (listeners.isEmpty()) {
-            this.slotSelectionStrategy = createSlotSelectionStrategy(this.resourceUsageMonitor);
+            this.slotSelectionStrategy = createSlotSelectionStrategy(slotManager, this.resourceUsageMonitor);
         } else {
             Preconditions.checkArgument(!listeners.isEmpty());
             Preconditions.checkArgument(listeners.get(0) instanceof SlotSelectionStrategy);
@@ -47,9 +47,10 @@ public class SlotTracker extends BaseSlotTracker {
         }
     }
 
-    private SlotSelectionStrategy createSlotSelectionStrategy(ResourceUsageMonitor resourceUsageMonitor) {
+    private SlotSelectionStrategy createSlotSelectionStrategy(BaseSlotManager slotManager,
+                                                              ResourceUsageMonitor resourceUsageMonitor) {
         if (Config.enable_query_queue_v2) {
-            return new SlotSelectionStrategyV2(this.warehouseId);
+            return new SlotSelectionStrategyV2(slotManager, this.warehouseId);
         } else {
             return new DefaultSlotSelectionStrategy(
                     resourceUsageMonitor::isGlobalResourceOverloaded, resourceUsageMonitor::isGroupResourceOverloaded);

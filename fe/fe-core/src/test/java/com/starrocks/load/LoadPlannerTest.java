@@ -17,10 +17,6 @@ package com.starrocks.load;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.BrokerDesc;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionName;
-import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -29,8 +25,6 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksException;
@@ -43,9 +37,13 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.LoadPlanner;
+import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.LoadStmt;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FunctionName;
+import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.parser.AstBuilder;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.system.Backend;
@@ -63,6 +61,8 @@ import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TPrimitiveType;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Injectable;
@@ -246,7 +246,7 @@ public class LoadPlannerTest {
         List<Column> columns = Lists.newArrayList();
         columns.add(new Column("k1", Type.TINYINT, true, null, true, null, ""));
         columns.add(new Column("k2", Type.INT, true, null, false, null, ""));
-        columns.add(new Column("k3", ScalarType.createVarchar(50), true, null, true, null, ""));
+        columns.add(new Column("k3", TypeFactory.createVarchar(50), true, null, true, null, ""));
         columns.add(new Column("v", Type.BIGINT, false, AggregateType.SUM, false, null, ""));
 
         Function f1 = new Function(new FunctionName(FunctionSet.SUBSTR), new Type[] {Type.VARCHAR, Type.INT, Type.INT},
@@ -316,6 +316,7 @@ public class LoadPlannerTest {
         fileStatusesList.add(fileStatusList);
 
         // plan
+        Config.load_parallel_instance_num = 1;
         LoadPlanner planner = new LoadPlanner(jobId, loadId, txnId, db.getId(), table, strictMode,
                 timezone, timeoutS, startTime, partialUpdate, ctx, sessionVariables, loadMemLimit, execMemLimit,
                 brokerDesc, fileGroups, fileStatusesList, 1);
@@ -334,7 +335,7 @@ public class LoadPlannerTest {
         // 2. check scan node column expr
         FileScanNode scanNode = (FileScanNode) planner.getScanNodes().get(0);
         List<TScanRangeLocations> locationsList = scanNode.getScanRangeLocations(0);
-        Assertions.assertEquals(1, locationsList.size());
+        Assertions.assertEquals(2, locationsList.size());
         TScanRangeLocations location = locationsList.get(0);
         TBrokerScanRangeParams params = location.scan_range.broker_scan_range.params;
         Map<Integer, TExpr> exprOfDestSlot = params.expr_of_dest_slot;
@@ -380,7 +381,7 @@ public class LoadPlannerTest {
         List<Column> columns = Lists.newArrayList();
         columns.add(new Column("k1", Type.TINYINT, true, null, true, null, ""));
         columns.add(new Column("k2", Type.INT, true, null, false, null, ""));
-        columns.add(new Column("k3", ScalarType.createVarchar(50), true, null, true, null, ""));
+        columns.add(new Column("k3", TypeFactory.createVarchar(50), true, null, true, null, ""));
         columns.add(new Column("v", Type.BIGINT, false, AggregateType.SUM, false, null, ""));
 
         Function f1 = new Function(new FunctionName(FunctionSet.SUBSTR), new Type[] {Type.VARCHAR, Type.INT, Type.INT},
@@ -538,7 +539,7 @@ public class LoadPlannerTest {
         List<Column> columns = Lists.newArrayList();
         columns.add(new Column("pk", Type.BIGINT, true, null, false, null, ""));
         columns.add(new Column("v1", Type.INT, false, null, false, null, ""));
-        columns.add(new Column("v2", ScalarType.createVarchar(50), false, null, true, null, ""));
+        columns.add(new Column("v2", TypeFactory.createVarchar(50), false, null, true, null, ""));
 
         new Expectations() {
             {
@@ -627,7 +628,7 @@ public class LoadPlannerTest {
         List<Column> columns = Lists.newArrayList();
         columns.add(new Column("pk", Type.BIGINT, true, null, false, null, ""));
         columns.add(new Column("v1", Type.INT, false, null, false, null, ""));
-        columns.add(new Column("v2", ScalarType.createVarchar(50), false, null, true, null, ""));
+        columns.add(new Column("v2", TypeFactory.createVarchar(50), false, null, true, null, ""));
 
         new Expectations() {
             {
@@ -718,7 +719,7 @@ public class LoadPlannerTest {
         List<Column> columns = Lists.newArrayList();
         columns.add(new Column("pk", Type.BIGINT, true, null, false, null, ""));
         columns.add(new Column("v1", Type.INT, false, null, false, null, ""));
-        columns.add(new Column("v2", ScalarType.createVarchar(50), false, null, true, null, ""));
+        columns.add(new Column("v2", TypeFactory.createVarchar(50), false, null, true, null, ""));
 
         Function f1 = new Function(new FunctionName("casttobigint"), new Type[] {Type.VARCHAR},
                 Type.BIGINT, true);
@@ -829,7 +830,7 @@ public class LoadPlannerTest {
                 new ColumnDef.DefaultValueDef(true, new StringLiteral("123")), ""));
         columns.add(new Column("v1", Type.INT, false, null, false,
                 new ColumnDef.DefaultValueDef(true, new StringLiteral("231")), ""));
-        columns.add(new Column("v2", ScalarType.createVarchar(50), false, null, true,
+        columns.add(new Column("v2", TypeFactory.createVarchar(50), false, null, true,
                 new ColumnDef.DefaultValueDef(true, new StringLiteral("asdf")), ""));
 
         Function f1 = new Function(new FunctionName("casttobigint"), new Type[] {Type.VARCHAR},
@@ -924,7 +925,7 @@ public class LoadPlannerTest {
         List<Column> columns = Lists.newArrayList();
         columns.add(new Column("k1", Type.TINYINT, true, null, true, null, ""));
         columns.add(new Column("k2", Type.INT, true, null, false, null, ""));
-        columns.add(new Column("k3", ScalarType.createVarchar(50), true, null, true, null, ""));
+        columns.add(new Column("k3", TypeFactory.createVarchar(50), true, null, true, null, ""));
         columns.add(new Column("v", Type.BIGINT, false, AggregateType.SUM, false, null, ""));
 
         List<Column> keyColumns = Lists.newArrayList();
@@ -1038,7 +1039,7 @@ public class LoadPlannerTest {
         List<Column> columns = Lists.newArrayList();
         columns.add(new Column("k1", Type.TINYINT, true, null, true, null, ""));
         columns.add(new Column("k2", Type.INT, true, null, false, null, ""));
-        columns.add(new Column("k3", ScalarType.createVarchar(50), true, null, true, null, ""));
+        columns.add(new Column("k3", TypeFactory.createVarchar(50), true, null, true, null, ""));
         columns.add(new Column("v", Type.BIGINT, false, AggregateType.REPLACE, false, null, ""));
 
         List<Column> keyColumns = Lists.newArrayList();

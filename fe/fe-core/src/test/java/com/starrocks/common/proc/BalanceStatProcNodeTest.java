@@ -35,7 +35,6 @@ import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
-import com.starrocks.catalog.Type;
 import com.starrocks.clone.BalanceStat;
 import com.starrocks.clone.BalanceStat.BalanceType;
 import com.starrocks.clone.ClusterLoadStatistic;
@@ -50,6 +49,7 @@ import com.starrocks.server.LocalMetastore;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageMedium;
+import com.starrocks.type.Type;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
@@ -137,14 +137,14 @@ public class BalanceStatProcNodeTest {
             TabletSchedCtx ctx1 =
                     new TabletSchedCtx(TabletSchedCtx.Type.BALANCE, 1L, 2L, 3L, 4L, 1001L, System.currentTimeMillis());
             ctx1.setOrigPriority(TabletSchedCtx.Priority.NORMAL);
-            ctx1.setBalanceType(BalanceType.BACKEND_DISK);
+            ctx1.setBalanceType(BalanceType.INTRA_NODE_DISK_USAGE);
             ctx1.setStorageMedium(TStorageMedium.HDD);
             Deencapsulation.invoke(tabletScheduler, "addToPendingTablets", ctx1);
 
             TabletSchedCtx ctx2 =
                     new TabletSchedCtx(TabletSchedCtx.Type.BALANCE, 1L, 2L, 3L, 4L, 1002L, System.currentTimeMillis());
             ctx2.setOrigPriority(TabletSchedCtx.Priority.NORMAL);
-            ctx2.setBalanceType(BalanceType.BACKEND_DISK);
+            ctx2.setBalanceType(BalanceType.INTRA_NODE_DISK_USAGE);
             ctx2.setStorageMedium(TStorageMedium.HDD);
             Deencapsulation.invoke(tabletScheduler, "addToPendingTablets", ctx2);
         }
@@ -180,7 +180,7 @@ public class BalanceStatProcNodeTest {
             TabletSchedCtx ctx = new TabletSchedCtx(TabletSchedCtx.Type.BALANCE, db.getId(), olapTable.getId(), partitionId,
                     index.getId(), tablet1Id, System.currentTimeMillis());
             ctx.setOrigPriority(TabletSchedCtx.Priority.NORMAL);
-            ctx.setBalanceType(BalanceType.CLUSTER_TABLET);
+            ctx.setBalanceType(BalanceType.INTER_NODE_TABLET_DISTRIBUTION);
             ctx.setStorageMedium(TStorageMedium.HDD);
             Deencapsulation.invoke(tabletScheduler, "addToRunningTablets", ctx);
         }

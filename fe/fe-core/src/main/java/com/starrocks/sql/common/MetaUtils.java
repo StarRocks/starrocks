@@ -17,8 +17,6 @@ package com.starrocks.sql.common;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
@@ -32,14 +30,17 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.external.starrocks.TableMetaSyncer;
+import com.starrocks.persist.OriginStatementInfo;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.TableName;
+import com.starrocks.sql.optimizer.base.ColumnIdentifier;
 import com.starrocks.sql.optimizer.rule.mv.MVUtils;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TUniqueId;
@@ -121,7 +122,7 @@ public class MetaUtils {
         return table;
     }
 
-    public static Map<String, Expr> parseColumnNameToDefineExpr(OriginStatement originStmt) {
+    public static Map<String, Expr> parseColumnNameToDefineExpr(OriginStatementInfo originStmt) {
         CreateMaterializedViewStmt stmt;
 
         try {
@@ -198,6 +199,19 @@ public class MetaUtils {
         }
     }
 
+    public static long lookupDbIdByTableId(long tableId) {
+        long res = -1;
+        for (Long id : GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds()) {
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(id);
+            if (db != null &&
+                    GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId) != null) {
+                res = db.getId();
+                break;
+            }
+        }
+        return res;
+    }
+
     public static List<Column> getColumnsByColumnIds(Table table, List<ColumnId> ids) {
         return getColumnsByColumnIds(table.getIdToColumn(), ids);
     }
@@ -269,6 +283,22 @@ public class MetaUtils {
             throw new SemanticException(String.format("can not find column by column id: %s", columnId));
         }
         return column.getName();
+    }
+
+    public static Column getColumnByColumnId(ColumnIdentifier identifier) {
+        return getColumnByColumnId(identifier.getDbId(), identifier.getTableId(), identifier.getColumnName());
+    }
+
+    public static Column getColumnByColumnId(long dbId, long tableId, ColumnId columnId) {
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, tableId);
+        if (table == null) {
+            throw new SemanticException("Table %s is not found", tableId);
+        }
+        Column column = table.getColumn(columnId);
+        if (column == null) {
+            throw new SemanticException(String.format("can not find column by column id: %s", columnId));
+        }
+        return column;
     }
 
     public static List<ColumnId> getColumnIdsByColumnNames(Table table, List<String> names) {

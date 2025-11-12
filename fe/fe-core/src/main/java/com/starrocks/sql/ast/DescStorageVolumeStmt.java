@@ -40,7 +40,7 @@ public class DescStorageVolumeStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitDescStorageVolumeStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitDescStorageVolumeStatement(this, context);
     }
 
     @Override

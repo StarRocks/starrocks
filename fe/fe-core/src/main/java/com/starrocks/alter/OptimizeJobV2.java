@@ -22,6 +22,7 @@ import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
+import com.starrocks.catalog.DistributionInfoBuilder;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
@@ -44,6 +45,7 @@ import com.starrocks.persist.ReplacePartitionOperationLog;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.scheduler.Constants;
+import com.starrocks.scheduler.SubmitResult;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.TaskRun;
@@ -51,6 +53,7 @@ import com.starrocks.scheduler.TaskRunManager;
 import com.starrocks.scheduler.TaskRunScheduler;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.DistributionDescAnalyzer;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.OptimizeClause;
@@ -191,7 +194,7 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
 
         // wait previous transactions finished
         this.watershedTxnId =
-                    GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
         this.jobState = JobState.WAITING_TXN;
         this.optimizeOperation = optimizeClause.toString();
         span.setAttribute("createPartitionElapse", createPartitionElapse);
@@ -260,7 +263,7 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
                         }
             );
             tableColumnNames = targetTable.getBaseSchema().stream().filter(column -> !column.isGeneratedColumn())
-                        .map(col -> ParseUtil.backquote(col.getName())).collect(Collectors.toList());
+                    .map(col -> ParseUtil.backquote(col.getName())).collect(Collectors.toList());
         } finally {
             locker.unLockDatabase(db.getId(), LockType.READ);
         }
@@ -270,8 +273,8 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
             String tmpPartitionName = tmpPartitionNames.get(i);
             String partitionName = partitionNames.get(i);
             String rewriteSql = "insert into " + ParseUtil.backquote(tableName) + " TEMPORARY PARTITION ("
-                        + ParseUtil.backquote(tmpPartitionName) + ") select " + Joiner.on(", ").join(tableColumnNames)
-                        + " from " + ParseUtil.backquote(tableName) + " partition (" + ParseUtil.backquote(partitionName) + ")";
+                    + ParseUtil.backquote(tmpPartitionName) + ") select " + Joiner.on(", ").join(tableColumnNames)
+                    + " from " + ParseUtil.backquote(tableName) + " partition (" + ParseUtil.backquote(partitionName) + ")";
             String taskName = getName() + "_" + tmpPartitionName;
             OptimizeTask rewriteTask = TaskBuilder.buildOptimizeTask(taskName, properties, rewriteSql, dbName, warehouseId);
             rewriteTask.setPartitionName(partitionName);
@@ -285,8 +288,13 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
         for (OptimizeTask rewriteTask : rewriteTasks) {
             try {
-                taskManager.createTask(rewriteTask, false);
-                taskManager.executeTask(rewriteTask.getName());
+                taskManager.createTask(rewriteTask);
+                SubmitResult r = taskManager.executeTask(rewriteTask.getName());
+                if (r.getStatus() == SubmitResult.SubmitStatus.SUBMITTED) {
+                    rewriteTask.setOptimizeTaskState(Constants.TaskRunState.RUNNING);
+                } else if (r.getStatus() == SubmitResult.SubmitStatus.FAILED) {
+                    rewriteTask.setOptimizeTaskState(Constants.TaskRunState.FAILED);
+                }
                 LOG.debug("create rewrite task {}", rewriteTask.toString());
             } catch (DdlException e) {
                 rewriteTask.setOptimizeTaskState(Constants.TaskRunState.FAILED);
@@ -326,9 +334,12 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
 
         // wait insert tasks finished
         boolean allFinished = true;
-        int progress = 0;
+        // Use double to avoid integer division precision loss when task count > 100
+        double progressAcc = 0.0;
+        int taskCount = Math.max(1, rewriteTasks.size());
         TaskRunManager taskRunManager = GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunManager();
         TaskRunScheduler taskRunScheduler = taskRunManager.getTaskRunScheduler();
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager(); // add: define taskManager
 
         // prepare for the history task info
         Set<String> taskNames = Sets.newHashSet();
@@ -336,19 +347,27 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
             taskNames.add(rewriteTask.getName());
         }
         List<TaskRunStatus> resStatus = GlobalStateMgr.getCurrentState().getTaskManager()
-                    .getTaskRunManager().getTaskRunHistory().lookupHistoryByTaskNames(dbName, taskNames);
+                .getTaskRunManager().getTaskRunHistory().lookupHistoryByTaskNames(dbName, taskNames);
 
         for (OptimizeTask rewriteTask : rewriteTasks) {
+            if (rewriteTask.getOptimizeTaskState() == Constants.TaskRunState.PENDING) {
+                SubmitResult r = taskManager.executeTask(rewriteTask.getName());
+                if (r.getStatus() == SubmitResult.SubmitStatus.SUBMITTED) {
+                    rewriteTask.setOptimizeTaskState(Constants.TaskRunState.RUNNING);
+                } else if (r.getStatus() == SubmitResult.SubmitStatus.FAILED) {
+                    rewriteTask.setOptimizeTaskState(Constants.TaskRunState.FAILED);
+                }
+            }
             if (rewriteTask.getOptimizeTaskState() == Constants.TaskRunState.FAILED
-                        || rewriteTask.getOptimizeTaskState() == Constants.TaskRunState.SUCCESS) {
-                progress += 100 / rewriteTasks.size();
+                    || rewriteTask.getOptimizeTaskState() == Constants.TaskRunState.SUCCESS) {
+                progressAcc += 100.0 / taskCount;
                 continue;
             }
 
             TaskRun taskRun = taskRunScheduler.getRunnableTaskRun(rewriteTask.getId());
             if (taskRun != null) {
                 if (taskRun.getStatus() != null) {
-                    progress += taskRun.getStatus().getProgress() / rewriteTasks.size();
+                    progressAcc += (double) taskRun.getStatus().getProgress() / taskCount;
                 }
                 allFinished = false;
                 continue;
@@ -359,7 +378,7 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
                 continue;
             }
             List<TaskRunStatus> filteredTask = resStatus.stream()
-                        .filter(x -> rewriteTask.getName().equals(x.getTaskName())).collect(Collectors.toList());
+                    .filter(x -> rewriteTask.getName().equals(x.getTaskName())).collect(Collectors.toList());
             if (filteredTask.isEmpty()) {
                 allFinished = false;
                 continue;
@@ -370,13 +389,37 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
             if (status.getState() == Constants.TaskRunState.FAILED) {
                 LOG.warn("optimize task {} failed", rewriteTask.getName());
                 rewriteTask.setOptimizeTaskState(Constants.TaskRunState.FAILED);
+            } else if (status.getState() == Constants.TaskRunState.SUCCESS) {
+                // Task finished successfully at SQL level. Now gate on visibility for its temp partition.
+                try {
+                    Partition tmpPartition = tbl.getPartition(rewriteTask.getTempPartitionName(), true);
+                    if (tmpPartition == null) {
+                        LOG.warn("temp partition {} not found for task {}", rewriteTask.getTempPartitionName(),
+                                rewriteTask.getName());
+                        rewriteTask.setOptimizeTaskState(Constants.TaskRunState.FAILED);
+                    } else {
+                        boolean hasCommitted = hasCommittedNotVisible(tmpPartition.getId());
+                        if (hasCommitted) {
+                            // Not visible yet, mark this task as FAILED to avoid replacing this partition.
+                            LOG.warn("optimize task {} not visible yet, mark as FAILED (temp partition: {}, pid: {})",
+                                    rewriteTask.getName(), rewriteTask.getTempPartitionName(), tmpPartition.getId());
+                            rewriteTask.setOptimizeTaskState(Constants.TaskRunState.FAILED);
+                        } else {
+                            rewriteTask.setOptimizeTaskState(Constants.TaskRunState.SUCCESS);
+                        }
+                    }
+                } catch (Exception ex) {
+                    LOG.warn("check visibility for task {} failed", rewriteTask.getName(), ex);
+                    rewriteTask.setOptimizeTaskState(Constants.TaskRunState.FAILED);
+                }
             }
-            progress += 100 / rewriteTasks.size();
+            progressAcc += 100.0 / taskCount;
         }
 
         if (!allFinished) {
             LOG.debug("wait insert tasks to be finished, optimize job: {}", jobId);
-            this.progress = progress;
+            // Cap at 99 until all tasks are fully finished to keep previous semantics
+            this.progress = Math.min(99, (int) Math.floor(progressAcc));
             return;
         }
 
@@ -386,7 +429,7 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
 
         // replace partition
         try (AutoCloseableLock ignore =
-                    new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE)) {
+                     new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE)) {
             onFinished(db, tbl);
         }
 
@@ -404,11 +447,18 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
         // nothing to do
     }
 
+    // Visible check wrapper for testability.
+    // Returns true if there exists committed-but-not-visible txn for the given partition.
+    protected boolean hasCommittedNotVisible(long partitionId) {
+        return GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                .existCommittedTxns(dbId, tableId, partitionId);
+    }
+
     private void onFinished(Database db, OlapTable targetTable) throws AlterCancelException {
         try {
             tmpPartitionNames = getTmpPartitionIds().stream()
-                        .map(partitionId -> targetTable.getPartition(partitionId).getName())
-                        .collect(Collectors.toList());
+                    .map(partitionId -> targetTable.getPartition(partitionId).getName())
+                    .collect(Collectors.toList());
 
             Map<String, Long> partitionLastVersion = Maps.newHashMap();
             optimizeClause.getSourcePartitionIds().stream()
@@ -424,10 +474,10 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
             String errMsg = "";
             for (OptimizeTask rewriteTask : rewriteTasks) {
                 if (rewriteTask.getOptimizeTaskState() == Constants.TaskRunState.FAILED
-                            || partitionLastVersion.get(rewriteTask.getPartitionName()) != rewriteTask.getLastVersion()) {
+                        || partitionLastVersion.get(rewriteTask.getPartitionName()) != rewriteTask.getLastVersion()) {
                     LOG.info("optimize job {} rewrite task {} state {} failed or partition {} version {} change to {}",
-                                jobId, rewriteTask.getName(), rewriteTask.getOptimizeTaskState(), rewriteTask.getPartitionName(),
-                                rewriteTask.getLastVersion(), partitionLastVersion.get(rewriteTask.getPartitionName()));
+                            jobId, rewriteTask.getName(), rewriteTask.getOptimizeTaskState(), rewriteTask.getPartitionName(),
+                            rewriteTask.getLastVersion(), partitionLastVersion.get(rewriteTask.getPartitionName()));
                     sourcePartitionNames.remove(rewriteTask.getPartitionName());
                     tmpPartitionNames.remove(rewriteTask.getTempPartitionName());
                     targetTable.dropTempPartition(rewriteTask.getTempPartitionName(), true);
@@ -446,9 +496,9 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
 
             if (hasFailedTask && (optimizeClause.getKeysDesc() != null || optimizeClause.getSortKeys() != null)) {
                 rewriteTasks.forEach(
-                            rewriteTask -> targetTable.dropTempPartition(rewriteTask.getTempPartitionName(), true));
+                        rewriteTask -> targetTable.dropTempPartition(rewriteTask.getTempPartitionName(), true));
                 throw new AlterCancelException(
-                            "optimize keysType or sort keys failed since some partitions rewrite failed [" + errMsg + "]");
+                        "optimize keysType or sort keys failed since some partitions rewrite failed [" + errMsg + "]");
             }
 
             allPartitionOptimized = false;
@@ -458,12 +508,13 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
                 targetPartitionNames.retainAll(sourcePartitionNames);
 
                 if (optimizeClause.isTableOptimize()) {
-                    if (optimizeClause.getDistributionDesc().getType() != targetTable.getDefaultDistributionInfo().getType()) {
+                    if (DistributionDescAnalyzer.isDifferentDistributionType(optimizeClause.getDistributionDesc(),
+                            targetTable.getDefaultDistributionInfo())) {
                         if (targetPartitionNames.size() != targetPartitionNum
-                                    || targetPartitionNum != sourcePartitionNames.size()) {
+                                || targetPartitionNum != sourcePartitionNames.size()) {
                             // partial partitions of target table are optimized
                             throw new AlterCancelException("can not change distribution type of target table" +
-                                        " since partial partitions are not optimized [" + errMsg + "]");
+                                    " since partial partitions are not optimized [" + errMsg + "]");
                         }
                     }
                     allPartitionOptimized = true;
@@ -474,9 +525,10 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
                     DistributionDesc optimizeDistributionDesc = optimizeClause.getDistributionDesc();
                     DistributionDesc tableDistributionDesc = targetTable.getDefaultDistributionInfo().toDistributionDesc(
                             targetTable.getIdToColumn());
-                    if (tableDistributionDesc.getType() != optimizeDistributionDesc.getType()) {
+                    if (DistributionDescAnalyzer.isDifferentDistributionType(optimizeDistributionDesc,
+                            targetTable.getDefaultDistributionInfo())) {
                         throw new AlterCancelException("can not change distribution type of target table" +
-                                    " since some partitions rewrite failed [" + errMsg + "]");
+                                " since some partitions rewrite failed [" + errMsg + "]");
                     }
                     if (tableDistributionDesc instanceof HashDistributionDesc) {
                         HashDistributionDesc tableHashDistributionDesc = (HashDistributionDesc) tableDistributionDesc;
@@ -484,9 +536,9 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
                         if (!tableHashDistributionDesc.getDistributionColumnNames()
                                 .equals(optimizeHashDistributionDesc.getDistributionColumnNames())) {
                             throw new AlterCancelException("can not change distribution column of target table" +
-                                        " from " + tableHashDistributionDesc.getDistributionColumnNames() + " to " +
-                                        optimizeHashDistributionDesc.getDistributionColumnNames() +
-                                        " since some partitions rewrite failed [" + errMsg + "]");
+                                    " from " + tableHashDistributionDesc.getDistributionColumnNames() + " to " +
+                                    optimizeHashDistributionDesc.getDistributionColumnNames() +
+                                    " since some partitions rewrite failed [" + errMsg + "]");
                         }
                     }
                 }
@@ -512,7 +564,7 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
             }
             // write log
             ReplacePartitionOperationLog info = new ReplacePartitionOperationLog(db.getId(), targetTable.getId(),
-                        sourcePartitionNames, tmpPartitionNames, true, false, partitionInfo instanceof SinglePartitionInfo);
+                    sourcePartitionNames, tmpPartitionNames, true, false, partitionInfo instanceof SinglePartitionInfo);
             GlobalStateMgr.getCurrentState().getEditLog().logReplaceTempPartition(info);
             // mark all source tablet ids force delete to drop it directly on BE,
             // not to move it to trash
@@ -520,7 +572,7 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
 
             try {
                 GlobalStateMgr.getCurrentState().getColocateTableIndex().updateLakeTableColocationInfo(targetTable,
-                            true /* isJoin */, null /* expectGroupId */);
+                        true /* isJoin */, null /* expectGroupId */);
             } catch (DdlException e) {
                 // log an error if update colocation info failed, insert overwrite already succeeded
                 LOG.error("table {} update colocation info failed after insert overwrite, {}.", tableId, e.getMessage());
@@ -528,14 +580,15 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
             targetTable.lastSchemaUpdateTime.set(System.nanoTime());
 
             if (allPartitionOptimized && optimizeClause.getDistributionDesc() != null) {
-                this.distributionInfo = optimizeClause.getDistributionDesc().toDistributionInfo(targetTable.getColumns());
+                this.distributionInfo =
+                        DistributionInfoBuilder.build(optimizeClause.getDistributionDesc(), targetTable.getColumns());
                 targetTable.setDefaultDistributionInfo(distributionInfo);
             }
             targetTable.setState(OlapTableState.NORMAL);
 
             LOG.info("optimize job {} finish replace partitions dbId:{}, tableId:{},"
-                                    + "source partitions:{}, tmp partitions:{}, allOptimized:{}",
-                        jobId, dbId, tableId, sourcePartitionNames, tmpPartitionNames, allPartitionOptimized);
+                            + "source partitions:{}, tmp partitions:{}, allOptimized:{}",
+                    jobId, dbId, tableId, sourcePartitionNames, tmpPartitionNames, allPartitionOptimized);
         } catch (Exception e) {
             LOG.warn("optimize table failed dbId:{}, tableId:{} exception: {}", dbId, tableId, e);
             throw new AlterCancelException("optimize table failed " + e.getMessage());
@@ -621,7 +674,7 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
     // Check whether transactions of the given database which txnId is less than 'watershedTxnId' are finished.
     protected boolean isPreviousLoadFinished() throws AnalysisException {
         return GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
-                    .isPreviousTransactionsFinished(watershedTxnId, dbId, Lists.newArrayList(tableId));
+                .isPreviousTransactionsFinished(watershedTxnId, dbId, Lists.newArrayList(tableId));
     }
 
     /**
@@ -640,7 +693,7 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
             return;
         }
         try (AutoCloseableLock ignore =
-                    new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE)) {
+                     new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE)) {
             // set table state
             tbl.setState(OlapTableState.OPTIMIZE);
         }
@@ -707,8 +760,8 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
         targetTable.setState(OlapTableState.NORMAL);
 
         LOG.info("finish replay optimize job {} dbId:{}, tableId:{},"
-                                + "source partitions:{}, tmp partitions:{}, allOptimized:{}",
-                    jobId, dbId, tableId, sourcePartitionNames, tmpPartitionNames, allPartitionOptimized);
+                        + "source partitions:{}, tmp partitions:{}, allOptimized:{}",
+                jobId, dbId, tableId, sourcePartitionNames, tmpPartitionNames, allPartitionOptimized);
     }
 
     /**
@@ -721,7 +774,7 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
             OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
             if (tbl != null) {
                 try (AutoCloseableLock ignore =
-                            new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE)) {
+                             new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE)) {
                     onReplayFinished(replayedJob, tbl);
                 }
             }
@@ -785,8 +838,6 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
     public void setJobState(JobState jobState) {
         this.jobState = jobState;
     }
-
-
 
 
     @Override

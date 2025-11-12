@@ -213,6 +213,13 @@ select dayofweek_iso("2023-01-03");
 select dayofweek_iso("");
 select dayofweek_iso(NULL);
 
+-- name: test_week_day
+select weekday("2023-01-01");
+select weekday("2023-01-02");
+select weekday("2023-01-03");
+select weekday("");
+select weekday(NULL);
+
 -- name: test_makedate
 CREATE TABLE IF NOT EXISTS `makedate_test` (
   `id` int,
@@ -320,3 +327,12 @@ select timestampadd(MILLISECOND, 1, '2019-01-02 00:00:00');
 
 -- name: test_timestamp_diff
 select  timestampdiff(MILLISECOND, '2003-02-01 00:00:00', '2003-05-01 12:05:55');
+
+
+-- name: sec_to_time
+select sec_to_time(NULL);
+select sec_to_time(0);
+select sec_to_time(1);
+select sec_to_time(-1);
+select sec_to_time(3024000);
+select sec_to_time(-3024000);

@@ -285,6 +285,7 @@ Status ColumnExprPredicate::try_to_rewrite_for_zone_map_filter(starrocks::Object
 }
 Status ColumnExprPredicate::seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
                                                 roaring::Roaring* row_bitmap) const {
+#ifndef __APPLE__
     // Only support simple (NOT) LIKE/MATCH predicate for now
     // Root must be (NOT) LIKE/MATCH, and left child must be ColumnRef, which satisfy simple (NOT) LIKE/MATCH predicate
     // format as: col (NOT) LIKE/MATCH xxx, xxx must be string literal
@@ -341,6 +342,8 @@ Status ColumnExprPredicate::seek_inverted_index(const std::string& column_name, 
     // TODO: The logic for determining query_type will be abstracted into a separate method in the future.
     if (valid_match && expr->op() == TExprOpcode::MATCH_ANY) {
         query_type = InvertedIndexQueryType::MATCH_ANY_QUERY;
+    } else if (valid_match && expr->op() == TExprOpcode::MATCH_ALL) {
+        query_type = InvertedIndexQueryType::MATCH_ALL_QUERY;
     } else {
         query_type = has_wildcard ? InvertedIndexQueryType::MATCH_WILDCARD_QUERY : InvertedIndexQueryType::EQUAL_QUERY;
     }
@@ -353,6 +356,9 @@ Status ColumnExprPredicate::seek_inverted_index(const std::string& column_name, 
         *row_bitmap &= roaring;
     }
     return Status::OK();
+#else
+    return Status::OK();
+#endif
 }
 
 Status ColumnTruePredicate::evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const {

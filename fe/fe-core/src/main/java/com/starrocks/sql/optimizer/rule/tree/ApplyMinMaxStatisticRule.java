@@ -29,6 +29,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperat
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.DictMappingOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import com.starrocks.sql.optimizer.statistics.IMinMaxStatsMgr;
 import com.starrocks.sql.optimizer.statistics.StatsVersion;
@@ -72,6 +73,23 @@ public class ApplyMinMaxStatisticRule implements TreeRewriteRule {
             }
             if (table.inputHasTempPartition(scanOperator.getSelectedPartitionId())) {
                 continue;
+            }
+            if (scanOperator.getProjection() != null) {
+                for (var entry : scanOperator.getProjection().getColumnRefMap().entrySet()) {
+                    if (groupByRefSets.contains(entry.getKey()) &&
+                            entry.getValue() instanceof DictMappingOperator mappingOperator) {
+                        ColumnRefOperator column = mappingOperator.getDictColumn();
+                        if (!column.getType().isNumericType() && !column.getType().isDate()) {
+                            continue;
+                        }
+                        if (globalDicts.containsKey(column.getId())) {
+                            final ConstantOperator min = ConstantOperator.createVarchar("0");
+                            final ColumnDict columnDict = globalDicts.get(column.getId());
+                            final ConstantOperator max = ConstantOperator.createVarchar("" + columnDict.getDictSize());
+                            infos.put(entry.getKey().getId(), new Pair<>(min, max));
+                        }
+                    }
+                }
             }
             for (ColumnRefOperator column : scanOperator.getColRefToColumnMetaMap().keySet()) {
                 if (groupByRefSets.contains(column.getId())) {

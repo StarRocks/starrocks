@@ -38,11 +38,11 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.Expr;
 import com.starrocks.common.io.Writable;
+import com.starrocks.persist.OriginStatementInfo;
 import com.starrocks.persist.gson.GsonPostProcessable;
-import com.starrocks.qe.OriginStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.thrift.TStorageType;
 
@@ -83,7 +83,7 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
     @SerializedName(value = "keysType")
     private KeysType keysType;
     @SerializedName(value = "defineStmt")
-    private OriginStatement defineStmt;
+    private OriginStatementInfo defineStmt;
     @SerializedName(value = "dbId")
     private long dbId;
     @SerializedName(value = "viewDefineSql")
@@ -99,7 +99,7 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
 
     public MaterializedIndexMeta(long indexId, List<Column> schema, int schemaVersion, int schemaHash,
                                  short shortKeyColumnCount, TStorageType storageType, KeysType keysType,
-                                 OriginStatement defineStmt, List<Integer> sortKeyIdxes, List<Integer> sortKeyUniqueIds) {
+                                 OriginStatementInfo defineStmt, List<Integer> sortKeyIdxes, List<Integer> sortKeyUniqueIds) {
         this.indexId = indexId;
         Preconditions.checkState(schema != null);
         Preconditions.checkState(!schema.isEmpty());
@@ -119,14 +119,14 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
 
     public MaterializedIndexMeta(long indexId, List<Column> schema, int schemaVersion, int schemaHash,
                                  short shortKeyColumnCount, TStorageType storageType, KeysType keysType,
-                                 OriginStatement defineStmt, List<Integer> sortKeyIdxes) {
+                                 OriginStatementInfo defineStmt, List<Integer> sortKeyIdxes) {
         this(indexId, schema, schemaVersion, schemaHash, shortKeyColumnCount, storageType, keysType, defineStmt,
                 sortKeyIdxes, null);        
     }
 
     public MaterializedIndexMeta(long indexId, List<Column> schema, int schemaVersion, int schemaHash,
                                  short shortKeyColumnCount, TStorageType storageType, KeysType keysType,
-                                 OriginStatement defineStmt) {
+                                 OriginStatementInfo defineStmt) {
         this(indexId, schema, schemaVersion, schemaHash, shortKeyColumnCount, storageType, keysType, defineStmt, null);
     }
 
@@ -199,11 +199,11 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
         }
     }
 
-    public void setDefineStmt(OriginStatement stmt) {
+    public void setDefineStmt(OriginStatementInfo stmt) {
         this.defineStmt = stmt;
     }
 
-    public OriginStatement getDefineStmt() {
+    public OriginStatementInfo getDefineStmt() {
         return this.defineStmt;
     }
 

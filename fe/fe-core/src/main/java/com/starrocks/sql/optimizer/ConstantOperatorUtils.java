@@ -15,8 +15,8 @@
 
 package com.starrocks.sql.optimizer;
 
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.type.Type;
 
 import java.util.OptionalDouble;
 

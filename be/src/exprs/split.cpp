@@ -155,6 +155,9 @@ StatusOr<ColumnPtr> StringFunctions::split(FunctionContext* context, const starr
             array_binary_column->reserve(row_nums * 5, haystack_columns->get_bytes().size());
             for (int row = 0; row < row_nums; ++row) {
                 array_offsets->append(offset);
+                if (string_viewer.is_null(row)) {
+                    continue;
+                }
                 Slice haystack = string_viewer.value(row);
                 int32_t haystack_offset = 0;
                 int splits_size = 0;

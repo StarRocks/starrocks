@@ -16,10 +16,9 @@ package com.starrocks.sql.ast;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Index;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.EngineType;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -341,6 +340,6 @@ public class CreateTableStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCreateTableStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitCreateTableStatement(this, context);
     }
 }

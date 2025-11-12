@@ -19,8 +19,6 @@ import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.Delimiter;
-import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.common.CsvFormat;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
@@ -30,6 +28,7 @@ import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.fs.FileSystem;
 import com.starrocks.load.Load;
+import com.starrocks.planner.DescriptorTable;
 import com.starrocks.proto.PGetFileSchemaResult;
 import com.starrocks.proto.PSlotDescriptor;
 import com.starrocks.qe.SessionVariable;
@@ -40,6 +39,7 @@ import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.LoadStmt;
+import com.starrocks.sql.ast.expression.Delimiter;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorFunctions;
 import com.starrocks.system.ComputeNode;
@@ -58,6 +58,9 @@ import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableFunctionTable;
 import com.starrocks.thrift.TTableType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeDeserializer;
+import com.starrocks.type.TypeFactory;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.logging.log4j.LogManager;
@@ -690,7 +693,7 @@ public class TableFunctionTable extends Table {
 
         List<Column> columns = new ArrayList<>();
         for (PSlotDescriptor slot : result.schema) {
-            columns.add(new Column(slot.colName, Type.fromProtobuf(slot.slotType), true));
+            columns.add(new Column(slot.colName, TypeDeserializer.fromProtobuf(slot.slotType), true));
         }
         return columns;
     }
@@ -698,7 +701,7 @@ public class TableFunctionTable extends Table {
     private List<Column> getSchemaFromPath() {
         List<Column> columns = new ArrayList<>();
         for (String colName : columnsFromPath) {
-            columns.add(new Column(colName, ScalarType.createDefaultString(), true));
+            columns.add(new Column(colName, TypeFactory.createDefaultString(), true));
         }
         return columns;
     }

@@ -16,8 +16,6 @@ package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.alter.AlterOpType;
-import com.starrocks.analysis.OrderByElement;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -58,7 +56,7 @@ public class OptimizeClause extends AlterTableClause {
                           PartitionNames partitionNames,
                           OptimizeRange range,
                           NodePosition pos) {
-        super(AlterOpType.OPTIMIZE, pos);
+        super(pos);
         this.keysDesc = keysDesc;
         this.partitionDesc = partitionDesc;
         this.distributionDesc = distributionDesc;
@@ -129,29 +127,7 @@ public class OptimizeClause extends AlterTableClause {
     }
 
     @Override
-    public String toString() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("ALTER ");
-        if (partitionDesc != null) {
-            sb.append(partitionDesc.toString());
-        }
-        if (distributionDesc != null) {
-            sb.append(distributionDesc.toString());
-        }
-        if (keysDesc != null) {
-            sb.append(keysDesc.toSql());
-        }
-        if (sortKeys != null && !sortKeys.isEmpty()) {
-            sb.append(String.join(",", sortKeys));
-        }
-        if (range != null) {
-            sb.append(range.toString());
-        }
-        return sb.toString();
-    }
-
-    @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitOptimizeClause(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitOptimizeClause(this, context);
     }
 }

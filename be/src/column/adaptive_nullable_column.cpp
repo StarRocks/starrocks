@@ -35,7 +35,7 @@ size_t AdaptiveNullableColumn::null_count() const {
         if (!_has_null) {
             return 0;
         }
-        return SIMD::count_nonzero(_null_column->get_data());
+        return SIMD::count_nonzero(_null_column->immutable_data());
     }
     }
 }
@@ -53,7 +53,7 @@ size_t AdaptiveNullableColumn::null_count(size_t offset, size_t count) const {
         if (!_has_null) {
             return 0;
         }
-        return SIMD::count_nonzero(_null_column->get_data());
+        return SIMD::count_nonzero(_null_column->immutable_data());
     }
     }
 }
@@ -262,16 +262,16 @@ uint32_t AdaptiveNullableColumn::serialize_default(uint8_t* pos) const {
 }
 
 size_t AdaptiveNullableColumn::serialize_batch_at_interval(uint8_t* dst, size_t byte_offset, size_t byte_interval,
-                                                           size_t start, size_t count) const {
+                                                           uint32_t max_row_size, size_t start, size_t count) const {
     materialized_nullable();
-    return NullableColumn::serialize_batch_at_interval(dst, byte_offset, byte_interval, start, count);
+    return NullableColumn::serialize_batch_at_interval(dst, byte_offset, byte_interval, max_row_size, start, count);
 }
 
 void AdaptiveNullableColumn::serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
                                              uint32_t max_one_row_size) const {
     materialized_nullable();
     _data_column->serialize_batch_with_null_masks(dst, slice_sizes, chunk_size, max_one_row_size,
-                                                  _null_column->get_data().data(), _has_null);
+                                                  _null_column->immutable_data().data(), _has_null);
 }
 
 const uint8_t* AdaptiveNullableColumn::deserialize_and_append(const uint8_t* pos) {

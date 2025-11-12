@@ -15,11 +15,11 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.Predicate;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.Predicate;
 import com.starrocks.sql.parser.NodePosition;
 
-public class ShowProcedureStmt extends ShowStmt {
+public class ShowProcedureStmt extends EnhancedShowStmt {
 
     private String pattern;
     private Expr where;
@@ -44,6 +44,6 @@ public class ShowProcedureStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowProcedureStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowProcedureStatement(this, context);
     }
 }

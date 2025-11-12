@@ -27,13 +27,23 @@ namespace starrocks {
 struct PercentileApproxState {
 public:
     PercentileApproxState() : percentile(new PercentileValue()) {}
-    explicit PercentileApproxState(double compression) : percentile(new PercentileValue(compression)) {}
+    explicit PercentileApproxState(double compression)
+            : percentile(new PercentileValue(compression)), compression_initialized(true) {}
     ~PercentileApproxState() = default;
+
+    // Reinitialize the PercentileValue with a new compression factor
+    // This is used when the state is already constructed (e.g., as part of NullableAggregateFunctionState)
+    // but we need to apply a different compression factor from FunctionContext
+    void reinit_with_compression(double compression) {
+        percentile.reset(new PercentileValue(compression));
+        compression_initialized = true;
+    }
 
     int64_t mem_usage() const { return percentile->mem_usage(); }
 
     std::unique_ptr<PercentileValue> percentile;
     double targetQuantile = std::numeric_limits<double>::infinity();
+    bool compression_initialized = false; // Flag to track if compression has been initialized from FunctionContext
 };
 
 class PercentileApproxAggregateFunctionBase
@@ -47,12 +57,18 @@ public:
     virtual double get_compression_factor(FunctionContext* ctx) const = 0;
 
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
+        double compression = get_compression_factor(ctx);
+        // Lazy initialization of compression factor on first merge
+        if (UNLIKELY(!data(state).compression_initialized)) {
+            data(state).reinit_with_compression(compression);
+        }
+
         const auto* binary_column = down_cast<const BinaryColumn*>(column);
         Slice src = binary_column->get_slice(row_num);
         double quantile;
         memcpy(&quantile, src.data, sizeof(double));
 
-        PercentileApproxState src_percentile(get_compression_factor(ctx));
+        PercentileApproxState src_percentile(compression);
         src_percentile.targetQuantile = quantile;
         src_percentile.percentile->deserialize((char*)src.data + sizeof(double));
 
@@ -81,11 +97,6 @@ public:
 // PercentileApproxAggregateFunction: percentile_approx(expr, DOUBLE p[, DOUBLE compression])
 class PercentileApproxAggregateFunction final : public PercentileApproxAggregateFunctionBase {
 public:
-    void create(FunctionContext* ctx, AggDataPtr __restrict ptr) const override {
-        double compression = (ctx == nullptr) ? DEFAULT_COMPRESSION_FACTOR : get_compression_factor(ctx);
-        new (ptr) PercentileApproxState(compression);
-    }
-
     double get_compression_factor(FunctionContext* ctx) const override {
         double compression = DEFAULT_COMPRESSION_FACTOR;
         if (ctx->get_num_args() > 2) {
@@ -100,6 +111,12 @@ public:
     }
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr state, size_t row_num) const override {
+        // Lazy initialization of compression factor on first update
+        if (UNLIKELY(!data(state).compression_initialized)) {
+            double compression = get_compression_factor(ctx);
+            data(state).reinit_with_compression(compression);
+        }
+
         // argument 0
         const auto* data_column = down_cast<const DoubleColumn*>(columns[0]);
         // argument 1
@@ -109,7 +126,7 @@ public:
         if (UNLIKELY(data(state).targetQuantile == std::numeric_limits<double>::infinity())) {
             data(state).targetQuantile = columns[1]->get(0).get_double();
         }
-        double column_value = data_column->get_data()[row_num];
+        double column_value = data_column->immutable_data()[row_num];
         int64_t prev_memory = data(state).percentile->mem_usage();
         data(state).percentile->add(implicit_cast<float>(column_value));
         ctx->add_mem_usage(data(state).percentile->mem_usage() - prev_memory);
@@ -133,7 +150,7 @@ public:
         size_t old_size = bytes.size();
         for (size_t i = 0; i < chunk_size; ++i) {
             PercentileValue percentile;
-            percentile.add(data_column->get_data()[i]);
+            percentile.add(data_column->immutable_data()[i]);
 
             size_t new_size = old_size + sizeof(double) + percentile.serialize_size();
             bytes.resize(new_size);
@@ -150,25 +167,35 @@ public:
 // PercentileApproxWeightedAggregateFunction: percentile_approx_weighted(expr, weight, DOUBLE p[, DOUBLE compression])
 class PercentileApproxWeightedAggregateFunction final : public PercentileApproxAggregateFunctionBase {
 public:
-    void create(FunctionContext* ctx, AggDataPtr __restrict ptr) const override {
-        double compression = (ctx == nullptr) ? DEFAULT_COMPRESSION_FACTOR : get_compression_factor(ctx);
-        new (ptr) PercentileApproxState(compression);
-    }
-
+    // SplitAggregateRule pass the const args to merge phase aggregator for performance.
+    // Compression parameter is always the last constant parameter (if provided)
     double get_compression_factor(FunctionContext* ctx) const override {
         double compression = DEFAULT_COMPRESSION_FACTOR;
-        if (ctx->get_num_args() > 3) {
-            compression = ColumnHelper::get_const_value<TYPE_DOUBLE>(ctx->get_constant_column(3));
-            if (compression < MIN_COMPRESSION || compression > MAX_COMPRESSION) {
-                LOG(WARNING) << "Compression factor out of range. Using default compression factor: "
-                             << DEFAULT_COMPRESSION_FACTOR;
-                compression = DEFAULT_COMPRESSION_FACTOR;
+        int num_args = ctx->get_num_args();
+        if (num_args > 3) {
+            for (int i = num_args - 1; i >= 0; i--) {
+                auto const_col = ctx->get_constant_column(i);
+                if (const_col != nullptr) {
+                    // Found the last constant column, this should be compression
+                    compression = ColumnHelper::get_const_value<TYPE_DOUBLE>(const_col);
+                    if (compression < MIN_COMPRESSION || compression > MAX_COMPRESSION) {
+                        LOG(WARNING) << "Compression factor out of range. Using default compression factor: "
+                                     << DEFAULT_COMPRESSION_FACTOR;
+                        compression = DEFAULT_COMPRESSION_FACTOR;
+                    }
+                    break;
+                }
             }
         }
         return compression;
     }
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr state, size_t row_num) const override {
+        // Lazy initialization of compression factor on first update
+        if (UNLIKELY(!data(state).compression_initialized)) {
+            double compression = get_compression_factor(ctx);
+            data(state).reinit_with_compression(compression);
+        }
         // argument 0
         const auto* data_column = down_cast<const DoubleColumn*>(columns[0]);
         // argument 1: weight can be const or int64 column
@@ -181,7 +208,7 @@ public:
             data(state).targetQuantile = columns[2]->get(0).get_double();
         }
 
-        double column_value = data_column->get_data()[row_num];
+        double column_value = data_column->immutable_data()[row_num];
         int64_t prev_memory = data(state).percentile->mem_usage();
         // add value with weight
         if (LIKELY(weight != 0)) {
@@ -211,7 +238,7 @@ public:
             if (LIKELY(weight != 0)) {
                 for (size_t i = 0; i < chunk_size; ++i) {
                     PercentileValue percentile;
-                    double value = data_column->get_data()[i];
+                    double value = data_column->immutable_data()[i];
                     percentile.add(value, weight);
                     size_t new_size = old_size + sizeof(double) + percentile.serialize_size();
                     bytes.resize(new_size);
@@ -236,9 +263,9 @@ public:
         } else {
             const auto* weight_column = down_cast<const Int64Column*>(src[1].get());
             for (size_t i = 0; i < chunk_size; ++i) {
-                int64_t weight = weight_column->get_data()[i];
+                int64_t weight = weight_column->immutable_data()[i];
                 PercentileValue percentile;
-                double value = data_column->get_data()[i];
+                double value = data_column->immutable_data()[i];
                 if (LIKELY(weight != 0)) {
                     percentile.add(value, weight);
                 }

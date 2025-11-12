@@ -34,6 +34,8 @@
 
 package com.starrocks.qe;
 
+import com.starrocks.authentication.UserAuthenticationInfo;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.DdlException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SetStmtAnalyzer;
@@ -41,6 +43,7 @@ import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetPassVar;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SystemVariable;
+import com.starrocks.sql.ast.UserRef;
 import com.starrocks.sql.ast.UserVariable;
 
 import java.util.Map;
@@ -70,8 +73,10 @@ public class SetExecutor {
             ctx.modifyUserVariableCopyInWrite(userVariable);
         } else if (var instanceof SetPassVar setPassVar) {
             // Set password
+            UserRef user = setPassVar.getUser();
+            UserIdentity userIdentity = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
             GlobalStateMgr.getCurrentState().getAuthenticationMgr()
-                    .alterUser(setPassVar.getUserIdent(), setPassVar.getUserAuthenticationInfo(), null);
+                    .alterUser(userIdentity, new UserAuthenticationInfo(user, setPassVar.getAuthOption()), null);
         }
     }
 
@@ -90,7 +95,16 @@ public class SetExecutor {
         }
         try {
             for (SetListItem var : stmt.getSetListItems()) {
-                setVariablesOfAllType(var);
+                if (var instanceof SystemVariable) {
+                    SystemVariable systemVariable = (SystemVariable) var;
+                    if (SessionVariable.WAREHOUSE_NAME.equalsIgnoreCase(systemVariable.getVariable())) {
+                        handleSetWarehouse(systemVariable);
+                    } else {
+                        setVariablesOfAllType(var);
+                    }
+                } else {
+                    setVariablesOfAllType(var);
+                }
             }
         } catch (Throwable e) {
             if (hasUserVar) {
@@ -106,6 +120,18 @@ public class SetExecutor {
                     ctx.modifyUserVariables(clonedUserVars);
                 }
             }
+        }
+    }
+
+    private void handleSetWarehouse(SystemVariable var) throws DdlException {
+        String originalWarehouseName = ctx.getCurrentWarehouseName();
+        setVariablesOfAllType(var);
+        String newWarehouseName = ctx.getCurrentWarehouseName();
+        // after set warehouse, need to reset compute resource
+        if (newWarehouseName != null && newWarehouseName.equalsIgnoreCase(originalWarehouseName)) {
+            ctx.ensureCurrentComputeResourceAvailable();
+        } else {
+            ctx.resetComputeResource();
         }
     }
 }

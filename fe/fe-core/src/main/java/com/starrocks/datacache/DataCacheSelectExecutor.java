@@ -32,6 +32,7 @@ import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.cngroup.ComputeResource;
+import com.starrocks.warehouse.cngroup.ComputeResourceProvider;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -42,19 +43,27 @@ public class DataCacheSelectExecutor {
     private static final Logger LOG = LogManager.getLogger(DataCacheSelectExecutor.class);
 
     public static DataCacheSelectMetrics cacheSelect(DataCacheSelectStatement statement,
-                                                             ConnectContext connectContext) throws Exception {
+                                                     ConnectContext connectContext) throws Exception {
         InsertStmt insertStmt = statement.getInsertStmt();
 
         final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         final Warehouse wh = warehouseManager.getWarehouse(connectContext.getCurrentWarehouseName());
+        final ComputeResourceProvider computeResourceProvider = warehouseManager.getComputeResourceProvider();
+        final List<ComputeResource> computeResources = computeResourceProvider.getComputeResources(wh);
+
         List<StmtExecutor> subStmtExecutors = Lists.newArrayList();
-        for (int workerGroupIdx = 0; workerGroupIdx < wh.getWorkerGroupIds().size(); workerGroupIdx++) {
-            long workerGroupId = wh.getWorkerGroupIds().get(workerGroupIdx);
-            ConnectContext subContext = buildCacheSelectConnectContext(statement, connectContext, workerGroupIdx == 0);
-            ComputeResource computeResource = warehouseManager.getComputeResourceProvider().ofComputeResource(
-                    wh.getId(), workerGroupId);
+        boolean isFirstSubContext = true;
+        for (ComputeResource computeResource : computeResources) {
+            if (!computeResourceProvider.isResourceAvailable(computeResource)) {
+                // skip if this compute resource is not available
+                LOG.warn("skip cache select for compute resource {} because it is not available", computeResource);
+                continue;
+            }
+
+            ConnectContext subContext = buildCacheSelectConnectContext(statement, connectContext, isFirstSubContext);
             subContext.setCurrentComputeResource(computeResource);
             StmtExecutor subStmtExecutor = StmtExecutor.newInternalExecutor(subContext, insertStmt);
+            isFirstSubContext = false;
             // Register new StmtExecutor into current ConnectContext's StmtExecutor, so we can handle ctrl+c command
             // If DataCacheSelect is forward to leader, connectContext's Executor is null
             if (connectContext.getExecutor() != null) {

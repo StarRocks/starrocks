@@ -113,6 +113,13 @@ struct TypeDescriptor {
         return res;
     }
 
+    static TypeDescriptor create_variant_type() {
+        TypeDescriptor res;
+        res.type = TYPE_VARIANT;
+        res.len = 128; // Default length for variant type
+        return res;
+    }
+
     static TypeDescriptor create_array_type(const TypeDescriptor& children) {
         TypeDescriptor res;
         res.type = TYPE_ARRAY;
@@ -211,6 +218,8 @@ struct TypeDescriptor {
             return TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL256, precision, scale);
         case TYPE_JSON:
             return TypeDescriptor::create_json_type();
+        case TYPE_VARIANT:
+            return TypeDescriptor::create_variant_type();
         case TYPE_OBJECT:
             return TypeDescriptor::create_bitmap_type();
         default:
@@ -325,7 +334,9 @@ struct TypeDescriptor {
 
     // For some types with potential huge length, whose memory consumption is far more than normal types,
     // they need a different chunk_size setting
-    bool is_huge_type() const { return type == TYPE_JSON || type == TYPE_OBJECT || type == TYPE_HLL; }
+    bool is_huge_type() const {
+        return type == TYPE_JSON || type == TYPE_OBJECT || type == TYPE_HLL || type == TYPE_VARIANT;
+    }
 
     /// Returns the size of a slot for this type.
     int get_slot_size() const;
@@ -367,9 +378,12 @@ private:
 
 static const TypeDescriptor TYPE_UNKNOWN_DESC = TypeDescriptor(LogicalType::TYPE_UNKNOWN);
 static const TypeDescriptor TYPE_BOOLEAN_DESC = TypeDescriptor{LogicalType::TYPE_BOOLEAN};
+static const TypeDescriptor TYPE_TINYINT_DESC = TypeDescriptor{LogicalType::TYPE_TINYINT};
 static const TypeDescriptor TYPE_SMALLINT_DESC = TypeDescriptor{LogicalType::TYPE_SMALLINT};
 static const TypeDescriptor TYPE_INT_DESC = TypeDescriptor(LogicalType::TYPE_INT);
 static const TypeDescriptor TYPE_BIGINT_DESC = TypeDescriptor(LogicalType::TYPE_BIGINT);
+static const TypeDescriptor TYPE_FLOAT_DESC = TypeDescriptor(LogicalType::TYPE_FLOAT);
+static const TypeDescriptor TYPE_DOUBLE_DESC = TypeDescriptor(LogicalType::TYPE_DOUBLE);
 static const TypeDescriptor TYPE_TIME_DESC = TypeDescriptor(LogicalType::TYPE_TIME);
 static const TypeDescriptor TYPE_DATE_DESC = TypeDescriptor(LogicalType::TYPE_DATE);
 static const TypeDescriptor TYPE_DATETIME_DESC = TypeDescriptor(LogicalType::TYPE_DATETIME);

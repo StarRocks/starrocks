@@ -15,18 +15,17 @@ package com.starrocks.catalog.system.information;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.InternalCatalog;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.Config;
+import com.starrocks.common.util.SqlCredentialRedactor;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskManager;
@@ -43,6 +42,9 @@ import com.starrocks.thrift.TGetTasksParams;
 import com.starrocks.thrift.TSchemaTableType;
 import com.starrocks.thrift.TTaskRunInfo;
 import com.starrocks.thrift.TUserIdentity;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import org.apache.commons.lang3.NotImplementedException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -71,22 +73,22 @@ public class TaskRunsSystemTable extends SystemTable {
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("QUERY_ID", ScalarType.createVarchar(64))
-                        .column("TASK_NAME", ScalarType.createVarchar(64))
-                        .column("CREATE_TIME", ScalarType.createType(PrimitiveType.DATETIME))
-                        .column("FINISH_TIME", ScalarType.createType(PrimitiveType.DATETIME))
-                        .column("STATE", ScalarType.createVarchar(16))
-                        .column("CATALOG", ScalarType.createVarchar(64))
-                        .column("DATABASE", ScalarType.createVarchar(64))
-                        .column("DEFINITION", ScalarType.createVarchar(MAX_FIELD_VARCHAR_LENGTH))
-                        .column("EXPIRE_TIME", ScalarType.createType(PrimitiveType.DATETIME))
-                        .column("ERROR_CODE", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("ERROR_MESSAGE", ScalarType.createVarchar(MAX_FIELD_VARCHAR_LENGTH))
-                        .column("PROGRESS", ScalarType.createVarchar(64))
-                        .column("EXTRA_MESSAGE", ScalarType.createVarchar(8192))
-                        .column("PROPERTIES", ScalarType.createVarcharType(512))
-                        .column("JOB_ID", ScalarType.createVarcharType(64))
-                        .column("PROCESS_TIME", ScalarType.createType(PrimitiveType.DATETIME))
+                        .column("QUERY_ID", TypeFactory.createVarchar(64))
+                        .column("TASK_NAME", TypeFactory.createVarchar(64))
+                        .column("CREATE_TIME", TypeFactory.createType(PrimitiveType.DATETIME))
+                        .column("FINISH_TIME", TypeFactory.createType(PrimitiveType.DATETIME))
+                        .column("STATE", TypeFactory.createVarchar(16))
+                        .column("CATALOG", TypeFactory.createVarchar(64))
+                        .column("DATABASE", TypeFactory.createVarchar(64))
+                        .column("DEFINITION", TypeFactory.createVarchar(MAX_FIELD_VARCHAR_LENGTH))
+                        .column("EXPIRE_TIME", TypeFactory.createType(PrimitiveType.DATETIME))
+                        .column("ERROR_CODE", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("ERROR_MESSAGE", TypeFactory.createVarchar(MAX_FIELD_VARCHAR_LENGTH))
+                        .column("PROGRESS", TypeFactory.createVarchar(64))
+                        .column("EXTRA_MESSAGE", TypeFactory.createVarchar(8192))
+                        .column("PROPERTIES", TypeFactory.createVarcharType(512))
+                        .column("JOB_ID", TypeFactory.createVarcharType(64))
+                        .column("PROCESS_TIME", TypeFactory.createType(PrimitiveType.DATETIME))
                         .build(), TSchemaTableType.SCH_TASK_RUNS);
     }
 
@@ -137,7 +139,7 @@ public class TaskRunsSystemTable extends SystemTable {
         }
 
         ConnectContext context = Preconditions.checkNotNull(ConnectContext.get(), "not a valid connection");
-        TUserIdentity userIdentity = context.getCurrentUserIdentity().toThrift();
+        TUserIdentity userIdentity = UserIdentityUtils.toThrift(context.getCurrentUserIdentity());
         params.setCurrent_user_ident(userIdentity);
         // Evaluate result
         TGetTaskRunInfoResult info = query(params);
@@ -166,7 +168,7 @@ public class TaskRunsSystemTable extends SystemTable {
 
         UserIdentity currentUser = null;
         if (params.isSetCurrent_user_ident()) {
-            currentUser = UserIdentity.fromThrift(params.current_user_ident);
+            currentUser = UserIdentityUtils.fromThrift(params.current_user_ident);
         }
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         TaskManager taskManager = globalStateMgr.getTaskManager();
@@ -198,13 +200,21 @@ public class TaskRunsSystemTable extends SystemTable {
             info.setCatalog(status.getCatalogName());
             info.setDatabase(ClusterNamespace.getNameFromFullName(status.getDbName()));
             if (!Strings.isEmpty(status.getDefinition())) {
-                info.setDefinition(status.getDefinition());
+                if (Config.enable_task_info_mask_credential) {
+                    info.setDefinition(SqlCredentialRedactor.redact(status.getDefinition()));
+                } else {
+                    info.setDefinition(status.getDefinition());
+                }
             } else {
                 try {
                     // NOTE: use task's definition to display task-run's definition here
                     Task task = taskManager.getTaskWithoutLock(taskName);
                     if (task != null) {
-                        info.setDefinition(task.getDefinition());
+                        if (Config.enable_task_info_mask_credential) {
+                            info.setDefinition(SqlCredentialRedactor.redact(task.getDefinition()));
+                        } else {
+                            info.setDefinition(task.getDefinition());
+                        }
                     }
                 } catch (Exception e) {
                     LOG.warn("Get taskName {} definition failed: {}", taskName, e);

@@ -71,6 +71,8 @@ public:
 
     DEFINE_VECTORIZED_FN(repeat);
 
+    DEFINE_VECTORIZED_FN(array_top_n);
+
     template <LogicalType type>
     static StatusOr<ColumnPtr> array_overlap(FunctionContext* context, const Columns& columns) {
         return ArrayOverlap<type>::process(context, columns);
@@ -194,6 +196,8 @@ public:
     DEFINE_VECTORIZED_FN(array_intersect_any_type);
 
     DEFINE_VECTORIZED_FN(array_sortby_multi);
+
+    DEFINE_VECTORIZED_FN(null_or_empty);
 
     DEFINE_VECTORIZED_FN(array_flatten);
 };

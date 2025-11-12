@@ -43,6 +43,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MaterializedViewRefreshType;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
@@ -145,13 +146,11 @@ public class AlterJobMgr {
         // check db
         String dbName = stmt.getDbName();
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
-        if (db == null) {
+        if (db == null || !db.isExist()) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
-        Locker locker = new Locker();
-        if (!locker.lockDatabaseAndCheckExist(db, LockType.WRITE)) {
-            throw new DdlException("drop materialized failed. database:" + db.getFullName() + " not exist");
-        }
+
+        OlapTable targetTable = null;
         try {
             Table table = null;
             boolean hasfindTable = false;
@@ -184,21 +183,30 @@ public class AlterJobMgr {
                         "Do not support non-OLAP table [" + table.getName() + "] when drop materialized view");
             }
             // check table state
-            OlapTable olapTable = (OlapTable) table;
-            if (olapTable.getState() != OlapTableState.NORMAL) {
-                throw InvalidOlapTableStateException.of(olapTable.getState(), olapTable.getName());
+            targetTable = (OlapTable) table;
+            if (targetTable.getState() != OlapTableState.NORMAL) {
+                throw InvalidOlapTableStateException.of(targetTable.getState(), targetTable.getName());
             }
-            // drop materialized view
-            materializedViewHandler.processDropMaterializedView(stmt, db, olapTable);
-
         } catch (MetaNotFoundException e) {
             if (stmt.isSetIfExists()) {
                 LOG.info(e.getMessage());
             } else {
                 throw e;
             }
+        }
+        if (targetTable == null) {
+            return;
+        }
+
+        Locker locker = new Locker();
+        if (!locker.lockTableAndCheckDbExist(db, targetTable.getId(), LockType.WRITE)) {
+            throw new AlterJobException("alter materialized failed. database:" + db.getFullName() + " not exist");
+        }
+        try {
+            // drop materialized view
+            materializedViewHandler.processDropMaterializedView(stmt, db, targetTable);
         } finally {
-            locker.unLockDatabase(db.getId(), LockType.WRITE);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), targetTable.getId(), LockType.WRITE);
         }
     }
 
@@ -227,14 +235,32 @@ public class AlterJobMgr {
                     Lists.newArrayList(MaterializedViewAnalyzer.getBaseTableInfos(mvQueryStatement, !isReplay));
             materializedView.setBaseTableInfos(baseTableInfos);
             materializedView.fixRelationship();
+            // resume the mv scheduler
+            TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+            Task task = taskManager.getTask(materializedView);
+            if (task == null) {
+                throw new SemanticException("Can not find running task for materialized view [%s]", materializedView.getName());
+            }
+            taskManager.resumeTask(task);
         } else if (AlterMaterializedViewStatusClause.INACTIVE.equalsIgnoreCase(status)) {
             materializedView.setInactiveAndReason(reason);
             // clear running & pending task runs since the mv has been inactive
             final TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
             Task currentTask = taskManager.getTask(TaskBuilder.getMvTaskName(materializedView.getId()));
+            // suspend the inactive mv's task
             if (currentTask != null) {
                 TaskRunManager taskRunManager = taskManager.getTaskRunManager();
-                taskRunManager.killTaskRun(currentTask.getId(), true);
+                if (!taskRunManager.tryTaskRunLock()) {
+                    throw new SemanticException("Failed to acquire task run lock when altering " +
+                            "mv status:" + materializedView.getName());
+                }
+                try {
+                    taskRunManager.killTaskRun(currentTask.getId(), true);
+                } finally {
+                    taskRunManager.taskRunUnlock();
+                }
+                // suspend the task to avoid scheduling new task runs
+                taskManager.suspendTask(currentTask);
             }
         }
     }
@@ -263,7 +289,7 @@ public class AlterJobMgr {
         List<Column> newColumns = createStmt.getMvColumnItems().stream()
                 .sorted(Comparator.comparing(Column::getName))
                 .collect(Collectors.toList());
-        List<Column> existedColumns = materializedView.getOrderedOutputColumns().stream()
+        List<Column> existedColumns = materializedView.getOrderedOutputColumns(true).stream()
                 .sorted(Comparator.comparing(Column::getName))
                 .collect(Collectors.toList());
         if (newColumns.size() != existedColumns.size()) {
@@ -390,7 +416,6 @@ public class AlterJobMgr {
                 TaskBuilder.getMvTaskName(materializedView.getId()));
         if (currentTask != null) {
             currentTask.setDefinition(materializedView.getTaskDefinition());
-            currentTask.setPostRun(TaskBuilder.getAnalyzeMVStmt(materializedView.getName()));
         }
     }
 
@@ -416,7 +441,7 @@ public class AlterJobMgr {
             final MaterializedView.MvRefreshScheme oldRefreshScheme = oldMaterializedView.getRefreshScheme();
             newMvRefreshScheme.setAsyncRefreshContext(oldRefreshScheme.getAsyncRefreshContext());
             newMvRefreshScheme.setLastRefreshTime(oldRefreshScheme.getLastRefreshTime());
-            final MaterializedView.RefreshType refreshType = log.getRefreshType();
+            final MaterializedViewRefreshType refreshType = log.getRefreshType();
             final MaterializedView.AsyncRefreshContext asyncRefreshContext = log.getAsyncRefreshContext();
             final MaterializedView.RefreshMoment moment = oldRefreshScheme.getMoment();
             newMvRefreshScheme.setType(refreshType);
@@ -622,7 +647,7 @@ public class AlterJobMgr {
         }
 
         if (!isReplay) {
-            GlobalStateMgr.getCurrentState().getEditLog().logEdit(OperationType.OP_SET_VIEW_SECURITY_LOG, alterViewInfo);
+            GlobalStateMgr.getCurrentState().getEditLog().logJsonObject(OperationType.OP_SET_VIEW_SECURITY_LOG, alterViewInfo);
         }
     }
 

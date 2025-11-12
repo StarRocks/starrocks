@@ -18,8 +18,10 @@
 #include "gen_cpp/Types_types.h"
 
 namespace starrocks {
+
 class ResultBufferMgr;
-class ArrowFlightBatchReader : public arrow::RecordBatchReader {
+
+class ArrowFlightBatchReader final : public arrow::RecordBatchReader {
 public:
     ArrowFlightBatchReader(ResultBufferMgr* result_buf_mgr, const TUniqueId& query_id);
 

@@ -17,17 +17,19 @@ package com.starrocks.sql.spm;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.BinaryPredicate;
-import com.starrocks.analysis.CompoundPredicate;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.InPredicate;
-import com.starrocks.analysis.IntLiteral;
-import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.ParseNode;
-import com.starrocks.analysis.Subquery;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.QueryRelation;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.CompoundPredicate;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.InPredicate;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.LargeInPredicate;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.Subquery;
 import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.List;
@@ -50,9 +52,9 @@ public class SPMPlaceholderBuilder {
         @Override
         public String toString() {
             return "PlaceholderExpr{" +
-                    "originalExpr=" + originalExpr.toMySql() +
-                    ", placeholderExpr=" + placeholderExpr.toMySql() +
-                    ", parentExpr=" + (parentExpr == null ? "null" : parentExpr.toMySql()) +
+                    "originalExpr=" + ExprToSql.toMySql(originalExpr) +
+                    ", placeholderExpr=" + ExprToSql.toMySql(placeholderExpr) +
+                    ", parentExpr=" + (parentExpr == null ? "null" : ExprToSql.toMySql(parentExpr)) +
                     '}';
         }
     }
@@ -110,7 +112,7 @@ public class SPMPlaceholderBuilder {
                 Preconditions.checkState(node.getChild(0).isLiteral());
                 long spmId = ((IntLiteral) node.getChild(0)).getValue();
                 if (userSPMIds.contains(spmId)) {
-                    throw new SemanticException("sql plan found conflict placeholder expression: " + node.toMySql());
+                    throw new SemanticException("sql plan found conflict placeholder expression: " + ExprToSql.toMySql(node));
                 }
                 userSPMIds.add(spmId);
                 return node;
@@ -133,7 +135,7 @@ public class SPMPlaceholderBuilder {
             if (placeholder.isPresent()) {
                 if (isStrictCheck) {
                     throw new SemanticException("sql plan found conflict placeholder expression: "
-                            + (root == null ? node.toMySql() : root.toMySql()));
+                            + (root == null ? ExprToSql.toMySql(node) : ExprToSql.toMySql(root)));
                 } else {
                     return placeholder.get();
                 }
@@ -146,12 +148,17 @@ public class SPMPlaceholderBuilder {
         }
 
         @Override
+        public ParseNode visitLargeInPredicate(LargeInPredicate node, Expr root) {
+            return node;
+        }
+
+        @Override
         public ParseNode visitLiteral(LiteralExpr node, Expr root) {
             Optional<Expr> placeholder = findPlaceholderExpr(node, root);
             if (placeholder.isPresent()) {
                 if (isStrictCheck) {
                     throw new SemanticException("sql plan found conflict placeholder expression: "
-                            + (root == null ? node.toMySql() : root.toMySql()));
+                            + (root == null ? ExprToSql.toMySql(node) : ExprToSql.toMySql(root)));
                 } else {
                     return placeholder.get();
                 }
@@ -236,7 +243,7 @@ public class SPMPlaceholderBuilder {
             }
             for (Expr pe : usePlaceholders) {
                 if (placeholderExprs.stream().noneMatch(e -> e.placeholderExpr.equals(pe))) {
-                    throw new SemanticException("can't found expression[" + pe.toMySql() + "] used in bind stmt");
+                    throw new SemanticException("can't found expression[" + ExprToSql.toMySql(pe) + "] used in bind stmt");
                 }
             }
         }
@@ -254,10 +261,15 @@ public class SPMPlaceholderBuilder {
             Optional<Expr> spm = findPlaceholderExpr(node, root);
             if (spm.isEmpty()) {
                 throw new SemanticException("can't find expression placeholder or placeholder conflict, "
-                        + "expression : " + node.toMySql());
+                        + "expression : " + ExprToSql.toMySql(node));
             }
             usePlaceholders.add(spm.get());
             return spm.get();
+        }
+
+        @Override
+        public ParseNode visitLargeInPredicate(LargeInPredicate node, Expr root) {
+            return node;
         }
 
         @Override
@@ -266,7 +278,7 @@ public class SPMPlaceholderBuilder {
 
             if (spm.isEmpty()) {
                 throw new SemanticException("can't find expression placeholder or placeholder conflict, "
-                        + "expression : " + node.toMySql());
+                        + "expression : " + ExprToSql.toMySql(node));
             }
             usePlaceholders.add(spm.get());
             return spm.get();

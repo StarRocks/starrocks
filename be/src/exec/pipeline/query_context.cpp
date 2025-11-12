@@ -57,11 +57,14 @@ QueryContext::~QueryContext() noexcept {
     // segmentation fault.
     if (_mem_tracker != nullptr) {
         if (lifetime() > config::big_query_sec * 1000 * 1000 * 1000) {
+            int64_t read_local = get_read_local_cnt();
+            int64_t read_total = read_local + get_read_remote_cnt();
+            double cache_hit_ratio = read_total > 0 ? (((double)read_local / read_total) * 100) : 100;
             LOG(INFO) << fmt::format(
                     "finished query_id:{} context life time:{} cpu costs:{} peak memusage:{} scan_bytes:{} spilled "
-                    "bytes:{}",
-                    print_id(query_id()), lifetime(), cpu_cost(), mem_cost_bytes(), get_scan_bytes(),
-                    get_spill_bytes());
+                    "bytes:{} cache_hit_ratio:{:.1f}%",
+                    print_id(query_id()), lifetime(), cpu_cost(), mem_cost_bytes(), get_scan_bytes(), get_spill_bytes(),
+                    cache_hit_ratio);
         }
     }
 
@@ -135,7 +138,7 @@ void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent,
         _profile = std::make_shared<RuntimeProfile>("Query" + print_id(_query_id));
         auto* mem_tracker_counter =
                 ADD_COUNTER_SKIP_MERGE(_profile.get(), "MemoryLimit", TUnit::BYTES, TCounterMergeType::SKIP_ALL);
-        mem_tracker_counter->set(query_mem_limit);
+        COUNTER_SET(mem_tracker_counter, query_mem_limit);
         size_t lowest_limit = parent->lowest_limit();
         size_t tracker_reserve_limit = -1;
 
@@ -269,6 +272,7 @@ std::shared_ptr<QueryStatistics> QueryContext::final_query_statistic() {
     res->add_cpu_costs(cpu_cost());
     res->add_mem_costs(mem_cost_bytes());
     res->add_spill_bytes(get_spill_bytes());
+    res->add_read_stats(get_read_local_cnt(), get_read_remote_cnt());
     res->add_transmitted_bytes(get_transmitted_bytes());
 
     {

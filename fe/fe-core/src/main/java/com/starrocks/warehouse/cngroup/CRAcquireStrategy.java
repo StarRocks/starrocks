@@ -20,5 +20,13 @@ package com.starrocks.warehouse.cngroup;
 public enum CRAcquireStrategy {
     STANDARD, // default strategy
     RANDOM, // round-robin strategy
-    LOCAL_FIRST, // local first strategy
+    LOCAL_FIRST; // local first strategy
+
+    public static CRAcquireStrategy fromString(String value) {
+        try {
+            return CRAcquireStrategy.valueOf(value.trim().toUpperCase());
+        } catch (Exception e) {
+            return STANDARD;
+        }
+    }
 }

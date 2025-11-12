@@ -14,7 +14,7 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.Expr;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;
@@ -57,6 +57,6 @@ public abstract class SetOperationRelation extends QueryRelation {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitSetOp(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitSetOp(this, context);
     }
 }

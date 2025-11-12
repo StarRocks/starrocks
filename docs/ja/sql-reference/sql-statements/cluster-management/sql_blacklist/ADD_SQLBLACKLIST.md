@@ -13,7 +13,7 @@ SQLブラックリストの詳細については、[Manage SQL Blacklist](../../
 :::tip
 
 - この操作には、SYSTEMレベルのBLACKLIST権限が必要です。[GRANT](../../account-management/GRANT.md)の指示に従って、この権限を付与できます。
-- 現在、StarRocksはSELECT文をSQLブラックリストに追加することをサポートしています。
+- ブラックリストは、SELECT ステートメント、INSERT ステートメント（v3.1 以降）、および CTAS ステートメント（v3.4 以降）にのみ適用されます。
 
 :::
 
@@ -61,4 +61,22 @@ mysql> ADD SQLBLACKLIST
         from test_all_type_nullable2 
     except select id_int, id_tinyint, id_varchar 
         from test_basic_nullable";
+```
+
+例5: すべての INSERT INTO ステートメントを禁止する:
+
+```sql
+ADD SQLBLACKLIST "(?i)^insert\\s+into\\s+.*";
+```
+
+例6: すべての INSERT INTO ... VALUES ステートメントを禁止する:
+
+```sql
+ADD SQLBLACKLIST "(?i)^insert\\s+into\\s+.*values\\s*\\(";
+```
+
+例7: システム定義ビュー `_statistics_.column_statistics` に対するものを除き、すべての INSERT INTO ... VALUES ステートメントを禁止する:
+
+```sql
+ADD SQLBLACKLIST "(?i)^insert\\s+into\\s+(?!column_statistics\\b).*values\\s*\\(";
 ```

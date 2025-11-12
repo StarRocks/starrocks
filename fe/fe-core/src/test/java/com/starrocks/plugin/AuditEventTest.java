@@ -14,6 +14,9 @@
 
 package com.starrocks.plugin;
 
+import com.starrocks.server.RunMode;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -39,7 +42,16 @@ public class AuditEventTest {
                 .setWarehouse("wh")
                 .setSessionId("sessionId")
                 .setCustomQueryId("customQueryId")
-                .setCNGroup("test_cngroup");
+                .setCNGroup("test_cngroup")
+                .addReadLocalCnt(100)
+                .addReadRemoteCnt(100);
+
+        new MockUp<RunMode>() {
+            @Mock
+            public static boolean isSharedNothingMode() {
+                return false;
+            }
+        };
         AuditEvent event = builder.build();
 
         Assertions.assertEquals(AuditEvent.EventType.CONNECTION, event.type);
@@ -61,5 +73,7 @@ public class AuditEventTest {
         Assertions.assertEquals("sessionId", event.sessionId);
         Assertions.assertEquals("customQueryId", event.customQueryId);
         Assertions.assertEquals("test_cngroup", event.cnGroup);
+        Assertions.assertEquals("50.0%", event.cacheHitRatio);
+        Assertions.assertEquals((float) 50, event.getCacheMissRatio());
     }
 }

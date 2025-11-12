@@ -28,6 +28,6 @@ public class UnionRelation extends SetOperationRelation {
     }
 
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitUnion(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitUnion(this, context);
     }
 }

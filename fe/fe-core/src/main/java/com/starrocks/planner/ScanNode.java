@@ -36,24 +36,26 @@ package com.starrocks.planner;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.MoreObjects;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.SlotDescriptor;
-import com.starrocks.analysis.TupleDescriptor;
+import com.google.common.collect.Maps;
 import com.starrocks.catalog.ColumnAccessPath;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.connector.BucketProperty;
 import com.starrocks.connector.RemoteFilesSampleStrategy;
 import com.starrocks.datacache.DataCacheOptions;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.optimizer.ScanOptimizeOption;
 import com.starrocks.thrift.TColumnAccessPath;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.warehouse.cngroup.ComputeResource;
+import org.apache.commons.collections4.CollectionUtils;
 import org.jetbrains.annotations.TestOnly;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -74,6 +76,8 @@ public abstract class ScanNode extends PlanNode {
     // NOTE: To avoid trigger a new compute resource creation, set the value when the scan node needs to use it.
     // The compute resource used by this scan node.
     protected ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
+
+    private Map<SlotId, Expr> heavyExprs = Maps.newHashMap();
 
     public ScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc.getId().asList(), planNodeName);
@@ -129,12 +133,19 @@ public abstract class ScanNode extends PlanNode {
         throw new StarRocksException("Error when using bucket-aware execution");
     }
 
+    public Optional<List<BucketProperty>> getBucketProperties() throws StarRocksException {
+        throw new StarRocksException("Error when using bucket-aware execution");
+    }
+
     public boolean isLocalNativeTable() {
         return false;
     }
 
     public boolean hasMoreScanRanges() {
         return false;
+    }
+
+    public void setReachLimit() {
     }
 
     /**
@@ -167,6 +178,9 @@ public abstract class ScanNode extends PlanNode {
 
     protected String explainColumnAccessPath(String prefix) {
         String result = "";
+        if (CollectionUtils.isEmpty(columnAccessPaths)) {
+            return result;
+        }
         if (columnAccessPaths.stream().anyMatch(c -> !c.isFromPredicate() && !c.isExtended())) {
             result += prefix + "ColumnAccessPath: [" + columnAccessPaths.stream()
                     .filter(c -> !c.isFromPredicate() && !c.isExtended())
@@ -238,5 +252,13 @@ public abstract class ScanNode extends PlanNode {
             output.append("\n");
         }
         return output.toString();
+    }
+
+    public void setHeavyExprs(Map<SlotId, Expr> heavyExprs) {
+        this.heavyExprs = heavyExprs;
+    }
+
+    public Map<SlotId, Expr> getHeavyExprs() {
+        return heavyExprs;
     }
 }

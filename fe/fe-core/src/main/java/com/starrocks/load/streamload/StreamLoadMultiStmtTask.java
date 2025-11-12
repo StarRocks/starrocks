@@ -21,10 +21,8 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.StarRocksException;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.http.rest.TransactionResult;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
@@ -43,7 +41,6 @@ import io.netty.handler.codec.http.HttpHeaders;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
@@ -159,7 +156,18 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
     }
 
     public void beginTxn(TransactionResult resp) {
-        TransactionStmtExecutor.beginStmt(context, new BeginStmt(NodePosition.ZERO));
+        // Ensure a non-empty label is generated in TransactionStmtExecutor.beginStmt
+        // by providing a valid executionId. Use the pre-generated loadId as executionId.
+        if (context.getExecutionId() == null) {
+            context.setExecutionId(loadId);
+        }
+        // Also propagate compute resource so the txn carries the same resource context.
+        if (context.getCurrentComputeResource() == null) {
+            context.setCurrentComputeResource(computeResource);
+        }
+
+        TransactionStmtExecutor.beginStmt(context, new BeginStmt(NodePosition.ZERO),
+                TransactionState.LoadJobSourceType.MULTI_STATEMENT_STREAMING, label);
         this.txnId = context.getTxnId();
         LOG.info("start transaction id {}", txnId);
     }
@@ -319,12 +327,6 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
             result.addAll(task.toStreamLoadThrift());
         }
         return result;
-    }
-
-    // Implement remaining abstract methods from parent classes
-    @Override
-    public void write(DataOutput out) throws IOException {
-        Text.writeString(out, GsonUtils.GSON.toJson(this));
     }
 
     @Override

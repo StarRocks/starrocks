@@ -17,11 +17,8 @@ package com.starrocks.catalog.system;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSortedSet;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.catalog.system.information.BeConfigsSystemTable;
 import com.starrocks.catalog.system.information.BeTabletsSystemTable;
 import com.starrocks.catalog.system.information.FeTabletSchedulesSystemTable;
@@ -40,6 +37,7 @@ import com.starrocks.catalog.system.information.ViewsSystemTable;
 import com.starrocks.catalog.system.information.WarehouseMetricsSystemTable;
 import com.starrocks.catalog.system.information.WarehouseQueriesSystemTable;
 import com.starrocks.common.util.DateUtils;
+import com.starrocks.planner.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -48,6 +46,9 @@ import com.starrocks.thrift.TSchemaTable;
 import com.starrocks.thrift.TSchemaTableType;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.NotImplementedException;
 import org.apache.thrift.protocol.TType;
@@ -278,6 +279,6 @@ public class SystemTable extends Table {
     }
 
     public static ScalarType createNameType() {
-        return ScalarType.createVarchar(NAME_CHAR_LEN);
+        return TypeFactory.createVarchar(NAME_CHAR_LEN);
     }
 }

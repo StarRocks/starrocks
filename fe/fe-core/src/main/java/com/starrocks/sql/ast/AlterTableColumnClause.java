@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.alter.AlterOpType;
 import com.starrocks.catalog.Column;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -33,9 +32,9 @@ public abstract class AlterTableColumnClause extends AlterTableClause {
     // for AddColumnsClause
     private final List<Column> columns = new ArrayList<>();
 
-    protected AlterTableColumnClause(AlterOpType opType, String rollupName, Map<String, String> properties,
+    protected AlterTableColumnClause(String rollupName, Map<String, String> properties,
                                      NodePosition pos) {
-        super(opType, pos);
+        super(pos);
         this.rollupName = rollupName;
         this.properties = properties;
     }

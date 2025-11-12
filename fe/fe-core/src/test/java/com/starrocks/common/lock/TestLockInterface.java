@@ -31,7 +31,6 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 public class TestLockInterface {
@@ -64,7 +63,7 @@ public class TestLockInterface {
         Database database = new Database(rid, "db");
         database.setExist(false);
         Locker locker = new Locker();
-        Assertions.assertFalse(locker.lockDatabaseAndCheckExist(database, rid2, LockType.READ));
+        Assertions.assertFalse(locker.lockTableAndCheckDbExist(database, rid2, LockType.READ));
     }
 
     @Test
@@ -197,46 +196,6 @@ public class TestLockInterface {
         };
 
         Assertions.assertTrue(locker.tryLockDatabase(database.getId(), LockType.READ, 10, TimeUnit.MILLISECONDS));
-
-        Config.lock_manager_enabled = true;
-    }
-
-    @Test
-    public void testReentrantReadWriteTryLock() {
-        List<Database> dbs = Lists.newArrayList();
-        for (int i = 0; i < 10; i++) {
-            dbs.add(new Database(i, "db" + i));
-        }
-        Locker locker = new Locker();
-        Config.lock_manager_enabled = false;
-
-        {
-            Assertions.assertTrue(locker.tryLockDatabases(dbs, LockType.WRITE, 10, TimeUnit.MILLISECONDS));
-            Assertions.assertTrue(locker.tryLockDatabases(dbs, LockType.WRITE, 10, TimeUnit.MILLISECONDS));
-            locker.unlockDatabases(dbs, LockType.WRITE);
-            locker.unlockDatabases(dbs, LockType.WRITE);
-        }
-
-        {
-            new MockUp<Locker>() {
-                @Mock
-                public boolean tryLockDatabase(Long dbId, LockType lockType, long timeout, TimeUnit unit) {
-                    if (dbId == 5) {
-                        return false;
-                    }
-
-                    QueryableReentrantReadWriteLock rwLock = dbs.get(dbId.intValue()).getRwLock();
-                    rwLock.exclusiveLock();
-                    return true;
-                }
-
-                @Mock
-                public void unLockDatabase(Long dbId, LockType lockType) {
-
-                }
-            };
-            Assertions.assertFalse(locker.tryLockDatabases(dbs, LockType.WRITE, 10, TimeUnit.MILLISECONDS));
-        }
 
         Config.lock_manager_enabled = true;
     }

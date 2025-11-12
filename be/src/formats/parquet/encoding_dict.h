@@ -432,7 +432,7 @@ public:
     }
 
     Status get_dict_values(const Buffer<int32_t>& dict_codes, const NullableColumn& nulls, Column* column) override {
-        const NullData& null_data = nulls.immutable_null_column_data();
+        const auto null_data = nulls.immutable_null_column_data();
         bool has_null = nulls.has_null();
         bool all_null = false;
 

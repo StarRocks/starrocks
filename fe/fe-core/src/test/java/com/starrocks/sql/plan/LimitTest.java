@@ -687,6 +687,98 @@ public class LimitTest extends PlanTestBase {
     }
 
     @Test
+    public void testAsofJoinLimitPushDown() throws Exception {
+        String sql = "select t0.v1 from t0 asof join t1 on t0.v1 = t1.v4 and t0.v2 <= t1.v5 limit 10";
+        String plan = getFragmentPlan(sql);
+        
+        assertContains(plan, "3:HASH JOIN\n" +
+                "  |  join op: ASOF INNER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 1: v1 = 4: v4\n" +
+                "  |  asof join conjunct: 2: v2 <= 5: v5\n" +
+                "  |  limit: 10\n" +
+                "  |  \n" +
+                "  |----2:EXCHANGE\n" +
+                "  |    \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 1: v1 IS NOT NULL\n" +
+                "     partitions=0/1\n" +
+                "     rollup: t0\n" +
+                "     tabletRatio=0/0\n" +
+                "     tabletList=\n" +
+                "     cardinality=1\n" +
+                "     avgRowSize=2.0");
+
+        assertContains(plan, "1:OlapScanNode\n" +
+                "     TABLE: t1\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 4: v4 IS NOT NULL\n" +
+                "     partitions=0/1\n" +
+                "     rollup: t1\n" +
+                "     tabletRatio=0/0\n" +
+                "     tabletList=\n" +
+                "     cardinality=1\n" +
+                "     avgRowSize=2.0");
+    }
+
+    @Test
+    public void testAsofLeftJoinLimitPushDown() throws Exception {
+        String sql = "select t0.v1 from t0 asof left join t1 on t0.v1 = t1.v4 and t0.v2 >= t1.v5 limit 15";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "1:OlapScanNode\n" +
+                "     TABLE: t1\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=0/1\n" +
+                "     rollup: t1\n" +
+                "     tabletRatio=0/0\n" +
+                "     tabletList=\n" +
+                "     cardinality=1\n" +
+                "     avgRowSize=2.0");
+
+        assertContains(plan, "3:HASH JOIN\n" +
+                "  |  join op: ASOF LEFT OUTER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 1: v1 = 4: v4\n" +
+                "  |  asof join conjunct: 2: v2 >= 5: v5\n" +
+                "  |  limit: 15\n" +
+                "  |  \n" +
+                "  |----2:EXCHANGE\n" +
+                "  |    \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=0/1\n" +
+                "     rollup: t0\n" +
+                "     tabletRatio=0/0\n" +
+                "     tabletList=\n" +
+                "     cardinality=1\n" +
+                "     avgRowSize=2.0\n" +
+                "     limit: 15");
+    }
+
+    @Test
+    public void testAsofJoinLimitWithDatetime() throws Exception {
+        // Test ASOF JOIN with datetime temporal condition
+        String sql = "select a.ta from tall a asof join tall b on a.tc = b.tc and a.th <= b.th limit 5";
+        String plan = getFragmentPlan(sql);
+        
+        assertContains(plan, "join op: ASOF INNER JOIN");
+        assertContains(plan, "limit: 5");
+    }
+
+    @Test
+    public void testAsofJoinLimitWithDate() throws Exception {
+        // Test ASOF LEFT JOIN with date temporal condition  
+        String sql = "select a.ta from tall a asof left join tall b on a.tc = b.tc and a.ti >= b.ti limit 8";
+        String plan = getFragmentPlan(sql);
+        
+        assertContains(plan, "join op: ASOF LEFT OUTER JOIN");
+        assertContains(plan, "limit: 8");
+    }
+
+    @Test
     public void testMergeLimitForFilterNode() throws Exception {
         String sql =
                 "SELECT CAST(nullif(subq_0.c1, subq_0.c1) AS INTEGER) AS c0, subq_0.c0 AS c1, 42 AS c2, subq_0.c0 AS "
@@ -1059,4 +1151,5 @@ public class LimitTest extends PlanTestBase {
             Assertions.assertThrows(SemanticException.class, () -> getFragmentPlan(tql));
         }
     }
+
 }

@@ -178,7 +178,11 @@ Status FragmentExecutor::_prepare_fragment_ctx(const UnifiedExecPlanFragmentPara
 
     if (request.common().__isset.pred_tree_params) {
         const auto& tpred_tree_params = request.common().pred_tree_params;
-        _fragment_ctx->set_pred_tree_params({tpred_tree_params.enable_or, tpred_tree_params.enable_show_in_profile});
+        const int32_t max_pushdown_or_predicates = tpred_tree_params.__isset.max_pushdown_or_predicates
+                                                           ? tpred_tree_params.max_pushdown_or_predicates
+                                                           : PredicateTreeParams::DEFAULT_MAX_PUSHDOWN_OR_PREDICATES;
+        _fragment_ctx->set_pred_tree_params(
+                {tpred_tree_params.enable_or, tpred_tree_params.enable_show_in_profile, max_pushdown_or_predicates});
     }
 
     return Status::OK();
@@ -855,7 +859,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
             auto fragment_ctx = _query_ctx->fragment_mgr()->get(request.fragment_instance_id());
             auto* profile = fragment_ctx->runtime_state()->runtime_profile();
 
-            auto* prepare_timer = ADD_TIMER_WITH_THRESHOLD(profile, "FragmentInstancePrepareTime", 10_ms);
+            auto* prepare_timer = ADD_TIMER_WITH_THRESHOLD(profile, "FragmentInstancePrepareTime", 1_ms);
             COUNTER_SET(prepare_timer, profiler.prepare_time);
 
             auto* prepare_query_ctx_timer =
@@ -929,6 +933,8 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     FAIL_POINT_TRIGGER_EXECUTE(fragment_prepare_sleep, { sleep(2); });
 
     RETURN_IF_ERROR(_query_ctx->fragment_mgr()->register_ctx(request.fragment_instance_id(), _fragment_ctx));
+    auto* runtime_state = _fragment_ctx->runtime_state();
+    runtime_state->set_fragment_prepared(true);
     _query_ctx->mark_prepared();
     prepare_success = true;
 
@@ -976,7 +982,8 @@ void FragmentExecutor::_fail_cleanup(bool fragment_has_registed) {
     }
 }
 
-Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const TExecPlanFragmentParams& request) {
+Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const TExecPlanFragmentParams& request,
+                                                        TExecPlanFragmentResult* response) {
     DCHECK(!request.__isset.fragment);
     DCHECK(request.__isset.params);
     const TPlanFragmentExecParams& params = request.params;
@@ -997,6 +1004,7 @@ Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const
     RuntimeState* runtime_state = fragment_ctx->runtime_state();
 
     std::unordered_set<int> notify_ids;
+    std::vector<int32_t> closed_scan_nodes;
 
     for (const auto& [node_id, scan_ranges] : params.per_node_scan_ranges) {
         if (scan_ranges.size() == 0) continue;
@@ -1020,6 +1028,10 @@ Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const
         RETURN_IF_ERROR(morsel_queue_factory->append_morsels(0, std::move(morsels)));
         morsel_queue_factory->set_has_more(has_more_morsel);
         notify_ids.insert(node_id);
+
+        if (morsel_queue_factory->reach_limit()) {
+            closed_scan_nodes.push_back(node_id);
+        }
     }
 
     if (params.__isset.node_to_per_driver_seq_scan_ranges) {
@@ -1048,6 +1060,14 @@ Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const
             }
             morsel_queue_factory->set_has_more(has_more_morsel);
             notify_ids.insert(node_id);
+
+            if (morsel_queue_factory->reach_limit()) {
+                closed_scan_nodes.push_back(node_id);
+            }
+        }
+
+        if (closed_scan_nodes.size() > 0) {
+            response->__set_closed_scan_nodes(closed_scan_nodes);
         }
     }
 

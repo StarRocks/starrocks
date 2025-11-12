@@ -38,25 +38,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.alter.SchemaChangeHandler;
-import com.starrocks.analysis.BinaryPredicate;
-import com.starrocks.analysis.BinaryType;
-import com.starrocks.analysis.CastExpr;
-import com.starrocks.analysis.DescriptorTable;
-import com.starrocks.analysis.DictQueryExpr;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.ExprSubstitutionMap;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.FunctionName;
-import com.starrocks.analysis.FunctionParams;
-import com.starrocks.analysis.IntLiteral;
-import com.starrocks.analysis.IsNullPredicate;
-import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.NullLiteral;
-import com.starrocks.analysis.SlotDescriptor;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.catalog.Column;
@@ -65,7 +46,6 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
@@ -73,6 +53,9 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.load.loadv2.JobState;
+import com.starrocks.planner.DescriptorTable;
+import com.starrocks.planner.SlotDescriptor;
+import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeState;
@@ -85,11 +68,31 @@ import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.ImportColumnDesc;
-import com.starrocks.sql.ast.LambdaArgument;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.CastExpr;
+import com.starrocks.sql.ast.expression.DictQueryExpr;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
+import com.starrocks.sql.ast.expression.ExprSubstitutionVisitor;
+import com.starrocks.sql.ast.expression.ExprToSql;
+import com.starrocks.sql.ast.expression.ExprUtils;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.FunctionName;
+import com.starrocks.sql.ast.expression.FunctionParams;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.IsNullPredicate;
+import com.starrocks.sql.ast.expression.LambdaArgument;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.NullLiteral;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.thrift.TBrokerScanRangeParams;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TOpType;
+import com.starrocks.type.Type;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -401,7 +404,7 @@ public class Load {
                             throw new AnalysisException("const load op type column should only be upsert(0)/delete(1)");
                         }
                     }
-                    LOG.info("load __op column expr: " + (expr != null ? expr.toSql() : "null"));
+                    LOG.info("load __op column expr: " + (expr != null ? ExprToSql.toSql(expr) : "null"));
                     break;
                 }
             }
@@ -737,7 +740,7 @@ public class Load {
             }
 
             List<CastExpr> casts = Lists.newArrayList();
-            entry.getValue().collect(Expr.IS_VARCHAR_SLOT_REF_IMPLICIT_CAST, casts);
+            entry.getValue().collect(ExprUtils.IS_VARCHAR_SLOT_REF_IMPLICIT_CAST, casts);
             if (casts.isEmpty()) {
                 continue;
             }
@@ -797,17 +800,16 @@ public class Load {
                 if (useVectorizedLoad) {
                     slotDesc.setIsMaterialized(true);
                 }
-                smap.getLhs().add(slot);
                 SlotRef slotRef = new SlotRef(slotDesc);
                 slotRef.setColumnName(slot.getColumnName());
-                smap.getRhs().add(slotRef);
+                smap.put(slot, slotRef);
             }
-            Expr expr = entry.getValue().clone(smap);
+            Expr expr = ExprSubstitutionVisitor.rewrite(entry.getValue(), smap);
 
             try {
                 java.util.function.Function<SlotRef, ColumnRefOperator> resolveSlotFunc =
                         (slotRef) -> resolveSlotRef(descriptorTable, srcTupleDesc, slotDescByName, slotRef);
-                expr = Expr.analyzeLoadExpr(expr, resolveSlotFunc);
+                expr = ExprUtils.analyzeLoadExpr(expr, resolveSlotFunc);
             } catch (SemanticException e) {
                 ErrorReport.reportAnalysisException(ERR_MAPPING_EXPR_INVALID, AstToSQLBuilder.toSQL(entry.getValue()),
                         e.getDetailMsg(), entry.getKey());
@@ -843,15 +845,13 @@ public class Load {
                 // In this case, we should rewrite the generated column expression using
                 // the expression in expression list instead of column list.
                 if (slotDesc == null || exprsByName.get(slot.getColumnName()) != null) {
-                    smap.getLhs().add(slot);
                     Expr replaceExpr = exprsByName.get(slot.getColumnName());
                     if (replaceExpr.getType().matchesType(Type.VARCHAR) &&
                             !replaceExpr.getType().matchesType(slot.getType())) {
                         replaceExpr = replaceExpr.castTo(slot.getType());
                     }
-                    smap.getRhs().add(replaceExpr);
+                    smap.put(slot, replaceExpr);
                 } else {
-                    smap.getLhs().add(slot);
                     SlotRef slotRef = new SlotRef(slotDesc);
                     slotRef.setColumnName(slot.getColumnName());
                     Expr replaceExpr = slotRef;
@@ -859,12 +859,12 @@ public class Load {
                             !replaceExpr.getType().matchesType(slot.getType())) {
                         replaceExpr = replaceExpr.castTo(slot.getType());
                     }
-                    smap.getRhs().add(replaceExpr);
+                    smap.put(slot, replaceExpr);
                 }
             }
-            Expr expr = entry.getValue().clone(smap);
+            Expr expr = ExprSubstitutionVisitor.rewrite(entry.getValue(), smap);
 
-            expr = Expr.analyzeAndCastFold(expr);
+            expr = ExprUtils.analyzeAndCastFold(expr);
 
             // check if contain aggregation
             List<FunctionCallExpr> funcs = Lists.newArrayList();
@@ -887,22 +887,19 @@ public class Load {
                     if (useVectorizedLoad) {
                         slotDesc.setIsMaterialized(true);
                     }
-                    smap.getLhs().add(slot);
                     SlotRef slotRef = new SlotRef(slotDesc);
                     slotRef.setColumnName(slot.getColumnName());
-                    smap.getRhs().add(new CastExpr(tbl.getColumn(slot.getColumnName()).getType(),
-                            slotRef));
+                    smap.put(slot, new CastExpr(tbl.getColumn(slot.getColumnName()).getType(), slotRef));
                 } else if (exprsByName.get(slot.getColumnName()) != null) {
-                    smap.getLhs().add(slot);
-                    smap.getRhs().add(new CastExpr(tbl.getColumn(slot.getColumnName()).getType(),
+                    smap.put(slot, new CastExpr(tbl.getColumn(slot.getColumnName()).getType(),
                             exprsByName.get(slot.getColumnName())));
                 } else {
                     ErrorReport.reportAnalysisException(ERR_EXPR_REFERENCED_COLUMN_NOT_FOUND, slot.getColumnName(),
                             AstToSQLBuilder.toSQL(entry.getValue()), entry.getKey());
                 }
             }
-            Expr expr = entry.getValue().clone(smap);
-            expr = Expr.analyzeAndCastFold(expr);
+            Expr expr = ExprSubstitutionVisitor.rewrite(entry.getValue(), smap);
+            expr = ExprUtils.analyzeAndCastFold(expr);
 
             exprsByName.put(entry.getKey(), expr);
         }
@@ -921,7 +918,7 @@ public class Load {
         if (!node.isFromLambda() && !node.isAnalyzed()) {
             // The SlotRef for non-lambda argument is analyzed manually before using Analyzer
             // TODO: delete old analyze in Load
-            String errMsg = String.format("The SlotRef not from lambda is not analyzed, %s", node.toSql());
+            String errMsg = String.format("The SlotRef not from lambda is not analyzed, %s", ExprToSql.toSql(node));
             LOG.warn(errMsg);
             throw unsupportedException(errMsg);
         }

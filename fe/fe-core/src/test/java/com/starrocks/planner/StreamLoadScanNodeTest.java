@@ -35,21 +35,14 @@
 package com.starrocks.planner;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.DescriptorTable;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.FunctionName;
-import com.starrocks.analysis.SlotDescriptor;
-import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.ScalarFunction;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksException;
@@ -58,6 +51,8 @@ import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ImportColumnDesc;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.sql.parser.AstBuilder;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.parser.SqlParser;
@@ -70,6 +65,8 @@ import com.starrocks.thrift.TPrimitiveType;
 import com.starrocks.thrift.TSlotDescriptor;
 import com.starrocks.thrift.TStreamLoadPutRequest;
 import com.starrocks.thrift.TTypeNode;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mock;
@@ -121,7 +118,7 @@ public class StreamLoadScanNodeTest {
         k1.setIsAllowNull(false);
         columns.add(k1);
 
-        Column k2 = new Column("k2", ScalarType.createVarchar(25));
+        Column k2 = new Column("k2", TypeFactory.createVarchar(25));
         k2.setIsKey(true);
         k2.setIsAllowNull(true);
         columns.add(k2);
@@ -133,7 +130,7 @@ public class StreamLoadScanNodeTest {
 
         columns.add(v1);
 
-        Column v2 = new Column("v2", ScalarType.createVarchar(25));
+        Column v2 = new Column("v2", TypeFactory.createVarchar(25));
         v2.setIsKey(false);
         v2.setAggregationType(AggregateType.REPLACE, false);
         v2.setIsAllowNull(false);
@@ -804,7 +801,7 @@ public class StreamLoadScanNodeTest {
         assertThrows(DdlException.class, () -> {
             List<Column> columns = Lists.newArrayList();
             columns.add(new Column("c1", Type.INT, true, null, false, null, ""));
-            columns.add(new Column("c2", ScalarType.createVarchar(10), true, null, false, null, ""));
+            columns.add(new Column("c2", TypeFactory.createVarchar(10), true, null, false, null, ""));
             Table table = new Table(1L, "table0", TableType.OLAP, columns);
             List<ImportColumnDesc> columnExprs = Lists.newArrayList();
             columnExprs.add(new ImportColumnDesc("c3", new FunctionCallExpr("func", Lists.newArrayList())));

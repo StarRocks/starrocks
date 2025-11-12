@@ -14,7 +14,7 @@
 
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/formats")
 
-add_library(Formats STATIC
+ADD_BE_LIB(Formats
         csv/array_converter.cpp
         csv/array_reader.cpp
         csv/boolean_converter.cpp
@@ -89,6 +89,7 @@ add_library(Formats STATIC
         parquet/parquet_block_split_bloom_filter.cpp
         parquet/variant.h
         parquet/variant.cpp
+        parquet/iceberg_row_id_reader.cpp
         disk_range.hpp
         )
 

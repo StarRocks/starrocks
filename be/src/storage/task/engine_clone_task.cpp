@@ -655,6 +655,8 @@ Status EngineCloneTask::_download_files(DataDir* data_dir, const std::string& re
     if (total_time_ms > 0) {
         copy_rate = total_file_size / ((double)total_time_ms) / 1000;
     }
+    _copy_size = (int64_t)total_file_size;
+    _copy_time_ms = (int64_t)total_time_ms;
     LOG(INFO) << "Copied tablet " << _signature << " files=" << file_name_list.size() << ". bytes=" << total_file_size
               << " cost=" << total_time_ms << " ms"
               << " rate=" << copy_rate << " MB/s";

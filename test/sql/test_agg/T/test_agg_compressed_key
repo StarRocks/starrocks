@@ -127,6 +127,17 @@ select c2, sum(c1) from all_decimal group by 1 order by 1, 2 limit 1;
 select c3, sum(c1) from all_decimal group by 1 order by 1, 2 limit 1;
 select c4, sum(c1) from all_decimal group by 1 order by 1, 2 limit 1;
 
+select c1, c2, sum(c1) from all_decimal group by 1,2 order by 1,2,3 limit 1;
+select c1, c3, sum(c1) from all_decimal group by 1,2 order by 1,2,3 limit 1;
+select c1, c4, sum(c1) from all_decimal group by 1,2 order by 1,2,3 limit 1;
+select c2, c3, sum(c1) from all_decimal group by 1,2 order by 1,2,3 limit 1;
+select c2, c4, sum(c1) from all_decimal group by 1,2 order by 1,2,3 limit 1;
+select c3, c4, sum(c1) from all_decimal group by 1,2 order by 1,2,3 limit 1;
+select c1, c2, c3, sum(c1) from all_decimal group by 1,2,3 order by 1,2,3,4 limit 1;
+select c1, c2, c4, sum(c1) from all_decimal group by 1,2,3 order by 1,2,3,4 limit 1;
+select c2, c3, c4, sum(c1) from all_decimal group by 1,2,3 order by 1,2,3,4 limit 1;
+select c1, c2, c3, c4, sum(c1) from all_decimal group by 1,2,3,4 order by 1,2,3,4,5 limit 1;
+
 -- int overflow
 create table all_numbers_t0 (
     c1 tinyint,

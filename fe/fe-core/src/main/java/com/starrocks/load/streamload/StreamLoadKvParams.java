@@ -14,6 +14,7 @@
 
 package com.starrocks.load.streamload;
 
+import com.starrocks.common.util.Util;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TFileType;
 import com.starrocks.thrift.TPartialUpdateMode;
@@ -317,7 +318,7 @@ public class StreamLoadKvParams implements StreamLoadParams {
         if (value == null) {
             return Optional.empty();
         }
-        return Optional.of(Boolean.parseBoolean(value));
+        return Optional.of(Util.stringToBool(value));
     }
 
     private Optional<Integer> getIntParam(String paramName) {

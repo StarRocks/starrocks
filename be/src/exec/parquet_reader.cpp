@@ -23,7 +23,7 @@
 
 #include "common/config.h"
 #include "common/logging.h"
-#include "exec/file_scanner.h"
+#include "exec/file_scanner/file_scanner.h"
 #include "fmt/format.h"
 #include "parquet/schema.h"
 #include "parquet_schema_builder.h"
@@ -50,7 +50,7 @@ ParquetReaderWrap::ParquetReaderWrap(std::shared_ptr<arrow::io::RandomAccessFile
           _read_offset(read_offset),
           _read_size(read_size) {
     _parquet = std::move(parquet_file);
-    _properties = parquet::ReaderProperties();
+    _properties = ::parquet::ReaderProperties();
     _filename = (reinterpret_cast<ParquetChunkFile*>(_parquet.get()))->filename();
 }
 
@@ -77,7 +77,7 @@ Status ParquetReaderWrap::next_selected_row_group() {
 
 Status ParquetReaderWrap::_init_parquet_reader() {
     try {
-        parquet::ArrowReaderProperties arrow_reader_properties;
+        ::parquet::ArrowReaderProperties arrow_reader_properties;
         /*
         * timestamp unit to use for INT96-encoded timestamps in parquet.
         * SECOND, MICRO, MILLI, NANO
@@ -111,9 +111,9 @@ Status ParquetReaderWrap::_init_parquet_reader() {
         arrow_reader_properties.set_cache_options(cache_options);
 
         // new file reader for parquet file
-        auto st = parquet::arrow::FileReader::Make(arrow::default_memory_pool(),
-                                                   parquet::ParquetFileReader::Open(_parquet, _properties),
-                                                   arrow_reader_properties, &_reader);
+        auto st = ::parquet::arrow::FileReader::Make(arrow::default_memory_pool(),
+                                                     ::parquet::ParquetFileReader::Open(_parquet, _properties),
+                                                     arrow_reader_properties, &_reader);
         if (!st.ok()) {
             std::ostringstream oss;
             oss << "Failed to create parquet file reader. error: " << st.ToString() << ", filename: " << _filename;
@@ -153,7 +153,7 @@ Status ParquetReaderWrap::_init_parquet_reader() {
         }
 
         return Status::OK();
-    } catch (parquet::ParquetException& e) {
+    } catch (::parquet::ParquetException& e) {
         std::stringstream str_error;
         str_error << "Init parquet reader fail. " << e.what() << ", filename: " << _filename;
         LOG(WARNING) << str_error.str();
@@ -195,7 +195,7 @@ Status ParquetReaderWrap::init_parquet_reader(const std::vector<SlotDescriptor*>
             }
         }
         return Status::OK();
-    } catch (parquet::ParquetException& e) {
+    } catch (::parquet::ParquetException& e) {
         std::stringstream str_error;
         str_error << "Init parquet reader fail. " << e.what();
         LOG(WARNING) << str_error.str() << " filename: " << _filename;

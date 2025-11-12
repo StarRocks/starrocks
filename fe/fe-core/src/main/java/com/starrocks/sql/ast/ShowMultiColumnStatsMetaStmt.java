@@ -15,9 +15,6 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.LimitElement;
-import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.Predicate;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
@@ -25,6 +22,8 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.ast.expression.LimitElement;
+import com.starrocks.sql.ast.expression.Predicate;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.statistic.MultiColumnStatsMeta;
 
@@ -32,7 +31,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.stream.Collectors;
 
-public class ShowMultiColumnStatsMetaStmt extends ShowStmt {
+public class ShowMultiColumnStatsMetaStmt extends EnhancedShowStmt {
     public ShowMultiColumnStatsMetaStmt(Predicate predicate, List<OrderByElement> orderByElements,
                                       LimitElement limitElement, NodePosition pos) {
         super(pos);
@@ -75,6 +74,6 @@ public class ShowMultiColumnStatsMetaStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowMultiColumnsStatsMetaStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowMultiColumnsStatsMetaStatement(this, context);
     }
 }

@@ -24,6 +24,7 @@
 #include "exprs/function_helper.h"
 #include "simd/simd.h"
 #include "typeinfo"
+#include "types/logical_type.h"
 
 namespace starrocks {
 
@@ -61,9 +62,15 @@ public:
             for (int i = 0; i < s; ++i) {
                 data3[i] = OP::template apply<LCppType, RCppType, ResultCppType>(r1[i], r2[i]);
             }
+        } else if constexpr (lt_is_object_family<LType> || lt_is_object_family<RType>) {
+            const auto data1 = ColumnHelper::cast_to_raw<LType>(v1)->immutable_data();
+            const auto data2 = ColumnHelper::cast_to_raw<RType>(v2)->immutable_data();
+            for (int i = 0; i < s; ++i) {
+                data3[i] = OP::template apply<LCppType, RCppType, ResultCppType>(data1[i], data2[i]);
+            }
         } else {
-            auto* data1 = ColumnHelper::cast_to_raw<LType>(v1)->get_data().data();
-            auto* data2 = ColumnHelper::cast_to_raw<RType>(v2)->get_data().data();
+            auto* data1 = ColumnHelper::cast_to_raw<LType>(v1)->immutable_data().data();
+            auto* data2 = ColumnHelper::cast_to_raw<RType>(v2)->immutable_data().data();
             for (int i = 0; i < s; ++i) {
                 data3[i] = OP::template apply<LCppType, RCppType, ResultCppType>(data1[i], data2[i]);
             }
@@ -90,9 +97,15 @@ public:
             for (int i = 0; i < size; ++i) {
                 data3[i] = OP::template apply<LCppType, RCppType, ResultCppType>(data1, r2[i]);
             }
+        } else if constexpr (lt_is_object_family<LType> || lt_is_object_family<RType>) {
+            const auto data1 = ColumnHelper::cast_to_raw<LType>(v1)->immutable_data()[0];
+            const auto data2 = ColumnHelper::cast_to_raw<RType>(v2)->immutable_data();
+            for (int i = 0; i < size; ++i) {
+                data3[i] = OP::template apply<LCppType, RCppType, ResultCppType>(data1, data2[i]);
+            }
         } else {
-            auto data1 = ColumnHelper::cast_to_raw<LType>(v1)->get_data()[0];
-            auto* data2 = ColumnHelper::cast_to_raw<RType>(v2)->get_data().data();
+            const auto data1 = ColumnHelper::cast_to_raw<LType>(v1)->immutable_data()[0];
+            const auto* data2 = ColumnHelper::cast_to_raw<RType>(v2)->immutable_data().data();
             for (int i = 0; i < size; ++i) {
                 data3[i] = OP::template apply<LCppType, RCppType, ResultCppType>(data1, data2[i]);
             }
@@ -120,9 +133,15 @@ public:
             for (int i = 0; i < size; ++i) {
                 data3[i] = OP::template apply<LCppType, RCppType, ResultCppType>(r1[i], data2);
             }
+        } else if constexpr (lt_is_object_family<LType> || lt_is_object_family<RType>) {
+            const auto data1 = ColumnHelper::cast_to_raw<LType>(v1)->immutable_data();
+            const auto data2 = ColumnHelper::cast_to_raw<RType>(v2)->immutable_data()[0];
+            for (int i = 0; i < size; ++i) {
+                data3[i] = OP::template apply<LCppType, RCppType, ResultCppType>(data1[i], data2);
+            }
         } else {
-            auto* data1 = ColumnHelper::cast_to_raw<LType>(v1)->get_data().data();
-            auto data2 = ColumnHelper::cast_to_raw<RType>(v2)->get_data()[0];
+            const auto* data1 = ColumnHelper::cast_to_raw<LType>(v1)->immutable_data().data();
+            auto data2 = ColumnHelper::cast_to_raw<RType>(v2)->immutable_data()[0];
             for (int i = 0; i < size; ++i) {
                 data3[i] = OP::template apply<LCppType, RCppType, ResultCppType>(data1[i], data2);
             }
@@ -147,8 +166,8 @@ public:
             auto& r2 = ColumnHelper::cast_to_raw<RType>(v2)->get_proxy_data();
             r3[0] = OP::template apply<LCppType, RCppType, ResultCppType>(r1[0], r2[0]);
         } else {
-            auto& r1 = ColumnHelper::cast_to_raw<LType>(v1)->get_data();
-            auto& r2 = ColumnHelper::cast_to_raw<RType>(v2)->get_data();
+            auto& r1 = ColumnHelper::cast_to_raw<LType>(v1)->immutable_data();
+            auto& r2 = ColumnHelper::cast_to_raw<RType>(v2)->immutable_data();
             r3[0] = OP::template apply<LCppType, RCppType, ResultCppType>(r1[0], r2[0]);
         }
 
@@ -271,7 +290,7 @@ public:
                 // DO NOT overwrite null flag if it is already set
                 null_flags->get_data()[i] |=
                         NULL_OP::template apply<RunTimeCppType<ResultType>, RunTimeCppType<TYPE_BOOLEAN>>(
-                                real_data->get_data()[i]);
+                                real_data->immutable_data()[i]);
             }
 
             if (data->is_nullable()) {
@@ -397,11 +416,11 @@ public:
     template <LogicalType LType, LogicalType RType, LogicalType ResultType>
     static ColumnPtr vector_vector(const ColumnPtr& lv, const NullColumnPtr& ln, const ColumnPtr& rv,
                                    const NullColumnPtr& rn) {
-        auto* lvd = ColumnHelper::cast_to_raw<LType>(lv)->get_data().data();
-        auto* rvd = ColumnHelper::cast_to_raw<RType>(rv)->get_data().data();
+        auto* lvd = ColumnHelper::cast_to_raw<LType>(lv)->immutable_data().data();
+        auto* rvd = ColumnHelper::cast_to_raw<RType>(rv)->immutable_data().data();
 
-        auto* lnd = ln->get_data().data();
-        auto* rnd = rn->get_data().data();
+        auto* lnd = ln->immutable_data().data();
+        auto* rnd = rn->immutable_data().data();
 
         int size = std::min(lv->size(), rv->size());
 
@@ -430,11 +449,11 @@ public:
     template <LogicalType LType, LogicalType RType, LogicalType ResultType>
     static ColumnPtr const_vector(const ColumnPtr& lv, const NullColumnPtr& ln, const ColumnPtr& rv,
                                   const NullColumnPtr& rn) {
-        auto* lvd = ColumnHelper::cast_to_raw<LType>(lv)->get_data().data();
-        auto* rvd = ColumnHelper::cast_to_raw<RType>(rv)->get_data().data();
+        const auto* lvd = ColumnHelper::cast_to_raw<LType>(lv)->immutable_data().data();
+        const auto* rvd = ColumnHelper::cast_to_raw<RType>(rv)->immutable_data().data();
 
-        auto* lnd = ln->get_data().data();
-        auto* rnd = rn->get_data().data();
+        const auto* lnd = ln->immutable_data().data();
+        const auto* rnd = rn->immutable_data().data();
 
         int size = rv->size();
 
@@ -463,11 +482,11 @@ public:
     template <LogicalType LType, LogicalType RType, LogicalType ResultType>
     static ColumnPtr vector_const(const ColumnPtr& lv, const NullColumnPtr& ln, const ColumnPtr& rv,
                                   const NullColumnPtr& rn) {
-        auto* lvd = ColumnHelper::cast_to_raw<LType>(lv)->get_data().data();
-        auto* rvd = ColumnHelper::cast_to_raw<RType>(rv)->get_data().data();
+        const auto* lvd = ColumnHelper::cast_to_raw<LType>(lv)->immutable_data().data();
+        const auto* rvd = ColumnHelper::cast_to_raw<RType>(rv)->immutable_data().data();
 
-        auto* lnd = ln->get_data().data();
-        auto* rnd = rn->get_data().data();
+        const auto* lnd = ln->immutable_data().data();
+        const auto* rnd = rn->immutable_data().data();
 
         int size = lv->size();
 

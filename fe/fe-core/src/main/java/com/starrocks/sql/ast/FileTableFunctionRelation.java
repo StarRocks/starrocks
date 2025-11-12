@@ -14,8 +14,8 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.TableFunctionTable;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Map;
@@ -49,6 +49,6 @@ public class FileTableFunctionRelation extends TableRelation {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitFileTableFunction(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitFileTableFunction(this, context);
     }
 }

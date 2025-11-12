@@ -1,0 +1,74 @@
+-- name: test_partition_hash_join @sequential
+
+CREATE TABLE __row_util_base (
+  k1 bigint NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 32
+PROPERTIES (
+    "replication_num" = "1"
+);
+insert into __row_util_base select generate_series from TABLE(generate_series(0, 10000 - 1));
+insert into __row_util_base select * from __row_util_base; -- 20000
+insert into __row_util_base select * from __row_util_base; -- 40000
+insert into __row_util_base select * from __row_util_base; -- 80000
+insert into __row_util_base select * from __row_util_base; -- 160000
+insert into __row_util_base select * from __row_util_base; -- 320000
+insert into __row_util_base select * from __row_util_base; -- 640000
+insert into __row_util_base select * from __row_util_base; -- 1280000
+insert into __row_util_base select * from __row_util_base; -- 2560000
+insert into __row_util_base select * from __row_util_base; -- 5120000
+CREATE TABLE __row_util (
+  idx bigint NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`idx`)
+DISTRIBUTED BY HASH(`idx`) BUCKETS 32
+PROPERTIES (
+    "replication_num" = "1"
+);
+insert into __row_util select row_number() over() as idx from __row_util_base;
+
+
+CREATE TABLE t1 (
+    k1 bigint NULL,
+
+    c_bigint_null bigint NULL,
+    c_string STRING
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 96
+PROPERTIES (
+    "replication_num" = "1"
+);
+
+insert into t1 
+select
+    idx,
+    idx, -- c_int
+    uuid() -- c_string
+from __row_util;
+
+select count(tt1.k1) from t1 tt1 join [broadcast] t1 tt2 using(c_bigint_null);
+select count(tt1.k1) from t1 tt1 join [broadcast] t1 tt2 using(c_bigint_null) where tt1.k1 % 2 = 0;
+select count(tt1.k1) from t1 tt1 join [broadcast] t1 tt2 using(c_bigint_null) where tt1.k1 % 3 = 0;
+select count(tt1.k1) from t1 tt1 join [broadcast] t1 tt2 using(c_bigint_null) where tt1.k1 % 5 = 0;
+select count(tt1.k1) from t1 tt1 join [broadcast] t1 tt2 using(c_bigint_null) where tt1.k1 % 10 = 0;
+select count(tt1.k1) from t1 tt1 join [broadcast] t1 tt2 using(c_bigint_null) where tt1.k1 % 100 = 0;
+
+
+select count(tt1.c_string) from t1 tt1 join [broadcast] t1 tt2 using(c_bigint_null);
+select count(tt1.c_string) from t1 tt1 join [broadcast] t1 tt2 using(c_bigint_null) where tt1.k1 % 2 = 0;
+select count(tt1.c_string) from t1 tt1 join [broadcast] t1 tt2 using(c_bigint_null) where tt1.k1 % 3 = 0;
+select count(tt1.c_string) from t1 tt1 join [broadcast] t1 tt2 using(c_bigint_null) where tt1.k1 % 5 = 0;
+select count(tt1.c_string) from t1 tt1 join [broadcast] t1 tt2 using(c_bigint_null) where tt1.k1 % 10 = 0;
+select count(tt1.c_string) from t1 tt1 join [broadcast] t1 tt2 using(c_bigint_null) where tt1.k1 % 100 = 0;
+
+select count(tt2.c_string) from t1 tt1 join [broadcast] t1 tt2 using(c_bigint_null);
+select count(tt2.c_string) from t1 tt1 join [broadcast] t1 tt2 using(c_bigint_null) where tt1.k1 % 2 = 0;
+select count(tt2.c_string) from t1 tt1 join [broadcast] t1 tt2 using(c_bigint_null) where tt1.k1 % 3 = 0;
+select count(tt2.c_string) from t1 tt1 join [broadcast] t1 tt2 using(c_bigint_null) where tt1.k1 % 5 = 0;
+select count(tt2.c_string) from t1 tt1 join [broadcast] t1 tt2 using(c_bigint_null) where tt1.k1 % 10 = 0;
+select count(tt2.c_string) from t1 tt1 join [broadcast] t1 tt2 using(c_bigint_null) where tt1.k1 % 100 = 0;
+
+select count(tt2.c_string) from t1 tt1 join [broadcast] t1 tt2 using(c_string);
+

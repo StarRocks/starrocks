@@ -1,0 +1,21 @@
+-- name: test_bucket_aware_incremental_scan_range
+
+create external catalog iceberg_${uuid0} PROPERTIES ("type"="iceberg",
+    "iceberg.catalog.type"="hive", 
+    "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+);
+
+select distinct entity_type_id from iceberg_${uuid0}.iceberg_oss_db.entity order by entity_type_id;
+
+SELECT
+  owner_id,
+  COUNT(*) AS count
+FROM iceberg_${uuid0}.iceberg_oss_db.entity
+GROUP BY owner_id
+ORDER BY count DESC, owner_id ASC
+LIMIT 10;
+
+drop catalog iceberg_${uuid0};

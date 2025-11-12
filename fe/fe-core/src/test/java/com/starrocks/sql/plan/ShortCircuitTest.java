@@ -15,10 +15,10 @@
 package com.starrocks.sql.plan;
 
 import com.google.common.collect.ImmutableList;
-import com.starrocks.analysis.DescriptorTable;
-import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.common.FeConstants;
+import com.starrocks.planner.DescriptorTable;
 import com.starrocks.planner.OlapScanNode;
+import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.scheduler.dag.ExecutionFragment;
 import com.starrocks.server.WarehouseManager;
@@ -109,7 +109,7 @@ public class ShortCircuitTest extends PlanTestBase {
         scanNode.setSelectedPartitionIds(selectPartitionIds);
 
         DefaultCoordinator coord = new DefaultCoordinator.Factory().createQueryScheduler(connectContext,
-                execPlan.getFragments(), ImmutableList.of(scanNode), execPlan.getDescTbl().toThrift());
+                execPlan.getFragments(), ImmutableList.of(scanNode), execPlan.getDescTbl().toThrift(), execPlan);
         coord.exec();
 
         ExecutionFragment execFragment = coord.getExecutionDAG().getRootFragment();
@@ -149,7 +149,7 @@ public class ShortCircuitTest extends PlanTestBase {
                 WarehouseManager.DEFAULT_RESOURCE);
 
         DefaultCoordinator coord = new DefaultCoordinator.Factory().createQueryScheduler(connectContext,
-                execPlan.getFragments(), ImmutableList.of(scanNode), execPlan.getDescTbl().toThrift());
+                execPlan.getFragments(), ImmutableList.of(scanNode), execPlan.getDescTbl().toThrift(), execPlan);
         coord.exec();
         Assertions.assertTrue(coord.getNext().isEos());
     }

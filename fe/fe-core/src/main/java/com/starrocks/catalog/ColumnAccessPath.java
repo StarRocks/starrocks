@@ -16,10 +16,13 @@ package com.starrocks.catalog;
 
 import com.google.api.client.util.Lists;
 import com.google.common.base.Preconditions;
-import com.starrocks.analysis.StringLiteral;
+import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
+import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.optimizer.rule.tree.prunesubfield.SubfieldAccessPathNormalizer;
 import com.starrocks.thrift.TAccessPathType;
 import com.starrocks.thrift.TColumnAccessPath;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeSerializer;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -92,9 +95,8 @@ public class ColumnAccessPath {
     }
 
     public static ColumnAccessPath createFromLinearPath(String linearPath, Type valueType) {
-        final int jsonFlattenDepth = 20;
-        List<String> pieces = Lists.newArrayList();
-        if (SubfieldAccessPathNormalizer.parseSimpleJsonPath(jsonFlattenDepth, linearPath, pieces)) {
+        List<String> pieces = SubfieldAccessPathNormalizer.parseSimpleJsonPath(linearPath);
+        if (pieces.isEmpty()) {
             throw new IllegalArgumentException("illegal json path: " + linearPath);
         }
         return createLinearPath(pieces, valueType);
@@ -232,12 +234,12 @@ public class ColumnAccessPath {
     public TColumnAccessPath toThrift() {
         TColumnAccessPath tColumnAccessPath = new TColumnAccessPath();
         tColumnAccessPath.setType(type);
-        tColumnAccessPath.setPath(new StringLiteral(path).treeToThrift());
+        tColumnAccessPath.setPath(ExprToThriftVisitor.treeToThrift(new StringLiteral(path)));
         tColumnAccessPath.setChildren(children.stream().map(ColumnAccessPath::toThrift).collect(Collectors.toList()));
         tColumnAccessPath.setFrom_predicate(fromPredicate);
         tColumnAccessPath.setExtended(extended);
         if (valueType != null) {
-            tColumnAccessPath.setType_desc(valueType.toThrift());
+            tColumnAccessPath.setType_desc(TypeSerializer.toThrift(valueType));
         }
         return tColumnAccessPath;
     }

@@ -110,6 +110,10 @@ public class LogicalAggregationOperator extends LogicalOperator {
         return isSplit;
     }
 
+    public void setSplit(boolean split) {
+        isSplit = split;
+    }
+
     public void setOnlyLocalAggregate() {
         isSplit = false;
     }

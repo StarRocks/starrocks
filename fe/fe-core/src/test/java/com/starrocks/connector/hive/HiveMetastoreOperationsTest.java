@@ -12,19 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.hive;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnBuilder;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.PartitionKey;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
@@ -36,7 +32,11 @@ import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.ListPartitionDesc;
+import com.starrocks.sql.ast.expression.TableName;
+import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.Type;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.hadoop.conf.Configuration;
@@ -118,8 +118,8 @@ public class HiveMetastoreOperationsTest {
         Assertions.assertEquals(Lists.newArrayList("col1"), hiveTable.getPartitionColumnNames());
         Assertions.assertEquals(Lists.newArrayList("col2"), hiveTable.getDataColumnNames());
         Assertions.assertEquals("hdfs://127.0.0.1:10000/hive", hiveTable.getTableLocation());
-        Assertions.assertEquals(ScalarType.INT, hiveTable.getPartitionColumns().get(0).getType());
-        Assertions.assertEquals(ScalarType.INT, hiveTable.getBaseSchema().get(0).getType());
+        Assertions.assertEquals(Type.INT, hiveTable.getPartitionColumns().get(0).getType());
+        Assertions.assertEquals(Type.INT, hiveTable.getBaseSchema().get(0).getType());
         Assertions.assertEquals("hive_catalog", hiveTable.getCatalogName());
     }
 
@@ -371,7 +371,7 @@ public class HiveMetastoreOperationsTest {
                 "my table comment");
         List<Column> columns = stmt.getColumnDefs()
                 .stream()
-                .map(columnDef -> columnDef.toColumn(null))
+                .map(columnDef -> ColumnBuilder.buildGeneratedColumn(null, columnDef))
                 .collect(Collectors.toList());
         stmt.setColumns(columns);
 
@@ -420,7 +420,9 @@ public class HiveMetastoreOperationsTest {
                 properties,
                 new HashMap<>(),
                 "my table comment");
-        List<Column> columns = stmt.getColumnDefs().stream().map(def -> def.toColumn(null)).collect(Collectors.toList());
+        List<Column> columns =
+                stmt.getColumnDefs().stream().map(def -> ColumnBuilder.buildGeneratedColumn(null, def))
+                        .collect(Collectors.toList());
         stmt.setColumns(columns);
 
         Assertions.assertTrue(mockedHmsOps.createTable(stmt));
@@ -458,7 +460,9 @@ public class HiveMetastoreOperationsTest {
                 properties,
                 new HashMap<>(),
                 "my table comment");
-        List<Column> columns = stmt.getColumnDefs().stream().map(def -> def.toColumn(null)).collect(Collectors.toList());
+        List<Column> columns =
+                stmt.getColumnDefs().stream().map(def -> ColumnBuilder.buildGeneratedColumn(null, def))
+                        .collect(Collectors.toList());
         stmt.setColumns(columns);
 
         Assertions.assertTrue(mockedHmsOps.createTable(stmt));
@@ -495,7 +499,9 @@ public class HiveMetastoreOperationsTest {
                 properties,
                 new HashMap<>(),
                 "my table comment");
-        List<Column> columns = stmt.getColumnDefs().stream().map(def -> def.toColumn(null)).collect(Collectors.toList());
+        List<Column> columns =
+                stmt.getColumnDefs().stream().map(def -> ColumnBuilder.buildGeneratedColumn(null, def))
+                        .collect(Collectors.toList());
         stmt.setColumns(columns);
 
         Assertions.assertTrue(mockedHmsOps.createTable(stmt));
@@ -534,7 +540,7 @@ public class HiveMetastoreOperationsTest {
                 "my table comment");
         List<Column> columns = stmt.getColumnDefs()
                 .stream()
-                .map(columnDef -> columnDef.toColumn(null))
+                .map(columnDef -> ColumnBuilder.buildGeneratedColumn(null, columnDef))
                 .collect(Collectors.toList());
         stmt.setColumns(columns);
 

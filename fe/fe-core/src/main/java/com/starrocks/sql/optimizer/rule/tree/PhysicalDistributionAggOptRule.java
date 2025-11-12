@@ -93,6 +93,10 @@ public class PhysicalDistributionAggOptRule implements TreeRewriteRule {
             if (!agg.getType().isGlobal() || agg.getGroupBys().isEmpty()) {
                 return null;
             }
+            // Cloud Native Table is not yet optimized for bucket aggregation.
+            if (scan.getTable().isCloudNativeTableOrMaterializedView()) {
+                return null;
+            }
             agg.setUsePerBucketOptmize(true);
             scan.setNeedOutputChunkByBucket(true);
 

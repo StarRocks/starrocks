@@ -51,7 +51,7 @@ Status GlobalDictCodeColumnIterator::decode_array_dict_codes(const Column& codes
 }
 
 Status GlobalDictCodeColumnIterator::decode_string_dict_codes(const Column& codes, Column* words) {
-    const auto& code_data = down_cast<const Int32Column*>(ColumnHelper::get_data_column(&codes))->get_data();
+    const auto code_data = down_cast<const Int32Column*>(ColumnHelper::get_data_column(&codes))->immutable_data();
     const size_t size = code_data.size();
 
     auto* low_card = down_cast<LowCardDictColumn*>(ColumnHelper::get_data_column(words));
@@ -77,11 +77,9 @@ Status GlobalDictCodeColumnIterator::decode_string_dict_codes(const Column& code
         // reserve null data
         auto word_nulls = down_cast<NullableColumn*>(words)->mutable_null_column();
         down_cast<NullableColumn*>(words)->set_has_null(codes.has_null());
-        const auto& null_data = down_cast<const NullableColumn&>(codes).immutable_null_column_data();
+        const auto null_data = down_cast<const NullableColumn&>(codes).immutable_null_column_data();
         word_nulls->resize(0);
-        for (size_t i = 0; i < size; ++i) {
-            word_nulls->append(null_data[i]);
-        }
+        word_nulls->append(null_data);
         if (codes.has_null()) {
             // assign code 0 if input data is null
             for (size_t i = 0; i < size; ++i) {

@@ -281,7 +281,7 @@ public class ColocateTableIndexTest {
             }
 
             @Mock
-            public boolean isCloudNativeTable() {
+            public boolean isCloudNativeTableOrMaterializedView() {
                 return true;
             }
 

@@ -85,7 +85,7 @@ public class MVMetaVersionRepairerTest extends MVTestBase {
                                 mv1.getRefreshScheme().getAsyncRefreshContext();
                         Map<Long, Map<String, MaterializedView.BasePartitionInfo>> baseTableVisibleVersionMap =
                                 asyncRefreshContext.getBaseTableVisibleVersionMap();
-                        System.out.println(baseTableVisibleVersionMap);
+                        logSysInfo(baseTableVisibleVersionMap);
 
                         // check mv version map before
                         Assertions.assertEquals(1, baseTableVisibleVersionMap.size());
@@ -143,7 +143,7 @@ public class MVMetaVersionRepairerTest extends MVTestBase {
                                 mv1.getRefreshScheme().getAsyncRefreshContext();
                         Map<Long, Map<String, MaterializedView.BasePartitionInfo>> baseTableVisibleVersionMap =
                                 asyncRefreshContext.getBaseTableVisibleVersionMap();
-                        System.out.println(baseTableVisibleVersionMap);
+                        logSysInfo(baseTableVisibleVersionMap);
 
                         // check mv version map before
                         Assertions.assertEquals(0, baseTableVisibleVersionMap.size());
@@ -190,7 +190,7 @@ public class MVMetaVersionRepairerTest extends MVTestBase {
                                 mv1.getRefreshScheme().getAsyncRefreshContext();
                         Map<Long, Map<String, MaterializedView.BasePartitionInfo>> baseTableVisibleVersionMap =
                                 asyncRefreshContext.getBaseTableVisibleVersionMap();
-                        System.out.println(baseTableVisibleVersionMap);
+                        logSysInfo(baseTableVisibleVersionMap);
 
                         // repair base table version changes
                         Table m1 = getTable("test", "m1");
@@ -225,7 +225,7 @@ public class MVMetaVersionRepairerTest extends MVTestBase {
                         Assertions.assertEquals(baseTableId, baseTableVisibleVersionMap.keySet().iterator().next());
                         Map<String, MaterializedView.BasePartitionInfo> basePartitionInfoMap = baseTableVisibleVersionMap.get(m1.getId());
                         Assertions.assertEquals(1, basePartitionInfoMap.size());
-                        System.out.println(basePartitionInfoMap);
+                        logSysInfo(basePartitionInfoMap);
                         // p2 should not be in the version map
                         Assertions.assertFalse(basePartitionInfoMap.containsKey("p2"));
                     });
@@ -255,7 +255,7 @@ public class MVMetaVersionRepairerTest extends MVTestBase {
                                 mv1.getRefreshScheme().getAsyncRefreshContext();
                         Map<Long, Map<String, MaterializedView.BasePartitionInfo>> baseTableVisibleVersionMap =
                                 asyncRefreshContext.getBaseTableVisibleVersionMap();
-                        System.out.println(baseTableVisibleVersionMap);
+                        logSysInfo(baseTableVisibleVersionMap);
 
                         // repair base table version changes
                         Table m1 = getTable("test", "m1");
@@ -293,7 +293,7 @@ public class MVMetaVersionRepairerTest extends MVTestBase {
                         Assertions.assertEquals(baseTableId, baseTableVisibleVersionMap.keySet().iterator().next());
                         Map<String, MaterializedView.BasePartitionInfo> basePartitionInfoMap = baseTableVisibleVersionMap.get(m1.getId());
                         Assertions.assertEquals(1, basePartitionInfoMap.size());
-                        System.out.println(basePartitionInfoMap);
+                        logSysInfo(basePartitionInfoMap);
                         basePartitionInfo = basePartitionInfoMap.get("p1");
                         // p1 should not been updated since it has been updated
                         Assertions.assertEquals(basePartitionInfo.getVersion(), lastRefreshVersion);

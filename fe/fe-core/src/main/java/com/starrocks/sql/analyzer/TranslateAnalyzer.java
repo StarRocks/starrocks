@@ -15,7 +15,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.translate.TranslateStmt;
 
@@ -24,7 +24,7 @@ public class TranslateAnalyzer {
         new TranslateAnalyzer.TranslateAnalyzerVisitor().analyze(statement, context);
     }
 
-    static class TranslateAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+    static class TranslateAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
         public void analyze(StatementBase statement, ConnectContext session) {
             visit(statement, session);
         }

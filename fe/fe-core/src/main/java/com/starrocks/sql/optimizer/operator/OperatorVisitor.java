@@ -40,6 +40,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalOdpsScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalPaimonScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalRawValuesOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalRepeatOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalSchemaScanOperator;
@@ -82,6 +83,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalOdpsScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalPaimonScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalRawValuesOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalRepeatOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalSchemaScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperator;
@@ -225,6 +227,10 @@ public abstract class OperatorVisitor<R, C> {
     }
 
     public R visitLogicalValues(LogicalValuesOperator node, C context) {
+        return visitOperator(node, context);
+    }
+
+    public R visitLogicalRawValues(LogicalRawValuesOperator node, C context) {
         return visitOperator(node, context);
     }
 
@@ -380,6 +386,10 @@ public abstract class OperatorVisitor<R, C> {
     }
 
     public R visitPhysicalValues(PhysicalValuesOperator node, C context) {
+        return visitOperator(node, context);
+    }
+
+    public R visitPhysicalRawValues(PhysicalRawValuesOperator node, C context) {
         return visitOperator(node, context);
     }
 

@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.optimizer.operator.logical;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
@@ -82,6 +83,7 @@ public class LogicalMetaScanOperator extends LogicalScanOperator {
             super.withOperator(operator);
             builder.aggColumnIdToNames = ImmutableMap.copyOf(operator.aggColumnIdToNames);
             builder.selectPartitionNames = operator.selectPartitionNames;
+            builder.columnAccessPaths = ImmutableList.copyOf(operator.columnAccessPaths);
             return this;
         }
 

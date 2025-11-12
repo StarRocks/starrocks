@@ -242,6 +242,36 @@ PARALLEL_TEST(JsonColumnTest, test_compare_array) {
     EXPECT_LT(array1.compare(array2), 0);
 }
 
+PARALLEL_TEST(JsonColumnTest, test_compare_array_large_integers) {
+    // Test comparison with large integers to avoid overflow issues
+    // This tests the bug where comparing [1] < [9223372036854775807] would incorrectly return false
+    auto small_int_array = JsonValue::parse("[1]").value();
+    auto large_int_array = JsonValue::parse("[9223372036854775807]").value(); // INT64_MAX
+    auto medium_large_int_array = JsonValue::parse("[922337203685477580]").value();
+    auto medium_int_array = JsonValue::parse("[92233720368547758]").value();
+
+    // Small integer should be less than large integer
+    EXPECT_LT(small_int_array.compare(large_int_array), 0);
+    EXPECT_LT(small_int_array.compare(medium_large_int_array), 0);
+    EXPECT_LT(small_int_array.compare(medium_int_array), 0);
+
+    // Large integer should be greater than small integer
+    EXPECT_GT(large_int_array.compare(small_int_array), 0);
+    EXPECT_GT(medium_large_int_array.compare(small_int_array), 0);
+    EXPECT_GT(medium_int_array.compare(small_int_array), 0);
+
+    // Test with negative numbers
+    auto neg_small_int_array = JsonValue::parse("[-1]").value();
+    auto neg_large_int_array = JsonValue::parse("[-9223372036854775808]").value(); // INT64_MIN
+
+    EXPECT_GT(neg_small_int_array.compare(neg_large_int_array), 0);
+    EXPECT_LT(neg_large_int_array.compare(neg_small_int_array), 0);
+
+    // Compare positive and negative
+    EXPECT_GT(small_int_array.compare(neg_small_int_array), 0);
+    EXPECT_LT(neg_small_int_array.compare(small_int_array), 0);
+}
+
 PARALLEL_TEST(JsonColumnTest, test_compare_object) {
     auto obj0 = JsonValue::parse("{}").value();
     auto obj1 = JsonValue::parse(R"( {"a": 1} )").value();

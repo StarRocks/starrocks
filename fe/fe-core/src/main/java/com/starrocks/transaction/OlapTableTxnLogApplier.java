@@ -15,6 +15,7 @@
 package com.starrocks.transaction;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
@@ -205,6 +206,15 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
                 dictCollectedVersions = partitionCommitInfo.getDictCollectedVersions();
             }
             maxPartitionVersionTime = Math.max(maxPartitionVersionTime, versionTime);
+        }
+
+        // TODO(murphy) don't invalidate all cache columns, only invalidate the columns that are changed
+        // Invalidate the dict for JSON type
+        List<Column> jsonColumns = table.getColumns().stream()
+                .filter(x -> x.getType().isJsonType())
+                .toList();
+        for (Column column : jsonColumns) {
+            IDictManager.getInstance().removeGlobalDictForJson(tableId, column.getColumnId());
         }
 
         if (!GlobalStateMgr.isCheckpointThread() && dictCollectedVersions.size() == validDictCacheColumns.size()) {

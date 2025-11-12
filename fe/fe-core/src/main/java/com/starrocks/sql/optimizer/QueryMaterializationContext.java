@@ -36,6 +36,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.BestMvSelector;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvRewriteStrategy;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.PredicateSplit;
 import org.apache.logging.log4j.LogManager;
@@ -81,6 +82,8 @@ public class QueryMaterializationContext {
     private Set<MaterializationContext> rewrittenSuccessMVContexts = Sets.newHashSet();
 
     private MvRewriteStrategy.MVRewriteStage currentRewriteStage = MvRewriteStrategy.MVRewriteStage.PHASE0;
+
+    private final Set<String> queryDistEqCols = Sets.newHashSet();
 
     /**
      * It's used to record the cache stats of `mvQueryContextCache`.
@@ -209,6 +212,19 @@ public class QueryMaterializationContext {
      */
     public void addValidCandidateMV(MaterializationContext mv) {
         validCandidateMVs.add(mv);
+    }
+
+    /**
+     * Register query opt expression and do something:
+     * - collect dist keys which are used for BestMvSelector
+     */
+    public void registerQueryOptExpression(OptExpression queryExpression) {
+        Set<String> distEqCols = BestMvSelector.collectDistKeys(queryExpression);
+        queryDistEqCols.addAll(distEqCols);
+    }
+
+    public Set<String> getQueryDistEqCols() {
+        return queryDistEqCols;
     }
 
     /**

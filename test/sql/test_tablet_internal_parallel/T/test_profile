@@ -1,4 +1,4 @@
--- name: test_tablet_internal_parallel_profile @sequential
+-- test_tablet_internal_parallel_profile @sequential
 
 -- setup be config to minimize the split size.
 function: update_be_config("tablet_internal_parallel_min_splitted_scan_rows", "1")

@@ -1,0 +1,480 @@
+-- name: test_normal_flat_json_dict @sequential
+update information_schema.be_configs set value = 'true' where name = 'enable_json_flat';
+-- result:
+-- !result
+set enable_profile = true;
+-- result:
+-- !result
+set enable_async_profile = false;
+-- result:
+-- !result
+set cbo_json_v2_rewrite = true;
+-- result:
+-- !result
+set cbo_json_v2_dict_opt = true;
+-- result:
+-- !result
+create view profile_decode as
+select trim(unnest) 
+from table(unnest(split(get_query_profile(last_query_id()), '\n')))
+where unnest like '%DICT_DECODE%'
+order by unnest;
+-- result:
+-- !result
+CREATE TABLE js2 (
+    v1 BIGINT NULL,
+    c1 JSON NULL
+)
+DUPLICATE KEY (v1)
+DISTRIBUTED BY HASH(`v1`) BUCKETS 1
+PROPERTIES ( "replication_num" = "1" );
+-- result:
+-- !result
+insert into js2 
+select 
+    generate_series, 
+    json_object(
+        'f1', concat('a', generate_series % 10),
+        'f2', concat('a', generate_series % 100),
+        'f3', concat('a', generate_series % 200),
+        'f4', concat('a', generate_series % 500)
+        )
+from (table(generate_series(1, 1000)));
+-- result:
+-- !result
+select dict_merge(get_json_string(c1, 'f1'), 255) from js2 [_META_];
+-- result:
+{"2":{"lst":["str",10,"YTA","YTE","YTI","YTM","YTQ","YTU","YTY","YTc","YTg","YTk"]},"3":{"lst":["i32",10,1,2,3,4,5,6,7,8,9,10]}}
+-- !result
+select dict_merge(get_json_string(c1, 'f2'), 255) from js2 [_META_];
+-- result:
+{"2":{"lst":["str",100,"YTA","YTE","YTEw","YTEx","YTEy","YTEz","YTE0","YTE1","YTE2","YTE3","YTE4","YTE5","YTI","YTIw","YTIx","YTIy","YTIz","YTI0","YTI1","YTI2","YTI3","YTI4","YTI5","YTM","YTMw","YTMx","YTMy","YTMz","YTM0","YTM1","YTM2","YTM3","YTM4","YTM5","YTQ","YTQw","YTQx","YTQy","YTQz","YTQ0","YTQ1","YTQ2","YTQ3","YTQ4","YTQ5","YTU","YTUw","YTUx","YTUy","YTUz","YTU0","YTU1","YTU2","YTU3","YTU4","YTU5","YTY","YTYw","YTYx","YTYy","YTYz","YTY0","YTY1","YTY2","YTY3","YTY4","YTY5","YTc","YTcw","YTcx","YTcy","YTcz","YTc0","YTc1","YTc2","YTc3","YTc4","YTc5","YTg","YTgw","YTgx","YTgy","YTgz","YTg0","YTg1","YTg2","YTg3","YTg4","YTg5","YTk","YTkw","YTkx","YTky","YTkz","YTk0","YTk1","YTk2","YTk3","YTk4","YTk5"]},"3":{"lst":["i32",100,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100]}}
+-- !result
+select dict_merge(get_json_string(c1, 'f3'), 255) from js2 [_META_];
+-- result:
+{"2":{"lst":["str",200,"YTA","YTE","YTEw","YTEwMA","YTEwMQ","YTEwMg","YTEwMw","YTEwNA","YTEwNQ","YTEwNg","YTEwNw","YTEwOA","YTEwOQ","YTEx","YTExMA","YTExMQ","YTExMg","YTExMw","YTExNA","YTExNQ","YTExNg","YTExNw","YTExOA","YTExOQ","YTEy","YTEyMA","YTEyMQ","YTEyMg","YTEyMw","YTEyNA","YTEyNQ","YTEyNg","YTEyNw","YTEyOA","YTEyOQ","YTEz","YTEzMA","YTEzMQ","YTEzMg","YTEzMw","YTEzNA","YTEzNQ","YTEzNg","YTEzNw","YTEzOA","YTEzOQ","YTE0","YTE0MA","YTE0MQ","YTE0Mg","YTE0Mw","YTE0NA","YTE0NQ","YTE0Ng","YTE0Nw","YTE0OA","YTE0OQ","YTE1","YTE1MA","YTE1MQ","YTE1Mg","YTE1Mw","YTE1NA","YTE1NQ","YTE1Ng","YTE1Nw","YTE1OA","YTE1OQ","YTE2","YTE2MA","YTE2MQ","YTE2Mg","YTE2Mw","YTE2NA","YTE2NQ","YTE2Ng","YTE2Nw","YTE2OA","YTE2OQ","YTE3","YTE3MA","YTE3MQ","YTE3Mg","YTE3Mw","YTE3NA","YTE3NQ","YTE3Ng","YTE3Nw","YTE3OA","YTE3OQ","YTE4","YTE4MA","YTE4MQ","YTE4Mg","YTE4Mw","YTE4NA","YTE4NQ","YTE4Ng","YTE4Nw","YTE4OA","YTE4OQ","YTE5","YTE5MA","YTE5MQ","YTE5Mg","YTE5Mw","YTE5NA","YTE5NQ","YTE5Ng","YTE5Nw","YTE5OA","YTE5OQ","YTI","YTIw","YTIx","YTIy","YTIz","YTI0","YTI1","YTI2","YTI3","YTI4","YTI5","YTM","YTMw","YTMx","YTMy","YTMz","YTM0","YTM1","YTM2","YTM3","YTM4","YTM5","YTQ","YTQw","YTQx","YTQy","YTQz","YTQ0","YTQ1","YTQ2","YTQ3","YTQ4","YTQ5","YTU","YTUw","YTUx","YTUy","YTUz","YTU0","YTU1","YTU2","YTU3","YTU4","YTU5","YTY","YTYw","YTYx","YTYy","YTYz","YTY0","YTY1","YTY2","YTY3","YTY4","YTY5","YTc","YTcw","YTcx","YTcy","YTcz","YTc0","YTc1","YTc2","YTc3","YTc4","YTc5","YTg","YTgw","YTgx","YTgy","YTgz","YTg0","YTg1","YTg2","YTg3","YTg4","YTg5","YTk","YTkw","YTkx","YTky","YTkz","YTk0","YTk1","YTk2","YTk3","YTk4","YTk5"]},"3":{"lst":["i32",200,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115,116,117,118,119,120,121,122,123,124,125,126,127,128,129,130,131,132,133,134,135,136,137,138,139,140,141,142,143,144,145,146,147,148,149,150,151,152,153,154,155,156,157,158,159,160,161,162,163,164,165,166,167,168,169,170,171,172,173,174,175,176,177,178,179,180,181,182,183,184,185,186,187,188,189,190,191,192,193,194,195,196,197,198,199,200]}}
+-- !result
+select dict_merge(get_json_string(c1, 'f4'), 255) from js2 [_META_];
+-- result:
+[REGEX]E: \(1064, 'global dict size:500 greater than low_cardinality_threshold:255: BE:.*'\)
+-- !result
+select dict_merge(get_json_string(c1, 'f5'), 255) from js2 [_META_];
+-- result:
+None
+-- !result
+insert into js2 
+select 
+    generate_series, 
+    json_object(
+        'f1', generate_series % 10,                                 -- integer
+        'f2', cast((generate_series % 20) * 1.5 as double),         -- float
+        'f3', if(generate_series % 2 = 0, true, false),             -- boolean
+        'f4', null,                                                 -- null
+        'f5', json_array(generate_series % 5, 'arr', 1.23)          -- array
+        )
+from (table(generate_series(1, 100)));
+-- result:
+-- !result
+select dict_merge(get_json_string(c1, 'f1'), 255) from js2 [_META_];
+-- result:
+{"2":{"lst":["str",10,"YTA","YTE","YTI","YTM","YTQ","YTU","YTY","YTc","YTg","YTk"]},"3":{"lst":["i32",10,1,2,3,4,5,6,7,8,9,10]}}
+-- !result
+select dict_merge(get_json_string(c1, 'f2'), 255) from js2 [_META_];
+-- result:
+{"2":{"lst":["str",100,"YTA","YTE","YTEw","YTEx","YTEy","YTEz","YTE0","YTE1","YTE2","YTE3","YTE4","YTE5","YTI","YTIw","YTIx","YTIy","YTIz","YTI0","YTI1","YTI2","YTI3","YTI4","YTI5","YTM","YTMw","YTMx","YTMy","YTMz","YTM0","YTM1","YTM2","YTM3","YTM4","YTM5","YTQ","YTQw","YTQx","YTQy","YTQz","YTQ0","YTQ1","YTQ2","YTQ3","YTQ4","YTQ5","YTU","YTUw","YTUx","YTUy","YTUz","YTU0","YTU1","YTU2","YTU3","YTU4","YTU5","YTY","YTYw","YTYx","YTYy","YTYz","YTY0","YTY1","YTY2","YTY3","YTY4","YTY5","YTc","YTcw","YTcx","YTcy","YTcz","YTc0","YTc1","YTc2","YTc3","YTc4","YTc5","YTg","YTgw","YTgx","YTgy","YTgz","YTg0","YTg1","YTg2","YTg3","YTg4","YTg5","YTk","YTkw","YTkx","YTky","YTkz","YTk0","YTk1","YTk2","YTk3","YTk4","YTk5"]},"3":{"lst":["i32",100,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100]}}
+-- !result
+select dict_merge(get_json_string(c1, 'f3'), 255) from js2 [_META_];
+-- result:
+{"2":{"lst":["str",200,"YTA","YTE","YTEw","YTEwMA","YTEwMQ","YTEwMg","YTEwMw","YTEwNA","YTEwNQ","YTEwNg","YTEwNw","YTEwOA","YTEwOQ","YTEx","YTExMA","YTExMQ","YTExMg","YTExMw","YTExNA","YTExNQ","YTExNg","YTExNw","YTExOA","YTExOQ","YTEy","YTEyMA","YTEyMQ","YTEyMg","YTEyMw","YTEyNA","YTEyNQ","YTEyNg","YTEyNw","YTEyOA","YTEyOQ","YTEz","YTEzMA","YTEzMQ","YTEzMg","YTEzMw","YTEzNA","YTEzNQ","YTEzNg","YTEzNw","YTEzOA","YTEzOQ","YTE0","YTE0MA","YTE0MQ","YTE0Mg","YTE0Mw","YTE0NA","YTE0NQ","YTE0Ng","YTE0Nw","YTE0OA","YTE0OQ","YTE1","YTE1MA","YTE1MQ","YTE1Mg","YTE1Mw","YTE1NA","YTE1NQ","YTE1Ng","YTE1Nw","YTE1OA","YTE1OQ","YTE2","YTE2MA","YTE2MQ","YTE2Mg","YTE2Mw","YTE2NA","YTE2NQ","YTE2Ng","YTE2Nw","YTE2OA","YTE2OQ","YTE3","YTE3MA","YTE3MQ","YTE3Mg","YTE3Mw","YTE3NA","YTE3NQ","YTE3Ng","YTE3Nw","YTE3OA","YTE3OQ","YTE4","YTE4MA","YTE4MQ","YTE4Mg","YTE4Mw","YTE4NA","YTE4NQ","YTE4Ng","YTE4Nw","YTE4OA","YTE4OQ","YTE5","YTE5MA","YTE5MQ","YTE5Mg","YTE5Mw","YTE5NA","YTE5NQ","YTE5Ng","YTE5Nw","YTE5OA","YTE5OQ","YTI","YTIw","YTIx","YTIy","YTIz","YTI0","YTI1","YTI2","YTI3","YTI4","YTI5","YTM","YTMw","YTMx","YTMy","YTMz","YTM0","YTM1","YTM2","YTM3","YTM4","YTM5","YTQ","YTQw","YTQx","YTQy","YTQz","YTQ0","YTQ1","YTQ2","YTQ3","YTQ4","YTQ5","YTU","YTUw","YTUx","YTUy","YTUz","YTU0","YTU1","YTU2","YTU3","YTU4","YTU5","YTY","YTYw","YTYx","YTYy","YTYz","YTY0","YTY1","YTY2","YTY3","YTY4","YTY5","YTc","YTcw","YTcx","YTcy","YTcz","YTc0","YTc1","YTc2","YTc3","YTc4","YTc5","YTg","YTgw","YTgx","YTgy","YTgz","YTg0","YTg1","YTg2","YTg3","YTg4","YTg5","YTk","YTkw","YTkx","YTky","YTkz","YTk0","YTk1","YTk2","YTk3","YTk4","YTk5"]},"3":{"lst":["i32",200,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115,116,117,118,119,120,121,122,123,124,125,126,127,128,129,130,131,132,133,134,135,136,137,138,139,140,141,142,143,144,145,146,147,148,149,150,151,152,153,154,155,156,157,158,159,160,161,162,163,164,165,166,167,168,169,170,171,172,173,174,175,176,177,178,179,180,181,182,183,184,185,186,187,188,189,190,191,192,193,194,195,196,197,198,199,200]}}
+-- !result
+select dict_merge(get_json_string(c1, 'f4'), 255) from js2 [_META_];
+-- result:
+[REGEX]E: \(1064, 'global dict size:500 greater than low_cardinality_threshold:255: BE:.*'\)
+-- !result
+select dict_merge(get_json_string(c1, 'f5'), 255) from js2 [_META_];
+-- result:
+None
+-- !result
+truncate table js2;
+-- result:
+-- !result
+insert into js2 
+select 
+    generate_series, 
+    json_object(
+        'f1', concat('a', generate_series % 10),
+        'f2', concat('a', generate_series % 100),
+        'f3', concat('a', generate_series % 200),
+        'f4', concat('a', generate_series % 500)
+        )
+from (table(generate_series(1, 1000)));
+-- result:
+-- !result
+select get_json_string(inspect_global_dict('js2', 'c1'), 'dict');
+-- result:
+{"a0": 1, "a1": 2, "a10": 3, "a100": 4, "a101": 5, "a102": 6, "a103": 7, "a104": 8, "a105": 9, "a106": 10, "a107": 11, "a108": 12, "a109": 13, "a11": 14, "a110": 15, "a111": 16, "a112": 17, "a113": 18, "a114": 19, "a115": 20, "a116": 21, "a117": 22, "a118": 23, "a119": 24, "a12": 25, "a120": 26, "a121": 27, "a122": 28, "a123": 29, "a124": 30, "a125": 31, "a126": 32, "a127": 33, "a128": 34, "a129": 35, "a13": 36, "a130": 37, "a131": 38, "a132": 39, "a133": 40, "a134": 41, "a135": 42, "a136": 43, "a137": 44, "a138": 45, "a139": 46, "a14": 47, "a140": 48, "a141": 49, "a142": 50, "a143": 51, "a144": 52, "a145": 53, "a146": 54, "a147": 55, "a148": 56, "a149": 57, "a15": 58, "a150": 59, "a151": 60, "a152": 61, "a153": 62, "a154": 63, "a155": 64, "a156": 65, "a157": 66, "a158": 67, "a159": 68, "a16": 69, "a160": 70, "a161": 71, "a162": 72, "a163": 73, "a164": 74, "a165": 75, "a166": 76, "a167": 77, "a168": 78, "a169": 79, "a17": 80, "a170": 81, "a171": 82, "a172": 83, "a173": 84, "a174": 85, "a175": 86, "a176": 87, "a177": 88, "a178": 89, "a179": 90, "a18": 91, "a180": 92, "a181": 93, "a182": 94, "a183": 95, "a184": 96, "a185": 97, "a186": 98, "a187": 99, "a188": 100, "a189": 101, "a19": 102, "a190": 103, "a191": 104, "a192": 105, "a193": 106, "a194": 107, "a195": 108, "a196": 109, "a197": 110, "a198": 111, "a199": 112, "a2": 113, "a20": 114, "a21": 115, "a22": 116, "a23": 117, "a24": 118, "a25": 119, "a26": 120, "a27": 121, "a28": 122, "a29": 123, "a3": 124, "a30": 125, "a31": 126, "a32": 127, "a33": 128, "a34": 129, "a35": 130, "a36": 131, "a37": 132, "a38": 133, "a39": 134, "a4": 135, "a40": 136, "a41": 137, "a42": 138, "a43": 139, "a44": 140, "a45": 141, "a46": 142, "a47": 143, "a48": 144, "a49": 145, "a5": 146, "a50": 147, "a51": 148, "a52": 149, "a53": 150, "a54": 151, "a55": 152, "a56": 153, "a57": 154, "a58": 155, "a59": 156, "a6": 157, "a60": 158, "a61": 159, "a62": 160, "a63": 161, "a64": 162, "a65": 163, "a66": 164, "a67": 165, "a68": 166, "a69": 167, "a7": 168, "a70": 169, "a71": 170, "a72": 171, "a73": 172, "a74": 173, "a75": 174, "a76": 175, "a77": 176, "a78": 177, "a79": 178, "a8": 179, "a80": 180, "a81": 181, "a82": 182, "a83": 183, "a84": 184, "a85": 185, "a86": 186, "a87": 187, "a88": 188, "a89": 189, "a9": 190, "a90": 191, "a91": 192, "a92": 193, "a93": 194, "a94": 195, "a95": 196, "a96": 197, "a97": 198, "a98": 199, "a99": 200}
+-- !result
+select get_json_string(inspect_global_dict('js2', 'c1.f1'), 'dict');
+-- result:
+{"a0": 1, "a1": 2, "a2": 3, "a3": 4, "a4": 5, "a5": 6, "a6": 7, "a7": 8, "a8": 9, "a9": 10}
+-- !result
+select get_json_string(inspect_global_dict('js2', 'c1.f2'), 'dict');
+-- result:
+{"a0": 1, "a1": 2, "a10": 3, "a11": 4, "a12": 5, "a13": 6, "a14": 7, "a15": 8, "a16": 9, "a17": 10, "a18": 11, "a19": 12, "a2": 13, "a20": 14, "a21": 15, "a22": 16, "a23": 17, "a24": 18, "a25": 19, "a26": 20, "a27": 21, "a28": 22, "a29": 23, "a3": 24, "a30": 25, "a31": 26, "a32": 27, "a33": 28, "a34": 29, "a35": 30, "a36": 31, "a37": 32, "a38": 33, "a39": 34, "a4": 35, "a40": 36, "a41": 37, "a42": 38, "a43": 39, "a44": 40, "a45": 41, "a46": 42, "a47": 43, "a48": 44, "a49": 45, "a5": 46, "a50": 47, "a51": 48, "a52": 49, "a53": 50, "a54": 51, "a55": 52, "a56": 53, "a57": 54, "a58": 55, "a59": 56, "a6": 57, "a60": 58, "a61": 59, "a62": 60, "a63": 61, "a64": 62, "a65": 63, "a66": 64, "a67": 65, "a68": 66, "a69": 67, "a7": 68, "a70": 69, "a71": 70, "a72": 71, "a73": 72, "a74": 73, "a75": 74, "a76": 75, "a77": 76, "a78": 77, "a79": 78, "a8": 79, "a80": 80, "a81": 81, "a82": 82, "a83": 83, "a84": 84, "a85": 85, "a86": 86, "a87": 87, "a88": 88, "a89": 89, "a9": 90, "a90": 91, "a91": 92, "a92": 93, "a93": 94, "a94": 95, "a95": 96, "a96": 97, "a97": 98, "a98": 99, "a99": 100}
+-- !result
+select get_json_string(inspect_global_dict('js2', 'c1.f3'), 'dict');
+-- result:
+{"a0": 1, "a1": 2, "a10": 3, "a100": 4, "a101": 5, "a102": 6, "a103": 7, "a104": 8, "a105": 9, "a106": 10, "a107": 11, "a108": 12, "a109": 13, "a11": 14, "a110": 15, "a111": 16, "a112": 17, "a113": 18, "a114": 19, "a115": 20, "a116": 21, "a117": 22, "a118": 23, "a119": 24, "a12": 25, "a120": 26, "a121": 27, "a122": 28, "a123": 29, "a124": 30, "a125": 31, "a126": 32, "a127": 33, "a128": 34, "a129": 35, "a13": 36, "a130": 37, "a131": 38, "a132": 39, "a133": 40, "a134": 41, "a135": 42, "a136": 43, "a137": 44, "a138": 45, "a139": 46, "a14": 47, "a140": 48, "a141": 49, "a142": 50, "a143": 51, "a144": 52, "a145": 53, "a146": 54, "a147": 55, "a148": 56, "a149": 57, "a15": 58, "a150": 59, "a151": 60, "a152": 61, "a153": 62, "a154": 63, "a155": 64, "a156": 65, "a157": 66, "a158": 67, "a159": 68, "a16": 69, "a160": 70, "a161": 71, "a162": 72, "a163": 73, "a164": 74, "a165": 75, "a166": 76, "a167": 77, "a168": 78, "a169": 79, "a17": 80, "a170": 81, "a171": 82, "a172": 83, "a173": 84, "a174": 85, "a175": 86, "a176": 87, "a177": 88, "a178": 89, "a179": 90, "a18": 91, "a180": 92, "a181": 93, "a182": 94, "a183": 95, "a184": 96, "a185": 97, "a186": 98, "a187": 99, "a188": 100, "a189": 101, "a19": 102, "a190": 103, "a191": 104, "a192": 105, "a193": 106, "a194": 107, "a195": 108, "a196": 109, "a197": 110, "a198": 111, "a199": 112, "a2": 113, "a20": 114, "a21": 115, "a22": 116, "a23": 117, "a24": 118, "a25": 119, "a26": 120, "a27": 121, "a28": 122, "a29": 123, "a3": 124, "a30": 125, "a31": 126, "a32": 127, "a33": 128, "a34": 129, "a35": 130, "a36": 131, "a37": 132, "a38": 133, "a39": 134, "a4": 135, "a40": 136, "a41": 137, "a42": 138, "a43": 139, "a44": 140, "a45": 141, "a46": 142, "a47": 143, "a48": 144, "a49": 145, "a5": 146, "a50": 147, "a51": 148, "a52": 149, "a53": 150, "a54": 151, "a55": 152, "a56": 153, "a57": 154, "a58": 155, "a59": 156, "a6": 157, "a60": 158, "a61": 159, "a62": 160, "a63": 161, "a64": 162, "a65": 163, "a66": 164, "a67": 165, "a68": 166, "a69": 167, "a7": 168, "a70": 169, "a71": 170, "a72": 171, "a73": 172, "a74": 173, "a75": 174, "a76": 175, "a77": 176, "a78": 177, "a79": 178, "a8": 179, "a80": 180, "a81": 181, "a82": 182, "a83": 183, "a84": 184, "a85": 185, "a86": 186, "a87": 187, "a88": 188, "a89": 189, "a9": 190, "a90": 191, "a91": 192, "a92": 193, "a93": 194, "a94": 195, "a95": 196, "a96": 197, "a97": 198, "a98": 199, "a99": 200}
+-- !result
+select get_json_string(inspect_global_dict('js2', 'c1.f4'), 'dict');
+-- result:
+None
+-- !result
+select get_json_string(inspect_global_dict('js2', 'c1.f5'), 'dict');
+-- result:
+None
+-- !result
+select min(get_json_string(c1, 'f1')) from js2;
+-- result:
+a0
+-- !result
+select * from profile_decode;
+-- result:
+DICT_DECODE (plan_node_id=3):
+-- !result
+select min(get_json_string(c1, 'f2')) from js2;
+-- result:
+a0
+-- !result
+select * from profile_decode;
+-- result:
+DICT_DECODE (plan_node_id=3):
+-- !result
+select min(get_json_string(c1, 'f3')) from js2;
+-- result:
+a0
+-- !result
+select * from profile_decode;
+-- result:
+DICT_DECODE (plan_node_id=3):
+-- !result
+select min(get_json_string(c1, 'f4')) from js2;
+-- result:
+a0
+-- !result
+select * from profile_decode;
+-- result:
+-- !result
+select min(get_json_string(c1, 'f5')) from js2;
+-- result:
+None
+-- !result
+select * from profile_decode;
+-- result:
+-- !result
+select get_json_string(c1, 'f1') k1, count(*) from js2 group by k1 order by k1 limit 3;
+-- result:
+a0	100
+a1	100
+a2	100
+-- !result
+select * from profile_decode;
+-- result:
+DICT_DECODE (plan_node_id=5):
+-- !result
+select get_json_string(c1, 'f2') k1, count(*) from js2 group by k1 order by k1 limit 3;
+-- result:
+a0	10
+a1	10
+a10	10
+-- !result
+select * from profile_decode;
+-- result:
+DICT_DECODE (plan_node_id=5):
+-- !result
+select get_json_string(c1, 'f3') k1, count(*) from js2 group by k1 order by k1 limit 3;
+-- result:
+a0	5
+a1	5
+a10	5
+-- !result
+select * from profile_decode;
+-- result:
+DICT_DECODE (plan_node_id=5):
+-- !result
+select get_json_string(c1, 'f4') k1, count(*) from js2 group by k1 order by k1 limit 3;
+-- result:
+a0	2
+a1	2
+a10	2
+-- !result
+select * from profile_decode;
+-- result:
+-- !result
+select get_json_string(c1, 'f5') k1, count(*) from js2 group by k1 order by k1 limit 3;
+-- result:
+None	1000
+-- !result
+select * from profile_decode;
+-- result:
+-- !result
+insert into js2 
+select 
+    generate_series, 
+    json_object(
+        'f1', concat('a', generate_series % 10),
+        'f2', concat('a', generate_series % 300),
+        'f3', concat('a', generate_series % 500),
+        'f4', concat('a', generate_series % 500)
+        )
+from (table(generate_series(1, 1000)));
+-- result:
+-- !result
+select get_json_string((inspect_global_dict('js2', 'c1.f1')), 'dict');
+-- result:
+{"a0": 1, "a1": 2, "a2": 3, "a3": 4, "a4": 5, "a5": 6, "a6": 7, "a7": 8, "a8": 9, "a9": 10}
+-- !result
+select get_json_string((inspect_global_dict('js2', 'c1.f2')), 'dict');
+-- result:
+None
+-- !result
+select get_json_string((inspect_global_dict('js2', 'c1.f3')), 'dict');
+-- result:
+None
+-- !result
+select get_json_string(inspect_global_dict('js2', 'c1.f4'), 'dict');
+-- result:
+None
+-- !result
+select get_json_string(inspect_global_dict('js2', 'c1.f5'), 'dict');
+-- result:
+None
+-- !result
+insert into js2 
+select 
+    generate_series, 
+    json_object(
+        'f1', concat('a', generate_series % 1000),
+        'f2', concat('a', generate_series % 1000),
+        'f3', concat('a', generate_series % 1000),
+        'f4', concat('a', generate_series % 1000)
+        )
+from (table(generate_series(1, 1000)));
+-- result:
+-- !result
+select get_json_string(inspect_global_dict('js2', 'c1.f1'), 'dict');
+-- result:
+{"a0": 1, "a1": 2, "a2": 3, "a3": 4, "a4": 5, "a5": 6, "a6": 7, "a7": 8, "a8": 9, "a9": 10}
+-- !result
+select get_json_string(inspect_global_dict('js2', 'c1.f2'), 'dict');
+-- result:
+None
+-- !result
+select get_json_string(inspect_global_dict('js2', 'c1.f3'), 'dict');
+-- result:
+None
+-- !result
+select get_json_string(inspect_global_dict('js2', 'c1.f4'), 'dict');
+-- result:
+None
+-- !result
+select get_json_string(inspect_global_dict('js2', 'c1.f5'), 'dict');
+-- result:
+None
+-- !result
+truncate table js2;
+-- result:
+-- !result
+select get_json_string(inspect_global_dict('js2', 'c1.f1'), 'dict');
+-- result:
+{"a0": 1, "a1": 2, "a2": 3, "a3": 4, "a4": 5, "a5": 6, "a6": 7, "a7": 8, "a8": 9, "a9": 10}
+-- !result
+select get_json_string(inspect_global_dict('js2', 'c1.f2'), 'dict');
+-- result:
+None
+-- !result
+select get_json_string(inspect_global_dict('js2', 'c1.f3'), 'dict');
+-- result:
+None
+-- !result
+select get_json_string(inspect_global_dict('js2', 'c1.f4'), 'dict');
+-- result:
+None
+-- !result
+select get_json_string(inspect_global_dict('js2', 'c1.f5'), 'dict');
+-- result:
+None
+-- !result
+insert into js2 
+select 
+    generate_series, 
+    json_object(
+        'f1', concat('a', generate_series % 10),
+        'f2', concat('a', generate_series % 20),
+        'f3', concat('a', generate_series % 30),
+        'f4', concat('a', generate_series % 40),
+        'f5', concat('a', generate_series % 50)
+        )
+from (table(generate_series(1, 1000)));
+-- result:
+-- !result
+select get_json_string(inspect_global_dict('js2', 'c1.f1'), 'dict');
+-- result:
+{"a0": 1, "a1": 2, "a2": 3, "a3": 4, "a4": 5, "a5": 6, "a6": 7, "a7": 8, "a8": 9, "a9": 10}
+-- !result
+select get_json_string(inspect_global_dict('js2', 'c1.f2'), 'dict');
+-- result:
+{"a0": 1, "a1": 2, "a10": 3, "a11": 4, "a12": 5, "a13": 6, "a14": 7, "a15": 8, "a16": 9, "a17": 10, "a18": 11, "a19": 12, "a2": 13, "a3": 14, "a4": 15, "a5": 16, "a6": 17, "a7": 18, "a8": 19, "a9": 20}
+-- !result
+select get_json_string(inspect_global_dict('js2', 'c1.f3'), 'dict');
+-- result:
+{"a0": 1, "a1": 2, "a10": 3, "a11": 4, "a12": 5, "a13": 6, "a14": 7, "a15": 8, "a16": 9, "a17": 10, "a18": 11, "a19": 12, "a2": 13, "a20": 14, "a21": 15, "a22": 16, "a23": 17, "a24": 18, "a25": 19, "a26": 20, "a27": 21, "a28": 22, "a29": 23, "a3": 24, "a4": 25, "a5": 26, "a6": 27, "a7": 28, "a8": 29, "a9": 30}
+-- !result
+select get_json_string(inspect_global_dict('js2', 'c1.f4'), 'dict');
+-- result:
+{"a0": 1, "a1": 2, "a10": 3, "a11": 4, "a12": 5, "a13": 6, "a14": 7, "a15": 8, "a16": 9, "a17": 10, "a18": 11, "a19": 12, "a2": 13, "a20": 14, "a21": 15, "a22": 16, "a23": 17, "a24": 18, "a25": 19, "a26": 20, "a27": 21, "a28": 22, "a29": 23, "a3": 24, "a30": 25, "a31": 26, "a32": 27, "a33": 28, "a34": 29, "a35": 30, "a36": 31, "a37": 32, "a38": 33, "a39": 34, "a4": 35, "a5": 36, "a6": 37, "a7": 38, "a8": 39, "a9": 40}
+-- !result
+select get_json_string(inspect_global_dict('js2', 'c1.f5'), 'dict');
+-- result:
+{"a0": 1, "a1": 2, "a10": 3, "a11": 4, "a12": 5, "a13": 6, "a14": 7, "a15": 8, "a16": 9, "a17": 10, "a18": 11, "a19": 12, "a2": 13, "a20": 14, "a21": 15, "a22": 16, "a23": 17, "a24": 18, "a25": 19, "a26": 20, "a27": 21, "a28": 22, "a29": 23, "a3": 24, "a30": 25, "a31": 26, "a32": 27, "a33": 28, "a34": 29, "a35": 30, "a36": 31, "a37": 32, "a38": 33, "a39": 34, "a4": 35, "a40": 36, "a41": 37, "a42": 38, "a43": 39, "a44": 40, "a45": 41, "a46": 42, "a47": 43, "a48": 44, "a49": 45, "a5": 46, "a6": 47, "a7": 48, "a8": 49, "a9": 50}
+-- !result
+insert into js2 
+select 
+    generate_series, 
+    json_object(
+        'f1', generate_series % 10,                                 -- integer
+        'f2', cast((generate_series % 20) * 1.5 as double),         -- float
+        'f3', if(generate_series % 2 = 0, true, false),             -- boolean
+        'f4', null,                                                 -- null
+        'f5', json_array(generate_series % 5, 'arr', 1.23)          -- array
+        )
+from (table(generate_series(1, 1000)));
+-- result:
+-- !result
+select get_json_string(inspect_global_dict('js2', 'c1.f1'), 'dict');
+-- result:
+{"a0": 1, "a1": 2, "a2": 3, "a3": 4, "a4": 5, "a5": 6, "a6": 7, "a7": 8, "a8": 9, "a9": 10}
+-- !result
+select get_json_string(inspect_global_dict('js2', 'c1.f2'), 'dict');
+-- result:
+{"a0": 1, "a1": 2, "a10": 3, "a11": 4, "a12": 5, "a13": 6, "a14": 7, "a15": 8, "a16": 9, "a17": 10, "a18": 11, "a19": 12, "a2": 13, "a3": 14, "a4": 15, "a5": 16, "a6": 17, "a7": 18, "a8": 19, "a9": 20}
+-- !result
+select get_json_string(inspect_global_dict('js2', 'c1.f3'), 'dict');
+-- result:
+{"a0": 1, "a1": 2, "a10": 3, "a11": 4, "a12": 5, "a13": 6, "a14": 7, "a15": 8, "a16": 9, "a17": 10, "a18": 11, "a19": 12, "a2": 13, "a20": 14, "a21": 15, "a22": 16, "a23": 17, "a24": 18, "a25": 19, "a26": 20, "a27": 21, "a28": 22, "a29": 23, "a3": 24, "a4": 25, "a5": 26, "a6": 27, "a7": 28, "a8": 29, "a9": 30}
+-- !result
+select get_json_string(inspect_global_dict('js2', 'c1.f4'), 'dict');
+-- result:
+{"a0": 1, "a1": 2, "a10": 3, "a11": 4, "a12": 5, "a13": 6, "a14": 7, "a15": 8, "a16": 9, "a17": 10, "a18": 11, "a19": 12, "a2": 13, "a20": 14, "a21": 15, "a22": 16, "a23": 17, "a24": 18, "a25": 19, "a26": 20, "a27": 21, "a28": 22, "a29": 23, "a3": 24, "a30": 25, "a31": 26, "a32": 27, "a33": 28, "a34": 29, "a35": 30, "a36": 31, "a37": 32, "a38": 33, "a39": 34, "a4": 35, "a5": 36, "a6": 37, "a7": 38, "a8": 39, "a9": 40}
+-- !result
+select get_json_string(inspect_global_dict('js2', 'c1.f5'), 'dict');
+-- result:
+{"a0": 1, "a1": 2, "a10": 3, "a11": 4, "a12": 5, "a13": 6, "a14": 7, "a15": 8, "a16": 9, "a17": 10, "a18": 11, "a19": 12, "a2": 13, "a20": 14, "a21": 15, "a22": 16, "a23": 17, "a24": 18, "a25": 19, "a26": 20, "a27": 21, "a28": 22, "a29": 23, "a3": 24, "a30": 25, "a31": 26, "a32": 27, "a33": 28, "a34": 29, "a35": 30, "a36": 31, "a37": 32, "a38": 33, "a39": 34, "a4": 35, "a40": 36, "a41": 37, "a42": 38, "a43": 39, "a44": 40, "a45": 41, "a46": 42, "a47": 43, "a48": 44, "a49": 45, "a5": 46, "a6": 47, "a7": 48, "a8": 49, "a9": 50}
+-- !result
+CREATE TABLE js3 (
+    v1 BIGINT NULL,
+    c1 JSON NULL
+)
+DUPLICATE KEY (v1)
+DISTRIBUTED BY HASH(`v1`) BUCKETS 1
+PROPERTIES ( "replication_num" = "1" );
+-- result:
+-- !result
+insert into js3
+select 
+    generate_series, 
+    json_object(
+        'str_field', concat('str_', generate_series % 10),
+        'int_field', generate_series % 100,
+        'float_field', (generate_series % 100) * 1.23,
+        'bool_field', if(generate_series % 2 = 0, true, false),
+        'null_field', null,
+        'array_field', json_array(
+            generate_series % 5, 
+            concat('arr_', generate_series % 3), 
+            (generate_series % 10) * 0.5
+        ),
+        'object_field', json_object(
+            'nested_str', concat('nested_', generate_series % 7),
+            'nested_int', generate_series % 7,
+            'nested_bool', if(generate_series % 3 = 0, true, false)
+        ),
+        'deep_nested', json_object(
+            'level1', json_object(
+                'level2', json_array(
+                    json_object(
+                        'leaf_str', concat('leaf_', generate_series % 2),
+                        'leaf_num', generate_series % 2
+                    ),
+                    generate_series % 2
+                )
+            )
+        )
+    )
+from (table(generate_series(1, 1000)));
+-- result:
+-- !result
+select dict_merge(get_json_string(c1, 'str_field'), 255) from js3 [_META_];
+-- result:
+{"2":{"lst":["str",10,"c3RyXzA","c3RyXzE","c3RyXzI","c3RyXzM","c3RyXzQ","c3RyXzU","c3RyXzY","c3RyXzc","c3RyXzg","c3RyXzk"]},"3":{"lst":["i32",10,1,2,3,4,5,6,7,8,9,10]}}
+-- !result
+select get_json_string(inspect_global_dict('js3', 'c1.str_field'), 'dict');
+-- result:
+{"str_0": 1, "str_1": 2, "str_2": 3, "str_3": 4, "str_4": 5, "str_5": 6, "str_6": 7, "str_7": 8, "str_8": 9, "str_9": 10}
+-- !result
+select get_json_string(inspect_global_dict('js3', 'c1.int_field'), 'dict');
+-- result:
+None
+-- !result
+select get_json_string(inspect_global_dict('js3', 'c1.float_field'), 'dict');
+-- result:
+None
+-- !result
+select get_json_string(inspect_global_dict('js3', 'c1.bool_field'), 'dict');
+-- result:
+None
+-- !result
+select get_json_string(inspect_global_dict('js3', 'c1.null_field'), 'dict');
+-- result:
+None
+-- !result
+select get_json_string(inspect_global_dict('js3', 'c1.array_field'), 'dict');
+-- result:
+None
+-- !result
+select get_json_string(inspect_global_dict('js3', 'c1.object_field'), 'dict');
+-- result:
+None
+-- !result
+select get_json_string(inspect_global_dict('js3', 'c1.object_field.nested_str'), 'dict');
+-- result:
+{"nested_0": 1, "nested_1": 2, "nested_2": 3, "nested_3": 4, "nested_4": 5, "nested_5": 6, "nested_6": 7}
+-- !result
+select get_json_string(inspect_global_dict('js3', 'c1.object_field.nested_int'), 'dict');
+-- result:
+None
+-- !result
+select get_json_string(inspect_global_dict('js3', 'c1.object_field.nested_bool'), 'dict');
+-- result:
+None
+-- !result
+select get_json_string(inspect_global_dict('js3', 'c1.deep_nested'), 'dict');
+-- result:
+None
+-- !result
+select get_json_string(inspect_global_dict('js3', 'c1.deep_nested.level1'), 'dict');
+-- result:
+None
+-- !result
+select get_json_string(inspect_global_dict('js3', 'c1.deep_nested.level1.level2'), 'dict');
+-- result:
+None
+-- !result
+select get_json_string(inspect_global_dict('js3', 'c1.deep_nested.level1.level2.leaf_str'), 'dict');
+-- result:
+None
+-- !result
+select get_json_string(inspect_global_dict('js3', 'c1.deep_nested.level1.level2.leaf_num'), 'dict');
+-- result:
+None
+-- !result

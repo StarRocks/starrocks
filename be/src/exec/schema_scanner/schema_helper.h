@@ -110,6 +110,9 @@ public:
     static Status get_partitions_meta(const SchemaScannerState& state, const TGetPartitionsMetaRequest& var_params,
                                       TGetPartitionsMetaResponse* var_result);
 
+    static Status listRecycleBinCatalogs(const SchemaScannerState& state, const TListRecycleBinCatalogsParams& req,
+                                         TListRecycleBinCatalogsResult* res);
+
     static Status get_column_stats_usage(const SchemaScannerState& state, const TColumnStatsUsageReq& var_params,
                                          TColumnStatsUsageRes* var_result);
 

@@ -10,13 +10,13 @@ StarRocks has an elegant design. It encompasses a rich set of features including
 
 StarRocks is ideal for real-time analytics on fresh data. Data can be ingested at a high speed and updated and deleted in real time. StarRocks empowers users to create tables that use various schemas, such as flat, star, and snowflake schemas.
 
-Compatible with MySQL protocols and standard SQL, StarRocks has out-of-the-box support for all major BI tools, such as Tableau and Power BI. StarRocks does not rely on any external components. It is an integrated data analytics platform that allows for high scalability, high availability, and simplified management and maintenance.
+Compatible with MySQL protocols and standard SQL, StarRocks has out-of-the-box support for all major Business Intelligence (BI) tools, such as Tableau and Power BI. StarRocks does not rely on any external components. It is an integrated data analytics platform that allows for high scalability, high availability, and simplified management and maintenance.
 
 [StarRocks](https://github.com/StarRocks/starrocks/tree/main) is licensed under Apache 2.0, available at the StarRocks GitHub repository (see the [StarRocks license](https://github.com/StarRocks/starrocks/blob/main/LICENSE.txt)). StarRocks (i) links to or calls functions from third party software libraries, the licenses of which are available in the folder [licenses-binary](https://github.com/StarRocks/starrocks/tree/main/licenses-binary); and (ii) incorporates third party software code, the licenses of which are available in the folder [licenses](https://github.com/StarRocks/starrocks/tree/main/licenses).
 
 ## Scenarios
 
-StarRocks meets varied enterprise analytics requirements, including OLAP multi-dimensional analytics, real-time analytics, high-concurrency analytics, customized reporting, ad-hoc queries, and unified analytics.
+StarRocks meets varied enterprise analytics requirements, including OLAP (Online Analytical Processing) multi-dimensional analytics, real-time analytics, high-concurrency analytics, customized reporting, ad-hoc queries, and unified analytics.
 
 ### OLAP multi-dimensional analytics
 
@@ -40,7 +40,7 @@ The MPP framework and vectorized execution engine enable users to choose between
 
 ### Real-time analytics
 
-StarRocks uses the Primary Key table to implement real-time updates. Data changes in a TP database can be synchronized to StarRocks in a matter of seconds to build a real-time warehouse.
+StarRocks uses the Primary Key table to implement real-time updates. Data changes in a TP (Transaction Processing) database can be synchronized to StarRocks in a matter of seconds to build a real-time warehouse.
 
 Scenarios:
 
@@ -74,6 +74,6 @@ StarRocks leverages performant data distribution, flexible indexing, and intelli
 
 StarRocks provides a unified data analytics experience.
 
-- One system can power various analytical scenarios, reducing system complexity and lowering TCO.
+- One system can power various analytical scenarios, reducing system complexity and lowering Total Cost of Ownership (TCO).
 
 - StarRocks unifies data lakes and data warehouses. Data in a lakehouse can be managed all in StarRocks. Latency-sensitive queries that require high concurrency can run on StarRocks. Data in data lakes can be accessed by using external catalogs or external tables provided by StarRocks.

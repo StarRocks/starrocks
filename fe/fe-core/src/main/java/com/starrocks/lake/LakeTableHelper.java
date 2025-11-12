@@ -259,6 +259,11 @@ public class LakeTableHelper {
                 sourceType == TransactionState.LoadJobSourceType.BATCH_LOAD_JOB;
     }
 
+    // for now, only loading txn and compaction txn support combined txn log
+    public static boolean isTransactionSupportCombinedTxnLog(TransactionState.LoadJobSourceType sourceType) {
+        return isLoadingTransaction(sourceType) || sourceType == TransactionState.LoadJobSourceType.LAKE_COMPACTION;
+    }
+
     // if one of the tables in tableIdList is LakeTable with file bundling, return true
     // else return false
     public static boolean fileBundling(long dbId, List<Long> tableIdList) {

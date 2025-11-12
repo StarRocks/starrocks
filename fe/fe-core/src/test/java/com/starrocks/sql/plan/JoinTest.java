@@ -17,6 +17,7 @@ package com.starrocks.sql.plan;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.FeConstants;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -414,6 +415,75 @@ public class JoinTest extends PlanTestBase {
     }
 
     @Test
+    public void testUsingLeftOuterJoin() throws Exception {
+        String sql = "select * from t0 left join test_using using(v1) where v1 = 3;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "equal join conjunct: 4: v1 = 1: v1");
+        assertContains(plan, "0:OlapScanNode\n" +
+                "     TABLE: test_using\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 4: v1 = 3");
+        assertContains(plan, "2:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 1: v1 = 3");
+    }
+
+    @Test
+    public void testFullOuterJoinWithUsing() throws Exception {
+        String sql = "select v1, t0.v2 from t0 full outer join test_using using(v1) where v1 = 3;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "4:HASH JOIN\n" +
+                "  |  join op: FULL OUTER JOIN (PARTITIONED)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 1: v1 = 4: v1\n" +
+                "  |  other predicates: coalesce(1: v1, 4: v1) = 3");
+
+        sql = "select v5, v6 from t1 full outer join test_using a using(v5, v6) full outer join test_using b using(v5, v6)";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "9:Project\n" +
+                "  |  <slot 10> : coalesce(2: v5, CAST(7: v5 AS BIGINT))\n" +
+                "  |  <slot 11> : coalesce(3: v6, 8: v6)\n" +
+                "  |  \n" +
+                "  8:HASH JOIN\n" +
+                "  |  join op: FULL OUTER JOIN (PARTITIONED)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 21: cast = 2: v5\n" +
+                "  |  equal join conjunct: 8: v6 = 3: v6");
+        assertContains("12:Project\n" +
+                "  |  <slot 18> : coalesce(10: v5, CAST(15: v5 AS BIGINT))\n" +
+                "  |  <slot 19> : coalesce(11: v6, 16: v6)\n" +
+                "  |  \n" +
+                "  11:HASH JOIN\n" +
+                "  |  join op: FULL OUTER JOIN (PARTITIONED)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 20: cast = 10: v5\n" +
+                "  |  equal join conjunct: 16: v6 = 11: v6");
+
+        sql = "select v6 from t1 left outer join test_using a using(v6) full outer join test_using b using(v6)";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "HASH_PARTITIONED: 3: v6\n" +
+                "\n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t1\n" +
+                "     PREAGGREGATION: ON");
+        assertContains("5:Project\n" +
+                "  |  <slot 3> : 3: v6\n" +
+                "  |  \n" +
+                "  4:HASH JOIN\n" +
+                "  |  join op: LEFT OUTER JOIN (PARTITIONED)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 3: v6 = 8: v6");
+        assertContains("9:Project\n" +
+                "  |  <slot 16> : coalesce(3: v6, 14: v6)\n" +
+                "  |  \n" +
+                "  8:HASH JOIN\n" +
+                "  |  join op: FULL OUTER JOIN (BUCKET_SHUFFLE(S))\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 3: v6 = 14: v6");
+    }
+
+    @Test
     public void testJoinAssociativityConst() throws Exception {
         String sql = "SELECT x0.*\n" +
                 "FROM (\n" +
@@ -772,12 +842,12 @@ public class JoinTest extends PlanTestBase {
 
         sql = "select (v2+v6 = 1 or v2+v6 = 5) from t0, t1 where v2 = v5 ";
         plan = getVerboseExplain(sql);
-        assertContains(plan, "  4:Project\n" +
-                "  |  output columns:\n" +
-                "  |  7 <-> (8: add = 1) OR (8: add = 5)\n" +
-                "  |  common expressions:\n" +
-                "  |  8 <-> [2: v2, BIGINT, true] + [6: v6, BIGINT, true]\n" +
-                "  |  cardinality: 1");
+        assertContains(plan, "  4:Project\n"
+                + "  |  output columns:\n"
+                + "  |  7 <-> ([8: add, BIGINT, true] = 1) OR ([8: add, BIGINT, true] = 5)\n"
+                + "  |  common expressions:\n"
+                + "  |  8 <-> [2: v2, BIGINT, true] + [6: v6, BIGINT, true]\n"
+                + "  |  cardinality: 1");
         assertContains(plan, "output columns: 2, 6");
 
         sql = "select * from t0,t1 where v1 = v4";
@@ -2744,7 +2814,36 @@ public class JoinTest extends PlanTestBase {
         }
     }
 
+    @Test
+    public void testPushDownTopNWithAsofLeftOuterJoin() throws Exception {
+        String sql = "SELECT\n" +
+                "    *\n" +
+                "FROM\n" +
+                "    (\n" +
+                "        SELECT\n" +
+                "            t0.*,\n" +
+                "            t1.v5,\n" +
+                "            t1.v6\n" +
+                "        FROM\n" +
+                "            t0\n" +
+                "            ASOF LEFT JOIN t1 ON t0.v1 = t1.v4 and t0.v2 > t1.v5\n" +
+                "    ) AS mocktable\n" +
+                "ORDER BY\n" +
+                "    mocktable.v2 DESC\n" +
+                "LIMIT\n" +
+                "    20";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "5:HASH JOIN\n" +
+                "  |  join op: ASOF LEFT OUTER JOIN (BROADCAST)");
 
+        assertContains(plan, "1:TOP-N\n" +
+                "  |  order by: <slot 2> 2: v2 DESC\n" +
+                "  |  offset: 0\n" +
+                "  |  limit: 20\n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
+
+    }
 
     @Test
     public void testPushDownTopWithOuterJoin() throws Exception {
@@ -3326,12 +3425,159 @@ public class JoinTest extends PlanTestBase {
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 1: v1 = 5: v4\n" +
                 "  |  equal join conjunct: 4: count = 8: count\n" +
-                "  |  other predicates: ((1: v1 != 1) AND (if(8: count = 1, 'a', 'b') = 'b')) OR ((1: v1 = 1) AND " +
-                "(if(8: count = 1, 'a', 'b') = 'b')), if(8: count = 1, 'a', 'b') = 'b'\n" +
-                "  |  \n" +
-                "  |----5:EXCHANGE\n" +
-                "  |    \n" +
-                "  2:EXCHANGE");
+                "  |  other predicates: ((1: v1 != 1) AND (31: expr)) OR ((1: v1 = 1) AND (31: expr)), 31: expr\n" +
+                "  |    common sub expr:\n" +
+                "  |    <slot 29> : 8: count = 1\n" +
+                "  |    <slot 30> : if(29: expr, 'a', 'b')\n" +
+                "  |    <slot 31> : 30: if = 'b'");
     }
 
+    @Test
+    public void testAsofJoinConditionNormalizeAllOperators() throws Exception {
+        String sql1 = "select t0.v1 from t0 asof join t1 on t0.v1 = t1.v4 and t1.v5 > t0.v2";
+        String plan1 = getFragmentPlan(sql1);
+        assertContains(plan1, "asof join conjunct: 2: v2 < 5: v5");
+
+        String sql2 = "select t0.v1 from t0 asof join t1 on t0.v1 = t1.v4 and t1.v5 >= t0.v2";
+        String plan2 = getFragmentPlan(sql2);
+        assertContains(plan2, "asof join conjunct: 2: v2 <= 5: v5");
+
+        String sql3 = "select t0.v1 from t0 asof join t1 on t0.v1 = t1.v4 and t1.v5 < t0.v2";
+        String plan3 = getFragmentPlan(sql3);
+        assertContains(plan3, "asof join conjunct: 2: v2 > 5: v5");
+
+        String sql4 = "select t0.v1 from t0 asof join t1 on t0.v1 = t1.v4 and t1.v5 <= t0.v2";
+        String plan4 = getFragmentPlan(sql4);
+        assertContains(plan4, "asof join conjunct: 2: v2 >= 5: v5");
+    }
+
+    @Test
+    public void testAsofJoinConditionNormalizeWithFunctions() throws Exception {
+        String sql1 = "select t0.v1 from t0 asof join t1 on t0.v1 = t1.v4 and t1.v5 + 1 > t0.v2";
+        String plan1 = getFragmentPlan(sql1);
+        assertContains(plan1, "asof join conjunct: 2: v2 < 7: add");
+
+        String sql2 = "select t0.v1 from t0 asof join t1 on t0.v1 = t1.v4 and t0.v2 * 2 >= t1.v5";
+        String plan2 = getFragmentPlan(sql2);
+        assertContains(plan2, "asof join conjunct: 7: multiply >= 5: v5");
+
+        String sql3 = "select t0.v1 from t0 asof join t1 on t0.v1 = t1.v4 and date_add(t1.v5, 1) > t0.v2";
+        ExceptionChecker.expectThrowsWithMsg(IllegalStateException.class,
+                "ASOF JOIN temporal condition operand must be BIGINT, DATE, or DATETIME in join ON clause",
+                () -> getFragmentPlan(sql3));
+
+        String sql4 = "select t0.v1 from t0 asof join t1 on t0.v1 = t1.v4 and unix_timestamp(t1.v5) < t0.v2";
+        String plan4 = getFragmentPlan(sql4);
+        assertContains(plan4, "asof join conjunct: 2: v2 > 7: unix_timestamp");
+    }
+
+    @Test
+    public void testAsofJoinConditionNormalizeWithComplexExpressions() throws Exception {
+        String sql1 = "select t0.v1 from t0 asof join t1 on t0.v1 = t1.v4 and (t1.v5 + t1.v6) > (t0.v2 - t0.v3)";
+        String plan1 = getFragmentPlan(sql1);
+        assertContains(plan1, "3:Project\n" +
+                "  |  <slot 4> : 4: v4\n" +
+                "  |  <slot 8> : 5: v5 + 6: v6\n" +
+                "  |  \n" +
+                "  2:OlapScanNode\n" +
+                "     TABLE: t1");
+        assertContains(plan1, "1:Project\n" +
+                "  |  <slot 1> : 1: v1\n" +
+                "  |  <slot 7> : 2: v2 - 3: v3\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0");
+
+        assertContains(plan1, "asof join conjunct: 7: subtract < 8: add");
+
+        String sql2 = "select t0.v1 from t0 asof join t1 on t0.v1 = t1.v4 and CASE WHEN t1.v5 > 0 THEN t1.v5 ELSE 0 END > t0.v2";
+        String plan2 = getFragmentPlan(sql2);
+        assertContains(plan2, "asof join conjunct: 2: v2 < 7: if");
+
+        String sql3 = "select t0.v1 from t0 asof join t1 on t0.v1 = t1.v4 and COALESCE(t1.v5, 0) >= t0.v2";
+        String plan3 = getFragmentPlan(sql3);
+        assertContains(plan3, "asof join conjunct: 2: v2 <= 7: coalesce");
+    }
+
+    @Test
+    public void testAsofJoinConditionNormalizeWithMultipleJoins() throws Exception {
+        String sql1 = "select t0.v1 from t0 asof join t1 on t0.v1 = t1.v4 and t0.v2 <= t1.v5 " +
+                "asof join t2 on t1.v4 = t2.v7 and t2.v8 > t1.v5";
+        String plan1 = getFragmentPlan(sql1);
+        assertContains(plan1, "asof join conjunct: 5: v5 < 8: v8");
+
+        String sql3 = "select t0.v1 from t0 join t1 on t0.v1 = t1.v4 " +
+                "asof join t2 on t1.v4 = t2.v7 and t2.v8 >= t1.v5";
+        String plan3 = getFragmentPlan(sql3);
+        assertContains(plan3, "asof join conjunct: 5: v5 <= 8: v8");
+    }
+
+    @Test
+    public void testAsofJoinConditionNormalizeWithSubqueries() {
+        String sql1 = "select t0.v1 from t0 asof join t1 on t0.v1 = t1.v4 and (SELECT MAX(v5) FROM t1) > t0.v2";
+        ExceptionChecker.expectThrowsWithMsg(IllegalStateException.class,
+                "ASOF JOIN requires exactly one temporal inequality condition",
+                () -> getFragmentPlan(sql1));
+    }
+
+    @Test
+    public void testAsofJoinOtherPredicates() throws Exception {
+        String sql1 = "SELECT t0.v1 FROM t0 asof JOIN t1 ON t0.v1 = t1.v4 and t0.v2 <= t1.v5 " +
+                "WHERE t0.v2 = t0.v3 + t1.v4 and t0.v1 =1 ;";
+        String plan1 = getFragmentPlan(sql1);
+        assertContains(plan1, "3:HASH JOIN\n" +
+                "  |  join op: ASOF INNER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 1: v1 = 4: v4\n" +
+                "  |  asof join conjunct: 2: v2 <= 5: v5\n" +
+                "  |  other join predicates: 2: v2 = 3: v3 + 4: v4");
+
+        String sql2 = "SELECT t0.v1 FROM t0 asof JOIN t1 ON t0.v1 = t1.v4 and t0.v2 < t0.v3 + t1.v4";
+        ExceptionChecker.expectThrowsWithMsg(IllegalStateException.class,
+                "ASOF JOIN requires exactly one temporal inequality condition",
+                () -> getFragmentPlan(sql2));
+
+        String sql3 = "select * from t0 asof join t1 on t0.v1 = t1.v4 and  t1.v5 <= t0.v2 where (v1 > 4 and v5 < 2)";
+        String plan3 = getFragmentPlan(sql3);
+        assertContains(plan3, "3:HASH JOIN\n" +
+                "  |  join op: ASOF INNER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 1: v1 = 4: v4\n" +
+                "  |  asof join conjunct: 2: v2 >= 5: v5");
+
+        String sql4 = "SELECT t0.v1 FROM t0 ASOF JOIN t1 ON t0.v1 = t1.v4 AND t0.v2 <= t1.v5 " +
+                "where (t0.v3 = t1.v6 OR t0.v3 = t1.v4)";
+        String plan4 = getFragmentPlan(sql4);
+        assertContains(plan4, "3:HASH JOIN\n" +
+                "  |  join op: ASOF INNER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 1: v1 = 4: v4\n" +
+                "  |  asof join conjunct: 2: v2 <= 5: v5\n" +
+                "  |  other join predicates: (3: v3 = 6: v6) OR (3: v3 = 4: v4)");
+    }
+    
+    @Test
+    public void testJoinWithMultiAnalytic() throws Exception {
+        FeConstants.runningUnitTest = true;
+        String query = "with cte0 as (\n" +
+                "    select max(v1) over (partition by v1 order by v2) mx, v1, v2, v3 from t0\n" +
+                "),\n" +
+                "cte1 as (\n" +
+                "    select l.mx g1, l.v1 g2, l.v2 g3, l.v3 g4, max(v5) over (partition by l.v1 order by l.v2) g5 from \n" +
+                "    cte0 l join [broadcast] t1 r on v1 = v4\n" +
+                ")\n" +
+                "select sum(g1),sum(g2), sum(g3), sum(g4), sum(g5) from cte1;";
+        String plan = getFragmentPlan(query);
+        assertContains(plan, "  8:ANALYTIC\n" +
+                "  |  functions: [, max(6: v5), ]\n" +
+                "  |  partition by: 1: v1\n" +
+                "  |  order by: 2: v2 ASC\n" +
+                "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
+                "  |  \n" +
+                "  7:SORT\n" +
+                "  |  order by: <slot 1> 1: v1 ASC, <slot 2> 2: v2 ASC\n" +
+                "  |  analytic partition by: 1: v1\n" +
+                "  |  offset: 0");
+        FeConstants.runningUnitTest = false;
+    }
 }

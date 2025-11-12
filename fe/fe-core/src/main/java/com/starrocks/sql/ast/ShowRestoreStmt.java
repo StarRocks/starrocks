@@ -14,7 +14,7 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.Expr;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.parser.NodePosition;
 
 import static com.starrocks.common.util.Util.normalizeName;
@@ -49,7 +49,7 @@ public class ShowRestoreStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowRestoreStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowRestoreStatement(this, context);
     }
 }
 

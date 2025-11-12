@@ -136,6 +136,11 @@ Status ColumnarSerde::serialize(RuntimeState* state, SerdeContext& ctx, const Ch
         column_stats.reserve(columns.size());
         // serialize to io buffer
         int padding_size = 0;
+        if (UNLIKELY(config::pipeline_enable_large_column_checker)) {
+            if (chunk->has_capacity_limit_reached()) {
+                return Status::CapacityLimitExceed(fmt::format("Large column detected in spill serialize phase "));
+            }
+        }
         for (size_t i = 0; i < columns.size(); i++) {
             uint8_t* begin = buf;
             buf = serde::ColumnArraySerde::serialize(*columns[i], buf, false, encode_levels[i]);
@@ -166,7 +171,7 @@ StatusOr<ChunkUniquePtr> ColumnarSerde::deserialize(SerdeContext& ctx, BlockRead
     RETURN_IF_ERROR(reader->read_fully(header_buffer, HEADER_SIZE));
 
     int32_t sequence_id = UNALIGNED_LOAD32(header_buffer + SEQUENCE_OFFSET);
-    int32_t attachment_size = UNALIGNED_LOAD32(header_buffer + ATTACHMENT_SIZE_OFFSET);
+    size_t attachment_size = UNALIGNED_LOAD64(header_buffer + ATTACHMENT_SIZE_OFFSET);
     if (sequence_id != SEQUENCE_MAGIC_ID) {
         return Status::InternalError(fmt::format("sequence id mismatch {} vs {}", sequence_id, SEQUENCE_MAGIC_ID));
     }

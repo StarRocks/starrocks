@@ -15,11 +15,11 @@
 package com.starrocks.qe;
 
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.translate.TranslateStmt;
 import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.type.Type;
 
 import java.util.ArrayList;
 import java.util.List;

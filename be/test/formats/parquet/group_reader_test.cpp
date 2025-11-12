@@ -21,7 +21,7 @@
 #include <memory>
 
 #include "column/column_helper.h"
-#include "exec/hdfs_scanner.h"
+#include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "formats/parquet/column_reader_factory.h"
 #include "fs/fs.h"
 #include "runtime/descriptor_helper.h"
@@ -457,6 +457,23 @@ TEST_F(GroupReaderTest, ColumnReaderCreateTypeMismatch) {
 
     ColumnReaderOptions options;
     auto st = ColumnReaderFactory::create(options, &field, col_type, nullptr);
+    ASSERT_FALSE(st.ok()) << st;
+    std::cout << st.status().message() << "\n";
+}
+
+TEST_F(GroupReaderTest, VariantColumnReader) {
+    ParquetField field;
+    field.name = "col_variant";
+    field.type = ColumnType::STRUCT;
+
+    TypeDescriptor col_type;
+    col_type.type = LogicalType::TYPE_VARIANT;
+
+    ColumnReaderOptions options;
+    TIcebergSchemaField lake_schema_field;
+    lake_schema_field.name = "col_variant";
+    lake_schema_field.field_id = 1;
+    auto st = ColumnReaderFactory::create(options, &field, col_type, &lake_schema_field);
     ASSERT_FALSE(st.ok()) << st;
     std::cout << st.status().message() << "\n";
 }

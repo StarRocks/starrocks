@@ -14,20 +14,31 @@
 
 package com.starrocks.sql.common;
 
-import com.starrocks.analysis.ParseNode;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.analyzer.AstToSQLBuilder;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.JoinRelation;
+import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UnionRelation;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 
-public class DebugRelationTracer implements AstVisitor<String, String> {
+public class DebugRelationTracer implements AstVisitorExtendInterface<String, String> {
     @Override
     public String visit(ParseNode node) {
-        return node == null ? "null" : node.toSql();
+        if (node == null) {
+            return "null";
+        }
+
+        if (node instanceof Expr expr) {
+            return ExprToSql.toSql(expr);
+        }
+
+        return AstToSQLBuilder.toSQL(node);
     }
 
     @Override

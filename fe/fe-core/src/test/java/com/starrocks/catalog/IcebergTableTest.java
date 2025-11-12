@@ -17,12 +17,12 @@ package com.starrocks.catalog;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.BucketProperty;
 import com.starrocks.connector.iceberg.TableTestBase;
 import com.starrocks.connector.iceberg.TestTables;
+import com.starrocks.planner.DescriptorTable;
 import com.starrocks.server.IcebergTableFactory;
 import com.starrocks.thrift.TBucketFunction;
 import com.starrocks.thrift.TTableDescriptor;
@@ -39,12 +39,12 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import static com.starrocks.catalog.Type.ARRAY_BIGINT;
-import static com.starrocks.catalog.Type.DATETIME;
-import static com.starrocks.catalog.Type.INT;
-import static com.starrocks.catalog.Type.STRING;
-import static com.starrocks.catalog.Type.VARCHAR;
 import static com.starrocks.server.ExternalTableFactory.RESOURCE;
+import static com.starrocks.type.Type.ARRAY_BIGINT;
+import static com.starrocks.type.Type.DATETIME;
+import static com.starrocks.type.Type.INT;
+import static com.starrocks.type.Type.STRING;
+import static com.starrocks.type.Type.VARCHAR;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class IcebergTableTest extends TableTestBase {

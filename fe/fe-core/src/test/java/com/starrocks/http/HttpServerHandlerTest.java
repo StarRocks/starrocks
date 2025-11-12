@@ -14,37 +14,23 @@
 
 package com.starrocks.http;
 
-import io.netty.channel.Channel;
-import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.DefaultFullHttpRequest;
 import io.netty.handler.codec.http.DefaultFullHttpResponse;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpVersion;
-import io.netty.util.Attribute;
 import io.netty.util.ReferenceCountUtil;
 import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
-import java.util.LinkedList;
-import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.Executor;
-import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static com.starrocks.http.HttpServerHandler.HTTP_CONNECT_CONTEXT_ATTRIBUTE_KEY;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.same;
-import static org.mockito.Mockito.CALLS_REAL_METHODS;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-import static org.mockito.Mockito.withSettings;
 
-public class HttpServerHandlerTest {
+public class HttpServerHandlerTest extends HttpServerTestUtils {
 
     @Test
     public void testSyncHandle() throws Exception {
@@ -176,12 +162,7 @@ public class HttpServerHandlerTest {
         assertTrue(httpResponse.content().toString(StandardCharsets.UTF_8).contains(expectContent));
     }
 
-    private MockChannelHandlerContext createChannelHandlerContext() {
-        return mock(MockChannelHandlerContext.class,
-                withSettings()
-                        .useConstructor()
-                        .defaultAnswer(CALLS_REAL_METHODS));
-    }
+
 
     private static class MockAction extends BaseAction {
 
@@ -221,76 +202,7 @@ public class HttpServerHandlerTest {
         }
     }
 
-    private static class MockExecutor implements Executor {
 
-        private boolean rejectExecute = false;
-        private final LinkedList<Runnable> pendingTasks = new LinkedList<>();
 
-        public void setRejectExecute(boolean rejectExecute) {
-            this.rejectExecute = rejectExecute;
-        }
 
-        int pendingTaskCount() {
-            return pendingTasks.size();
-        }
-
-        @Override
-        public void execute(Runnable runnable) {
-            if (rejectExecute) {
-                throw new RejectedExecutionException("mock reject");
-            }
-            pendingTasks.add(runnable);
-        }
-
-        public void runOneTask() {
-            if (!pendingTasks.isEmpty()) {
-                pendingTasks.pollFirst().run();
-            }
-        }
-    }
-
-    private abstract static class MockChannelHandlerContext implements ChannelHandlerContext {
-
-        private final Channel channel;
-        private final ChannelFuture channelFuture;
-        private final ConcurrentLinkedQueue<Object> responses = new ConcurrentLinkedQueue<>();
-        private volatile boolean flushed = false;
-
-        public MockChannelHandlerContext() {
-            Attribute attribute = mock(Attribute.class);
-            when(attribute.get()).thenReturn(null);
-            this.channel = mock(Channel.class);
-            when(channel.attr(same(HTTP_CONNECT_CONTEXT_ATTRIBUTE_KEY))).thenReturn(attribute);
-            this.channelFuture = mock(ChannelFuture.class);
-        }
-
-        @Override
-        public ChannelHandlerContext flush() {
-            this.flushed = true;
-            return this;
-        }
-
-        public boolean isFlushed() {
-            return flushed;
-        }
-
-        @Override
-        public ChannelFuture writeAndFlush(Object object) {
-            responses.add(object);
-            return channelFuture;
-        }
-
-        @Override
-        public Channel channel() {
-            return channel;
-        }
-
-        public int numResponses() {
-            return responses.size();
-        }
-
-        public Object pollResponse() {
-            return responses.poll();
-        }
-    }
 }

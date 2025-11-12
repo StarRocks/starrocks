@@ -541,7 +541,7 @@ public class ShowMaterializedViewStatus {
         long mvRefreshStartTime = firstTaskRunStatus.getProcessStartTime();
         status.setMvRefreshProcessTime(mvRefreshStartTime);
 
-        /// last refresh job id
+        // last refresh job id
         status.setJobId(lastTaskRunStatus.getStartTaskRunId());
 
         // last refresh state

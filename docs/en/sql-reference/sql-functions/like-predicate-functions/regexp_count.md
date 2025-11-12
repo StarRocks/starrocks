@@ -6,7 +6,7 @@ import Tip from '../../../_assets/commonMarkdown/quickstart-shared-nothing-tip.m
 
 # regexp_count
 
-This function counts the number of times a pattern occurs in a string. It returns the number of occurrences of the regular expression pattern in the target string.
+Counts the number of times a pattern occurs in a string. It returns the number of occurrences of the regular expression pattern in the target string.
 
 ## Syntax
 
@@ -16,9 +16,9 @@ INT regexp_count(VARCHAR str, VARCHAR pattern)
 
 ## Parameters
 
-- `str`: the string to search in. Can be of any length. If the input is NULL, NULL is returned.
+- `str`: The string to search in. Supported data type is VARCHAR. If the input is NULL, NULL is returned.
 
-- `pattern`: the regular expression pattern to search for. If the pattern is NULL, NULL is returned.
+- `pattern`: The regular expression pattern to search for. Supported data type is VARCHAR. If the pattern is NULL, NULL is returned.
 
 ## Return value
 

@@ -29,12 +29,12 @@ public class MVTaskRunExtraMessageTest {
     public void testMessageWithNormalMVPartitionsToRefresh() {
         MVTaskRunExtraMessage extraMessage = new MVTaskRunExtraMessage();
         Set<String> mvPartitionsToRefresh = Sets.newHashSet();
-        for (int i = 0; i < 10; i++) {
+        for (int i = 0; i < Config.max_mv_task_run_meta_message_values_length; i++) {
             mvPartitionsToRefresh.add("partition" + i);
         }
         extraMessage.setMvPartitionsToRefresh(mvPartitionsToRefresh);
         Assertions.assertTrue(extraMessage.getMvPartitionsToRefresh().size() ==
-                10);
+                Config.max_mv_task_run_meta_message_values_length);
     }
 
     @Test
@@ -52,7 +52,7 @@ public class MVTaskRunExtraMessageTest {
     @Test
     public void testMessageWithNormalRefBasePartitionsToRefreshMap() {
         Map<String, Set<String>> refBasePartitionsToRefreshMap = Maps.newHashMap();
-        for (int i = 0; i < 15; i++) {
+        for (int i = 0; i < Config.max_mv_task_run_meta_message_values_length; i++) {
             Set<String> partitions = Sets.newHashSet();
             for (int j = 0; j < 10; j++) {
                 partitions.add("partition" + j);
@@ -61,7 +61,8 @@ public class MVTaskRunExtraMessageTest {
         }
         MVTaskRunExtraMessage message = new MVTaskRunExtraMessage();
         message.setRefBasePartitionsToRefreshMap(refBasePartitionsToRefreshMap);
-        Assertions.assertTrue(message.getRefBasePartitionsToRefreshMap().size() == 15);
+        Assertions.assertEquals(message.getRefBasePartitionsToRefreshMap().size(),
+                Config.max_mv_task_run_meta_message_values_length);
     }
 
     @Test
@@ -92,7 +93,8 @@ public class MVTaskRunExtraMessageTest {
         }
         MVTaskRunExtraMessage message = new MVTaskRunExtraMessage();
         message.setBasePartitionsToRefreshMap(basePartitionsToRefreshMap);
-        Assertions.assertTrue(message.getBasePartitionsToRefreshMap().size() == 15);
+        Assertions.assertEquals(message.getBasePartitionsToRefreshMap().size(),
+                Config.max_mv_task_run_meta_message_values_length);
     }
 
     @Test

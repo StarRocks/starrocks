@@ -16,7 +16,7 @@
 package com.starrocks.sql.optimizer.operator.scalar;
 
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Type;
+import com.starrocks.type.Type;
 
 import java.util.Objects;
 
@@ -80,6 +80,6 @@ public class CastOperator extends CallOperator {
 
     @Override
     public <R, C> R accept(ScalarOperatorVisitor<R, C> visitor, C context) {
-        return visitor.visitCastOperator(this, context);
+        return  visitor.visitCastOperator(this, context);
     }
 }

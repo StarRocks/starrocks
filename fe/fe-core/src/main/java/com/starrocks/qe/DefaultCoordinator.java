@@ -38,7 +38,6 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.catalog.FsBroker;
@@ -62,6 +61,7 @@ import com.starrocks.connector.exception.RemoteFileNotFoundException;
 import com.starrocks.datacache.DataCacheSelectMetrics;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.MysqlCommand;
+import com.starrocks.planner.DescriptorTable;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.ResultSink;
@@ -176,17 +176,17 @@ public class DefaultCoordinator extends Coordinator {
         @Override
         public DefaultCoordinator createQueryScheduler(ConnectContext context, List<PlanFragment> fragments,
                                                        List<ScanNode> scanNodes,
-                                                       TDescriptorTable descTable) {
+                                                       TDescriptorTable descTable, ExecPlan execPlan) {
             JobSpec jobSpec =
-                    JobSpec.Factory.fromQuerySpec(context, fragments, scanNodes, descTable, TQueryType.SELECT);
+                    JobSpec.Factory.fromQuerySpec(context, fragments, scanNodes, descTable, TQueryType.SELECT, execPlan);
             return new DefaultCoordinator(context, jobSpec);
         }
 
         @Override
         public DefaultCoordinator createInsertScheduler(ConnectContext context, List<PlanFragment> fragments,
                                                         List<ScanNode> scanNodes,
-                                                        TDescriptorTable descTable) {
-            JobSpec jobSpec = JobSpec.Factory.fromQuerySpec(context, fragments, scanNodes, descTable, TQueryType.LOAD);
+                                                        TDescriptorTable descTable, ExecPlan execPlan) {
+            JobSpec jobSpec = JobSpec.Factory.fromQuerySpec(context, fragments, scanNodes, descTable, TQueryType.LOAD, execPlan);
             return new DefaultCoordinator(context, jobSpec);
         }
 
@@ -239,27 +239,10 @@ public class DefaultCoordinator extends Coordinator {
         public DefaultCoordinator createRefreshDictionaryCacheScheduler(ConnectContext context, TUniqueId queryId,
                                                                         DescriptorTable descTable,
                                                                         List<PlanFragment> fragments,
-                                                                        List<ScanNode> scanNodes) {
+                                                                        List<ScanNode> scanNodes, ExecPlan execPlan) {
 
-            JobSpec jobSpec = JobSpec.Factory.fromRefreshDictionaryCacheSpec(context, queryId, descTable, fragments,
-                    scanNodes);
-            return new DefaultCoordinator(context, jobSpec);
-        }
-
-        @Override
-        public DefaultCoordinator createNonPipelineBrokerLoadScheduler(Long jobId, TUniqueId queryId,
-                                                                       DescriptorTable descTable,
-                                                                       List<PlanFragment> fragments,
-                                                                       List<ScanNode> scanNodes,
-                                                                       String timezone,
-                                                                       long startTime,
-                                                                       Map<String, String> sessionVariables,
-                                                                       ConnectContext context, long execMemLimit,
-                                                                       long warehouseId) {
-            JobSpec jobSpec = JobSpec.Factory.fromNonPipelineBrokerLoadJobSpec(context, jobId, queryId, descTable,
-                    fragments, scanNodes, timezone,
-                    startTime, sessionVariables, execMemLimit, warehouseId);
-
+            JobSpec jobSpec = JobSpec.Factory.fromRefreshDictionaryCacheSpec(
+                    context, queryId, descTable, fragments, scanNodes, execPlan);
             return new DefaultCoordinator(context, jobSpec);
         }
     }
@@ -308,7 +291,7 @@ public class DefaultCoordinator extends Coordinator {
         shortCircuitExecutor =
                 ShortCircuitExecutor.create(context, fragments, scanNodes, descTable, isBinaryRow,
                         jobSpec.isNeedReport(),
-                        jobSpec.getPlanProtocol(), coordinatorPreprocessor.getWorkerProvider());
+                        jobSpec.getPlanProtocol(), coordinatorPreprocessor.getLazyWorkerProvider());
 
         if (null != shortCircuitExecutor) {
             isShortCircuit = true;
@@ -575,6 +558,8 @@ public class DefaultCoordinator extends Coordinator {
             deliverExecFragments(option);
         }
 
+        scheduler.continueSchedule(option);
+
         // Prevent `explain scheduler` from waiting until the profile timeout.
         if (!option.doDeploy) {
             queryProfile.finishAllInstances(Status.OK);
@@ -587,7 +572,7 @@ public class DefaultCoordinator extends Coordinator {
             scheduler.tryScheduleNextTurn(fragmentInstanceId);
         } catch (Exception e) {
             LOG.warn("schedule fragment:{} next internal error:", DebugUtil.printId(fragmentInstanceId), e);
-            cancel(PPlanFragmentCancelReason.INTERNAL_ERROR, e.getMessage());
+            cancel(PPlanFragmentCancelReason.INTERNAL_ERROR, FeConstants.SCHEDULE_FRAGMENT_ERROR + e.getMessage());
             return Status.internalError(e.getMessage());
         }
         return Status.OK;
@@ -1007,6 +992,11 @@ public class DefaultCoordinator extends Coordinator {
     public void cancel(PPlanFragmentCancelReason reason, String message) {
         lock();
         try {
+            // All results have been obtained. The query has ended. Ignore this error.
+            if (returnedAllResults) {
+                cancelInternal(PPlanFragmentCancelReason.QUERY_FINISHED);
+                return;
+            }
             if (!queryStatus.ok()) {
                 // we can't cancel twice
                 return;
@@ -1020,10 +1010,10 @@ public class DefaultCoordinator extends Coordinator {
             try {
                 // Disable count down profileDoneSignal for collect all backend's profile
                 // but if backend has crashed, we need count down profileDoneSignal since it will not report by itself
-                if (message.equals(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR)) {
+                if (message.equals(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR) ||
+                        message.startsWith(FeConstants.SCHEDULE_FRAGMENT_ERROR)) {
                     queryProfile.finishAllInstances(Status.OK);
-                    LOG.info("count down profileDoneSignal since backend has crashed, query id: {}",
-                            DebugUtil.printId(jobSpec.getQueryId()));
+
                 }
             } finally {
                 unlock();
@@ -1053,6 +1043,10 @@ public class DefaultCoordinator extends Coordinator {
             // count down to zero to notify all objects waiting for this
             if (!connectContext.isProfileEnabled()) {
                 queryProfile.finishAllInstances(Status.OK);
+                List<String> unFinishedInstanceIds = queryProfile.getUnfinishedInstanceIds();
+                if (!unFinishedInstanceIds.isEmpty()) {
+                    LOG.info("query: {} has unfinished instances: {}", connectContext.queryId, unFinishedInstanceIds);
+                }
             }
         }
     }

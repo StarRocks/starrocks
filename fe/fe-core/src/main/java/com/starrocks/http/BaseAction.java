@@ -51,7 +51,6 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
-import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelProgressiveFuture;
 import io.netty.channel.ChannelProgressiveFutureListener;
 import io.netty.channel.DefaultFileRegion;
@@ -120,6 +119,10 @@ public abstract class BaseAction implements IAction {
     }
 
     public abstract void execute(BaseRequest request, BaseResponse response) throws DdlException, AccessDeniedException;
+
+    public boolean isSqlAction() {
+        return false;
+    }
 
     protected void writeResponse(BaseRequest request, BaseResponse response, HttpResponseStatus status) {
         // if (HttpHeaders.is100ContinueExpected(request.getRequest())) {
@@ -272,9 +275,6 @@ public abstract class BaseAction implements IAction {
         for (Cookie cookie : response.getCookies()) {
             responseObj.headers().add(HttpHeaderNames.SET_COOKIE.toString(), ServerCookieEncoder.LAX.encode(cookie));
         }
-    }
-
-    protected void handleChannelInactive(ChannelHandlerContext ctx) {
     }
 
     public static class ActionAuthorizationInfo {

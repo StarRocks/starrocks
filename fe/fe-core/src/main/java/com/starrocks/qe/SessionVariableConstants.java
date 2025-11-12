@@ -39,6 +39,12 @@ public class SessionVariableConstants {
     public static final String ALWAYS = "always";
 
     public static final String NEVER = "never";
+    public static final String ELASTIC = "elastic";
+    public static final String BALANCE = "balance";
+
+    public static final String ETL = "etl";
+    public static final String DEFAULT = "default";
+
 
     public enum ChooseInstancesMode {
 

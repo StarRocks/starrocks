@@ -45,6 +45,7 @@ ChunksSorter::ChunksSorter(RuntimeState* state, const std::vector<ExprContext*>*
           _sort_desc(*is_asc, *is_null_first),
           _sort_keys(std::move(sort_keys)),
           _is_topn(is_topn) {
+    set_use_german_string(state->enable_full_sort_use_german_string());
     DCHECK(_sort_exprs != nullptr);
     DCHECK(is_asc != nullptr);
     DCHECK(is_null_first != nullptr);
@@ -62,6 +63,7 @@ void ChunksSorter::setup_runtime(RuntimeState* state, RuntimeProfile* profile, M
     _sort_cnt = ADD_COUNTER(profile, "SortingCnt", TUnit::UNIT);
     profile->add_info_string("SortKeys", _sort_keys);
     profile->add_info_string("SortType", _is_topn ? "TopN" : "All");
+    profile->add_info_string("UseGermanString", is_use_german_string() ? "True" : "False");
 }
 
 StatusOr<ChunkPtr> ChunksSorter::materialize_chunk_before_sort(Chunk* chunk, TupleDescriptor* materialized_tuple_desc,

@@ -64,7 +64,7 @@ DUPLICATE KEY(`k`, `v`)
 PARTITION BY date_trunc('day', k)
 DISTRIBUTED BY RANDOM
 PROPERTIES (
-"bucket_size" = "4294967296",
+"bucket_size" = "1073741824",
 "compression" = "LZ4",
 "fast_schema_evolution" = "true",
 "replicated_storage" = "true",
@@ -103,7 +103,7 @@ PARTITION BY RANGE(`k`)
 (PARTITION p1 VALUES [("-2147483648"), ("0")))
 DISTRIBUTED BY RANDOM BUCKETS 10
 PROPERTIES (
-"bucket_size" = "4294967296",
+"bucket_size" = "1073741824",
 "compression" = "LZ4",
 "fast_schema_evolution" = "true",
 "replicated_storage" = "true",
@@ -125,7 +125,7 @@ PARTITION BY RANGE(`k`)
 PARTITION p2 VALUES [("0"), ("20")))
 DISTRIBUTED BY RANDOM BUCKETS 10
 PROPERTIES (
-"bucket_size" = "4294967296",
+"bucket_size" = "1073741824",
 "compression" = "LZ4",
 "fast_schema_evolution" = "true",
 "replicated_storage" = "true",
@@ -148,7 +148,7 @@ PARTITION p2 VALUES [("0"), ("20")),
 PARTITION p3 VALUES [("20"), ("30")))
 DISTRIBUTED BY RANDOM BUCKETS 10
 PROPERTIES (
-"bucket_size" = "4294967296",
+"bucket_size" = "1073741824",
 "compression" = "LZ4",
 "fast_schema_evolution" = "true",
 "replicated_storage" = "true",
@@ -172,7 +172,7 @@ PARTITION p3 VALUES [("20"), ("30")),
 PARTITION p4 VALUES [("30"), ("40")))
 DISTRIBUTED BY RANDOM BUCKETS 10
 PROPERTIES (
-"bucket_size" = "4294967296",
+"bucket_size" = "1073741824",
 "compression" = "LZ4",
 "fast_schema_evolution" = "true",
 "replicated_storage" = "true",
@@ -215,7 +215,7 @@ t3	CREATE TABLE `t3` (
 DUPLICATE KEY(`k`)
 DISTRIBUTED BY RANDOM BUCKETS 10
 PROPERTIES (
-"bucket_size" = "4294967296",
+"bucket_size" = "1073741824",
 "compression" = "LZ4",
 "fast_schema_evolution" = "true",
 "replicated_storage" = "true",
@@ -237,7 +237,7 @@ t5	CREATE TABLE `t5` (
 DUPLICATE KEY(`k`, `v`)
 DISTRIBUTED BY RANDOM BUCKETS 10
 PROPERTIES (
-"bucket_size" = "4294967296",
+"bucket_size" = "1073741824",
 "compression" = "LZ4",
 "fast_schema_evolution" = "true",
 "replicated_storage" = "true",
@@ -265,7 +265,7 @@ PARTITION BY RANGE(`k`)
 (PARTITION p1 VALUES [("-2147483648"), ("0")))
 DISTRIBUTED BY RANDOM BUCKETS 10
 PROPERTIES (
-"bucket_size" = "4294967296",
+"bucket_size" = "1073741824",
 "compression" = "LZ4",
 "fast_schema_evolution" = "true",
 "replicated_storage" = "true",

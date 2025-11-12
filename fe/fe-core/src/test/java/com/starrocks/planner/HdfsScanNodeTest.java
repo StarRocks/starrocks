@@ -14,8 +14,6 @@
 
 package com.starrocks.planner;
 
-import com.starrocks.analysis.TupleDescriptor;
-import com.starrocks.analysis.TupleId;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.connector.CatalogConnector;
 import com.starrocks.credential.CloudConfiguration;
@@ -47,5 +45,6 @@ public class HdfsScanNodeTest {
         TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
         desc.setTable(table);
         HdfsScanNode scanNode = new HdfsScanNode(new PlanNodeId(0), desc, "XXX");
+        scanNode.setReachLimit();
     }
 }

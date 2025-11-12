@@ -15,14 +15,14 @@
 
 package com.starrocks.sql.optimizer.statistics;
 
-import com.starrocks.analysis.BinaryType;
-import com.starrocks.catalog.Type;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.statistic.StatisticUtils;
+import com.starrocks.type.Type;
 
 import java.util.ArrayList;
 import java.util.HashMap;

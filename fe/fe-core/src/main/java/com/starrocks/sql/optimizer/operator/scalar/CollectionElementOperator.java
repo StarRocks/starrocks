@@ -17,8 +17,8 @@ package com.starrocks.sql.optimizer.operator.scalar;
 
 import com.google.common.base.Objects;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.type.Type;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -73,7 +73,7 @@ public class CollectionElementOperator extends ArgsScalarOperator {
 
     @Override
     public <R, C> R accept(ScalarOperatorVisitor<R, C> visitor, C context) {
-        return visitor.visitCollectionElement(this, context);
+        return  visitor.visitCollectionElement(this, context);
     }
 
     @Override

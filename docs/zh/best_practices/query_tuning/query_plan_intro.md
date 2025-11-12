@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 10
+keywords: ['cha xun']
 ---
 
 # 查询调优简介

@@ -277,9 +277,9 @@ TEST(QueryContextManagerTest, testSetWorkgroup) {
     auto query_ctx_mgr = std::make_shared<QueryContextManager>(6);
     ASSERT_TRUE(query_ctx_mgr->init().ok());
 
-    workgroup::WorkGroupPtr wg = std::make_shared<workgroup::WorkGroup>("wg1", 1, 1, 1, 1, 1 /* concurrency_limit */,
-                                                                        1.0 /* spill_mem_limit_threshold */,
-                                                                        workgroup::WorkGroupType::WG_NORMAL);
+    workgroup::WorkGroupPtr wg = std::make_shared<workgroup::WorkGroup>(
+            "wg1", 1, 1, 1, 1, 1 /* concurrency_limit */, 1.0 /* spill_mem_limit_threshold */,
+            workgroup::WorkGroupType::WG_NORMAL, workgroup::WorkGroup::DEFAULT_MEM_POOL);
 
     auto* query_ctx1 = gen_query_ctx(parent_mem_tracker.get(), query_ctx_mgr.get(), 0, 1, 3, 60, 300);
     auto* query_ctx_overloaded = gen_query_ctx(parent_mem_tracker.get(), query_ctx_mgr.get(), 1, 2, 3, 60, 300);
@@ -325,6 +325,13 @@ TEST(QueryContextManagerTest, testSetWorkgroup) {
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
     ASSERT_FALSE(query_ctx_mgr->remove(query_id2)); // Trigger _clean_slot.
     ASSERT_EQ(0, wg->num_running_queries());
+}
+
+TEST(QueryContextManagerTest, testReadStats) {
+    QueryContext ctx;
+    ctx.incr_read_stats(100, 200);
+    ASSERT_EQ(100, ctx.get_read_local_cnt());
+    ASSERT_EQ(200, ctx.get_read_remote_cnt());
 }
 
 } // namespace starrocks::pipeline

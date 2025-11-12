@@ -1,0 +1,20 @@
+-- name: test_delete_dupkey_rename
+CREATE TABLE `test_delete_dup_rename` (
+    `name1` varchar(255)
+) ENGINE=OLAP
+DUPLICATE KEY(`name1`)
+DISTRIBUTED BY HASH(`name1`) BUCKETS 2
+PROPERTIES (
+"replication_num" = "1"
+);
+
+INSERT INTO test_delete_dup_rename VALUES ("mon"), ("tue");
+SELECT name1 FROM test_delete_dup_rename;
+DELETE FROM test_delete_dup_rename where name1 = "mon";
+SELECT name1 from test_delete_dup_rename;
+ALTER TABLE test_delete_dup_rename RENAME COLUMN name1 TO name2;
+INSERT INTO test_delete_dup_rename VALUES ("wed"), ("thu");
+DELETE FROM test_delete_dup_rename WHERE name2 = "tue";
+SELECT * FROM test_delete_dup_rename;
+DELETE FROM test_delete_dup_rename WHERE name2 = "wed";
+SELECT * FROM test_delete_dup_rename;

@@ -43,6 +43,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
+import com.starrocks.common.ErrorCode;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.util.FrontendDaemon;
@@ -215,7 +216,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
      *
      * @return the thread pool executor
      */
-    private @NotNull ThreadPoolExecutor getLakeTaskExecutor() {
+    public @NotNull ThreadPoolExecutor getLakeTaskExecutor() {
         if (lakeTaskExecutor == null) {
             int numThreads = getOrFixLakeTaskExecutorThreadPoolMaxSizeConfig();
             lakeTaskExecutor =
@@ -333,8 +334,21 @@ public class PublishVersionDaemon extends FrontendDaemon {
             }
 
             if (shouldFinishTxn) {
-                globalTransactionMgr.finishTransaction(transactionState.getDbId(), transactionState.getTransactionId(),
-                        publishErrorReplicaIds);
+                try {
+                    // Attempt to finish the transaction with a lock timeout. If it fails, it will be retried in the next cycle.
+                    // This approach prevents blocking subsequent transactions due to the current one.
+                    globalTransactionMgr.finishTransaction(transactionState.getDbId(),
+                            transactionState.getTransactionId(), publishErrorReplicaIds,
+                            Config.finish_transaction_default_lock_timeout_ms);
+                } catch (StarRocksException exception) {
+                    if (exception.getErrorCode() == ErrorCode.ERR_LOCK_ERROR) {
+                        LOG.warn("Fail to get lock to finish transaction {}, error: {}. Will retry later",
+                                transactionState.getTransactionId(), exception.getMessage());
+                        continue;
+                    } else {
+                        throw exception;
+                    }
+                }
                 if (transactionState.getTransactionStatus() != TransactionStatus.VISIBLE) {
                     transactionState.updateSendTaskTime();
                     LOG.debug("publish version for transaction {} failed, has {} error replicas during publish",
@@ -469,6 +483,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
             return CompletableFuture.completedFuture(null);
         }
 
+        txnState.setHasSendTask(true);
         CompletableFuture<Boolean> publishFuture;
         Collection<TableCommitInfo> tableCommitInfos = txnState.getIdToTableCommitInfos().values();
         if (tableCommitInfos.size() == 1) {
@@ -487,6 +502,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
         return publishFuture.thenAccept(success -> {
             if (success) {
                 try {
+                    txnState.updatePublishTaskFinishTime();
                     globalTransactionMgr.finishTransaction(dbId, txnId, null);
                 } catch (StarRocksException e) {
                     throw new RuntimeException(e);
@@ -528,8 +544,11 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 LOG.info("partition is null in publish partition batch");
                 return true;
             }
-            if (partition.getVisibleVersion() + 1 != versions.get(0)) {
-                LOG.error("publish partition batch partition.getVisibleVersion() + 1 != version.get(0)" + " "
+
+            // this can happen when the table is doing schema change
+            if (partition.getVisibleVersion() + 1 != versions.get(0) && publishVersionData.getTransactionStates().get(0).
+                    getSourceType() != TransactionState.LoadJobSourceType.REPLICATION) {
+                LOG.debug("publish partition batch partition.getVisibleVersion() + 1 != version.get(0)" + " "
                         + partition.getId() + " " + partition.getVisibleVersion() + " " + versions.get(0));
                 return false;
             }
@@ -613,6 +632,11 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 stateBatch.putBeTablets(partitionId, nodeToTablets);
             }
         } catch (Exception e) {
+            for (int i = 0; i < transactionStates.size(); i++) {
+                TransactionState txnState = transactionStates.get(i);
+                // Avoid holding txn write lock here; setting errMsg is best-effort for diagnostics
+                txnState.setErrorMsg("Fail to publish partition " + partitionId + " error " + e.getMessage());
+            }
             LOG.error("Fail to publish partition {} of txnIds {}:", partitionId,
                     txnInfos.stream().map(i -> i.txnId).collect(Collectors.toList()), e);
             return false;
@@ -707,6 +731,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
         List<TransactionState> states = txnStateBatch.getTransactionStates();
         Map<Long, PartitionPublishVersionData> publishVersionDataMap = new HashMap<>();
 
+        states.forEach(state -> state.setHasSendTask(true));
         for (TransactionState state : states) {
             TableCommitInfo tableCommitInfo = Objects.requireNonNull(state.getTableCommitInfo(tableId));
             Map<Long, PartitionCommitInfo> partitionCommitInfoMap = tableCommitInfo.getIdToPartitionCommitInfo();
@@ -764,6 +789,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
         return publishFuture.thenAccept(success -> {
             if (success) {
                 try {
+                    states.forEach(TransactionState::updatePublishTaskFinishTime);
                     globalTransactionMgr.finishTransactionBatch(dbId, txnStateBatch, null);
                     // here create the job to drop txnLog, for the visibleVersion has been updated
                     submitDeleteTxnLogJob(txnStateBatch);
@@ -892,6 +918,9 @@ public class PublishVersionDaemon extends FrontendDaemon {
             }
             return true;
         } catch (Throwable e) {
+            // Avoid holding txn write lock here; setting errMsg is best-effort for diagnostics
+            txnState.setErrorMsg("Fail to publish partition " + partitionCommitInfo.getPhysicalPartitionId()
+                    + " error " + e.getMessage());
             // prevent excessive logging
             if (partitionCommitInfo.getVersionTime() < 0 &&
                     Math.abs(partitionCommitInfo.getVersionTime()) + 10000 < System.currentTimeMillis()) {

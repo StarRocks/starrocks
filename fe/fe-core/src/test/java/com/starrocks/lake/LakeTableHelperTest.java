@@ -30,7 +30,6 @@ import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -40,6 +39,7 @@ import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.type.Type;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
@@ -249,5 +249,27 @@ public class LakeTableHelperTest {
         result = LakeTableHelper.extractIdFromPath("s3://bucket/path/12345");
         Assertions.assertTrue(result.isPresent());
         Assertions.assertEquals(12345L, result.get().longValue());
+    }
+
+    @Test
+    public void testIsTransactionSupportCombinedTxnLog() {
+        Assertions.assertTrue(LakeTableHelper.isTransactionSupportCombinedTxnLog(
+                    TransactionState.LoadJobSourceType.BACKEND_STREAMING));
+        Assertions.assertTrue(LakeTableHelper.isTransactionSupportCombinedTxnLog(
+                    TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK));
+        Assertions.assertTrue(LakeTableHelper.isTransactionSupportCombinedTxnLog(
+                    TransactionState.LoadJobSourceType.INSERT_STREAMING));
+        Assertions.assertTrue(LakeTableHelper.isTransactionSupportCombinedTxnLog(
+                    TransactionState.LoadJobSourceType.BATCH_LOAD_JOB));
+        Assertions.assertTrue(LakeTableHelper.isTransactionSupportCombinedTxnLog(
+                    TransactionState.LoadJobSourceType.LAKE_COMPACTION));
+        Assertions.assertFalse(LakeTableHelper.isTransactionSupportCombinedTxnLog(
+                    TransactionState.LoadJobSourceType.FRONTEND_STREAMING));
+        Assertions.assertFalse(LakeTableHelper.isTransactionSupportCombinedTxnLog(
+                    TransactionState.LoadJobSourceType.BYPASS_WRITE));
+        Assertions.assertFalse(LakeTableHelper.isTransactionSupportCombinedTxnLog(
+                    TransactionState.LoadJobSourceType.DELETE));
+        Assertions.assertFalse(LakeTableHelper.isTransactionSupportCombinedTxnLog(
+                    TransactionState.LoadJobSourceType.MV_REFRESH));
     }
 }

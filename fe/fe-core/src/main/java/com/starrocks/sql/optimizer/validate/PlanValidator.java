@@ -21,6 +21,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.task.TaskContext;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -31,20 +32,33 @@ public final class PlanValidator {
 
     private static final Logger LOGGER = LogManager.getLogger(PlanValidator.class);
 
-    private static final PlanValidator INSTANCE = new PlanValidator();
+    private List<Checker> checkerList;
+    private boolean enableInputDependenciesChecker = false;
 
-    private final List<Checker> checkerList;
-
-    private PlanValidator() {
-        checkerList = ImmutableList.of(
-                InputDependenciesChecker.getInstance(),
-                TypeChecker.getInstance(),
-                CTEUniqueChecker.getInstance(),
-                ColumnReuseChecker.getInstance());
+    public PlanValidator() {
+        checkerList = ImmutableList.of(CTEUniqueChecker.getInstance());
     }
 
-    public static PlanValidator getInstance() {
-        return INSTANCE;
+    /**
+     * Enable inputDependencies checker for rule transformation phase.
+     * This method should be called after column pruning to ensure InputDependenciesChecker
+     * can properly validate column dependencies in the optimized plan.
+     */
+    public void enableInputDependenciesChecker() {
+        if (!enableInputDependenciesChecker) {
+            checkerList = ImmutableList.of(
+                    CTEUniqueChecker.getInstance(),
+                    InputDependenciesChecker.getInstance());
+            enableInputDependenciesChecker = true;
+        }
+    }
+
+    public void enableAllCheckers() {
+        checkerList = ImmutableList.of(
+                TypeChecker.getInstance(),
+                CTEUniqueChecker.getInstance(),
+                InputDependenciesChecker.getInstance(),
+                ColumnReuseChecker.getInstance());
     }
 
     public void validatePlan(OptExpression optExpression, TaskContext taskContext) {
@@ -58,7 +72,7 @@ public final class PlanValidator {
         } catch (IllegalArgumentException e) {
             String message = e.getMessage();
             if (!message.contains("Invalid plan")) {
-                message = "Invalid plan:\n" + optExpression.debugString() + message;
+                message = "Invalid plan:\n" + optExpression.debugString() + "\n" + message;
             }
             LOGGER.debug("Failed to validate plan.", e);
             if (enablePlanValidation) {
@@ -76,6 +90,44 @@ public final class PlanValidator {
             }
         }
     }
+
+    /**
+     * Validates the query plan after applying an optimizer rule for debugging purposes.
+     * Provides detailed error information including rule name and before/after expressions.
+     * 
+     * @param beforeExpression The query plan expression before rule transformation
+     * @param afterExpression The query plan expression after rule transformation
+     * @param rule The optimizer rule that was applied
+     * @param taskContext The task context containing session variables
+     * @throws IllegalStateException if validation fails, with detailed rule information
+     */
+    public static void validateAfterRule(OptExpression beforeExpression, OptExpression afterExpression, 
+                                       Rule rule, TaskContext taskContext) {
+        if (!taskContext.getOptimizerContext().getSessionVariable().enableOptimizerRuleDebug()) {
+            return;
+        }
+        
+        try {
+            OptExpression clonedOpt = OptExpression.create(afterExpression.getOp(), afterExpression.getInputs());
+            clonedOpt.clearStatsAndInitOutputInfo();
+            taskContext.getPlanValidator().validatePlan(clonedOpt, taskContext);
+        } catch (Exception e) {
+            String errorMsg = String.format("Optimizer rule debug: Plan validation failed after applying rule [%s].\n" +
+                            "Validation error: %s\n" +
+                            "Hint: This error was caught by enable_optimizer_rule_debug=true\n" +
+                            "\n=== Query Plan Before Rule Application ===\n%s\n" +
+                            "\n=== Query Plan After Rule Application ===\n%s\n",
+                    rule.type(),
+                    e.getMessage(),
+                    beforeExpression.debugString(),
+                    afterExpression.debugString()
+            );
+            LOGGER.error(errorMsg, e);
+            
+            throw new IllegalStateException(errorMsg, e);
+        }
+    }
+
 
     public interface Checker {
         void validate(OptExpression physicalPlan, TaskContext taskContext);

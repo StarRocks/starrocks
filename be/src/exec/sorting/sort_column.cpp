@@ -80,7 +80,8 @@ static Status sort_and_tie_helper(const std::atomic<bool>& cancel, const Column*
 }
 
 static Status sort_and_tie_column(const std::atomic<bool>& cancel, const Column* column, const SortDesc& sort_desc,
-                                  SmallPermutation& permutation, Tie& tie, Ranges&& ranges, bool build_tie);
+                                  SmallPermutation& permutation, Tie& tie, Ranges&& ranges, bool build_tie,
+                                  const SortDescs* sort_descs = nullptr);
 
 template <class NullPred>
 static Status sort_and_tie_helper_nullable(const std::atomic<bool>& cancel, const NullableColumn* column,
@@ -118,7 +119,7 @@ public:
             return column.data_column_ref().accept(this);
         }
 
-        const NullData& null_data = column.immutable_null_column_data();
+        const auto null_data = column.immutable_null_column_data();
 
         auto null_pred = [&](const SmallPermuteItem& item) -> bool {
             if (_sort_desc.is_null_first()) {
@@ -170,16 +171,29 @@ public:
             DCHECK_GE(column.size(), _permutation.size());
         }
 
-        using ItemType = InlinePermuteItem<Slice>;
-        auto cmp = [&](const ItemType& lhs, const ItemType& rhs) -> int {
-            return lhs.inline_value.compare(rhs.inline_value);
-        };
+        if (_use_german_string) {
+            using ItemType = InlinePermuteItem<GermanString>;
+            auto cmp = [&](const ItemType& lhs, const ItemType& rhs) -> int {
+                return lhs.inline_value.compare(rhs.inline_value);
+            };
 
-        auto inlined = create_inline_permutation<Slice, IS_RANGES>(_permutation, column.get_proxy_data());
-        RETURN_IF_ERROR(sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), inlined, _tie, cmp,
-                                            _range_or_ranges, _build_tie));
-        restore_inline_permutation(inlined, _permutation);
+            auto inlined =
+                    create_inline_permutation<GermanString, IS_RANGES>(_permutation, column.get_german_strings());
 
+            RETURN_IF_ERROR(sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), inlined, _tie, cmp,
+                                                _range_or_ranges, _build_tie));
+            restore_inline_permutation(inlined, _permutation);
+        } else {
+            using ItemType = InlinePermuteItem<Slice>;
+            auto cmp = [&](const ItemType& lhs, const ItemType& rhs) -> int {
+                return lhs.inline_value.compare(rhs.inline_value);
+            };
+
+            auto inlined = create_inline_permutation<Slice, IS_RANGES>(_permutation, column.get_proxy_data());
+            RETURN_IF_ERROR(sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), inlined, _tie, cmp,
+                                                _range_or_ranges, _build_tie));
+            restore_inline_permutation(inlined, _permutation);
+        }
         return Status::OK();
     }
 
@@ -194,7 +208,7 @@ public:
             return SorterComparator<T>::compare(lhs.inline_value, rhs.inline_value);
         };
 
-        auto inlined = create_inline_permutation<T, IS_RANGES>(_permutation, column.get_data());
+        auto inlined = create_inline_permutation<T, IS_RANGES>(_permutation, column.immutable_data());
         RETURN_IF_ERROR(sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), inlined, _tie, cmp,
                                             _range_or_ranges, _build_tie));
         restore_inline_permutation(inlined, _permutation);
@@ -218,6 +232,8 @@ public:
                                    _build_tie);
     }
 
+    void use_german_string(bool flag) { _use_german_string = flag; }
+
 private:
     const std::atomic<bool>& _cancel;
     const SortDesc& _sort_desc;
@@ -225,6 +241,7 @@ private:
     Tie& _tie;
     R _range_or_ranges;
     bool _build_tie;
+    bool _use_german_string = false;
 };
 
 // Sort multiple a column from multiple chunks(vertical column)
@@ -247,17 +264,17 @@ public:
     size_t get_limited() const { return _pruned_limit; }
 
     Status do_visit(const NullableColumn& column) {
-        std::vector<const NullData*> null_datas;
+        std::vector<ImmutableNullData> null_datas;
         Columns data_columns;
         for (auto& col : _vertical_columns) {
             auto real = down_cast<const NullableColumn*>(col.get());
-            null_datas.push_back(&real->immutable_null_column_data());
+            null_datas.push_back(real->immutable_null_column_data());
             data_columns.push_back(real->data_column());
         }
 
         if (_sort_desc.is_null_first()) {
             auto null_pred = [&](const PermutationItem& item) -> bool {
-                return (*null_datas[item.chunk_index])[item.index_in_chunk] == 1;
+                return null_datas[item.chunk_index][item.index_in_chunk] == 1;
             };
 
             RETURN_IF_ERROR(sort_and_tie_helper_nullable_vertical(_cancel, data_columns, null_pred, _sort_desc,
@@ -265,7 +282,7 @@ public:
                                                                   &_pruned_limit));
         } else {
             auto null_pred = [&](const PermutationItem& item) -> bool {
-                return (*null_datas[item.chunk_index])[item.index_in_chunk] != 1;
+                return null_datas[item.chunk_index][item.index_in_chunk] != 1;
             };
 
             RETURN_IF_ERROR(sort_and_tie_helper_nullable_vertical(_cancel, data_columns, null_pred, _sort_desc,
@@ -290,10 +307,10 @@ public:
                 return lhs.inline_value.compare(rhs.inline_value);
             };
 
-            std::vector<const Container*> containers;
+            std::vector<Container> containers;
             for (const auto& col : _vertical_columns) {
                 const auto real = down_cast<const ColumnType*>(col.get());
-                containers.push_back(&real->get_proxy_data());
+                containers.push_back(real->get_proxy_data());
             }
 
             auto inlined = _create_inlined_permutation<Slice>(containers);
@@ -319,17 +336,17 @@ public:
     template <typename T>
     Status do_visit(const FixedLengthColumnBase<T>& column) {
         using ColumnType = FixedLengthColumnBase<T>;
-        using Container = typename FixedLengthColumnBase<T>::Container;
+        using Container = typename FixedLengthColumnBase<T>::ImmContainer;
 
         if (_need_inline_value()) {
             using ItemType = CompactChunkItem<T>;
             auto cmp = [&](const ItemType& lhs, const ItemType& rhs) {
                 return SorterComparator<T>::compare(lhs.inline_value, rhs.inline_value);
             };
-            std::vector<const Container*> containers;
+            std::vector<Container> containers;
             for (const auto& col : _vertical_columns) {
                 const auto real = down_cast<const ColumnType*>(col.get());
-                containers.emplace_back(&real->get_data());
+                containers.emplace_back(real->immutable_data());
             }
             auto inlined = _create_inlined_permutation<T>(containers);
             RETURN_IF_ERROR(sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), inlined, _tie, cmp, _range,
@@ -340,8 +357,8 @@ public:
             auto cmp = [&](const ItemType& lhs, const ItemType& rhs) {
                 auto left_column = down_cast<const ColumnType*>(_vertical_columns[lhs.chunk_index].get());
                 auto right_column = down_cast<const ColumnType*>(_vertical_columns[rhs.chunk_index].get());
-                auto left_value = left_column->get_data()[lhs.index_in_chunk];
-                auto right_value = right_column->get_data()[rhs.index_in_chunk];
+                auto left_value = left_column->immutable_data()[lhs.index_in_chunk];
+                auto right_value = right_column->immutable_data()[rhs.index_in_chunk];
                 return SorterComparator<T>::compare(left_value, right_value);
             };
 
@@ -434,7 +451,7 @@ private:
             int index_in_chunk = _permutation[i].index_in_chunk;
             result[i].chunk_index = chunk_index;
             result[i].index_in_chunk = index_in_chunk;
-            result[i].inline_value = (*containers[chunk_index])[index_in_chunk];
+            result[i].inline_value = containers[chunk_index][index_in_chunk];
         }
         return result;
     }
@@ -469,24 +486,33 @@ private:
 };
 
 Status sort_and_tie_column(const std::atomic<bool>& cancel, const ColumnPtr& column, const SortDesc& sort_desc,
-                           SmallPermutation& permutation, Tie& tie, std::pair<int, int> range, bool build_tie) {
+                           SmallPermutation& permutation, Tie& tie, std::pair<int, int> range, bool build_tie,
+                           const SortDescs* sort_descs) {
     ColumnSorter column_sorter(cancel, sort_desc, permutation, tie, range, build_tie);
+    if (sort_descs != nullptr) {
+        column_sorter.use_german_string(sort_descs->is_use_german_string());
+    }
     return column->accept(&column_sorter);
 }
 
 Status sort_and_tie_column(const std::atomic<bool>& cancel, ColumnPtr& column, const SortDesc& sort_desc,
-                           SmallPermutation& permutation, Tie& tie, std::pair<int, int> range, bool build_tie) {
+                           SmallPermutation& permutation, Tie& tie, std::pair<int, int> range, bool build_tie,
+                           const SortDescs* sort_descs) {
     // Nullable column need set all the null rows to default values,
     // see the comment of the declaration of `partition_null_and_nonnull_helper` for details.
     if (column->is_nullable() && !column->is_constant()) {
         ColumnHelper::as_column<NullableColumn>(column)->fill_null_with_default();
     }
     ColumnSorter column_sorter(cancel, sort_desc, permutation, tie, range, build_tie);
+    if (sort_descs != nullptr) {
+        column_sorter.use_german_string(sort_descs->is_use_german_string());
+    }
     return column->accept(&column_sorter);
 }
 
 static Status sort_and_tie_column(const std::atomic<bool>& cancel, const Column* column, const SortDesc& sort_desc,
-                                  SmallPermutation& permutation, Tie& tie, Ranges&& ranges, bool build_tie) {
+                                  SmallPermutation& permutation, Tie& tie, Ranges&& ranges, bool build_tie,
+                                  const SortDescs* sort_descs) {
     // Nullable column need set all the null rows to default values,
     // see the comment of the declaration of `partition_null_and_nonnull_helper` for details.
     if (column->is_nullable() && !column->is_constant()) {
@@ -494,6 +520,9 @@ static Status sort_and_tie_column(const std::atomic<bool>& cancel, const Column*
         down_cast<NullableColumn*>(mutable_col)->fill_null_with_default();
     }
     ColumnSorter column_sorter(cancel, sort_desc, permutation, tie, std::move(ranges), build_tie);
+    if (sort_descs != nullptr) {
+        column_sorter.use_german_string(sort_descs->is_use_german_string());
+    }
     return column->accept(&column_sorter);
 }
 
@@ -503,18 +532,30 @@ Status sort_and_tie_columns(const std::atomic<bool>& cancel, const Columns& colu
         return Status::OK();
     }
     size_t num_rows = columns[0]->size();
-    Tie tie(num_rows, 1);
-    std::pair<int, int> range{0, num_rows};
     SmallPermutation small_perm = create_small_permutation(num_rows);
+    RETURN_IF_ERROR(sort_and_tie_columns(cancel, columns, sort_desc, small_perm));
+    restore_small_permutation(small_perm, *permutation);
+
+    return Status::OK();
+}
+
+Status sort_and_tie_columns(const std::atomic<bool>& cancel, const Columns& columns, const SortDescs& sort_desc,
+                            SmallPermutation& permutation) {
+    if (columns.size() < 1) {
+        return Status::OK();
+    }
+    const size_t num_rows = columns.at(0)->size();
+    DCHECK(permutation.size() == num_rows);
+
+    Tie tie(num_rows, 1);
+    std::pair<int, int> range{0, static_cast<int>(num_rows)};
 
     for (int col_index = 0; col_index < columns.size(); col_index++) {
         ColumnPtr column = columns[col_index];
         bool build_tie = col_index != columns.size() - 1;
-        RETURN_IF_ERROR(sort_and_tie_column(cancel, column, sort_desc.get_column_desc(col_index), small_perm, tie,
-                                            range, build_tie));
+        RETURN_IF_ERROR(sort_and_tie_column(cancel, column, sort_desc.get_column_desc(col_index), permutation, tie,
+                                            range, build_tie, &sort_desc));
     }
-
-    restore_small_permutation(small_perm, *permutation);
 
     return Status::OK();
 }
@@ -522,7 +563,8 @@ Status sort_and_tie_columns(const std::atomic<bool>& cancel, const Columns& colu
 Status sort_and_tie_columns(const std::atomic<bool>& cancel, const std::vector<const Column*>& columns,
                             const SortDescs& sort_desc, SmallPermutation& perm,
                             const std::span<const uint32_t> src_offsets,
-                            const std::vector<std::span<const uint32_t>>& offsets_per_key) {
+                            const std::vector<std::span<const uint32_t>>& offsets_per_key,
+                            const SortDescs* sort_descs) {
     if (src_offsets.empty()) {
         return Status::OK();
     }
@@ -572,7 +614,7 @@ Status sort_and_tie_columns(const std::atomic<bool>& cancel, const std::vector<c
         const bool build_tie = (col_i != (columns.size() - 1));
         shift_perm(offsets_per_key[col_i].data());
         RETURN_IF_ERROR(sort_and_tie_column(cancel, column, sort_desc.get_column_desc(col_i), perm, tie,
-                                            Ranges(src_offsets, offsets_per_key[col_i]), build_tie));
+                                            Ranges(src_offsets, offsets_per_key[col_i]), build_tie, sort_descs));
     }
     shift_perm(src_offsets.data());
 

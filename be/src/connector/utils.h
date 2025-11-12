@@ -104,6 +104,12 @@ public:
     // location = base_path/{query_id}_{be_number}_{driver_id}_index.file_suffix
     std::string get() { return fmt::format("{}/{}_{}.{}", _base_path, _file_name_prefix, _index++, _file_name_suffix); }
 
+    std::string root_location(const std::string& partition) {
+        return fmt::format("{}/{}", _base_path, PathUtils::remove_trailing_slash(partition));
+    }
+
+    std::string root_location() { return fmt::format("{}", PathUtils::remove_trailing_slash(_base_path)); }
+
 private:
     const std::string _base_path;
     const std::string _file_name_prefix;

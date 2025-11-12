@@ -25,23 +25,23 @@
 namespace starrocks {
 class DataCacheUtilsTest : public ::testing::Test {};
 
-TEST_F(DataCacheUtilsTest, test_set_metrics_from_thrift) {
+TEST_F(DataCacheUtilsTest, test_add_metrics_from_thrift) {
     TDataCacheMetrics t_metrics{};
-    DataCacheMetrics metrics{};
+    DataCacheDiskMetrics metrics{};
     metrics.status = DataCacheStatus::NORMAL;
-    DataCacheUtils::set_metrics_from_thrift(t_metrics, metrics);
+    DataCacheUtils::set_metrics_to_thrift(t_metrics, metrics);
     ASSERT_EQ(t_metrics.status, TDataCacheStatus::NORMAL);
 
     metrics.status = DataCacheStatus::UPDATING;
-    DataCacheUtils::set_metrics_from_thrift(t_metrics, metrics);
+    DataCacheUtils::set_metrics_to_thrift(t_metrics, metrics);
     ASSERT_EQ(t_metrics.status, TDataCacheStatus::UPDATING);
 
     metrics.status = DataCacheStatus::LOADING;
-    DataCacheUtils::set_metrics_from_thrift(t_metrics, metrics);
+    DataCacheUtils::set_metrics_to_thrift(t_metrics, metrics);
     ASSERT_EQ(t_metrics.status, TDataCacheStatus::LOADING);
 
     metrics.status = DataCacheStatus::ABNORMAL;
-    DataCacheUtils::set_metrics_from_thrift(t_metrics, metrics);
+    DataCacheUtils::set_metrics_to_thrift(t_metrics, metrics);
     ASSERT_EQ(t_metrics.status, TDataCacheStatus::ABNORMAL);
 }
 

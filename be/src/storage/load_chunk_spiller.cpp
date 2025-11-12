@@ -124,6 +124,7 @@ Status LoadChunkSpiller::_prepare(const ChunkPtr& chunk_ptr) {
         // 1. alloc & prepare spiller
         spill::SpilledOptions options;
         options.encode_level = 7;
+        options.wg = ExecEnv::GetInstance()->workgroup_manager()->get_default_workgroup();
         _spiller = _spiller_factory->create(options);
         RETURN_IF_ERROR(_spiller->prepare(_runtime_state.get()));
         DCHECK(_profile != nullptr) << "LoadChunkSpiller profile is null";
@@ -199,6 +200,10 @@ private:
     size_t _block_idx = 0;
 };
 
+size_t LoadChunkSpiller::total_bytes() const {
+    return _block_manager ? _block_manager->total_bytes() : 0;
+}
+
 Status LoadChunkSpiller::merge_write(size_t target_size, bool do_sort, bool do_agg,
                                      std::function<Status(Chunk*)> write_func, std::function<Status()> flush_func) {
     auto& groups = _block_manager->block_container()->block_groups();
@@ -267,10 +272,10 @@ Status LoadChunkSpiller::merge_write(size_t target_size, bool do_sort, bool do_a
             (std::ostringstream() << _block_manager->load_id()).str(),
             (std::ostringstream() << _block_manager->fragment_instance_id()).str(), groups.size(), total_blocks,
             total_block_bytes, total_merges, total_rows, total_chunk, duration_ms);
-    ADD_COUNTER(_profile, "SpillMergeInputGroups", TUnit::UNIT)->update(groups.size());
-    ADD_COUNTER(_profile, "SpillMergeInputBytes", TUnit::BYTES)->update(total_block_bytes);
-    ADD_COUNTER(_profile, "SpillMergeCount", TUnit::UNIT)->update(total_merges);
-    ADD_COUNTER(_profile, "SpillMergeDurationNs", TUnit::TIME_NS)->update(duration_ms * 1000000);
+    COUNTER_UPDATE(ADD_COUNTER(_profile, "SpillMergeInputGroups", TUnit::UNIT), groups.size());
+    COUNTER_UPDATE(ADD_COUNTER(_profile, "SpillMergeInputBytes", TUnit::BYTES), total_block_bytes);
+    COUNTER_UPDATE(ADD_COUNTER(_profile, "SpillMergeCount", TUnit::UNIT), total_merges);
+    COUNTER_UPDATE(ADD_COUNTER(_profile, "SpillMergeDurationNs", TUnit::TIME_NS), duration_ms * 1000000);
     return Status::OK();
 }
 

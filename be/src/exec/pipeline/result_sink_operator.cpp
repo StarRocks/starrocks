@@ -53,9 +53,14 @@ Status ResultSinkOperator::prepare(RuntimeState* state) {
     case TResultSinkType::HTTP_PROTOCAL:
         _writer = std::make_shared<HttpResultWriter>(_sender.get(), _output_expr_ctxs, profile, _format_type);
         break;
+#ifndef __APPLE__
     case TResultSinkType::METADATA_ICEBERG:
         _writer = std::make_shared<MetadataResultWriter>(_sender.get(), _output_expr_ctxs, profile, _sink_type);
         break;
+#else
+    case TResultSinkType::METADATA_ICEBERG:
+        return Status::NotSupported("Iceberg metadata result sink is disabled on macOS");
+#endif
     case TResultSinkType::CUSTOMIZED:
         // CustomizedResultWriter is a general-purposed result writer that used by FE to executing internal
         // query, the result is serialized in packed binary format. FE can parse the result row into object
@@ -64,7 +69,8 @@ Status ResultSinkOperator::prepare(RuntimeState* state) {
         _writer = std::make_shared<CustomizedResultWriter>(_sender.get(), _output_expr_ctxs, profile);
         break;
     case TResultSinkType::ARROW_FLIGHT_PROTOCAL:
-        _writer = std::make_shared<ArrowResultWriter>(_sender.get(), _output_expr_ctxs, profile, _row_desc);
+        _writer = std::make_shared<ArrowResultWriter>(_sender.get(), _output_expr_ctxs, _output_column_names, profile,
+                                                      _row_desc);
         break;
     default:
         return Status::InternalError("Unknown result sink type");

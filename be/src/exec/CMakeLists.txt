@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-cmake_minimum_required(VERSION 2.8.12)
+cmake_minimum_required(VERSION 3.10.12)
 
 # where to put generated libraries
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/exec")
@@ -57,11 +57,11 @@ set(EXEC_FILES
     aggregate/distinct_blocking_node.cpp
     aggregate/aggregate_streaming_node.cpp
     aggregate/distinct_streaming_node.cpp
+    partition/bucket_aware_partition.cpp
     partition/chunks_partitioner.cpp
     partition/partition_hash_variant.cpp
     analytic_node.cpp
     analytor.cpp
-    csv_scanner.cpp
     tablet_scanner.cpp
     olap_scan_node.cpp
     olap_scan_prepare.cpp
@@ -84,14 +84,11 @@ set(EXEC_FILES
     spillable_chunks_sorter_full_sort.cpp
     cross_join_node.cpp
     union_node.cpp
+    raw_values_node.cpp
     except_hash_set.cpp
     except_node.cpp
-    file_scanner.cpp
-    orc_scanner.cpp
-    jni_scanner.cpp
     arrow_to_starrocks_converter.cpp
     arrow_to_json_converter.cpp
-    parquet_scanner.cpp
     parquet_schema_builder.cpp
     parquet_reader.cpp
     parquet_writer.cpp
@@ -100,16 +97,7 @@ set(EXEC_FILES
     assert_num_rows_node.cpp
     intersect_hash_set.cpp
     intersect_node.cpp
-    hdfs_scanner.cpp
-    hdfs_scanner_orc.cpp
-    hdfs_scanner_parquet.cpp
-    hdfs_scanner_text.cpp
-    hdfs_scanner_partition.cpp
-    cache_select_scanner.cpp
-    json_scanner.cpp
     json_parser.cpp
-    avro_scanner.cpp
-    avro_cpp_scanner.cpp
     project_node.cpp
     dict_decode_node.cpp
     repeat_node.cpp
@@ -121,6 +109,20 @@ set(EXEC_FILES
     iceberg/iceberg_delete_builder.cpp
     iceberg/iceberg_delete_file_iterator.cpp
     paimon/paimon_delete_file_builder.cpp
+    hdfs_scanner/cache_select_scanner.cpp
+    hdfs_scanner/hdfs_scanner_text.cpp
+    hdfs_scanner/hdfs_scanner_partition.cpp
+    hdfs_scanner/hdfs_scanner_parquet.cpp
+    hdfs_scanner/hdfs_scanner_orc.cpp
+    hdfs_scanner/hdfs_scanner.cpp
+    hdfs_scanner/jni_scanner.cpp
+    file_scanner/avro_cpp_scanner.cpp
+    file_scanner/avro_scanner.cpp
+    file_scanner/csv_scanner.cpp
+    file_scanner/file_scanner.cpp
+    file_scanner/json_scanner.cpp
+    file_scanner/orc_scanner.cpp
+    file_scanner/parquet_scanner.cpp
     schema_scanner/schema_analyze_status.cpp
     schema_scanner/schema_tables_scanner.cpp
     schema_scanner/schema_dummy_scanner.cpp
@@ -157,6 +159,7 @@ set(EXEC_FILES
     schema_scanner/schema_be_cloud_native_compactions_scanner.cpp
     schema_scanner/schema_pipe_files.cpp
     schema_scanner/schema_pipes.cpp
+    schema_scanner/schema_recyclebin_catalogs.cpp
     schema_scanner/starrocks_role_edges_scanner.cpp
     schema_scanner/starrocks_grants_to_scanner.cpp
     schema_scanner/schema_helper.cpp
@@ -271,6 +274,7 @@ set(EXEC_FILES
     pipeline/assert_num_rows_operator.cpp
     pipeline/set/union_passthrough_operator.cpp
     pipeline/set/union_const_source_operator.cpp
+    pipeline/set/raw_values_source_operator.cpp
     pipeline/hashjoin/hash_join_build_operator.cpp
     pipeline/hashjoin/hash_join_probe_operator.cpp
     pipeline/hashjoin/hash_joiner_factory.cpp
@@ -308,6 +312,7 @@ set(EXEC_FILES
     workgroup/pipeline_executor_set.cpp
     workgroup/pipeline_executor_set_manager.cpp
     workgroup/work_group.cpp
+    workgroup/mem_tracker_manager.cpp
     workgroup/scan_executor.cpp
     workgroup/scan_task_queue.cpp
     query_cache/multilane_operator.cpp
@@ -338,6 +343,6 @@ set(EXEC_FILES
     stream/aggregate/stream_aggregate_operator.cpp
     stream/stream_aggregate_node.cpp)
 
-add_library(Exec STATIC
+ADD_BE_LIB(Exec
     ${EXEC_FILES}
 )

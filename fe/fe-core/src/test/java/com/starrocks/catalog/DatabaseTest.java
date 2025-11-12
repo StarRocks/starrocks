@@ -34,7 +34,6 @@
 
 package com.starrocks.catalog;
 
-import com.starrocks.analysis.FunctionName;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.concurrent.lock.LockManager;
@@ -42,7 +41,9 @@ import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
+import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.transaction.GtidGenerator;
+import com.starrocks.type.Type;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;

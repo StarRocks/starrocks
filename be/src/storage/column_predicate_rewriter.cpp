@@ -446,7 +446,7 @@ StatusOr<ColumnPredicateRewriter::RewriteStatus> ColumnPredicateRewriter::_rewri
 
     size_t code_size = raw_code_column->size();
     const auto& code_column = ColumnHelper::cast_to<TYPE_INT>(raw_code_column);
-    const auto& code_values = code_column->get_data();
+    const auto code_values = code_column->immutable_data();
     if (field_nullable) {
         DCHECK((code_size + 1) == value_size);
     } else {

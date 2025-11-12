@@ -17,7 +17,6 @@ package com.starrocks.sql.optimizer.rule.transformation;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Function;
@@ -25,8 +24,8 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.Type;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnIdentifier;
@@ -47,6 +46,7 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.statistics.IMinMaxStatsMgr;
 import com.starrocks.sql.optimizer.statistics.StatsVersion;
 import com.starrocks.statistic.StatisticUtils;
+import com.starrocks.type.Type;
 
 import java.time.LocalDateTime;
 import java.util.Collections;
@@ -97,7 +97,9 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
             Type columnType = aggCall.getType();
 
             ColumnRefOperator metaColumn;
-            if (aggCall.getFnName().equals(FunctionSet.COUNT)) {
+            if (aggCall.getFnName().equals(FunctionSet.COUNT)
+                    || aggCall.getFnName().equals(FunctionSet.COLUMN_SIZE)
+                    || aggCall.getFnName().equals(FunctionSet.COLUMN_COMPRESSED_SIZE)) {
                 if (countPlaceHolderColumn != null) {
                     metaColumn = countPlaceHolderColumn;
                 } else {
@@ -121,8 +123,10 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
             Function aggFunction = aggCall.getFunction();
             String newAggFnName = aggCall.getFnName();
             Type newAggReturnType = aggCall.getType();
-            if (aggCall.getFnName().equals(FunctionSet.COUNT)) {
-                aggFunction = Expr.getBuiltinFunction(FunctionSet.SUM,
+            if (aggCall.getFnName().equals(FunctionSet.COUNT)
+                    || aggCall.getFnName().equals(FunctionSet.COLUMN_SIZE)
+                    || aggCall.getFnName().equals(FunctionSet.COLUMN_COMPRESSED_SIZE)) {
+                aggFunction = ExprUtils.getBuiltinFunction(FunctionSet.SUM,
                         new Type[] {Type.BIGINT}, Function.CompareMode.IS_IDENTICAL);
                 newAggFnName = FunctionSet.SUM;
                 newAggReturnType = Type.BIGINT;
@@ -205,7 +209,9 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
                         // min/max column should have zonemap index
                         Type type = aggregator.getType();
                         return !(type.isStringType() || type.isComplexType());
-                    } else if (functionName.equals(FunctionSet.COUNT) && !aggregator.isDistinct()) {
+                    } else if ((functionName.equals(FunctionSet.COUNT) ||
+                            functionName.equals(FunctionSet.COLUMN_SIZE) ||
+                            functionName.equals(FunctionSet.COLUMN_COMPRESSED_SIZE)) && !aggregator.isDistinct()) {
                         if (usedColumns.size() == 1) {
                             ColumnRefOperator usedColumn =
                                     context.getColumnRefFactory().getColumnRef(usedColumns.getFirstId());
@@ -268,6 +274,7 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
                         .getStats(new ColumnIdentifier(table.getId(), c.getColumnId()),
                                 new StatsVersion(-1, lastUpdateTimestamp));
                 if (minMax.isEmpty()) {
+                    newAggCalls.put(entry.getKey(), entry.getValue());
                     continue;
                 }
 

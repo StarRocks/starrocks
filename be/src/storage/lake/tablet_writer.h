@@ -65,6 +65,8 @@ public:
     // PREREQUISITES: the writer has successfully `finish()`ed but not yet `close()`ed.
     std::vector<FileInfo> files() const { return _files; }
 
+    std::vector<FileInfo> ssts() const { return _ssts; }
+
     // The sum of all segment file sizes, in bytes.
     int64_t data_size() const { return _data_size; }
 
@@ -143,6 +145,13 @@ public:
 
     const DictColumnsValidMap& global_dict_columns_valid_info() const { return _global_dict_columns_valid_info; }
 
+    // When the system determines that pk parallel execution can be enabled
+    // (for example, during large imports or major compaction tasks), it will invoke this function.
+    // However, whether pk parallel execution is actually enabled still depends on the schema.
+    void try_enable_pk_parallel_execution();
+
+    bool enable_pk_parallel_execution() const { return _enable_pk_parallel_execution; }
+
 protected:
     TabletManager* _tablet_mgr;
     int64_t _tablet_id;
@@ -150,6 +159,7 @@ protected:
     int64_t _txn_id;
     ThreadPool* _flush_pool;
     std::vector<FileInfo> _files;
+    std::vector<FileInfo> _ssts;
     int64_t _num_rows = 0;
     int64_t _data_size = 0;
     uint32_t _seg_id = 0;
@@ -161,6 +171,7 @@ protected:
 
     bool _is_compaction = false;
     DictColumnsValidMap _global_dict_columns_valid_info;
+    bool _enable_pk_parallel_execution = false;
 };
 
 } // namespace lake

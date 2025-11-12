@@ -19,12 +19,8 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.gson.Gson;
-import com.starrocks.analysis.AggregateInfo;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.SlotId;
-import com.starrocks.analysis.SortInfo;
 import com.starrocks.common.Pair;
+import com.starrocks.planner.AggregateInfo;
 import com.starrocks.planner.AggregationNode;
 import com.starrocks.planner.AnalyticEvalNode;
 import com.starrocks.planner.DataPartition;
@@ -41,10 +37,15 @@ import com.starrocks.planner.ProjectNode;
 import com.starrocks.planner.ResultSink;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.SelectNode;
+import com.starrocks.planner.SlotId;
+import com.starrocks.planner.SortInfo;
 import com.starrocks.planner.SortNode;
 import com.starrocks.planner.SplitCastDataSink;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.ast.OrderByElement;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.cost.CostEstimate;
@@ -447,7 +448,7 @@ public class ProfilingExecPlan {
 
     private static String exprsToString(List<? extends Expr> exprs) {
         List<String> exprContents = exprs.stream()
-                .map(Expr::toSql)
+                .map(ExprToSql::toSql)
                 .collect(Collectors.toList());
         int lastIndex = -1;
         int length = 0;

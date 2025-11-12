@@ -77,6 +77,7 @@ public class InsertLoadJob extends LoadJob {
     private long estimateScanRow = 0;
     private TLoadJobType loadType;
     private Coordinator coordinator;
+    private InsertLoadTxnCallback txnCallback;
 
     // only for log replay
     public InsertLoadJob() {
@@ -84,8 +85,10 @@ public class InsertLoadJob extends LoadJob {
         this.jobType = EtlJobType.INSERT;
     }
 
-    public InsertLoadJob(String label, long dbId, long tableId, long txnId, String loadId, String user, long createTimestamp,
-                         long timeout, long warehouseId, Coordinator coordinator) {
+    public InsertLoadJob(String label, long dbId, long tableId, long txnId,
+                         String loadId, String user, long createTimestamp,
+                         long timeout, long warehouseId, Coordinator coordinator,
+                         InsertLoadTxnCallback insertLoadTxnCallback) {
         super(dbId, label);
         this.tableId = tableId;
         this.createTimestamp = createTimestamp;
@@ -99,6 +102,7 @@ public class InsertLoadJob extends LoadJob {
         this.loadIds.add(loadId);
         this.transactionId = txnId;
         this.user = user;
+        this.txnCallback = insertLoadTxnCallback;
     }
 
     // only used for test
@@ -256,6 +260,9 @@ public class InsertLoadJob extends LoadJob {
 
     @Override
     public void beforeCommitted(TransactionState txnState) throws TransactionException {
+        if (txnCallback != null) {
+            txnCallback.beforeCommitted(txnState);
+        }
     }
 
     @Override
@@ -264,6 +271,9 @@ public class InsertLoadJob extends LoadJob {
             return;
         }
         loadCommittedTimestamp = System.currentTimeMillis();
+        if (txnCallback != null) {
+            txnCallback.afterCommitted(txnState, txnOperated);
+        }
     }
 
     @Override

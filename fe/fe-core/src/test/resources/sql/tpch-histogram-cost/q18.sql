@@ -135,4 +135,3 @@ tabletRatio=20/20
 cardinality=600000000
 avgRowSize=16.0
 [end]
-

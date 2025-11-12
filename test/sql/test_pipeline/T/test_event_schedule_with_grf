@@ -1,0 +1,47 @@
+-- name: test_event_scheduler_with_grf @sequential
+
+CREATE TABLE `t0` (
+  `c0` int DEFAULT NULL,
+  `c1` bigint DEFAULT NULL,
+  `c2` string DEFAULT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+
+CREATE TABLE `t1` (
+  `c0` int DEFAULT NULL,
+  `c1` bigint DEFAULT NULL,
+  `c2` string DEFAULT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+
+insert into t0 SELECT generate_series, generate_series, generate_series FROM TABLE(generate_series(1,  409600));
+insert into t1 SELECT generate_series, generate_series, generate_series FROM TABLE(generate_series(1,  409600));
+
+select count(*) from t0;
+select count(*) from t1;
+
+-- case1: grf arrive first
+set query_debug_options = '{"execDebugOptions":[{"plan_node_id":0, "debug_action":"WAIT", "value":500}]}';
+select count(*) from t0 t join [shuffle] t1 s on t.c0 = s.c0 where s.c1 < 100;
+set query_debug_options = '';
+-- case3 race condition
+admin enable failpoint 'global_runtime_filter_sync_A';
+admin enable failpoint 'global_runtime_filter_sync_B';
+select count(*) from t0 t join [shuffle] t1 s on t.c0 = s.c0 where s.c1 < 100;
+admin disable failpoint 'global_runtime_filter_sync_A';
+admin disable failpoint 'global_runtime_filter_sync_B';
+-- case2: grf exceed
+set runtime_join_filter_push_down_limit = 1;
+select count(*) from t0 t join [shuffle] t1 s on t.c0 = s.c0;
+
+

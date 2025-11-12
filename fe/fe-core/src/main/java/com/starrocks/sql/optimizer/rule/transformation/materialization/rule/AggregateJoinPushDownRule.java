@@ -91,6 +91,11 @@ public class AggregateJoinPushDownRule extends BaseMaterializedViewRewriteRule {
         return super.check(input, context);
     }
 
+    @Override
+    public boolean isChooseBestMVBasedDataLayout(OptExpression expression) {
+        return false;
+    }
+
     /**
      * MV can only contain LogicalScanOperator, LogicalProjectOperator, LogicalAggregationOperator for mv push down rewrite.
      */
@@ -137,7 +142,7 @@ public class AggregateJoinPushDownRule extends BaseMaterializedViewRewriteRule {
             if (isLogicalSPG(mvContext.getMvExpression()) && validMv(mvContext, scanOperators)) {
                 validCandidateContexts.add(mvContext);
             } else {
-                logMVRewrite(mvContext, "mv pruned");
+                logMVRewrite(mvContext, this, "mv pruned: not logical SPG or not contain all columns used in scan");
             }
         }
         return validCandidateContexts;

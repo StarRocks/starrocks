@@ -1,0 +1,51 @@
+-- name: test_alter_table_with_mv
+CREATE TABLE t0(k0 BIGINT, k1 DATETIME, v0 INT, v1 VARCHAR(100))
+ distributed by hash(k0)
+ order by (v0)
+ properties('replication_num'='1');
+-- result:
+-- !result
+INSERT INTO t0 VALUES(0, '2024-01-01 00:00:00', 10, '100');
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_mv1 AS SELECT k0, v1 FROM t0 WHERE v0 > 10;
+-- result:
+-- !result
+function: wait_table_rollup_finish()
+-- result:
+None
+-- !result
+CREATE MATERIALIZED VIEW test_mv2 AS SELECT k0, v1, k1, v0 FROM t0 WHERE v0 > 10 and k1 = '2024-01-01 00:00:00';
+-- result:
+-- !result
+function: wait_table_rollup_finish()
+-- result:
+None
+-- !result
+ALTER TABLE t0 DROP COLUMN k1;
+-- result:
+[REGEX].*Can not drop/modify the column k1, because the column is used in the related rollup.*
+-- !result
+ALTER TABLE t0 DROP COLUMN v0;
+-- result:
+[REGEX].*Can not drop/modify the column v0, because the column is used in the related rollup.*
+-- !result
+ALTER TABLE t0 DROP COLUMN v1, DROP COLUMN v0;
+-- result:
+[REGEX].*Can not drop/modify the column v0, because the column is used in the related rollup.*
+-- !result
+ALTER TABLE t0 DROP COLUMN v1, DROP COLUMN v100;
+-- result:
+E: (1064, 'Column does not exists: v100')
+-- !result
+DESC t0;
+-- result:
+k0	bigint	YES	true	None	
+k1	datetime	YES	true	None	
+v0	int	YES	true	None	
+v1	varchar(100)	YES	false	None	
+-- !result
+SELECT * from t0 order by k0;
+-- result:
+0	2024-01-01 00:00:00	10	100
+-- !result

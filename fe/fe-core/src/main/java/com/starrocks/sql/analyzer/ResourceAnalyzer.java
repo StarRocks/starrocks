@@ -18,7 +18,7 @@ import com.starrocks.catalog.Resource;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterResourceStmt;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.DropResourceStmt;
 import com.starrocks.sql.ast.StatementBase;
@@ -34,7 +34,7 @@ public class ResourceAnalyzer {
         new ResourceAnalyzer.ResourceAnalyzerVisitor().visit(stmt, session);
     }
 
-    static class ResourceAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+    static class ResourceAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
         public void analyze(StatementBase statement, ConnectContext session) {
             visit(statement, session);
         }

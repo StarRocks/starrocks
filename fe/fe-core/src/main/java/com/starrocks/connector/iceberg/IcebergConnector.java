@@ -67,7 +67,9 @@ public class IcebergConnector implements Connector {
         this.icebergCatalogProperties = new IcebergCatalogProperties(properties);
         this.connectorProperties = new ConnectorProperties(ConnectorType.ICEBERG, properties);
         this.procedureRegistry = new IcebergProcedureRegistry();
-        registerProcedures();
+        if (!isResourceMappingCatalog(this.catalogName)) {
+            registerProcedures();
+        }
     }
 
     private IcebergCatalog buildIcebergNativeCatalog() {
@@ -109,7 +111,7 @@ public class IcebergConnector implements Connector {
         if (icebergNativeCatalog == null) {
             IcebergCatalog nativeCatalog = buildIcebergNativeCatalog();
 
-            if (icebergCatalogProperties.enableIcebergMetadataCache() && !isResourceMappingCatalog(catalogName)) {
+            if (icebergCatalogProperties.isEnableIcebergMetadataCache() && !isResourceMappingCatalog(catalogName)) {
                 nativeCatalog = new CachingIcebergCatalog(catalogName, nativeCatalog,
                         icebergCatalogProperties, buildBackgroundJobPlanningExecutor());
                 GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor()
@@ -143,7 +145,7 @@ public class IcebergConnector implements Connector {
     }
 
     private void registerProcedures() {
-        this.procedureRegistry.register(RegisterTableProcedure.getInstance());
+        this.procedureRegistry.register(new RegisterTableProcedure(catalogName, getNativeCatalog()));
     }
 
     @Override
@@ -159,7 +161,7 @@ public class IcebergConnector implements Connector {
 
     @Override
     public boolean supportMemoryTrack() {
-        return icebergCatalogProperties.enableIcebergMetadataCache() && icebergNativeCatalog != null;
+        return icebergCatalogProperties.isEnableIcebergMetadataCache() && icebergNativeCatalog != null;
     }
 
     @Override

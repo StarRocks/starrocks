@@ -18,18 +18,7 @@
 package com.starrocks.qe;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.BoolLiteral;
-import com.starrocks.analysis.DateLiteral;
-import com.starrocks.analysis.DecimalLiteral;
-import com.starrocks.analysis.FloatLiteral;
-import com.starrocks.analysis.IntLiteral;
-import com.starrocks.analysis.LargeIntLiteral;
-import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.NullLiteral;
-import com.starrocks.analysis.StringLiteral;
 import com.starrocks.authentication.AuthenticationMgr;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.Type;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.StarRocksException;
@@ -41,9 +30,22 @@ import com.starrocks.sql.ast.SetPassVar;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.UserAuthOption;
+import com.starrocks.sql.ast.UserRef;
 import com.starrocks.sql.ast.UserVariable;
+import com.starrocks.sql.ast.expression.BoolLiteral;
+import com.starrocks.sql.ast.expression.DateLiteral;
+import com.starrocks.sql.ast.expression.DecimalLiteral;
+import com.starrocks.sql.ast.expression.ExprToSql;
+import com.starrocks.sql.ast.expression.FloatLiteral;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.LargeIntLiteral;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.NullLiteral;
+import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
@@ -70,7 +72,8 @@ public class SetExecutorTest {
         AuthenticationMgr authenticationManager =
                 starRocksAssert.getCtx().getGlobalStateMgr().getAuthenticationMgr();
         authenticationManager.createUser(createUserStmt);
-        testUser = createUserStmt.getUserIdentity();
+        UserRef user = createUserStmt.getUser();
+        testUser = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
     }
 
     private static void ctxToTestUser() {
@@ -87,7 +90,7 @@ public class SetExecutorTest {
     public void testNormal() throws StarRocksException {
         List<SetListItem> vars = Lists.newArrayList();
 
-        new SetPassVar(new UserIdentity("testUser", "%"),
+        new SetPassVar(new UserRef("testUser", "%"),
                 new UserAuthOption(null, "*88EEBA7D913688E7278E2AD071FDB5E76D76D34B", false, NodePosition.ZERO),
                 NodePosition.ZERO);
         vars.add(new SetNamesVar("utf8"));
@@ -129,13 +132,15 @@ public class SetExecutorTest {
         executor = new SetExecutor(ctx, stmt);
         executor.execute();
         Assertions.assertEquals(2, ctx.getModifiedSessionVariables().getSetListItems().size());
-        Assertions.assertEquals("10", ctx.getModifiedSessionVariables().getSetListItems().get(1).toSql());
+
+        UserVariable userVariable = (UserVariable) ctx.getModifiedSessionVariables().getSetListItems().get(1);
+        Assertions.assertEquals("10", userVariable.toSql());
         ctx.getUserVariables().remove("test_b");
     }
 
     public void testUserVariableImp(LiteralExpr value, Type type) throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
-        String sql = String.format("set @var = cast(%s as %s)", value.toSql(), type.toSql());
+        String sql = String.format("set @var = cast(%s as %s)", ExprToSql.toSql(value), type.toSql());
         SetStmt stmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         SetExecutor executor = new SetExecutor(ctx, stmt);
         executor.execute();
@@ -162,7 +167,7 @@ public class SetExecutorTest {
         testUserVariableImp(new DecimalLiteral("1", Type.DECIMAL32_INT), Type.DECIMAL32_INT);
         testUserVariableImp(new DecimalLiteral("1", Type.DECIMAL64_INT), Type.DECIMAL64_INT);
         testUserVariableImp(new DecimalLiteral("1", Type.DECIMAL128_INT), Type.DECIMAL128_INT);
-        testUserVariableImp(new StringLiteral("xxx"), ScalarType.createVarcharType(10));
+        testUserVariableImp(new StringLiteral("xxx"), TypeFactory.createVarcharType(10));
     }
 
     @Test
@@ -275,7 +280,6 @@ public class SetExecutorTest {
         for (int i = 0; i < 1023; ++i) {
             ctx.getUserVariables().put(String.valueOf(i), new UserVariable(null, null, null));
         }
-        System.out.println(ctx.getUserVariables().keySet().size());
         try {
             sql = "set @aVar = 6, @bVar = @aVar + 1, @cVar = @bVar + 1";
             stmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);

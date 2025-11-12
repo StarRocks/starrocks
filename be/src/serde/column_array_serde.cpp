@@ -15,8 +15,6 @@
 #include "serde/column_array_serde.h"
 
 #include <fmt/format.h>
-#include <lz4/lz4.h>
-#include <lz4/lz4frame.h>
 #include <streamvbyte.h>
 #include <streamvbytedelta.h>
 
@@ -31,11 +29,14 @@
 #include "column/nullable_column.h"
 #include "column/object_column.h"
 #include "column/struct_column.h"
+#include "column/variant_column.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/descriptors.h"
 #include "serde/protobuf_serde.h"
 #include "types/hll.h"
+#include "types/variant_value.h"
 #include "util/coding.h"
+#include "util/compression/compression_headers.h"
 #include "util/json.h"
 #include "util/percentile_value.h"
 
@@ -116,11 +117,12 @@ uint8_t* encode_string_lz4(const void* data, size_t size, uint8_t* buff, int enc
         throw std::runtime_error(
                 fmt::format("The input size for compression should be less than {}", LZ4_MAX_INPUT_SIZE));
     }
-    uint64_t encode_size =
+    auto encode_size =
             LZ4_compress_fast(reinterpret_cast<const char*>(data), reinterpret_cast<char*>(buff + sizeof(uint64_t)),
                               size, LZ4_compressBound(size), std::max(1, std::abs(encode_level / 10000) % 100));
     if (encode_size <= 0) {
-        throw std::runtime_error("lz4 compress error.");
+        throw std::runtime_error(
+                fmt::format("lz4 compress failed: raw size = {}, compressed get encode size = {}.", size, encode_size));
     }
     buff = write_little_endian_64(encode_size, buff);
 
@@ -133,10 +135,12 @@ uint8_t* encode_string_lz4(const void* data, size_t size, uint8_t* buff, int enc
 const uint8_t* decode_string_lz4(const uint8_t* buff, void* target, size_t size) {
     uint64_t encode_size = 0;
     buff = read_little_endian_64(buff, &encode_size);
-    uint64_t decode_size = LZ4_decompress_safe(reinterpret_cast<const char*>(buff), reinterpret_cast<char*>(target),
-                                               encode_size, size);
+    auto decode_size = LZ4_decompress_safe(reinterpret_cast<const char*>(buff), reinterpret_cast<char*>(target),
+                                           encode_size, size);
     if (decode_size <= 0) {
-        throw std::runtime_error("lz4 decompress error.");
+        throw std::runtime_error(fmt::format(
+                "lz4 decompress failed: encode size = {}, raw size = {}, decompressed get decode size = {}.",
+                encode_size, size, decode_size));
     }
     if (size != decode_size) {
         throw std::runtime_error(
@@ -228,7 +232,8 @@ public:
         } else {
             buff = write_little_endian_64(bytes_size, buff);
         }
-        if (EncodeContext::enable_encode_string(encode_level) && bytes_size >= ENCODE_SIZE_LIMIT) {
+        if (EncodeContext::enable_encode_string(encode_level) && bytes_size >= ENCODE_SIZE_LIMIT &&
+            bytes_size <= LZ4_MAX_INPUT_SIZE) {
             buff = encode_string_lz4(bytes.data(), bytes_size, buff, encode_level);
         } else {
             buff = write_raw(bytes.data(), bytes_size, buff);
@@ -262,7 +267,8 @@ public:
             buff = read_little_endian_64(buff, &bytes_size);
         }
         column->get_bytes().resize(bytes_size);
-        if (EncodeContext::enable_encode_string(encode_level) && bytes_size >= ENCODE_SIZE_LIMIT) {
+        if (EncodeContext::enable_encode_string(encode_level) && bytes_size >= ENCODE_SIZE_LIMIT &&
+            bytes_size <= LZ4_MAX_INPUT_SIZE) {
             buff = decode_string_lz4(buff, column->get_bytes().data(), bytes_size);
         } else {
             buff = read_raw(buff, column->get_bytes().data(), bytes_size);
@@ -375,6 +381,55 @@ public:
             pool.emplace_back(Slice(buff, serialized_size));
             buff += serialized_size;
         }
+        return buff;
+    }
+};
+
+class VariantColumnSerde {
+public:
+    static int64_t max_serialized_size(const VariantColumn& column) {
+        const auto& pool = column.get_pool();
+        int64_t size = 0;
+        size += sizeof(uint32_t); // num_objects
+        for (const auto& obj : pool) {
+            size += sizeof(uint64_t);
+            size += obj.serialize_size();
+        }
+
+        return size;
+    }
+
+    static uint8_t* serialize(const VariantColumn& column, uint8_t* buff) {
+        buff = write_little_endian_32(column.get_pool().size(), buff);
+        for (const auto& v : column.get_pool()) {
+            constexpr uint64_t size_field_length = sizeof(uint64_t);
+            uint64_t actual = v.serialize(buff + size_field_length);
+            buff = write_little_endian_64(actual, buff);
+            buff += actual;
+        }
+
+        return buff;
+    }
+
+    static StatusOr<const uint8_t*> deserialize(const uint8_t* buff, VariantColumn* column) {
+        uint32_t num_objects = 0;
+        buff = read_little_endian_32(buff, &num_objects);
+        column->reset_column();
+        auto& pool = column->get_pool();
+        pool.reserve(num_objects);
+        for (int i = 0; i < num_objects; ++i) {
+            uint64_t serialized_size = 0;
+            buff = read_little_endian_64(buff, &serialized_size);
+            auto variant = VariantValue::create(Slice(buff, serialized_size));
+            if (!variant.ok()) {
+                return Status::Corruption(fmt::format("Failed to deserialize VariantValue at index {}: {}", i,
+                                                      variant.status().to_string()));
+            }
+
+            pool.emplace_back(std::move(variant.value()));
+            buff += serialized_size;
+        }
+
         return buff;
     }
 };
@@ -543,6 +598,11 @@ public:
         return Status::OK();
     }
 
+    Status do_visit(const VariantColumn& column) {
+        _size += VariantColumnSerde::max_serialized_size(column);
+        return Status::OK();
+    }
+
     int64_t size() const { return _size; }
 
 private:
@@ -604,6 +664,11 @@ public:
 
     Status do_visit(const JsonColumn& column) {
         _cur = JsonColumnSerde::serialize(column, _cur);
+        return Status::OK();
+    }
+
+    Status do_visit(const VariantColumn& column) {
+        _cur = VariantColumnSerde::serialize(column, _cur);
         return Status::OK();
     }
 
@@ -676,6 +741,16 @@ public:
 
     Status do_visit(JsonColumn* column) {
         _cur = JsonColumnSerde::deserialize(_cur, column);
+        return Status::OK();
+    }
+
+    Status do_visit(VariantColumn* column) {
+        auto v = VariantColumnSerde::deserialize(_cur, column);
+        if (!v.ok()) {
+            return v.status();
+        }
+
+        _cur = v.value();
         return Status::OK();
     }
 

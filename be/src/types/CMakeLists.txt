@@ -14,7 +14,7 @@
 
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/types")
 
-add_library(Types STATIC
+ADD_BE_LIB(Types
     array_type_info.cpp
     bitmap_value.cpp
     date_value.cpp
@@ -28,4 +28,5 @@ add_library(Types STATIC
     checker/type_checker.cpp
     type_checker_manager.cpp
     int256.cpp
+    variant_value.cpp
 )

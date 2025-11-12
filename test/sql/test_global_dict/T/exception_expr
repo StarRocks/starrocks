@@ -1,0 +1,20 @@
+-- name: test_dict_exception_expr
+set sql_mode='ALLOW_THROW_EXCEPTION';
+create table t_low(c1 int, c2 string);
+insert into t_low values (1, null);
+
+function: wait_global_dict_ready('c2', 't_low')
+
+select c1, cast (c2 as int) as name from t_low;
+
+insert into t_low values (2, "");
+insert into t_low values (3, "1");
+insert into t_low values (4, "2");
+
+function: wait_global_dict_ready('c2', 't_low')
+
+select c1, cast (c2 as int) as name from t_low where c1 = 3;
+select c1, cast (c2 as int) as name from t_low where c1 = 4;
+select c1, cast (c2 as int) as name from t_low where c1 != 2;
+select c1, cast (c2 as int) as name from t_low where c1 = 2;
+

@@ -18,47 +18,10 @@
 #include <cmath>
 #include <memory>
 
-#include "column/array_column.h"
-#include "column/column_builder.h"
-#include "column/fixed_length_column.h"
-#include "column/nullable_column.h"
-#include "column/vectorized_fwd.h"
-#include "exprs/agg/aggregate_factory.h"
-#include "exprs/agg/aggregate_state_allocator.h"
-#include "exprs/agg/any_value.h"
-#include "exprs/agg/array_agg.h"
-#include "exprs/agg/group_concat.h"
-#include "exprs/agg/maxmin.h"
-#include "exprs/agg/nullable_aggregate.h"
-#include "exprs/agg/sum.h"
-#include "exprs/arithmetic_operation.h"
-#include "exprs/function_context.h"
-#include "gen_cpp/Data_types.h"
-#include "gen_cpp/Types_types.h"
-#include "gutil/casts.h"
-#include "runtime/mem_pool.h"
-#include "runtime/time_types.h"
-#include "testutil/function_utils.h"
-#include "types/bitmap_value.h"
-#include "util/slice.h"
-#include "util/thrift_util.h"
-#include "util/unaligned_access.h"
+#include "exprs/agg/base_aggregate_test.h"
 
 namespace starrocks {
 // adaptor to TypeDescriptor
-struct UTRawType {
-    LogicalType type;
-    int precision;
-    int scale;
-    operator TypeDescriptor() {
-        TypeDescriptor type_desc;
-        type_desc.type = type;
-        type_desc.precision = precision;
-        type_desc.scale = scale;
-        return type_desc;
-    }
-};
-
 class AggregateTest : public testing::Test {
 public:
     AggregateTest() = default;
@@ -80,254 +43,6 @@ private:
     FunctionContext* ctx{};
     std::unique_ptr<CountingAllocatorWithHook> _allocator;
 };
-
-class ManagedAggrState {
-public:
-    ~ManagedAggrState() { _func->destroy(_ctx, _state); }
-    static std::unique_ptr<ManagedAggrState> create(FunctionContext* ctx, const AggregateFunction* func) {
-        return std::make_unique<ManagedAggrState>(ctx, func);
-    }
-    AggDataPtr state() { return _state; }
-
-private:
-    ManagedAggrState(FunctionContext* ctx, const AggregateFunction* func) : _ctx(ctx), _func(func) {
-        _state = _mem_pool.allocate_aligned(func->size(), func->alignof_size());
-        _func->create(_ctx, _state);
-    }
-    FunctionContext* _ctx;
-    const AggregateFunction* _func;
-    MemPool _mem_pool;
-    AggDataPtr _state;
-};
-
-template <typename T>
-ColumnPtr gen_input_column1() {
-    using DataColumn = typename ColumnTraits<T>::ColumnType;
-    auto column = DataColumn::create();
-    for (int i = 0; i < 1024; i++) {
-        column->append(i);
-    }
-    column->append(100);
-    column->append(200);
-    return column;
-}
-
-template <LogicalType LT>
-ColumnPtr gen_input_decimal_column1(const FunctionContext::TypeDesc* type_desc) {
-    auto column = RunTimeColumnType<LT>::create(type_desc->precision, type_desc->scale);
-    for (int i = 0; i < 1024; i++) {
-        column->append(i);
-    }
-    column->append(100);
-    column->append(200);
-    return column;
-}
-
-template <typename T>
-ColumnPtr gen_input_column2() {
-    using DataColumn = typename ColumnTraits<T>::ColumnType;
-    auto column = DataColumn::create();
-    for (int i = 2000; i < 3000; i++) {
-        column->append(i);
-    }
-    return column;
-}
-
-template <>
-ColumnPtr gen_input_column1<Slice>() {
-    auto column = BinaryColumn::create();
-    std::vector<Slice> strings{{"ddd"}, {"ddd"}, {"eeeee"}, {"ff"}, {"ff"}, {"ddd"}};
-    column->append_strings(strings.data(), strings.size());
-    return column;
-}
-
-template <>
-ColumnPtr gen_input_column2<Slice>() {
-    auto column2 = BinaryColumn::create();
-    std::vector<Slice> strings2{{"kkk"}, {"k"}, {"kk"}, {"kkk"}};
-    column2->append_strings(strings2.data(), strings2.size());
-    return column2;
-}
-
-template <>
-ColumnPtr gen_input_column1<DecimalV2Value>() {
-    auto column = DecimalColumn::create();
-    column->append(DecimalV2Value(1));
-    column->append(DecimalV2Value(2));
-    column->append(DecimalV2Value(3));
-    return column;
-}
-
-template <>
-ColumnPtr gen_input_column2<DecimalV2Value>() {
-    auto column2 = DecimalColumn::create();
-    column2->append(DecimalV2Value(7));
-    column2->append(DecimalV2Value(8));
-    column2->append(DecimalV2Value(3));
-    return column2;
-}
-
-template <>
-ColumnPtr gen_input_column1<TimestampValue>() {
-    auto column = TimestampColumn::create();
-    for (int j = 0; j < 20; ++j) {
-        column->append(TimestampValue::create(2000 + j, 1, 1, 0, 30, 30));
-    }
-    column->append(TimestampValue::create(2000, 1, 1, 0, 30, 30));
-    column->append(TimestampValue::create(2001, 1, 1, 0, 30, 30));
-    return column;
-}
-
-template <>
-ColumnPtr gen_input_column2<TimestampValue>() {
-    auto column = TimestampColumn::create();
-    for (int j = 0; j < 20; ++j) {
-        column->append(TimestampValue::create(1000 + j, 1, 1, 0, 30, 30));
-    }
-    column->append(TimestampValue::create(2000, 1, 1, 0, 30, 30));
-    column->append(TimestampValue::create(1000, 1, 1, 0, 30, 30));
-    return column;
-}
-
-template <>
-ColumnPtr gen_input_column1<DateValue>() {
-    auto column = DateColumn::create();
-    for (int j = 0; j < 20; ++j) {
-        column->append(DateValue::create(2000 + j, 1, 1));
-    }
-    column->append(DateValue::create(2000, 1, 1));
-    column->append(DateValue::create(2001, 1, 1));
-    return column;
-}
-
-template <>
-ColumnPtr gen_input_column2<DateValue>() {
-    auto column = DateColumn::create();
-    for (int j = 0; j < 20; ++j) {
-        column->append(DateValue::create(1000 + j, 1, 1));
-    }
-    column->append(DateValue::create(2000, 1, 1));
-    column->append(DateValue::create(1000, 1, 1));
-    return column;
-}
-
-template <LogicalType LT>
-ColumnPtr gen_input_decimal_column2(const FunctionContext::TypeDesc* type_desc) {
-    auto column = RunTimeColumnType<LT>::create(type_desc->precision, type_desc->scale);
-    for (int i = 2000; i < 3000; i++) {
-        column->append(i);
-    }
-    return column;
-}
-
-template <typename T, typename TResult>
-void test_agg_function(FunctionContext* ctx, const AggregateFunction* func, TResult update_result1,
-                       TResult update_result2, TResult merge_result) {
-    int64_t mem_usage = 0;
-    ctx->set_mem_usage_counter(&mem_usage);
-    using ResultColumn = typename ColumnTraits<TResult>::ColumnType;
-    using ResultColumnPtr = typename ColumnTraits<TResult>::ColumnType::Ptr;
-    ResultColumnPtr result_column = ResultColumn::create();
-
-    // update input column 1
-    auto aggr_state = ManagedAggrState::create(ctx, func);
-    ColumnPtr column;
-    column = gen_input_column1<T>();
-    const Column* row_column = column.get();
-    func->update_batch_single_state(ctx, row_column->size(), &row_column, aggr_state->state());
-    func->finalize_to_column(ctx, aggr_state->state(), result_column.get());
-    ASSERT_EQ(update_result1, result_column->get_data()[0]);
-
-    // update input column 2
-    auto aggr_state2 = ManagedAggrState::create(ctx, func);
-    ColumnPtr column2;
-    column2 = gen_input_column2<T>();
-    row_column = column2.get();
-    func->update_batch_single_state(ctx, row_column->size(), &row_column, aggr_state2->state());
-    func->finalize_to_column(ctx, aggr_state2->state(), result_column.get());
-    ASSERT_EQ(update_result2, result_column->get_data()[1]);
-
-    // merge column 1 and column 2
-    ColumnPtr serde_column = BinaryColumn::create();
-    std::string func_name = func->get_name();
-    if (func_name == "count" || func_name == "sum" || func_name == "maxmin") {
-        serde_column = ResultColumn::create();
-    }
-
-    func->serialize_to_column(ctx, aggr_state->state(), serde_column.get());
-    func->merge(ctx, serde_column.get(), aggr_state2->state(), 0);
-    func->finalize_to_column(ctx, aggr_state2->state(), result_column.get());
-    ASSERT_EQ(merge_result, result_column->get_data()[2]);
-}
-
-template <LogicalType LT, typename TResult = RunTimeCppType<TYPE_DECIMAL128>, typename = DecimalLTGuard<LT>>
-void test_decimal_agg_function(FunctionContext* ctx, const AggregateFunction* func, TResult update_result1,
-                               TResult update_result2, TResult merge_result) {
-    using ResultColumn = RunTimeColumnType<TYPE_DECIMAL128>;
-    using ResultColumnPtr = typename RunTimeColumnType<TYPE_DECIMAL128>::Ptr;
-    const auto& result_type = ctx->get_return_type();
-    ResultColumnPtr result_column = ResultColumn::create(result_type.precision, result_type.scale);
-
-    // update input column 1
-    auto aggr_state = ManagedAggrState::create(ctx, func);
-    ColumnPtr column = gen_input_decimal_column1<LT>(ctx->get_arg_type(0));
-    const Column* row_column = column.get();
-    func->update_batch_single_state(ctx, row_column->size(), &row_column, aggr_state->state());
-    func->finalize_to_column(ctx, aggr_state->state(), result_column.get());
-    ASSERT_EQ(update_result1, result_column->get_data()[0]);
-
-    // update input column 2
-    auto aggr_state2 = ManagedAggrState::create(ctx, func);
-    ColumnPtr column2 = gen_input_decimal_column2<LT>(ctx->get_arg_type(0));
-    row_column = column2.get();
-    func->update_batch_single_state(ctx, row_column->size(), &row_column, aggr_state2->state());
-    func->finalize_to_column(ctx, aggr_state2->state(), result_column.get());
-    ASSERT_EQ(update_result2, result_column->get_data()[1]);
-
-    // merge column 1 and column 2
-    ColumnPtr serde_column = BinaryColumn::create();
-    std::string func_name = func->get_name();
-    if (func_name == "count" || func_name == "sum" || func_name == "decimal_sum" || func_name == "maxmin") {
-        serde_column = ResultColumn::create(result_type.precision, result_type.scale);
-    }
-
-    func->serialize_to_column(ctx, aggr_state->state(), serde_column.get());
-    func->merge(ctx, serde_column.get(), aggr_state2->state(), 0);
-    func->finalize_to_column(ctx, aggr_state2->state(), result_column.get());
-    ASSERT_EQ(merge_result, result_column->get_data()[2]);
-}
-
-template <typename T, typename TResult>
-void test_agg_variance_function(FunctionContext* ctx, const AggregateFunction* func, TResult update_result1,
-                                TResult update_result2, TResult merge_result) {
-    using ResultColumn = typename ColumnTraits<TResult>::ColumnType;
-    using ResultColumnPtr = typename ColumnTraits<TResult>::ColumnType::Ptr;
-    ResultColumnPtr result_column = ResultColumn::create();
-
-    auto state = ManagedAggrState::create(ctx, func);
-    // update input column 1
-    ColumnPtr column = gen_input_column1<T>();
-    const Column* row_column = column.get();
-    func->update_batch_single_state(ctx, row_column->size(), &row_column, state->state());
-    func->finalize_to_column(ctx, state->state(), result_column.get());
-    ASSERT_EQ(update_result1, result_column->get_data()[0]);
-
-    // update input column 2
-    auto state2 = ManagedAggrState::create(ctx, func);
-    ColumnPtr column2 = gen_input_column2<T>();
-    row_column = column2.get();
-    func->update_batch_single_state(ctx, row_column->size(), &row_column, state2->state());
-    func->finalize_to_column(ctx, state2->state(), result_column.get());
-    ASSERT_EQ(update_result2, result_column->get_data()[1]);
-
-    // merge column 1 and column 2
-    ColumnPtr serde_column = BinaryColumn::create();
-    func->serialize_to_column(ctx, state->state(), serde_column.get());
-    func->merge(ctx, serde_column.get(), state2->state(), 0);
-    func->finalize_to_column(ctx, state2->state(), result_column.get());
-    ASSERT_TRUE(std::abs(merge_result - result_column->get_data()[2]) < 1e-8);
-}
-
 TEST_F(AggregateTest, test_count) {
     const AggregateFunction* func = get_aggregate_function("count", TYPE_BIGINT, TYPE_BIGINT, false);
     test_agg_function<int16_t, int64_t>(ctx, func, 1026, 1000, 2026);
@@ -1293,7 +1008,7 @@ TEST_F(AggregateTest, test_sum_nullable) {
 
     const Column& result_data_column = result_column->data_column_ref();
     const auto& result_data = static_cast<const Int64Column&>(result_data_column);
-    ASSERT_EQ(4950, result_data.get_data()[0]);
+    ASSERT_EQ(4950, result_data.immutable_data()[0]);
 }
 
 TEST_F(AggregateTest, test_count_nullable) {
@@ -1341,7 +1056,7 @@ TEST_F(AggregateTest, test_bitmap_nullable) {
     const Column& result_data_column = result_column->data_column_ref();
     const auto& result_data = static_cast<const Int64Column&>(result_data_column);
     ASSERT_EQ(false, result_column->is_null(0));
-    ASSERT_EQ(50, result_data.get_data()[0]);
+    ASSERT_EQ(50, result_data.immutable_data()[0]);
 }
 
 TEST_F(AggregateTest, test_group_concat) {
@@ -1704,10 +1419,10 @@ ColumnPtr gen_histogram_column() {
     return column;
 }
 
-TEST_F(AggregateTest, test_histogram) {
-    std::vector<TypeDescriptor> arg_types = {
-            TypeDescriptor::from_logical_type(TYPE_BIGINT), TypeDescriptor::from_logical_type(TYPE_INT),
-            TypeDescriptor::from_logical_type(TYPE_DOUBLE), TypeDescriptor::from_logical_type(TYPE_INT)};
+TEST_F(AggregateTest, test_histogram_none) {
+    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_BIGINT),
+                                             TypeDescriptor::from_logical_type(TYPE_INT),
+                                             TypeDescriptor::from_logical_type(TYPE_DOUBLE)};
     auto return_type = TypeDescriptor::from_logical_type(TYPE_VARCHAR);
     std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
 
@@ -1717,26 +1432,20 @@ TEST_F(AggregateTest, test_histogram) {
     auto data_column = gen_histogram_column<int64_t>();
     auto const1 = ColumnHelper::create_const_column<TYPE_INT>(10, data_column->size());
     auto const2 = ColumnHelper::create_const_column<TYPE_DOUBLE>(1, data_column->size());
-    auto const3 = ColumnHelper::create_const_column<TYPE_INT>(2, data_column->size());
 
     Columns const_columns;
     const_columns.emplace_back(data_column);
-    const_columns.emplace_back(const1); // first column
+    const_columns.emplace_back(const1);
     const_columns.emplace_back(const2);
-    const_columns.emplace_back(const3); // 3rd const column
     local_ctx->set_constant_columns(const_columns);
 
     std::vector<const Column*> raw_columns;
-    raw_columns.resize(4);
+    raw_columns.resize(3);
     raw_columns[0] = data_column.get();
     raw_columns[1] = const1.get();
     raw_columns[2] = const2.get();
-    raw_columns[3] = const3.get();
     histogram_function->update_batch_single_state(local_ctx.get(), data_column->size(), raw_columns.data(),
                                                   state->state());
-    // for (int i = 0; i < data_column->size(); ++i) {
-    //     histogram_function->update(local_ctx.get(), raw_columns.data(), state->state(), i);
-    // }
 
     NullableColumn::Ptr result_column = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
     histogram_function->finalize_to_column(local_ctx.get(), state->state(), result_column.get());
@@ -1745,6 +1454,171 @@ TEST_F(AggregateTest, test_histogram) {
             "\"405\",\"408\",\"1\"],[\"406\",\"507\",\"510\",\"1\"],[\"508\",\"609\",\"612\",\"1\"],[\"610\",\"711\","
             "\"714\",\"1\"],[\"712\",\"813\",\"816\",\"1\"],[\"814\",\"915\",\"918\",\"1\"],[\"916\",\"1017\",\"1020\","
             "\"1\"],[\"1018\",\"1023\",\"1026\",\"1\"]]']",
+            result_column->debug_string());
+}
+
+TEST_F(AggregateTest, test_histogram_sample) {
+    std::vector<std::string> estimators = {"DUJ1", "LINEAR", "POLYNOMIAL", "GEE"};
+    for (const std::string& estimator : estimators) {
+        std::vector<TypeDescriptor> arg_types = {
+                TypeDescriptor::from_logical_type(TYPE_BIGINT), TypeDescriptor::from_logical_type(TYPE_INT),
+                TypeDescriptor::from_logical_type(TYPE_DOUBLE), TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
+        auto return_type = TypeDescriptor::from_logical_type(TYPE_VARCHAR);
+        std::unique_ptr<FunctionContext> local_ctx(
+                FunctionContext::create_test_context(std::move(arg_types), return_type));
+
+        const AggregateFunction* histogram_function =
+                get_aggregate_function("histogram", TYPE_BIGINT, TYPE_VARCHAR, true);
+        auto state = ManagedAggrState::create(ctx, histogram_function);
+
+        auto data_column = gen_histogram_column<int64_t>();
+        auto const1 = ColumnHelper::create_const_column<TYPE_INT>(10, data_column->size());
+        auto const2 = ColumnHelper::create_const_column<TYPE_DOUBLE>(1, data_column->size());
+        auto const3 = ColumnHelper::create_const_column<TYPE_VARCHAR>(estimator, data_column->size());
+
+        Columns const_columns;
+        const_columns.emplace_back(data_column);
+        const_columns.emplace_back(const1);
+        const_columns.emplace_back(const2);
+        const_columns.emplace_back(const3);
+        local_ctx->set_constant_columns(const_columns);
+
+        std::vector<const Column*> raw_columns;
+        raw_columns.resize(4);
+        raw_columns[0] = data_column.get();
+        raw_columns[1] = const1.get();
+        raw_columns[2] = const2.get();
+        raw_columns[3] = const3.get();
+        histogram_function->update_batch_single_state(local_ctx.get(), data_column->size(), raw_columns.data(),
+                                                      state->state());
+
+        NullableColumn::Ptr result_column = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+        histogram_function->finalize_to_column(local_ctx.get(), state->state(), result_column.get());
+        ASSERT_EQ(
+                "['[[\"0\",\"100\",\"102\",\"2\",\"101\"],[\"101\",\"201\",\"204\",\"1\",\"101\"],[\"202\",\"303\""
+                ",\"306\",\"1\",\"102\"],[\"304\",\"405\",\"408\",\"1\",\"102\"],[\"406\",\"507\",\"510\",\"1\""
+                ",\"102\"],[\"508\",\"609\",\"612\",\"1\",\"102\"],[\"610\",\"711\",\"714\",\"1\",\"102\"],[\"712\""
+                ",\"813\",\"816\",\"1\",\"102\"],[\"814\",\"915\",\"918\",\"1\",\"102\"],[\"916\",\"1017\",\"1020\""
+                ",\"1\",\"102\"],[\"1018\",\"1023\",\"1026\",\"1\",\"6\"]]']",
+                result_column->debug_string());
+    }
+}
+
+TEST_F(AggregateTest, test_histogram_hll_ndv) {
+    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_BIGINT),
+                                             TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
+    auto return_type = TypeDescriptor::from_logical_type(TYPE_VARCHAR);
+    std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
+
+    const AggregateFunction* histogram_hll_ndv_function =
+            get_aggregate_function("histogram_hll_ndv", TYPE_BIGINT, TYPE_VARCHAR, true);
+    auto state = ManagedAggrState::create(ctx, histogram_hll_ndv_function);
+
+    auto data_column = gen_histogram_column<int64_t>();
+    auto const1 = ColumnHelper::create_const_column<TYPE_VARCHAR>(
+            "[[\"0\",\"100\",\"102\",\"2\"],[\"101\",\"201\",\"204\",\"1\"],[\"202\",\"303\",\"306\",\"1\"],[\"304\","
+            "\"405\",\"408\",\"1\"],[\"406\",\"507\",\"510\",\"1\"],[\"508\",\"609\",\"612\",\"1\"],[\"610\",\"711\","
+            "\"714\",\"1\"],[\"712\",\"813\",\"816\",\"1\"],[\"814\",\"915\",\"918\",\"1\"],[\"916\",\"1017\",\"1020\","
+            "\"1\"],[\"1018\",\"1023\",\"1026\",\"1\"]]",
+            data_column->size());
+
+    Columns const_columns;
+    const_columns.emplace_back(data_column);
+    const_columns.emplace_back(const1);
+    local_ctx->set_constant_columns(const_columns);
+
+    std::vector<const Column*> raw_columns;
+    raw_columns.resize(2);
+    raw_columns[0] = data_column.get();
+    raw_columns[1] = const1.get();
+    histogram_hll_ndv_function->update_batch_single_state(local_ctx.get(), data_column->size(), raw_columns.data(),
+                                                          state->state());
+
+    NullableColumn::Ptr result_column = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    histogram_hll_ndv_function->finalize_to_column(local_ctx.get(), state->state(), result_column.get());
+
+    ASSERT_EQ(
+            "['[[\"0\",\"100\",\"102\",\"2\",\"101\"],[\"101\",\"201\",\"204\",\"1\",\"101\"],[\"202\",\"303\",\"306\","
+            "\"1\",\"102\"],[\"304\",\"405\",\"408\",\"1\",\"102\"],[\"406\",\"507\",\"510\",\"1\",\"102\"],[\"508\","
+            "\"609\",\"612\",\"1\",\"102\"],[\"610\",\"711\",\"714\",\"1\",\"102\"],[\"712\",\"813\",\"816\",\"1\","
+            "\"102\"],[\"814\",\"915\",\"918\",\"1\",\"102\"],[\"916\",\"1017\",\"1020\",\"1\",\"102\"],[\"1018\","
+            "\"1023\",\"1026\",\"1\",\"6\"]]']",
+            result_column->debug_string());
+
+    // reset and try different buckets.
+    histogram_hll_ndv_function->reset(local_ctx.get(), const_columns, state->state());
+
+    auto const2 =
+            ColumnHelper::create_const_column<TYPE_VARCHAR>("[[\"0\",\"1023\",\"1026\",\"1\"]]", data_column->size());
+
+    const_columns.clear();
+    const_columns.emplace_back(data_column);
+    const_columns.emplace_back(const2);
+    local_ctx->set_constant_columns(const_columns);
+
+    raw_columns[1] = const2.get();
+    histogram_hll_ndv_function->update_batch_single_state(local_ctx.get(), data_column->size(), raw_columns.data(),
+                                                          state->state());
+
+    result_column = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    histogram_hll_ndv_function->finalize_to_column(local_ctx.get(), state->state(), result_column.get());
+
+    ASSERT_EQ("['[[\"0\",\"1023\",\"1026\",\"1\",\"1011\"]]']", result_column->debug_string());
+}
+
+ColumnPtr gen_histogram_string_column() {
+    auto column = BinaryColumn::create();
+    for (int i = 0; i < 1024; i++) {
+        if (i == 100) {
+            column->append("100");
+        }
+        if (i == 200) {
+            column->append("200");
+        }
+        column->append(std::to_string(i));
+    }
+    return column;
+}
+
+TEST_F(AggregateTest, test_histogram_hll_ndv_with_strings) {
+    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_VARCHAR),
+                                             TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
+    auto return_type = TypeDescriptor::from_logical_type(TYPE_VARCHAR);
+    std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
+
+    const AggregateFunction* histogram_hll_ndv_function =
+            get_aggregate_function("histogram_hll_ndv", TYPE_VARCHAR, TYPE_VARCHAR, true);
+    auto state = ManagedAggrState::create(ctx, histogram_hll_ndv_function);
+
+    auto data_column = gen_histogram_string_column();
+    auto const1 = ColumnHelper::create_const_column<TYPE_VARCHAR>(
+            "[[\"0\",\"100\",\"102\",\"2\"],[\"101\",\"201\",\"204\",\"1\"],[\"202\",\"303\",\"306\",\"1\"],[\"304\","
+            "\"405\",\"408\",\"1\"],[\"406\",\"507\",\"510\",\"1\"],[\"508\",\"609\",\"612\",\"1\"],[\"610\",\"711\","
+            "\"714\",\"1\"],[\"712\",\"813\",\"816\",\"1\"],[\"814\",\"915\",\"918\",\"1\"],[\"916\",\"1017\",\"1020\","
+            "\"1\"],[\"1018\",\"1023\",\"1026\",\"1\"]]",
+            data_column->size());
+
+    Columns const_columns;
+    const_columns.emplace_back(data_column);
+    const_columns.emplace_back(const1);
+    local_ctx->set_constant_columns(const_columns);
+
+    std::vector<const Column*> raw_columns;
+    raw_columns.resize(2);
+    raw_columns[0] = data_column.get();
+    raw_columns[1] = const1.get();
+    histogram_hll_ndv_function->update_batch_single_state(local_ctx.get(), data_column->size(), raw_columns.data(),
+                                                          state->state());
+
+    NullableColumn::Ptr result_column = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    histogram_hll_ndv_function->finalize_to_column(local_ctx.get(), state->state(), result_column.get());
+
+    ASSERT_EQ(
+            "['[[\"0\",\"100\",\"102\",\"2\",\"4\"],[\"101\",\"201\",\"204\",\"1\",\"126\"],[\"202\",\"303\",\"306\","
+            "\"1\",\"113\"],[\"304\",\"405\",\"408\",\"1\",\"113\"],[\"406\",\"507\",\"510\",\"1\",\"113\"],[\"508\","
+            "\"609\",\"612\",\"1\",\"113\"],[\"610\",\"711\",\"714\",\"1\",\"113\"],[\"712\",\"813\",\"816\",\"1\","
+            "\"113\"],[\"814\",\"915\",\"918\",\"1\",\"113\"],[\"916\",\"1017\",\"1020\",\"1\",\"1\"],[\"1018\","
+            "\"1023\",\"1026\",\"1\",\"1\"]]']",
             result_column->debug_string());
 }
 

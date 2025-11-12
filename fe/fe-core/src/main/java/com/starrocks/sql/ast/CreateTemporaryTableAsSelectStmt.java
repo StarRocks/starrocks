@@ -27,6 +27,6 @@ public class CreateTemporaryTableAsSelectStmt extends CreateTableAsSelectStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCreateTemporaryTableAsSelectStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitCreateTemporaryTableAsSelectStatement(this, context);
     }
 }

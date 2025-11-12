@@ -22,12 +22,12 @@ import com.aliyun.odps.type.MapTypeInfo;
 import com.aliyun.odps.type.StructTypeInfo;
 import com.aliyun.odps.type.TypeInfo;
 import com.aliyun.odps.type.VarcharTypeInfo;
-import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.MapType;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.StructType;
-import com.starrocks.catalog.Type;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.MapType;
+import com.starrocks.type.StructType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -52,20 +52,20 @@ public class EntityConvertUtils {
                 //In odps 2.0, the maximum length of decimal is 38, while in 1.0 it is 54. You need to convert it to String type for processing.
                 //https://help.aliyun.com/zh/maxcompute/user-guide/maxcompute-v2-0-data-type-edition?spm=a2c4g.11186623.help-menu-27797.d_2_15_0_2.1c01123dDL8rEV
                 if (decimalTypeInfo.getPrecision() > 38) {
-                    return ScalarType.createDefaultCatalogString();
+                    return TypeFactory.createDefaultCatalogString();
                 }
-                return ScalarType.createUnifiedDecimalType(decimalTypeInfo.getPrecision(), decimalTypeInfo.getScale());
+                return TypeFactory.createUnifiedDecimalType(decimalTypeInfo.getPrecision(), decimalTypeInfo.getScale());
             case DOUBLE:
                 return Type.DOUBLE;
             case CHAR:
                 CharTypeInfo charTypeInfo = (CharTypeInfo) typeInfo;
-                return ScalarType.createCharType(charTypeInfo.getLength());
+                return TypeFactory.createCharType(charTypeInfo.getLength());
             case VARCHAR:
                 VarcharTypeInfo varcharTypeInfo = (VarcharTypeInfo) typeInfo;
-                return ScalarType.createVarcharType(varcharTypeInfo.getLength());
+                return TypeFactory.createVarcharType(varcharTypeInfo.getLength());
             case STRING:
             case JSON:
-                return ScalarType.createDefaultCatalogString();
+                return TypeFactory.createDefaultCatalogString();
             case BINARY:
                 return Type.VARBINARY;
             case BOOLEAN:

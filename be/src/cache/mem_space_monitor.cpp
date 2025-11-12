@@ -14,7 +14,7 @@
 
 #include "cache/mem_space_monitor.h"
 
-#include "cache/object_cache/page_cache.h"
+#include "cache/mem_cache/page_cache.h"
 #include "common/config.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
@@ -60,7 +60,11 @@ void MemSpaceMonitor::_adjust_datacache_callback() {
     std::unique_ptr<GCHelper> inc_advisor = std::make_unique<GCHelper>(cur_period, cur_interval, MonoTime::Now());
     while (!_stopped.load(std::memory_order_consume)) {
         int64_t kWaitTimeout = cur_interval * 1000 * 1000;
-        static const int64_t kCheckInterval = 1000 * 1000;
+#ifdef BE_TEST
+        static const int64_t kCheckInterval = 10 * 1000; // 10ms for faster shutdown in test environment
+#else
+        static const int64_t kCheckInterval = 1000 * 1000; // 1 second
+#endif
         auto cond = [this]() { return _stopped.load(std::memory_order_acquire); };
         auto wait_ret = Awaitility().timeout(kWaitTimeout).interval(kCheckInterval).until(cond);
         if (wait_ret) {

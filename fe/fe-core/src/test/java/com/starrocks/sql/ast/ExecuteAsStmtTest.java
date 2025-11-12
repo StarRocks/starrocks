@@ -45,8 +45,6 @@ public class ExecuteAsStmtTest {
     private AuthenticationMgr auth;
     @Mocked
     private AuthorizationMgr authorizationMgr;
-    @Mocked
-    private ConnectContext ctx;
 
     @BeforeEach
     public void setUp() throws PrivilegeException {
@@ -93,29 +91,23 @@ public class ExecuteAsStmtTest {
             }
         };
 
-        new Expectations(ctx) {
-            {
-                ctx.updateByUserProperty((UserProperty) any);
-                minTimes = 0;
-            }
-        };
-        ctx.setGlobalStateMgr(globalStateMgr);
-
+        ConnectContext connectContext = new ConnectContext();
         ExecuteAsStmt stmt = (ExecuteAsStmt) com.starrocks.sql.parser.SqlParser.parse(
                 "execute as user1 with no revert", 1).get(0);
-        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
         Assertions.assertEquals("user1", stmt.getToUser().getUser());
         Assertions.assertEquals("%", stmt.getToUser().getHost());
         Assertions.assertEquals("EXECUTE AS 'user1'@'%' WITH NO REVERT", stmt.toString());
         Assertions.assertFalse(stmt.isAllowRevert());
 
-        ExecuteAsExecutor.execute(stmt, ctx);
+        ExecuteAsExecutor.execute(stmt, connectContext);
 
-        Assertions.assertEquals(new UserIdentity("user1", "%"), ctx.getCurrentUserIdentity());
+        Assertions.assertEquals(new UserIdentity("user1", "%"), connectContext.getCurrentUserIdentity());
     }
 
     @Test
     public void testUserNotExist() {
+        ConnectContext ctx = new ConnectContext();
         assertThrows(SemanticException.class, () -> {
             // suppose current user doesn't exist, check for exception
             new Expectations(auth) {
@@ -134,6 +126,7 @@ public class ExecuteAsStmtTest {
 
     @Test
     public void testAllowRevert() {
+        ConnectContext ctx = new ConnectContext();
         assertThrows(SemanticException.class, () -> {
             // suppose current user exists
             new Expectations(auth) {

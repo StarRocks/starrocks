@@ -18,19 +18,20 @@ import com.google.api.client.util.Lists;
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.FunctionParams;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.FunctionAnalyzer;
+import com.starrocks.sql.ast.expression.FunctionParams;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TAggStateDesc;
 import com.starrocks.thrift.TFunctionVersion;
 import com.starrocks.thrift.TTypeDesc;
 import com.starrocks.thrift.TTypeNode;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeSerializer;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -69,7 +70,6 @@ public class AggStateDesc {
         this.resultNullable = resultNullable;
     }
 
-
     public AggStateDesc(String functionName,
                         Type returnType,
                         List<Type> argTypes) {
@@ -82,15 +82,11 @@ public class AggStateDesc {
         this.resultNullable = isAggFuncResultNullable(functionName);
     }
 
-    private boolean isAggFuncResultNullable(String functionName) {
+    public static boolean isAggFuncResultNullable(String functionName) {
         // To be more compatible, always set result nullable to true here. This may decrease the performance of runtime
         // but can be more compatible with different aggregate functions and inputs.
         // this.resultNullable = !FunctionSet.alwaysReturnNonNullableFunctions.contains(functionName);
-        if (FunctionSet.COUNT.equalsIgnoreCase(functionName)) {
-            return false;
-        } else {
-            return true;
-        }
+        return !FunctionSet.COUNT.equalsIgnoreCase(functionName);
     }
 
     public List<Type> getArgTypes() {
@@ -152,7 +148,7 @@ public class AggStateDesc {
         for (Type argType : argTypes) {
             TTypeDesc tTypeDesc = new TTypeDesc();
             tTypeDesc.setTypes(new ArrayList<TTypeNode>());
-            argType.toThrift(tTypeDesc);
+            TypeSerializer.toThrift(argType, tTypeDesc);
             tAggStateDesc.addToArg_types(tTypeDesc);
         }
         tAggStateDesc.setResult_nullable(resultNullable);
@@ -161,7 +157,7 @@ public class AggStateDesc {
         // ret type
         TTypeDesc tTypeDesc = new TTypeDesc();
         tTypeDesc.setTypes(new ArrayList<TTypeNode>());
-        returnType.toThrift(tTypeDesc);
+        TypeSerializer.toThrift(returnType, tTypeDesc);
         tAggStateDesc.setRet_type(tTypeDesc);
         Preconditions.checkState(!tTypeDesc.types.isEmpty());
 

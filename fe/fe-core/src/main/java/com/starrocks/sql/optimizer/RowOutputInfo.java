@@ -137,7 +137,7 @@ public class RowOutputInfo {
     }
 
     public List<ColumnRefOperator> getOutputColRefs() {
-        return chooseOutputMap().values().stream().map(e -> e.getColumnRef()).collect(Collectors.toList());
+        return chooseOutputMap().values().stream().map(ColumnOutputInfo::getColumnRef).collect(Collectors.toList());
     }
 
     public Map<ColumnRefOperator, ScalarOperator> getColumnRefMap() {
@@ -148,8 +148,6 @@ public class RowOutputInfo {
     public ColumnRefSet getOutputColumnRefSet() {
         return ColumnRefSet.createByIds(chooseOutputMap().keySet());
     }
-
-
 
     // used to obtain all the used cols from the children of an optExpression.
     public ColumnRefSet getUsedColumnRefSet() {

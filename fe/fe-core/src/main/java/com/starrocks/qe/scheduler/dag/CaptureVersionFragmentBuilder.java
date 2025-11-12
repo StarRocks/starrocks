@@ -16,7 +16,6 @@ package com.starrocks.qe.scheduler.dag;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.TupleId;
 import com.starrocks.planner.BlackHoleTableSink;
 import com.starrocks.planner.CaptureVersionNode;
 import com.starrocks.planner.DataPartition;
@@ -25,6 +24,7 @@ import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.PlanNode;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.ScanNode;
+import com.starrocks.planner.TupleId;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TScanRangeParams;
 

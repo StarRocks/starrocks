@@ -14,6 +14,8 @@
 
 #include "storage/rowset/binary_plain_page.h"
 
+#include "common/config.h"
+
 #ifdef __SSE4_2__
 #include <emmintrin.h>
 #endif
@@ -133,6 +135,15 @@ bool BinaryPlainPageDecoder<Type>::append_range(uint32_t idx, uint32_t end, Colu
 
         size_t append_bytes_length = offsets.back() - begin_offset;
         size_t old_bytes_size = bytes.size();
+        // try to reserve to avoid extra memcpy
+        if (bytes.capacity() == 0 && end - idx == _num_elems) {
+            // We assume each row is roughly the same size and then estimate the required buffer size.
+            size_t chunk_size = config::vector_chunk_size;
+            size_t read_rows = std::min<size_t>(end - idx, chunk_size);
+            size_t reserve_length = config::data_page_size * 1.5 / read_rows * chunk_size;
+            bytes.reserve(reserve_length);
+        }
+
         bytes.resize(old_bytes_size + append_bytes_length);
         // TODO: need did some optimize for large memory copy
         memcpy(bytes.data() + old_bytes_size, _data.get_data() + offset(idx), append_bytes_length);
@@ -155,11 +166,19 @@ bool BinaryPlainPageDecoder<Type>::append_range(uint32_t idx, uint32_t end, Colu
 
 template <LogicalType Type>
 void BinaryPlainPageDecoder<Type>::batch_string_at_index(Slice* dst, const int32_t* idx, size_t size) const {
+    // On macOS ARM64 with ASAN, the _parsed_datas optimization causes issues
+    // where cached Slices may point to freed memory. Disable the optimization
+    // and always use string_at_index for safety.
+#ifdef __APPLE__
+    for (int i = 0; i < size; ++i) {
+        dst[i] = string_at_index(idx[i]);
+    }
+#else
     if (_parsed_datas.has_value()) {
         const std::vector<Slice>& parsed_data = *_parsed_datas;
-        const Slice* parsed_data_ptr = parsed_data.data();
         static_assert(sizeof(Slice) == sizeof(__int128));
 #ifdef __SSE4_2__
+        const Slice* parsed_data_ptr = parsed_data.data();
 #pragma GCC unroll 2
         for (int i = 0; i < size; ++i) {
             DCHECK_LT(idx[i], parsed_data.size());
@@ -172,12 +191,12 @@ void BinaryPlainPageDecoder<Type>::batch_string_at_index(Slice* dst, const int32
             dst[i] = parsed_data[idx[i]];
         }
 #endif
-
     } else {
         for (int i = 0; i < size; ++i) {
             dst[i] = string_at_index(idx[i]);
         }
     }
+#endif
 }
 
 template class BinaryPlainPageDecoder<TYPE_CHAR>;

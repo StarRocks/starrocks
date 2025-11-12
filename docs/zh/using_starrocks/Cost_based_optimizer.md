@@ -210,6 +210,7 @@ StarRocks 提供灵活的信息采集方式，您可以根据业务场景选择�
 | statistic_auto_collect_predicate_columns_threshold | INT     | 32       | 自动采集时若发现表中的列数超过配置项，则仅会采集 Predicate Column 的列统计信息。 |
 | statistic_predicate_columns_persist_interval_sec   | LONG    | 60       | FE 对 Predicate Column 的同步和持久化间隔周期。 |
 | statistic_predicate_columns_ttl_hours       | LONG    | 24       | Predicate Column 信息在 FE 中缓存淘汰时间。 |
+| enable_predicate_columns_collection         | BOOLEAN | TRUE     | 是否启用 Predicate Column 采集。如果禁用，在查询优化期间将不会记录 Predicate Column。 |
 | enable_manual_collect_array_ndv             | BOOLEAN | FALSE        | 是否允许手动采集 ARRAY 类型列的 NDV 信息。 |
 | enable_auto_collect_array_ndv               | BOOLEAN | FALSE        | 是否允许自动采集 ARRAY 类型列的 NDV 信息。 |
 

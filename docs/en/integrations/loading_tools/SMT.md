@@ -602,7 +602,7 @@ Flink CDC connector captures and records row-level changes that occur in the SQL
     flink.starrocks.sink.properties.strip_outer_array=true
     ```
 
-7. Execute *starrocks-migrate-tool**. All SQL scripts are generated in the `result` directory.
+7. Execute **starrocks-migrate-tool**. All SQL scripts are generated in the `result` directory.
 
 ​    ```Bash
     $./starrocks-migrate-tool
@@ -788,8 +788,7 @@ The Flink CDC connector captures data by directly reading full and incremental d
 
 For TiDB whose version is before v4.0.0, additional configuration of `flink.cdc.pd-addresses` is required.
 
-````
-```Bash
+```Plain
 ############################################
 ### flink-cdc configuration for `tidb`
 ############################################
@@ -797,4 +796,3 @@ For TiDB whose version is before v4.0.0, additional configuration of `flink.cdc.
 # # TiKV cluster's PD address.
 # flink.cdc.pd-addresses = 127.0.0.1:2379
 ```
-````

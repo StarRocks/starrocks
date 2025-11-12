@@ -36,7 +36,6 @@ package com.starrocks.alter;
 
 import com.google.common.collect.Lists;
 import com.starrocks.alter.AlterJobV2.JobState;
-import com.starrocks.analysis.TableName;
 import com.starrocks.backup.CatalogMocker;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DynamicPartitionProperty;
@@ -52,7 +51,6 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Partition.PartitionState;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.ThreadUtil;
 import com.starrocks.server.GlobalStateMgr;
@@ -64,6 +62,7 @@ import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.sql.ast.ReorderColumnsClause;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.utframe.MockedWarehouseManager;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -411,8 +410,8 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         try {
             alterJobV2 = schemaChangeHandler.analyzeAndCreateJob(Lists.newArrayList(clause), db, olapTable);
             Assertions.fail();
-        } catch (DdlException e) {
-            Assertions.assertTrue(e.getMessage().contains("no available compute nodes"));
+        } catch (Exception e) {
+            Assertions.assertTrue(e.getMessage().contains("Current connection's warehouse(default_warehouse) does not exist"));
         }
     }
 

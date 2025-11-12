@@ -15,10 +15,11 @@
 package com.starrocks.sql.optimizer.operator.logical;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.analysis.Expr;
+import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -26,6 +27,7 @@ import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 
 import java.util.Map;
@@ -42,6 +44,9 @@ public class LogicalViewScanOperator  extends LogicalScanOperator {
     // Original plan evaluator(inlined view) for the input logical plan tree which has not done rule based rewrite yet,
     // this is only used when the view scan operator cannot be rewritten by view-based rewrite rules.
     private OptPlanEvaluator optPlanEvaluator;
+    // this maps original inlined view's column ref to non-inlined column ref which can be used for
+    // replacing from non-inlined column refs to inlined view's column ref.
+    private Map<ColumnRefOperator, ScalarOperator> originalColumnRefToInlinedColumnRefMap;
 
     public LogicalViewScanOperator(
             int relationId,
@@ -49,12 +54,15 @@ public class LogicalViewScanOperator  extends LogicalScanOperator {
             Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
             Map<Column, ColumnRefOperator> columnMetaToColRefMap,
             ColumnRefSet outputColumnSet,
-            Map<Expr, ColumnRefOperator> expressionToColumns) {
+            Map<Expr, ColumnRefOperator> expressionToColumns,
+            Map<ColumnRefOperator, ScalarOperator> originalColumnRefToInlinedColumnRefMap) {
         super(OperatorType.LOGICAL_VIEW_SCAN, table, colRefToColumnMetaMap,
                 columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null, null);
         this.relationId = relationId;
         this.outputColumnSet = outputColumnSet;
         this.expressionToColumns = expressionToColumns;
+        // copy the originalColumnRefToInlinedColumnRefMap to avoid modification by projection
+        this.originalColumnRefToInlinedColumnRefMap = Maps.newHashMap(originalColumnRefToInlinedColumnRefMap);
     }
 
     private LogicalViewScanOperator() {
@@ -82,6 +90,10 @@ public class LogicalViewScanOperator  extends LogicalScanOperator {
 
     public OptExpression getOriginalPlanEvaluator() {
         return this.optPlanEvaluator.evaluate();
+    }
+
+    public Map<ColumnRefOperator, ScalarOperator> getOriginalColumnRefToInlinedColumnRefMap() {
+        return originalColumnRefToInlinedColumnRefMap;
     }
 
     /**
@@ -157,6 +169,7 @@ public class LogicalViewScanOperator  extends LogicalScanOperator {
             builder.expressionToColumns = scanOperator.expressionToColumns;
             builder.outputColumnSet = scanOperator.outputColumnSet;
             builder.optPlanEvaluator = scanOperator.optPlanEvaluator;
+            builder.originalColumnRefToInlinedColumnRefMap = scanOperator.originalColumnRefToInlinedColumnRefMap;
             return this;
         }
     }

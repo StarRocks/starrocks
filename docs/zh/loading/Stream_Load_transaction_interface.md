@@ -5,9 +5,11 @@ keywords: ['Stream Load']
 
 # 使用 Stream Load 事务接口导入
 
-import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
+import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.mdx'
 
 为了支持和 Apache Flink®、Apache Kafka® 等其他系统之间实现跨系统的两阶段提交，并提升高并发 Stream Load 导入场景下的性能，StarRocks 自 2.4 版本起提供 Stream Load 事务接口。
+
+从 v4.0 版本开始，Stream Load 事务接口支持多表事务，即向同一数据库内的多个表导入数据。
 
 本文介绍 Stream Load 事务接口、以及如何使用该事务接口把数据导入到 StarRocks 中。
 
@@ -51,6 +53,8 @@ stateDiagram-v2
 
 提供 `/api/transaction/load` 接口，用于写入数据。您可以在同一个事务中多次调用该接口来写入数据。
 
+从 v4.0 版本开始，您可以在不同表上调用 `/api/transaction/load` 操作，将数据导入到同一数据库中的多个表中。
+
 ### 事务去重
 
 复用 StarRocks 现有的标签机制，通过标签绑定事务，实现事务的 “至多一次 (At-Most-Once)” 语义。
@@ -79,11 +83,11 @@ Stream Load 事务接口具有如下优势：
 
 事务接口当前具有如下使用限制：
 
-- 只支持**单库单表**事务，未来将会支持**跨库多表**事务。
+- 从 v4.0 版本起支持**单库多表**事务。未来将会支持**跨库多表**事务。
 
 - 只支持**单客户端并发**数据写入，未来将会支持**多客户端并发**数据写入。
 
-- 支持在单个事务中多次调用数据写入接口 `/api/transaction/load` 来写入数据，但是要求所有 `/api/transaction/load` 接口中的参数设置必须保持一致。
+- 支持在单个事务中多次调用数据写入接口 `/api/transaction/load` 来写入数据，但是要求所有 `/api/transaction/load` 接口中的参数设置（除 `table` 外）必须保持一致。
 
 - 导入 CSV 格式的数据时，需要确保每行数据结尾都有行分隔符。
 
@@ -91,7 +95,8 @@ Stream Load 事务接口具有如下优势：
 
 - 使用 Stream Load 事务接口导入数据的过程中，注意 `/api/transaction/begin`、`/api/transaction/load`、`/api/transaction/prepare` 接口报错后，事务将失败并自动回滚。
 - 在调用 `/api/transaction/begin` 接口开启事务时，您必须指定标签 (Label)，其后的 `/api/transaction/load`、`/api/transaction/prepare`、`/api/transaction/commit` 三个接口中，必须使用与 `/api/transaction/begin` 接口中相同的标签。
-- 重复调用标签相同的 `/api/transaction/begin` 接口，会导致前面使用相同标签已开启的事务失败并回滚。
+- 重复调用标签相同的 `/api/transaction/begin` 接口，会导致前面使用相同标签正在进行中的事务失败并回滚。
+- 若使用多表事务将数据导入到不同表中，则必须为事务涉及的所有操作指定参数 `-H "transaction_type:multi"`。
 - StarRocks支持导入的 CSV 格式数据默认的列分隔符是 `\t`，默认的行分隔符是 `\n`。如果源数据文件中的列分隔符和行分隔符不是 `\t` 和 `\n`，则在调用 `/api/transaction/load` 接口时必须通过 `"column_separator: <column_separator>"` 和 `"row_delimiter: <row_delimiter>"` 指定行分隔符和列分隔符。
 
 ## 准备工作
@@ -140,9 +145,14 @@ Stream Load 事务接口具有如下优势：
 ```Bash
 curl --location-trusted -u <username>:<password> -H "label:<label_name>" \
     -H "Expect:100-continue" \
+    [-H "transaction_type:multi"]\  # 可选。启动多表事务。
     -H "db:<database_name>" -H "table:<table_name>" \
     -XPOST http://<fe_host>:<fe_http_port>/api/transaction/begin
 ```
+
+> **说明**
+>
+> 若需在事务内向不同表导入数据，请在命令中指定 `-H "transaction_type:multi"`。
 
 #### 示例
 
@@ -197,6 +207,7 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
 ```Bash
 curl --location-trusted -u <username>:<password> -H "label:<label_name>" \
     -H "Expect:100-continue" \
+    [-H "transaction_type:multi"]\  # 可选。通过多表事务导入数据。
     -H "db:<database_name>" -H "table:<table_name>" \
     -T <file_path> \
     -XPUT http://<fe_host>:<fe_http_port>/api/transaction/load
@@ -204,7 +215,8 @@ curl --location-trusted -u <username>:<password> -H "label:<label_name>" \
 
 > **说明**
 >
-> 调用 `/api/transaction/load` 接口时，必须通过 `-T <file_path>` 指定数据文件所在的路径。
+> - 调用 `/api/transaction/load` 接口时，必须通过 `-T <file_path>` 指定数据文件所在的路径。
+> - 您可以通过调用 `/api/transaction/load` 操作并传入不同的 `table` 参数值，将数据导入到同一数据库中的不同表中。此时，您必须在命令中指定 `-H "transaction_type:multi"`。
 
 #### 示例
 
@@ -283,10 +295,15 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
 ```Bash
 curl --location-trusted -u <username>:<password> -H "label:<label_name>" \
     -H "Expect:100-continue" \
+    [-H "transaction_type:multi"]\ # 可选。预提交多表事务。
     -H "db:<database_name>" \
     [-H "prepared_timeout:<timeout_seconds>"] \
     -XPOST http://<fe_host>:<fe_http_port>/api/transaction/prepare
 ```
+
+> **说明**
+>
+> 若要预提交的事务为多表事务，请在命令中指定 `-H "transaction_type:multi"`。
 
 #### 示例
 
@@ -365,9 +382,14 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
 ```Bash
 curl --location-trusted -u <username>:<password> -H "label:<label_name>" \
     -H "Expect:100-continue" \
+    [-H "transaction_type:multi"]\  # 可选。提交多表事务。
     -H "db:<database_name>" \
     -XPOST http://<fe_host>:<fe_http_port>/api/transaction/commit
 ```
+
+> **说明**
+>
+> 若要提交的事务为多表事务，请在命令中指定 `-H "transaction_type:multi"`。
 
 #### 示例
 
@@ -464,9 +486,14 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
 ```Bash
 curl --location-trusted -u <username>:<password> -H "label:<label_name>" \
     -H "Expect:100-continue" \
+    [-H "transaction_type:multi"]\  # 可选。回滚多表事务。
     -H "db:<database_name>" \
     -XPOST http://<fe_host>:<fe_http_port>/api/transaction/rollback
 ```
+
+> **说明**
+>
+> 若要回滚的事务为多表事务，请在命令中指定 `-H "transaction_type:multi"`。
 
 #### 示例
 

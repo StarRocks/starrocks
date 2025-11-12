@@ -72,7 +72,7 @@ public class CreateStorageVolumeStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCreateStorageVolumeStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitCreateStorageVolumeStatement(this, context);
     }
 
     @Override

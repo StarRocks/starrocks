@@ -46,6 +46,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkState;
+import static com.starrocks.connector.hive.HiveStorageFormat.PARQUET;
 import static com.starrocks.connector.hive.HiveWriteUtils.checkLocationProperties;
 import static com.starrocks.connector.hive.HiveWriteUtils.createDirectory;
 import static com.starrocks.connector.hive.HiveWriteUtils.isDirectory;
@@ -199,7 +200,7 @@ public class HiveMetastoreOperations {
                 .setFullSchema(stmt.getColumns())
                 .setTableLocation(tablePath == null ? null : tablePath.toString())
                 .setProperties(stmt.getProperties())
-                .setStorageFormat(HiveStorageFormat.get(properties.getOrDefault(FILE_FORMAT, "parquet")))
+                .setStorageFormat(HiveStorageFormat.get(properties.getOrDefault(FILE_FORMAT, PARQUET.name())))
                 .setCreateTime(System.currentTimeMillis())
                 .setHiveTableType(tableType);
         Table table = builder.build();

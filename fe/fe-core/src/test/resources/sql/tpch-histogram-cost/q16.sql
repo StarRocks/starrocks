@@ -159,7 +159,7 @@ OutPut Exchange Id: 07
 5:OlapScanNode
 table: supplier, rollup: supplier
 preAggregation: on
-Predicates: 23: S_COMMENT LIKE '%Customer%Complaints%'
+Predicates: [23: S_COMMENT, VARCHAR, false] LIKE '%Customer%Complaints%'
 partitionsRatio=1/1, tabletsRatio=1/1
 actualRows=0, avgRowSize=105.0
 cardinality: 250000
@@ -176,7 +176,7 @@ OutPut Exchange Id: 02
 1:OlapScanNode
 table: part, rollup: part
 preAggregation: on
-Predicates: [10: P_BRAND, CHAR, false] != 'Brand#43', NOT (11: P_TYPE LIKE 'PROMO BURNISHED%'), 12: P_SIZE IN (31, 43, 9, 6, 18, 11, 25, 1)
+Predicates: [10: P_BRAND, CHAR, false] != 'Brand#43', NOT ([11: P_TYPE, VARCHAR, false] LIKE 'PROMO BURNISHED%'), [12: P_SIZE, INT, false] IN (31, 43, 9, 6, 18, 11, 25, 1)
 partitionsRatio=1/1, tabletsRatio=10/10
 actualRows=0, avgRowSize=47.0
 cardinality: 2284599

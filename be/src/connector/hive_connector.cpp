@@ -18,13 +18,13 @@
 
 #include "common/config.h"
 #include "connector/hive_chunk_sink.h"
-#include "exec/cache_select_scanner.h"
 #include "exec/exec_node.h"
-#include "exec/hdfs_scanner_orc.h"
-#include "exec/hdfs_scanner_parquet.h"
-#include "exec/hdfs_scanner_partition.h"
-#include "exec/hdfs_scanner_text.h"
-#include "exec/jni_scanner.h"
+#include "exec/hdfs_scanner/cache_select_scanner.h"
+#include "exec/hdfs_scanner/hdfs_scanner_orc.h"
+#include "exec/hdfs_scanner/hdfs_scanner_parquet.h"
+#include "exec/hdfs_scanner/hdfs_scanner_partition.h"
+#include "exec/hdfs_scanner/hdfs_scanner_text.h"
+#include "exec/hdfs_scanner/jni_scanner.h"
 #include "exprs/expr.h"
 #include "storage/chunk_helper.h"
 
@@ -813,10 +813,12 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         scanner = new HdfsOrcScanner();
     } else if (format == THdfsFileFormat::TEXT) {
         scanner = new HdfsTextScanner();
-    } else if ((format == THdfsFileFormat::AVRO || format == THdfsFileFormat::RC_BINARY ||
+    } else if ((format == THdfsFileFormat::AVRO || format == THdfsFileFormat::RC_FILE ||
                 format == THdfsFileFormat::RC_TEXT || format == THdfsFileFormat::SEQUENCE_FILE) &&
                (dynamic_cast<const HdfsTableDescriptor*>(_hive_table) != nullptr ||
                 dynamic_cast<const FileTableDescriptor*>(_hive_table) != nullptr)) {
+        // THdfsFileFormat::RC_TEXT is deprecated. RCText and RCBinary are both mapped to RC_FILE in the frontend.
+        // The RC_TEXT check is retained here for backward compatibility with older FE versions.
         scanner = create_hive_jni_scanner(jni_scanner_create_options).release();
     } else {
         std::string msg = fmt::format("unsupported hdfs file format: {}", to_string(format));

@@ -88,30 +88,30 @@ public:
         [[maybe_unused]] const auto* column = down_cast<const InputColumnType*>(columns[0]);
         if constexpr (is_inc) {
             if constexpr (lt_is_datetime<LT>) {
-                this->data(state).sum += column->get_data()[row_num].to_unix_second();
+                this->data(state).sum += column->immutable_data()[row_num].to_unix_second();
             } else if constexpr (lt_is_date<LT>) {
-                this->data(state).sum += column->get_data()[row_num].julian();
+                this->data(state).sum += column->immutable_data()[row_num].julian();
             } else if constexpr (lt_is_decimalv2<LT>) {
-                this->data(state).sum += column->get_data()[row_num];
+                this->data(state).sum += column->immutable_data()[row_num];
             } else if constexpr (lt_is_arithmetic<LT>) {
-                this->data(state).sum += column->get_data()[row_num];
+                this->data(state).sum += column->immutable_data()[row_num];
             } else if constexpr (lt_is_decimal<LT>) {
-                this->data(state).sum += column->get_data()[row_num];
+                this->data(state).sum += column->immutable_data()[row_num];
             } else {
                 DCHECK(false) << "Invalid LogicalTypes for avg function";
             }
             this->data(state).count++;
         } else {
             if constexpr (lt_is_datetime<LT>) {
-                this->data(state).sum -= column->get_data()[row_num].to_unix_second();
+                this->data(state).sum -= column->immutable_data()[row_num].to_unix_second();
             } else if constexpr (lt_is_date<LT>) {
-                this->data(state).sum -= column->get_data()[row_num].julian();
+                this->data(state).sum -= column->immutable_data()[row_num].julian();
             } else if constexpr (lt_is_decimalv2<LT>) {
-                this->data(state).sum -= column->get_data()[row_num];
+                this->data(state).sum -= column->immutable_data()[row_num];
             } else if constexpr (lt_is_arithmetic<LT>) {
-                this->data(state).sum -= column->get_data()[row_num];
+                this->data(state).sum -= column->immutable_data()[row_num];
             } else if constexpr (lt_is_decimal<LT>) {
-                this->data(state).sum -= column->get_data()[row_num];
+                this->data(state).sum -= column->immutable_data()[row_num];
             } else {
                 DCHECK(false) << "Invalid LogicalTypes for avg function";
             }
@@ -196,15 +196,15 @@ public:
         ImmediateType result = {};
         for (size_t i = 0; i < chunk_size; ++i) {
             if constexpr (lt_is_datetime<LT>) {
-                result = src_column->get_data()[i].to_unix_second();
+                result = src_column->immutable_data()[i].to_unix_second();
             } else if constexpr (lt_is_date<LT>) {
-                result = src_column->get_data()[i].julian();
+                result = src_column->immutable_data()[i].julian();
             } else if constexpr (lt_is_decimalv2<LT>) {
-                result = src_column->get_data()[i];
+                result = src_column->immutable_data()[i];
             } else if constexpr (lt_is_arithmetic<LT>) {
-                result = src_column->get_data()[i];
+                result = src_column->immutable_data()[i];
             } else if constexpr (lt_is_decimal<LT>) {
-                result = src_column->get_data()[i];
+                result = src_column->immutable_data()[i];
             } else {
                 DCHECK(false) << "Invalid LogicalTypes for avg function";
             }

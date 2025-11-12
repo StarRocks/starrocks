@@ -14,12 +14,21 @@
 
 package com.starrocks.sql.plan;
 
+import com.google.common.collect.Lists;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.FeConstants;
+import com.starrocks.planner.AnalyticEvalNode;
+import com.starrocks.planner.TableFunctionNode;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.utframe.StarRocksAssert;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+
+import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 public class LowCardinalityArrayTest extends PlanTestBase {
 
@@ -158,7 +167,8 @@ public class LowCardinalityArrayTest extends PlanTestBase {
         Assertions.assertTrue(plan.contains("  0:OlapScanNode\n" +
                 "     table: supplier_nullable, rollup: supplier_nullable\n" +
                 "     preAggregation: on\n" +
-                "     Predicates: DictDecode(10: S_ADDRESS, [<place-holder> = 'a'], 10: S_ADDRESS[0])"), plan);
+                "     Predicates: DictDecode([10: S_ADDRESS, ARRAY<INT>, true], [<place-holder> = 'a'], "
+                + "[10: S_ADDRESS, ARRAY<INT>, true][0])"), plan);
     }
 
     @Test
@@ -168,10 +178,11 @@ public class LowCardinalityArrayTest extends PlanTestBase {
         Assertions.assertTrue(plan.contains(" 0:OlapScanNode\n" +
                 "     table: supplier_nullable, rollup: supplier_nullable\n" +
                 "     preAggregation: on\n" +
-                "     Predicates: DictDecode(10: S_ADDRESS, [<place-holder>]) = ['a','b']"), plan);
-        Assertions.assertTrue(plan.contains("  |  output columns:\n" +
-                "  |  9 <-> DictDecode(10: S_ADDRESS, [<place-holder>], array_min(10: S_ADDRESS))\n" +
-                "  |  10 <-> [10: S_ADDRESS, ARRAY<INT>, true]"), plan);
+                "     Predicates: DictDecode([10: S_ADDRESS, ARRAY<INT>, true], [<place-holder>]) = ['a','b']"), plan);
+        Assertions.assertTrue(plan.contains("  |  output columns:\n"
+                + "  |  9 <-> DictDecode([10: S_ADDRESS, ARRAY<INT>, true], [<place-holder>], array_min[([10: S_ADDRESS, "
+                + "ARRAY<INT>, true]); args: INVALID_TYPE; result: INT; args nullable: true; result nullable: true])\n"
+                + "  |  10 <-> [10: S_ADDRESS, ARRAY<INT>, true]"), plan);
     }
 
     @Test
@@ -199,16 +210,17 @@ public class LowCardinalityArrayTest extends PlanTestBase {
     public void testArrayPredicate4() throws Exception {
         String sql = "select array_min(S_ADDRESS), S_ADDRESS from supplier_nullable where S_ADDRESS[0] = 'a'";
         String plan = getVerboseExplain(sql);
-        Assertions.assertTrue(plan.contains("  0:OlapScanNode\n" +
-                "     table: supplier_nullable, rollup: supplier_nullable\n" +
-                "     preAggregation: on\n" +
-                "     Predicates: DictDecode(10: S_ADDRESS, [<place-holder> = 'a'], 10: S_ADDRESS[0])\n" +
-                "     dict_col=S_ADDRESS\n" +
-                "     partitionsRatio=0/1, tabletsRatio=0/0\n" +
-                "     tabletList=\n" +
-                "     actualRows=0, avgRowSize=2.0\n" +
-                "     Pruned type: 10 <-> [ARRAY<INT>]\n" +
-                "     cardinality: 1\n"), plan);
+        Assertions.assertTrue(plan.contains("  0:OlapScanNode\n"
+                + "     table: supplier_nullable, rollup: supplier_nullable\n"
+                + "     preAggregation: on\n"
+                + "     Predicates: DictDecode([10: S_ADDRESS, ARRAY<INT>, true], [<place-holder> = 'a'], [10: S_ADDRESS, "
+                + "ARRAY<INT>, true][0])\n"
+                + "     dict_col=S_ADDRESS\n"
+                + "     partitionsRatio=0/1, tabletsRatio=0/0\n"
+                + "     tabletList=\n"
+                + "     actualRows=0, avgRowSize=2.0\n"
+                + "     Pruned type: 10 <-> [ARRAY<INT>]\n"
+                + "     cardinality: 1\n"), plan);
     }
 
     @Test
@@ -216,36 +228,37 @@ public class LowCardinalityArrayTest extends PlanTestBase {
         String sql = "select array_min(S_ADDRESS), S_ADDRESS from supplier_nullable " +
                 "where S_ADDRESS[0] = 'a' and S_ADDRESS[1] = 'b'";
         String plan = getVerboseExplain(sql);
-        assertContains(plan, "Predicates: DictDecode(10: S_ADDRESS, [<place-holder> = 'a'], 10: S_ADDRESS[0]), " +
-                "DictDecode(10: S_ADDRESS, [<place-holder> = 'b'], 10: S_ADDRESS[1])");
+        assertContains(plan, "Predicates: DictDecode([10: S_ADDRESS, ARRAY<INT>, true], [<place-holder> = 'a'], "
+                + "[10: S_ADDRESS, ARRAY<INT>, true][0]), DictDecode([10: S_ADDRESS, ARRAY<INT>, true], "
+                + "[<place-holder> = 'b'], [10: S_ADDRESS, ARRAY<INT>, true][1])");
     }
 
     @Test
     public void testArrayComplexPredicate() throws Exception {
         String sql = "select array_min(S_ADDRESS), S_ADDRESS from supplier_nullable " +
                 "where ARRAY_DISTINCT(S_ADDRESS)[0] = 'a' and REVERSE(S_ADDRESS)[1] = 'b'";
-        String plan = getVerboseExplain(sql);
+        String plan = getFragmentPlan(sql);
         assertContains(plan,
-                "Predicates: DictDecode(10: S_ADDRESS, [<place-holder> = 'a'], array_distinct(10: S_ADDRESS)[0]), " +
+                "DictDecode(10: S_ADDRESS, [<place-holder> = 'a'], array_distinct(10: S_ADDRESS)[0]), " +
                         "DictDecode(10: S_ADDRESS, [<place-holder> = 'b'], reverse(10: S_ADDRESS)[1])");
 
         sql = "select array_min(S_ADDRESS), S_ADDRESS from supplier_nullable " +
                 "where ARRAY_SLICE(S_ADDRESS, 2, 4)[0] = 'a' and ARRAY_FILTER(S_ADDRESS, [TRUE,FALSE])[1] = 'b'";
-        plan = getVerboseExplain(sql);
+        plan = getFragmentPlan(sql);
         assertContains(plan,
-                "Predicates: DictDecode(10: S_ADDRESS, [<place-holder> = 'a'], array_slice(10: S_ADDRESS, 2, 4)[0]), " +
+                "DictDecode(10: S_ADDRESS, [<place-holder> = 'a'], array_slice(10: S_ADDRESS, 2, 4)[0]), " +
                         "DictDecode(10: S_ADDRESS, [<place-holder> = 'b'], array_filter(10: S_ADDRESS, [TRUE,FALSE])" +
                         "[1])");
 
         sql = "select S_ADDRESS from supplier_nullable " +
                 "where ARRAY_MIN(S_ADDRESS) = 'a' and ARRAY_MAX(S_ADDRESS) = 'b'";
-        plan = getVerboseExplain(sql);
+        plan = getFragmentPlan(sql);
         assertContains(plan, "DictDecode(9: S_ADDRESS, [<place-holder> = 'a'], array_min(9: S_ADDRESS)), " +
                 "DictDecode(9: S_ADDRESS, [<place-holder> = 'b'], array_max(9: S_ADDRESS))");
 
         sql = "select array_min(S_ADDRESS), S_ADDRESS from supplier_nullable " +
                 "where ARRAY_DISTINCT(ARRAY_SLICE(S_ADDRESS, 2, 4))[0] = 'a'";
-        plan = getVerboseExplain(sql);
+        plan = getFragmentPlan(sql);
         assertContains(plan, "DictDecode(10: S_ADDRESS, [<place-holder> = 'a'], " +
                 "array_distinct(array_slice(10: S_ADDRESS, 2, 4))[0])");
     }
@@ -255,14 +268,13 @@ public class LowCardinalityArrayTest extends PlanTestBase {
         String sql = "select array_min(S_ADDRESS), ARRAY_DISTINCT(ARRAY_SLICE(S_ADDRESS, 2, 4))[0], " +
                 "array_max(S_ADDRESS), ARRAY_LENGTH(S_ADDRESS)" +
                 "from supplier_nullable where S_ADDRESS[0] = 'a'";
-        String plan = getVerboseExplain(sql);
-        Assertions.assertTrue(plan.contains("  |  output columns:\n" +
-                "  |  9 <-> DictDecode(13: S_ADDRESS, [<place-holder>], array_min(13: S_ADDRESS))\n" +
-                "  |  10 <-> DictDecode(13: S_ADDRESS, [<place-holder>], array_distinct(array_slice(13: S_ADDRESS, 2," +
-                " 4))[0])\n" +
-                "  |  11 <-> DictDecode(13: S_ADDRESS, [<place-holder>], array_max(13: S_ADDRESS))\n" +
-                "  |  12 <-> array_length[([13: S_ADDRESS, ARRAY<INT>, true]); args: INVALID_TYPE; result: INT; " +
-                "args nullable: true; result nullable: true]"), plan);
+        String plan = getFragmentPlan(sql);
+        Assertions.assertTrue(plan.contains("  1:Project\n"
+                + "  |  <slot 9> : DictDecode(13: S_ADDRESS, [<place-holder>], array_min(13: S_ADDRESS))\n"
+                + "  |  <slot 10> : DictDecode(13: S_ADDRESS, [<place-holder>], "
+                + "array_distinct(array_slice(13: S_ADDRESS, 2, 4))[0])\n"
+                + "  |  <slot 11> : DictDecode(13: S_ADDRESS, [<place-holder>], array_max(13: S_ADDRESS))\n"
+                + "  |  <slot 12> : array_length(13: S_ADDRESS)"), plan);
     }
 
     @Test
@@ -271,37 +283,31 @@ public class LowCardinalityArrayTest extends PlanTestBase {
                 "       reverse(a1), array_slice(a2, 2, 4), cardinality(a2)\n" +
                 "from s2 where a1[1] = 'Jiangsu' and a2[2] = 'GD' order by v1 limit 2;";
 
-        String plan = getVerboseExplain(sql);
-        assertContains(plan, "  3:Project\n" +
-                "  |  output columns:\n" +
-                "  |  5 <-> array_length[([17: a1, ARRAY<INT>, true]); " +
-                "args: INVALID_TYPE; result: INT; args nullable: true; result nullable: true]\n" +
-                "  |  6 <-> DictDecode(18: a2, [<place-holder>], array_max(18: a2))\n" +
-                "  |  7 <-> DictDecode(17: a1, [<place-holder>], array_min(17: a1))\n" +
-                "  |  8 <-> DictDecode(17: a1, [<place-holder>], array_distinct(17: a1))\n" +
-                "  |  9 <-> DictDecode(18: a2, [<place-holder>], array_sort(18: a2))\n" +
-                "  |  10 <-> DictDecode(17: a1, [<place-holder>], reverse(17: a1))\n" +
-                "  |  11 <-> DictDecode(18: a2, [<place-holder>], array_slice(18: a2, 2, 4))\n" +
-                "  |  12 <-> cardinality[([18: a2, ARRAY<INT>, true]); " +
-                "args: INVALID_TYPE; result: INT; args nullable: true; result nullable: true]\n" +
-                "  |  limit: 2\n" +
-                "  |  cardinality: 1\n" +
-                "  |  \n" +
-                "  2:MERGING-EXCHANGE");
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  3:Project\n"
+                + "  |  <slot 5> : array_length(17: a1)\n"
+                + "  |  <slot 6> : DictDecode(18: a2, [<place-holder>], array_max(18: a2))\n"
+                + "  |  <slot 7> : DictDecode(17: a1, [<place-holder>], array_min(17: a1))\n"
+                + "  |  <slot 8> : DictDecode(17: a1, [<place-holder>], array_distinct(17: a1))\n"
+                + "  |  <slot 9> : DictDecode(18: a2, [<place-holder>], array_sort(18: a2))\n"
+                + "  |  <slot 10> : DictDecode(17: a1, [<place-holder>], reverse(17: a1))\n"
+                + "  |  <slot 11> : DictDecode(18: a2, [<place-holder>], array_slice(18: a2, 2, 4))\n"
+                + "  |  <slot 12> : cardinality(18: a2)\n"
+                + "  |  limit: 2\n"
+                + "  |  \n"
+                + "  2:MERGING-EXCHANGE");
     }
 
     @Test
     public void testArrayProjectOrderLimit2() throws Exception {
         String sql = "explain verbose  select lower(upper(array_min(reverse(array_sort(a1)))))      \n" +
                 "    from s2 where a2[2] = 'GD' order by v1 limit 2; ";
-        String plan = getVerboseExplain(sql);
-        assertContains(plan, "  4:Project\n" +
-                "  |  output columns:\n" +
-                "  |  5 <-> DictDecode(6: a1, [lower(upper(<place-holder>))], array_min(reverse(array_sort(6: a1))))\n" +
-                "  |  limit: 2\n" +
-                "  |  cardinality: 1\n" +
-                "  |  \n" +
-                "  3:MERGING-EXCHANGE");
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  4:Project\n"
+                + "  |  <slot 5> : DictDecode(6: a1, [lower(upper(<place-holder>))], array_min(reverse(array_sort(6: a1))))\n"
+                + "  |  limit: 2\n"
+                + "  |  \n"
+                + "  3:MERGING-EXCHANGE");
     }
 
     @Test
@@ -313,22 +319,24 @@ public class LowCardinalityArrayTest extends PlanTestBase {
                 "from supplier_nullable xx join[shuffle] table_int t on S_NATIONKEY = id_int " +
                 "where S_ADDRESS[0] = 'a'";
         String plan = getVerboseExplain(sql);
-        Assertions.assertTrue(plan.contains("Global Dict Exprs:\n" +
-                "    20: DictDefine(19: S_ADDRESS, [<place-holder>])\n" +
-                "    21: DictDefine(19: S_ADDRESS, [<place-holder>])\n" +
-                "    22: DictDefine(19: S_ADDRESS, [<place-holder>])\n" +
-                "\n" +
-                "  1:Project\n" +
-                "  |  output columns:\n" +
-                "  |  4 <-> [4: S_NATIONKEY, INT, false]\n" +
-                "  |  18 <-> array_length[([19: S_ADDRESS, ARRAY<INT>, true]); args: INVALID_TYPE; result: INT; args " +
-                "nullable: true; result nullable: true]\n" +
-                "  |  20 <-> array_distinct(array_slice(19: S_ADDRESS, 2, 4))[0]\n" +
-                "  |  21 <-> array_max[([19: S_ADDRESS, ARRAY<INT>, true]); args: INVALID_TYPE; result: INT; args " +
-                "nullable: true; result nullable: true]\n" +
-                "  |  22 <-> array_min[([19: S_ADDRESS, ARRAY<INT>, true]); args: INVALID_TYPE; result: INT; args " +
-                "nullable: true; result nullable: true]\n" +
-                "  |  cardinality: 1"), plan);
+        Assertions.assertTrue(plan.contains("Global Dict Exprs:\n"
+                + "    20: DictDefine(19: S_ADDRESS, [<place-holder>])\n"
+                + "    21: DictDefine(19: S_ADDRESS, [<place-holder>])\n"
+                + "    22: DictDefine(19: S_ADDRESS, [<place-holder>])\n"
+                + "\n"
+                + "  1:Project\n"
+                + "  |  output columns:\n"
+                + "  |  4 <-> [4: S_NATIONKEY, INT, false]\n"
+                + "  |  18 <-> array_length[([19: S_ADDRESS, ARRAY<INT>, true]); args: INVALID_TYPE; result: INT; args "
+                + "nullable: true; result nullable: true]\n"
+                + "  |  20 <-> array_distinct[(array_slice[([19: S_ADDRESS, ARRAY<INT>, true], 2, 4); args: INVALID_TYPE,"
+                + "BIGINT,BIGINT; result: ARRAY<INT>; args nullable: true; result nullable: true]); args: INVALID_TYPE; result:"
+                + " ARRAY<INT>; args nullable: true; result nullable: true][0]\n"
+                + "  |  21 <-> array_max[([19: S_ADDRESS, ARRAY<INT>, true]); args: INVALID_TYPE; result: INT; args nullable: "
+                + "true; result nullable: true]\n"
+                + "  |  22 <-> array_min[([19: S_ADDRESS, ARRAY<INT>, true]); args: INVALID_TYPE; result: INT; args nullable: "
+                + "true; result nullable: true]\n"
+                + "  |  cardinality: 1"), plan);
     }
 
     @Test
@@ -344,57 +352,66 @@ public class LowCardinalityArrayTest extends PlanTestBase {
                 "from supplier_nullable xx join[shuffle] table_int t on S_NATIONKEY = id_int " +
                 "where S_ADDRESS[0] = 'a'";
         String plan = getVerboseExplain(sql);
-        Assertions.assertTrue(plan.contains("  Global Dict Exprs:\n" +
-                "    26: DictDefine(25: S_ADDRESS, [<place-holder>])\n" +
-                "    27: DictDefine(25: S_ADDRESS, [<place-holder>])\n" +
-                "    28: DictDefine(25: S_ADDRESS, [<place-holder>])\n" +
-                "    29: DictDefine(25: S_ADDRESS, [<place-holder>])\n" +
-                "    30: DictDefine(25: S_ADDRESS, [<place-holder>])\n" +
-                "    31: DictDefine(25: S_ADDRESS, [<place-holder>])\n" +
-                "\n" +
-                "  1:Project\n" +
-                "  |  output columns:\n" +
-                "  |  4 <-> [4: S_NATIONKEY, INT, false]\n" +
-                "  |  25 <-> [25: S_ADDRESS, ARRAY<INT>, true]\n" +
-                "  |  26 <-> array_max[([34: reverse, ARRAY<INT>, true]); " +
-                "args: INVALID_TYPE; result: INT; args nullable: true; result nullable: true]\n" +
-                "  |  27 <-> 34: reverse[2]\n" +
-                "  |  28 <-> array_min[([25: S_ADDRESS, ARRAY<INT>, true]); " +
-                "args: INVALID_TYPE; result: INT; args nullable: true; result nullable: true]\n" +
-                "  |  29 <-> array_distinct(array_slice(25: S_ADDRESS, 2, 4))[0]\n" +
-                "  |  30 <-> array_slice(25: S_ADDRESS, 1, 2)[0]\n" +
-                "  |  31 <-> array_max[([25: S_ADDRESS, ARRAY<INT>, true]); " +
-                "args: INVALID_TYPE; result: INT; args nullable: true; result nullable: true]\n" +
-                "  |  common expressions:\n" +
-                "  |  32 <-> reverse[([25: S_ADDRESS, ARRAY<INT>, true]); " +
-                "args: INVALID_TYPE; result: ARRAY<INT>; args nullable: true; result nullable: true]\n" +
-                "  |  33 <-> array_distinct[([32: reverse, ARRAY<INT>, true]); " +
-                "args: INVALID_TYPE; result: ARRAY<INT>; args nullable: true; result nullable: true]\n" +
-                "  |  34 <-> reverse[([33: array_distinct, ARRAY<INT>, true]); " +
-                "args: INVALID_TYPE; result: ARRAY<INT>; args nullable: true; result nullable: true]\n" +
-                "  |  cardinality: 1\n"), plan);
+        Assertions.assertTrue(plan.contains("Global Dict Exprs:\n"
+                + "    26: DictDefine(25: S_ADDRESS, [<place-holder>])\n"
+                + "    27: DictDefine(25: S_ADDRESS, [<place-holder>])\n"
+                + "    28: DictDefine(25: S_ADDRESS, [<place-holder>])\n"
+                + "    29: DictDefine(25: S_ADDRESS, [<place-holder>])\n"
+                + "    30: DictDefine(25: S_ADDRESS, [<place-holder>])\n"
+                + "    31: DictDefine(25: S_ADDRESS, [<place-holder>])\n"
+                + "\n"
+                + "  1:Project\n"
+                + "  |  output columns:\n"
+                + "  |  4 <-> [4: S_NATIONKEY, INT, false]\n"
+                + "  |  25 <-> [25: S_ADDRESS, ARRAY<INT>, true]\n"
+                + "  |  26 <-> array_max[([34: reverse, ARRAY<INT>, true]); args: INVALID_TYPE; result: INT; args nullable: "
+                + "true; result nullable: true]\n"
+                + "  |  27 <-> [34: reverse, ARRAY<INT>, true][2]\n"
+                + "  |  28 <-> array_min[([25: S_ADDRESS, ARRAY<INT>, true]); args: INVALID_TYPE; result: INT; args nullable: "
+                + "true; result nullable: true]\n"
+                + "  |  29 <-> array_distinct[(array_slice[([25: S_ADDRESS, ARRAY<INT>, true], 2, 4); args: INVALID_TYPE,"
+                + "BIGINT,BIGINT; result: ARRAY<INT>; args nullable: true; result nullable: true]); args: INVALID_TYPE; result:"
+                + " ARRAY<INT>; args nullable: true; result nullable: true][0]\n"
+                + "  |  30 <-> array_slice[([25: S_ADDRESS, ARRAY<INT>, true], 1, 2); args: INVALID_TYPE,BIGINT,BIGINT; result:"
+                + " ARRAY<INT>; args nullable: true; result nullable: true][0]\n"
+                + "  |  31 <-> array_max[([25: S_ADDRESS, ARRAY<INT>, true]); args: INVALID_TYPE; result: INT; args nullable: "
+                + "true; result nullable: true]\n"
+                + "  |  common expressions:\n"
+                + "  |  32 <-> reverse[([25: S_ADDRESS, ARRAY<INT>, true]); args: INVALID_TYPE; result: ARRAY<INT>; args "
+                + "nullable: true; result nullable: true]\n"
+                + "  |  33 <-> array_distinct[([32: reverse, ARRAY<INT>, true]); args: INVALID_TYPE; result: ARRAY<INT>; args "
+                + "nullable: true; result nullable: true]\n"
+                + "  |  34 <-> reverse[([33: array_distinct, ARRAY<INT>, true]); args: INVALID_TYPE; result: ARRAY<INT>; args "
+                + "nullable: true; result nullable: true]\n"
+                + "  |  cardinality: 1"), plan);
 
-        assertContains(plan, "  Global Dict Exprs:\n" +
-                "    26: DictDefine(25: S_ADDRESS, [<place-holder>])\n" +
-                "    27: DictDefine(25: S_ADDRESS, [<place-holder>])\n" +
-                "    28: DictDefine(25: S_ADDRESS, [<place-holder>])\n" +
-                "    29: DictDefine(25: S_ADDRESS, [<place-holder>])\n" +
-                "    30: DictDefine(25: S_ADDRESS, [<place-holder>])\n" +
-                "    31: DictDefine(25: S_ADDRESS, [<place-holder>])\n" +
-                "\n" +
-                "  6:Project\n" +
-                "  |  output columns:\n" +
-                "  |  11 <-> DictDecode(28: array_min, [<place-holder>])\n" +
-                "  |  12 <-> DictDecode(29: expr, [<place-holder>])\n" +
-                "  |  13 <-> DictDecode(30: expr, [hex(<place-holder>)])\n" +
-                "  |  14 <-> DictDecode(31: array_max, [upper(<place-holder>)])\n" +
-                "  |  15 <-> DictDecode(25: S_ADDRESS, [<place-holder>], " +
-                "array_distinct(array_filter(25: S_ADDRESS, [TRUE,FALSE])))\n" +
-                "  |  16 <-> DictDecode(25: S_ADDRESS, [<place-holder>], " +
-                "reverse(array_distinct(reverse(25: S_ADDRESS))))\n" +
-                "  |  17 <-> DictDecode(26: array_max, [<place-holder>])\n" +
-                "  |  18 <-> DictDecode(27: expr, [<place-holder>])\n" +
-                "  |  cardinality: 1");
+        assertContains(plan, "Global Dict Exprs:\n"
+                + "    26: DictDefine(25: S_ADDRESS, [<place-holder>])\n"
+                + "    27: DictDefine(25: S_ADDRESS, [<place-holder>])\n"
+                + "    28: DictDefine(25: S_ADDRESS, [<place-holder>])\n"
+                + "    29: DictDefine(25: S_ADDRESS, [<place-holder>])\n"
+                + "    30: DictDefine(25: S_ADDRESS, [<place-holder>])\n"
+                + "    31: DictDefine(25: S_ADDRESS, [<place-holder>])\n"
+                + "\n"
+                + "  6:Project\n"
+                + "  |  output columns:\n"
+                + "  |  11 <-> DictDecode([28: array_min, INT, true], [<place-holder>])\n"
+                + "  |  12 <-> DictDecode([29: expr, INT, true], [<place-holder>])\n"
+                + "  |  13 <-> DictDecode([30: expr, INT, true], [hex[(<place-holder>); args: VARCHAR; result: VARCHAR; args "
+                + "nullable: true; result nullable: true]])\n"
+                + "  |  14 <-> DictDecode([31: array_max, INT, true], [upper[(<place-holder>); args: VARCHAR; result: VARCHAR; "
+                + "args nullable: true; result nullable: true]])\n"
+                + "  |  15 <-> DictDecode([25: S_ADDRESS, ARRAY<INT>, true], [<place-holder>], array_distinct[(array_filter["
+                + "([25: S_ADDRESS, ARRAY<INT>, true], [TRUE,FALSE]); args: INVALID_TYPE,INVALID_TYPE; result: ARRAY<INT>; args"
+                + " nullable: true; result nullable: true]); args: INVALID_TYPE; result: ARRAY<INT>; args nullable: true; "
+                + "result nullable: true])\n"
+                + "  |  16 <-> DictDecode([25: S_ADDRESS, ARRAY<INT>, true], [<place-holder>], reverse[(array_distinct["
+                + "(reverse[([25: S_ADDRESS, ARRAY<INT>, true]); args: INVALID_TYPE; result: ARRAY<INT>; args nullable: true; "
+                + "result nullable: true]); args: INVALID_TYPE; result: ARRAY<INT>; args nullable: true; result nullable: "
+                + "true]); args: INVALID_TYPE; result: ARRAY<INT>; args nullable: true; result nullable: true])\n"
+                + "  |  17 <-> DictDecode([26: array_max, INT, true], [<place-holder>])\n"
+                + "  |  18 <-> DictDecode([27: expr, INT, true], [<place-holder>])\n"
+                + "  |  cardinality: 1");
     }
 
     @Test
@@ -445,17 +462,17 @@ public class LowCardinalityArrayTest extends PlanTestBase {
                 "    51: DictDefine(35: S_ADDRESS, [<place-holder>])\n" +
                 "    52: DictDefine(35: S_ADDRESS, [<place-holder>])\n" +
                 "    53: DictDefine(35: S_ADDRESS, [<place-holder>])"), plan);
-        assertContains(plan, " 6:Project\n" +
-                "  |  output columns:\n" +
-                "  |  39 <-> DictDefine(51: array_min, [<place-holder>])\n" +
-                "  |  40 <-> DictDefine(52: expr, [<place-holder>])\n" +
-                "  |  41 <-> DictDefine(53: expr, [<place-holder>])\n" +
-                "  |  42 <-> DictDefine(36: array_max, [<place-holder>])\n" +
-                "  |  43 <-> DictDefine(37: expr, [<place-holder>])\n" +
-                "  |  44 <-> DictDefine(38: expr, [<place-holder>])\n" +
-                "  |  45 <-> DictDefine(49: array_max, [<place-holder>])\n" +
-                "  |  46 <-> DictDefine(50: expr, [<place-holder>])\n" +
-                "  |  cardinality: 1");
+        assertContains(plan, "  6:Project\n"
+                + "  |  output columns:\n"
+                + "  |  39 <-> DictDefine([51: array_min, INT, true], [<place-holder>])\n"
+                + "  |  40 <-> DictDefine([52: expr, INT, true], [<place-holder>])\n"
+                + "  |  41 <-> DictDefine([53: expr, INT, true], [<place-holder>])\n"
+                + "  |  42 <-> DictDefine([36: array_max, INT, true], [<place-holder>])\n"
+                + "  |  43 <-> DictDefine([37: expr, INT, true], [<place-holder>])\n"
+                + "  |  44 <-> DictDefine([38: expr, INT, true], [<place-holder>])\n"
+                + "  |  45 <-> DictDefine([49: array_max, INT, true], [<place-holder>])\n"
+                + "  |  46 <-> DictDefine([50: expr, INT, true], [<place-holder>])\n"
+                + "  |  cardinality: 1");
         assertContains(plan, " Global Dict Exprs:\n" +
                 "    49: DictDefine(35: S_ADDRESS, [<place-holder>])\n" +
                 "    50: DictDefine(35: S_ADDRESS, [<place-holder>])\n" +
@@ -465,32 +482,38 @@ public class LowCardinalityArrayTest extends PlanTestBase {
                 "    53: DictDefine(35: S_ADDRESS, [<place-holder>])\n" +
                 "    37: DictDefine(35: S_ADDRESS, [<place-holder>])\n" +
                 "    38: DictDefine(35: S_ADDRESS, [<place-holder>])");
-        assertContains(plan, " 1:Project\n" +
-                "  |  output columns:\n" +
-                "  |  4 <-> [4: S_NATIONKEY, INT, false]\n" +
-                "  |  36 <-> array_max[([35: S_ADDRESS, ARRAY<INT>, true]); args: INVALID_TYPE; result: INT; args " +
-                "nullable: true; result nullable: true]\n" +
-                "  |  37 <-> array_distinct(array_filter(35: S_ADDRESS, [TRUE,FALSE]))[3]\n" +
-                "  |  38 <-> 56: reverse[1]\n" +
-                "  |  49 <-> array_max[([56: reverse, ARRAY<INT>, true]); args: INVALID_TYPE; result: INT; args " +
-                "nullable: true; result nullable: true]\n" +
-                "  |  50 <-> 56: reverse[2]\n" +
-                "  |  51 <-> array_min[([35: S_ADDRESS, ARRAY<INT>, true]); args: INVALID_TYPE; result: INT; args " +
-                "nullable: true; result nullable: true]\n" +
-                "  |  52 <-> array_distinct(array_slice(35: S_ADDRESS, 2, 4))[0]\n" +
-                "  |  53 <-> array_slice(35: S_ADDRESS, 1, 2)[0]\n" +
-                "  |  common expressions:\n" +
-                "  |  54 <-> reverse[([35: S_ADDRESS, ARRAY<INT>, true]); args: INVALID_TYPE; result: ARRAY<INT>; " +
-                "args nullable: true; result nullable: true]\n" +
-                "  |  55 <-> array_distinct[([54: reverse, ARRAY<INT>, true]); args: INVALID_TYPE; result: " +
-                "ARRAY<INT>; args nullable: true; result nullable: true]\n" +
-                "  |  56 <-> reverse[([55: array_distinct, ARRAY<INT>, true]); args: INVALID_TYPE; result: " +
-                "ARRAY<INT>; args nullable: true; result nullable: true]\n" +
-                "  |  cardinality: 1");
-        assertContains(plan, "0:OlapScanNode\n" +
-                "     table: supplier_nullable, rollup: supplier_nullable\n" +
-                "     preAggregation: on\n" +
-                "     Predicates: DictDecode(35: S_ADDRESS, [<place-holder> = 'a'], 35: S_ADDRESS[0])");
+        assertContains(plan, "  1:Project\n"
+                + "  |  output columns:\n"
+                + "  |  4 <-> [4: S_NATIONKEY, INT, false]\n"
+                + "  |  36 <-> array_max[([35: S_ADDRESS, ARRAY<INT>, true]); args: INVALID_TYPE; result: INT; args nullable: "
+                + "true; result nullable: true]\n"
+                + "  |  37 <-> array_distinct[(array_filter[([35: S_ADDRESS, ARRAY<INT>, true], [TRUE,FALSE]); args: "
+                + "INVALID_TYPE,INVALID_TYPE; result: ARRAY<INT>; args nullable: true; result nullable: true]); args: "
+                + "INVALID_TYPE; result: ARRAY<INT>; args nullable: true; result nullable: true][3]\n"
+                + "  |  38 <-> [56: reverse, ARRAY<INT>, true][1]\n"
+                + "  |  49 <-> array_max[([56: reverse, ARRAY<INT>, true]); args: INVALID_TYPE; result: INT; args nullable: "
+                + "true; result nullable: true]\n"
+                + "  |  50 <-> [56: reverse, ARRAY<INT>, true][2]\n"
+                + "  |  51 <-> array_min[([35: S_ADDRESS, ARRAY<INT>, true]); args: INVALID_TYPE; result: INT; args nullable: "
+                + "true; result nullable: true]\n"
+                + "  |  52 <-> array_distinct[(array_slice[([35: S_ADDRESS, ARRAY<INT>, true], 2, 4); args: INVALID_TYPE,"
+                + "BIGINT,BIGINT; result: ARRAY<INT>; args nullable: true; result nullable: true]); args: INVALID_TYPE; result:"
+                + " ARRAY<INT>; args nullable: true; result nullable: true][0]\n"
+                + "  |  53 <-> array_slice[([35: S_ADDRESS, ARRAY<INT>, true], 1, 2); args: INVALID_TYPE,BIGINT,BIGINT; result:"
+                + " ARRAY<INT>; args nullable: true; result nullable: true][0]\n"
+                + "  |  common expressions:\n"
+                + "  |  54 <-> reverse[([35: S_ADDRESS, ARRAY<INT>, true]); args: INVALID_TYPE; result: ARRAY<INT>; args "
+                + "nullable: true; result nullable: true]\n"
+                + "  |  55 <-> array_distinct[([54: reverse, ARRAY<INT>, true]); args: INVALID_TYPE; result: ARRAY<INT>; args "
+                + "nullable: true; result nullable: true]\n"
+                + "  |  56 <-> reverse[([55: array_distinct, ARRAY<INT>, true]); args: INVALID_TYPE; result: ARRAY<INT>; args "
+                + "nullable: true; result nullable: true]\n"
+                + "  |  cardinality: 1");
+        assertContains(plan, "  0:OlapScanNode\n"
+                + "     table: supplier_nullable, rollup: supplier_nullable\n"
+                + "     preAggregation: on\n"
+                + "     Predicates: DictDecode([35: S_ADDRESS, ARRAY<INT>, true], [<place-holder> = 'a'], [35: S_ADDRESS, "
+                + "ARRAY<INT>, true][0])");
     }
 
     @Test
@@ -515,13 +538,18 @@ public class LowCardinalityArrayTest extends PlanTestBase {
                 "    30: DictDefine(26: S_ADDRESS, [<place-holder>])\n" +
                 "    31: DictDefine(26: S_ADDRESS, [<place-holder>])"), plan);
 
-        assertContains(plan, "6:Project\n" +
-                "  |  output columns:\n" +
-                "  |  16 <-> DictDecode(31: array_min, [upper(<place-holder>)])\n" +
-                "  |  17 <-> DictDecode(27: expr, [ltrim(<place-holder>)])\n" +
-                "  |  18 <-> DictDecode(28: expr, [if(CAST(<place-holder> AS BOOLEAN), 'a', 'b')])\n" +
-                "  |  19 <-> DictDecode(29: array_max, [lower(<place-holder>)])\n" +
-                "  |  20 <-> DictDecode(30: expr, [concat(<place-holder>)])");
+        assertContains(plan, "  6:Project\n"
+                + "  |  output columns:\n"
+                + "  |  16 <-> DictDecode([31: array_min, INT, true], [upper[(<place-holder>); args: VARCHAR; result: VARCHAR; "
+                + "args nullable: true; result nullable: true]])\n"
+                + "  |  17 <-> DictDecode([27: expr, INT, true], [ltrim[(<place-holder>); args: VARCHAR; result: VARCHAR; args "
+                + "nullable: true; result nullable: true]])\n"
+                + "  |  18 <-> DictDecode([28: expr, INT, true], [if[(cast(<place-holder> as BOOLEAN), 'a', 'b'); args: "
+                + "BOOLEAN,VARCHAR,VARCHAR; result: VARCHAR; args nullable: true; result nullable: true]])\n"
+                + "  |  19 <-> DictDecode([29: array_max, INT, true], [lower[(<place-holder>); args: VARCHAR; result: VARCHAR; "
+                + "args nullable: true; result nullable: true]])\n"
+                + "  |  20 <-> DictDecode([30: expr, INT, true], [concat[(<place-holder>); args: VARCHAR; result: VARCHAR; args"
+                + " nullable: true; result nullable: true]])\n");
     }
 
     @Test
@@ -543,17 +571,18 @@ public class LowCardinalityArrayTest extends PlanTestBase {
         String sql = "select array_min(S_ADDRESS), S_ADDRESS from supplier_nullable " +
                 "where S_ADDRESS[0] = 'a' or S_ADDRESS[1] = 'b'";
         String plan = getVerboseExplain(sql);
-        Assertions.assertTrue(plan.contains("  0:OlapScanNode\n" +
-                "     table: supplier_nullable, rollup: supplier_nullable\n" +
-                "     preAggregation: on\n" +
-                "     Predicates: (DictDecode(10: S_ADDRESS, [<place-holder> = 'a'], 10: S_ADDRESS[0]))" +
-                " OR (DictDecode(10: S_ADDRESS, [<place-holder> = 'b'], 10: S_ADDRESS[1]))\n" +
-                "     dict_col=S_ADDRESS\n" +
-                "     partitionsRatio=0/1, tabletsRatio=0/0\n" +
-                "     tabletList=\n" +
-                "     actualRows=0, avgRowSize=2.0\n" +
-                "     Pruned type: 10 <-> [ARRAY<INT>]\n" +
-                "     cardinality: 1"), plan);
+        Assertions.assertTrue(plan.contains("0:OlapScanNode\n"
+                + "     table: supplier_nullable, rollup: supplier_nullable\n"
+                + "     preAggregation: on\n"
+                + "     Predicates: (DictDecode([10: S_ADDRESS, ARRAY<INT>, true], [<place-holder> = 'a'], [10: S_ADDRESS, "
+                + "ARRAY<INT>, true][0])) OR (DictDecode([10: S_ADDRESS, ARRAY<INT>, true], [<place-holder> = 'b'], [10: "
+                + "S_ADDRESS, ARRAY<INT>, true][1]))\n"
+                + "     dict_col=S_ADDRESS\n"
+                + "     partitionsRatio=0/1, tabletsRatio=0/0\n"
+                + "     tabletList=\n"
+                + "     actualRows=0, avgRowSize=2.0\n"
+                + "     Pruned type: 10 <-> [ARRAY<INT>]\n"
+                + "     cardinality: 1"), plan);
     }
 
     @Test
@@ -561,14 +590,14 @@ public class LowCardinalityArrayTest extends PlanTestBase {
         String sql = "select case when S_ADDRESS[1] = '5-LOW' " +
                 "then 2 when S_ADDRESS[1] = '3-MEDIUM' then 1 else 0 end " +
                 "from supplier_nullable";
-        String plan = getVerboseExplain(sql);
+        String plan = getFragmentPlan(sql);
         assertContains(plan, "DictDecode(10: S_ADDRESS, [CASE WHEN <place-holder> = '5-LOW' THEN 2 " +
                 "WHEN <place-holder> = '3-MEDIUM' THEN 1 ELSE 0 END], 10: S_ADDRESS[1])");
 
         sql = "select case when S_ADDRESS[1] = '5-LOW' " +
                 "then 2 when S_ADDRESS[2] = '3-MEDIUM' then 1 else 0 end " +
                 "from supplier_nullable";
-        plan = getVerboseExplain(sql);
+        plan = getFragmentPlan(sql);
         assertContains(plan, "CASE " +
                 "WHEN DictDecode(10: S_ADDRESS, [<place-holder> = '5-LOW'], 10: S_ADDRESS[1]) THEN 2 " +
                 "WHEN DictDecode(10: S_ADDRESS, [<place-holder> = '3-MEDIUM'], 10: S_ADDRESS[2]) THEN 1 ELSE 0 END");
@@ -647,11 +676,11 @@ public class LowCardinalityArrayTest extends PlanTestBase {
                 "  |  tableFunctionName: unnest\n" +
                 "  |  columns: [unnest]\n" +
                 "  |  returnTypes: [INT]\n");
-        assertContains(plan, "  3:Project\n" +
-                "  |  output columns:\n" +
-                "  |  10 <-> DictDecode(14: expr, [<place-holder>])\n" +
-                "  |  13 <-> [13: unnest, INT, true]\n" +
-                "  |  cardinality: 1");
+        assertContains(plan, "  3:Project\n"
+                + "  |  output columns:\n"
+                + "  |  10 <-> DictDecode([14: expr, INT, true], [<place-holder>])\n"
+                + "  |  13 <-> [13: unnest, INT, true]\n"
+                + "  |  cardinality: 1");
 
         sql = "select S_ADDRESS[2], lower(col.unnest) from supplier_nullable, unnest(S_ADDRESS) col;";
         plan = getVerboseExplain(sql);
@@ -660,11 +689,12 @@ public class LowCardinalityArrayTest extends PlanTestBase {
                 "  |  columns: [unnest]\n" +
                 "  |  returnTypes: [INT]\n" +
                 "  |  cardinality: 1");
-        assertContains(plan, "  3:Project\n" +
-                "  |  output columns:\n" +
-                "  |  10 <-> DictDecode(15: expr, [<place-holder>])\n" +
-                "  |  11 <-> DictDecode(14: unnest, [lower(<place-holder>)])\n" +
-                "  |  cardinality: 1");
+        assertContains(plan, "  3:Project\n"
+                + "  |  output columns:\n"
+                + "  |  10 <-> DictDecode([15: expr, INT, true], [<place-holder>])\n"
+                + "  |  11 <-> DictDecode([14: unnest, INT, true], [lower[(<place-holder>); args: VARCHAR; result: VARCHAR; "
+                + "args nullable: true; result nullable: true]])\n"
+                + "  |  cardinality: 1");
     }
 
     @Test
@@ -677,12 +707,12 @@ public class LowCardinalityArrayTest extends PlanTestBase {
                 "  |  columns: [unnest]\n" +
                 "  |  returnTypes: [INT, CHAR(15)]\n" +
                 "  |  cardinality: 1");
-        assertContains(plan, "  3:Project\n" +
-                "  |  output columns:\n" +
-                "  |  10 <-> [10: b, CHAR(15), true]\n" +
-                "  |  11 <-> DictDecode(15: expr, [<place-holder>])\n" +
-                "  |  14 <-> [14: a, INT, true]\n" +
-                "  |  cardinality: 1");
+        assertContains(plan, "  3:Project\n"
+                + "  |  output columns:\n"
+                + "  |  10 <-> [10: b, CHAR(15), true]\n"
+                + "  |  11 <-> DictDecode([15: expr, INT, true], [<place-holder>])\n"
+                + "  |  14 <-> [14: a, INT, true]\n"
+                + "  |  cardinality: 1");
 
         sql = "select *" +
                 "from s3, unnest(a1, a2, a3) as unnest(a, b, c) ;";
@@ -704,11 +734,10 @@ public class LowCardinalityArrayTest extends PlanTestBase {
         sql = "select *" +
                 "from s3, unnest(a1, a2, array_map(x -> concat(x, 'abc'), a3)) as unnest(a, b, c) ;";
         plan = getVerboseExplain(sql);
-        assertContains(plan, "  |  10 <-> array_map[([9, VARCHAR(65533), true] -> concat" +
-                "[([9, VARCHAR(65533), true], 'abc'); args: VARCHAR; result: VARCHAR; args nullable: " +
-                "true; result nullable: true], DictDecode(12: a3, [<place-holder>])); args: " +
-                "FUNCTION,INVALID_TYPE; result: ARRAY<VARCHAR>; args nullable: true; result nullable:" +
-                " true]\n");
+        assertContains(plan, "  |  10 <-> array_map[([9, VARCHAR(65533), true] -> "
+                + "concat[([9, VARCHAR(65533), true], 'abc'); args: VARCHAR; result: VARCHAR; args nullable: true; result "
+                + "nullable: true], DictDecode([12: a3, ARRAY<INT>, true], [<place-holder>])); args: FUNCTION,INVALID_TYPE; "
+                + "result: ARRAY<VARCHAR>; args nullable: true; result nullable: true]\n");
         assertContains(plan, "dict_col=a1,a3");
         assertContains(plan, "  2:TableValueFunction\n" +
                 "  |  tableFunctionName: unnest\n" +
@@ -721,44 +750,36 @@ public class LowCardinalityArrayTest extends PlanTestBase {
         String sql = "select array_length(a1), array_max(a2), array_min(a1), array_distinct(a1), array_sort(a2),\n" +
                 "       reverse(a1), array_slice(a2, 2, 4), cardinality(a2)\n" +
                 "from s4 where a1[1] = 'Jiangsu' and a2[2] = 'GD' order by v1 limit 2;";
-        String plan = getVerboseExplain(sql);
-        assertContains(plan, "  3:Project\n" +
-                "  |  output columns:\n" +
-                "  |  5 <-> array_length[([17: a1, ARRAY<INT>, true]); " +
-                "args: INVALID_TYPE; result: INT; args nullable: true; result nullable: true]\n" +
-                "  |  6 <-> DictDecode(18: a2, [<place-holder>], array_max(18: a2))\n" +
-                "  |  7 <-> DictDecode(17: a1, [<place-holder>], array_min(17: a1))\n" +
-                "  |  8 <-> DictDecode(17: a1, [<place-holder>], array_distinct(17: a1))\n" +
-                "  |  9 <-> DictDecode(18: a2, [<place-holder>], array_sort(18: a2))\n" +
-                "  |  10 <-> DictDecode(17: a1, [<place-holder>], reverse(17: a1))\n" +
-                "  |  11 <-> DictDecode(18: a2, [<place-holder>], array_slice(18: a2, 2, 4))\n" +
-                "  |  12 <-> cardinality[([18: a2, ARRAY<INT>, true]); " +
-                "args: INVALID_TYPE; result: INT; args nullable: true; result nullable: true]\n" +
-                "  |  limit: 2\n" +
-                "  |  cardinality: 1\n" +
-                "  |  \n" +
-                "  2:MERGING-EXCHANGE");
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  3:Project\n"
+                + "  |  <slot 5> : array_length(17: a1)\n"
+                + "  |  <slot 6> : DictDecode(18: a2, [<place-holder>], array_max(18: a2))\n"
+                + "  |  <slot 7> : DictDecode(17: a1, [<place-holder>], array_min(17: a1))\n"
+                + "  |  <slot 8> : DictDecode(17: a1, [<place-holder>], array_distinct(17: a1))\n"
+                + "  |  <slot 9> : DictDecode(18: a2, [<place-holder>], array_sort(18: a2))\n"
+                + "  |  <slot 10> : DictDecode(17: a1, [<place-holder>], reverse(17: a1))\n"
+                + "  |  <slot 11> : DictDecode(18: a2, [<place-holder>], array_slice(18: a2, 2, 4))\n"
+                + "  |  <slot 12> : cardinality(18: a2)\n"
+                + "  |  limit: 2\n"
+                + "  |  \n"
+                + "  2:MERGING-EXCHANGE");
 
         sql = "select array_length(a1), array_max(a2), array_min(a1), array_distinct(a1), array_sort(a2),\n" +
                 "       reverse(a1), array_slice(a2, 2, 4), cardinality(a2)\n" +
                 "from s5 where a1[1] = 'Jiangsu' and a2[2] = 'GD' order by v1 limit 2;";
-        plan = getVerboseExplain(sql);
-        assertContains(plan, "  3:Project\n" +
-                "  |  output columns:\n" +
-                "  |  5 <-> array_length[([17: a1, ARRAY<INT>, true]); " +
-                "args: INVALID_TYPE; result: INT; args nullable: true; result nullable: true]\n" +
-                "  |  6 <-> DictDecode(18: a2, [<place-holder>], array_max(18: a2))\n" +
-                "  |  7 <-> DictDecode(17: a1, [<place-holder>], array_min(17: a1))\n" +
-                "  |  8 <-> DictDecode(17: a1, [<place-holder>], array_distinct(17: a1))\n" +
-                "  |  9 <-> DictDecode(18: a2, [<place-holder>], array_sort(18: a2))\n" +
-                "  |  10 <-> DictDecode(17: a1, [<place-holder>], reverse(17: a1))\n" +
-                "  |  11 <-> DictDecode(18: a2, [<place-holder>], array_slice(18: a2, 2, 4))\n" +
-                "  |  12 <-> cardinality[([18: a2, ARRAY<INT>, true]); " +
-                "args: INVALID_TYPE; result: INT; args nullable: true; result nullable: true]\n" +
-                "  |  limit: 2\n" +
-                "  |  cardinality: 1\n" +
-                "  |  \n" +
-                "  2:MERGING-EXCHANGE");
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  3:Project\n"
+                + "  |  <slot 5> : array_length(17: a1)\n"
+                + "  |  <slot 6> : DictDecode(18: a2, [<place-holder>], array_max(18: a2))\n"
+                + "  |  <slot 7> : DictDecode(17: a1, [<place-holder>], array_min(17: a1))\n"
+                + "  |  <slot 8> : DictDecode(17: a1, [<place-holder>], array_distinct(17: a1))\n"
+                + "  |  <slot 9> : DictDecode(18: a2, [<place-holder>], array_sort(18: a2))\n"
+                + "  |  <slot 10> : DictDecode(17: a1, [<place-holder>], reverse(17: a1))\n"
+                + "  |  <slot 11> : DictDecode(18: a2, [<place-holder>], array_slice(18: a2, 2, 4))\n"
+                + "  |  <slot 12> : cardinality(18: a2)\n"
+                + "  |  limit: 2\n"
+                + "  |  \n"
+                + "  2:MERGING-EXCHANGE");
     }
 
     @Test
@@ -779,5 +800,352 @@ public class LowCardinalityArrayTest extends PlanTestBase {
         Assertions.assertTrue(plan.contains("1:Project\n" +
                 "  |  <slot 9> : CAST(7: S_COMMENT AS ARRAY<ARRAY<VARCHAR(65533)>>)\n" +
                 "  |  limit: 1"), plan);
+    }
+
+    @Test
+    public void testUnnestStringToArray() throws Exception {
+        String sql = "select concat(t.a, 'xxx') as name from s2, unnest(s2.a1) as t(a) "
+                + "union all "
+                + "select concat(v1, 'yyy') as name from s1 as b;";
+        String plan = getVerboseExplain(sql);
+        Assertions.assertTrue(plan.contains("Global Dict Exprs:\n"
+                + "    14: DictDefine(13: a1, [<place-holder>])\n"
+                + "    15: DictDefine(13: a1, [concat(<place-holder>, 'xxx')])"), plan);
+    }
+
+    @Test
+    public void testArrayLowCardinalityOptimizationOnLateralLeftJoin() throws Exception {
+        String sql = "  select s1.v1, s1.v2, t.a1 a1, t.a2 a2\n" +
+                "  from s1 left join unnest(s1.a1, s1.a2)t(a1,a2) on true";
+        String plan = getFragmentPlan(sql);
+        Assertions.assertTrue(plan.contains("  2:Decode\n" +
+                "  |  <dict id 9> : <string id 5>\n" +
+                "  |  <dict id 10> : <string id 6>\n" +
+                "  |  \n" +
+                "  1:TableValueFunction\n" +
+                "  |  tableFunctionName: unnest\n" +
+                "  |  columns: [unnest]\n" +
+                "  |  returnTypes: [INT, INT]"), plan);
+        ExecPlan execPlan = getExecPlan(sql);
+        List<TableFunctionNode> tfNodes = Lists.newArrayList();
+        execPlan.getTopFragment().getPlanRoot().collect(TableFunctionNode.class, tfNodes);
+        Assertions.assertEquals(1, tfNodes.size());
+        TableFunctionNode tableFunctionNode = tfNodes.get(0);
+        Assertions.assertTrue(tableFunctionNode.getTableFunction().isLeftJoin());
+    }
+    @Test
+    public void testWindowFunOptimizationInWindowAboveUnnest() throws Exception {
+        String sql = "with cte as(\n" +
+                "  select s1.v1, s1.v2, t.a1 a1\n" +
+                "  from s1,unnest(s1.a1)t(a1) \n" +
+                ")\n" +
+                "select v1, v2, lead(a1) over(partition by v1 order by v2)\n" +
+                "from cte;";
+        String plan = getVerboseExplain(sql);
+        Assertions.assertTrue(plan.contains("  6:Decode\n" +
+                "  |  <dict id 9> : <string id 6>\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  5:Project\n" +
+                "  |  output columns:\n" +
+                "  |  1 <-> [1: v1, BIGINT, true]\n" +
+                "  |  2 <-> [2: v2, INT, true]\n" +
+                "  |  9 <-> [9: lead(5: a1, 1, null), INT, true]\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  4:ANALYTIC\n" +
+                "  |  functions: [, lead[([8: a1, INT, true], 1, NULL); " +
+                "args: INT; result: INT; args nullable: true; result nullable: true], ]\n" +
+                "  |  partition by: [1: v1, BIGINT, true]\n" +
+                "  |  order by: [2: v2, INT, true] ASC\n" +
+                "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING\n" +
+                "  |  cardinality: 1"), plan);
+    }
+
+    @Test
+    public void testOrderByClauseOptimizationInWindowAboveUnnest() throws Exception {
+        String sql = "with cte as(\n" +
+                "  select s1.v1, s1.v2, t.a1 a1\n" +
+                "  from s1,unnest(s1.a1)t(a1) \n" +
+                ")\n" +
+                "select v1, a1, lead(v2) over(partition by v1 order by a1)\n" +
+                "from cte;";
+        String plan = getVerboseExplain(sql);
+        Assertions.assertTrue(plan.contains("  6:Decode\n" +
+                "  |  <dict id 8> : <string id 5>\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  5:Project\n" +
+                "  |  output columns:\n" +
+                "  |  1 <-> [1: v1, BIGINT, true]\n" +
+                "  |  6 <-> [6: lead(2: v2, 1, null), INT, true]\n" +
+                "  |  8 <-> [8: a1, INT, true]\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  4:ANALYTIC\n" +
+                "  |  functions: [, lead[([2: v2, INT, true], 1, NULL); " +
+                "args: INT; result: INT; args nullable: true; result nullable: true], ]\n" +
+                "  |  partition by: [1: v1, BIGINT, true]\n" +
+                "  |  order by: [8: a1, INT, true] ASC\n" +
+                "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING\n" +
+                "  |  cardinality: 1"), plan);
+    }
+
+    @Test
+    public void testSupportedWindowFunctions() throws Exception {
+        String sqlFmt = "with cte as(\n" +
+                "  select s1.v1, s1.v2, t.a1 a1\n" +
+                "  from s1,unnest(s1.a1)t(a1) \n" +
+                ")\n" +
+                "select v1, a1, {WINDOW_FUN}(a1) over(partition by v1 order by a1)\n" +
+                "from cte;";
+
+        String[] windowFuncs = new String[] {
+                FunctionSet.LEAD,
+                FunctionSet.LAG,
+                FunctionSet.FIRST_VALUE,
+                FunctionSet.LAST_VALUE,
+                FunctionSet.MAX,
+                FunctionSet.MIN,
+                FunctionSet.COUNT};
+
+        for (String wf : windowFuncs) {
+            String q = sqlFmt.replace("{WINDOW_FUN}", wf);
+            String plan = getVerboseExplain(q);
+            String[] lines = plan.split("\n");
+            List<Integer> decodeNodeLines = IntStream.range(0, lines.length).boxed()
+                    .filter(lineno -> lines[lineno]
+                            .matches("^\\s*\\d+:Decode\\s*$"))
+                    .collect(Collectors.toList());
+
+            List<Integer> analyticNodeLines = IntStream.range(0, lines.length).boxed()
+                    .filter(lineno -> lines[lineno]
+                            .matches("^\\s*\\d+:ANALYTIC\\s*$"))
+                    .collect(Collectors.toList());
+            Assertions.assertEquals(1, decodeNodeLines.size(), plan);
+            Assertions.assertEquals(1, analyticNodeLines.size(), plan);
+            Assertions.assertTrue(decodeNodeLines.get(0) < analyticNodeLines.get(0), plan);
+        }
+    }
+
+    @Test
+    public void testNotSupportedWindowFunctions() throws Exception {
+        String sqlFmt = "with cte as(\n" +
+                "  select s1.v1, s1.v2, t.a1 a1\n" +
+                "  from s1,unnest(s1.a1)t(a1) \n" +
+                ")\n" +
+                "select v1, a1, {WINDOW_FUN}(a1) over(partition by v1)\n" +
+                "from cte;";
+
+        String[] windowFuncs = new String[] {
+                FunctionSet.SUM,
+                FunctionSet.AVG,
+        };
+
+        for (String wf : windowFuncs) {
+            String q = sqlFmt.replace("{WINDOW_FUN}", wf);
+            String plan = getVerboseExplain(q);
+            String[] lines = plan.split("\n");
+            List<Integer> decodeNodeLines = IntStream.range(0, lines.length).boxed()
+                    .filter(lineno -> lines[lineno]
+                            .matches("^\\s*\\d+:Decode\\s*$"))
+                    .collect(Collectors.toList());
+
+            List<Integer> analyticNodeLines = IntStream.range(0, lines.length).boxed()
+                    .filter(lineno -> lines[lineno]
+                            .matches("^\\s*\\d+:ANALYTIC\\s*$"))
+                    .collect(Collectors.toList());
+            Assertions.assertEquals(1, decodeNodeLines.size(), plan);
+            Assertions.assertEquals(1, analyticNodeLines.size(), plan);
+            Assertions.assertTrue(decodeNodeLines.get(0) > analyticNodeLines.get(0), plan);
+        }
+    }
+
+    @Test
+    public void testWindowFunctionsIgnoreNulls() throws Exception {
+        String sqlFmt = "with cte as(\n" +
+                "  select s1.v1, s1.v2, t.a1 a1\n" +
+                "  from s1,unnest(s1.a1)t(a1) \n" +
+                ")\n" +
+                "select v1, a1, {WINDOW_FUN}(a1 ignore nulls) over(partition by v1)\n" +
+                "from cte;";
+
+        String[] windowFuncs = new String[] {
+                FunctionSet.LEAD,
+                FunctionSet.LAG,
+                FunctionSet.FIRST_VALUE,
+                FunctionSet.LAST_VALUE
+        };
+
+        for (String wf : windowFuncs) {
+            String q = sqlFmt.replace("{WINDOW_FUN}", wf);
+            ExecPlan plan = getExecPlan(q);
+            List<AnalyticEvalNode> analyticEvalNodes = Lists.newArrayList();
+            plan.getTopFragment().getPlanRoot().collect(AnalyticEvalNode.class, analyticEvalNodes);
+            Assertions.assertEquals(1, analyticEvalNodes.size());
+            Assertions.assertEquals(1, analyticEvalNodes.get(0).getAnalyticFnCalls().size());
+            FunctionCallExpr expr = (FunctionCallExpr) analyticEvalNodes.get(0).getAnalyticFnCalls().get(0);
+            Assertions.assertTrue(expr.getIgnoreNulls());
+        }
+    }
+
+    @Test
+    public void testNotSupportedWindowFunctionLeadLagWithSpecifiedDefaultValue() throws Exception {
+        String sqlFmt = "with cte as(\n" +
+                "  select s1.v1, s1.v2, t.a1 a1\n" +
+                "  from s1,unnest(s1.a1)t(a1) \n" +
+                ")\n" +
+                "select v1, a1, {WINDOW_FUN}(a1, 1, 'ABCD') over(partition by v1)\n" +
+                "from cte;";
+
+        String[] windowFuncs = new String[] {
+                FunctionSet.LEAD,
+                FunctionSet.LAG
+        };
+
+        for (String wf : windowFuncs) {
+            String q = sqlFmt.replace("{WINDOW_FUN}", wf);
+            String plan = getVerboseExplain(q);
+            String[] lines = plan.split("\n");
+            List<Integer> decodeNodeLines = IntStream.range(0, lines.length).boxed()
+                    .filter(lineno -> lines[lineno]
+                            .matches("^\\s*\\d+:Decode\\s*$"))
+                    .collect(Collectors.toList());
+
+            List<Integer> analyticNodeLines = IntStream.range(0, lines.length).boxed()
+                    .filter(lineno -> lines[lineno]
+                            .matches("^\\s*\\d+:ANALYTIC\\s*$"))
+                    .collect(Collectors.toList());
+            Assertions.assertEquals(1, decodeNodeLines.size(), plan);
+            Assertions.assertEquals(1, analyticNodeLines.size(), plan);
+            Assertions.assertTrue(decodeNodeLines.get(0) > analyticNodeLines.get(0), plan);
+        }
+    }
+    @Test
+    public void testdWindowFunctionCount() throws Exception {
+        String sql1 = "with cte as(\n" +
+                "  select s1.v1, s1.v2, t.a1 a1\n" +
+                "  from s1,unnest(s1.a1)t(a1) \n" +
+                ")\n" +
+                "select v1, count(a1) over (partition by v1)\n" +
+                "from cte;";
+
+        String sql2 = "with cte as(\n" +
+                "  select s1.v1, s1.v2, t.a1 a1\n" +
+                "  from s1,unnest(s1.a1)t(a1) \n" +
+                ")\n" +
+                "select v1, count(a1) over (partition by v1)\n" +
+                "from cte;";
+
+        String plan1 = getVerboseExplain(sql1);
+        Assertions.assertTrue(plan1.contains("  5:Project\n" +
+                "  |  output columns:\n" +
+                "  |  1 <-> [1: v1, BIGINT, true]\n" +
+                "  |  6 <-> [6: count(5: a1), BIGINT, false]\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  4:ANALYTIC\n" +
+                "  |  functions: [, count[([8: a1, INT, true]); args: INT; result: BIGINT;" +
+                " args nullable: true; result nullable: false], ]\n" +
+                "  |  partition by: [1: v1, BIGINT, true]\n" +
+                "  |  cardinality: 1"), plan1);
+        String plan2 = getVerboseExplain(sql2);
+        Assertions.assertTrue(plan2.contains("  5:Project\n" +
+                "  |  output columns:\n" +
+                "  |  1 <-> [1: v1, BIGINT, true]\n" +
+                "  |  6 <-> [6: count(5: a1), BIGINT, false]\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  4:ANALYTIC\n" +
+                "  |  functions: [, count[([8: a1, INT, true]); args: INT; result: BIGINT;" +
+                " args nullable: true; result nullable: false], ]\n" +
+                "  |  partition by: [1: v1, BIGINT, true]\n" +
+                "  |  cardinality: 1"), plan2);
+    }
+
+    @Test
+    public void testPartitionByClauseOptimizationInWindowAboveUnnest() throws Exception {
+        String sql = "with cte as(\n" +
+                "  select s1.v1, s1.v2, t.a1 a1\n" +
+                "  from s1,unnest(s1.a1)t(a1) \n" +
+                ")\n" +
+                "select v1, a1, lead(v2) over(partition by a1 order by v1)\n" +
+                "from cte;";
+        String plan = getVerboseExplain(sql);
+        Assertions.assertTrue(plan.contains("  6:Decode\n" +
+                "  |  <dict id 8> : <string id 5>\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  5:Project\n" +
+                "  |  output columns:\n" +
+                "  |  1 <-> [1: v1, BIGINT, true]\n" +
+                "  |  6 <-> [6: lead(2: v2, 1, null), INT, true]\n" +
+                "  |  8 <-> [8: a1, INT, true]\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  4:ANALYTIC\n" +
+                "  |  functions: [, lead[([2: v2, INT, true], 1, NULL); args: INT; result: INT; " +
+                "args nullable: true; result nullable: true], ]\n" +
+                "  |  partition by: [8: a1, INT, true]\n" +
+                "  |  order by: [1: v1, BIGINT, true] ASC\n" +
+                "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING\n" +
+                "  |  cardinality: 1"), plan);
+    }
+
+    @Test
+    public void testOptimizationInWindowAboveUnnest() throws Exception {
+        String sql = "with cte as(\n" +
+                "  select s1.v1, s1.v2, t.a1 a1, t.a2 a2\n" +
+                "  from s1,unnest(s1.a1, s1.a2)t(a1,a2) \n" +
+                ")\n" +
+                "select v1, v2, a1, a2, lead(a1) over(partition by a2 order by substr(a1, 1, 3))\n" +
+                "from cte;";
+        String plan = getVerboseExplain(sql);
+        Assertions.assertTrue(plan.contains("  7:Decode\n" +
+                "  |  <dict id 17> : <string id 9>\n" +
+                "  |  <dict id 19> : <string id 12>\n" +
+                "  |  <dict id 16> : <string id 6>\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  6:Project\n" +
+                "  |  output columns:\n" +
+                "  |  7 <-> [7: v1, BIGINT, true]\n" +
+                "  |  8 <-> [8: v2, INT, true]\n" +
+                "  |  16 <-> [16: a2, INT, true]\n" +
+                "  |  17 <-> [17: a1, INT, true]\n" +
+                "  |  19 <-> [19: lead(9: a1, 1, null), INT, true]\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  5:ANALYTIC\n" +
+                "  |  functions: [, lead[([17: a1, INT, true], 1, NULL); args: INT; result: INT; " +
+                "args nullable: true; result nullable: true], ]\n" +
+                "  |  partition by: [16: a2, INT, true]\n" +
+                "  |  order by: [18: substr, INT, true] ASC\n" +
+                "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING\n" +
+                "  |  cardinality: 1"), plan);
+    }
+
+    @Test
+    public void testLeadLagUsingArrayAsParameterType() throws Exception {
+
+        String sql = "select /*+SET_VAR(array_low_cardinality_optimize=true)*/ v1, v2," +
+                " lead(a1) over(partition by v1 order by v2)\n" +
+                "  from s1;";
+        String plan = getVerboseExplain(sql);
+        Assertions.assertTrue(plan.contains("  4:Decode\n" +
+                "  |  <dict id 7> : <string id 5>\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  3:Project\n" +
+                "  |  output columns:\n" +
+                "  |  1 <-> [1: v1, BIGINT, true]\n" +
+                "  |  2 <-> [2: v2, INT, true]\n" +
+                "  |  7 <-> [7: lead(3: a1, 1, null), ARRAY<INT>, true]\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  2:ANALYTIC\n" +
+                "  |  functions: [, lead[([6: a1, ARRAY<INT>, true], 1, NULL); " +
+                "args: INVALID_TYPE; result: ARRAY<INT>; args nullable: true; result nullable: true], ]\n" +
+                "  |  partition by: [1: v1, BIGINT, true]"));
     }
 }

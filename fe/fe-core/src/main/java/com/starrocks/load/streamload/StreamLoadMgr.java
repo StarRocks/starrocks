@@ -42,6 +42,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.transaction.TxnCommitAttachment;
 import com.starrocks.warehouse.WarehouseLoadInfoBuilder;
 import com.starrocks.warehouse.WarehouseLoadStatusInfo;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -579,6 +580,13 @@ public class StreamLoadMgr implements MemoryTrackable {
 
     public StreamLoadTask getSyncSteamLoadTaskByTxnId(long txnId) {
         return txnIdToSyncStreamLoadTasks.getOrDefault(txnId, null);
+    }
+
+    public void setSyncStreamLoadState(long txnId, TxnCommitAttachment attachment, String errorMsg) {
+        StreamLoadTask task = getSyncSteamLoadTaskByTxnId(txnId);
+        if (task != null && attachment != null) {
+            task.setLoadState(attachment, errorMsg);
+        }
     }
 
     // put history task in the end

@@ -66,6 +66,7 @@ std::unique_ptr<ThreadPoolToken> LoadSpillBlockMergeExecutor::create_token() {
 void LoadSpillBlockContainer::append_block(const spill::BlockPtr& block) {
     std::lock_guard guard(_mutex);
     _block_groups.back().append(block);
+    _total_bytes += block->size();
 }
 
 void LoadSpillBlockContainer::create_block_group() {
@@ -91,13 +92,16 @@ Status LoadSpillBlockManager::init() {
     // init remote block manager
     std::vector<std::shared_ptr<spill::Dir>> remote_dirs;
     // Remote FS can also use data cache to speed up.
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_remote_spill_path));
-    if (fs->type() != FileSystem::Type::STARLET) {
+
+    if (!_fs) {
+        ASSIGN_OR_RETURN(_fs, FileSystem::CreateSharedFromString(_remote_spill_path));
+    }
+    if (_fs->type() != FileSystem::Type::STARLET) {
         // in starlet fs, there is opt create_missing_parent and it will create the parent dir if not exists.
         // but in other fs, we need to create the parent dir manually.
-        RETURN_IF_ERROR(fs->create_dir_if_missing(_remote_spill_path));
+        RETURN_IF_ERROR(_fs->create_dir_if_missing(_remote_spill_path));
     }
-    auto dir = std::make_shared<spill::RemoteDir>(_remote_spill_path, std::move(fs), nullptr, INT64_MAX);
+    auto dir = std::make_shared<spill::RemoteDir>(_remote_spill_path, std::move(_fs), nullptr, INT64_MAX);
     remote_dirs.emplace_back(dir);
     _remote_dir_manager = std::make_unique<spill::DirManager>(remote_dirs);
 

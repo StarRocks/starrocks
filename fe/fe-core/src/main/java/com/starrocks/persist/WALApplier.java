@@ -14,9 +14,7 @@
 
 package com.starrocks.persist;
 
-import com.starrocks.common.io.Writable;
-
 public interface WALApplier {
 
-    void apply(Writable wal);
+    void apply(Object wal);
 }

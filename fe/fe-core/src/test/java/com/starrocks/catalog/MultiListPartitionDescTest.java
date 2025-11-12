@@ -15,12 +15,14 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.TypeDef;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.sql.analyzer.PartitionDescAnalyzer;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
+import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletType;
+import com.starrocks.type.PrimitiveType;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -84,10 +86,9 @@ public class MultiListPartitionDescTest {
 
         MultiItemListPartitionDesc partitionDesc = new MultiItemListPartitionDesc(ifNotExists, partitionName,
                 multiValues, partitionProperties);
-        partitionDesc.analyze(columnDefLists, null);
+        PartitionDescAnalyzer.analyze(partitionDesc, columnDefLists, null);
 
         Assertions.assertEquals(partitionName, partitionDesc.getPartitionName());
-        Assertions.assertEquals(PartitionType.LIST, partitionDesc.getType());
         Assertions.assertEquals(1, partitionDesc.getReplicationNum());
         Assertions.assertEquals(TTabletType.TABLET_TYPE_MEMORY, partitionDesc.getTabletType());
         Assertions.assertEquals(true, partitionDesc.isInMemory());

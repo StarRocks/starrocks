@@ -56,6 +56,7 @@ public:
     virtual Status visit(BitmapColumn* column);
     virtual Status visit(PercentileColumn* column);
     virtual Status visit(JsonColumn* column);
+    virtual Status visit(VariantColumn* column);
     virtual Status visit(FixedLengthColumn<int96_t>* column);
     virtual Status visit(FixedLengthColumn<uint24_t>* column);
     virtual Status visit(FixedLengthColumn<decimal12_t>* column);
@@ -81,6 +82,7 @@ public:
     virtual Status visit(FixedLengthColumnBase<uint24_t>* column);
     virtual Status visit(FixedLengthColumnBase<decimal12_t>* column);
     virtual Status visit(ObjectColumn<JsonValue>* column);
+    virtual Status visit(ObjectColumn<VariantValue>* column);
     virtual Status visit(ArrayViewColumn* column) { return Status::NotSupported("ArrayViewColumn is not supported"); }
     virtual Status visit(ColumnView* column) { return Status::NotSupported("ColumnView is not supported"); }
 };

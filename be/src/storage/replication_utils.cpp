@@ -29,6 +29,7 @@
 #include "gutil/strings/substitute.h"
 #include "http/http_client.h"
 #include "runtime/client_cache.h"
+#include "runtime/exec_env.h"
 #include "service/backend_options.h"
 #include "util/network_util.h"
 #include "util/string_parser.hpp"

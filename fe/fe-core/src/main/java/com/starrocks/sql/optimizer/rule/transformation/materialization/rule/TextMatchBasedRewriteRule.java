@@ -20,7 +20,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.ParseNode;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.catalog.MvUpdateInfo;
@@ -33,7 +32,10 @@ import com.starrocks.metric.IMaterializedViewMetricsEntity;
 import com.starrocks.metric.MaterializedViewMetricsRegistry;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.common.PCellSortedSet;
+import com.starrocks.sql.common.PCellUtils;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.MvRewritePreprocessor;
@@ -257,9 +259,9 @@ public class TextMatchBasedRewriteRule extends Rule {
                 final List<ColumnRefOperator>  mvScanOutputColumns = MvUtils.getMvScanOutputColumnRefs(mv, mvScanOperator);
 
                 // if mv is partitioned, and some partitions are outdated, then compensate it
-                final Set<String> partitionNamesToRefresh = mvUpdateInfo.getMvToRefreshPartitionNames();
+                final PCellSortedSet partitionNamesToRefresh = mvUpdateInfo.getMVToRefreshPCells();
                 OptExpression mvCompensatePlan = null;
-                if (CollectionUtils.isEmpty(partitionNamesToRefresh)) {
+                if (PCellUtils.isEmpty(partitionNamesToRefresh)) {
                     mvCompensatePlan = OptExpression.create(mvScanOperator);
                 } else {
                     // if mv's query rewrite consistency mode is FORCE_MV, then do not compensate it because its

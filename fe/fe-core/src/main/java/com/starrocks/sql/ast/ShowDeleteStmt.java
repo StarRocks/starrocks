@@ -42,6 +42,6 @@ public class ShowDeleteStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowDeleteStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowDeleteStatement(this, context);
     }
 }

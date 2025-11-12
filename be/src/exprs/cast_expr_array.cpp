@@ -176,7 +176,8 @@ StatusOr<ColumnPtr> CastStringToArray::evaluate_checked(ExprContext* context, Ch
         // return null if not valid array
         if (!is_valid_array(str, stack)) {
             if (_throw_exception_if_err) {
-                return Status::InternalError(fmt::format("invalid array input: {}", str));
+                return Status::InternalError(
+                        fmt::format("invalid array input: {}", std::string_view(str.get_data(), str.get_size())));
             } else {
                 has_null = true;
                 null_column->append(1);

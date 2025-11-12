@@ -19,6 +19,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -225,4 +226,98 @@ public class OnPredicateMoveAroundRuleTest extends PlanTestBase {
         return argumentsList.stream();
     }
 
+    @Test
+    public void asofJoinComplexPredicateCases() throws Exception {
+        String sql1 = "select * from \n" +
+                "(select * from test_all_type " +
+                "where id_datetime between '2021-01-01' and '2021-02-01') t1\n " +
+                "asof join test_all_type_not_null t2\n " +
+                "on t1.t1b = t2.t1b and t1.id_datetime  < t2.id_datetime;";
+        String plan = getFragmentPlan(sql1);
+        assertContains(plan, "1:OlapScanNode\n" +
+                "     TABLE: test_all_type_not_null\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 18: id_datetime >= '2021-01-01 00:00:00'");
+
+        String sql2 = "select * from \n" +
+                "(select * from test_all_type where (t1d in (1, 2, 3) and id_date = '2021-01-01') " +
+                "or (id_date >'2021-04-01')) t1 asof join test_all_type_not_null t2\n" +
+                "on t1.t1d > t2.t1d and t1.id_date = t2.id_date;";
+        String plan2 = getFragmentPlan(sql2);
+        assertContains(plan2, "1:OlapScanNode\n" +
+                "     TABLE: test_all_type_not_null\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: (19: id_date = '2021-01-01') OR (19: id_date > '2021-04-01'), 19: id_date >= '2021-01-01'");
+
+        String sql3 = "select * from \n" +
+                "(select * from test_all_type where abs(t1b + t1d) > 20 and t1a in ('abc', '中文')) t1\n" +
+                " asof join test_all_type_not_null t2\n" +
+                "on abs(t1.t1b + t1.t1d) = t2.t1b and t1.id_date > t2.id_date;";
+        String plan3 = getFragmentPlan(sql3);
+        assertContains(plan3, "PREDICATES: 12: t1b > 20, CAST(12: t1b AS LARGEINT) IS NOT NULL");
+
+        String sql4 = "select * from \n" +
+                "(select max(t1d) t1d, t1a, id_date from test_all_type group by t1a, id_date " +
+                "having max(t1d) > 10 and t1a in ('abc', '中文')) t1\n" +
+                "asof left join test_all_type_not_null t2\n" +
+                "on t1.t1d = t2.t1d and t1.t1a = t2.t1a and t1.id_date > t2.id_date;";
+        String plan4 = getFragmentPlan(sql4);
+        assertContains(plan4, "2:OlapScanNode\n" +
+                "     TABLE: test_all_type_not_null\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 15: t1d > 10, 12: t1a IN ('abc', '中文')");
+
+        String sql5 = "select * from t0 asof join t1 on v1 = v4 and v2 > v5 where all_match( x-> x > 1, [v1]) or v1 < 0;";
+        String plan5 = getFragmentPlan(sql5);
+        assertContains(plan5, "3:SELECT\n" +
+                "  |  predicates: (all_match(array_map(<slot 7> -> <slot 7> > 1, [4: v4]))) OR (4: v4 < 0)\n" +
+                "  |  \n" +
+                "  2:OlapScanNode\n" +
+                "     TABLE: t1");
+    }
+
+    @Test
+    public void asofJoinRedundantPredicateCases() throws Exception {
+        String sql1 = "select * from \n" +
+                "(select * from test_all_type where (t1d in (1, 2, 3) and id_date = '2021-01-01') " +
+                "or (id_date >'2021-04-01')) t1 asof left join test_all_type_not_null t2\n" +
+                "on t1.t1d > t2.t1d and t1.id_date = t2.id_date;";
+        String plan1 = getFragmentPlan(sql1);
+        assertContains(plan1, "1:OlapScanNode\n" +
+                "     TABLE: test_all_type_not_null\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: (19: id_date = '2021-01-01') OR (19: id_date > '2021-04-01'), 19: id_date >= '2021-01-01'");
+
+        String sql2 = "select * from \n" +
+                "(select * from t0 where v1 > 1 and v1 < 4) t0\n" +
+                "join\n" +
+                "(select * from t1 where v4 = 2) t1\n" +
+                "on t0.v1 > t1.v4 and t0.v3 = t1.v6;";
+       String plan2 = getFragmentPlan(sql2);
+       assertContains(plan2, "PREDICATES: 1: v1 >= 2, 3: v3 IS NOT NULL, 1: v1 > 1, 1: v1 < 4");
+    }
+
+    @ParameterizedTest(name = "sql_{index}: {0}.")
+    @MethodSource("asofJoinComplexJoinCases")
+    void testAsofComplexJoinCases(String sql, int expect) throws Exception {
+        String plan = getFragmentPlan(sql);
+        int numOfPredicate = (int) Arrays.stream(plan.split("\n"))
+                .filter(ln -> Pattern.compile("PREDICATES").matcher(ln).find()).count();
+        Assertions.assertEquals(expect, numOfPredicate, plan);
+    }
+
+
+    public static Stream<Arguments>  asofJoinComplexJoinCases() {
+        List<Arguments> argumentsList = Lists.newArrayList();
+
+        String templateSql = "select * from (select * from t0 where v1 < 10) t0 " +
+                "%s join t1 on v1 = v4 and v2 > v5 %s join (select * from t2 where v7 > 1) t2\n" +
+                "on v4 = v7 and v6 > v9;";
+        argumentsList.add(Arguments.of(String.format(templateSql, "asof inner", "asof inner"), 3));
+        argumentsList.add(Arguments.of(String.format(templateSql, "asof left", "asof inner"), 3));
+        argumentsList.add(Arguments.of(String.format(templateSql, "asof inner", "asof left"), 3));
+        argumentsList.add(Arguments.of(String.format(templateSql, "asof left", "asof left"), 3));
+
+        return argumentsList.stream();
+    }
 }

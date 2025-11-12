@@ -29,6 +29,7 @@ import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.UserRef;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -45,6 +46,7 @@ import java.util.ArrayList;
 public class ExternalDbTablePrivTest {
     private static StarRocksAssert starRocksAssert;
     private static UserIdentity testUser;
+    private static UserRef user;
 
     private void mockHiveMeta() {
         new MockUp<MetadataMgr>() {
@@ -138,7 +140,9 @@ public class ExternalDbTablePrivTest {
         AuthenticationMgr authenticationManager =
                 starRocksAssert.getCtx().getGlobalStateMgr().getAuthenticationMgr();
         authenticationManager.createUser(createUserStmt);
-        testUser = createUserStmt.getUserIdentity();
+
+        user = createUserStmt.getUser();
+        testUser = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
     }
 
     @BeforeEach

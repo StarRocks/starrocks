@@ -338,6 +338,9 @@ public class OperationType {
     public static final short OP_MODIFY_ENABLE_LOAD_PROFILE = 11142;
 
     @IgnorableOnReplayFailed
+    public static final short OP_MODIFY_DEFAULT_BUCKET_NUM = 11144;
+
+    @IgnorableOnReplayFailed
     public static final short OP_MODIFY_BASE_COMPACTION_FORBIDDEN_TIME_RANGES = 11143;
 
     // external table analyze
@@ -637,6 +640,21 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_REMOVE_DYNAMIC_TABLET_JOB_LOG = 13551;
 
+    // New V2 operations for logEdit to logJsonObject migration
+    public static final short OP_SAVE_NEXTID_V2 = 13552;
+    
+    @IgnorableOnReplayFailed
+    public static final short OP_ERASE_DB_V2 = 13553;
+    
+    @IgnorableOnReplayFailed
+    public static final short OP_ERASE_PARTITION_V2 = 13554;
+    
+    @IgnorableOnReplayFailed
+    public static final short OP_DROP_ALL_BROKER_V2 = 13555;
+    
+    @IgnorableOnReplayFailed
+    public static final short OP_DROP_REPOSITORY_V2 = 13556;
+
     /**
      * NOTICE: OperationType cannot use a value exceeding 20000, please follow the above sequence number
      */
@@ -653,6 +671,10 @@ public class OperationType {
     public static final short OP_CREATE_SECURITY_INTEGRATION = 20269;
     public static final short OP_DROP_SECURITY_INTEGRATION = 20271;
     public static final short OP_ALTER_SECURITY_INTEGRATION = 20272;
+
+    // Grant Role to Group
+    public static final short OP_GRANT_ROLE_TO_GROUP = 20501;
+    public static final short OP_REVOKE_ROLE_FROM_GROUP = 20502;
 
     public static final ImmutableSet<Short> IGNORABLE_OPERATIONS = buildIgnorableOperations();
 
@@ -679,7 +701,9 @@ public class OperationType {
                     opType != OP_WAREHOUSE_INTERNAL_OP &&
                     opType != OP_CREATE_SECURITY_INTEGRATION &&
                     opType != OP_DROP_SECURITY_INTEGRATION &&
-                    opType != OP_ALTER_SECURITY_INTEGRATION) {
+                    opType != OP_ALTER_SECURITY_INTEGRATION &&
+                    opType != OP_GRANT_ROLE_TO_GROUP &&
+                    opType != OP_REVOKE_ROLE_FROM_GROUP) {
                 LOG.fatal("OperationType cannot use a value exceeding 20000, " +
                         "and an error will be reported if it exceeds : {} = {}", field.getName(), opType);
                 System.exit(-1);

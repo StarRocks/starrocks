@@ -57,7 +57,7 @@ struct PercentileState {
     using GridType = typename PercentileStateTypes<LT>::GridType;
 
     void update(CppType item) { items.emplace_back(item); }
-    void update_batch(const Buffer<CppType>& vec) {
+    void update_batch(const ImmBuffer<CppType> vec) {
         size_t old_size = items.size();
         items.resize(old_size + vec.size());
         memcpy(items.data() + old_size, vec.data(), vec.size() * sizeof(CppType));
@@ -198,7 +198,8 @@ public:
         this->init_state_if_needed(ctx, columns, state);
 
         const auto& column = down_cast<const InputColumnType&>(*columns[0]);
-        this->data(state).update(column.get_data()[row_num]);
+        auto column_data = column.immutable_data();
+        this->data(state).update(column_data[row_num]);
     }
 
     void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
@@ -206,7 +207,8 @@ public:
         this->init_state_if_needed(ctx, columns, state);
 
         const auto& column = down_cast<const InputColumnType&>(*columns[0]);
-        this->data(state).update_batch(column.get_data());
+        auto column_data = column.immutable_data();
+        this->data(state).update_batch(column_data);
     }
 
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
@@ -269,7 +271,7 @@ public:
         Bytes& bytes = dst_column->get_bytes();
         double rate = ColumnHelper::get_const_value<TYPE_DOUBLE>(src[1]);
         auto src_column = *down_cast<const InputColumnType*>(src[0].get());
-        InputCppType* src_data = src_column.get_data().data();
+        const InputCppType* src_data = src_column.immutable_data().data();
         for (auto i = 0; i < chunk_size; ++i) {
             size_t old_size = bytes.size();
             bytes.resize(old_size + sizeof(double) + sizeof(size_t) + sizeof(InputCppType));
@@ -304,12 +306,12 @@ public:
         this->init_state_if_needed(ctx, columns, state);
 
         const auto& column = down_cast<const BinaryColumn&>(*columns[0]);
-
+        const auto& column_data = column.get_proxy_data();
         // use mem_pool to hold the slice's data, otherwise after chunk is processed, the memory of slice used is gone
-        size_t element_size = column.get_data()[row_num].get_size();
+        size_t element_size = column_data[row_num].get_size();
         uint8_t* pos = ctx->mem_pool()->allocate(element_size);
         ctx->add_mem_usage(element_size);
-        memcpy(pos, column.get_data()[row_num].get_data(), element_size);
+        memcpy(pos, column_data[row_num].get_data(), element_size);
 
         this->data(state).update(Slice(pos, element_size));
     }
@@ -392,7 +394,7 @@ public:
         double rate = ColumnHelper::get_const_value<TYPE_DOUBLE>(src[1]);
 
         auto src_column = *down_cast<const BinaryColumn*>(src[0].get());
-        Slice* src_data = src_column.get_data().data();
+        const auto& src_data = src_column.get_proxy_data();
         for (auto i = 0; i < chunk_size; ++i) {
             size_t old_size = bytes.size();
             // [rate, 1, element ith size, element ith data]
@@ -543,7 +545,7 @@ struct LowCardPercentileState {
     constexpr int static ser_header = 0x3355 | LT << 16;
     void update(CppType item) { items[item]++; }
 
-    void update_batch(const Buffer<CppType>& vec) {
+    void update_batch(const ImmBuffer<CppType> vec) {
         for (const auto& item : vec) {
             items[item]++;
         }
@@ -629,13 +631,13 @@ public:
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
         const auto& column = down_cast<const InputColumnType&>(*columns[0]);
-        this->data(state).update(column.get_data()[row_num]);
+        this->data(state).update(column.immutable_data()[row_num]);
     }
 
     void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
                                    AggDataPtr __restrict state) const override {
         const auto& column = down_cast<const InputColumnType&>(*columns[0]);
-        this->data(state).update_batch(column.get_data());
+        this->data(state).update_batch(column.immutable_data());
     }
 
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
@@ -670,7 +672,7 @@ public:
         unsigned char* cur = bytes.data() + old_size;
 
         auto src_column = *down_cast<const InputColumnType*>(src[0].get());
-        InputCppType* src_data = src_column.get_data().data();
+        const InputCppType* src_data = src_column.immutable_data().data();
 
         size_t cur_size = old_size;
         for (size_t i = 0; i < chunk_size; ++i) {

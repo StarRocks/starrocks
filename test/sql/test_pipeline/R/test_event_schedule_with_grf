@@ -1,0 +1,74 @@
+-- name: test_event_scheduler_with_grf @sequential
+CREATE TABLE `t0` (
+  `c0` int DEFAULT NULL,
+  `c1` bigint DEFAULT NULL,
+  `c2` string DEFAULT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+CREATE TABLE `t1` (
+  `c0` int DEFAULT NULL,
+  `c1` bigint DEFAULT NULL,
+  `c2` string DEFAULT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t0 SELECT generate_series, generate_series, generate_series FROM TABLE(generate_series(1,  409600));
+-- result:
+-- !result
+insert into t1 SELECT generate_series, generate_series, generate_series FROM TABLE(generate_series(1,  409600));
+-- result:
+-- !result
+select count(*) from t0;
+-- result:
+409600
+-- !result
+select count(*) from t1;
+-- result:
+409600
+-- !result
+set query_debug_options = '{"execDebugOptions":[{"plan_node_id":0, "debug_action":"WAIT", "value":500}]}';
+-- result:
+-- !result
+select count(*) from t0 t join [shuffle] t1 s on t.c0 = s.c0 where s.c1 < 100;
+-- result:
+99
+-- !result
+set query_debug_options = '';
+-- result:
+-- !result
+admin enable failpoint 'global_runtime_filter_sync_A';
+-- result:
+-- !result
+admin enable failpoint 'global_runtime_filter_sync_B';
+-- result:
+-- !result
+select count(*) from t0 t join [shuffle] t1 s on t.c0 = s.c0 where s.c1 < 100;
+-- result:
+99
+-- !result
+admin disable failpoint 'global_runtime_filter_sync_A';
+-- result:
+-- !result
+admin disable failpoint 'global_runtime_filter_sync_B';
+-- result:
+-- !result
+set runtime_join_filter_push_down_limit = 1;
+-- result:
+-- !result
+select count(*) from t0 t join [shuffle] t1 s on t.c0 = s.c0;
+-- result:
+409600
+-- !result

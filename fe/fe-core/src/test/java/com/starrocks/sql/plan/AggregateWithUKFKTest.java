@@ -87,14 +87,14 @@ public class AggregateWithUKFKTest extends PlanTestBase {
                 "ORDER BY \n" +
                 "    id;";
         plan = getVerboseExplain(sql);
-        assertContains(plan, "  1:Project\n" +
-                "  |  output columns:\n" +
-                "  |  1 <-> [1: id, INT, false]\n" +
-                "  |  6 <-> if[(5: varchar_value IS NULL, cast(0 as BIGINT), cast(1 as BIGINT)); " +
-                "args: BOOLEAN,BIGINT,BIGINT; result: BIGINT; args nullable: false; result nullable: true]\n" +
-                "  |  cardinality: 1\n" +
-                "  |  \n" +
-                "  0:OlapScanNode");
+        assertContains(plan, "  1:Project\n"
+                + "  |  output columns:\n"
+                + "  |  1 <-> [1: id, INT, false]\n"
+                + "  |  6 <-> if[([5: varchar_value, VARCHAR, true] IS NULL, cast(0 as BIGINT), cast(1 as BIGINT)); "
+                + "args: BOOLEAN,BIGINT,BIGINT; result: BIGINT; args nullable: false; result nullable: true]\n"
+                + "  |  cardinality: 1\n"
+                + "  |  \n"
+                + "  0:OlapScanNode");
 
         sql = "SELECT\n" +
                 "    id,\n" +
@@ -129,15 +129,15 @@ public class AggregateWithUKFKTest extends PlanTestBase {
                 "ORDER BY\n" +
                 "    id;";
         plan = getVerboseExplain(sql);
-        assertContains(plan, "  1:Project\n" +
-                "  |  output columns:\n" +
-                "  |  1 <-> [1: id, INT, false]\n" +
-                "  |  2 <-> [2: big_value, BIGINT, true]\n" +
-                "  |  6 <-> if[(5: varchar_value IS NULL, cast(0 as BIGINT), cast(1 as BIGINT)); " +
-                "args: BOOLEAN,BIGINT,BIGINT; result: BIGINT; args nullable: false; result nullable: true]\n" +
-                "  |  cardinality: 1\n" +
-                "  |  \n" +
-                "  0:OlapScanNode");
+        assertContains(plan, "  1:Project\n"
+                + "  |  output columns:\n"
+                + "  |  1 <-> [1: id, INT, false]\n"
+                + "  |  2 <-> [2: big_value, BIGINT, true]\n"
+                + "  |  6 <-> if[([5: varchar_value, VARCHAR, true] IS NULL, cast(0 as BIGINT), cast(1 as BIGINT)); "
+                + "args: BOOLEAN,BIGINT,BIGINT; result: BIGINT; args nullable: false; result nullable: true]\n"
+                + "  |  cardinality: 1\n"
+                + "  |  \n"
+                + "  0:OlapScanNode");
         sql = "SELECT\n" +
                 "    id,\n" +
                 "    big_value,\n" +
@@ -499,8 +499,8 @@ public class AggregateWithUKFKTest extends PlanTestBase {
 
         sql = "select c21, count(c22) from tt2 group by c21";
         plan = getVerboseExplain(sql);
-        assertContains(plan, "if[(2: c22 IS NULL, cast(0 as BIGINT), cast(1 as BIGINT)); " +
-                "args: BOOLEAN,BIGINT,BIGINT; result: BIGINT; args nullable: false; result nullable: true]");
+        assertContains(plan, "if[([2: c22, INT, true] IS NULL, cast(0 as BIGINT), cast(1 as BIGINT)); "
+                + "args: BOOLEAN,BIGINT,BIGINT; result: BIGINT; args nullable: false; result nullable: true]");
 
         sql = "select c21, count(1) as cnt from tt2 group by c21 order by cnt";
         plan = getVerboseExplain(sql);

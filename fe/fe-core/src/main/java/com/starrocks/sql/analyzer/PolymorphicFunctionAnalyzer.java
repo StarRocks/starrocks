@@ -20,20 +20,20 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.AggregateFunction;
-import com.starrocks.catalog.AnyArrayType;
-import com.starrocks.catalog.AnyElementType;
-import com.starrocks.catalog.AnyMapType;
-import com.starrocks.catalog.AnyStructType;
-import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.ScalarFunction;
-import com.starrocks.catalog.StructField;
-import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.TableFunction;
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.common.TypeManager;
+import com.starrocks.type.AnyArrayType;
+import com.starrocks.type.AnyElementType;
+import com.starrocks.type.AnyMapType;
+import com.starrocks.type.AnyStructType;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.MapType;
+import com.starrocks.type.StructField;
+import com.starrocks.type.StructType;
+import com.starrocks.type.Type;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -216,15 +216,40 @@ public class PolymorphicFunctionAnalyzer {
             .put(FunctionSet.COALESCE, new CommonDeduce())
             // it's mock, need handle it in expressionAnalyzer
             .put(FunctionSet.NAMED_STRUCT, new RowDeduce())
+            // min/max by functions
+            .put(FunctionSet.MAX_BY, types -> types[0])
+            .put(FunctionSet.MIN_BY, types -> types[0])
+            .put(FunctionSet.getAggStateName(FunctionSet.MAX_BY), types -> types[0])
+            .put(FunctionSet.getAggStateUnionName(FunctionSet.MAX_BY), types -> types[0])
+            .put(FunctionSet.getAggStateMergeName(FunctionSet.MAX_BY), types -> types[0])
+            .put(FunctionSet.getAggStateIfName(FunctionSet.MAX_BY), types -> types[0])
+            .put(FunctionSet.getStateUnionName(FunctionSet.MAX_BY), types -> types[0])
+            .put(FunctionSet.getStateMergeName(FunctionSet.MAX_BY), types -> types[0])
+            .put(FunctionSet.getAggStateCombineName(FunctionSet.MAX_BY), types -> types[0])
+            .put(FunctionSet.getAggStateName(FunctionSet.MIN_BY), types -> types[0])
+            .put(FunctionSet.getAggStateUnionName(FunctionSet.MIN_BY), types -> types[0])
+            .put(FunctionSet.getAggStateMergeName(FunctionSet.MIN_BY), types -> types[0])
+            .put(FunctionSet.getAggStateIfName(FunctionSet.MIN_BY), types -> types[0])
+            .put(FunctionSet.getStateUnionName(FunctionSet.MIN_BY), types -> types[0])
+            .put(FunctionSet.getStateMergeName(FunctionSet.MIN_BY), types -> types[0])
+            .put(FunctionSet.getAggStateCombineName(FunctionSet.MIN_BY), types -> types[0])
             .put(FunctionSet.ANY_VALUE, types -> types[0])
+            // any_value functions
             .put(FunctionSet.getAggStateName(FunctionSet.ANY_VALUE), types -> types[0])
             .put(FunctionSet.getAggStateUnionName(FunctionSet.ANY_VALUE), types -> types[0])
             .put(FunctionSet.getAggStateMergeName(FunctionSet.ANY_VALUE), types -> types[0])
             .put(FunctionSet.getAggStateIfName(FunctionSet.ANY_VALUE), types -> types[0])
+            .put(FunctionSet.getStateUnionName(FunctionSet.ANY_VALUE), types -> types[0])
+            .put(FunctionSet.getStateMergeName(FunctionSet.ANY_VALUE), types -> types[0])
+            .put(FunctionSet.getAggStateCombineName(FunctionSet.ANY_VALUE), types -> types[0])
+            // array functions
             .put(FunctionSet.getAggStateName(FunctionSet.ARRAY_AGG), new ArrayAggStateDeduce())
             .put(FunctionSet.getAggStateUnionName(FunctionSet.ARRAY_AGG), types -> types[0])
             .put(FunctionSet.getAggStateMergeName(FunctionSet.ARRAY_AGG), new ArrayAggMergeDeduce())
             .put(FunctionSet.getAggStateIfName(FunctionSet.ARRAY_AGG), types -> types[0])
+            .put(FunctionSet.getStateMergeName(FunctionSet.ARRAY_AGG), new ArrayAggMergeDeduce())
+            .put(FunctionSet.getStateUnionName(FunctionSet.ARRAY_AGG), types -> types[0])
+            .put(FunctionSet.getAggStateCombineName(FunctionSet.ARRAY_AGG), types -> types[0])
             .put(FunctionSet.MAP_AGG, new MapAggDeduce())
             .build();
 

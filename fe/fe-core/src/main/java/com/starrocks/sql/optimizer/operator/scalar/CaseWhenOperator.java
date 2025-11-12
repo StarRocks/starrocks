@@ -16,9 +16,9 @@ package com.starrocks.sql.optimizer.operator.scalar;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.type.Type;
 
 import java.util.List;
 import java.util.Objects;
@@ -232,6 +232,6 @@ public class CaseWhenOperator extends CallOperator {
     }
     @Override
     public <R, C> R accept(ScalarOperatorVisitor<R, C> visitor, C context) {
-        return visitor.visitCaseWhenOperator(this, context);
+        return  visitor.visitCaseWhenOperator(this, context);
     }
 }

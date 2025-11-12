@@ -17,6 +17,7 @@
 
 package com.starrocks.common;
 
+import com.starrocks.utframe.StarRocksTestBase;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -28,7 +29,7 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.PrintWriter;
 
-public class MD5Test {
+public class MD5Test extends StarRocksTestBase {
 
     private static String fileName = "job_info.txt";
 
@@ -63,14 +64,14 @@ public class MD5Test {
             e.printStackTrace();
         }
 
-        System.out.println(md5sum);
+        logSysInfo(md5sum);
         String fullName = fileName + "__" + md5sum;
-        System.out.println(fullName);
+        logSysInfo(fullName);
 
-        System.out.println(fullName.lastIndexOf("__"));
-        System.out.println(fullName.substring(fullName.lastIndexOf("__") + 2));
-        System.out.println(fullName.substring(0, fullName.lastIndexOf("__")));
-        System.out.println(md5sum.length());
+        logSysInfo(fullName.lastIndexOf("__"));
+        logSysInfo(fullName.substring(fullName.lastIndexOf("__") + 2));
+        logSysInfo(fullName.substring(0, fullName.lastIndexOf("__")));
+        logSysInfo(md5sum.length());
     }
 
 }

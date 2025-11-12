@@ -1,0 +1,104 @@
+-- name: test_mv_force_refresh
+
+create database db_${uuid0};
+use db_${uuid0};
+
+-- range partition table
+CREATE TABLE `t1` (
+    `k1` date,
+    `k2` int,
+    `k3` int
+)
+DUPLICATE KEY(`k1`)
+PARTITION BY RANGE (k1) (
+START ("2020-10-01") END ("2022-03-04") EVERY (INTERVAL 15 day)
+)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 3;
+
+INSERT INTO t1 VALUES ("2020-11-10",1,1),("2020-11-11",2,2),("2020-11-12",3,3);
+
+CREATE MATERIALIZED VIEW test_mv1
+PARTITION BY k1
+DISTRIBUTED BY HASH(k1) BUCKETS 10
+REFRESH DEFERRED MANUAL
+PROPERTIES ("partition_refresh_number"="-1")
+AS SELECT * FROM t1;
+
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+select * from test_mv1 order by k1, k2;
+
+REFRESH MATERIALIZED VIEW test_mv1 FORCE WITH SYNC MODE;
+select * from test_mv1 order by k1, k2;
+
+REFRESH MATERIALIZED VIEW test_mv1 PARTITION START("2020-11-10") END("2020-11-11") FORCE WITH SYNC MODE;
+select * from test_mv1 order by k1, k2;
+
+INSERT INTO t1 VALUES ("2020-11-10",4,4);
+REFRESH MATERIALIZED VIEW test_mv1 FORCE WITH SYNC MODE;
+select * from test_mv1 order by k1, k2;
+
+DROP MATERIALIZED VIEW test_mv1;
+
+-- non partition table
+CREATE TABLE `t2` (
+    `k1` date,
+    `k2` int,
+    `k3` int
+)
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 3;
+INSERT INTO t2 VALUES ("2020-11-10",1,1),("2020-11-11",2,2),("2020-11-12",3,3);
+
+CREATE MATERIALIZED VIEW test_mv1
+DISTRIBUTED BY HASH(k1) BUCKETS 10
+REFRESH DEFERRED MANUAL
+AS SELECT * FROM t2;
+
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+select * from test_mv1 order by k1, k2;
+
+REFRESH MATERIALIZED VIEW test_mv1 FORCE WITH SYNC MODE;
+select * from test_mv1 order by k1, k2;
+
+INSERT INTO t2 VALUES ("2020-11-10",4,4);
+REFRESH MATERIALIZED VIEW test_mv1 FORCE WITH SYNC MODE;
+select * from test_mv1 order by k1, k2;
+
+DROP MATERIALIZED VIEW test_mv1;
+
+-- list partition table
+CREATE TABLE t3 (
+    k1 date,
+    k2 int,
+    k3 int 
+)
+DUPLICATE KEY(k1)
+PARTITION BY date_trunc("day", k1), k2;
+
+INSERT INTO t3 VALUES ("2020-11-10",1,1),("2020-11-11",2,2),("2020-11-12",3,3);
+
+CREATE MATERIALIZED VIEW test_mv1
+partition by (date_trunc("day", k1), k2)
+REFRESH DEFERRED MANUAL
+PROPERTIES ("partition_refresh_number"="-1")
+AS select k1, k2, sum(k3) from t3 group by k1, k2;
+
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+select * from test_mv1 order by k1, k2;
+
+REFRESH MATERIALIZED VIEW test_mv1 FORCE WITH SYNC MODE;
+select * from test_mv1 order by k1, k2;
+
+INSERT INTO t3 VALUES ("2020-11-10",4,4);
+REFRESH MATERIALIZED VIEW test_mv1 PARTITION (("2020-11-10", "4")) FORCE WITH SYNC MODE;
+select * from test_mv1 order by k1, k2;
+
+REFRESH MATERIALIZED VIEW test_mv1 FORCE WITH SYNC MODE;
+select * from test_mv1 order by k1, k2;
+
+DROP MATERIALIZED VIEW test_mv1;
+
+drop table t1;
+drop table t2;
+drop table t3;
+drop database db_${uuid0} force;

@@ -1,30 +1,18 @@
 package com.starrocks.planner;
 
-import com.starrocks.analysis.BinaryPredicate;
-import com.starrocks.analysis.BinaryType;
-import com.starrocks.analysis.BoolLiteral;
-import com.starrocks.analysis.DescriptorTable;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.IntLiteral;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.TupleDescriptor;
-import com.starrocks.analysis.TupleId;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.connector.BucketProperty;
 import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.ConnectorTblMetaInfoMgr;
-import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.RemoteFileInfoSource;
 import com.starrocks.connector.exception.StarRocksConnectorException;
-import com.starrocks.connector.iceberg.IcebergAlterTableExecutor;
+import com.starrocks.connector.iceberg.IcebergApiConverter;
 import com.starrocks.connector.iceberg.IcebergConnectorScanRangeSource;
 import com.starrocks.connector.iceberg.IcebergMORParams;
 import com.starrocks.connector.iceberg.IcebergMetadata;
@@ -38,7 +26,6 @@ import com.starrocks.connector.iceberg.IcebergRewriteData;
 import com.starrocks.connector.iceberg.IcebergRewriteDataJob;
 import com.starrocks.connector.iceberg.IcebergTableMORParams;
 import com.starrocks.connector.iceberg.IcebergTableOperation;
-import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.qe.ConnectContext;
@@ -49,26 +36,18 @@ import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.TemporaryTableMgr;
 import com.starrocks.sql.StatementPlanner;
-import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
-import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.AlterTableOperationClause;
 import com.starrocks.sql.ast.AlterTableStmt;
-import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.IcebergRewriteStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.optimizer.base.ColumnRefFactory;
-import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
-import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
-import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TBucketFunction;
 import com.starrocks.thrift.TIcebergTable;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TSinkCommitInfo;
 import com.starrocks.thrift.TTableDescriptor;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.TypeFactory;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -82,10 +61,12 @@ import org.apache.iceberg.FileContent;
 import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.FileMetadata;
 import org.apache.iceberg.FileScanTask;
+import org.apache.iceberg.NullOrder;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.ReplacePartitions;
 import org.apache.iceberg.RewriteFiles;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.SortOrder;
 import org.apache.iceberg.TableMetadata;
 import org.apache.iceberg.TableOperations;
 import org.apache.iceberg.Transaction;
@@ -106,24 +87,26 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import javax.swing.text.html.Option;
-import static com.starrocks.common.util.Util.executeCommand;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.stream.Stream;
 
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isA;
+
 public class IcebergScanNodeTest {
-    public static final HdfsEnvironment HDFS_ENVIRONMENT = new HdfsEnvironment();
     class TestableIcebergConnectorScanRangeSource extends IcebergConnectorScanRangeSource {
         public TestableIcebergConnectorScanRangeSource(IcebergConnectorScanRangeSource original) {
             super(
-                Deencapsulation.getField(original, "table"),
-                Deencapsulation.getField(original, "remoteFileInfoSource"),
-                Deencapsulation.getField(original, "morParams"),
-                Deencapsulation.getField(original, "desc"),
-                Deencapsulation.getField(original, "bucketProperties"),
-                Deencapsulation.getField(original, "recordScanFiles")
+                    Deencapsulation.getField(original, "table"),
+                    Deencapsulation.getField(original, "remoteFileInfoSource"),
+                    Deencapsulation.getField(original, "morParams"),
+                    Deencapsulation.getField(original, "desc"),
+                    Deencapsulation.getField(original, "bucketProperties"),
+                    Deencapsulation.getField(original, "partitionIdGenerator"),
+                    Deencapsulation.getField(original, "recordScanFiles")
             );
         }
-    
+
         @Override
         public List<TScanRangeLocations> toScanRanges(FileScanTask fileScanTask) {
             return Collections.singletonList(new TScanRangeLocations());
@@ -173,8 +156,8 @@ public class IcebergScanNodeTest {
 
         IcebergScanNode scanNode = new IcebergScanNode(
                 new PlanNodeId(0), desc, catalog,
-                tableMORParams, IcebergMORParams.DATA_FILE_WITHOUT_EQ_DELETE);
-        scanNode.setSnapshotId(Optional.of(12345L));
+                tableMORParams, IcebergMORParams.DATA_FILE_WITHOUT_EQ_DELETE, null);
+        scanNode.setTvrVersionRange(TvrTableSnapshot.of(Optional.of(12345L)));
 
         IcebergRemoteFileInfo remoteFileInfo = new IcebergRemoteFileInfo(fileScanTask);
         List<RemoteFileInfo> remoteFileInfos = List.of(remoteFileInfo);
@@ -196,7 +179,7 @@ public class IcebergScanNodeTest {
         List<RemoteFileInfo> empty = new ArrayList<>();
         try {
             scanNode.rebuildScanRange(empty);
-            scanNode.setSnapshotId(Optional.empty());
+            scanNode.setTvrVersionRange(TvrTableSnapshot.empty());
             scanNode.rebuildScanRange(remoteFileInfos);
             testSource.clearScannedFiles();
         } catch (Exception e) {
@@ -224,7 +207,8 @@ public class IcebergScanNodeTest {
         }};
 
         IcebergConnectorScanRangeSource scanSource = new IcebergConnectorScanRangeSource(
-                null, mockSource, null, null, Optional.empty(), true  // recordScanFiles = true
+                null, mockSource, null, null, Optional.empty(),
+                PartitionIdGenerator.of(), true  // recordScanFiles = true
         ) {
             private int callCount = 0;
 
@@ -339,251 +323,7 @@ public class IcebergScanNodeTest {
     }
 
     @Test
-    public void testVisitAlterTableOperationClause_rewriteDataFiles2(@Mocked IcebergTable table) {
-        AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(table);
-
-        Expr rewriteAll = new BinaryPredicate(BinaryType.EQ,
-                new StringLiteral("REWRITE_ALL"), new BoolLiteral(true));
-        Expr minFileSize = new BinaryPredicate(BinaryType.EQ,
-                new StringLiteral("MIN_FILE_SIZE_BYTES"), new IntLiteral(100));
-        Expr batchSize = new BinaryPredicate(BinaryType.EQ,
-                new StringLiteral("BATCH_SIZE"), new IntLiteral(200));
-
-        AlterTableOperationClause clause = new AlterTableOperationClause(new NodePosition(1, 1), "REWRITE_DATA_FILES",
-                Arrays.asList(rewriteAll, minFileSize, batchSize), null);
-
-        analyzer.visitAlterTableOperationClause(clause, new ConnectContext());
-
-        Assertions.assertTrue(clause.isRewriteAll());
-        Assertions.assertEquals(100, clause.getMinFileSizeBytes());
-        Assertions.assertEquals(200, clause.getBatchSize());
-    }
-
-    @Test
-    public void testVisitAlterTableOperationClause_invalidExpr(@Mocked IcebergTable table) {
-        AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(table);
-        Expr wrongExpr = new StringLiteral("wrong");
-        AlterTableOperationClause clause = new AlterTableOperationClause(new NodePosition(1, 1), "REWRITE_DATA_FILES",
-                Collections.singletonList(wrongExpr), null);
-
-        Assertions.assertThrows(SemanticException.class,
-                () -> analyzer.visitAlterTableOperationClause(clause, new ConnectContext()));
-    }
-
-    @Test
-    public void testVisitAlterTableOperationClause_otherOp_addsArgs(@Mocked IcebergTable table) {
-        AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(table);
-        Expr expr = new StringLiteral("dummy");
-    
-        AlterTableOperationClause clause = new AlterTableOperationClause(
-                new NodePosition(1, 1),
-                "OTHER_OP",
-                Collections.singletonList(expr),
-                null
-        );
-    
-        final ConstantOperator constOp = ConstantOperator.createInt(123);
-    
-        new MockUp<SqlToScalarOperatorTranslator>() {
-            @Mock
-            public ScalarOperator translate(Expr e, ExpressionMapping m, ColumnRefFactory f) {
-                return constOp;
-            }
-        };
-    
-        analyzer.visitAlterTableOperationClause(clause, new ConnectContext());
-    
-        Assertions.assertFalse(clause.getArgs().isEmpty());
-        Assertions.assertEquals(constOp, clause.getArgs().get(0));
-    }
-
-    @Test
-    public void testVisitAlterTableOperationClause_otherOp_addsArgs2(@Mocked IcebergTable table) {
-        AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(table);
-        Expr expr = new StringLiteral("dummy");
-    
-        AlterTableOperationClause clause = new AlterTableOperationClause(
-                new NodePosition(1, 1),
-                "OTHER_OP",
-                Collections.singletonList(expr),
-                null
-        );
-    
-        final ConstantOperator constOp = ConstantOperator.createInt(123);
-    
-        new MockUp<SqlToScalarOperatorTranslator>() {
-            @Mock
-            public ScalarOperator translate(Expr e, ExpressionMapping m, ColumnRefFactory f) {
-                return constOp;
-            }
-        };
-    
-        analyzer.visitAlterTableOperationClause(clause, new ConnectContext());
-    
-        Assertions.assertFalse(clause.getArgs().isEmpty());
-        Assertions.assertEquals(constOp, clause.getArgs().get(0));
-    }
-
-    @Test
-    public void testVisitAlterTableOperationClause_rewriteDataFiles(@Mocked IcebergTable table) {
-        AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(table);
-
-        Expr rewriteAll = new BinaryPredicate(BinaryType.EQ,
-                new StringLiteral("REWRITE_ALL"), new BoolLiteral(true));
-        Expr minFileSize = new BinaryPredicate(BinaryType.EQ,
-                new StringLiteral("MIN_FILE_SIZE_BYTES"), new IntLiteral(100));
-        Expr batchSize = new BinaryPredicate(BinaryType.EQ,
-                new StringLiteral("BATCH_SIZE"), new IntLiteral(200));
-
-        AlterTableOperationClause clause = new AlterTableOperationClause(
-                new NodePosition(1, 1), "REWRITE_DATA_FILES",
-                Arrays.asList(rewriteAll, minFileSize, batchSize), null);
-
-        analyzer.visitAlterTableOperationClause(clause, new ConnectContext());
-
-        Assertions.assertTrue(clause.isRewriteAll());
-        Assertions.assertEquals(100, clause.getMinFileSizeBytes());
-        Assertions.assertEquals(200, clause.getBatchSize());
-    }
-
-    @Test
-    public void testVisitAlterTableOperationClause_nullTableOperationName_shouldThrow() {
-        AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(null);
-        AlterTableOperationClause clause = new AlterTableOperationClause(
-                new NodePosition(1, 1), null, Collections.emptyList(), null);
-
-        SemanticException ex = Assertions.assertThrows(SemanticException.class, () ->
-                analyzer.visitAlterTableOperationClause(clause, new ConnectContext()));
-        Assertions.assertTrue(ex.getMessage().contains("Table operation name should be null"));
-    }
-
-    @Test
-    public void testVisitAlterTableOperationClause_invalidExprType_shouldThrow() {
-        AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(null);
-        Expr expr = new BoolLiteral(true); // not a BinaryPredicate
-        AlterTableOperationClause clause = new AlterTableOperationClause(
-                new NodePosition(1, 1), "REWRITE_DATA_FILES",
-                Collections.singletonList(expr), null);
-
-        SemanticException ex = Assertions.assertThrows(SemanticException.class, () ->
-                analyzer.visitAlterTableOperationClause(clause, new ConnectContext()));
-        Assertions.assertTrue(ex.getMessage().contains("Invalid"));
-    }
-
-    @Test
-    public void testVisitAlterTableOperationClause_nonEqPredicate_shouldThrow() {
-        AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(null);
-        Expr expr = new BinaryPredicate(BinaryType.NE,
-                new StringLiteral("REWRITE_ALL"), new BoolLiteral(true)); // Not EQ
-        AlterTableOperationClause clause = new AlterTableOperationClause(
-                new NodePosition(1, 1), "REWRITE_DATA_FILES",
-                Collections.singletonList(expr), null);
-
-        SemanticException ex = Assertions.assertThrows(SemanticException.class, () ->
-                analyzer.visitAlterTableOperationClause(clause, new ConnectContext()));
-        Assertions.assertTrue(ex.getMessage().contains("Invalid"));
-    }
-
-    @Test
-    public void testVisitAlterTableOperationClause_nonLiteralArgs_shouldThrow() {
-        AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(null);
-        Expr expr = new BinaryPredicate(BinaryType.EQ,
-                new BinaryPredicate(BinaryType.EQ, new StringLiteral("x"), new StringLiteral("y")),
-                new BoolLiteral(true)); // left child not a LiteralExpr
-        AlterTableOperationClause clause = new AlterTableOperationClause(
-                new NodePosition(1, 1), "REWRITE_DATA_FILES",
-                Collections.singletonList(expr), null);
-
-        SemanticException ex = Assertions.assertThrows(SemanticException.class, () ->
-                analyzer.visitAlterTableOperationClause(clause, new ConnectContext()));
-        Assertions.assertTrue(ex.getMessage().contains("Invalid"));
-    }
-
-    @Test
-    public void testVisitAlterTableOperationClause_nonStringKey_shouldThrow() {
-        AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(null);
-        Expr expr = new BinaryPredicate(BinaryType.EQ,
-                new IntLiteral(1), new BoolLiteral(true)); // key is not StringLiteral
-        AlterTableOperationClause clause = new AlterTableOperationClause(
-                new NodePosition(1, 1), "REWRITE_DATA_FILES",
-                Collections.singletonList(expr), null);
-
-        SemanticException ex = Assertions.assertThrows(SemanticException.class, () ->
-                analyzer.visitAlterTableOperationClause(clause, new ConnectContext()));
-        Assertions.assertTrue(ex.getMessage().contains("Invalid"));
-    }
-
-    @Test
-    public void testVisitAlterTableOperationClause_rewriteAllInvalidType_shouldThrow() {
-        AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(null);
-        Expr expr = new BinaryPredicate(BinaryType.EQ,
-                new StringLiteral("REWRITE_ALL"), new IntLiteral(1)); // value not BoolLiteral
-        AlterTableOperationClause clause = new AlterTableOperationClause(
-                new NodePosition(1, 1), "REWRITE_DATA_FILES",
-                Collections.singletonList(expr), null);
-
-        SemanticException ex = Assertions.assertThrows(SemanticException.class, () ->
-                analyzer.visitAlterTableOperationClause(clause, new ConnectContext()));
-        Assertions.assertTrue(ex.getMessage().contains("boolean value"));
-    }
-
-    @Test
-    public void testVisitAlterTableOperationClause_minFileSizeNegative_shouldThrow() {
-        AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(null);
-        Expr expr = new BinaryPredicate(BinaryType.EQ,
-                new StringLiteral("MIN_FILE_SIZE_BYTES"), new IntLiteral(-1));
-        AlterTableOperationClause clause = new AlterTableOperationClause(
-                new NodePosition(1, 1), "REWRITE_DATA_FILES",
-                Collections.singletonList(expr), null);
-
-        SemanticException ex = Assertions.assertThrows(SemanticException.class, () ->
-                analyzer.visitAlterTableOperationClause(clause, new ConnectContext()));
-        Assertions.assertTrue(ex.getMessage().contains("non-negative integer"));
-    }
-
-    @Test
-    public void testVisitAlterTableOperationClause_batchSizeInvalidType_shouldThrow() {
-        AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(null);
-        Expr expr = new BinaryPredicate(BinaryType.EQ,
-                new StringLiteral("BATCH_SIZE"), new BoolLiteral(false)); // invalid type
-        AlterTableOperationClause clause = new AlterTableOperationClause(
-                new NodePosition(1, 1), "REWRITE_DATA_FILES",
-                Collections.singletonList(expr), null);
-
-        SemanticException ex = Assertions.assertThrows(SemanticException.class, () ->
-                analyzer.visitAlterTableOperationClause(clause, new ConnectContext()));
-        Assertions.assertTrue(ex.getMessage().contains("integer value"));
-    }
-
-    @Test
-    public void testVisitAlterTableOperationClause_unknownKey_shouldThrow() {
-        AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(null);
-        Expr expr = new BinaryPredicate(BinaryType.EQ,
-                new StringLiteral("UNKNOWN_KEY"), new IntLiteral(1));
-        AlterTableOperationClause clause = new AlterTableOperationClause(
-                new NodePosition(1, 1), "REWRITE_DATA_FILES",
-                Collections.singletonList(expr), null);
-
-        SemanticException ex = Assertions.assertThrows(SemanticException.class, () ->
-                analyzer.visitAlterTableOperationClause(clause, new ConnectContext()));
-        Assertions.assertTrue(ex.getMessage().contains("Unknown key"));
-    }
-
-    @Test
-    public void testVisitAlterTableOperationClause_whereClauseButNotIceberg_shouldThrow(@Mocked com.starrocks.catalog.Table table) {
-        AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(table);
-        Expr where = new BoolLiteral(true);
-        AlterTableOperationClause clause = new AlterTableOperationClause(
-                new NodePosition(1, 1), "REWRITE_DATA_FILES",
-                Collections.emptyList(), where);
-
-        SemanticException ex = Assertions.assertThrows(SemanticException.class, () ->
-                analyzer.visitAlterTableOperationClause(clause, new ConnectContext()));
-        Assertions.assertTrue(ex.getMessage().contains("not an iceberg table"));
-    }
-
-    @Test
-    public void testToThrift_withPartitionExprs() throws Exception {
+    public void testToThriftWithPartitionExprs() throws Exception {
 
         Schema schema = new Schema(
                 Types.NestedField.required(1, "col1", Types.StringType.get())
@@ -607,7 +347,7 @@ public class IcebergScanNodeTest {
 
 
         List<Column> schemaColumns = new ArrayList<>();
-        schemaColumns.add(new Column("col1", ScalarType.createVarchar(20)));
+        schemaColumns.add(new Column("col1", TypeFactory.createVarchar(20)));
 
         IcebergTable icebergTable = new IcebergTable.Builder()
                 .setId(1234)
@@ -618,10 +358,16 @@ public class IcebergScanNodeTest {
                 .setFullSchema(schemaColumns)
                 .setNativeTable(mockNativeTable)
                 .setIcebergProperties(Collections.singletonMap("iceberg.catalog.type", "hive"))
+
                 .build();
 
         icebergTable.setComment("some normal comment");
 
+        Schema icebergApiSchema = IcebergApiConverter.toIcebergApiSchema(schemaColumns);
+        SortOrder.Builder builder = SortOrder.builderFor(icebergApiSchema);
+        builder.asc("col1", NullOrder.NULLS_FIRST);
+        SortOrder sortOrder = builder.build();
+        Mockito.when(mockNativeTable.sortOrder()).thenReturn(sortOrder);
 
         List<DescriptorTable.ReferencedPartitionInfo> partitions = new ArrayList<>();
         TTableDescriptor tdesc = icebergTable.toThrift(partitions);
@@ -631,6 +377,7 @@ public class IcebergScanNodeTest {
         Assertions.assertEquals("file:///tmp/test", tIcebergTable.getLocation());
         Assertions.assertFalse(tIcebergTable.getPartition_info().isEmpty());
         Assertions.assertEquals("col1_trunc", tIcebergTable.getPartition_info().get(0).getPartition_column_name());
+        Assertions.assertFalse(tIcebergTable.getSort_order().getSort_key_idxes().isEmpty());
     }
 
     private Schema _schema() {
@@ -765,7 +512,7 @@ public class IcebergScanNodeTest {
     }
 
     @Test
-    public void testFillRewriteFiles_shouldFillExtraCorrectly() throws Exception {
+    public void testFillRewriteFilesShouldFillExtraCorrectly() throws Exception {
         // 1. Mock InsertStmt
         IcebergRewriteStmt rewriteStmt = Mockito.mock(IcebergRewriteStmt.class);
         Mockito.when(rewriteStmt.rewriteAll()).thenReturn(true);
@@ -815,7 +562,7 @@ public class IcebergScanNodeTest {
     }
 
     @Test
-    public void testGetSourceFileScanOutputs_mixedScenarios() {
+    public void testGetSourceFileScanOutputsMixedScenarios() {
         // --- Mock DeleteFile ---
         DeleteFile posDeleteFile = Mockito.mock(DeleteFile.class);
         Mockito.when(posDeleteFile.content()).thenReturn(FileContent.POSITION_DELETES);
@@ -870,8 +617,9 @@ public class IcebergScanNodeTest {
                 remoteFileInfoSource,
                 morParams,
                 tupleDesc,
-                Optional.empty()
-        );
+                Optional.empty(),
+                PartitionIdGenerator.of()
+                );
 
         List<FileScanTask> result = source.getSourceFileScanOutputs(
                 10, // maxSize
@@ -884,7 +632,7 @@ public class IcebergScanNodeTest {
     }
 
     @Test
-    public void testFinishSink_success(
+    public void testFinishSinkSuccess(
             @Mocked LocalMetastore localMetastore,
             @Mocked TemporaryTableMgr temporaryTableMgr,
             @Mocked ConnectorMgr connectorMgr,
@@ -908,7 +656,7 @@ public class IcebergScanNodeTest {
     }
 
     @Test
-    public void testFinishSink_metadataThrows(
+    public void testFinishSinkMetadataThrows(
             @Mocked LocalMetastore localMetastore,
             @Mocked TemporaryTableMgr temporaryTableMgr,
             @Mocked ConnectorMgr connectorMgr,
@@ -935,7 +683,7 @@ public class IcebergScanNodeTest {
     }
 
     @Test
-    public void testFinishSink_noMetadata(
+    public void testFinishSinkNoMetadata(
             @Mocked LocalMetastore localMetastore,
             @Mocked TemporaryTableMgr temporaryTableMgr,
             @Mocked ConnectorMgr connectorMgr,
@@ -953,8 +701,9 @@ public class IcebergScanNodeTest {
     }
 
     @Test
-    void execute_shouldRunNormally_whenPreparedStateAndTasksExist() throws Exception {
+    void executeShouldRunNormallyWhenPreparedStateAndTasksExist() throws Exception {
         ConnectContext context = Mockito.mock(ConnectContext.class, Mockito.RETURNS_DEEP_STUBS);
+        SessionVariable sessVar = Mockito.mock(SessionVariable.class);
         AlterTableStmt alter = Mockito.mock(AlterTableStmt.class);
         IcebergRewriteStmt rewriteStmt = Mockito.mock(IcebergRewriteStmt.class);
         ExecPlan execPlan = Mockito.mock(ExecPlan.class);
@@ -967,13 +716,16 @@ public class IcebergScanNodeTest {
         fragments.add(fragment);
         Mockito.when(execPlan.getFragments()).thenReturn(fragments);
         Mockito.when(fragment.collectScanNodes()).thenReturn(scanMap);
-        Mockito.when(rewriteData.hasMoreTaskGroup())
-                .thenReturn(true)
-                .thenReturn(false);
-        List<RemoteFileInfo> oneGroup = Collections.emptyList();
+        Mockito.when(rewriteData.hasMoreTaskGroup()).thenReturn(true).thenReturn(false);
+        List<RemoteFileInfo> oneGroup = new ArrayList<>();
+        RemoteFileInfo rfi = Mockito.mock(RemoteFileInfo.class);
+        oneGroup.add(rfi);
         Mockito.when(rewriteData.nextTaskGroup()).thenReturn(oneGroup);
         Mockito.when(scanNode.getPlanNodeName()).thenReturn("IcebergScanNode");
-        RemoteFileInfo remoteFileInfo = Mockito.mock(RemoteFileInfo.class);
+        Mockito.when(context.getSessionVariable()).thenReturn(sessVar);
+        Mockito.when(sessVar.clone()).thenReturn(sessVar);
+        Mockito.doNothing().when(sessVar).setQueryTimeoutS(Mockito.anyInt());
+    
         // --- Mock DataFile ---
         DataFile dataFile = Mockito.mock(DataFile.class);
         Mockito.when(dataFile.fileSizeInBytes()).thenReturn(500L);
@@ -984,24 +736,16 @@ public class IcebergScanNodeTest {
         Mockito.when(fileScanTask.deletes()).thenReturn(Collections.emptyList());
 
         // --- Mock IcebergRemoteFileInfo ---
+        RemoteFileInfo remoteFileInfo = Mockito.mock(RemoteFileInfo.class);
         IcebergRemoteFileInfo icebergRemoteFileInfo = Mockito.mock(IcebergRemoteFileInfo.class);
         Mockito.when(icebergRemoteFileInfo.getFileScanTask()).thenReturn(fileScanTask);
         Mockito.when(remoteFileInfo.cast()).thenReturn(icebergRemoteFileInfo);
         RemoteFileInfoSource remoteFileInfoSource = new RemoteFileInfoSource() {
             int count = 0;
-
-            @Override
-            public RemoteFileInfo getOutput() {
-                count++;
-                return remoteFileInfo;
-            }
-
-            @Override
-            public boolean hasMoreOutput() {
-                return count == 0;
-            }
+            @Override public RemoteFileInfo getOutput() { count++; return remoteFileInfo; }
+            @Override public boolean hasMoreOutput() { return count == 0; }
         };
-
+    
         IcebergTable icebergTable = Mockito.mock(IcebergTable.class);
         IcebergMORParams morParams = Mockito.mock(IcebergMORParams.class);
         TupleDescriptor tupleDesc = Mockito.mock(TupleDescriptor.class);
@@ -1011,17 +755,20 @@ public class IcebergScanNodeTest {
                 remoteFileInfoSource,
                 morParams,
                 tupleDesc,
-                Optional.empty()
-        );
+                Optional.empty(),
+                PartitionIdGenerator.of()
+                );
         Mockito.when(scanNode.getSourceRange()).thenReturn(fakeSourceRange);
         StmtExecutor executor = Mockito.mock(StmtExecutor.class);
         new MockUp<StmtExecutor>() {
+            private static StmtExecutor HOLDER;
+            { HOLDER = executor; }
             @Mock
-            public StmtExecutor newInternalExecutor(ConnectContext c, StatementBase s) {
-                return executor;
+            public static StmtExecutor newInternalExecutor(ConnectContext c, StatementBase s) {
+                return HOLDER;
             }
         };
-
+    
         new MockUp<com.starrocks.sql.parser.SqlParser>() {
             @Mock
             public List<com.starrocks.sql.ast.StatementBase> parse(String sql, SessionVariable sessionVariable) {
@@ -1038,16 +785,7 @@ public class IcebergScanNodeTest {
 
         new MockUp<IcebergScanNode>() {
             @Mock
-            public void rebuildScanRange(List<RemoteFileInfo> splits) {
-                return;
-            }
-        };
-
-        new MockUp<StmtExecutor>() {
-            @Mock
-            public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) {
-                return;
-            }
+            public void rebuildScanRange(List<RemoteFileInfo> splits) { /* no-op */ }
         };
         new MockUp<IcebergRewriteData>() {
             @Mock
@@ -1064,161 +802,106 @@ public class IcebergScanNodeTest {
         };
 
         IcebergRewriteDataJob job = new IcebergRewriteDataJob(
-                "insert into t select * from t", false, 0L, 10L, context, alter);
+                "insert into t select * from t", false, 0L, 10L, 1L, context, alter);
 
         job.prepare();
         Deencapsulation.setField(job, "execPlan", execPlan);
         Deencapsulation.setField(job, "scanNodes", Arrays.asList(scanNode));
         Deencapsulation.setField(job, "rewriteStmt", rewriteStmt);
         Deencapsulation.setField(job, "rewriteData", rewriteData);
+        
+        ConcurrentLinkedQueue<IcebergRewriteDataJob.FinishArgs> finishArg = new ConcurrentLinkedQueue<>();
+        finishArg.add(job.new FinishArgs(
+                "c", "db", "t",
+                Arrays.asList(new TSinkCommitInfo(), new TSinkCommitInfo()),
+                "main",
+                new IcebergSinkExtra()
+        ));
+        Deencapsulation.setField(job, "collected", finishArg);
+        // ---- run ----
         job.execute();
 
         Mockito.verify(rewriteData, Mockito.times(2)).hasMoreTaskGroup();
         Mockito.verify(rewriteData, Mockito.times(1)).nextTaskGroup();
         Mockito.verify(scanNode, Mockito.times(1)).rebuildScanRange(oneGroup);
-        Mockito.verify(executor, Mockito.times(1)).handleDMLStmt(execPlan, rewriteStmt);
+    
+        Mockito.verify(executor, Mockito.times(1))
+               .handleDMLStmt(eq(execPlan), isA(IcebergRewriteStmt.class));
     }
 
     @Test
-    void execute_shouldSetErrorAndReturn_whenExecutorThrows() throws Exception {
+    void executeShouldSetErrorAndReturnWhenExecutorThrows() throws Exception {
         ConnectContext context = Mockito.mock(ConnectContext.class, Mockito.RETURNS_DEEP_STUBS);
+        SessionVariable sessVar = Mockito.mock(SessionVariable.class);
         AlterTableStmt alter = Mockito.mock(AlterTableStmt.class);
         IcebergRewriteStmt rewriteStmt = Mockito.mock(IcebergRewriteStmt.class);
         ExecPlan execPlan = Mockito.mock(ExecPlan.class);
         IcebergScanNode scanNode = Mockito.mock(IcebergScanNode.class);
         IcebergRewriteData rewriteData = Mockito.mock(IcebergRewriteData.class);
+        List<RemoteFileInfo> oneGroup = new ArrayList<>();
+        RemoteFileInfo rfi = Mockito.mock(RemoteFileInfo.class);
+        oneGroup.add(rfi);
+    
+        Mockito.when(rewriteData.hasMoreTaskGroup()).thenReturn(true).thenReturn(false);
+        Mockito.when(rewriteData.nextTaskGroup()).thenReturn(oneGroup);
+        Mockito.when(scanNode.getPlanNodeName()).thenReturn("IcebergScanNode");
+    
+        Mockito.when(context.getQueryId()).thenReturn(java.util.UUID.randomUUID());
+        Mockito.when(context.getSkipFinishSink()).thenReturn(true);
+        Mockito.when(context.getSessionVariable()).thenReturn(sessVar);
+        Mockito.when(sessVar.clone()).thenReturn(sessVar);
+        Mockito.doNothing().when(sessVar).setQueryTimeoutS(Mockito.anyInt());
 
-        Mockito.when(rewriteData.hasMoreTaskGroup())
-                .thenReturn(true)
-                .thenReturn(false);
-        Mockito.when(rewriteData.nextTaskGroup()).thenReturn(Collections.emptyList());
+    
+        PlanFragment fragment = Mockito.mock(PlanFragment.class);
+        ArrayList<PlanFragment> fragments = new ArrayList<>();
+        fragments.add(fragment);
 
-        StmtExecutor executor = Mockito.mock(StmtExecutor.class);
-        Mockito.doThrow(new RuntimeException("boom")).when(executor).handleDMLStmt(execPlan, rewriteStmt);
-
-        new MockUp<StmtExecutor>() {
-            @Mock
-            public StmtExecutor newInternalExecutor(ConnectContext c, StatementBase s) {
-                return executor;
-            }
+        Map<PlanNodeId, ScanNode> scanMap = new HashMap<>();
+        scanMap.put(new PlanNodeId(1), scanNode);
+        Mockito.when(execPlan.getFragments()).thenReturn(fragments);
+        Mockito.when(fragment.collectScanNodes()).thenReturn(scanMap);
+    
+        com.starrocks.sql.ast.InsertStmt parsedInsert = Mockito.mock(com.starrocks.sql.ast.InsertStmt.class);
+    
+        new mockit.MockUp<StatementPlanner>() {
+            @mockit.Mock
+            public ExecPlan plan(StatementBase stmt, ConnectContext session) { return execPlan; }
         };
-
-        new MockUp<IcebergScanNode>() {
-            @Mock
-            public void rebuildScanRange(List<RemoteFileInfo> splits) {
-                return;
-            }
+        new mockit.MockUp<IcebergRewriteStmt>() {
+            @mockit.Mock
+            public void $init(InsertStmt base, boolean rewriteAll) { /* no-op */ }
+        };
+        new mockit.MockUp<IcebergScanNode>() {
+            @mockit.Mock
+            public void rebuildScanRange(List<RemoteFileInfo> splits) { /* no-op */ }
+        };
+    
+        StmtExecutor executor = Mockito.mock(StmtExecutor.class);
+        Mockito.doThrow(new RuntimeException("boom"))
+               .when(executor)
+               .handleDMLStmt(Mockito.eq(execPlan), Mockito.isA(IcebergRewriteStmt.class));
+    
+        new mockit.MockUp<StmtExecutor>() {
+            private static StmtExecutor HOLDER;
+            { HOLDER = executor; }     
+            @mockit.Mock
+            public static StmtExecutor newInternalExecutor(ConnectContext c, StatementBase s) { return HOLDER; }
         };
 
         IcebergRewriteDataJob job = new IcebergRewriteDataJob(
-                "insert into t select 1", false, 0L, 10L, context, alter);
+                "insert into t select 1", false, 0L, 10L, 1L, context, alter);
 
         Deencapsulation.setField(job, "rewriteStmt", rewriteStmt);
+        Deencapsulation.setField(job, "parsedStmt", parsedInsert);
         Deencapsulation.setField(job, "execPlan", execPlan);
         Deencapsulation.setField(job, "scanNodes", Arrays.asList(scanNode));
         Deencapsulation.setField(job, "rewriteData", rewriteData);
 
-        job.execute();
+        StarRocksConnectorException ex = Assertions.assertThrows(StarRocksConnectorException.class, () -> job.execute());
 
-        Mockito.verify(context.getState(), Mockito.times(1)).setError("boom");
+        Assertions.assertEquals("Failed to compact files", ex.getMessage());
         Mockito.verify(scanNode, Mockito.times(1)).rebuildScanRange(Mockito.anyList());
-    }
-
-    @Test
-    void rewriteDataFiles_shouldBuildSQL_andRunJob(@Mocked org.apache.iceberg.Table table,
-            @Mocked IcebergHiveCatalog icebergHiveCatalog) throws Exception {
-        // --- arrange
-        String catalog = "c1";
-        String db = "db";
-        String tbl = "table";
-
-        AlterTableStmt stmt = Mockito.mock(AlterTableStmt.class);
-        Mockito.when(stmt.getCatalogName()).thenReturn(catalog);
-        Mockito.when(stmt.getDbName()).thenReturn(db);
-        Mockito.when(stmt.getTableName()).thenReturn(tbl);
-
-        AlterTableOperationClause clause = Mockito.mock(AlterTableOperationClause.class);
-        Mockito.when(clause.isRewriteAll()).thenReturn(true);
-        Mockito.when(clause.getMinFileSizeBytes()).thenReturn(128L);
-        Mockito.when(clause.getBatchSize()).thenReturn(10L);
-
-        Expr where = Mockito.mock(Expr.class);
-        SlotRef slot = Mockito.mock(SlotRef.class);
-        Mockito.doAnswer(inv -> {
-            @SuppressWarnings("unchecked")
-            List<SlotRef> list = (List<SlotRef>) inv.getArgument(1);
-            list.add(slot);
-            return null;
-        }).when(where).collect(Mockito.eq(SlotRef.class), Mockito.anyList());
-        Mockito.when(where.toSql()).thenReturn("k1 = 1");
-        Mockito.when(clause.getWhere()).thenReturn(where);
-
-        ConnectContext ctx = Mockito.mock(ConnectContext.class);
-        new MockUp<IcebergRewriteDataJob>() {
-            @Mock public void prepare() {}
-            @Mock public void execute() {}
-        };
-
-
-        IcebergAlterTableExecutor target = new IcebergAlterTableExecutor(new AlterTableStmt(
-                new TableName("db", "table"),
-                List.of(clause)),
-                table, icebergHiveCatalog,
-                ctx,
-                HDFS_ENVIRONMENT);
-
-        // --- act
-        target.rewriteDataFiles(clause, ctx);
-    }
-
-    @Test
-    void rewriteDataFiles_shouldWrapAndThrow_whenJobExecuteFails(@Mocked org.apache.iceberg.Table table,
-            @Mocked IcebergHiveCatalog icebergHiveCatalog) throws Exception {
-        // --- arrange
-        String catalog = "c1";
-        String db = "db";
-        String tbl = "table";
-
-        AlterTableStmt stmt = Mockito.mock(AlterTableStmt.class);
-        Mockito.when(stmt.getCatalogName()).thenReturn(catalog);
-        Mockito.when(stmt.getDbName()).thenReturn(db);
-        Mockito.when(stmt.getTableName()).thenReturn(tbl);
-
-        AlterTableOperationClause clause = Mockito.mock(AlterTableOperationClause.class);
-        Mockito.when(clause.isRewriteAll()).thenReturn(true);
-        Mockito.when(clause.getMinFileSizeBytes()).thenReturn(128L);
-        Mockito.when(clause.getBatchSize()).thenReturn(10L);
-
-        Expr where = Mockito.mock(Expr.class);
-        SlotRef slot = Mockito.mock(SlotRef.class);
-        Mockito.doAnswer(inv -> {
-            @SuppressWarnings("unchecked")
-            List<SlotRef> list = (List<SlotRef>) inv.getArgument(1);
-            list.add(slot);
-            return null;
-        }).when(where).collect(Mockito.eq(SlotRef.class), Mockito.anyList());
-        Mockito.when(where.toSql()).thenReturn("k1 = 1");
-        Mockito.when(clause.getWhere()).thenReturn(where);
-
-        ConnectContext ctx = Mockito.mock(ConnectContext.class);
-        new MockUp<IcebergRewriteDataJob>() {
-            @Mock public void prepare() {}
-            @Mock public void execute() { throw new RuntimeException("boom"); }
-        };
-
-
-        IcebergAlterTableExecutor target = new IcebergAlterTableExecutor(new AlterTableStmt(
-                new TableName("db", "table"),
-                List.of(clause)),
-                table, icebergHiveCatalog,
-                ctx,
-                HDFS_ENVIRONMENT);
-
-        // --- act + assert
-        StarRocksConnectorException ex =
-                Assertions.assertThrows(StarRocksConnectorException.class, () -> target.rewriteDataFiles(clause, ctx));
-        Assertions.assertTrue(ex.getMessage().contains("db.table"));
-        Assertions.assertTrue(ex.getMessage().contains("boom"));
     }
 
     @Test
@@ -1228,7 +911,7 @@ public class IcebergScanNodeTest {
 
         IcebergScanNode scanNode = new IcebergScanNode(
                 new PlanNodeId(0), desc, "IcebergScanNode",
-                IcebergTableMORParams.EMPTY, IcebergMORParams.DATA_FILE_WITHOUT_EQ_DELETE);
+                IcebergTableMORParams.EMPTY, IcebergMORParams.DATA_FILE_WITHOUT_EQ_DELETE, null);
 
         // Create three bucket properties
         List<BucketProperty> bucketProperties = new ArrayList<>();

@@ -18,19 +18,16 @@
 #include <memory>
 #include <mutex>
 #include <numeric>
-#include <optional>
 
 #include "common/config.h"
 #include "exec/hash_joiner.h"
 #include "exec/pipeline/hashjoin/hash_join_probe_operator.h"
 #include "exec/pipeline/hashjoin/hash_joiner_factory.h"
-#include "exec/pipeline/query_context.h"
 #include "exec/spill/executor.h"
 #include "exec/spill/partition.h"
 #include "exec/spill/spill_components.h"
 #include "exec/spill/spiller.h"
 #include "exec/spill/spiller.hpp"
-#include "gen_cpp/PlanNodes_types.h"
 #include "gutil/casts.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
@@ -280,7 +277,7 @@ Status SpillableHashJoinProbeOperator::_load_partition_build_side(workgroup::Yie
 
             if (chunk_st.ok() && chunk_st.value() != nullptr && !chunk_st.value()->is_empty()) {
                 int64_t old_mem_usage = hash_table_mem_usage;
-                RETURN_IF_ERROR(builder->append_chunk(std::move(chunk_st.value())));
+                RETURN_IF_ERROR(builder->append_chunk(state, std::move(chunk_st.value())));
                 hash_table_mem_usage = builder->ht_mem_usage();
                 COUNTER_ADD(metrics.build_partition_peak_memory_usage, hash_table_mem_usage - old_mem_usage);
             } else if (chunk_st.status().is_end_of_file()) {
@@ -345,6 +342,7 @@ void SpillableHashJoinProbeOperator::_update_status(Status&& status) const {
 }
 
 Status SpillableHashJoinProbeOperator::_status() const {
+    RETURN_IF_ERROR(_join_builder->spiller()->task_status());
     std::lock_guard guard(_mutex);
     return _operator_status;
 }
