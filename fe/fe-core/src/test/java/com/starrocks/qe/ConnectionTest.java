@@ -128,7 +128,6 @@ public class ConnectionTest {
         Assertions.assertTrue(result.second.contains("Reach cluster-wide connection limit"));
     }
 
-
     @Test
     public void testConnectionReachUserLimit() throws Exception {
         Config.qe_max_connection = 100;
@@ -167,12 +166,12 @@ public class ConnectionTest {
         ExecuteEnv.setup();
 
         Deencapsulation.invoke(executeSqlAction,
-                "registerContext",
+                "registerContextOnce",
                 "select 1",
                 createHttpConnectContextForUser("test"));
         try {
             Deencapsulation.invoke(executeSqlAction,
-                    "registerContext",
+                    "registerContextOnce",
                     "select 1",
                     createHttpConnectContextForUser("test"));
         } catch (StarRocksHttpException e) {
@@ -393,7 +392,7 @@ public class ConnectionTest {
         Assertions.assertFalse(changeResult.first);
         Assertions.assertNotNull(changeResult.second);
         Assertions.assertTrue(changeResult.second.contains("new qualifiedUser is null"));
-        
+
         // Verify original state is preserved
         Assertions.assertEquals(1, getUserConnCount(scheduler, userA));
         Assertions.assertEquals(1, totalTrackedConnections(scheduler));
@@ -419,7 +418,7 @@ public class ConnectionTest {
         Pair<Boolean, String> changeResult = scheduler.onUserChanged(ctx, userA, userA);
         Assertions.assertTrue(changeResult.first);
         Assertions.assertNull(changeResult.second);
-        
+
         // Verify state remains unchanged
         Assertions.assertEquals(1, getUserConnCount(scheduler, userA));
         Assertions.assertEquals(1, totalTrackedConnections(scheduler));
@@ -446,7 +445,7 @@ public class ConnectionTest {
         // Test with non-existent old user (should still succeed)
         Pair<Boolean, String> changeResult = scheduler.onUserChanged(ctx, "non_existent_user", userB);
         Assertions.assertTrue(changeResult.first);
-        
+
         // Verify new user counter is incremented, old user counter remains unchanged
         // because the old user didn't exist in the counter map
         Assertions.assertEquals(1, getUserConnCount(scheduler, userA)); // Still 1 because old user didn't exist
@@ -480,7 +479,7 @@ public class ConnectionTest {
         // Now try to change user - should handle negative counter gracefully
         Pair<Boolean, String> changeResult = scheduler.onUserChanged(ctx, userA, userB);
         Assertions.assertTrue(changeResult.first);
-        
+
         // Verify counters are correct after recovery
         Assertions.assertEquals(0, getUserConnCount(scheduler, userA)); // Should be reset to 0
         Assertions.assertEquals(1, getUserConnCount(scheduler, userB));
@@ -511,7 +510,7 @@ public class ConnectionTest {
         // Now try to change user - should handle missing counter gracefully
         Pair<Boolean, String> changeResult = scheduler.onUserChanged(ctx, userA, userB);
         Assertions.assertTrue(changeResult.first);
-        
+
         // Verify new user counter is still incremented correctly
         Assertions.assertEquals(0, getUserConnCount(scheduler, userA));
         Assertions.assertEquals(1, getUserConnCount(scheduler, userB));
@@ -547,7 +546,7 @@ public class ConnectionTest {
         ctx1.setQualifiedUser(userB);
         ctx1.setCurrentUserIdentity(new UserIdentity(userB, "%"));
         Pair<Boolean, String> changeResult1 = scheduler.onUserChanged(ctx1, userA, userB);
-        
+
         // ctx2 changes from userB to userC (should succeed)
         ctx2.setQualifiedUser(userC);
         ctx2.setCurrentUserIdentity(new UserIdentity(userC, "%"));
@@ -591,7 +590,7 @@ public class ConnectionTest {
         ctx1.setQualifiedUser(userB);
         ctx1.setCurrentUserIdentity(new UserIdentity(userB, "%"));
         Pair<Boolean, String> changeResult = scheduler.onUserChanged(ctx1, userA, userB);
-        
+
         Assertions.assertFalse(changeResult.first);
         Assertions.assertNotNull(changeResult.second);
         Assertions.assertTrue(changeResult.second.contains("Reach user-level"));
