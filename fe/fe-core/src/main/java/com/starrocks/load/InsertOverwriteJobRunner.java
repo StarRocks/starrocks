@@ -53,7 +53,13 @@ import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.transaction.InsertOverwriteJobStats;
+import com.starrocks.transaction.InsertTxnCommitAttachment;
 import com.starrocks.transaction.TransactionState;
+<<<<<<< HEAD
+=======
+import com.starrocks.transaction.TxnCommitAttachment;
+import com.starrocks.warehouse.cngroup.ComputeResource;
+>>>>>>> c7b206ede5 ([BugFix] Fix statistics collection strategy after overwrite (#65327))
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -477,9 +483,26 @@ public class InsertOverwriteJobRunner {
                 throw new DdlException("partition type " + partitionInfo.getType() + " is not supported");
             }
 
-            long sumTargetRows = job.getTmpPartitionIds().stream()
-                    .mapToLong(p -> targetTable.mayGetPartition(p).stream().mapToLong(Partition::getRowCount).sum())
-                    .sum();
+            long sumTargetRows = 0;
+            if (insertStmt != null) {
+                TransactionState txnState = GlobalStateMgr.getCurrentState()
+                        .getGlobalTransactionMgr()
+                        .getTransactionState(dbId, insertStmt.getTxnId());
+                if (txnState != null && txnState.getTxnCommitAttachment() != null) {
+                    TxnCommitAttachment attachment = txnState.getTxnCommitAttachment();
+                    if (attachment instanceof InsertTxnCommitAttachment) {
+                        sumTargetRows = ((InsertTxnCommitAttachment) attachment).getLoadedRows();
+                    }
+                }
+            }
+            
+            if (sumTargetRows == 0) {
+                LOG.warn("TxnCommitAttachment is null or invalid, fallback to partition.getRowCount()");
+                sumTargetRows = job.getTmpPartitionIds().stream()
+                        .mapToLong(p -> targetTable.mayGetPartition(p).stream().mapToLong(Partition::getRowCount).sum())
+                        .sum();
+            }
+
             stats.setTargetRows(sumTargetRows);
             if (!isReplay) {
                 // mark all source tablet ids force delete to drop it directly on BE,
