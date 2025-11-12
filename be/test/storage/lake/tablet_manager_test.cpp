@@ -27,6 +27,7 @@
 #include "storage/lake/join_path.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/metacache.h"
+#include "storage/lake/options.h"
 #include "storage/lake/update_manager.h"
 #include "storage/lake/versioned_tablet.h"
 #include "storage/options.h"
@@ -833,6 +834,28 @@ TEST_F(LakeTabletManagerTest, cache_tablet_metadata) {
     ASSERT_TRUE(_tablet_manager->cache_tablet_metadata(metadata).ok());
     auto path = _tablet_manager->tablet_metadata_location(tablet_id, 2);
     ASSERT_TRUE(_tablet_manager->metacache()->lookup_tablet_metadata(path) != nullptr);
+}
+
+TEST_F(LakeTabletManagerTest, get_tablet_metadata_cache_options) {
+    auto metadata = std::make_shared<TabletMetadata>();
+    auto tablet_id = next_id();
+    metadata->set_id(tablet_id);
+    metadata->set_version(2);
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(metadata));
+
+    auto path = _tablet_manager->tablet_metadata_location(tablet_id, 2);
+
+    // 1. fill_meta_cache=true
+    _tablet_manager->metacache()->prune();
+    auto res = _tablet_manager->get_tablet_metadata(tablet_id, 2, {true, true});
+    EXPECT_TRUE(res.ok());
+    EXPECT_TRUE(_tablet_manager->metacache()->lookup_tablet_metadata(path) != nullptr);
+
+    // 2. fill_meta_cache=false
+    _tablet_manager->metacache()->prune();
+    res = _tablet_manager->get_tablet_metadata(tablet_id, 2, {false, true});
+    EXPECT_TRUE(res.ok());
+    EXPECT_TRUE(_tablet_manager->metacache()->lookup_tablet_metadata(path) == nullptr);
 }
 
 TEST_F(LakeTabletManagerTest, get_tablet_metadata) {}
