@@ -71,7 +71,7 @@ jobs:
               fi
               echo "::error::PR CHECKER is failed, please check and then you can re-execute by commenting on rerun!"
               exit 1
-            then
+            else
               echo "$pr_check_run_info"
               round_limit=$((round_limit-1))
               sleep 10
