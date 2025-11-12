@@ -63,7 +63,7 @@ public final class IcebergUtil {
                 case DATE:
                     texpr.setType(TExprNodeType.INT_LITERAL);
                     texpr.setMin_int_value(((Number) minValue).intValue());
-                    texpr.setMin_int_value(((Number) maxValue).intValue());
+                    texpr.setMax_int_value(((Number) maxValue).intValue());
                     break;
                 case BIGINT:
                 case TIME:
