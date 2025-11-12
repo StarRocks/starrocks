@@ -95,6 +95,7 @@ public class FragmentInstanceExecState {
     private final ComputeNode worker;
     private final TNetworkAddress address;
     private final long lastMissingHeartbeatTime;
+    private final long lastStartTime;
 
     private FragmentInstance fragmentInstance;
 
@@ -109,7 +110,7 @@ public class FragmentInstanceExecState {
         profile.addInfoString("Address", String.format("%s:%s", address.hostname, address.port));
         profile.addInfoString("InstanceId", instanceId);
 
-        return new FragmentInstanceExecState(null, null, 0, fragmentInstanceId, 0, null, profile, null, null, -1);
+        return new FragmentInstanceExecState(null, null, 0, fragmentInstanceId, 0, null, profile, null, null, -1, -1);
     }
 
     public static FragmentInstanceExecState createExecution(JobSpec jobSpec,
@@ -129,7 +130,7 @@ public class FragmentInstanceExecState {
                 request.params.getFragment_instance_id(), request.getBackend_num(),
                 request,
                 profile,
-                worker, address, worker.getLastMissingHeartbeatTime());
+                worker, address, worker.getLastMissingHeartbeatTime(), worker.getLastStartTime());
     }
 
     private FragmentInstanceExecState(JobSpec jobSpec,
@@ -141,7 +142,8 @@ public class FragmentInstanceExecState {
                                       RuntimeProfile profile,
                                       ComputeNode worker,
                                       TNetworkAddress address,
-                                      long lastMissingHeartbeatTime) {
+                                      long lastMissingHeartbeatTime,
+                                      long lastStartTime) {
         this.jobSpec = jobSpec;
         // fake fragment instance exec state
         if (jobSpec == null) {
@@ -159,6 +161,7 @@ public class FragmentInstanceExecState {
         this.address = address;
         this.worker = worker;
         this.lastMissingHeartbeatTime = lastMissingHeartbeatTime;
+        this.lastStartTime = lastStartTime;
     }
 
     public void serializeRequest() {
@@ -439,7 +442,13 @@ public class FragmentInstanceExecState {
     }
 
     public boolean isBackendStateHealthy() {
-        if (worker.getLastMissingHeartbeatTime() > lastMissingHeartbeatTime) {
+        // There are two scenarios:
+        // 1. heartbeat is ok, but `lastStartTime` updated, it means the backend is really restarted. we use `lastStartTime`
+        // to detect backend restart while`heartbeat_retry_times` hasn't been exceeded, in which case only checking
+        // `lastMissingHeartbeatTime` is not enough.
+        // 2. heartbeat failed after `heartbeat_retry_times` times, the `lastMissingHeartbeatTime` will be updated for
+        // that backend, we will treat this case as backend un-responsible and make the query fail fast
+        if (worker.getLastStartTime() > lastStartTime || worker.getLastMissingHeartbeatTime() > lastMissingHeartbeatTime) {
             LOG.warn("backend {} is down while joining the coordinator. job id: {}", worker.getId(),
                     jobSpec.getLoadJobId());
             return false;
