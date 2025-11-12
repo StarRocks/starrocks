@@ -1,0 +1,45 @@
+-- name: test_proc_profile_multi_node
+-- Test FE /proc_profile page accessing different nodes (FE and BE)
+
+-- Get BE IP and HTTP port from show backends command
+shell: ${mysql_cmd} -e "show backends\G" | grep "IP" | head -1 | awk -F':' '{print $2}' | xargs > be_ip.txt
+shell: ${mysql_cmd} -e "show backends\G" | grep "HttpPort" | head -1 | awk -F':' '{print $2}' | xargs > be_http_port.txt
+[UC]shell: echo "BE_IP=$(cat be_ip.txt), BE_HTTP_PORT=$(cat be_http_port.txt)"
+
+-- Test 1: Check that FE /proc_profile page with node=FE parameter is accessible
+shell: curl -s -u root: "${url}/proc_profile?node=FE" | grep -c "Process Profiles"
+
+-- Test 2: Check that FE /proc_profile page contains tab navigation
+shell: curl -s -u root: "${url}/proc_profile" | grep -c "nav nav-tabs"
+
+-- Test 3: Check that FE /proc_profile page contains FE tab
+shell: curl -s -u root: "${url}/proc_profile" | grep -c "node=FE"
+
+-- Test 4: Check that FE /proc_profile page contains BE tabs
+shell: curl -s -u root: "${url}/proc_profile" | grep -c "BE:"
+
+-- Test 5: Test accessing BE node via FE /proc_profile page
+-- This should fetch profile list from BE using the JSON API
+shell: curl -s -u root: "${url}/proc_profile?node=BE:$(cat be_ip.txt):$(cat be_http_port.txt)" | grep -c "Process Profiles"
+
+-- Test 6: Test accessing BE node and verify tab is active
+shell: curl -s -u root: "${url}/proc_profile?node=BE:$(cat be_ip.txt):$(cat be_http_port.txt)" | grep -c "node=BE:$(cat be_ip.txt):$(cat be_http_port.txt)"
+
+-- Test 7: Test FE /proc_profile/file endpoint with FE node (default)
+-- Get a profile filename from FE page if exists
+shell: curl -s -u root: "${url}/proc_profile?node=FE" | grep -o 'filename=[^"]*\.tar\.gz' | head -1 | cut -d'=' -f2 > fe_profile_file.txt || echo "" > fe_profile_file.txt
+[UC]shell: cat fe_profile_file.txt
+shell: if [ -s fe_profile_file.txt ] && [ "$(cat fe_profile_file.txt)" != "" ]; then if [ $(curl -s -u root: "${url}/proc_profile/file?filename=$(cat fe_profile_file.txt)" | wc -l) -gt 0 ]; then echo "exist"; else echo "empty"; fi; else echo "no_profile"; fi
+
+-- Test 8: Test FE /proc_profile page with BE node parameter and verify profile list is not empty
+shell: curl -s -u root: "${url}/proc_profile?node=BE:$(cat be_ip.txt):$(cat be_http_port.txt)" | grep -o 'filename=[^"]*\.gz' | wc -l > be_profile_count.txt
+[UC]shell: cat be_profile_count.txt
+shell: if [ $(cat be_profile_count.txt) -gt 0 ]; then echo "non_empty"; else echo "empty"; fi
+
+-- Test 10: Test error handling when BE node is unavailable
+-- This should still show the page but with empty profile list
+shell: curl -s -u root: "${url}/proc_profile?node=BE:127.0.0.1:99999" | grep -c "Process Profiles"
+
+-- Cleanup
+shell: rm -f fe_profile_file.txt be_profile_count.txt be_ip.txt be_http_port.txt
+
