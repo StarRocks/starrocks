@@ -21,7 +21,7 @@
 
 #include <string>
 
-#include "cache/disk_cache/block_cache_hit_rate_counter.hpp"
+#include "cache/data_cache_hit_rate_counter.hpp"
 #include "cache/disk_cache/local_disk_cache_engine.h"
 #include "cache/mem_cache/local_mem_cache_engine.h"
 #include "http/http_channel.h"
@@ -172,8 +172,7 @@ void DataCacheAction::_handle_app_stat(HttpRequest* req) {
         auto& allocator = root.GetAllocator();
         DataCacheHitRateCounter* hit_rate_counter = DataCacheHitRateCounter::instance();
 
-        root.AddMember("block_cache_hit_bytes", rapidjson::Value(hit_rate_counter->block_cache_hit_bytes()),
-                       allocator);
+        root.AddMember("block_cache_hit_bytes", rapidjson::Value(hit_rate_counter->block_cache_hit_bytes()), allocator);
         root.AddMember("block_cache_miss_bytes", rapidjson::Value(hit_rate_counter->block_cache_miss_bytes()),
                        allocator);
         root.AddMember("block_cache_hit_rate", rapidjson::Value(hit_rate_counter->block_cache_hit_rate()), allocator);

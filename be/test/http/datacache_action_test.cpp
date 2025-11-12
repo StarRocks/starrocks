@@ -19,7 +19,7 @@
 #include <gtest/gtest.h>
 #include <rapidjson/document.h>
 
-#include "cache/disk_cache/block_cache_hit_rate_counter.hpp"
+#include "cache/data_cache_hit_rate_counter.hpp"
 #include "cache/disk_cache/starcache_engine.h"
 #include "cache/disk_cache/test_cache_utils.h"
 #include "http/http_channel.h"
