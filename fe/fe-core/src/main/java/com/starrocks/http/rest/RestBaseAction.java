@@ -108,9 +108,11 @@ public class RestBaseAction extends BaseAction {
     protected static ObjectMapper mapper = new ObjectMapper();
 
     private static final Set<String> SKIP_HEADERS = Set.of("content-length");
+
+    // to make things simple, let `http_internal_redirect_default_timeout_ms` be a static config
     private static final RequestConfig REQUEST_CONFIG = RequestConfig.custom()
-            .setConnectTimeout(Config.stream_load_default_timeout_second)
-            .setSocketTimeout(Config.stream_load_default_timeout_second)
+            .setConnectTimeout(Config.http_internal_redirect_default_timeout_ms)
+            .setSocketTimeout(Config.http_internal_redirect_default_timeout_ms)
             .build();
 
     public RestBaseAction(ActionController controller) {
@@ -289,7 +291,8 @@ public class RestBaseAction extends BaseAction {
     // That means if fe leader return a new location, we will return this location to the client. Because the FE doesn't
     // have the capability to deal with large datasets. If we redirect data here, it might result in a significantly
     // unexpected consequence.
-    private void internalRedirectTo(BaseRequest request, BaseResponse response, TNetworkAddress addr) throws DdlException {
+    private void internalRedirectTo(BaseRequest request, BaseResponse response, TNetworkAddress addr, int maxRetryTimes)
+            throws DdlException {
         String host = addr.getHostname();
         int port = addr.getPort();
 
@@ -297,7 +300,7 @@ public class RestBaseAction extends BaseAction {
         HttpRequest newRequest = generateNewHttpRequest(request, addr);
 
         Exception lastException = null;
-        for (int numTries = 0; numTries <= 3; ++numTries) {
+        for (int numTries = 0; numTries <= maxRetryTimes; ++numTries) {
             try (CloseableHttpClient client = HttpClientBuilder.create().setDefaultRequestConfig(REQUEST_CONFIG).build()) {
                 HttpResponse newResponse = client.execute(newHost, newRequest);
                 if (newResponse != null && newResponse.getStatusLine() != null) {
@@ -320,10 +323,13 @@ public class RestBaseAction extends BaseAction {
                 LOG.warn("Internal redirect request to leader failed, numTries: {}, reason: {}", numTries, e.getMessage());
             }
         }
-        LOG.error("Internal redirect request to leader failed.", lastException);
+        LOG.error("Internal redirect request to leader failed. uri: {}", getRedirectToUri(request, addr), lastException);
+        // throw exception, so that upper callers can write error responses to client
+        throw new DdlException("Internal redirect request to leader failed.");
     }
 
-    public boolean redirectToLeader(BaseRequest request, BaseResponse response) throws DdlException {
+    public boolean redirectToLeaderWithRetry(BaseRequest request, BaseResponse response, int maxRetryTimes)
+            throws DdlException {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         if (globalStateMgr.isLeader()) {
             return false;
@@ -343,7 +349,8 @@ public class RestBaseAction extends BaseAction {
             }
         }
         if (Config.emr_internal_redirect) {
-            internalRedirectTo(request, response, new TNetworkAddress(leaderIpAndPort.first, leaderIpAndPort.second));
+            internalRedirectTo(request, response,
+                    new TNetworkAddress(leaderIpAndPort.first, leaderIpAndPort.second), maxRetryTimes);
         } else {
             redirectTo(request, response, new TNetworkAddress(redirectHost, leaderIpAndPort.second));
         }
@@ -417,4 +424,8 @@ public class RestBaseAction extends BaseAction {
         });
     }
 
+    public boolean redirectToLeader(BaseRequest request, BaseResponse response) throws DdlException {
+        // Default max retry times is 3, in case of leader connect failed
+        return redirectToLeaderWithRetry(request, response, 3);
+    }
 }

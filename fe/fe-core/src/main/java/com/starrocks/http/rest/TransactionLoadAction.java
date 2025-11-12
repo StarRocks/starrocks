@@ -219,7 +219,9 @@ public class TransactionLoadAction extends RestBaseAction {
         OpMetrics opMetrics = null;
         long startTime = System.currentTimeMillis();
         try {
-            if (redirectToLeader(request, response)) {
+            // Should never retry transaction operation when redirecting to leader,
+            // e.g. if we retry `TXN_LOAD` operation, we might introduce duplicate of data
+            if (redirectToLeaderWithRetry(request, response, 0 /* maxRetryTimes */)) {
                 return;
             }
             TransactionOperation txnOperation = TransactionOperation.parse(request.getSingleParameter(TXN_OP_KEY))

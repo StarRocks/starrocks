@@ -1117,6 +1117,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int stream_load_default_timeout_second = 600; // 600s
 
+    @ConfField
+    public static int http_internal_redirect_default_timeout_ms = 30000; // 30s
+
     /**
      * Max stream load and streaming mini load timeout
      */
