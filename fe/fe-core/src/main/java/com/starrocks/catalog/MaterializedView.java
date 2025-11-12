@@ -49,6 +49,7 @@ import com.starrocks.connector.PartitionUtil;
 import com.starrocks.metric.MaterializedViewMetricsRegistry;
 import com.starrocks.mv.analyzer.MVPartitionExpr;
 import com.starrocks.persist.AlterMaterializedViewBaseTableInfosLog;
+import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.persist.ExpressionSerializedObject;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
@@ -1278,6 +1279,15 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     @Override
     public void onCreate(Database database) throws DdlException {
         onReload(false, isActive(), true);
+        
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        if (colocateTableIndex.isColocateTable(getId())) {
+            ColocateTableIndex.GroupId groupId = colocateTableIndex.getGroup(getId());
+            List<List<Long>> backendsPerBucketSeq = colocateTableIndex.getBackendsPerBucketSeq(groupId);
+            ColocatePersistInfo colocatePersistInfo = ColocatePersistInfo.createForAddTable(groupId, getId(),
+                    backendsPerBucketSeq);
+            GlobalStateMgr.getCurrentState().getEditLog().logColocateAddTable(colocatePersistInfo);
+        }
     }
 
     /**
