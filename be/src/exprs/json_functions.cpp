@@ -548,7 +548,9 @@ static StatusOr<ColumnPtr> _extract_with_hyper(NativeJsonState* state, const std
                 state->is_partial_match = true;
                 state->flat_column_type = TYPE_JSON;
             }
-            state->flat_path = flat_path.substr(1);
+            // Remove leading dot if flat_path is not empty
+            // flat_path starts with "." when paths are added, but can be empty if no paths were added
+            state->flat_path = flat_path.empty() ? "" : flat_path.substr(1);
             state->init_flat = true;
         });
     }
