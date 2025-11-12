@@ -624,6 +624,11 @@ public final class RangePartitionDiffer extends PartitionDiffer {
         }
     }
 
+    /**
+     * This is a help class to keep the original base cell and normalized cell at the same time.
+     * @param basePCell original base cell
+     * @param normalized normalized cell
+     */
     public record PCellWithNorm(PCellWithName basePCell, PCellWithName normalized) {
         public static PCellWithNorm of(PCellWithName basePCell, PCellWithName normalized) {
             return  new PCellWithNorm(basePCell, normalized);
@@ -642,14 +647,14 @@ public final class RangePartitionDiffer extends PartitionDiffer {
         }
         return rangeMap.getPartitions()
                 .stream()
-                .map(e -> {
-                    Range<PartitionKey> partitionKeyRanges = ((PRangeCell) e.cell()).getRange();
-                    Range<PartitionKey> convertRanges = SyncPartitionUtils.convertToDatePartitionRange(partitionKeyRanges);
-                    return new PCellWithName(e.name(), new PRangeCell(SyncPartitionUtils.transferRange(convertRanges, expr)));
-                })
-                // this should be already sorted, but just in case
-                .sorted(PCellWithName::compareTo)
-                .map(p -> PCellWithNorm.of(p, p))
+                .map(pCell -> PCellWithNorm.of(pCell, toNormalizedCell(pCell, expr)))
                 .collect(Collectors.toList());
+    }
+
+    private static PCellWithName toNormalizedCell(PCellWithName pCellWithName,
+                                                  Expr expr) {
+        Range<PartitionKey> partitionKeyRanges = ((PRangeCell) pCellWithName.cell()).getRange();
+        Range<PartitionKey> convertRanges = SyncPartitionUtils.convertToDatePartitionRange(partitionKeyRanges);
+        return new PCellWithName(pCellWithName.name(), new PRangeCell(SyncPartitionUtils.transferRange(convertRanges, expr)));
     }
 }

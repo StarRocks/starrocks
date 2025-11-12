@@ -137,7 +137,7 @@ public class MvUpdateInfo {
     public String toString() {
         StringBuilder sb = new StringBuilder();
         sb.append("refreshType=").append(mvToRefreshType);
-        if (!PCellUtils.isNotEmpty(mvToRefreshPartitionNames)) {
+        if (!PCellUtils.isEmpty(mvToRefreshPartitionNames)) {
             sb.append(", mvToRefreshPartitionNames=").append(mvToRefreshPartitionNames);
         }
         if (!CollectionUtils.sizeIsEmpty(basePartToMvPartNames)) {
