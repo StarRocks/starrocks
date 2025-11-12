@@ -31,15 +31,16 @@ shell: curl -s -u root: "${url}/proc_profile?node=FE" | grep -o 'filename=[^"]*\
 [UC]shell: cat fe_profile_file.txt
 shell: if [ -s fe_profile_file.txt ] && [ "$(cat fe_profile_file.txt)" != "" ]; then if [ $(curl -s -u root: "${url}/proc_profile/file?filename=$(cat fe_profile_file.txt)" | wc -l) -gt 0 ]; then echo "exist"; else echo "empty"; fi; else echo "no_profile"; fi
 
--- Test 8: Test FE /proc_profile page with BE node parameter and verify profile list is not empty
-shell: curl -s -u root: "${url}/proc_profile?node=BE:$(cat be_ip.txt):$(cat be_http_port.txt)" | grep -o 'filename=[^"]*\.gz' | wc -l > be_profile_count.txt
-[UC]shell: cat be_profile_count.txt
-shell: if [ $(cat be_profile_count.txt) -gt 0 ]; then echo "non_empty"; else echo "empty"; fi
+-- Test 8: Test FE /proc_profile/file endpoint with BE node parameter
+-- Get a profile filename from BE via FE page if exists
+shell: curl -s -u root: "${url}/proc_profile?node=BE:$(cat be_ip.txt):$(cat be_http_port.txt)" | grep -o 'filename=[^"]*\.gz' | tail -1 | cut -d'=' -f2 > be_profile_file.txt || echo "" > be_profile_file.txt
+[UC]shell: cat be_profile_file.txt
+shell: if [ -s be_profile_file.txt ] && [ "$(cat be_profile_file.txt)" != "" ]; then if [ $(curl -s -u root: "${url}/proc_profile/file?node=BE:$(cat be_ip.txt):$(cat be_http_port.txt)&filename=$(cat be_profile_file.txt)" | wc -l) -gt 0 ]; then echo "exist"; else echo "empty"; fi; else echo "no_profile"; fi
 
 -- Test 10: Test error handling when BE node is unavailable
 -- This should still show the page but with empty profile list
 shell: curl -s -u root: "${url}/proc_profile?node=BE:127.0.0.1:99999" | grep -c "Process Profiles"
 
 -- Cleanup
-shell: rm -f fe_profile_file.txt be_profile_count.txt be_ip.txt be_http_port.txt
+shell: rm -f fe_profile_file.txt be_profile_file.txt be_ip.txt be_http_port.txt
 

@@ -52,34 +52,34 @@ shell: curl -s -u root: "${url}/proc_profile?node=FE" | grep -o 'filename=[^"]*\
 [UC]shell: cat fe_profile_file.txt
 -- result:
 0
-cpu-profile-20251112-131328.html.tar.gz
+mem-profile-20251112-172207.html.tar.gz
 -- !result
 shell: if [ -s fe_profile_file.txt ] && [ "$(cat fe_profile_file.txt)" != "" ]; then if [ $(curl -s -u root: "${url}/proc_profile/file?filename=$(cat fe_profile_file.txt)" | wc -l) -gt 0 ]; then echo "exist"; else echo "empty"; fi; else echo "no_profile"; fi
 -- result:
 0
 exist
 -- !result
-shell: curl -s -u root: "${url}/proc_profile?node=BE:$(cat be_ip.txt):$(cat be_http_port.txt)" | grep -o 'filename=[^"]*\.gz' | wc -l > be_profile_count.txt
+shell: curl -s -u root: "${url}/proc_profile?node=BE:$(cat be_ip.txt):$(cat be_http_port.txt)" | grep -o 'filename=[^"]*\.gz' | tail -1 | cut -d'=' -f2 > be_profile_file.txt || echo "" > be_profile_file.txt
 -- result:
 0
 
 -- !result
-[UC]shell: cat be_profile_count.txt
+[UC]shell: cat be_profile_file.txt
 -- result:
 0
-1034
+cpu-profile-20251110-185622-pprof.gz
 -- !result
-shell: if [ $(cat be_profile_count.txt) -gt 0 ]; then echo "non_empty"; else echo "empty"; fi
+shell: if [ -s be_profile_file.txt ] && [ "$(cat be_profile_file.txt)" != "" ]; then if [ $(curl -s -u root: "${url}/proc_profile/file?node=BE:$(cat be_ip.txt):$(cat be_http_port.txt)&filename=$(cat be_profile_file.txt)" | wc -l) -gt 0 ]; then echo "exist"; else echo "empty"; fi; else echo "no_profile"; fi
 -- result:
 0
-non_empty
+exist
 -- !result
 shell: curl -s -u root: "${url}/proc_profile?node=BE:127.0.0.1:99999" | grep -c "Process Profiles"
 -- result:
 0
 1
 -- !result
-shell: rm -f fe_profile_file.txt be_profile_count.txt be_ip.txt be_http_port.txt
+shell: rm -f fe_profile_file.txt be_profile_file.txt be_ip.txt be_http_port.txt
 -- result:
 0
 
