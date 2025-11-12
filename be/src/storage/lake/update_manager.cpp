@@ -919,7 +919,8 @@ static StatusOr<std::unique_ptr<ColumnIterator>> new_lake_dcg_column_iterator(
     if (ctx.dcg_read_files.count(dcg_segment->file_name()) == 0) {
         RandomAccessFileOptions ropts;
         if (!dcg_segment->file_info().encryption_meta.empty()) {
-            ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(dcg_segment->file_info().encryption_meta));
+            ASSIGN_OR_RETURN(auto info,
+                             KeyCache::instance().unwrap_encryption_meta(dcg_segment->file_info().encryption_meta));
             ropts.encryption_info = std::move(info);
         }
         ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file_with_bundling(ropts, dcg_segment->file_info()));
