@@ -25,7 +25,7 @@ public class MvBaseTableUpdateInfo {
     // The base table partition cells snapshot
     private final PCellSortedSet refBaseTablePCells = PCellSortedSet.of();
     // If the base table is a mv, needs to record the mapping of mv partition name to partition range
-    private final PCellSortedSet nestedRefBaseMVPCells = PCellSortedSet.of();
+    private final PCellSortedSet refBaseNestedMVPCells = PCellSortedSet.of();
 
     public MvBaseTableUpdateInfo() {
     }
@@ -34,12 +34,12 @@ public class MvBaseTableUpdateInfo {
         return new MvBaseTableUpdateInfo();
     }
 
-    public PCellSortedSet getNestedRefBaseMVPCells() {
-        return nestedRefBaseMVPCells;
+    public PCellSortedSet getRefBaseNestedMVPCells() {
+        return refBaseNestedMVPCells;
     }
 
     public void addMVPartitionNameToCellMap(PCellSortedSet partitionNameToRangeMap) {
-        nestedRefBaseMVPCells.addAll(partitionNameToRangeMap);
+        refBaseNestedMVPCells.addAll(partitionNameToRangeMap);
     }
 
     public PCellSortedSet getToRefreshPCells() {

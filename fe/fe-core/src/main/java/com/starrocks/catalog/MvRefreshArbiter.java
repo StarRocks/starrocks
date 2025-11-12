@@ -183,7 +183,7 @@ public class MvRefreshArbiter {
                 }
                 // NOTE: if base table is mv, check to refresh partition names as the base table's update info.
                 updatedPCellSet.addAll(mvUpdateInfo.getMvToRefreshPCells());
-                baseTableUpdateInfo.addMVPartitionNameToCellMap(mvUpdateInfo.getNestedRefBaseMVPCells());
+                baseTableUpdateInfo.addMVPartitionNameToCellMap(mvUpdateInfo.getRefBaseNestedMVPCells());
             }
             // update base table's partition info
             baseTableUpdateInfo.addToRefreshPartitionNames(updatedPCellSet);

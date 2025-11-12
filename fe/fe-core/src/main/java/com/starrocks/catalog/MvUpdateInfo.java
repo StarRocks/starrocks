@@ -43,7 +43,7 @@ public class MvUpdateInfo {
     private final TableProperty.QueryRewriteConsistencyMode queryRewriteConsistencyMode;
 
     // If the base table is a mv, needs to record the mapping of mv partition name to partition range
-    private final PCellSortedSet nestedRefBaseMVPCells = PCellSortedSet.of();
+    private final PCellSortedSet refBaseNestedMVPCells = PCellSortedSet.of();
 
     /**
      * Marks the type of mv refresh later.
@@ -130,11 +130,11 @@ public class MvUpdateInfo {
     }
 
     public void addMVPartitionNameToCellMap(PCellSortedSet m) {
-        nestedRefBaseMVPCells.addAll(m);
+        refBaseNestedMVPCells.addAll(m);
     }
 
-    public PCellSortedSet getNestedRefBaseMVPCells() {
-        return nestedRefBaseMVPCells;
+    public PCellSortedSet getRefBaseNestedMVPCells() {
+        return refBaseNestedMVPCells;
     }
 
     public MaterializedView getMv() {

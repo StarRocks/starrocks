@@ -198,8 +198,8 @@ public abstract class MVTimelinessArbiter {
     protected void collectExtraBaseTableChangedPartitions(Map<Table, MvBaseTableUpdateInfo> baseTableUpdateInfoMap,
                                                           Map<Table, PCellSortedSet> basePartitionNameToRangeMap) {
         Map<Table, PCellSortedSet> extraChangedPartitions = baseTableUpdateInfoMap.entrySet().stream()
-                .filter(e -> !e.getValue().getNestedRefBaseMVPCells().isEmpty())
-                .collect(Collectors.toMap(e -> e.getKey(), e -> e.getValue().getNestedRefBaseMVPCells()));
+                .filter(e -> !e.getValue().getRefBaseNestedMVPCells().isEmpty())
+                .collect(Collectors.toMap(e -> e.getKey(), e -> e.getValue().getRefBaseNestedMVPCells()));
         for (Map.Entry<Table, PCellSortedSet> entry : extraChangedPartitions.entrySet()) {
             Table baseTable = entry.getKey();
             Preconditions.checkState(basePartitionNameToRangeMap.containsKey(baseTable));
@@ -227,8 +227,7 @@ public abstract class MVTimelinessArbiter {
     }
 
     /**
-     * Collect mv ref base table's partition cells into mv update info
-     *
+     * Collect mv ref base table's partition cells into mv update info.
      */
     public Map<Table, PCellSortedSet> syncBaseTablePartitions(MvUpdateInfo mvUpdateInfo) {
         PartitionInfo partitionInfo = mv.getPartitionInfo();
