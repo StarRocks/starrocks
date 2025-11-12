@@ -567,7 +567,7 @@ set(EXEC_FILES
         ./storage/record_predicate/record_predicate_helper_test.cpp
         ./storage/sstable/sstable_predicate_test.cpp
         ./cache/datacache_utils_test.cpp
-        ./cache/disk_cache/block_cache_hit_rate_counter_test.cpp
+        ./cache/data_cache_hit_rate_counter_test.cpp
         ./cache/mem_cache/page_cache_test.cpp
         ./cache/peer_cache_test.cpp
         ./util/thrift_rpc_helper_test.cpp
