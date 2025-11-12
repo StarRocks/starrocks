@@ -78,6 +78,7 @@ import com.starrocks.http.rest.HttpSSLContextLoader;
 import com.starrocks.http.rest.IdleAction;
 import com.starrocks.http.rest.LoadAction;
 import com.starrocks.http.rest.MetaReplayerCheckAction;
+import com.starrocks.http.rest.FeThreadsAction;
 import com.starrocks.http.rest.MetricsAction;
 import com.starrocks.http.rest.MigrationAction;
 import com.starrocks.http.rest.OAuth2Action;
@@ -213,6 +214,7 @@ public class HttpServer {
         FeatureAction.registerAction(controller);
         GetClusterSnapshotRestoreStateAction.registerAction(controller);
         MetricsAction.registerAction(controller);
+        FeThreadsAction.registerAction(controller);
         ShowMetaInfoAction.registerAction(controller);
         ShowProcAction.registerAction(controller);
         ShowRuntimeInfoAction.registerAction(controller);
