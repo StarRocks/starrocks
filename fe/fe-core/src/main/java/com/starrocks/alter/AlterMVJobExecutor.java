@@ -687,7 +687,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             GlobalStateMgr.getCurrentState().getAlterJobMgr().
                     alterMaterializedViewStatus(mv, status, reason, false);
             AlterMaterializedViewStatusLog log = new AlterMaterializedViewStatusLog(mv.getDbId(),
-                    mv.getId(), status, MANUAL_INACTIVE_MV_REASON);
+                    mv.getId(), status, reason);
             GlobalStateMgr.getCurrentState().getEditLog().logAlterMvStatus(log);
         } else {
             mv.setInactiveAndReason(reason);
