@@ -317,7 +317,7 @@ public abstract class MVTestBase extends StarRocksTestBase {
     public static Set<String> getPartitionNamesToRefreshForMv(MaterializedView mv) {
         MvUpdateInfo mvUpdateInfo = MvRefreshArbiter.getMVTimelinessUpdateInfo(mv, true);
         Preconditions.checkState(mvUpdateInfo != null);
-        return mvUpdateInfo.getMvToRefreshPartitionNames().getPartitionNames();
+        return mvUpdateInfo.getMVToRefreshPCells().getPartitionNames();
     }
 
     public static void executeInsertSql(ConnectContext connectContext, String sql) throws Exception {
