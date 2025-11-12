@@ -116,7 +116,7 @@ http://${BE_HOST}:${BE_HTTP_PORT}/api/datacache/app_stat
 | block_cache_miss_bytes             | 从远端读取的字节数。                                                                                    |
 | block_cache_hit_rate               | Block Cache 命中率 `(block_cache_hit_bytes / (block_cache_hit_bytes + block_cache_miss_bytes))`。 |
 | block_cache_hit_bytes_last_minute  | 最近一分钟内从 Block Cache 中读取的字节数。                                                                  |
-| block_cache_miss_bytes_last_minute | 最近一分钟内从远端读取的字节数。                                                                              |
+| block_cache_miss_bytes_last_minute | 最近一分钟内从远端读取的字节数（Block Cache 未命中）。                                                             |
 | block_cache_hit_rate_last_minute   | 最近一分钟内 Block Cache 命中率。                                                                       |
 | page_cache_hit_count               | 从 Page Cache 中读取的 Page 数量。                                                                    |
 | page_cache_miss_count              | Page Cache 未命中的 Page 数量。                                                                      |
