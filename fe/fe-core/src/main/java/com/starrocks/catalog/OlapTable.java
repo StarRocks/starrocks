@@ -62,7 +62,6 @@ import com.starrocks.backup.Status.ErrCode;
 import com.starrocks.backup.mv.MvBackupInfo;
 import com.starrocks.backup.mv.MvRestoreContext;
 import com.starrocks.binlog.BinlogConfig;
-import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.catalog.LocalTablet.TabletHealthStatus;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
@@ -2033,7 +2032,7 @@ public class OlapTable extends Table {
             LOG.debug("signature. partition name: {}", partName);
             DistributionInfo distributionInfo = partition.getDistributionInfo();
             adler32.update(distributionInfo.getType().name().getBytes(StandardCharsets.UTF_8));
-            if (distributionInfo.getType() == DistributionInfoType.HASH) {
+            if (distributionInfo.getType() == DistributionInfo.DistributionInfoType.HASH) {
                 HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) distributionInfo;
                 List<Column> distributionColumns = MetaUtils.getColumnsByColumnIds(
                         this, hashDistributionInfo.getDistributionColumns());
@@ -2108,7 +2107,7 @@ public class OlapTable extends Table {
             checkSumList.add(new Pair(Math.abs((int) adler32.getValue()), "partition name is inconsistent"));
             DistributionInfo distributionInfo = partition.getDistributionInfo();
             adler32.update(distributionInfo.getType().name().getBytes(StandardCharsets.UTF_8));
-            if (distributionInfo.getType() == DistributionInfoType.HASH) {
+            if (distributionInfo.getType() == DistributionInfo.DistributionInfoType.HASH) {
                 HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) distributionInfo;
                 List<Column> distributionColumns = MetaUtils.getColumnsByColumnIds(
                         this, hashDistributionInfo.getDistributionColumns());
@@ -3310,39 +3309,6 @@ public class OlapTable extends Table {
         tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_USE_FAST_SCHEMA_EVOLUTION,
                 Boolean.valueOf(useFastSchemaEvolution).toString());
         tableProperty.buildUseFastSchemaEvolution();
-    }
-
-    public Boolean getEnableDynamicTablet() {
-        if (tableProperty != null) {
-            return tableProperty.getEnableDynamicTablet();
-        }
-        return null;
-    }
-
-    public boolean isEnableDynamicTablet() {
-        if (!isCloudNativeTableOrMaterializedView()) {
-            return false;
-        }
-
-        if (defaultDistributionInfo.getType() != DistributionInfoType.HASH) {
-            return false;
-        }
-
-        Boolean enableDynamicTablet = getEnableDynamicTablet();
-        if (enableDynamicTablet == null) {
-            return false;
-        }
-
-        return enableDynamicTablet;
-    }
-
-    public void setEnableDynamicTablet(Boolean enableDynamicTablet) {
-        if (tableProperty == null) {
-            tableProperty = new TableProperty(new HashMap<>());
-        }
-        tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_ENABLE_DYNAMIC_TABLET,
-                enableDynamicTablet != null ? enableDynamicTablet.toString() : "");
-        tableProperty.buildEnableDynamicTablet();
     }
 
     public void setSessionId(UUID sessionId) {
