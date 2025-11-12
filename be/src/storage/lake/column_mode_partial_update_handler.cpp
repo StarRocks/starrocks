@@ -373,7 +373,8 @@ static void padding_char_columns(const Schema& schema, const TabletSchemaCSPtr& 
     ChunkHelper::padding_char_columns(char_field_indexes, schema, tschema, chunk);
 }
 
-Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& params, MetaFileBuilder* builder) {
+Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& params, MetaFileBuilder* builder,
+                                               std::vector<std::vector<uint32_t>>* insert_rowids_by_segment) {
     TRACE_COUNTER_SCOPE_LATENCY_US("pcu_execute_us");
     // 1. load update state first
     RETURN_IF_ERROR(_load_update_state(params));
@@ -408,6 +409,12 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
     // 2. getter all rss_rowid_to_update_rowid, and prepare .col writer by the way
     // rss_id -> update file id -> <rowid, update rowid>
     std::map<uint32_t, UptidToRowidPairs> rss_upt_id_to_rowid_pairs;
+
+    // For COLUMN_UPSERT_MODE: save insert_rowids before clearing _partial_update_states
+    if (insert_rowids_by_segment != nullptr) {
+        insert_rowids_by_segment->resize(_partial_update_states.size());
+    }
+
     for (int upt_id = 0; upt_id < _partial_update_states.size(); upt_id++) {
         for (const auto& each_rss : _partial_update_states[upt_id].rss_rowid_to_update_rowid) {
             for (const auto& each : each_rss.second) {
@@ -416,6 +423,10 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
             TRACE_COUNTER_INCREMENT("pcu_update_cnt", each_rss.second.size());
         }
         TRACE_COUNTER_INCREMENT("pcu_insert_rows", _partial_update_states[upt_id].insert_rowids.size());
+
+        if (insert_rowids_by_segment != nullptr) {
+            (*insert_rowids_by_segment)[upt_id] = std::move(_partial_update_states[upt_id].insert_rowids);
+        }
     }
     _partial_update_states.clear();
     // must record unique column id in delta column group
