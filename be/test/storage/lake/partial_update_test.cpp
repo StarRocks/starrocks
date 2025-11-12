@@ -3580,9 +3580,7 @@ TEST_F(LakeColumnUpsertModeTest, test_dcg_column_reading_with_bundle_aware_acces
     // Step 4: Verify data correctness after COLUMN_UPSERT_MODE update
     // c1 should be updated to c0 * 7 (from chunk_upsert)
     // c2 should remain as c0 * 4 (from original chunk_full, read from DCG or original segment)
-    ASSERT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) {
-        return (c0 * 7 == c1) && (c0 * 4 == c2);
-    }));
+    ASSERT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return (c0 * 7 == c1) && (c0 * 4 == c2); }));
 
     // Verify metadata is consistent
     ASSIGN_OR_ABORT(auto final_md, _tablet_mgr->get_tablet_metadata(tablet_id, version));
