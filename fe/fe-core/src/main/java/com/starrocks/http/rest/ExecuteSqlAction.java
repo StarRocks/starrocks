@@ -63,11 +63,9 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.thrift.TResultSinkFormatType;
-import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpUtil;
-import io.netty.util.AttributeKey;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -81,9 +79,6 @@ import static io.netty.handler.codec.http.HttpResponseStatus.INTERNAL_SERVER_ERR
 import static io.netty.handler.codec.http.HttpResponseStatus.SERVICE_UNAVAILABLE;
 
 public class ExecuteSqlAction extends RestBaseAction {
-
-    private static final AttributeKey<HttpConnectContext> HTTP_CONNECT_CONTEXT_ATTRIBUTE_KEY =
-            AttributeKey.valueOf("httpContextKey");
     private static final Logger LOG = LogManager.getLogger(ExecuteSqlAction.class);
     private static final ExecutorService TASKSERVICE = ThreadPoolManager
             .newDaemonCacheThreadPool(Config.max_http_sql_service_task_threads_num, "starrocks-http-nio-pool", true);
@@ -106,6 +101,11 @@ public class ExecuteSqlAction extends RestBaseAction {
         // because the request body will be released after handleAction.
         String content = request.getContent();
         TASKSERVICE.submit(() -> realWork(request, content, response));
+    }
+
+    @Override
+    public boolean isSqlAction() {
+        return true;
     }
 
     private void realWork(BaseRequest request, String requestContent, BaseResponse response) {
@@ -137,11 +137,7 @@ public class ExecuteSqlAction extends RestBaseAction {
                 parsedStmt = parse(requestBody.query, context.getSessionVariable());
                 context.setStatement(parsedStmt);
 
-                // only register connectContext once for one channel
-                if (!context.isInitialized()) {
-                    registerContext(requestBody.query, context);
-                    context.setInitialized(true);
-                }
+                registerContextOnce(requestBody.query, context);
 
                 // store context in current thread, Executor rely on this thread local variable
                 context.setThreadLocalInfo();
@@ -236,8 +232,13 @@ public class ExecuteSqlAction extends RestBaseAction {
         return parsedStmt;
     }
 
+    // only register connectContext once for one channel
     // refer to AcceptListener.handleEvent
-    private void registerContext(String sql, HttpConnectContext context) throws StarRocksHttpException {
+    private void registerContextOnce(String sql, HttpConnectContext context) throws StarRocksHttpException {
+        if (context.isRegistered()) {
+            return;
+        }
+
         // now register this request in connectScheduler
         ConnectScheduler connectScheduler = ExecuteEnv.getInstance().getScheduler();
         connectScheduler.submit(context);
@@ -248,17 +249,9 @@ public class ExecuteSqlAction extends RestBaseAction {
         if (!result.first) {
             throw new StarRocksHttpException(SERVICE_UNAVAILABLE, result.second);
         }
+        context.setRegistered(true);
         context.setStartTime();
         LogUtil.logConnectionInfoToAuditLogAndQueryQueue(context, null);
-    }
-
-    // when connect is closed, this function will be called
-    protected void handleChannelInactive(ChannelHandlerContext ctx) {
-        LOG.info("Netty channel is closed");
-        HttpConnectContext context = ctx.channel().attr(HTTP_CONNECT_CONTEXT_ATTRIBUTE_KEY).get();
-        if (context.isInitialized()) {
-            context.getConnectScheduler().unregisterConnection(context);
-        }
     }
 
     private void checkSessionVariable(Map<String, String> customVariable, HttpConnectContext context) {
