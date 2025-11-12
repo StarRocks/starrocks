@@ -269,6 +269,7 @@ private:
                         new_upper = false;
                     }
                 } else {
+                    new_upper = true;
                     if (last_bucket->count_in_bucket >= bucket_size) {
                         int64_t last_ndv = ndv_estimator->estimate(last_bucket->count_in_bucket, sample_distinct,
                                                                    count_once, sample_ratio);
@@ -277,7 +278,6 @@ private:
                         buckets.emplace_back(bucket);
                         sample_distinct = 1;
                         count_once = 1;
-                        new_upper = true;
                     } else {
                         last_bucket->update_upper(v);
                         last_bucket->count++;
@@ -290,10 +290,12 @@ private:
             }
         }
 
-        Bucket<LT>* last_bucket = &buckets.back();
-        double last_ndv =
-                ndv_estimator->estimate(last_bucket->count_in_bucket, sample_distinct, count_once, sample_ratio);
-        last_bucket->distinct_count = last_ndv;
+        if (!buckets.empty()) {
+            Bucket<LT>* last_bucket = &buckets.back();
+            double last_ndv =
+                    ndv_estimator->estimate(last_bucket->count_in_bucket, sample_distinct, count_once, sample_ratio);
+            last_bucket->distinct_count = last_ndv;
+        }
 
         const auto& type_desc = ctx->get_arg_type(0);
         TypeInfoPtr type_info = get_type_info(LT, type_desc->precision, type_desc->scale);
