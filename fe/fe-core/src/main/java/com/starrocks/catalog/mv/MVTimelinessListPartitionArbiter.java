@@ -97,7 +97,7 @@ public final class MVTimelinessListPartitionArbiter extends MVTimelinessArbiter 
         }
 
         // update into mv's to refresh partitions
-        final PCellSortedSet mvToRefreshPartitionNames = mvTimelinessInfo.getMvToRefreshPCells();
+        final PCellSortedSet mvToRefreshPartitionNames = mvTimelinessInfo.getMVToRefreshPCells();
         mvToRefreshPartitionNames.addAll(diff.getDeletes());
         mvToRefreshPartitionNames.addAll(diff.getAdds());
 

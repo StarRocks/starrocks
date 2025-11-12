@@ -758,7 +758,7 @@ public class MvRewritePreprocessor {
                            MvUpdateInfo mvUpdateInfo) {
         MaterializedView mv = mvWithPlanContext.getMV();
         MvPlanContext mvPlanContext = mvWithPlanContext.getMvPlanContext();
-        PCellSortedSet partitionNamesToRefresh = mvUpdateInfo.getMvToRefreshPCells();
+        PCellSortedSet partitionNamesToRefresh = mvUpdateInfo.getMVToRefreshPCells();
         if (!checkMvPartitionNamesToRefresh(connectContext, mv, partitionNamesToRefresh, mvPlanContext)) {
             return;
         }
@@ -990,7 +990,7 @@ public class MvRewritePreprocessor {
         LogicalOlapScanOperator scanMvOp;
         synchronized (materializationContext.getQueryRefFactory()) {
             scanMvOp = createScanMvOperator(mv, materializationContext.getQueryRefFactory(),
-                    mvUpdateInfo.getMvToRefreshPCells(), false);
+                    mvUpdateInfo.getMVToRefreshPCells(), false);
         }
         materializationContext.setScanMvOperator(scanMvOp);
         // should keep the sequence of schema

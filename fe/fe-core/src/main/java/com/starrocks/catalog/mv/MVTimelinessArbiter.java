@@ -221,7 +221,7 @@ public abstract class MVTimelinessArbiter {
                 // add empty partitions
                 Optional<PCellWithName> pCellWithName = PCellUtils.of(mv, mvPartitionName);
                 Preconditions.checkState(pCellWithName.isPresent());
-                mvUpdateInfo.addMvToRefreshPartitionNames(pCellWithName.get());
+                mvUpdateInfo.addMVToRefreshPartitionNames(pCellWithName.get());
             }
         });
     }
@@ -284,7 +284,7 @@ public abstract class MVTimelinessArbiter {
         }
         PCellSortedSet adds = diff.getAdds();
         if (adds != null && !adds.isEmpty()) {
-            mvUpdateInfo.getMvToRefreshPCells().addAll(adds);
+            mvUpdateInfo.getMVToRefreshPCells().addAll(adds);
         }
         addEmptyPartitionsToRefresh(mvUpdateInfo);
         try (Timer ignored = Tracers.watchScope("CollectBaseTableUpdatePartitionNames")) {
@@ -350,7 +350,7 @@ public abstract class MVTimelinessArbiter {
         PCellSortedSet adds = diff.getAdds();
         addEmptyPartitionsToRefresh(mvUpdateInfo);
         if (adds != null && !adds.isEmpty()) {
-            mvUpdateInfo.getMvToRefreshPCells().addAll(adds);
+            mvUpdateInfo.getMVToRefreshPCells().addAll(adds);
         }
         return mvUpdateInfo;
     }

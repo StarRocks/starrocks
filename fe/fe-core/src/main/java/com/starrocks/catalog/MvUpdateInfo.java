@@ -85,7 +85,7 @@ public class MvUpdateInfo {
         return new MvUpdateInfo(mv, MvToRefreshType.PARTIAL, queryRewriteConsistencyMode);
     }
 
-    public MvToRefreshType getMvToRefreshType() {
+    public MvToRefreshType getMVToRefreshType() {
         return mvToRefreshType;
     }
 
@@ -93,15 +93,15 @@ public class MvUpdateInfo {
         return mvToRefreshType == MvToRefreshType.PARTIAL || mvToRefreshType == MvToRefreshType.NO_REFRESH;
     }
 
-    public void addMvToRefreshPartitionNames(PCellWithName partitionName) {
+    public void addMVToRefreshPartitionNames(PCellWithName partitionName) {
         mvToRefreshPCells.add(partitionName);
     }
 
-    public void addMvToRefreshPartitionNames(PCellSortedSet partitionNames) {
+    public void addMVToRefreshPartitionNames(PCellSortedSet partitionNames) {
         mvToRefreshPCells.addAll(partitionNames);
     }
 
-    public PCellSortedSet getMvToRefreshPCells() {
+    public PCellSortedSet getMVToRefreshPCells() {
         return mvToRefreshPCells;
     }
 

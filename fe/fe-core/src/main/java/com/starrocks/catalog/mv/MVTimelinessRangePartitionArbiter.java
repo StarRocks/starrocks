@@ -150,7 +150,7 @@ public final class MVTimelinessRangePartitionArbiter extends MVTimelinessArbiter
             }
         }
         // update mv's to refresh partitions
-        mvTimelinessInfo.addMvToRefreshPartitionNames(mvToRefreshPartitionNames);
+        mvTimelinessInfo.addMVToRefreshPartitionNames(mvToRefreshPartitionNames);
         return mvTimelinessInfo;
     }
 }
