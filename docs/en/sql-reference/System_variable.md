@@ -596,7 +596,7 @@ If a Join (other than Broadcast Join and Replicated Join) has multiple equi-join
 
 * **Default**: true
 * **Type**: Boolean
-* **Description**: Whether to enable query-trigger ANALYZE tasks.
+* **Description**: Whether to enable query-trigger ANALYZE tasks for tables under external catalog.
 * **Introduced in**: v3.4.0
 
 ### enable_scan_datacache
