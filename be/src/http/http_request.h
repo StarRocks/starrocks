@@ -28,7 +28,6 @@
 #include "http/http_method.h"
 #include "util/string_util.h"
 
-struct mg_connection;
 struct evhttp_request;
 
 namespace starrocks {
@@ -43,6 +42,7 @@ public:
 
     int init_from_evhttp();
 
+    void set_method(HttpMethod method) { _method = method; }
     HttpMethod method() const { return _method; }
 
     // path + '?' + query
@@ -53,12 +53,11 @@ public:
 
     const std::string& header(const std::string& key) const;
 
+    void add_param(const std::string& key, const std::string& value) { _params.emplace(key, value); }
     const std::string& param(const std::string& key) const;
 
-    // return params
     const StringCaseUnorderedMap<std::string>& headers() { return _headers; }
 
-    // return params
     std::map<std::string, std::string>* params() { return &_params; }
 
     const std::map<std::string, std::string>& query_params() const { return _query_params; }
