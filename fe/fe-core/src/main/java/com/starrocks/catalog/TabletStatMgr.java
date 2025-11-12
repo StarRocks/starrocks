@@ -41,7 +41,6 @@ import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -57,7 +56,6 @@ import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
-import com.starrocks.sql.ast.SplitTabletClause;
 import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
@@ -195,18 +193,7 @@ public class TabletStatMgr extends FrontendDaemon {
     }
 
     private void triggerDynamicTablet(Database db, OlapTable table, long maxTabletSize) {
-        if (maxTabletSize >= Config.dynamic_tablet_split_size && table.isEnableDynamicTablet()) {
-            try {
-                GlobalStateMgr.getCurrentState().getDynamicTabletJobMgr().createDynamicTabletJob(
-                        db, table, new SplitTabletClause());
-            } catch (StarRocksException e) {
-                LOG.info("Failed to create split tablet job for table {}.{}. ",
-                        db.getFullName(), table.getName(), e);
-            } catch (Exception e) {
-                LOG.warn("Failed to create split tablet job for table {}.{}. ",
-                        db.getFullName(), table.getName(), e);
-            }
-        }
+        // TODO(TackY)
     }
 
     private void updateLocalTabletStat() {
