@@ -44,13 +44,14 @@ import com.starrocks.http.IllegalArgException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import io.netty.handler.codec.http.HttpMethod;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 public class BackendAction extends WebBaseAction {
     private static final Logger LOG = LogManager.getLogger(BackendAction.class);
@@ -91,7 +92,8 @@ public class BackendAction extends WebBaseAction {
     }
 
     private void appendKnownBackendsInfo(StringBuilder buffer) {
-        ImmutableMap<Long, Backend> backendMap = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdToBackend();
+        ImmutableMap<Long, Backend> backendMap =
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdToBackend();
 
         List<List<String>> backendRows = new ArrayList<List<String>>();
         for (Backend backend : backendMap.values()) {
