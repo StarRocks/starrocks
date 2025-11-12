@@ -1343,3 +1343,37 @@ INSERT INTO csv_tbl
     "aws.s3.region" = "us-west-2"
 );
 ```
+
+#### Example 11: Using AWS STS Regional endpoints
+
+There are two cases shown here:
+
+1. Using a STS regional endpoint outside an AWS environment.
+2. Using STS within an AWS environment (for example, EC2).
+
+##### Outside an AWS environment
+
+:::important
+When working outside an AWS environment and using regional STS requires setting `"aws.s3.use_instance_profile" = "false"`.
+:::
+
+```sql
+SELECT COUNT(*)
+FROM FILES("path" = "s3://aws-bucket/path/file.csv.gz",
+    "format" = "csv",
+    "compression" = "gzip",
+    "aws.s3.endpoint"="https://s3.us-east-1.amazonaws.com",
+    "aws.s3.region"="us-east-1",
+    "aws.s3.use_aws_sdk_default_behavior" = "false",
+--highlight-start
+    "aws.s3.use_instance_profile" = "false",
+--highlight-end
+    "aws.s3.access_key" = "****",
+    "aws.s3.secret_key" = "****",
+    "aws.s3.iam_role_arn"="arn:aws:iam::1234567890:role/access-role",
+--highlight-start
+    "aws.s3.sts.region" = "{sts_region}",
+    "aws.s3.sts.endpoint" = "{sts_endpoint}"
+--highlight-end
+);
+```
