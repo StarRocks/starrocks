@@ -50,6 +50,7 @@ import com.starrocks.planner.TupleId;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.ParseNode;
+import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.type.Type;
 import org.roaringbitmap.RoaringBitmap;
@@ -523,7 +524,7 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         if (targetType.isHllType() && this.type.isStringType()) {
             return this;
         }
-        if (!Type.canCastTo(this.type, targetType)) {
+        if (!TypeManager.canCastTo(this.type, targetType)) {
             throw new AnalysisException("Cannot cast '" + ExprToSql.toSql(this) + "' from " + this.type + " to " + targetType);
         }
         return uncheckedCastTo(targetType);

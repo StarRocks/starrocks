@@ -19,6 +19,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.common.TypeManager;
 import com.starrocks.type.Type;
 
 import java.util.List;
@@ -64,7 +65,7 @@ public class AlterTableClauseAnalyzerEPack extends AlterTableClauseAnalyzer impl
                 throw new SemanticException("Column " + usingColumns.get(i) + " is not exist in table " + table.getName());
             }
 
-            if (!Type.canCastTo(column.getType(), policy.getArgTypes().get(i))) {
+            if (!TypeManager.canCastTo(column.getType(), policy.getArgTypes().get(i))) {
                 throw new SemanticException("Can't cast param type from " + column.getType()
                         + " to " + policy.getArgTypes().get(i));
             }
@@ -73,7 +74,7 @@ public class AlterTableClauseAnalyzerEPack extends AlterTableClauseAnalyzer impl
         if (policyType.equals(PolicyType.MASKING)) {
             Column maskingColumn = table.getColumn(maskingColumnName);
             Type targetType = maskingColumn.getType();
-            if (!Type.canCastTo(policy.getRetType(), targetType)) {
+            if (!TypeManager.canCastTo(policy.getRetType(), targetType)) {
                 throw new SemanticException("Can't cast return type from " + policy.getRetType() + " to " + targetType);
             }
         }

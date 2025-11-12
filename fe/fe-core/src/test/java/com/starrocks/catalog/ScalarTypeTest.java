@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.sql.common.TypeManager;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
 import com.starrocks.type.TypeFactory;
@@ -140,9 +141,9 @@ public class ScalarTypeTest {
             ScalarType lhs = tc[0];
             ScalarType rhs = tc[1];
             ScalarType expectResult = tc[2];
-            ScalarType actualResult = ScalarType.getCommonTypeForDecimalV3(rhs, lhs);
+            ScalarType actualResult = TypeManager.getCommonTypeForDecimalV3(rhs, lhs);
             Assertions.assertEquals(expectResult, actualResult);
-            actualResult = ScalarType.getCommonTypeForDecimalV3(rhs, lhs);
+            actualResult = TypeManager.getCommonTypeForDecimalV3(rhs, lhs);
             Assertions.assertEquals(expectResult, actualResult);
         }
     }

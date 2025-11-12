@@ -1522,7 +1522,7 @@ public class FunctionSet {
 
     private void registerBuiltinArrayAggDistinctFunction() {
         // array_agg(distinct)
-        for (ScalarType type : Type.getNumericTypes()) {
+        for (ScalarType type : Type.NUMERIC_TYPES) {
             Type arrayType = new ArrayType(type);
             addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_AGG_DISTINCT,
                     Lists.newArrayList(type), arrayType, arrayType,
@@ -1547,7 +1547,7 @@ public class FunctionSet {
     }
 
     private void registerBuiltinMapAggFunction() {
-        for (ScalarType keyType : Type.getNumericTypes()) {
+        for (ScalarType keyType : Type.NUMERIC_TYPES) {
             addBuiltin(AggregateFunction.createBuiltin(FunctionSet.MAP_AGG,
                     Lists.newArrayList(keyType, Type.ANY_ELEMENT), Type.ANY_MAP, null,
                     false, false, false));
@@ -1570,7 +1570,7 @@ public class FunctionSet {
 
     private void registerBuiltinArrayUniqueAggFunction() {
         // array_unique_agg mapping array_agg_distinct while array as input.
-        for (ScalarType type : Type.getNumericTypes()) {
+        for (ScalarType type : Type.NUMERIC_TYPES) {
             Type arrayType = new ArrayType(type);
             addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_UNIQUE_AGG,
                     Lists.newArrayList(arrayType), arrayType, arrayType,

@@ -44,6 +44,7 @@ import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.ast.expression.UserVariableExpr;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.common.TypeManager;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.Type;
 import org.apache.commons.collections4.CollectionUtils;
@@ -455,7 +456,8 @@ public class SelectAnalyzer {
 
         if (predicate.getType().isBoolean() || predicate.getType().isNull()) {
             // do nothing
-        } else if (!session.getSessionVariable().isEnableStrictType() && Type.canCastTo(predicate.getType(), Type.BOOLEAN)) {
+        } else if (!session.getSessionVariable().isEnableStrictType()
+                && TypeManager.canCastTo(predicate.getType(), Type.BOOLEAN)) {
             predicate = new CastExpr(Type.BOOLEAN, predicate);
         } else {
             throw new SemanticException("WHERE clause %s can not be converted to boolean type", ExprToSql.toSql(predicate));

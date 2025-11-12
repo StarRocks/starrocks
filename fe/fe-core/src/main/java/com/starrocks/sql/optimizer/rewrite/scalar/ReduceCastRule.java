@@ -16,6 +16,7 @@
 package com.starrocks.sql.optimizer.rewrite.scalar;
 
 import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
@@ -130,7 +131,7 @@ public class ReduceCastRule extends TopDownScalarOperatorRewriteRule {
 
         // if cast(cast1ChildType cast1Child) as child1Type will loss precision, we can't optimize it
         // e.g. cast(96.1) as int = 96, we can't change it into 96.1 = cast(96) as double
-        if (!Type.isImplicitlyCastable(cast1ChildType, child1Type, true)) {
+        if (!TypeManager.isImplicitlyCastable(cast1ChildType, child1Type, true)) {
             return operator;
         }
 
@@ -162,8 +163,8 @@ public class ReduceCastRule extends TopDownScalarOperatorRewriteRule {
             return false;
         }
 
-        Type childCompatibleType = Type.getAssignmentCompatibleType(grandChild, child, true);
-        Type parentCompatibleType = Type.getAssignmentCompatibleType(child, parent, true);
+        Type childCompatibleType = TypeManager.getAssignmentCompatibleType(grandChild, child, true);
+        Type parentCompatibleType = TypeManager.getAssignmentCompatibleType(child, parent, true);
         return childCompatibleType != Type.INVALID && parentCompatibleType != Type.INVALID;
     }
 

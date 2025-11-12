@@ -220,7 +220,7 @@ public class FunctionAnalyzer {
             // Validate that the condition parameter (last parameter) is boolean type or can be cast to boolean
             if (!params.exprs().isEmpty()) {
                 Expr conditionExpr = params.exprs().get(params.exprs().size() - 1);
-                if (!Type.canCastTo(conditionExpr.getType(), Type.BOOLEAN)) {
+                if (!TypeManager.canCastTo(conditionExpr.getType(), Type.BOOLEAN)) {
                     throw new SemanticException(String.format(
                         "The condition expression in %s function must be boolean type or castable to boolean, but got %s",
                         fnName.getFunction(), conditionExpr.getType().toSql()), functionCallExpr.getPos());
@@ -727,7 +727,7 @@ public class FunctionAnalyzer {
         // validate argument types
         for (int i = 0; i < fn.getNumArgs(); i++) {
             if (!argumentTypes[i].matchesType(fn.getArgs()[i]) &&
-                    !Type.canCastTo(argumentTypes[i], fn.getArgs()[i])) {
+                    !TypeManager.canCastTo(argumentTypes[i], fn.getArgs()[i])) {
                 String msg = String.format("No matching function with signature: %s(%s)", fnName,
                         node.getParams().isStar() ? "*" :
                                 Arrays.stream(argumentTypes).map(Type::toSql).collect(Collectors.joining(", ")));
@@ -738,7 +738,7 @@ public class FunctionAnalyzer {
             Type varType = fn.getArgs()[fn.getNumArgs() - 1];
             for (int i = fn.getNumArgs(); i < argumentTypes.length; i++) {
                 if (!argumentTypes[i].matchesType(varType) &&
-                        !Type.canCastTo(argumentTypes[i], varType)) {
+                        !TypeManager.canCastTo(argumentTypes[i], varType)) {
                     String msg = String.format("Variadic function %s(%s) can't support type: %s", fnName,
                             Arrays.stream(fn.getArgs()).map(Type::toSql).collect(Collectors.joining(", ")),
                             argumentTypes[i]);
@@ -923,7 +923,7 @@ public class FunctionAnalyzer {
                         //do nothing
                     } else if ((targetType.isNumericType() && argumentTypes[i].isNumericType()) ||
                                 (targetType.isStringType() && argumentTypes[i].isStringType())) {
-                        targetType = Type.getAssignmentCompatibleType(targetType, argumentTypes[i], false);
+                        targetType = TypeManager.getAssignmentCompatibleType(targetType, argumentTypes[i], false);
                         if (targetType.isInvalid()) {
                             throw new SemanticException("Parameter's type is invalid");
                         }
