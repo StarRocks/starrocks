@@ -100,17 +100,11 @@ public class IVMAnalyzer {
         this.queryStatement = queryStatement;
     }
 
-    public static boolean isSupportedIVM(MaterializedView mv) {
-        if (mv == null) {
-            return false;
+    public static boolean isTableTypeIVMSupported(Table.TableType tableType) {
+        if (SUPPORTED_TABLE_TYPES.contains(tableType)) {
+            return true;
         }
-        // check table types
-        for (Table baseTable : mv.getBaseTables()) {
-            if (!SUPPORTED_TABLE_TYPES.contains(baseTable.getType())) {
-                return false;
-            }
-        }
-        return true;
+        return false;
     }
 
     /**

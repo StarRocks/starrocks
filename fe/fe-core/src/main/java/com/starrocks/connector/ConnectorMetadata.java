@@ -149,7 +149,7 @@ public interface ConnectorMetadata {
     }
 
     /**
-     * NOTE: ensure the last snapshot is in the last of the collection.
+     * NOTE: ensure the last snapshot is at the last of the collection.
      *
      * @param dbName  database name
      * @param table table name
