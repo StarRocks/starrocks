@@ -109,6 +109,11 @@ public:
                           const std::string& end_key, WriteBatch* batch);
 
 private:
+    Status iterate(ColumnFamilyIndex column_family_index, const std::string& prefix, const std::string& start_key,
+                   std::function<StatusOr<bool>(std::string_view, std::string_view)> const& func,
+                   int64_t timeout_sec = -1);
+
+private:
     std::string _root_path;
     rocksdb::DB* _db;
     std::vector<rocksdb::ColumnFamilyHandle*> _handles;
