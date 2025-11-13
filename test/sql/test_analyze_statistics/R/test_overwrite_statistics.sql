@@ -93,3 +93,23 @@ function: assert_explain_costs_contains("select * from test_overwrite_statistics
 -- result:
 None
 -- !result
+delete from _statistics_.column_statistics where table_name='test_overwrite_statistics.test_overwrite_with_sample';
+-- result:
+-- !result
+create table test_overwrite_statistics.test_overwrite_with_sample (k1 int) properties("replication_num"="1");
+-- result:
+-- !result
+insert overwrite test_overwrite_statistics.test_overwrite_with_sample select generate_series from table(generate_series(1, 300000));
+-- result:
+-- !result
+function: assert_explain_costs_contains("select * from test_overwrite_statistics.test_overwrite_with_sample;", "ESTIMATE")
+-- result:
+None
+-- !result
+insert overwrite test_overwrite_statistics.test_overwrite_with_sample select generate_series from table(generate_series(1, 300000));
+-- result:
+-- !result
+function: assert_explain_costs_contains("select * from test_overwrite_statistics.test_overwrite_with_sample;", "ESTIMATE")
+-- result:
+None
+-- !result

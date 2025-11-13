@@ -14,6 +14,10 @@
 
 package com.starrocks.transaction;
 
+import com.google.common.collect.HashBasedTable;
+import com.google.common.collect.Table;
+
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -21,10 +25,12 @@ import java.util.List;
  */
 public class InsertOverwriteJobStats {
 
-    private List<Long> sourcePartitionIds;
-    private List<Long> targetPartitionIds;
+    private List<Long> sourcePartitionIds = new ArrayList<>();
+    private List<Long> targetPartitionIds = new ArrayList<>();
     private long sourceRows;
     private long targetRows;
+    // Map<PartitionId, Map<TabletId, RowCount>>
+    private Table<Long, Long, Long> partitionTabletRowCounts = HashBasedTable.create();
 
     public InsertOverwriteJobStats() {
     }
@@ -67,5 +73,13 @@ public class InsertOverwriteJobStats {
 
     public void setTargetRows(long targetRows) {
         this.targetRows = targetRows;
+    }
+
+    public Table<Long, Long, Long> getPartitionTabletRowCounts() {
+        return partitionTabletRowCounts;
+    }
+
+    public void setPartitionTabletRowCounts(Table<Long, Long, Long> partitionTabletRowCounts) {
+        this.partitionTabletRowCounts = partitionTabletRowCounts;
     }
 }

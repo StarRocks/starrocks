@@ -311,6 +311,12 @@ public class StatisticsCollectionTrigger {
     private void prepareAnalyzeForOverwrite() {
         partitionIds.addAll(overwriteJobStats.getTargetPartitionIds());
         analyzeType = decideAnalyzeTypeForOverwrite();
+        
+        // Set partition tablet row counts for sample-based statistics collection
+        if (analyzeType == StatsConstants.AnalyzeType.SAMPLE &&
+                !overwriteJobStats.getPartitionTabletRowCounts().isEmpty()) {
+            partitionTabletRowCounts.putAll(overwriteJobStats.getPartitionTabletRowCounts());
+        }
     }
 
     private StatsConstants.AnalyzeType decideAnalyzeTypeForOverwrite() {
