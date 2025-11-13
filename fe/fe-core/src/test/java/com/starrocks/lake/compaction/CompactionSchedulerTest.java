@@ -124,9 +124,9 @@ public class CompactionSchedulerTest {
             }
         };
         table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
-        Assertions.assertNull(compactionScheduler.startCompaction(snapshot, WarehouseManager.DEFAULT_WAREHOUSE_ID));
+        Assertions.assertNull(compactionScheduler.startCompaction(snapshot, WarehouseManager.DEFAULT_WAREHOUSE_ID, false));
         table.setState(OlapTable.OlapTableState.NORMAL);
-        Assertions.assertNull(compactionScheduler.startCompaction(snapshot, WarehouseManager.DEFAULT_WAREHOUSE_ID));
+        Assertions.assertNull(compactionScheduler.startCompaction(snapshot, WarehouseManager.DEFAULT_WAREHOUSE_ID, false));
     }
 
     @Test
@@ -328,7 +328,8 @@ public class CompactionSchedulerTest {
             partition1.addSubPartition(p10);
 
             Map<Long, List<String>> tabletsToPeerCacheNode = new HashMap<>();
-            Map<Long, List<Long>> resultMap = compactionScheduler.collectPartitionTablets(p10, warehouseId, tabletsToPeerCacheNode,false);
+            Map<Long, List<Long>> resultMap = compactionScheduler.collectPartitionTablets(p10, warehouseId,
+                    tabletsToPeerCacheNode, false);
             Assertions.assertEquals(2, resultMap.size());
             List<Long> tabletListOnC1 = resultMap.get(c1.getId());
             Assertions.assertEquals(1, tabletListOnC1.size());
@@ -353,7 +354,8 @@ public class CompactionSchedulerTest {
             partition2.addSubPartition(p20);
 
             Map<Long, List<String>> tabletsToPeerCacheNode = new HashMap<>();
-            Map<Long, List<Long>> resultMap = compactionScheduler.collectPartitionTablets(p20, warehouseId, tabletsToPeerCacheNode, false);
+            Map<Long, List<Long>> resultMap = compactionScheduler.collectPartitionTablets(p20, warehouseId,
+                    tabletsToPeerCacheNode, false);
             // no compute node for tablet3
             Assertions.assertEquals(0, resultMap.size());
         }
@@ -372,7 +374,8 @@ public class CompactionSchedulerTest {
             partition.addSubPartition(p20);
 
             Map<Long, List<String>> tabletsToPeerCacheNode = new HashMap<>();
-            Map<Long, List<Long>> resultMap = compactionScheduler.collectPartitionTablets(p20, warehouseId, tabletsToPeerCacheNode, false);
+            Map<Long, List<Long>> resultMap = compactionScheduler.collectPartitionTablets(p20, warehouseId,
+                    tabletsToPeerCacheNode, false);
             // exception found for tablet4
             Assertions.assertEquals(0, resultMap.size());
         }
@@ -887,7 +890,8 @@ class MockedCompactionScheduler extends CompactionScheduler {
         super(compactionManager, systemInfoService, transactionMgr, stateMgr, disableTablesStr);
     }
     @Override
-    protected CompactionJob startCompaction(PartitionStatisticsSnapshot partitionStatisticsSnapshot, long warehouseId) {
+    protected CompactionJob startCompaction(PartitionStatisticsSnapshot partitionStatisticsSnapshot, long warehouseId,
+                                            boolean enableCompactionService) {
         Database db = new Database();
         Table table = new LakeTable();
         PhysicalPartition partition = new PhysicalPartition(123, "aaa", 123, null);

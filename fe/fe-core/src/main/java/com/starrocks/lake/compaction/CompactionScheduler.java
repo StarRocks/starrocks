@@ -331,9 +331,13 @@ public class CompactionScheduler extends Daemon {
     private List<PartitionIdentifier> cleanPhysicalPartition() {
         long now = System.currentTimeMillis();
         if (now - lastPartitionCleanTime >= PARTITION_CLEAN_INTERVAL_SECOND * 1000L) {
-            List<PartitionIdentifier> deletedPartitionIdentifiers = compactionManager.getAllPartitions()
+            List<PartitionIdentifier> deletedPartitionIdentifiers =
+                    compactionManager.getAllPartitions()
                     .stream()
-                    .filter(p -> !MetaUtils.isPhysicalPartitionExist(stateMgr, p.getDbId(), p.getTableId(), p.getPartitionId()))
+                    .filter(p -> !MetaUtils.isPhysicalPartitionExist(
+                            stateMgr, p.getDbId(),
+                            p.getTableId(),
+                            p.getPartitionId()))
                     .collect(Collectors.toList());
 
             // ignore those partitions in runningCompactions
@@ -346,7 +350,8 @@ public class CompactionScheduler extends Daemon {
         return null;
     }
 
-    protected CompactionJob startCompaction(PartitionStatisticsSnapshot partitionStatisticsSnapshot, long warehouseId,
+    protected CompactionJob startCompaction(PartitionStatisticsSnapshot partitionStatisticsSnapshot,
+                                            long warehouseId,
                                             boolean enableCompactionService) {
         PartitionIdentifier partitionIdentifier = partitionStatisticsSnapshot.getPartition();
         Database db = stateMgr.getLocalMetastore().getDb(partitionIdentifier.getDbId());
@@ -373,7 +378,8 @@ public class CompactionScheduler extends Daemon {
             // Compact a table of SCHEMA_CHANGE state does not make much sense, because the compacted data
             // will not be used after the schema change job finished.
             if (table != null && table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE) {
-                compactionManager.enableCompactionAfter(partitionIdentifier, Config.lake_compaction_interval_ms_on_failure);
+                compactionManager.enableCompactionAfter(partitionIdentifier,
+                        Config.lake_compaction_interval_ms_on_failure);
                 return null;
             }
             partition = (table != null) ? table.getPhysicalPartition(partitionIdentifier.getPartitionId()) : null;
@@ -507,15 +513,18 @@ public class CompactionScheduler extends Daemon {
                             beToTablets.clear();
                             return beToTablets;
                         }
-                        tabletsToPeerCacheNode.computeIfAbsent(tablet.getId(), key -> new ArrayList<>()).add(computeNode.getHost());
-                        beToTablets.computeIfAbsent(compactionServiceCnNode.getId(), k -> Lists.newArrayList()).add(tablet.getId());
+                        tabletsToPeerCacheNode.computeIfAbsent(tablet.getId(),
+                                key -> new ArrayList<>()).add(computeNode.getHost());
+                        beToTablets.computeIfAbsent(compactionServiceCnNode.getId(),
+                                k -> Lists.newArrayList()).add(tablet.getId());
                     } else {
                         ComputeNode computeNode = manager.getComputeNodeAssignedToTablet(warehouseId, (LakeTablet) tablet);
                         if (computeNode == null) {
                             beToTablets.clear();
                             return beToTablets;
                         }
-                        beToTablets.computeIfAbsent(computeNode.getId(), k -> Lists.newArrayList()).add(tablet.getId());
+                        beToTablets.computeIfAbsent(computeNode.getId(),
+                                k -> Lists.newArrayList()).add(tablet.getId());
                     }
                 }
             }
