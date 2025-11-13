@@ -623,7 +623,7 @@ Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, ui
                              fs::new_random_access_file(opts, tablet_mgr->delvec_location(metadata.id(), delvec_name)));
         }
         RETURN_IF_ERROR(rf->read_at_fully(iter->second.offset(), buf.data(), iter->second.size()));
-        if (iter->second.has_crc32c() && delvec_page.crc32c_gen_version() == delvec_page.version()) {
+        if (iter->second.has_crc32c() && iter->second.crc32c_gen_version() == iter->second.version()) {
             // check crc32c
             uint32_t crc32c = crc32c::Value(buf.data(), iter->second.size());
             if (crc32c != crc32c::Unmask(iter->second.crc32c())) {
