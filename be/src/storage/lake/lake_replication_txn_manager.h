@@ -71,13 +71,12 @@ public:
 
     // Update segment sizes in tablet metadata after segment conversion
     // This is needed because segment file size may change after footer rewriting
-    Status update_tablet_metadata_segment_sizes(std::shared_ptr<TabletMetadataPB> tablet_metadata,
+    Status update_tablet_metadata_segment_sizes(const std::shared_ptr<TabletMetadataPB>& tablet_metadata,
                                                 const std::unordered_map<std::string, size_t>& segment_size_changes);
 
 private:
     TabletManager* _tablet_manager;
     std::unique_ptr<lake::RemoteStarletLocationProvider> _remote_location_provider;
-    std::unordered_map<int64_t, std::shared_ptr<FileSystem>> _faked_starlet_fs_map;
 };
 
 } // namespace starrocks::lake

@@ -80,6 +80,9 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
     auto src_meta_dir = "test_lake_replication/meta";
     auto src_data_dir = "test_lake_replication/data";
     auto shared_src_fs_st_or = FileSystem::CreateSharedFromString(src_data_dir);
+    if (!shared_src_fs_st_or.ok()) {
+        return Status::Corruption("Failed to create virtual starlet filesystem");
+    }
     auto shared_src_fs = shared_src_fs_st_or.value();
     ASSIGN_OR_RETURN(auto src_tablet_meta,
                      _tablet_manager->get_tablet_metadata(src_tablet_id, src_visible_version, false, 0, nullptr));
@@ -115,14 +118,14 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
     VLOG(3) << "Lake replicate storage task, have built new tablet meta, tablet_id: " << target_tablet_id
             << ", txn_id:" << txn_id << ", start calculate column unique id map..";
     // calc column unique id to adapt for fast schema change
-    const TabletSchemaPB* source_schema_pb = &src_tablet_meta->schema();
-    if (source_schema_pb == nullptr) {
-        LOG(WARNING) << "Failed to get source schema, tablet source tablet: " << src_tablet_id
+    if (!src_tablet_meta->has_schema()) {
+        LOG(WARNING) << "Failed to get source schema, source tablet: " << src_tablet_id
                      << ", target tablet: " << target_tablet_id;
         return Status::Corruption("Failed to get source schema");
     }
+    const TabletSchemaPB& source_schema_pb = src_tablet_meta->schema();
     std::unordered_map<uint32_t, uint32_t> column_unique_id_map;
-    ReplicationUtils::calc_column_unique_id_map(source_schema_pb->column(), target_tablet_meta->schema().column(),
+    ReplicationUtils::calc_column_unique_id_map(source_schema_pb.column(), target_tablet_meta->schema().column(),
                                                 &column_unique_id_map);
 
     LOG(INFO) << "Lake replicate storage task, start to replicate files from src to target cluster, txn_id: " << txn_id
@@ -150,27 +153,36 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
 
         VLOG(3) << "Lake replicate storage task, start to replicate file, src file: " << src_file_location
                 << ", target: " << target_file_location;
-        // check if need to convert segment file while downloading
         if (is_segment(src_file_name)) {
-            // file_size might be empty, in that case we'll get it while downloading the file
-            auto file_size = segment_name_to_size_map[src_file_name];
+            // For segment files, use download_lake_segment_file which supports schema conversion
+            // via SegmentStreamConverter when column_unique_id_map is not empty.
+            // file_size might be available in segment_name_to_size_map
+            auto src_file_size = segment_name_to_size_map[src_file_name];
             size_t final_file_size = 0;
             RETURN_IF_ERROR(ReplicationUtils::download_lake_segment_file(
-                    src_file_location, src_file_name, file_size, shared_src_fs, file_converters, &final_file_size));
+                    src_file_location, src_file_name, src_file_size, shared_src_fs, file_converters, &final_file_size));
             // Update the segment size map with the actual converted file size
-            if (final_file_size > 0 && final_file_size != file_size) {
-                // Get the target filename (after conversion)
+            if (final_file_size > 0 && final_file_size != src_file_size) {
                 const auto& target_file_name = pair.second.first;
                 segment_size_changes[target_file_name] = final_file_size;
                 LOG(INFO) << "Segment file size changed after conversion, src_file: " << src_file_name
-                          << ", target_file: " << target_file_name << ", original size: " << file_size
+                          << ", target_file: " << target_file_name << ", original size: " << src_file_size
                           << ", final size: " << final_file_size;
             }
             total_file_size += final_file_size;
         } else {
-            // since we can't easily get the file size for non-segment files, here we just use fs::copy operation
+            // For non-segment files (.del, .sst, .delvec, .cols), use streaming copy with encryption support.
+            // These files are typically small, so streaming copy is efficient and avoids an extra
+            // remote IO call to get file size (which would increase object storage IOPS cost).
+            WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+            if (config::enable_transparent_data_encryption) {
+                // Apply encryption info from filename_map to ensure file content matches metadata
+                opts.encryption_info = pair.second.second.info;
+            }
             ASSIGN_OR_RETURN(auto file_size, fs::copy_file(src_file_location, shared_src_fs, target_file_location,
-                                                           nullptr, 1024 * 1024));
+                                                           nullptr, opts, 1024 * 1024));
+            // Track this file for cleanup on failure, similar to how segment files are tracked via file_converters
+            files_to_delete.push_back(target_file_location);
             total_file_size += file_size;
             LOG(INFO) << "Finished to replicate lake remote file, src file: " << src_file_location
                       << ", target: " << target_file_location << ", txn_id: " << txn_id << ", size: " << file_size;
@@ -201,7 +213,7 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
     txn_meta->set_visible_version(target_visible_version);
     txn_meta->set_data_version(data_version);
     txn_meta->set_snapshot_version(src_visible_version);
-    // mak full replication for shared-data cluster migration
+    // mark full replication for shared-data cluster migration
     txn_meta->set_incremental_snapshot(false);
 
     RETURN_IF_ERROR(_tablet_manager->put_txn_log(txn_log));
@@ -328,6 +340,8 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
         new_rowset_meta->CopyFrom(src_rowset_meta);
         new_rowset_meta->mutable_segments()->Clear();
         new_rowset_meta->mutable_segment_encryption_metas()->Clear();
+        new_rowset_meta->mutable_segment_size()->Clear();
+        new_rowset_meta->mutable_del_files()->Clear();
         // check if segment size is valid
         auto segment_size_size = src_rowset_meta.segment_size_size();
         if (segment_size_size > 0) {
@@ -335,8 +349,8 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
             // `segment_size_size` and `segment_file_size` should always be equal
             if (UNLIKELY(segment_size_size > 0 && segment_size_size != segment_file_size)) {
                 return Status::Corruption(
-                        fmt::format("found invalidate segment_size, src_tablet_id: {}, "
-                                    "rowse_id: {}, segment_size_size: {}, segment_file_size: {}",
+                        fmt::format("found invalid segment_size, src_tablet_id: {}, "
+                                    "rowset_id: {}, segment_size_size: {}, segment_file_size: {}",
                                     src_tablet_id, src_rowset_meta.id(), segment_size_size, segment_file_size));
             }
         }
@@ -350,6 +364,11 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
                                                       final_segment_filename, target_tablet_id, src_data_dir,
                                                       file_locations, filename_map));
             new_rowset_meta->add_segments(final_segment_filename);
+
+            // Copy segment_size from source rowset metadata as inital value for the target rowset metadata
+            if (segment_size_size > 0) {
+                new_rowset_meta->add_segment_size(src_rowset_meta.segment_size(i));
+            }
 
             // Add encryption metadata for files
             if (config::enable_transparent_data_encryption) {
@@ -558,7 +577,7 @@ StatusOr<bool> LakeReplicationTxnManager::determine_final_filename(
 }
 
 Status LakeReplicationTxnManager::update_tablet_metadata_segment_sizes(
-        std::shared_ptr<TabletMetadataPB> tablet_metadata,
+        const std::shared_ptr<TabletMetadataPB>& tablet_metadata,
         const std::unordered_map<std::string, size_t>& segment_size_changes) {
     if (segment_size_changes.empty()) {
         return Status::OK();

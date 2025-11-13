@@ -167,9 +167,10 @@ inline std::string extract_uuid_from(std::string_view file_name) {
     const size_t uuid_start = TXN_ID_LENGTH + 1;
     const size_t uuid_length = dot_pos - uuid_start;
 
-    // standard UUID format: 8-4-4-4-12 = 36 bit
+    // standard UUID format: 8-4-4-4-12 = 36 characters
     if (uuid_length != 36) {
         LOG(WARNING) << "Invalid UUID length: " << uuid_length << " in file: " << file_name;
+        return {};
     }
 
     return std::string(file_name.substr(uuid_start, uuid_length));

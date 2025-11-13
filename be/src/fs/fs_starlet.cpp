@@ -641,7 +641,7 @@ std::shared_ptr<FileSystem> new_fs_starlet(int64_t shard_id) {
     // The cache here is used to store fslib's shard fs which is used for cross cluster migration,
     // where each shard fs correspond to one storage volume on source cluster.
     // We chose a small cache capacity size here, with expect that normally very few storage volumes are used.
-    constexpr size_t kDefaultCacheCapacity = 1024 * 10; // ~10 entries
+    constexpr size_t kDefaultCacheCapacity = 1024 * 10;
     static std::unique_ptr<Cache> g_shard_fs_cache(new_lru_cache(kDefaultCacheCapacity));
 
     // Build cache key from shard_id

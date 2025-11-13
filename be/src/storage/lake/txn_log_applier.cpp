@@ -409,7 +409,7 @@ private:
                 // Same logic for pk and non-pk tables
                 auto old_rowsets = std::move(*_metadata->mutable_rowsets());
 
-                auto copied_tablet_meta = op_replication.tablet_metadata();
+                const auto& copied_tablet_meta = op_replication.tablet_metadata();
                 if (copied_tablet_meta.rowsets_size() > 0) {
                     _metadata->mutable_rowsets()->Clear();
                     _metadata->mutable_rowsets()->CopyFrom(copied_tablet_meta.rowsets());
@@ -433,6 +433,8 @@ private:
                 _metadata->set_next_rowset_id(copied_tablet_meta.next_rowset_id());
                 _metadata->set_cumulative_point(0);
                 old_rowsets.Swap(_metadata->mutable_compaction_inputs());
+
+                _tablet.update_mgr()->unload_primary_index(_tablet.id());
 
                 VLOG(3) << "Apply pk replication log with tablet metadata provided. tablet_id: " << _tablet.id()
                         << ", base_version: " << _base_version << ", new_version: " << _new_version
@@ -841,7 +843,7 @@ private:
                 // Same logic for pk and non-pk tables
                 auto old_rowsets = std::move(*_metadata->mutable_rowsets());
 
-                auto copied_tablet_meta = op_replication.tablet_metadata();
+                const auto& copied_tablet_meta = op_replication.tablet_metadata();
                 if (copied_tablet_meta.rowsets_size() > 0) {
                     _metadata->mutable_rowsets()->Clear();
                     _metadata->mutable_rowsets()->CopyFrom(copied_tablet_meta.rowsets());
