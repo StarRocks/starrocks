@@ -79,6 +79,10 @@ public final class ExternalTableCompensation extends TableCompensation {
     public ExternalTableCompensation(Table refBaseTable, List<PRangeCell> compensations) {
         super(refBaseTable, MVTransparentState.COMPENSATE);
         this.compensations = compensations;
+        // sort the compensation for better display
+        if (CollectionUtils.isNotEmpty(compensations)) {
+            Collections.sort(compensations);
+        }
     }
 
     @Override
@@ -233,31 +237,38 @@ public final class ExternalTableCompensation extends TableCompensation {
         }
         StringBuilder sb = new StringBuilder();
         sb.append("[size=").append(compensations.size()).append("]");
+
         int size = Math.min(Config.max_mv_task_run_meta_message_values_length, compensations.size());
         sb.append(" [");
+
+        // compensations
         List<String> partitions = Lists.newArrayList();
-        for (int i = 0; i < size; i++) {
-            PRangeCell key = compensations.get(i);
-            Range<PartitionKey> range = key.getRange();
-            if (range.lowerEndpoint().equals(range.upperEndpoint())) {
-                partitions.add(getPartitionKeyString(range.lowerEndpoint()));
-            } else {
-                partitions.add(getPartitionKeyString(key.getRange().lowerEndpoint())
-                        + "-" + getPartitionKeyString(key.getRange().upperEndpoint()));
-            }
-        }
-        Collections.sort(partitions);
-        if (size < compensations.size()) {
+        if (compensations.size() <= Config.max_mv_task_run_meta_message_values_length) {
+            compensations
+                    .forEach(compensation -> partitions.add(compensateToString(compensation)));
+        } else {
             // output the fist half of partitions
             int half = size / 2;
-            sb.append(Joiner.on(",").join(partitions.subList(0, half)));
-            sb.append(",...");
-            sb.append(",").append(partitions.subList(half, size));
-        } else {
-            sb.append(Joiner.on(",").join(partitions));
+            compensations.subList(0, half)
+                    .forEach(compensation -> partitions.add(compensateToString(compensation)));
+            partitions.add("....");
+            compensations.subList(size - half, size)
+                    .forEach(compensation -> partitions.add(compensateToString(compensation)));
         }
+        sb.append(Joiner.on(", ").join(partitions));
+
         sb.append("]");
         return sb.toString();
+    }
+
+    private String compensateToString(PRangeCell key) {
+        Range<PartitionKey> range = key.getRange();
+        if (range.lowerEndpoint().equals(range.upperEndpoint())) {
+            return getPartitionKeyString(range.lowerEndpoint());
+        } else {
+            return "[" + getPartitionKeyString(range.lowerEndpoint()) + ","
+                    + getPartitionKeyString(range.upperEndpoint()) + ")";
+        }
     }
 
     private String getPartitionKeyString(PartitionKey key) {
