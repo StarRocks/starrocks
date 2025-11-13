@@ -15,6 +15,7 @@
 package com.starrocks.load;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.HashBasedTable;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
@@ -53,6 +54,8 @@ import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.transaction.InsertOverwriteJobStats;
 import com.starrocks.transaction.InsertTxnCommitAttachment;
+import com.starrocks.transaction.PartitionCommitInfo;
+import com.starrocks.transaction.TableCommitInfo;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TxnCommitAttachment;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -61,6 +64,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -478,6 +482,10 @@ public class InsertOverwriteJobRunner {
         InsertOverwriteJobStats stats = new InsertOverwriteJobStats();
         stats.setSourcePartitionIds(job.getSourcePartitionIds());
         stats.setTargetPartitionIds(job.getTmpPartitionIds());
+        
+        // Collect partition tablet row counts for statistics sampling
+        com.google.common.collect.Table<Long, Long, Long> partitionTabletRowCounts = HashBasedTable.create();
+        
         try {
             // try exception to release write lock finally
             final OlapTable targetTable = checkAndGetTable(db, tableId);
@@ -559,26 +567,53 @@ public class InsertOverwriteJobRunner {
             }
 
             long sumTargetRows = 0;
-            if (insertStmt != null) {
+            if (insertStmt != null && !isReplay) {
                 TransactionState txnState = GlobalStateMgr.getCurrentState()
                         .getGlobalTransactionMgr()
                         .getTransactionState(dbId, insertStmt.getTxnId());
-                if (txnState != null && txnState.getTxnCommitAttachment() != null) {
-                    TxnCommitAttachment attachment = txnState.getTxnCommitAttachment();
-                    if (attachment instanceof InsertTxnCommitAttachment) {
-                        sumTargetRows = ((InsertTxnCommitAttachment) attachment).getLoadedRows();
+                if (txnState != null) {
+                    // Get target rows from TxnCommitAttachment
+                    if (txnState.getTxnCommitAttachment() != null) {
+                        TxnCommitAttachment attachment = txnState.getTxnCommitAttachment();
+                        if (attachment instanceof InsertTxnCommitAttachment) {
+                            sumTargetRows = ((InsertTxnCommitAttachment) attachment).getLoadedRows();
+                        }
+                    }
+                    
+                    // Collect tablet row counts from TableCommitInfo for statistics sampling
+                    TableCommitInfo tableCommitInfo = txnState.getIdToTableCommitInfos().get(tableId);
+                    if (tableCommitInfo != null) {
+                        for (var entry : tableCommitInfo.getIdToPartitionCommitInfo().entrySet()) {
+                            long physicalPartitionId = entry.getKey();
+                            PartitionCommitInfo partitionCommitInfo = entry.getValue();
+                            Map<Long, Long> tabletRows = partitionCommitInfo.getTabletIdToRowCountForPartitionFirstLoad();
+                            
+                            PhysicalPartition physicalPartition = targetTable.getPhysicalPartition(physicalPartitionId);
+                            if (physicalPartition != null) {
+                                Partition partition = targetTable.getPartition(physicalPartition.getParentId());
+                                if (partition != null && !tabletRows.isEmpty() &&
+                                        stats.getTargetPartitionIds().contains(partition.getId())) {
+                                    long partitionId = partition.getId();
+                                    tabletRows.forEach((tabletId, rowCount) -> partitionTabletRowCounts.put(partitionId,
+                                            tabletId, rowCount));
+                                }
+                            }
+                        }
                     }
                 }
             }
             
             if (sumTargetRows == 0) {
-                LOG.warn("TxnCommitAttachment is null or invalid, fallback to partition.getRowCount()");
+                LOG.warn("TxnCommitAttachment is null or invalid, fallback to partition.getRowCount() for " +
+                        "table_id={}, partition_ids={}, txn_id={}", 
+                        tableId, job.getTmpPartitionIds(), insertStmt != null ? insertStmt.getTxnId() : "null");
                 sumTargetRows = job.getTmpPartitionIds().stream()
                         .mapToLong(p -> targetTable.mayGetPartition(p).stream().mapToLong(Partition::getRowCount).sum())
                         .sum();
             }
 
             stats.setTargetRows(sumTargetRows);
+            stats.setPartitionTabletRowCounts(partitionTabletRowCounts);
             if (!isReplay) {
                 // mark all source tablet ids force delete to drop it directly on BE,
                 // not to move it to trash
