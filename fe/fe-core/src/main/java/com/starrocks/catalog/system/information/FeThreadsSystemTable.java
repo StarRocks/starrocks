@@ -53,7 +53,6 @@ public class FeThreadsSystemTable {
                         .column("FE_ADDRESS", TypeFactory.createVarchar(NAME_CHAR_LEN))
                         .column("THREAD_ID", TypeFactory.createType(PrimitiveType.BIGINT))
                         .column("THREAD_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("GROUP_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
                         .column("THREAD_STATE", TypeFactory.createVarchar(NAME_CHAR_LEN))
                         .column("IS_DAEMON", TypeFactory.createType(PrimitiveType.BOOLEAN))
                         .column("PRIORITY", TypeFactory.createType(PrimitiveType.INT))
@@ -88,13 +87,8 @@ public class FeThreadsSystemTable {
                 threadData.setThread_id(threadInfo.getThreadId());
                 threadData.setThread_name(threadInfo.getThreadName());
                 
-                // Get thread object from map to check daemon status and get thread group name
+                // Get thread object from map to check daemon status
                 Thread thread = threadMap.get(threadInfo.getThreadId());
-                String groupName = "";
-                if (thread != null && thread.getThreadGroup() != null) {
-                    groupName = thread.getThreadGroup().getName();
-                }
-                threadData.setGroup_name(groupName);
                 threadData.setThread_state(threadInfo.getThreadState().toString());
                 threadData.setIs_daemon(thread != null && thread.isDaemon());
                 threadData.setPriority(threadInfo.getPriority());

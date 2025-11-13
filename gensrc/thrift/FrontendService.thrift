@@ -2199,12 +2199,11 @@ struct TFeThreadInfo {
     1: optional string fe_address;
     2: optional i64 thread_id;
     3: optional string thread_name;
-    4: optional string group_name;
-    5: optional string thread_state;
-    6: optional bool is_daemon;
-    7: optional i32 priority;
-    8: optional i64 cpu_time_ms;
-    9: optional i64 user_time_ms;
+    4: optional string thread_state;
+    5: optional bool is_daemon;
+    6: optional i32 priority;
+    7: optional i64 cpu_time_ms;
+    8: optional i64 user_time_ms;
 }
 
 struct TGetFeThreadsRequest {

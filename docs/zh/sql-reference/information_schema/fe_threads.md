@@ -13,7 +13,6 @@ displayed_sidebar: docs
 | FE_ADDRESS     | FE 节点的地址（格式：`host:port`）。                         |
 | THREAD_ID      | Java 线程 ID。                                                |
 | THREAD_NAME    | 线程名称。                                                    |
-| GROUP_NAME     | 线程所属的线程组名称。                                        |
 | THREAD_STATE   | 线程状态。可能的值：`NEW`、`RUNNABLE`、`BLOCKED`、`WAITING`、`TIMED_WAITING`、`TERMINATED`。 |
 | IS_DAEMON      | 指示线程是否为守护线程（`true`）或非守护线程（`false`）。    |
 | PRIORITY       | 线程优先级（通常为 1-10）。                                  |
@@ -31,7 +30,7 @@ SELECT * FROM information_schema.fe_threads;
 ### 按状态查询线程
 
 ```sql
-SELECT thread_id, thread_name, group_name, thread_state 
+SELECT thread_id, thread_name, thread_state 
 FROM information_schema.fe_threads 
 WHERE thread_state = 'RUNNABLE';
 ```
@@ -66,18 +65,10 @@ LIMIT 10;
 ### 搜索特定线程名称
 
 ```sql
-SELECT thread_id, thread_name, group_name, thread_state 
+SELECT thread_id, thread_name, thread_state 
 FROM information_schema.fe_threads 
 WHERE thread_name LIKE '%main%' 
    OR thread_name LIKE '%GC%';
-```
-
-### 按线程组名称查询
-
-```sql
-SELECT thread_id, thread_name, group_name, thread_state 
-FROM information_schema.fe_threads 
-WHERE group_name = 'main';
 ```
 
 ### 按守护线程状态统计

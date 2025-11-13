@@ -25,7 +25,6 @@ SchemaScanner::ColumnDesc SchemaFeThreadsScanner::_s_columns[] = {
         {"FE_ADDRESS", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
         {"THREAD_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
         {"THREAD_NAME", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
-        {"GROUP_NAME", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
         {"THREAD_STATE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
         {"IS_DAEMON", TypeDescriptor::from_logical_type(TYPE_BOOLEAN), 1, false},
         {"PRIORITY", TypeDescriptor::from_logical_type(TYPE_INT), sizeof(int32_t), false},
@@ -58,7 +57,6 @@ Status SchemaFeThreadsScanner::_get_fe_threads(RuntimeState* state) {
         info.fe_address = thread_info.fe_address;
         info.thread_id = thread_info.thread_id;
         info.thread_name = thread_info.thread_name;
-        info.group_name = thread_info.group_name;
         info.thread_state = thread_info.thread_state;
         info.is_daemon = thread_info.is_daemon;
         info.priority = thread_info.priority;
@@ -84,7 +82,7 @@ Status SchemaFeThreadsScanner::fill_chunk(ChunkPtr* chunk) {
     for (; _cur_idx < end; _cur_idx++) {
         auto& info = _infos[_cur_idx];
             for (const auto& [slot_id, index] : slot_id_to_index_map) {
-            if (slot_id < 1 || slot_id > 9) {
+            if (slot_id < 1 || slot_id > 8) {
                 return Status::InternalError(strings::Substitute("invalid slot id:$0", slot_id));
             }
             ColumnPtr column = (*chunk)->get_column_by_slot_id(slot_id);
@@ -107,33 +105,27 @@ Status SchemaFeThreadsScanner::fill_chunk(ChunkPtr* chunk) {
                 break;
             }
             case 4: {
-                // group_name
-                Slice v(info.group_name);
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&v);
-                break;
-            }
-            case 5: {
                 // thread_state
                 Slice v(info.thread_state);
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&v);
                 break;
             }
-            case 6: {
+            case 5: {
                 // is_daemon
                 fill_column_with_slot<TYPE_BOOLEAN>(column.get(), (void*)&info.is_daemon);
                 break;
             }
-            case 7: {
+            case 6: {
                 // priority
                 fill_column_with_slot<TYPE_INT>(column.get(), (void*)&info.priority);
                 break;
             }
-            case 8: {
+            case 7: {
                 // cpu_time_ms
                 fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.cpu_time_ms);
                 break;
             }
-            case 9: {
+            case 8: {
                 // user_time_ms
                 fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.user_time_ms);
                 break;
