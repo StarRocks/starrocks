@@ -750,6 +750,8 @@ public class MetadataMgr {
                     session.getSourceTablesCount() == 1) {
                 return StatisticsUtils.buildDefaultStatistics(columns.keySet());
             } else {
+                LOG.warn("Get table statistics from connector metadata. query: {}, table: {}, predicate: {}",
+                        session.getQueryId(), table.getName(), predicate);
                 Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
                 Statistics connectorBasicStats = connectorMetadata.map(metadata -> metadata.getTableStatistics(
                         session, table, columns, partitionKeys, predicate, limit, versionRange)).orElse(null);
