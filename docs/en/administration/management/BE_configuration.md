@@ -309,7 +309,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### local_library_dir
 
-- Default: ${UDF_RUNTIME_DIR}
+- Default: `${UDF_RUNTIME_DIR}`
 - Type: string
 - Unit: -
 - Is mutable: No
@@ -1099,7 +1099,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 
 ##### pull_load_task_dir
 
-- Default: ${STARROCKS_HOME}/var/pull_load
+- Default: `${STARROCKS_HOME}/var/pull_load`
 - Type: string
 - Unit: -
 - Is mutable: No
