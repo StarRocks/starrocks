@@ -1210,6 +1210,36 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Description: Whether to enable the Size-tiered Compaction policy for Primary Key tables. `true` indicates the Size-tiered Compaction strategy is enabled, and `false` indicates it is disabled.
 - Introduced in: This item takes effect for shared-data clusters from v3.2.4 and v3.1.10 onwards, and for shared-nothing clusters from v3.2.5 and v3.1.10 onwards.
 
+<<<<<<< HEAD
+=======
+##### enable_pk_parallel_execution
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Determines whether the Primary Key table parallel execution strategy is enabled. When enabled, PK index files will be generated during the import and compaction phases.
+- Introduced in: -
+
+##### pk_parallel_execution_threshold_bytes
+
+- Default: 314572800
+- Type: int
+- Unit: -
+- Is mutable: Yes
+- Description: When enable_pk_parallel_execution is set to true, the Primary Key table parallel execution strategy will be enabled if the data generated during import or compaction exceeds this threshold.
+- Introduced in: -
+
+##### enable_strict_delvec_crc_check
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: When enable_strict_delvec_crc_check is set to true, we will perform a strict CRC32 check on the delete vector, and if a mismatch is detected, a failure will be returned.
+- Introduced in: -
+
+>>>>>>> 6fe4f572a3 ([BugFix] add a configuration to skip delete vector CRC misjudgments in special upgrade/downgrade scenarios (#65354))
 ##### size_tiered_min_level_size
 
 - Default: 131072
