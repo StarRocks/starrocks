@@ -881,6 +881,30 @@ under the License.
             <artifactId>zero-allocation-hashing</artifactId>
             <version>0.16</version>
         </dependency>
+<<<<<<< HEAD
+=======
+
+        <dependency>
+            <groupId>org.jacoco</groupId>
+            <artifactId>org.jacoco.agent</artifactId>
+            <version>${jacoco.version}</version>
+            <classifier>runtime</classifier>
+            <scope>runtime</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>com.github.vertical-blank</groupId>
+            <artifactId>sql-formatter</artifactId>
+            <version>2.0.4</version>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/com.google.api-client/google-api-client -->
+        <dependency>
+            <groupId>com.google.api-client</groupId>
+            <artifactId>google-api-client</artifactId>
+            <version>2.8.1</version>
+        </dependency>
+>>>>>>> e93b3e3cb3 ([Enhancement] upgrade gcs hadoop connector to version 3 (#65127))
     </dependencies>
 
     <build>
