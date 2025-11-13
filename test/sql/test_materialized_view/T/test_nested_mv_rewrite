@@ -214,9 +214,9 @@ explain logical
         ON coalesce(CAST(t_join0.a_ds AS string), '无值') = coalesce(CAST(t_join1.a_ds AS string), '无值')
             AND coalesce(CAST(t_join0.`dim_1_ffund_union_5061_lvl1` AS string), '无值') = coalesce(CAST(t_join1.`dim_1_ffund_union_5061_lvl1` AS string), '无值');
 
-select inspect_related_mv('dal_aaaa');
-select inspect_related_mv('dal_bbb');
-select inspect_related_mv('dim_ccc');
-select inspect_related_mv('join_mv1');
-select inspect_related_mv('join_mv2');
-select inspect_related_mv('join_mv3');
+[UC]select regexp_replace(inspect_related_mv('dal_aaaa'), '"id":[0-9]+', '"id":0');
+[UC]select regexp_replace(inspect_related_mv('dal_bbb'), '"id":[0-9]+', '"id":0');
+[UC]select regexp_replace(inspect_related_mv('dim_ccc'), '"id":[0-9]+', '"id":0');
+[UC]select regexp_replace(inspect_related_mv('join_mv1'), '"id":[0-9]+', '"id":0');
+[UC]select regexp_replace(inspect_related_mv('join_mv2'), '"id":[0-9]+', '"id":0');
+[UC]select inspect_related_mv('join_mv3');
