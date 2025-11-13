@@ -35,14 +35,11 @@
 package com.starrocks.sql.ast.expression;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.catalog.Function;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.type.InvalidType;
 import com.starrocks.type.Type;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -111,10 +108,6 @@ public class CastExpr extends Expr {
         return targetTypeDef;
     }
 
-    private static String getFnName(Type targetType) {
-        return "castTo" + targetType.getPrimitiveType().toString();
-    }
-
     public boolean isNoOp() {
         return noOp;
     }
@@ -143,15 +136,7 @@ public class CastExpr extends Expr {
             return;
         }
 
-        FunctionName fnName = new FunctionName(getFnName(type));
-        Function searchDesc = new Function(fnName, ExprUtils.collectChildReturnTypes(this), InvalidType.INVALID, false);
-        if (isImplicit) {
-            fn = GlobalStateMgr.getCurrentState().getFunction(
-                    searchDesc, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-        } else {
-            fn = GlobalStateMgr.getCurrentState().getFunction(
-                    searchDesc, Function.CompareMode.IS_IDENTICAL);
-        }
+        ExprUtils.ensureCastFunctionExists(type, this, isImplicit);
     }
 
     @Override
@@ -193,8 +178,8 @@ public class CastExpr extends Expr {
         }
         CastExpr castExpr = (CastExpr) o;
 
-        if (targetTypeDef != null) {
-            return targetTypeDef.getType().equals(castExpr.getTargetTypeDef().getType());
+        if (targetTypeDef != null && !targetTypeDef.getType().equals(castExpr.getTargetTypeDef().getType())) {
+            return false;
         }
         return true;
     }

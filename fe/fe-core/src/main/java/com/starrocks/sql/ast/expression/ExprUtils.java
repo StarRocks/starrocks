@@ -15,6 +15,7 @@
 package com.starrocks.sql.ast.expression;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Function;
@@ -38,6 +39,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 public class ExprUtils {
@@ -47,6 +49,11 @@ public class ExprUtils {
     private static final String NEGATE_FN = "negate";
 
     public static final float FUNCTION_CALL_COST = 10;
+
+    private static final Set<String> TIMESTAMP_ADD_FUNCTIONS = ImmutableSet.of(
+            FunctionSet.DATE_ADD, FunctionSet.ADDDATE, FunctionSet.DAYS_ADD, FunctionSet.TIMESTAMPADD);
+    private static final Set<String> TIMESTAMP_SUB_FUNCTIONS = ImmutableSet.of(
+            FunctionSet.DATE_SUB, FunctionSet.SUBDATE, FunctionSet.DAYS_SUB);
 
     // Returns true if an Expr is a NOT CompoundPredicate.
     public static final com.google.common.base.Predicate<Expr> IS_NOT_PREDICATE =
@@ -261,6 +268,61 @@ public class ExprUtils {
         FunctionName fnName = new FunctionName(name);
         Function searchDesc = new Function(fnName, argTypes, retType, varArgs);
         return GlobalStateMgr.getCurrentState().getFunction(searchDesc, mode);
+    }
+
+    public static Function getCastFunction(Type targetType, Expr expr, boolean isImplicit) {
+        FunctionName fnName = new FunctionName(getCastFnName(targetType));
+        Function searchDesc = new Function(fnName, ExprUtils.collectChildReturnTypes(expr), InvalidType.INVALID, false);
+        Function.CompareMode mode = isImplicit
+                ? Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF
+                : Function.CompareMode.IS_IDENTICAL;
+        return GlobalStateMgr.getCurrentState().getFunction(searchDesc, mode);
+    }
+
+    public static void ensureCastFunctionExists(Type targetType, Expr expr, boolean isImplicit)
+            throws AnalysisException {
+        if (getCastFunction(targetType, expr, isImplicit) == null) {
+            throw new AnalysisException(
+                    String.format("No matching cast function from %s to %s",
+                            expr.getChild(0).getType(), targetType));
+        }
+    }
+
+    private static String getCastFnName(Type targetType) {
+        return "castTo" + targetType.getPrimitiveType().toString();
+    }
+
+    public static boolean requiresTimestampDiffCast(String funcName) {
+        if (funcName == null) {
+            return false;
+        }
+        return !TIMESTAMP_ADD_FUNCTIONS.contains(funcName) && !TIMESTAMP_SUB_FUNCTIONS.contains(funcName);
+    }
+
+    public static String getTimestampArithmeticFunctionName(TimestampArithmeticExpr expr) {
+        Preconditions.checkNotNull(expr.getTimeUnitIdent(), "time unit identifier cannot be null");
+        if (expr.getFuncName() != null) {
+            if (TIMESTAMP_ADD_FUNCTIONS.contains(expr.getFuncName())) {
+                return formatTimestampFunction(expr.getTimeUnitIdent(), "add");
+            } else if (TIMESTAMP_SUB_FUNCTIONS.contains(expr.getFuncName())) {
+                return formatTimestampFunction(expr.getTimeUnitIdent(), "sub");
+            } else {
+                return formatTimestampFunction(expr.getTimeUnitIdent(), "diff");
+            }
+        }
+        String suffix = expr.getOp() == ArithmeticExpr.Operator.ADD ? "add" : "sub";
+        return formatTimestampFunction(expr.getTimeUnitIdent(), suffix);
+    }
+
+    public static Function getTimestampArithmeticFunction(TimestampArithmeticExpr expr) {
+        String funcOpName = getTimestampArithmeticFunctionName(expr);
+        Type[] argumentTypes = expr.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
+        return getBuiltinFunction(funcOpName.toLowerCase(), argumentTypes,
+                Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+    }
+
+    private static String formatTimestampFunction(String timeUnitIdent, String suffix) {
+        return String.format("%sS_%s", timeUnitIdent, suffix);
     }
 
     public static boolean containsSlotRef(Expr root) {

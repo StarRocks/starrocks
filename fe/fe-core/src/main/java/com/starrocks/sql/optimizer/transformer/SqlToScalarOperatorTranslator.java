@@ -47,6 +47,7 @@ import com.starrocks.sql.ast.expression.DictionaryGetExpr;
 import com.starrocks.sql.ast.expression.ExistsPredicate;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprToSql;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FieldReference;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.GroupingFunctionCallExpr;
@@ -553,8 +554,9 @@ public final class SqlToScalarOperatorTranslator {
                 arguments.add(visit(argument, context.clone(node)));
             }
 
-            return new CallOperator(node.getFn().getFunctionName().getFunction(), node.getType(), arguments,
-                    node.getFn());
+            Function fn = ExprUtils.getTimestampArithmeticFunction(node);
+            Preconditions.checkNotNull(fn, "TimestampArithmeticExpr must resolve to a function");
+            return new CallOperator(fn.getFunctionName().getFunction(), node.getType(), arguments, fn);
         }
 
         private LogicalPlan getSubqueryPlan(QueryStatement queryStatement) {

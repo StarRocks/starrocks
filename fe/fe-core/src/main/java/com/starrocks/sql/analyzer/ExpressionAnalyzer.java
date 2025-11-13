@@ -391,12 +391,6 @@ public class ExpressionAnalyzer {
     }
 
     public static class Visitor implements AstVisitorExtendInterface<Void, Scope> {
-        private static final List<String> ADD_DATE_FUNCTIONS = Lists.newArrayList(FunctionSet.DATE_ADD,
-                FunctionSet.ADDDATE, FunctionSet.DAYS_ADD, FunctionSet.TIMESTAMPADD);
-        private static final List<String> SUB_DATE_FUNCTIONS =
-                Lists.newArrayList(FunctionSet.DATE_SUB, FunctionSet.SUBDATE,
-                        FunctionSet.DAYS_SUB);
-
         private final AnalyzeState analyzeState;
         private final ConnectContext session;
 
@@ -878,23 +872,13 @@ public class ExpressionAnalyzer {
         public Void visitTimestampArithmeticExpr(TimestampArithmeticExpr node, Scope scope) {
             node.setChild(0, TypeManager.addCastExpr(node.getChild(0), DateType.DATETIME));
 
-            String funcOpName;
-            if (node.getFuncName() != null) {
-                if (ADD_DATE_FUNCTIONS.contains(node.getFuncName())) {
-                    funcOpName = String.format("%sS_%s", node.getTimeUnitIdent(), "add");
-                } else if (SUB_DATE_FUNCTIONS.contains(node.getFuncName())) {
-                    funcOpName = String.format("%sS_%s", node.getTimeUnitIdent(), "sub");
-                } else {
-                    node.setChild(1, TypeManager.addCastExpr(node.getChild(1), DateType.DATETIME));
-                    funcOpName = String.format("%sS_%s", node.getTimeUnitIdent(), "diff");
-                }
-            } else {
-                funcOpName = String.format("%sS_%s", node.getTimeUnitIdent(),
-                        (node.getOp() == ArithmeticExpr.Operator.ADD) ? "add" : "sub");
+            if (node.getFuncName() != null && ExprUtils.requiresTimestampDiffCast(node.getFuncName())) {
+                node.setChild(1, TypeManager.addCastExpr(node.getChild(1), DateType.DATETIME));
             }
 
             Type[] argumentTypes = node.getChildren().stream().map(Expr::getType)
                     .toArray(Type[]::new);
+            String funcOpName = ExprUtils.getTimestampArithmeticFunctionName(node);
             Function fn = ExprUtils.getBuiltinFunction(funcOpName.toLowerCase(), argumentTypes,
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             if (fn == null) {
@@ -903,7 +887,6 @@ public class ExpressionAnalyzer {
                 throw new SemanticException(msg, node.getPos());
             }
             node.setType(fn.getReturnType());
-            node.setFn(fn);
             return null;
         }
 
@@ -2064,4 +2047,3 @@ public class ExpressionAnalyzer {
         expressionAnalyzer.analyzeWithVisitor(expression, state, scope, visitor);
     }
 }
-

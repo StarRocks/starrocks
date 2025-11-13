@@ -49,6 +49,7 @@ import java.util.Map;
  * They are executed as function call exprs in the BE.
  */
 public class TimestampArithmeticExpr extends Expr {
+
     private static final Map<String, TimeUnit> TIME_UNITS_MAP = new HashMap<String, TimeUnit>();
 
     static {

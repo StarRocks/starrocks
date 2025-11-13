@@ -2095,7 +2095,6 @@ public class MaterializedViewAnalyzer {
             Preconditions.checkNotNull(dateSubFn, "date_sub function is not found");
             TimestampArithmeticExpr newChild = new TimestampArithmeticExpr(FunctionSet.DATE_SUB, slotRef,
                     interval, "HOUR");
-            newChild.setFn(dateSubFn);
             newChild.setType(slotRef.getType());
             partitionByExpr.setChild(1, newChild);
         }
@@ -2109,7 +2108,6 @@ public class MaterializedViewAnalyzer {
             Preconditions.checkNotNull(dateAddFn, "date_add function is not found");
             TimestampArithmeticExpr dateAddFunc = new TimestampArithmeticExpr(FunctionSet.DATE_ADD, partitionByExpr,
                     interval, "HOUR");
-            dateAddFunc.setFn(dateAddFn);
             dateAddFunc.setType(slotRef.getType());
 
             return dateAddFunc;

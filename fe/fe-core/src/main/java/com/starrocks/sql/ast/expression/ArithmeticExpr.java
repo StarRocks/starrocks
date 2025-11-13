@@ -37,6 +37,7 @@ package com.starrocks.sql.ast.expression;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
+import com.starrocks.catalog.Function;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -80,7 +81,9 @@ public class ArithmeticExpr extends Expr {
             .add(Operator.MOD.name)
             .add(Operator.INT_DIVIDE.name)
             .build();
+
     private final Operator op;
+    protected Function fn;
 
     public enum OperatorPosition {
         BINARY_INFIX,
@@ -468,5 +471,13 @@ public class ArithmeticExpr extends Expr {
     @Override
     public boolean isSelfMonotonic() {
         return op.isMonotonic();
+    }
+
+    public void setFn(Function fn) {
+        this.fn = fn;
+    }
+
+    public Function getFn() {
+        return fn;
     }
 }

@@ -16,6 +16,7 @@ package com.starrocks.sql.ast.expression;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.Function;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
@@ -34,6 +35,7 @@ import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.thrift.TExprOpcode;
 import com.starrocks.thrift.TFloatLiteral;
 import com.starrocks.thrift.TFunction;
+import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.thrift.TInPredicate;
 import com.starrocks.thrift.TInfoFunc;
 import com.starrocks.thrift.TIntLiteral;
@@ -42,6 +44,8 @@ import com.starrocks.thrift.TPlaceHolder;
 import com.starrocks.thrift.TSlotRef;
 import com.starrocks.thrift.TStringLiteral;
 import com.starrocks.type.BooleanType;
+import com.starrocks.type.InvalidType;
+import com.starrocks.type.Type;
 import com.starrocks.type.TypeSerializer;
 
 import java.nio.ByteBuffer;
@@ -54,6 +58,9 @@ import java.util.function.BiConsumer;
 public class ExprToThriftVisitor implements AstVisitorExtendInterface<Void, TExprNode> {
 
     public static final ExprToThriftVisitor INSTANCE = new ExprToThriftVisitor();
+
+    private static final Function IS_NULL_FN = buildNullPredicateFn("is_null_pred");
+    private static final Function IS_NOT_NULL_FN = buildNullPredicateFn("is_not_null_pred");
 
     protected ExprToThriftVisitor() {
     }
@@ -71,6 +78,39 @@ public class ExprToThriftVisitor implements AstVisitorExtendInterface<Void, TExp
             result.add(ExprToThriftVisitor.treeToThrift(expr));
         }
         return result;
+    }
+
+    private static Function buildNullPredicateFn(String name) {
+        Function fn = new Function(new FunctionName(name),
+                new Type[] {InvalidType.INVALID}, BooleanType.BOOLEAN, false);
+        fn.setBinaryType(TFunctionBinaryType.BUILTIN);
+        return fn;
+    }
+
+    private static Function getFunction(Expr expr) {
+        if (expr instanceof FunctionCallExpr) {
+            return ((FunctionCallExpr) expr).getFn();
+        }
+        if (expr instanceof CastExpr) {
+            return ExprUtils.getCastFunction(expr.getType(), expr, ((CastExpr) expr).isImplicit());
+        }
+        if (expr instanceof ArithmeticExpr) {
+            return ((ArithmeticExpr) expr).getFn();
+        }
+        if (expr instanceof TimestampArithmeticExpr) {
+            Function fn = ExprUtils.getTimestampArithmeticFunction((TimestampArithmeticExpr) expr);
+            Preconditions.checkNotNull(fn, "TimestampArithmeticExpr must resolve to a builtin function");
+            return fn;
+        }
+        if (expr instanceof IsNullPredicate) {
+            return ((IsNullPredicate) expr).isNotNull() ? IS_NOT_NULL_FN : IS_NULL_FN;
+        }
+        if (expr instanceof LikePredicate) {
+            return ExprUtils.getBuiltinFunction(((LikePredicate) expr).getOp().name(),
+                    new Type[] {expr.getChild(0).getType(), expr.getChild(1).getType()},
+                    Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+        }
+        return null;
     }
 
     public static void treeToThriftHelper(Expr expr, TExpr container, BiConsumer<Expr, TExprNode> consumer) {
@@ -91,12 +131,13 @@ public class ExprToThriftVisitor implements AstVisitorExtendInterface<Void, TExp
         msg.num_children = children.size();
         msg.setHas_nullable_child(expr.hasNullableChild());
         msg.setIs_nullable(expr.isNullable());
-        if (expr.fn != null) {
-            TFunction tfn = expr.fn.toThrift();
+        Function fn = getFunction(expr);
+        if (fn != null) {
+            TFunction tfn = fn.toThrift();
             tfn.setIgnore_nulls(expr.getIgnoreNulls());
             msg.setFn(tfn);
-            if (expr.fn.hasVarArgs()) {
-                msg.setVararg_start_idx(expr.fn.getNumArgs() - 1);
+            if (fn.hasVarArgs()) {
+                msg.setVararg_start_idx(fn.getNumArgs() - 1);
             }
         }
         // BE no longer consumes output_scale; keep thrift field populated with a sentinel to preserve wire compatibility.

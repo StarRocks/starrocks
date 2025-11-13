@@ -40,7 +40,6 @@ import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-import com.starrocks.catalog.Function;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.TreeNode;
@@ -77,10 +76,6 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     protected boolean isAnalyzed = false;  // true after analyze() has been called
 
     protected boolean isFilter = false;
-
-    // The function to call. This can either be a scalar or aggregate function.
-    // Set in analyze().
-    protected Function fn;
 
     // Ignore nulls.
     private boolean ignoreNulls = false;
@@ -124,7 +119,6 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         originType = other.type;
         isAnalyzed = other.isAnalyzed;
         isConstant = other.isConstant;
-        fn = other.fn;
         printSqlInParens = other.printSqlInParens;
         children = ExprUtils.cloneList(other.children);
         hints = Lists.newArrayList(hints);
@@ -203,10 +197,6 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
 
     public boolean isFilter() {
         return isFilter;
-    }
-
-    public Function getFn() {
-        return fn;
     }
 
     public boolean getPrintSqlInParens() {
@@ -304,15 +294,7 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         if (obj == null || (obj.getClass() != this.getClass())) {
             return false;
         }
-        Expr expr = (Expr) obj;
-        if (fn == null && expr.fn == null) {
-            return true;
-        }
-        if (fn == null || expr.fn == null) {
-            return false;
-        }
-        // Both fn_'s are not null
-        return fn.equals(expr.fn);
+        return true;
     }
 
     @Override
@@ -565,10 +547,6 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return ((AstVisitorExtendInterface<R, C>) visitor).visitExpression(this, context);
-    }
-
-    public void setFn(Function fn) {
-        this.fn = fn;
     }
 
     public void setIgnoreNulls(boolean ignoreNulls) {

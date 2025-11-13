@@ -615,7 +615,6 @@ public class SimpleExpressionAnalyzer {
                         .join(Arrays.stream(argumentTypes).map(Type::toSql).collect(Collectors.toList())));
             }
             node.setType(fn.getReturnType());
-            node.setFn(fn);
             return null;
         }
 

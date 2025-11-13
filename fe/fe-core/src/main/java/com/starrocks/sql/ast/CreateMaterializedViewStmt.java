@@ -671,7 +671,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                     Function fn = ExprUtils.getBuiltinFunction(FunctionSet.TO_BITMAP, new Type[] {baseType},
                             Function.CompareMode.IS_IDENTICAL);
                     defineExpr = new FunctionCallExpr(FunctionSet.TO_BITMAP, Lists.newArrayList(defineExpr));
-                    defineExpr.setFn(fn);
+                    ((FunctionCallExpr) defineExpr).setFn(fn);
                     defineExpr.setType(BitmapType.BITMAP);
                 } else {
                     throw new SemanticException("Unsupported bitmap_agg type:" + baseType);
