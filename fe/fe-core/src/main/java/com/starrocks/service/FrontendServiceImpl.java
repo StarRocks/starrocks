@@ -89,6 +89,7 @@ import com.starrocks.common.DuplicatedRequestException;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
@@ -2725,14 +2726,15 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             ThreadInfo[] threadInfos = threadMXBean.getThreadInfo(threadIds);
 
             List<TFeThreadInfo> threads = Lists.newArrayList();
-            String feId = GlobalStateMgr.getCurrentState().getNodeMgr().getSelfNode().toString();
+            Pair<String, Integer> selfNode = GlobalStateMgr.getCurrentState().getNodeMgr().getSelfNode();
+            String feAddress = selfNode.first + ":" + selfNode.second;
 
             for (ThreadInfo threadInfo : threadInfos) {
                 if (threadInfo == null) {
                     continue;
                 }
                 TFeThreadInfo threadData = new TFeThreadInfo();
-                threadData.setFe_id(feId);
+                threadData.setFe_address(feAddress);
                 threadData.setThread_id(threadInfo.getThreadId());
                 threadData.setThread_name(threadInfo.getThreadName());
                 threadData.setThread_state(threadInfo.getThreadState().toString());

@@ -2196,7 +2196,7 @@ struct TDynamicTabletJobsResponse {
 }
 
 struct TFeThreadInfo {
-    1: optional string fe_id;
+    1: optional string fe_address;
     2: optional i64 thread_id;
     3: optional string thread_name;
     4: optional string thread_state;

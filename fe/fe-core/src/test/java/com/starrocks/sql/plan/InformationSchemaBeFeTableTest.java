@@ -133,7 +133,7 @@ public class InformationSchemaBeFeTableTest {
             while (stmt.getResultSet().next()) {
                 rowCount++;
                 // Verify columns exist
-                Assertions.assertNotNull(stmt.getResultSet().getString("FE_ID"));
+                Assertions.assertNotNull(stmt.getResultSet().getString("FE_ADDRESS"));
                 Assertions.assertNotNull(stmt.getResultSet().getLong("THREAD_ID"));
                 Assertions.assertNotNull(stmt.getResultSet().getString("THREAD_NAME"));
                 Assertions.assertNotNull(stmt.getResultSet().getString("THREAD_STATE"));
@@ -200,12 +200,12 @@ public class InformationSchemaBeFeTableTest {
             Assertions.assertTrue(foundCommonThread || stmt.getResultSet().getRow() > 0,
                     "Should find some common JVM threads");
 
-            // Test that we can query by FE_ID
+            // Test that we can query by FE_ADDRESS
             Assertions.assertTrue(stmt.execute(
-                    "select count(*) from information_schema.fe_threads where fe_id is not null"));
+                    "select count(*) from information_schema.fe_threads where fe_address is not null"));
             Assertions.assertTrue(stmt.getResultSet().next());
-            long feIdCount = stmt.getResultSet().getLong(1);
-            Assertions.assertTrue(feIdCount > 0, "All threads should have FE_ID");
+            long feAddressCount = stmt.getResultSet().getLong(1);
+            Assertions.assertTrue(feAddressCount > 0, "All threads should have FE_ADDRESS");
 
             // Test CPU time columns (may be -1 if not supported)
             Assertions.assertTrue(stmt.execute(

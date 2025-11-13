@@ -23,7 +23,7 @@
 namespace starrocks {
 
 struct FeThreadInfo {
-    std::string fe_id;
+    std::string fe_address;
     int64_t thread_id;
     std::string thread_name;
     std::string thread_state;

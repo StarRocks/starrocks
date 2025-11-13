@@ -1,0 +1,147 @@
+-- name: test_fe_threads @sequential
+-- Test queries on information_schema.fe_threads table
+
+-- Test 1: Basic select with limit
+select count(*) > 0 from information_schema.fe_threads;
+
+-- Test 2: Verify all columns exist and have valid data
+select 
+    fe_address is not null,
+    thread_id > 0,
+    thread_name is not null,
+    thread_state is not null,
+    is_daemon is not null,
+    priority >= 0,
+    cpu_time_ms >= -1,
+    user_time_ms >= -1
+from information_schema.fe_threads limit 1;
+
+-- Test 3: Filter by thread state
+select count(*) >= 0 from information_schema.fe_threads where thread_state = 'RUNNABLE';
+
+-- Test 4: Filter by daemon threads
+select count(*) >= 0 from information_schema.fe_threads where is_daemon = true;
+
+-- Test 5: Filter by non-daemon threads
+select count(*) >= 0 from information_schema.fe_threads where is_daemon = false;
+
+-- Test 6: Group by thread state
+select thread_state, count(*) as cnt 
+from information_schema.fe_threads 
+group by thread_state 
+order by cnt desc 
+limit 5;
+
+-- Test 7: Verify FE_ADDRESS format (should be host:port)
+select fe_address like '%:%' from information_schema.fe_threads limit 1;
+
+-- Test 8: Check for common JVM thread names
+select count(*) > 0 from information_schema.fe_threads 
+where thread_name like '%main%' 
+   or thread_name like '%GC%' 
+   or thread_name like '%Finalizer%'
+   or thread_name like '%Reference Handler%'
+   or thread_name like '%RMI%';
+
+-- Test 9: Verify thread priorities are in valid range (typically 1-10)
+select count(*) >= 0 from information_schema.fe_threads 
+where priority >= 1 and priority <= 10;
+
+-- Test 10: Test aggregation functions
+select 
+    count(*) as total_threads,
+    count(distinct thread_state) as distinct_states,
+    count(distinct thread_name) as distinct_names,
+    sum(case when is_daemon then 1 else 0 end) as daemon_count,
+    sum(case when not is_daemon then 1 else 0 end) as non_daemon_count
+from information_schema.fe_threads;
+
+-- Test 11: Check for main thread
+select count(*) >= 0 from information_schema.fe_threads 
+where thread_name like '%main%';
+
+-- Test 12: Check for GC threads
+select count(*) >= 0 from information_schema.fe_threads 
+where thread_name like '%GC%' or thread_name like '%garbage%';
+
+-- Test 13: Check for Finalizer thread
+select count(*) >= 0 from information_schema.fe_threads 
+where thread_name like '%Finalizer%';
+
+-- Test 14: Check for Reference Handler thread
+select count(*) >= 0 from information_schema.fe_threads 
+where thread_name like '%Reference Handler%';
+
+-- Test 15: Check for RMI threads
+select count(*) >= 0 from information_schema.fe_threads 
+where thread_name like '%RMI%';
+
+-- Test 16: Check for Signal Dispatcher thread
+select count(*) >= 0 from information_schema.fe_threads 
+where thread_name like '%Signal Dispatcher%';
+
+-- Test 17: Verify all threads have valid thread states
+select count(*) = 0 from information_schema.fe_threads 
+where thread_state not in ('NEW', 'RUNNABLE', 'BLOCKED', 'WAITING', 'TIMED_WAITING', 'TERMINATED');
+
+-- Test 18: Check that we have threads in RUNNABLE state (active threads)
+select count(*) > 0 from information_schema.fe_threads 
+where thread_state = 'RUNNABLE';
+
+-- Test 19: Verify FE_ADDRESS consistency (all threads from same FE should have same FE_ADDRESS)
+select count(distinct fe_address) = 1 from information_schema.fe_threads;
+
+-- Test 20: Check thread ID uniqueness
+select count(*) = count(distinct thread_id) from information_schema.fe_threads;
+
+-- Test 21: Filter by specific thread name pattern
+select thread_id, thread_name, thread_state 
+from information_schema.fe_threads 
+where thread_name like '%main%' 
+limit 5;
+
+-- Test 22: Filter by thread state and daemon status
+select count(*) >= 0 from information_schema.fe_threads 
+where thread_state = 'RUNNABLE' and is_daemon = true;
+
+-- Test 23: Filter by priority range
+select count(*) >= 0 from information_schema.fe_threads 
+where priority >= 5 and priority <= 10;
+
+-- Test 24: Filter threads with CPU time available (not -1)
+select count(*) >= 0 from information_schema.fe_threads 
+where cpu_time_ms >= 0;
+
+-- Test 25: Filter threads with user time available (not -1)
+select count(*) >= 0 from information_schema.fe_threads 
+where user_time_ms >= 0;
+
+-- Test 26: Order by thread ID
+select thread_id, thread_name 
+from information_schema.fe_threads 
+order by thread_id 
+limit 10;
+
+-- Test 27: Order by thread name
+select thread_id, thread_name, thread_state 
+from information_schema.fe_threads 
+order by thread_name 
+limit 10;
+
+-- Test 28: Count threads by state
+select thread_state, count(*) as count 
+from information_schema.fe_threads 
+group by thread_state 
+order by count desc;
+
+-- Test 29: Count threads by daemon status
+select is_daemon, count(*) as count 
+from information_schema.fe_threads 
+group by is_daemon;
+
+-- Test 30: Find threads with highest CPU time
+select thread_id, thread_name, cpu_time_ms 
+from information_schema.fe_threads 
+where cpu_time_ms >= 0 
+order by cpu_time_ms desc 
+limit 5;

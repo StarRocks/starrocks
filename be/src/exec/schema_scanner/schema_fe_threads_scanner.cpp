@@ -22,7 +22,7 @@
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaFeThreadsScanner::_s_columns[] = {
-        {"FE_ID", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"FE_ADDRESS", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
         {"THREAD_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
         {"THREAD_NAME", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
         {"THREAD_STATE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
@@ -54,7 +54,7 @@ Status SchemaFeThreadsScanner::_get_fe_threads(RuntimeState* state) {
 
     for (const auto& thread_info : response.threads) {
         auto& info = _infos.emplace_back();
-        info.fe_id = thread_info.fe_id;
+        info.fe_address = thread_info.fe_address;
         info.thread_id = thread_info.thread_id;
         info.thread_name = thread_info.thread_name;
         info.thread_state = thread_info.thread_state;
@@ -62,7 +62,7 @@ Status SchemaFeThreadsScanner::_get_fe_threads(RuntimeState* state) {
         info.priority = thread_info.priority;
         info.cpu_time_ms = thread_info.cpu_time_ms;
         info.user_time_ms = thread_info.user_time_ms;
-        VLOG(2) << "fe_id: " << info.fe_id << ", thread_id: " << info.thread_id
+        VLOG(2) << "fe_address: " << info.fe_address << ", thread_id: " << info.thread_id
                 << ", thread_name: " << info.thread_name << ", thread_state: " << info.thread_state;
     }
 
@@ -88,8 +88,8 @@ Status SchemaFeThreadsScanner::fill_chunk(ChunkPtr* chunk) {
             ColumnPtr column = (*chunk)->get_column_by_slot_id(slot_id);
             switch (slot_id) {
             case 1: {
-                // fe_id
-                Slice v(info.fe_id);
+                // fe_address
+                Slice v(info.fe_address);
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&v);
                 break;
             }

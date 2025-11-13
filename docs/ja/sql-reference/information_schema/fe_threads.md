@@ -10,7 +10,7 @@ displayed_sidebar: docs
 
 | **フィールド**       | **説明**                                                     |
 | -------------- | ------------------------------------------------------------ |
-| FE_ID          | FE ノードの ID（形式：`host:port`）。                        |
+| FE_ADDRESS     | FE ノードのアドレス（形式：`host:port`）。                   |
 | THREAD_ID      | Java スレッド ID。                                            |
 | THREAD_NAME    | スレッド名。                                                  |
 | THREAD_STATE   | スレッドの状態。可能な値：`NEW`、`RUNNABLE`、`BLOCKED`、`WAITING`、`TIMED_WAITING`、`TERMINATED`。 |
