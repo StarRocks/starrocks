@@ -917,7 +917,13 @@ static StatusOr<std::unique_ptr<ColumnIterator>> new_lake_dcg_column_iterator(
 
     auto dcg_segment = dcg_segment_result.value();
     if (ctx.dcg_read_files.count(dcg_segment->file_name()) == 0) {
-        ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(dcg_segment->file_info()));
+        RandomAccessFileOptions ropts;
+        if (!dcg_segment->file_info().encryption_meta.empty()) {
+            ASSIGN_OR_RETURN(auto info,
+                             KeyCache::instance().unwrap_encryption_meta(dcg_segment->file_info().encryption_meta));
+            ropts.encryption_info = std::move(info);
+        }
+        ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file_with_bundling(ropts, dcg_segment->file_info()));
         ctx.dcg_read_files[dcg_segment->file_name()] = std::move(read_file);
     }
     iter_opts.read_file = ctx.dcg_read_files[dcg_segment->file_name()].get();
