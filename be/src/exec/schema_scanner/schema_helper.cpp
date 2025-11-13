@@ -192,6 +192,13 @@ Status SchemaHelper::get_tablet_schedules(const SchemaScannerState& state, const
     });
 }
 
+Status SchemaHelper::get_fe_threads(const SchemaScannerState& state, const TGetFeThreadsRequest& request,
+                                    TGetFeThreadsResponse* response) {
+    return _call_rpc(state, [&request, &response](FrontendServiceConnection& client) {
+        client->getFeThreads(*response, request);
+    });
+}
+
 Status SchemaHelper::get_role_edges(const SchemaScannerState& state, const TGetRoleEdgesRequest& request,
                                     TGetRoleEdgesResponse* response) {
     return _call_rpc(state, [&request, &response](FrontendServiceConnection& client) {

@@ -14,13 +14,8 @@
 
 #include "exec/schema_scanner/schema_fe_threads_scanner.h"
 
-#include <simdjson.h>
-
-#include "agent/master_info.h"
 #include "exec/schema_scanner/schema_helper.h"
-#include "gutil/strings/numbers.h"
 #include "gutil/strings/substitute.h"
-#include "http/http_client.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 
@@ -43,37 +38,32 @@ SchemaFeThreadsScanner::SchemaFeThreadsScanner()
 SchemaFeThreadsScanner::~SchemaFeThreadsScanner() = default;
 
 Status SchemaFeThreadsScanner::_get_fe_threads(RuntimeState* state) {
-    for (const TFrontend& frontend : _param->frontends) {
-        std::string threads_json;
-        std::string url = "http://" + frontend.ip + ":" + SimpleItoa(frontend.http_port) + "/api/fe_threads";
-        auto timeout = state->query_options().query_timeout * 1000 / 2;
-        auto threads_cb = [&url, &threads_json, &timeout](HttpClient* client) {
-            RETURN_IF_ERROR(client->init(url));
-            client->set_timeout_ms(timeout);
-            RETURN_IF_ERROR(client->execute(&threads_json));
-            return Status::OK();
-        };
-        RETURN_IF_ERROR(HttpClient::execute_with_retry(2 /* retry times */, 1 /* sleep interval */, threads_cb));
-        VLOG(2) << "fe_threads: " << threads_json;
+    TGetFeThreadsRequest request;
+    if (nullptr != _param->current_user_ident) {
+        request.__set_auth_info(TAuthInfo());
+        request.auth_info.__set_current_user_ident(*(_param->current_user_ident));
+    }
 
-        simdjson::ondemand::parser parser;
-        simdjson::padded_string json_threads(threads_json);
-        simdjson::ondemand::document doc = parser.iterate(json_threads);
-        for (auto thread : doc["threads"]) {
-            auto& info = _infos.emplace_back();
-            info.fe_id = frontend.id;
-            info.thread_id = int64_t(thread["thread_id"]);
-            auto name = std::string_view(thread["thread_name"]);
-            info.thread_name = std::string(name.begin(), name.end());
-            auto state = std::string_view(thread["thread_state"]);
-            info.thread_state = std::string(state.begin(), state.end());
-            info.is_daemon = bool(thread["is_daemon"]);
-            info.priority = int32_t(thread["priority"]);
-            info.cpu_time_ms = int64_t(thread["cpu_time_ms"]);
-            info.user_time_ms = int64_t(thread["user_time_ms"]);
-            VLOG(2) << "fe_id: " << info.fe_id << ", thread_id: " << info.thread_id
-                    << ", thread_name: " << info.thread_name << ", thread_state: " << info.thread_state;
-        }
+    RETURN_IF_ERROR(SchemaScanner::init_schema_scanner_state(state));
+    TGetFeThreadsResponse response;
+    RETURN_IF_ERROR(SchemaHelper::get_fe_threads(_ss_state, request, &response));
+
+    if (response.status.status_code != TStatusCode::OK) {
+        return Status::InternalError(response.status.error_msgs[0]);
+    }
+
+    for (const auto& thread_info : response.threads) {
+        auto& info = _infos.emplace_back();
+        info.fe_id = thread_info.fe_id;
+        info.thread_id = thread_info.thread_id;
+        info.thread_name = thread_info.thread_name;
+        info.thread_state = thread_info.thread_state;
+        info.is_daemon = thread_info.is_daemon;
+        info.priority = thread_info.priority;
+        info.cpu_time_ms = thread_info.cpu_time_ms;
+        info.user_time_ms = thread_info.user_time_ms;
+        VLOG(2) << "fe_id: " << info.fe_id << ", thread_id: " << info.thread_id
+                << ", thread_name: " << info.thread_name << ", thread_state: " << info.thread_state;
     }
 
     return Status::OK();
@@ -83,7 +73,7 @@ Status SchemaFeThreadsScanner::start(RuntimeState* state) {
     _infos.clear();
     _cur_idx = 0;
     RETURN_IF_ERROR(_get_fe_threads(state));
-    return Status::OK();
+    return SchemaScanner::start(state);
 }
 
 Status SchemaFeThreadsScanner::fill_chunk(ChunkPtr* chunk) {

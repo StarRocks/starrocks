@@ -257,6 +257,13 @@ import com.starrocks.thrift.TGetTablesParams;
 import com.starrocks.thrift.TGetTablesResult;
 import com.starrocks.thrift.TGetTabletScheduleRequest;
 import com.starrocks.thrift.TGetTabletScheduleResponse;
+import com.starrocks.thrift.TGetFeThreadsRequest;
+import com.starrocks.thrift.TGetFeThreadsResponse;
+import com.starrocks.thrift.TFeThreadInfo;
+
+import java.lang.management.ManagementFactory;
+import java.lang.management.ThreadInfo;
+import java.lang.management.ThreadMXBean;
 import com.starrocks.thrift.TGetTaskInfoResult;
 import com.starrocks.thrift.TGetTaskRunInfoResult;
 import com.starrocks.thrift.TGetTasksParams;
@@ -2699,6 +2706,84 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         TGetTabletScheduleResponse response = GlobalStateMgr.getCurrentState().getTabletScheduler().getTabletSchedule(request);
         LOG.info("getTabletSchedule: {} return {} TabletSchedule", request, response.getTablet_schedulesSize());
         return response;
+    }
+
+    @Override
+    public TGetFeThreadsResponse getFeThreads(TGetFeThreadsRequest request) throws TException {
+        TGetFeThreadsResponse response = new TGetFeThreadsResponse();
+        TStatus status = new TStatus(TStatusCode.OK);
+        response.setStatus(status);
+
+        try {
+            ThreadMXBean threadMXBean = ManagementFactory.getThreadMXBean();
+            long[] threadIds = threadMXBean.getAllThreadIds();
+            ThreadInfo[] threadInfos = threadMXBean.getThreadInfo(threadIds);
+
+            List<TFeThreadInfo> threads = Lists.newArrayList();
+            String feId = GlobalStateMgr.getCurrentState().getNodeMgr().getSelfNode().getHost() + ":" +
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getSelfNode().getHttpPort();
+
+            for (ThreadInfo threadInfo : threadInfos) {
+                if (threadInfo == null) {
+                    continue;
+                }
+                TFeThreadInfo threadData = new TFeThreadInfo();
+                threadData.setFe_id(feId);
+                threadData.setThread_id(threadInfo.getThreadId());
+                threadData.setThread_name(threadInfo.getThreadName());
+                threadData.setThread_state(threadInfo.getThreadState().toString());
+
+                // Get thread object to check daemon status
+                Thread thread = findThreadById(threadInfo.getThreadId());
+                threadData.setIs_daemon(thread != null && thread.isDaemon());
+                threadData.setPriority(threadInfo.getPriority());
+
+                // Get CPU time if supported
+                long cpuTime = -1;
+                long userTime = -1;
+                if (threadMXBean.isThreadCpuTimeSupported()) {
+                    cpuTime = threadMXBean.getThreadCpuTime(threadInfo.getThreadId());
+                    if (cpuTime != -1) {
+                        cpuTime = cpuTime / 1000000; // Convert nanoseconds to milliseconds
+                    }
+                    if (threadMXBean instanceof com.sun.management.ThreadMXBean) {
+                        com.sun.management.ThreadMXBean sunThreadMXBean =
+                                (com.sun.management.ThreadMXBean) threadMXBean;
+                        userTime = sunThreadMXBean.getThreadUserTime(threadInfo.getThreadId());
+                        if (userTime != -1) {
+                            userTime = userTime / 1000000; // Convert nanoseconds to milliseconds
+                        }
+                    }
+                }
+                threadData.setCpu_time_ms(cpuTime);
+                threadData.setUser_time_ms(userTime);
+
+                threads.add(threadData);
+            }
+
+            response.setThreads(threads);
+        } catch (Exception e) {
+            LOG.warn("Failed to get FE threads", e);
+            status.setStatus_code(TStatusCode.INTERNAL_ERROR);
+            status.addToError_msgs("Failed to get FE threads: " + e.getMessage());
+        }
+
+        return response;
+    }
+
+    private Thread findThreadById(long threadId) {
+        ThreadGroup rootGroup = Thread.currentThread().getThreadGroup();
+        while (rootGroup.getParent() != null) {
+            rootGroup = rootGroup.getParent();
+        }
+        Thread[] threads = new Thread[rootGroup.activeCount() * 2];
+        int count = rootGroup.enumerate(threads, true);
+        for (int i = 0; i < count; i++) {
+            if (threads[i].getId() == threadId) {
+                return threads[i];
+            }
+        }
+        return null;
     }
 
     @Override
