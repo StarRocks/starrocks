@@ -1,5 +1,5 @@
 ---
-description: Apache Iceberg を使用したデータレイクハウス
+description: "Apache Iceberg を使用したデータレイクハウス"
 displayed_sidebar: docs
 ---
 
