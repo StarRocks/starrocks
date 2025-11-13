@@ -39,10 +39,8 @@ Status VariantFunctions::variant_segments_prepare(FunctionContext* context, Func
         return Status::OK();
     }
 
-    // Check if the json path column is constant
+    // Don't parse if the path is not constant
     if (!context->is_notnull_constant_column(1)) {
-        auto* path_state = new NativeVariantPath();
-        context->set_function_state(scope, path_state);
         return Status::OK();
     }
 
@@ -125,8 +123,8 @@ StatusOr<ColumnPtr> VariantFunctions::_do_variant_query(FunctionContext* context
             Variant variant(variant_value->get_metadata(), value);
             StatusOr<Variant> variant_field = VariantPath::seek(&variant, variant_segments_status.value());
             if (!variant_field.ok()) {
-                LOG(ERROR) << "Failed to seek variant path: " << path_slice.to_string()
-                           << "in variant: " << variant_value->to_string();
+                LOG(WARNING) << "Failed to seek variant path: " << path_slice.to_string()
+                           << "in the variant value: " << variant_value->to_string();
                 result.append_null();
                 continue;
             }
@@ -149,7 +147,7 @@ StatusOr<ColumnPtr> VariantFunctions::_do_variant_query(FunctionContext* context
                 }
             }
         } catch (const std::exception& e) {
-            LOG(ERROR) << "Error processing variant query: " << variant_value->to_string() << " with path "
+            LOG(WARNING) << "Error processing variant query: " << variant_value->to_string() << " with path "
                        << path_slice.to_string() << ": " << e.what();
             result.append_null();
         }
