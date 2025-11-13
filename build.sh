@@ -166,6 +166,7 @@ OPTS=$(${GETOPT_BIN} \
   -l 'with-gcov' \
   -l 'with-bench' \
   -l 'with-dynamic' \
+  -l 'module' \
   -l 'with-clang-tidy' \
   -l 'without-gcov' \
   -l 'without-java-ext' \
@@ -516,8 +517,8 @@ if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
         echo "build Backend module: ${BUILD_BE_MODULE}"
         time ${BUILD_SYSTEM} -j${PARALLEL} $BUILD_BE_MODULE
     else
-        time ${BUILD_SYSTEM} -j${PARALLEL}
         echo "Build all Backend modules"
+        time ${BUILD_SYSTEM} -j${PARALLEL}
     fi
 
     if [ "${WITH_CLANG_TIDY}" == "ON" ];then
@@ -667,10 +668,6 @@ if [ ${BUILD_BE} -eq 1 ]; then
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/jemalloc-debug/lib/libjemalloc.so.2 ${STARROCKS_OUTPUT}/be/lib/libjemalloc-dbg.so.2
     ln -s ./libjemalloc.so.2 ${STARROCKS_OUTPUT}/be/lib/libjemalloc.so
     
-    if [ "${ENABLE_MULTI_DYNAMIC_LIBS}" == "ON" ];then
-        cp -r -p ${STARROCKS_THIRDPARTY}/installed/lib64/libfmt.so.8 ${STARROCKS_OUTPUT}/be/lib/libfmt.so.8
-    fi
-
     # Copy pprof and FlameGraph tools
     if [ -d "${STARROCKS_THIRDPARTY}/installed/flamegraph" ]; then
         mkdir -p ${STARROCKS_OUTPUT}/be/bin/flamegraph/

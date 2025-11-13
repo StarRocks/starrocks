@@ -483,9 +483,9 @@ build_llvm() {
     -DLLVM_ENABLE_PIC:Bool=True \
     -DLLVM_ENABLE_TERMINFO:Bool=False \
     -DLLVM_TARGETS_TO_BUILD=${LLVM_TARGET} \
-    -DLLVM_BUILD_LLVM_DYLIB:BOOL=False \
-    -DLLVM_INCLUDE_TOOLS:BOOL=False \
-    -DLLVM_BUILD_TOOLS:BOOL=False \
+    -DLLVM_BUILD_LLVM_DYLIB:BOOL=ON \
+    -DLLVM_INCLUDE_TOOLS:BOOL=ON \
+    -DLLVM_BUILD_TOOLS:BOOL=ON \
     -DLLVM_INCLUDE_EXAMPLES:BOOL=False \
     -DLLVM_INCLUDE_TESTS:BOOL=False \
     -DLLVM_INCLUDE_BENCHMARKS:BOOL=False \
@@ -498,6 +498,7 @@ build_llvm() {
     REQUIRES_RTTI=1 ${BUILD_SYSTEM} -j$PARALLEL ${LLVM_TARGETS_TO_BUILD[@]}
     ${BUILD_SYSTEM} install-llvm-headers
     ${BUILD_SYSTEM} ${LLVM_TARGETS_TO_INSTALL[@]}
+    ${BUILD_SYSTEM} install-LLVM
 
     restore_compile_flags
 }
@@ -1369,6 +1370,8 @@ build_avro_c() {
     cd $TP_SOURCE_DIR/$AVRO_SOURCE/lang/c
     mkdir -p build
     cd build
+    
+    LDFLAGS="-L${TP_LIB_DIR}" \
     $CMAKE_CMD .. -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} -DCMAKE_INSTALL_LIBDIR=lib64 -DCMAKE_BUILD_TYPE=Release
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
@@ -1381,6 +1384,8 @@ build_avro_cpp() {
     cd $TP_SOURCE_DIR/$AVRO_SOURCE/lang/c++
     mkdir -p build
     cd build
+
+    LDFLAGS="-L${TP_LIB_DIR}" \
     $CMAKE_CMD .. -DCMAKE_BUILD_TYPE=Release -DBOOST_ROOT=${TP_INSTALL_DIR} -DBoost_USE_STATIC_RUNTIME=ON  -DCMAKE_PREFIX_PATH=${TP_INSTALL_DIR} -DSNAPPY_INCLUDE_DIR=${TP_INSTALL_DIR}/include -DSNAPPY_LIBRARIES=${TP_INSTALL_DIR}/lib
     LIBRARY_PATH=${TP_INSTALL_DIR}/lib64:$LIBRARY_PATH LD_LIBRARY_PATH=${STARROCKS_GCC_HOME}/lib64:$LD_LIBRARY_PATH ${BUILD_SYSTEM} -j$PARALLEL
 
@@ -1738,6 +1743,7 @@ declare -a all_packages=(
     fmt_shared
     ryu
     hadoop
+    hadoop_src
     jdk
     ragel
     hyperscan

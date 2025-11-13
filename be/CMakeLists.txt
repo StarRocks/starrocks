@@ -359,8 +359,8 @@ set_target_properties(benchmark_main PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_D
 
 if (ENABLE_MULTI_DYNAMIC_LIBS)
     add_library(fmt SHARED IMPORTED)
-    set_target_properties(fmt PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libfmt.so)
-    install(TARGETS ${LIB_NAME} DESTINATION ${OUTPUT_DIR}/lib)
+    set_target_properties(fmt PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libfmt.so.8)
+    install(FILES fmt DESTINATION ${OUTPUT_DIR}/lib)
 else()
     add_library(fmt STATIC IMPORTED)
     set_target_properties(fmt PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libfmt.a)
@@ -552,66 +552,7 @@ if ("${USE_STAROS}" STREQUAL "ON")
 endif()
 
 # LLVM
-set (LLVM_LIBRARIES
-    LLVMRuntimeDyld
-    LLVMBitstreamReader
-    LLVMOption
-    LLVMAsmPrinter
-    LLVMProfileData
-    LLVMAsmParser
-    LLVMOrcTargetProcess
-    LLVMExecutionEngine
-    LLVMBinaryFormat
-    LLVMDebugInfoDWARF
-    LLVMObjCARCOpts
-    LLVMPasses
-    LLVMCodeGen
-    LLVMFrontendOpenMP
-    LLVMMCDisassembler
-    LLVMJITLink
-    LLVMCFGuard
-    LLVMInstrumentation
-    LLVMInstCombine
-    LLVMipo
-    LLVMVectorize
-    LLVMIRReader
-    LLVMCore
-    LLVMTarget
-    LLVMMC
-    LLVMAnalysis
-    LLVMGlobalISel
-    LLVMScalarOpts
-    LLVMLinker
-    LLVMCoroutines
-    LLVMTargetParser
-    LLVMDemangle
-    LLVMRemarks
-    LLVMDebugInfoCodeView
-    LLVMAggressiveInstCombine
-    LLVMIRPrinter
-    LLVMOrcShared
-    LLVMOrcJIT
-    LLVMTextAPI
-    LLVMBitWriter
-    LLVMBitReader
-    LLVMObject
-    LLVMTransformUtils
-    LLVMSelectionDAG
-    LLVMMCParser
-    LLVMSupport
-)
-
-if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
-    list(APPEND LLVM_LIBRARIES LLVMX86CodeGen LLVMX86Desc LLVMX86Info LLVMX86AsmParser LLVMX86Disassembler)
-elseif ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "aarch64")
-    list(APPEND LLVM_LIBRARIES LLVMAArch64CodeGen LLVMAArch64Desc LLVMAArch64Info LLVMAArch64Utils LLVMAArch64AsmParser LLVMAArch64Disassembler)
-endif()
-
-foreach(lib IN ITEMS ${LLVM_LIBRARIES})
-    add_library(${lib} STATIC IMPORTED GLOBAL)
-    set_target_properties(${lib} PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/llvm/lib/lib${lib}.a)
-endforeach()
-
+include(cmake_modules/FindLLVM.cmake)
 
 # Check Clang-Tidy
 include(cmake_modules/FindClangTidy.cmake)
