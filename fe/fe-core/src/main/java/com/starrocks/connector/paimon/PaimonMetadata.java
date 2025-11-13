@@ -311,7 +311,7 @@ public class PaimonMetadata implements ConnectorMetadata {
             org.apache.paimon.table.DataTable paimonDataTable = (org.apache.paimon.table.DataTable) paimonNativeTable;
             SnapshotManager snapshotManager = new SnapshotManager(paimonNativeTable.fileIO(),
                     paimonDataTable.location(), null, null, null);
-            // result is ensured to sort by snapshot id
+            // the result is ensured to sort by snapshot id
             Iterator<Snapshot> iterator = snapshotManager.snapshotsWithinRange(
                     Optional.of(toSnapshotIdInclusive),
                     Optional.of(fromSnapshotIdExclusive)
@@ -320,7 +320,7 @@ public class PaimonMetadata implements ConnectorMetadata {
             Snapshot lastSnapshot = null;
             while (iterator.hasNext()) {
                 Snapshot currentSnapshot = iterator.next();
-                if  (lastSnapshot != null) {
+                if (lastSnapshot != null) {
                     long lastRecordCount = lastSnapshot.totalRecordCount();
                     long currentRecordCount = currentSnapshot.totalRecordCount();
                     long deltaRecordCount = currentRecordCount - lastRecordCount;
@@ -330,6 +330,24 @@ public class PaimonMetadata implements ConnectorMetadata {
                         result.add(TvrTableDeltaTrait.ofMonotonic(delta, stats));
                     } else {
                         result.add(TvrTableDeltaTrait.ofRetractable(delta, stats));
+                    }
+                } else {
+                    // if start snapshot is min, add it into result
+                    if (fromSnapshotExclusive.isEmpty()) {
+                        long currentRecordCount = currentSnapshot.totalRecordCount();
+                        TvrTableDelta delta = TvrTableDelta.of(fromSnapshotIdExclusive, currentSnapshot.id());
+                        TvrDeltaStats stats = TvrDeltaStats.of(currentRecordCount, 0L);
+                        if (currentSnapshot.commitKind() == Snapshot.CommitKind.APPEND) {
+                            result.add(TvrTableDeltaTrait.ofMonotonic(delta, stats));
+                        } else {
+                            result.add(TvrTableDeltaTrait.ofRetractable(delta, stats));
+                        }
+                    } else {
+                        // ensure this snapshot id is equal to from
+                        if (currentSnapshot.id() != fromSnapshotIdExclusive) {
+                            throw new SemanticException(String.format("Expect from snapshot id:{}, but got:{}",
+                                    fromSnapshotIdExclusive, currentSnapshot.id()));
+                        }
                     }
                 }
                 lastSnapshot = currentSnapshot;
