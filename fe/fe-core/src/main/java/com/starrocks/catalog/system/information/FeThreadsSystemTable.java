@@ -70,13 +70,10 @@ public class FeThreadsSystemTable {
             ThreadMXBean threadMXBean = ManagementFactory.getThreadMXBean();
             long[] threadIds = threadMXBean.getAllThreadIds();
             ThreadInfo[] threadInfos = threadMXBean.getThreadInfo(threadIds);
-
-            // Build a map of thread ID to Thread object once for efficient lookups
             Map<Long, Thread> threadMap = buildThreadMap();
-
             List<TFeThreadInfo> threads = Lists.newArrayList();
             Pair<String, Integer> selfNode = GlobalStateMgr.getCurrentState().getNodeMgr().getSelfNode();
-            String feAddress = selfNode.first + ":" + selfNode.second;
+            String feAddress = selfNode.toString();
 
             for (ThreadInfo threadInfo : threadInfos) {
                 if (threadInfo == null) {
@@ -101,13 +98,9 @@ public class FeThreadsSystemTable {
                     if (cpuTime != -1) {
                         cpuTime = cpuTime / 1000000; // Convert nanoseconds to milliseconds
                     }
-                    if (threadMXBean instanceof com.sun.management.ThreadMXBean) {
-                        com.sun.management.ThreadMXBean sunThreadMXBean =
-                                (com.sun.management.ThreadMXBean) threadMXBean;
-                        userTime = sunThreadMXBean.getThreadUserTime(threadInfo.getThreadId());
-                        if (userTime != -1) {
-                            userTime = userTime / 1000000; // Convert nanoseconds to milliseconds
-                        }
+                    userTime = threadMXBean.getThreadUserTime(threadInfo.getThreadId());
+                    if (userTime != -1) {
+                        userTime = userTime / 1000000; // Convert nanoseconds to milliseconds
                     }
                 }
                 threadData.setCpu_time_ms(cpuTime);
