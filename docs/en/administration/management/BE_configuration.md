@@ -223,7 +223,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: When a single allocation request exceeds the configured large-allocation threshold (g_large_memory_alloc_failure_threshold > 0 and requested size > threshold), this flag controls how the process responds. If true, StarRocks calls std::abort() immediately (hard crash) when such a large allocation is detected. If false, the allocation is blocked and the allocator returns failure (nullptr or ENOMEM) so callers can handle the error. This check only takes effect for allocations that are not wrapped with the TRY_CATCH_BAD_ALLOC path (the mem hook uses a different flow when bad-alloc is being caught). Enable for fail-fast debugging of unexpected huge allocations; keep disabled in production unless you want an immediate process abort on over-large allocation attempts.
+- Description: When a single allocation request exceeds the configured large-allocation threshold (g_large_memory_alloc_failure_threshold `>` 0 and requested size `>` threshold), this flag controls how the process responds. If true, StarRocks calls std::abort() immediately (hard crash) when such a large allocation is detected. If false, the allocation is blocked and the allocator returns failure (nullptr or ENOMEM) so callers can handle the error. This check only takes effect for allocations that are not wrapped with the TRY_CATCH_BAD_ALLOC path (the mem hook uses a different flow when bad-alloc is being caught). Enable for fail-fast debugging of unexpected huge allocations; keep disabled in production unless you want an immediate process abort on over-large allocation attempts.
 - Introduced in: v3.4.3, 3.5.0, 4.0.0
 
 ##### heartbeat_service_port
@@ -259,7 +259,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: Sets the number of worker threads for the "get_pindex" thread pool in UpdateManager, which is used to load / fetch persistent index data (used when applying rowsets for primary-key tables). At runtime, a config update will adjust the pool's maximum threads: if >0 that value is applied; if 0 the runtime callback uses the number of CPU cores (CpuInfo::num_cores()). On initialization the pool's max threads is computed as max(get_pindex_worker_count, max_apply_thread_cnt * 2) where max_apply_thread_cnt is the apply-thread pool maximum. Increase to raise parallelism for pindex loading; lowering reduces concurrency and memory/CPU usage.
+- Description: Sets the number of worker threads for the "get_pindex" thread pool in UpdateManager, which is used to load / fetch persistent index data (used when applying rowsets for primary-key tables). At runtime, a config update will adjust the pool's maximum threads: if `>0` that value is applied; if 0 the runtime callback uses the number of CPU cores (CpuInfo::num_cores()). On initialization the pool's max threads is computed as max(get_pindex_worker_count, max_apply_thread_cnt * 2) where max_apply_thread_cnt is the apply-thread pool maximum. Increase to raise parallelism for pindex loading; lowering reduces concurrency and memory/CPU usage.
 - Introduced in: v3.2.0
 
 ##### transaction_apply_thread_pool_num_min
@@ -304,7 +304,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Type: Double
 - Unit: -
 - Is mutable: Yes
-- Description: Threshold (uncompressed_size / compressed_size) used when deciding whether to send serialized row-batches over the network in compressed form. When compression is attempted (e.g., in DataStreamSender, exchange sink, tablet sink index channel, dictionary cache writer), StarRocks computes compress_ratio = uncompressed_size / compressed_size; it uses the compressed payload only if compress_ratio > rpc_compress_ratio_threshold. With the default 1.1, compressed data must be at least ~9.1% smaller than uncompressed to be used. Lower the value to prefer compression (more CPU for smaller bandwidth savings); raise it to avoid compression overhead unless it yields larger size reductions. Note: this applies to RPC/shuffle serialization and is effective only when row-batch compression is enabled (compress_rowbatches).
+- Description: Threshold (uncompressed_size / compressed_size) used when deciding whether to send serialized row-batches over the network in compressed form. When compression is attempted (e.g., in DataStreamSender, exchange sink, tablet sink index channel, dictionary cache writer), StarRocks computes compress_ratio = uncompressed_size / compressed_size; it uses the compressed payload only if compress_ratio `>` rpc_compress_ratio_threshold. With the default 1.1, compressed data must be at least ~9.1% smaller than uncompressed to be used. Lower the value to prefer compression (more CPU for smaller bandwidth savings); raise it to avoid compression overhead unless it yields larger size reductions. Note: this applies to RPC/shuffle serialization and is effective only when row-batch compression is enabled (compress_rowbatches).
 - Introduced in: v3.2.0
 
 ##### local_library_dir
@@ -313,7 +313,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Type: string
 - Unit: -
 - Is mutable: No
-- Description: Local directory on the BE where UDF (user-defined function) libraries are staged and where Python UDF worker processes operate. StarRocks copies UDF libraries from HDFS into this path, creates per-worker Unix domain sockets at <local_library_dir>/pyworker_<pid>, and chdirs Python worker processes into this directory before exec. The directory must exist, be writable by the BE process, and reside on a filesystem that supports Unix domain sockets (i.e., a local filesystem). Because this config is immutable at runtime, set it before startup and ensure adequate permissions and disk space on each BE.
+- Description: Local directory on the BE where UDF (user-defined function) libraries are staged and where Python UDF worker processes operate. StarRocks copies UDF libraries from HDFS into this path, creates per-worker Unix domain sockets at `<local_library_dir>/pyworker_<pid>`, and chdirs Python worker processes into this directory before exec. The directory must exist, be writable by the BE process, and reside on a filesystem that supports Unix domain sockets (i.e., a local filesystem). Because this config is immutable at runtime, set it before startup and ensure adequate permissions and disk space on each BE.
 - Introduced in: v3.2.0
 
 ##### thrift_connect_timeout_seconds
@@ -1179,7 +1179,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Type: Int
 - Unit: Threads
 - Is mutable: Yes
-- Description: Sets the maximum number of worker threads in the AgentServer thread pool that process TTaskType::CREATE (create-tablet) tasks submitted by FE. At BE startup this value is used as the thread-pool max (the pool is created with min threads = 1 and max queue size = unlimited), and changing it at runtime triggers ExecEnv::agent_server()->get_thread_pool(TTaskType::CREATE)->update_max_threads(...). Increase this to raise concurrent tablet creation throughput (useful during bulk load or partition creation); decreasing it throttles concurrent create operations. Raising the value increases CPU, memory and I/O concurrency and may cause contention; the thread pool enforces at least one thread, so values less than 1 have no practical effect.
+- Description: Sets the maximum number of worker threads in the AgentServer thread pool that process TTaskType::CREATE (create-tablet) tasks submitted by FE. At BE startup this value is used as the thread-pool max (the pool is created with min threads = 1 and max queue size = unlimited), and changing it at runtime triggers `ExecEnv::agent_server()->get_thread_pool(TTaskType::CREATE)->update_max_threads(...)`. Increase this to raise concurrent tablet creation throughput (useful during bulk load or partition creation); decreasing it throttles concurrent create operations. Raising the value increases CPU, memory and I/O concurrency and may cause contention; the thread pool enforces at least one thread, so values less than 1 have no practical effect.
 - Introduced in: v3.2.0
 
 ##### drop_tablet_worker_count
@@ -1197,7 +1197,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Type: Int
 - Unit: Threads
 - Is mutable: Yes
-- Description: Controls the maximum number of worker threads used by the UpdateManager's "update_apply" thread pool — the pool that applies rowsets for transactions (notably for primary-key tables). A value >0 sets a fixed maximum thread count; 0 (the default) makes the pool size equal to the number of CPU cores. The configured value is applied at startup (UpdateManager::init) and can be changed at runtime via the update-config HTTP action, which updates the pool's max threads. Tune this to increase apply concurrency (throughput) or limit CPU/memory contention; min threads and idle timeout are governed by transaction_apply_thread_pool_num_min and transaction_apply_worker_idle_time_ms respectively.
+- Description: Controls the maximum number of worker threads used by the UpdateManager's "update_apply" thread pool — the pool that applies rowsets for transactions (notably for primary-key tables). A value `>0` sets a fixed maximum thread count; 0 (the default) makes the pool size equal to the number of CPU cores. The configured value is applied at startup (UpdateManager::init) and can be changed at runtime via the update-config HTTP action, which updates the pool's max threads. Tune this to increase apply concurrency (throughput) or limit CPU/memory contention; min threads and idle timeout are governed by transaction_apply_thread_pool_num_min and transaction_apply_worker_idle_time_ms respectively.
 - Introduced in: v3.2.0
 
 ##### transaction_apply_worker_idle_time_ms
@@ -1386,7 +1386,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Type: double
 - Unit: Dimensionless (compression ratio)
 - Is mutable: Yes
-- Description: Threshold used by the serialization compression strategy to judge whether observed LZ4 compression is "good". In compress_strategy.cpp this value divides the observed compress_ratio when computing a reward metric together with lz4_expected_compression_speed_mbps; if the combined reward > 1.0 the strategy records positive feedback. Increasing this value raises the expected compression ratio (making the condition harder to satisfy), while lowering it makes it easier for observed compression to be considered satisfactory. Tune to match typical data compressibility. Valid range: MIN=1, MAX=65537.
+- Description: Threshold used by the serialization compression strategy to judge whether observed LZ4 compression is "good". In compress_strategy.cpp this value divides the observed compress_ratio when computing a reward metric together with lz4_expected_compression_speed_mbps; if the combined reward `>` 1.0 the strategy records positive feedback. Increasing this value raises the expected compression ratio (making the condition harder to satisfy), while lowering it makes it easier for observed compression to be considered satisfactory. Tune to match typical data compressibility. Valid range: MIN=1, MAX=65537.
 - Introduced in: v3.4.1, 3.5.0, 4.0.0
 
 ##### lz4_expected_compression_speed_mbps
@@ -1395,7 +1395,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Type: double
 - Unit: MB/s
 - Is mutable: Yes
-- Description: Expected LZ4 compression throughput in megabytes per second used by the adaptive compression policy (CompressStrategy). The feedback routine computes a reward_ratio = (observed_compression_ratio / lz4_expected_compression_ratio) * (observed_speed / lz4_expected_compression_speed_mbps). A reward_ratio > 1.0 increments the positive counter (alpha), otherwise the negative counter (beta); this influences whether future data will be compressed. Tune this value to reflect typical LZ4 throughput on your hardware — raising it makes the policy harder to classify a run as "good" (requires higher observed speed), lowering it makes classification easier. Must be a positive finite number.
+- Description: Expected LZ4 compression throughput in megabytes per second used by the adaptive compression policy (CompressStrategy). The feedback routine computes a reward_ratio = (observed_compression_ratio / lz4_expected_compression_ratio) * (observed_speed / lz4_expected_compression_speed_mbps). A reward_ratio `>` 1.0 increments the positive counter (alpha), otherwise the negative counter (beta); this influences whether future data will be compressed. Tune this value to reflect typical LZ4 throughput on your hardware — raising it makes the policy harder to classify a run as "good" (requires higher observed speed), lowering it makes classification easier. Must be a positive finite number.
 - Introduced in: v3.4.1, 3.5.0, 4.0.0
 
 ##### memory_limitation_per_thread_for_schema_change
@@ -1893,7 +1893,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Type: Int
 - Unit: Levels
 - Is mutable: Yes
-- Description: Limits how many size-tiered levels may be merged into a single primary-key real-time compaction task. During the PK size-tiered compaction selection, StarRocks builds ordered "levels" of rowsets by size and will add successive levels into the chosen compaction input until this limit is reached (the code uses compaction_level <= size_tiered_max_compaction_level). The value is inclusive and counts the number of distinct size tiers merged (the top level is counted as 1). Effective only when the PK size-tiered compaction strategy is enabled; raising it lets a compaction task include more levels (larger, more I/O- and CPU-intensive merges, potential higher write amplification), while lowering it restricts merges and reduces task size and resource usage.
+- Description: Limits how many size-tiered levels may be merged into a single primary-key real-time compaction task. During the PK size-tiered compaction selection, StarRocks builds ordered "levels" of rowsets by size and will add successive levels into the chosen compaction input until this limit is reached (the code uses compaction_level `<=` size_tiered_max_compaction_level). The value is inclusive and counts the number of distinct size tiers merged (the top level is counted as 1). Effective only when the PK size-tiered compaction strategy is enabled; raising it lets a compaction task include more levels (larger, more I/O- and CPU-intensive merges, potential higher write amplification), while lowering it restricts merges and reduces task size and resource usage.
 - Introduced in: v4.0.0
 
 ##### enable_strict_delvec_crc_check
@@ -2459,7 +2459,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Type: Long
 - Unit: Percent
 - Is mutable: Yes
-- Description: High water memory threshold expressed as a percentage of the process memory limit. When total memory consumption rises above this percentage, BE begins to free memory gradually (currently by evicting data cache and update cache) to relieve pressure. The monitor uses this value to compute memory_high = mem_limit * memory_high_level / 100 and, if consumption > memory_high, performs controlled eviction guided by the GC advisor; if consumption exceeds memory_urgent_level (a separate config), more aggressive immediate reductions occur. This value is also consulted to disable certain memory‑intensive operations (for example, primary-key preload) when the threshold is exceeded. Must satisfy validation with memory_urgent_level (memory_urgent_level > memory_high_level, memory_high_level >= 1, memory_urgent_level <= 100).
+- Description: High water memory threshold expressed as a percentage of the process memory limit. When total memory consumption rises above this percentage, BE begins to free memory gradually (currently by evicting data cache and update cache) to relieve pressure. The monitor uses this value to compute memory_high = mem_limit * memory_high_level / 100 and, if consumption `>` memory_high, performs controlled eviction guided by the GC advisor; if consumption exceeds memory_urgent_level (a separate config), more aggressive immediate reductions occur. This value is also consulted to disable certain memory‑intensive operations (for example, primary-key preload) when the threshold is exceeded. Must satisfy validation with memory_urgent_level (memory_urgent_level `>` memory_high_level, memory_high_level `>=` 1, memory_urgent_level `<=` 100).
 - Introduced in: v3.2.0
 
 ##### upload_buffer_size
