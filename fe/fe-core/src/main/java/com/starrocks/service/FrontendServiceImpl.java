@@ -2720,8 +2720,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             ThreadInfo[] threadInfos = threadMXBean.getThreadInfo(threadIds);
 
             List<TFeThreadInfo> threads = Lists.newArrayList();
-            String feId = GlobalStateMgr.getCurrentState().getNodeMgr().getSelfNode().getHost() + ":" +
-                    GlobalStateMgr.getCurrentState().getNodeMgr().getSelfNode().getHttpPort();
+            Pair<String, Integer> selfNode = GlobalStateMgr.getCurrentState().getNodeMgr().getSelfNode();
+            String feId = selfNode.first + ":" + selfNode.second;
 
             for (ThreadInfo threadInfo : threadInfos) {
                 if (threadInfo == null) {
