@@ -634,6 +634,25 @@ Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, ui
                              fs::new_random_access_file(opts, tablet_mgr->delvec_location(metadata.id(), delvec_name)));
         }
         RETURN_IF_ERROR(rf->read_at_fully(iter->second.offset(), buf.data(), iter->second.size()));
+<<<<<<< HEAD
+=======
+        if (iter->second.has_crc32c()) {
+            // check crc32c
+            uint32_t crc32c = crc32c::Value(buf.data(), iter->second.size());
+            if (crc32c != crc32c::Unmask(iter->second.crc32c())) {
+                LOG(ERROR) << fmt::format(
+                        "delvec crc32c mismatch, tabletid {}, delvecfile {}, offset {}, size {}, expect crc32c {}, "
+                        "actual "
+                        "crc32c {}",
+                        metadata.id(), delvec_name, iter->second.offset(), iter->second.size(),
+                        crc32c::Unmask(iter->second.crc32c()), crc32c);
+                if (config::enable_strict_delvec_crc_check) {
+                    return Status::Corruption(fmt::format("delvec crc32c mismatch. expect crc32c {}, actual {}",
+                                                          crc32c::Unmask(iter->second.crc32c()), crc32c));
+                }
+            }
+        }
+>>>>>>> fa54ee543b ([BugFix] add a configuration to skip delete vector CRC misjudgments in special upgrade/downgrade scenarios (backport #65354) (#65422))
         // parse delvec
         RETURN_IF_ERROR(delvec->load(iter->second.version(), buf.data(), iter->second.size()));
         // put in cache

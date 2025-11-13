@@ -948,6 +948,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: 主キーテーブルのサイズ階層型コンパクションポリシーを有効にするかどうか。`true` はサイズ階層型コンパクション戦略が有効であることを示し、`false` は無効であることを示します。この項目は、共有データクラスタでは v3.2.4 および v3.1.10 以降、共有なしクラスタでは v3.2.5 および v3.1.10 以降で有効になります。
 - 導入バージョン: -
 
+##### enable_strict_delvec_crc_check
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 可変: はい
+- 説明: enable_strict_delvec_crc_check を true に設定すると、delete vector の CRC32 を厳密にチェックし、一致しない場合はエラーを返します。
+- 導入バージョン: -
+
 ##### size_tiered_min_level_size
 
 - デフォルト: 131072
