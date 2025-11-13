@@ -1060,8 +1060,7 @@ void LakeServiceImpl::vacuum_full(::google::protobuf::RpcController* controller,
 
 void LakeServiceImpl::warm_up_segment(::google::protobuf::RpcController* controller,
                                       const ::starrocks::WarmUpSegmentRequest* request,
-                                      ::starrocks::WarmUpSegmentResponse* response,
-                                      ::google::protobuf::Closure* done) {
+                                      ::starrocks::WarmUpSegmentResponse* response, ::google::protobuf::Closure* done) {
     brpc::ClosureGuard guard(done);
     auto cntl = static_cast<brpc::Controller*>(controller);
 
@@ -1100,15 +1099,14 @@ void LakeServiceImpl::warm_up_segment(::google::protobuf::RpcController* control
 
     // Get attachment (block data)
     butil::IOBuf& attachment = cntl->request_attachment();
-    
+
     if (attachment.size() == 0) {
         LOG(WARNING) << "Received warmup request with empty attachment. tablet_id=" << request->tablet_id();
         Status::InvalidArgument("Empty attachment").to_protobuf(response->mutable_status());
         return;
     }
-    
-    VLOG(2) << "Received warmup request. tablet_id=" << request->tablet_id()
-            << " blocks=" << request->blocks_size()
+
+    VLOG(2) << "Received warmup request. tablet_id=" << request->tablet_id() << " blocks=" << request->blocks_size()
             << " attachment_size=" << attachment.size();
 
     // Return success immediately and process blocks asynchronously
@@ -1125,45 +1123,43 @@ void LakeServiceImpl::warm_up_segment(::google::protobuf::RpcController* control
     attachment_copy.append(attachment);
 
     // Process blocks asynchronously in thread pool
-    auto task = [tablet_id = request->tablet_id(), segment_path = request->segment_path(), 
+    auto task = [tablet_id = request->tablet_id(), segment_path = request->segment_path(),
                  blocks = std::vector<BlockData>(request->blocks().begin(), request->blocks().end()),
-                 attachment_copy = std::move(attachment_copy),
-                 block_cache]() mutable {
+                 attachment_copy = std::move(attachment_copy), block_cache]() mutable {
         int32_t cached_count = 0;
-        
+
         // Read block data from attachment (zero-copy)
         for (const auto& block : blocks) {
             // Check if we have enough data in attachment
             if (attachment_copy.size() < block.size()) {
-                LOG(WARNING) << "Not enough data in attachment. tablet_id=" << tablet_id
-                             << " expected=" << block.size() << " available=" << attachment_copy.size();
+                LOG(WARNING) << "Not enough data in attachment. tablet_id=" << tablet_id << " expected=" << block.size()
+                             << " available=" << attachment_copy.size();
                 break;
             }
-            
+
             // Read block data from attachment
             std::string buffer;
             buffer.resize(block.size());
             size_t copied = attachment_copy.cutn(buffer.data(), block.size());
-            
+
             if (copied != block.size()) {
                 LOG(WARNING) << "Failed to read from attachment. tablet_id=" << tablet_id
                              << " expected=" << block.size() << " copied=" << copied;
                 continue;
             }
-            
+
             // Write to cache
             Status st = block_cache->write(block.cache_key(), block.offset(), block.size(), buffer.data());
             if (st.ok()) {
                 cached_count++;
             } else {
-                LOG(WARNING) << "Failed to cache block. tablet_id=" << tablet_id
-                             << " cache_key=" << block.cache_key() << " offset=" << block.offset()
-                             << " size=" << block.size() << " error=" << st;
+                LOG(WARNING) << "Failed to cache block. tablet_id=" << tablet_id << " cache_key=" << block.cache_key()
+                             << " offset=" << block.offset() << " size=" << block.size() << " error=" << st;
             }
         }
-        
-        VLOG(2) << "Finished async warm_up_segment. tablet_id=" << tablet_id
-                << " cached_blocks=" << cached_count << "/" << blocks.size();
+
+        VLOG(2) << "Finished async warm_up_segment. tablet_id=" << tablet_id << " cached_blocks=" << cached_count << "/"
+                << blocks.size();
     };
 
     auto st = thread_pool->submit_func(std::move(task));

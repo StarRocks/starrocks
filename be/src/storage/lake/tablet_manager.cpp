@@ -73,7 +73,7 @@ TabletManager::TabletManager(std::shared_ptr<LocationProvider> location_provider
           _compaction_scheduler(std::make_unique<CompactionScheduler>(this)),
           _update_mgr(update_mgr) {
     _update_mgr->set_tablet_mgr(this);
-    
+
     // Initialize segment warmup manager
     auto* env = ExecEnv::GetInstance();
     if (env != nullptr) {
@@ -1063,7 +1063,8 @@ StatusOr<SegmentPtr> TabletManager::load_segment(const FileInfo& segment_info, i
         } else {
             ASSIGN_OR_RETURN(fs, FileSystem::CreateSharedFromString(segment_info.path));
         }
-        segment = std::make_shared<starrocks::Segment>(std::move(fs), segment_info, segment_id, std::move(tablet_schema), this);
+        segment = std::make_shared<starrocks::Segment>(std::move(fs), segment_info, segment_id,
+                                                       std::move(tablet_schema), this);
         if (fill_metadata_cache) {
             // NOTE: the returned segment may be not the same as the parameter passed in
             // Use the one in cache if the same key already exists

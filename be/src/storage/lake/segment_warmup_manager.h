@@ -14,13 +14,13 @@
 
 #pragma once
 
+#include <butil/iobuf.h>
+
 #include <atomic>
 #include <memory>
 #include <mutex>
 #include <string>
 #include <vector>
-
-#include <butil/iobuf.h>
 
 #include "common/status.h"
 #include "gen_cpp/lake_service.pb.h"
@@ -88,4 +88,3 @@ private:
 
 } // namespace lake
 } // namespace starrocks
-
