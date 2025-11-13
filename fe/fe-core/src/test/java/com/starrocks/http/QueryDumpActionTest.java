@@ -24,14 +24,9 @@ import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
 import org.awaitility.Awaitility;
-<<<<<<< HEAD
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
-=======
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
-import org.junit.jupiter.api.Test;
->>>>>>> 6008fcc33d ([UT] Disable unstable UT (#63985))
 
 import java.io.IOException;
 import java.util.concurrent.TimeUnit;
@@ -53,7 +48,7 @@ public class QueryDumpActionTest extends StarRocksHttpTestCase {
         ExecuteEnv.setup();
     }
 
-    @Disabled
+    @Ignore
     @Test
     public void testSuccess() throws Exception {
         try (Response response = postQueryDump(DB_NAME, true, "select * from testTbl")) {
