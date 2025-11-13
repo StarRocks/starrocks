@@ -2737,10 +2737,15 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 threadData.setFe_address(feAddress);
                 threadData.setThread_id(threadInfo.getThreadId());
                 threadData.setThread_name(threadInfo.getThreadName());
-                threadData.setThread_state(threadInfo.getThreadState().toString());
-
-                // Get thread object to check daemon status
+                
+                // Get thread object to check daemon status and get thread group name
                 Thread thread = findThreadById(threadInfo.getThreadId());
+                String groupName = "";
+                if (thread != null && thread.getThreadGroup() != null) {
+                    groupName = thread.getThreadGroup().getName();
+                }
+                threadData.setGroup_name(groupName);
+                threadData.setThread_state(threadInfo.getThreadState().toString());
                 threadData.setIs_daemon(thread != null && thread.isDaemon());
                 threadData.setPriority(threadInfo.getPriority());
 
