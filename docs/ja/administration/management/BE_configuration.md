@@ -948,26 +948,6 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: 主キーテーブルのサイズ階層型コンパクションポリシーを有効にするかどうか。`true` はサイズ階層型コンパクション戦略が有効であることを示し、`false` は無効であることを示します。この項目は、共有データクラスタでは v3.2.4 および v3.1.10 以降、共有なしクラスタでは v3.2.5 および v3.1.10 以降で有効になります。
 - 導入バージョン: -
 
-<<<<<<< HEAD
-=======
-##### enable_pk_parallel_execution
-
-- デフォルト: true
-- タイプ: Boolean
-- 単位: -
-- 可変: はい
-- 説明: Primary Key テーブルの並列実行戦略を有効にするかどうかを決定します。有効化されると、インポートおよびコンパクションの段階で PK インデックスファイルが生成されます。
-- 導入バージョン: -
-
-##### pk_parallel_execution_threshold_bytes
-
-- デフォルト: 314572800
-- タイプ: Int
-- 単位: -
-- 可変: はい
-- 説明: enable_pk_parallel_execution が true に設定されている場合、インポートまたはコンパクションで生成されるデータがこの閾値を超えると、Primary Key テーブルの並列実行戦略が有効になります。
-- 導入バージョン: -
-
 ##### enable_strict_delvec_crc_check
 
 - デフォルト: true
@@ -977,7 +957,6 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: enable_strict_delvec_crc_check を true に設定すると、delete vector の CRC32 を厳密にチェックし、一致しない場合はエラーを返します。
 - 導入バージョン: -
 
->>>>>>> 6fe4f572a3 ([BugFix] add a configuration to skip delete vector CRC misjudgments in special upgrade/downgrade scenarios (#65354))
 ##### size_tiered_min_level_size
 
 - デフォルト: 131072
