@@ -551,36 +551,34 @@ public class TabletChecker extends FrontendDaemon {
             Map.Entry<Long, Map<Long, Set<PrioPart>>> dbEntry = iter.next();
             long dbId = dbEntry.getKey();
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
-            if (db == null) {
+            if (db == null || dbEntry.getValue().isEmpty()) {
                 iter.remove();
                 continue;
             }
 
             Locker locker = new Locker();
-            locker.lockDatabase(db.getId(), LockType.READ);
-            try {
-                for (Map.Entry<Long, Set<PrioPart>> tblEntry : dbEntry.getValue().entrySet()) {
-                    long tblId = tblEntry.getKey();
-                    OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tblId);
+            for (Map.Entry<Long, Set<PrioPart>> tblEntry : dbEntry.getValue().entrySet()) {
+                long tblId = tblEntry.getKey();
+                locker.lockTableWithIntensiveDbLock(db.getId(), tblId, LockType.READ);
+                try {
+                    Table tbl = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tblId);
                     if (tbl == null) {
                         deletedUrgentTable.add(Pair.create(dbId, tblId));
                         continue;
                     }
 
-                    Set<PrioPart> parts = tblEntry.getValue();
-                    parts = parts.stream().filter(p -> (tbl.getPhysicalPartition(p.partId) != null && !p.isTimeout())).collect(
-                            Collectors.toSet());
-                    if (parts.isEmpty()) {
+                    boolean hasAny = tblEntry.getValue().stream()
+                            .anyMatch(p -> (tbl.getPhysicalPartition(p.partId) != null && !p.isTimeout()));
+                    if (!hasAny) {
                         deletedUrgentTable.add(Pair.create(dbId, tblId));
                     }
+                } finally {
+                    locker.unLockTableWithIntensiveDbLock(db.getId(), tblId, LockType.READ);
                 }
-
-                if (dbEntry.getValue().isEmpty()) {
-                    iter.remove();
-                }
-            } finally {
-                locker.unLockDatabase(db.getId(), LockType.READ);
             }
+            // NOTE: One-cycle delay in cleanup
+            // If all the tables in this db are added into `deletedUrgentTable`, the dbEntry will be empty
+            // after the tables are removed from copiedUrgentTable and will be removed in next cycle.
         }
         for (Pair<Long, Long> prio : deletedUrgentTable) {
             copiedUrgentTable.remove(prio.first, prio.second);
@@ -671,6 +669,19 @@ public class TabletChecker extends FrontendDaemon {
         return infos;
     }
 
+    /**
+     * Get repair tablet information for the specified table.
+     *
+     * @param dbName database name
+     * @param tblName table name
+     * @param partitions partition names (null for all partitions)
+     * @return repair tablet info containing tablet IDs to repair
+     * @throws DdlException if:
+     *   - database does not exist
+     *   - table does not exist or is not OLAP table
+     *   - table was dropped and recreated between initial lookup and lock acquisition (retry recommended)
+     *   - partition does not exist
+     */
     public static RepairTabletInfo getRepairTabletInfo(String dbName, String tblName, List<String> partitions)
             throws DdlException {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
@@ -678,19 +689,24 @@ public class TabletChecker extends FrontendDaemon {
         if (db == null) {
             throw new DdlException("Database " + dbName + " does not exist");
         }
+        Table table = db.getTable(tblName);
+        if (table == null) {
+            throw new DdlException("Table " + tblName + " does not exist");
+        }
 
         long dbId = db.getId();
-        long tblId;
+        long tblId = table.getId();
         List<Long> partIds = Lists.newArrayList();
         Locker locker = new Locker();
-        locker.lockDatabase(db.getId(), LockType.READ);
+        locker.lockTableWithIntensiveDbLock(dbId, tblId, LockType.READ);
         try {
             Table tbl = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tblName);
             if (tbl == null || tbl.getType() != TableType.OLAP) {
                 throw new DdlException("Table does not exist or is not OLAP table: " + tblName);
             }
-
-            tblId = tbl.getId();
+            if (tbl.getId() != tblId) {
+                throw new DdlException("Table " + tblName + " was recreated during the operation, please retry");
+            }
             OlapTable olapTable = (OlapTable) tbl;
 
             if (partitions == null || partitions.isEmpty()) {
@@ -706,7 +722,7 @@ public class TabletChecker extends FrontendDaemon {
                 }
             }
         } finally {
-            locker.unLockDatabase(db.getId(), LockType.READ);
+            locker.unLockTableWithIntensiveDbLock(dbId, tblId, LockType.READ);
         }
 
         Preconditions.checkState(tblId != -1);
