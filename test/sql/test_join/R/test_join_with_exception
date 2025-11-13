@@ -45,6 +45,7 @@ admin enable failpoint 'hash_join_append_bad_alloc';
 -- !result
 [UC]select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1;
 -- result:
+E: (1064, 'Mem usage has exceed the limit of BE: BE:10004')
 -- !result
 admin disable failpoint 'hash_join_append_bad_alloc';
 -- result:
@@ -54,6 +55,7 @@ admin enable failpoint 'hash_join_build_bad_alloc';
 -- !result
 [UC]select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1;
 -- result:
+E: (1064, 'Mem usage has exceed the limit of BE: BE:10004')
 -- !result
 admin disable failpoint 'hash_join_build_bad_alloc';
 -- result:

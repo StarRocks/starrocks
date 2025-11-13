@@ -742,7 +742,7 @@ void JoinHashTable::append_chunk(const ChunkPtr& chunk, const Columns& key_colum
         }
         columns[i]->append(*column);
         FAIL_POINT_TRIGGER_EXECUTE(hash_join_append_bad_alloc, {
-            if (i > 1) throw std::bad_alloc();
+            if (i > 0) throw std::bad_alloc();
         });
     }
 
