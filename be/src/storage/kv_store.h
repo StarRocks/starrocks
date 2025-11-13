@@ -109,16 +109,6 @@ public:
                           const std::string& end_key, WriteBatch* batch);
 
 private:
-<<<<<<< HEAD
-=======
-    static int64_t calc_rocksdb_write_buffer_size(MemTracker* mem_tracker);
-
-    Status iterate(ColumnFamilyIndex column_family_index, const std::string& prefix, const std::string& start_key,
-                   std::function<StatusOr<bool>(std::string_view, std::string_view)> const& func,
-                   int64_t timeout_sec = -1);
-
-private:
->>>>>>> 55bdebfa78 ([BugFix] Fix tablet meta load bug on rocksdb iteration timeout (#65146))
     std::string _root_path;
     rocksdb::DB* _db;
     std::vector<rocksdb::ColumnFamilyHandle*> _handles;

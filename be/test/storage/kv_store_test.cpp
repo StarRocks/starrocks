@@ -157,23 +157,6 @@ TEST_F(KVStoreTest, TestOpDeleteRange) {
     }
 }
 
-<<<<<<< HEAD
-=======
-TEST_F(KVStoreTest, calc_rocksdb_write_buffer_size_test) {
-    MemTracker mem_tracker(4294967296);
-
-    // case1: only one path
-    auto size = KVStore::calc_rocksdb_write_buffer_size(&mem_tracker);
-    ASSERT_EQ(size, 4294967296 * config::rocksdb_write_buffer_memory_percent / 100 / 2);
-
-    // case2: two paths
-    std::string old_val2 = config::storage_root_path;
-    config::storage_root_path = "/storage;/storage2";
-    auto size2 = KVStore::calc_rocksdb_write_buffer_size(&mem_tracker);
-    ASSERT_EQ(size2, 67108864L);
-    config::storage_root_path = old_val2;
-}
-
 TEST_F(KVStoreTest, iterate_with_compact_on_timeout_test) {
     // insert 100 keys
     for (int i = 0; i < 100; ++i) {
@@ -200,5 +183,4 @@ TEST_F(KVStoreTest, iterate_with_compact_on_timeout_test) {
     ASSERT_EQ(100, count);
 }
 
->>>>>>> 55bdebfa78 ([BugFix] Fix tablet meta load bug on rocksdb iteration timeout (#65146))
 } // namespace starrocks
