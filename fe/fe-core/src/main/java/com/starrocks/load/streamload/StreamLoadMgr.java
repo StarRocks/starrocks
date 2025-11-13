@@ -132,10 +132,10 @@ public class StreamLoadMgr implements MemoryTrackable {
                 return;
             }
             task = createMultiStatementLoadTask(db, label, user, clientIp, timeoutMillis, computeResource);
+            task.beginTxnFromFrontend(resp);
             GlobalStateMgr.getCurrentState().getEditLog().logCreateMultiStmtStreamLoadJob(
                     (StreamLoadMultiStmtTask) task, wal -> addLoadTask((StreamLoadMultiStmtTask) wal));
             LOG.info("create multi statement task {}", task);
-            task.beginTxnFromFrontend(resp);
         } finally {
             writeUnlock();
         }
