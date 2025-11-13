@@ -14,10 +14,7 @@
 
 package com.starrocks.connector.iceberg.procedure;
 
-import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
-import com.google.common.collect.Lists;
-import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.common.Pair;
 import com.starrocks.connector.GetRemoteFilesParams;
@@ -28,27 +25,9 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergPartitionData;
 import com.starrocks.connector.iceberg.IcebergTableOperation;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.AnalyzeState;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
-import com.starrocks.sql.analyzer.ExpressionAnalyzer;
-import com.starrocks.sql.analyzer.Field;
-import com.starrocks.sql.analyzer.RelationFields;
-import com.starrocks.sql.analyzer.RelationId;
-import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.ast.ParseNode;
-import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.TableName;
-import com.starrocks.sql.optimizer.OptimizerFactory;
-import com.starrocks.sql.optimizer.base.ColumnRefFactory;
-import com.starrocks.sql.optimizer.operator.Operator;
-import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
-import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.rewrite.OptExternalPartitionPruner;
-import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
-import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.type.Type;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
@@ -531,7 +510,8 @@ public class AddFilesProcedure extends IcebergTableProcedure {
         }
 
         // Use Hive table partition pruning to get filtered partition names
-        List<PartitionKey> filteredPartitionKeys = getFilteredPartitionKeys(context, sourceHiveTable);
+        List<PartitionKey> filteredPartitionKeys = PartitionUtil.getFilteredPartitionKeys(context.context(),
+                sourceHiveTable, context.clause().getWhere());
         GetRemoteFilesParams.Builder paramsBuilder;
         List<GetRemoteFilesParams> paramsList = new ArrayList<>();
         if (filteredPartitionKeys == null) {
@@ -604,100 +584,5 @@ public class AddFilesProcedure extends IcebergTableProcedure {
         appendFiles.commit();
         LOGGER.info("Successfully added {} files from source Hive table {} to Iceberg table",
                 dataFiles.size(), sourceTable);
-    }
-
-    /**
-     * Get filtered partition keys based on WHERE clause predicate using Hive partition pruning
-     * Reuses key logic from OptExternalPartitionPruner
-     *
-     * @param context         The procedure context containing WHERE clause
-     * @param sourceHiveTable The source Hive table
-     * @return List of filtered partition keys, or null if no filtering is needed
-     */
-    private List<PartitionKey> getFilteredPartitionKeys(IcebergTableProcedureContext context,
-                                                        com.starrocks.catalog.Table sourceHiveTable) {
-        try {
-            Expr whereExpr = context.clause().getWhere();
-            List<Column> partitionColumns = sourceHiveTable.getPartitionColumns();
-
-            if (partitionColumns.isEmpty()) {
-                LOGGER.info("Source table is not partitioned, WHERE clause will be ignored");
-                return null;
-            }
-
-            // Create column reference mappings for reusing OptExternalPartitionPruner logic
-            ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-            Map<Column, ColumnRefOperator> columnToColRefMap = new HashMap<>();
-            Map<ColumnRefOperator, Column> colRefToColumnMap = new HashMap<>();
-
-            // Create a simple mock operator that provides the necessary interface
-            LogicalHiveScanOperator hiveScanOperator = makeSourceTableHiveScanOperator(sourceHiveTable, columnToColRefMap,
-                    colRefToColumnMap, columnRefFactory, whereExpr, context);
-
-            OptExternalPartitionPruner.prunePartitions(OptimizerFactory.initContext(context.context(), columnRefFactory),
-                    hiveScanOperator);
-
-            ScanOperatorPredicates scanOperatorPredicates = hiveScanOperator.getScanOperatorPredicates();
-            if (!scanOperatorPredicates.getNonPartitionConjuncts().isEmpty() ||
-                    !scanOperatorPredicates.getNoEvalPartitionConjuncts().isEmpty()) {
-                LOGGER.warn("WHERE clause contains non-partition predicates or can not eval predicates, " +
-                                "non-partition predicates: {}, no-eval partition predicates: {}. ",
-                        Joiner.on(", ").join(scanOperatorPredicates.getNonPartitionConjuncts()),
-                        Joiner.on(", ").join(scanOperatorPredicates.getNoEvalPartitionConjuncts()));
-                throw new StarRocksConnectorException("WHERE clause contains non-partition predicates or can not eval " +
-                        "predicates, only simple partition predicates are supported for partition pruning. " +
-                        "Non-partition predicates: %s, no-eval partition predicates: %s",
-                        Joiner.on(", ").join(scanOperatorPredicates.getNonPartitionConjuncts()),
-                        Joiner.on(", ").join(scanOperatorPredicates.getNoEvalPartitionConjuncts()));
-            }
-
-            List<PartitionKey> partitionKeys = Lists.newArrayList();
-            scanOperatorPredicates.getSelectedPartitionIds().stream()
-                    .map(id -> scanOperatorPredicates.getIdToPartitionKey().get(id))
-                    .filter(Objects::nonNull)
-                    .forEach(partitionKeys::add);
-            LOGGER.info("Partition pruning selected {} partitions, select partitions : {}", partitionKeys.size(),
-                    Joiner.on(", ").join(partitionKeys));
-
-            return partitionKeys;
-        } catch (Exception e) {
-            LOGGER.warn("Failed to perform partition pruning, Error: {}", e.getMessage());
-            throw new StarRocksConnectorException("Failed to perform partition pruning: %s", e.getMessage(), e);
-        }
-    }
-
-    private LogicalHiveScanOperator makeSourceTableHiveScanOperator(com.starrocks.catalog.Table sourceTable,
-                                                                    Map<Column, ColumnRefOperator> columnToColRefMap,
-                                                                    Map<ColumnRefOperator, Column> colRefToColumnMap,
-                                                                    ColumnRefFactory columnRefFactory,
-                                                                    Expr whereExpr, IcebergTableProcedureContext context) {
-        List<ColumnRefOperator> columnRefOperators = new ArrayList<>();
-        for (Column column : sourceTable.getBaseSchema()) {
-            ColumnRefOperator columnRef = columnRefFactory.create(column.getName(),
-                    column.getType(), column.isAllowNull());
-            colRefToColumnMap.put(columnRef, column);
-            columnToColRefMap.put(column, columnRef);
-            columnRefOperators.add(columnRef);
-        }
-
-        ScalarOperator scalarOperator = null;
-        if (whereExpr != null) {
-            // Create scope with table columns for expression analysis
-            TableName sourceTableName = new TableName(sourceTable.getCatalogName(),
-                    sourceTable.getCatalogDBName(), sourceTable.getCatalogTableName());
-            Scope scope = new Scope(RelationId.anonymous(), new RelationFields(columnRefOperators.stream()
-                    .map(col -> new Field(col.getName(), col.getType(), sourceTableName, null))
-                    .collect(Collectors.toList())));
-            // Analyze the WHERE expression
-            ExpressionAnalyzer.analyzeExpression(whereExpr, new AnalyzeState(), scope, context.context());
-
-            // Create expression mapping for conversion
-            ExpressionMapping expressionMapping = new ExpressionMapping(scope, columnRefOperators);
-
-            // Convert Expr to ScalarOperator
-            scalarOperator = SqlToScalarOperatorTranslator.translate(whereExpr, expressionMapping, columnRefFactory);
-        }
-        return new LogicalHiveScanOperator(sourceTable, colRefToColumnMap, columnToColRefMap,
-                Operator.DEFAULT_LIMIT, scalarOperator);
     }
 }

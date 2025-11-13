@@ -148,4 +148,17 @@ public class HiveWriteUtils {
         return false;
     }
 
+    public static boolean createDirectoryIfNotExists(Path path, Configuration conf) {
+        try {
+            FileSystem fileSystem = FileSystem.get(path.toUri(), conf);
+            if (fileSystem.exists(path)) {
+                return false;
+            }
+            return fileSystem.mkdirs(path);
+        } catch (IOException e) {
+            LOG.error("Failed to create remote path {}", path, e);
+            throw new StarRocksConnectorException("Failed to create remote path: " + path);
+        }
+    }
+
 }

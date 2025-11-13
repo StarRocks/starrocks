@@ -260,7 +260,7 @@ public class InsertStmt extends DmlStmt {
     }
 
     public boolean isSpecifyPartitionNames() {
-        return targetPartitionNames != null && !targetPartitionNames.isStaticKeyPartitionInsert();
+        return targetPartitionNames != null && !targetPartitionNames.isKeyPartitionNames();
     }
 
     public void setTargetColumnNames(List<String> targetColumnNames) {
@@ -317,7 +317,7 @@ public class InsertStmt extends DmlStmt {
     }
 
     public boolean isStaticKeyPartitionInsert() {
-        return targetPartitionNames != null && targetPartitionNames.isStaticKeyPartitionInsert();
+        return targetPartitionNames != null && targetPartitionNames.isKeyPartitionNames();
     }
 
     public boolean isPartitionNotSpecifiedInOverwrite() {

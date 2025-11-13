@@ -310,6 +310,23 @@ public class RemoteFileOperations {
         return HiveWriteUtils.deleteIfExists(path, recursive, conf);
     }
 
+    public void truncateLocations(List<String> paths) {
+        for (String location : paths) {
+            try {
+                Path path = new Path(location);
+                if (!deleteIfExists(path, true)) {
+                    throw new StarRocksConnectorException("Failed to delete path : %s", location);
+                }
+                HiveWriteUtils.createDirectoryIfNotExists(path, conf);
+                LOG.info("Truncate data in partition location: {}", location);
+            } catch (Exception e) {
+                LOG.error("Failed to truncate data in location: {}", location, e);
+                throw new StarRocksConnectorException("Failed to truncate data in location: %s. msg: %s",
+                        location, e.getMessage());
+            }
+        }
+    }
+
     public FileStatus[] listStatus(Path path) {
         try {
             FileSystem fileSystem = FileSystem.get(path.toUri(), conf);

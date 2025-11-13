@@ -49,6 +49,10 @@ import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.sql.ast.KeyPartitionRef;
+import com.starrocks.sql.ast.TableRef;
+import com.starrocks.sql.ast.TruncateTablePartitionStmt;
+import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.OptimizerFactory;
@@ -834,5 +838,158 @@ public class HiveMetadataTest {
         GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder().setPartitionNames(partitionNames).build();
         List<RemoteFileInfo> remoteFileInfos = hiveMetadata.getRemoteFiles(table, params);
         Assertions.assertEquals(3, remoteFileInfos.size());
+    }
+
+    @Test
+    public void testTruncateUnpartitionedTable() throws Exception {
+        // Verify truncate on managed unpartitioned hive table will delete and recreate table directory
+        // and collect the expected location to truncate
+        final String expectedLocation = "hdfs://127.0.0.1:10000/hive";
+        final AtomicBoolean called = new AtomicBoolean(false);
+        new MockUp<RemoteFileOperations>() {
+            @Mock
+            public void truncateLocations(List<String> paths) {
+                called.set(true);
+                Assertions.assertEquals(1, paths.size());
+                Assertions.assertEquals(expectedLocation, paths.get(0));
+            }
+        };
+
+        // TRUNCATE TABLE hive_catalog.hive_db.unpartitioned_table
+        TableRef tableRef = new TableRef(
+                com.starrocks.sql.ast.QualifiedName.of(Lists.newArrayList("hive_catalog", "hive_db", "unpartitioned_table")),
+                null,
+                com.starrocks.sql.parser.NodePosition.ZERO);
+        TruncateTableStmt stmt = new TruncateTableStmt(tableRef);
+        hiveMetadata.truncateTable(stmt, connectContext);
+        Assertions.assertTrue(called.get());
+    }
+
+    @Test
+    public void testTruncateWholePartitionedTable() throws Exception {
+        // Verify truncate on managed partitioned hive table without partition spec truncates all partitions
+        final List<String> captured = Lists.newArrayList();
+        new MockUp<RemoteFileOperations>() {
+            @Mock
+            public void truncateLocations(List<String> paths) {
+                captured.clear();
+                captured.addAll(paths);
+            }
+        };
+
+        TableRef tableRef = new TableRef(
+                com.starrocks.sql.ast.QualifiedName.of(Lists.newArrayList("hive_catalog", "hive_db", "hive_table")),
+                null,
+                com.starrocks.sql.parser.NodePosition.ZERO);
+        TruncateTableStmt stmt = new TruncateTableStmt(tableRef);
+        hiveMetadata.truncateTable(stmt, connectContext);
+        // In mocked HMS, getPartitionKeys returns ["col1"], and getPartitionsByNames will map to
+        // hdfs://127.0.0.1:10000/hive.db/hive_tbl/<partitionName>
+        Assertions.assertEquals(1, captured.size());
+        Assertions.assertEquals("hdfs://127.0.0.1:10000/hive.db/hive_tbl/col1", captured.get(0));
+    }
+
+    @Test
+    public void testTruncatePartitionedTableWithSpec() throws Exception {
+        // Mock partition pruning to return a single partition key for col1=1
+        new MockUp<PartitionUtil>() {
+            @Mock
+            public List<PartitionKey> getFilteredPartitionKeys(ConnectContext ctx,
+                                                                com.starrocks.catalog.Table table,
+                                                                com.starrocks.sql.ast.expression.Expr partitionFilter) {
+                try {
+                    HiveTable hiveTable = (HiveTable) table;
+                    PartitionKey key = PartitionUtil.createPartitionKey(
+                            Lists.newArrayList("1"), hiveTable.getPartitionColumns(), table);
+                    return Lists.newArrayList(key);
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
+            }
+        };
+
+        final List<String> captured = Lists.newArrayList();
+        new MockUp<RemoteFileOperations>() {
+            @Mock
+            public void truncateLocations(List<String> paths) {
+                captured.clear();
+                captured.addAll(paths);
+            }
+        };
+
+        // TRUNCATE TABLE hive_catalog.hive_db.hive_table PARTITION (col1 = 1)
+        KeyPartitionRef keyPartitionRef = new KeyPartitionRef(
+                Lists.newArrayList("col1"),
+                Lists.newArrayList(new com.starrocks.sql.ast.expression.IntLiteral(1)),
+                com.starrocks.sql.parser.NodePosition.ZERO);
+        TableRef tableRef = new TableRef(
+                com.starrocks.sql.ast.QualifiedName.of(Lists.newArrayList("hive_catalog", "hive_db", "hive_table")),
+                null,
+                com.starrocks.sql.parser.NodePosition.ZERO);
+        TruncateTablePartitionStmt stmt = new TruncateTablePartitionStmt(tableRef, keyPartitionRef);
+
+        hiveMetadata.truncateTable(stmt, connectContext);
+
+        Assertions.assertEquals(1, captured.size());
+        // Expected mocked partition location: .../col1=1
+        Assertions.assertEquals("hdfs://127.0.0.1:10000/hive.db/hive_tbl/col1=1", captured.get(0));
+    }
+
+    @Test
+    public void testTruncatePartitionedTableWithInvalidColumn() {
+        // Partition column name not in table partition columns should raise DdlException
+        KeyPartitionRef keyPartitionRef = new KeyPartitionRef(
+                Lists.newArrayList("invalid"),
+                Lists.newArrayList(new com.starrocks.sql.ast.expression.IntLiteral(1)),
+                com.starrocks.sql.parser.NodePosition.ZERO);
+        TableRef tableRef = new TableRef(
+                com.starrocks.sql.ast.QualifiedName.of(Lists.newArrayList("hive_catalog", "hive_db", "hive_table")),
+                null,
+                com.starrocks.sql.parser.NodePosition.ZERO);
+        TruncateTablePartitionStmt stmt = new TruncateTablePartitionStmt(tableRef, keyPartitionRef);
+
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "partition names in partition spec do not match table partition columns",
+                () -> hiveMetadata.truncateTable(stmt, connectContext));
+    }
+
+    @Test
+    public void testTruncatePartitionedTableNoMatchedPartitions() {
+        // Mock partition pruning to return empty keys -> should throw StarRocksConnectorException
+        new MockUp<PartitionUtil>() {
+            @Mock
+            public List<PartitionKey> getFilteredPartitionKeys(ConnectContext ctx,
+                                                                com.starrocks.catalog.Table table,
+                                                                com.starrocks.sql.ast.expression.Expr partitionFilter) {
+                return Lists.newArrayList();
+            }
+        };
+
+        KeyPartitionRef keyPartitionRef = new KeyPartitionRef(
+                Lists.newArrayList("col1"),
+                Lists.newArrayList(new com.starrocks.sql.ast.expression.IntLiteral(1)),
+                com.starrocks.sql.parser.NodePosition.ZERO);
+        TableRef tableRef = new TableRef(
+                com.starrocks.sql.ast.QualifiedName.of(Lists.newArrayList("hive_catalog", "hive_db", "hive_table")),
+                null,
+                com.starrocks.sql.parser.NodePosition.ZERO);
+        TruncateTablePartitionStmt stmt = new TruncateTablePartitionStmt(tableRef, keyPartitionRef);
+
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
+                "No partitions matched the partition filter",
+                () -> hiveMetadata.truncateTable(stmt, connectContext));
+    }
+
+    @Test
+    public void testTruncateExternalTableNotAllowed() {
+        // external_table is EXTERNAL_TABLE in mocked HMS
+        TableRef tableRef = new TableRef(
+                com.starrocks.sql.ast.QualifiedName.of(Lists.newArrayList("hive_catalog", "hive_db", "external_table")),
+                null,
+                com.starrocks.sql.parser.NodePosition.ZERO);
+        TruncateTableStmt stmt = new TruncateTableStmt(tableRef);
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
+                "Only managed Hive table support truncate operation",
+                () -> hiveMetadata.truncateTable(stmt, connectContext));
     }
 }
