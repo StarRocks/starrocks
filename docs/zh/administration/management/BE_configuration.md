@@ -968,7 +968,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型: Int
 - 单位: Seconds
 - 是否可变: Yes
-- 描述: ProfileReportWorker 用于（1）决定何时上报 LOAD 查询的每个 fragment 的 profile 信息以及（2）在上报周期之间休眠的间隔（秒）。该 worker 使用 (profile_report_interval * 1000) ms 将当前时间与每个任务的 last_report_time 进行比较，以确定是否需要对非 pipeline 和 pipeline 的 load 任务重新上报 profile。在每次循环中，worker 会读取当前值（运行时可变）；如果配置值 <= 0，worker 会强制将其设为 1 并发出警告。修改此值会影响下一次的上报判断和休眠时长。
+- 描述: ProfileReportWorker 用于（1）决定何时上报 LOAD 查询的每个 fragment 的 profile 信息以及（2）在上报周期之间休眠的间隔（秒）。该 worker 使用 (profile_report_interval * 1000) ms 将当前时间与每个任务的 last_report_time 进行比较，以确定是否需要对非 pipeline 和 pipeline 的 load 任务重新上报 profile。在每次循环中，worker 会读取当前值（运行时可变）；如果配置值小于等于 0，worker 会强制将其设为 1 并发出警告。修改此值会影响下一次的上报判断和休眠时长。
 - 引入版本: v3.2.0
 
 ### 存储
