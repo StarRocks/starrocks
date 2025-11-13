@@ -693,6 +693,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String SPLIT_TOPN_AGG_LIMIT = "enable_split_topn_agg_limit";
 
+    public static final String ENABLE_DISTINCT_AGG_OVER_WINDOW =
+            "enable_distinct_agg_over_window";
+
+    public static final String OPTIMIZE_DISTINCT_AGG_OVER_FRAMED_WINDOW =
+            "optimize_distinct_agg_over_framed_window";
+
     // Flag to control whether to proxy follower's query statement to leader/follower.
     public enum FollowerQueryForwardMode {
         DEFAULT,    // proxy queries by the follower's replay progress (default)
@@ -1369,6 +1375,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = SPLIT_TOPN_AGG_LIMIT)
     private long splitTopNAggLimit = 10000;
+
+    @VarAttr(name = ENABLE_DISTINCT_AGG_OVER_WINDOW)
+    private boolean enableDistinctAggOverWindow = true;
+    // 0: auto, 1: opimize, -1: do not optimize
+    @VarAttr(name = OPTIMIZE_DISTINCT_AGG_OVER_FRAMED_WINDOW, flag = VariableMgr.INVISIBLE)
+    private int optimizeDistinctAggOverFramedWindow = 0;
 
     /*
      * the parallel exec instance num for one Fragment in one BE
@@ -2080,6 +2092,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public long getSplitTopNAggLimit() {
         return splitTopNAggLimit;
+    }
+
+    public void setEnableDistinctAggOverWindow(boolean value) {
+        this.enableDistinctAggOverWindow = value;
+    }
+
+    public boolean isEnableDistinctAggOverWindow() {
+        return enableDistinctAggOverWindow;
+    }
+
+    public void setOptimizeDistinctAggOverFramedWindow(int value) {
+        this.optimizeDistinctAggOverFramedWindow = value;
+    }
+
+    public int getOptimizeDistinctAggOverFramedWindow() {
+        return optimizeDistinctAggOverFramedWindow;
     }
 
     public boolean isEnableDesensitizeExplain() {
