@@ -601,6 +601,9 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                             .refreshMaterializedView(dbName, materializedView.getName(), false, null,
                                     Constants.TaskRunPriority.NORMAL.value(), true, false);
                 }
+                AlterMaterializedViewStatusLog log = new AlterMaterializedViewStatusLog(materializedView.getDbId(),
+                        materializedView.getId(), status, "");
+                GlobalStateMgr.getCurrentState().getEditLog().logAlterMvStatus(log);
             } else if (AlterMaterializedViewStatusClause.INACTIVE.equalsIgnoreCase(status)) {
                 if (!materializedView.isActive()) {
                     return null;
@@ -611,13 +614,11 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 Set<MvId> visited = Sets.newHashSet();
                 // not clear version map for user manual inactive by default since mv's refreshed data has not been
                 // broken from the current base tables.
+                // this method will write edit log in it.
                 doInactiveMaterializedViewRecursive(materializedView, MANUAL_INACTIVE_MV_REASON, false, visited);
             } else {
                 throw new AlterJobException("Unsupported modification materialized view status:" + status);
             }
-            AlterMaterializedViewStatusLog log = new AlterMaterializedViewStatusLog(materializedView.getDbId(),
-                    materializedView.getId(), status, MANUAL_INACTIVE_MV_REASON);
-            GlobalStateMgr.getCurrentState().getEditLog().logAlterMvStatus(log);
             return null;
         } catch (DdlException | MetaNotFoundException e) {
             throw new AlterJobException(e.getMessage(), e);
