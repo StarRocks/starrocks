@@ -1190,26 +1190,6 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：是否为 Primary Key 表开启 Size-tiered Compaction 策略。`true` 代表开启。`false` 代表关闭。
 - 引入版本：存算分离集群自 v3.2.4, v3.1.10 起生效，存算一体集群自 v3.2.5, v3.1.10 起生效
 
-<<<<<<< HEAD
-=======
-##### enable_pk_parallel_execution
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：是否为 Primary Key 表并行执行策略。当并行执行策略开启时，pk索引文件会在导入和compaction阶段生成。
-- 引入版本：-
-
-##### pk_parallel_execution_threshold_bytes
-
-- 默认值：314572800
-- 类型：Int
-- 单位：-
-- 是否动态：是
-- 描述：当enable_pk_parallel_execution设置为true后，导入或者compaction生成的数据大于该阈值时，Primary Key 表并行执行策略将被启用。
-- 引入版本：-
-
 ##### enable_strict_delvec_crc_check
 
 - 默认值：true
@@ -1219,7 +1199,6 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：当enable_strict_delvec_crc_check设置为true后，我们会对delete vector的crc32进行严格检查，如果不一致，将返回失败。
 - 引入版本：-
 
->>>>>>> 6fe4f572a3 ([BugFix] add a configuration to skip delete vector CRC misjudgments in special upgrade/downgrade scenarios (#65354))
 ##### size_tiered_min_level_size
 
 - 默认值：131072
