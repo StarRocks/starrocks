@@ -1051,6 +1051,7 @@ under the License.
                     <reuseForks>false</reuseForks>
 
                     <argLine>
+                        --add-opens=java.base/java.nio=org.apache.arrow.memory.core,ALL-UNNAMED
                         -javaagent:${settings.localRepository}/com/github/hazendaz/jmockit/jmockit/1.49.4/jmockit-1.49.4.jar
                         ${async.profiler.arg}
                         -Xmx4096m

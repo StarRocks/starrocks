@@ -90,9 +90,12 @@ import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.timeout;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -430,6 +433,82 @@ public class ArrowFlightSqlServiceImplTest {
 
     private void setFinalField(Object target, String fieldName, Object value) {
         Deencapsulation.setField(target, fieldName, value);
+    }
+
+
+    @Test
+    public void testCreateTwoPreparedStatementThenExecute() throws Exception {
+        FlightSql.ActionCreatePreparedStatementRequest request1 = mock(FlightSql.ActionCreatePreparedStatementRequest.class);
+        when(request1.getQuery()).thenReturn("SELECT 1");
+        FlightSql.ActionCreatePreparedStatementRequest request2 = mock(FlightSql.ActionCreatePreparedStatementRequest.class);
+        when(request2.getQuery()).thenReturn("SELECT 2");
+        
+        FlightProducer.CallContext callContext = mock(FlightProducer.CallContext.class);
+        when(callContext.peerIdentity()).thenReturn("token123");
+        
+        when(sessionManager.validateAndGetConnectContext("token123")).thenReturn(mockContext);
+        
+        FlightProducer.StreamListener<Result> listener = mock(FlightProducer.StreamListener.class);
+        
+        try (
+                MockedStatic<ArrowUtil> mockArrowUtil = mockStatic(ArrowUtil.class);
+                MockedStatic<ArrowFlightSqlServiceImpl> mockStatic =
+                        mockStatic(ArrowFlightSqlServiceImpl.class, CALLS_REAL_METHODS)
+        ) {
+            VectorSchemaRoot mockRoot = mock(VectorSchemaRoot.class);
+            Schema mockSchema = mock(Schema.class);
+            when(mockRoot.getSchema()).thenReturn(mockSchema);
+            mockArrowUtil.when(() -> ArrowUtil.createSingleSchemaRoot(anyString(), anyString())).thenReturn(mockRoot);
+            
+            mockStatic.when(() -> ArrowFlightSqlServiceImpl.serializeMetadata(mockSchema))
+                    .thenReturn(ByteBuffer.wrap("mock".getBytes(StandardCharsets.UTF_8)));
+            
+            service.createPreparedStatement(request1, callContext, listener);
+            service.createPreparedStatement(request2, callContext, listener);
+            
+            Thread.sleep(500);
+        }
+        
+        ArrowFlightSqlServiceImpl spyService = Mockito.spy(service);
+        FlightInfo mockFlightInfo1 = mock(FlightInfo.class);
+        FlightInfo mockFlightInfo2 = mock(FlightInfo.class);
+        
+        doReturn(mockFlightInfo1).when(spyService).getFlightInfoFromQuery(eq(mockContext), any(FlightDescriptor.class));
+        
+        FlightSql.CommandPreparedStatementQuery command1 = FlightSql.CommandPreparedStatementQuery.newBuilder()
+                .setPreparedStatementHandle(ByteString.copyFromUtf8("token123:SELECT 1"))
+                .build();
+        
+        FlightInfo result1 = spyService.getFlightInfoPreparedStatement(
+                command1,
+                mockCallContext,
+                FlightDescriptor.command("SELECT 1".getBytes())
+        );
+        
+        // Verify that reset was called with the correct query for first statement
+        verify(mockContext, times(1)).reset("SELECT 1");
+        verify(mockContext, times(1)).setThreadLocalInfo();
+        assertEquals(mockFlightInfo1, result1);
+        
+        doReturn(mockFlightInfo2).when(spyService).getFlightInfoFromQuery(eq(mockContext), any(FlightDescriptor.class));
+        
+        FlightSql.CommandPreparedStatementQuery command2 = FlightSql.CommandPreparedStatementQuery.newBuilder()
+                .setPreparedStatementHandle(ByteString.copyFromUtf8("token123:SELECT 2"))
+                .build();
+        
+        FlightInfo result2 = spyService.getFlightInfoPreparedStatement(
+                command2,
+                mockCallContext,
+                FlightDescriptor.command("SELECT 2".getBytes())
+        );
+        
+        // Verify that reset was called with the correct query for second statement
+        verify(mockContext, times(1)).reset("SELECT 2");
+        verify(mockContext, times(2)).setThreadLocalInfo();
+        assertEquals(mockFlightInfo2, result2);
+        
+        // Verify total reset calls - should be exactly 2 (one for each getFlightInfoPreparedStatement)
+        verify(mockContext, times(2)).reset(anyString());
     }
 
     @Test

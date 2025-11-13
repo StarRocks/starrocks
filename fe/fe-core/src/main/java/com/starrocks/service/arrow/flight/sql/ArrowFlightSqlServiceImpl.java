@@ -25,7 +25,6 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.util.ArrowUtil;
 import com.starrocks.common.util.DebugUtil;
-import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.scheduler.Coordinator;
@@ -136,18 +135,20 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
             FlightSql.ActionCreatePreparedStatementRequest request, CallContext context, StreamListener<Result> listener) {
         executor.submit(() -> {
             try {
-                String token = context.peerIdentity();
-                ArrowFlightSqlConnectContext ctx = sessionManager.validateAndGetConnectContext(token);
-
-                ctx.reset(request.getQuery());
                 // To prevent the client from mistakenly interpreting an empty Schema as an update statement (instead of a query statement),
                 // we need to ensure that the Schema returned by createPreparedStatement includes the query metadata.
                 // This means we need to correctly set the DatasetSchema and ParameterSchema in ActionCreatePreparedStatementResult.
                 // We generate a minimal Schema. This minimal Schema can include an integer column to ensure the Schema is not empty.
                 try (VectorSchemaRoot schemaRoot = ArrowUtil.createSingleSchemaRoot("r", "0")) {
                     Schema schema = schemaRoot.getSchema();
+                    
+                    final ByteString handle = ByteString.copyFromUtf8(
+                            context.peerIdentity() + ":" + request.getQuery()
+                    );
+                    
                     FlightSql.ActionCreatePreparedStatementResult result =
                             FlightSql.ActionCreatePreparedStatementResult.newBuilder()
+                                    .setPreparedStatementHandle(handle)
                                     .setDatasetSchema(ByteString.copyFrom(serializeMetadata(schema)))
                                     .setParameterSchema(ByteString.copyFrom(serializeMetadata(schema))).build();
                     listener.onNext(new Result(Any.pack(result).toByteArray()));
@@ -160,7 +161,6 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
                 listener.onError(
                         CallStatus.INTERNAL.withDescription("createPreparedStatement unexpected error: " + e.getMessage())
                                 .withCause(e).toRuntimeException());
-
             } finally {
                 listener.onCompleted();
             }
@@ -183,13 +183,20 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
                                                      FlightDescriptor descriptor) {
         String token = context.peerIdentity();
         ArrowFlightSqlConnectContext ctx = sessionManager.validateAndGetConnectContext(token);
-        String database = context.getMiddleware(FlightConstants.HEADER_KEY).headers().get("database");
-        if (!StringUtils.isEmpty(database)) {
-            ctx.setDatabase(database);
-        }
-        synchronized(ctx) {  // Synchronize on the shared context
-            ctx.setQueryId(UUIDUtil.genUUID());
-            ctx.setExecutionId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
+        
+        synchronized (ctx) {
+            // Extract query from the handle
+            String handle = command.getPreparedStatementHandle().toStringUtf8();
+            String[] parts = handle.split(":", 2);  // Split on first ':'
+            String query = parts[1];
+            
+            ctx.reset(query);
+            ctx.setThreadLocalInfo();
+            
+            String database = context.getMiddleware(FlightConstants.HEADER_KEY).headers().get("database");
+            if (!StringUtils.isEmpty(database)) {
+                ctx.setDatabase(database);
+            }
             return getFlightInfoFromQuery(ctx, descriptor);
         }
     }
