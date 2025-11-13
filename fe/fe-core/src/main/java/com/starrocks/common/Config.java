@@ -1292,6 +1292,12 @@ public class Config extends ConfigBase {
     public static long catalog_trash_expire_second = 86400L; // 1day
 
     /**
+     * The retention time for partition dropped by insert overwrite/mv rewrite etc.
+     */
+    @ConfField(mutable = true)
+    public static long partition_recycle_retention_period_secs = 30 * 60L; // 30mins
+
+    /**
      * Parallel load fragment instance num in single host
      */
     @ConfField(mutable = true)

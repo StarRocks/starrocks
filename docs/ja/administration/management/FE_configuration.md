@@ -1791,6 +1791,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: データベース、テーブル、またはパーティションが削除された後にメタデータが保持される最長期間。この期間が経過すると、データは削除され、[RECOVER](../../sql-reference/sql-statements/backup_restore/RECOVER.md) コマンドを使用して回復することはできません。
 - 導入バージョン: -
 
+##### partition_recycle_retention_period_secs
+
+- デフォルト: 1800
+- イプ: Long
+- 単位: 秒
+- 変更可能: はい
+- 説明: INSERT OVERWRITE またはマテリアライズドビューのリフレッシュ操作によって削除されるパーティションのメタデータ保持期間。このようなメタデータは、[RECOVER](../../sql-reference/sql-statements/backup_restore/RECOVER.md) を実行しても復元できないことに注意してください。
+- 導入バージョン: v3.5.9
+
 ##### enable_auto_tablet_distribution
 
 - デフォルト: true

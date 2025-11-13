@@ -700,4 +700,92 @@ public class CatalogRecycleBinTest {
         Assertions.assertEquals(0, recycleBin.idToRecycleTime.size());
         Assertions.assertEquals(0, recycleBin.enableEraseLater.size());
     }
+
+    @Test
+    public void testTimeExpiredWithRetentionPeriod(@Mocked GlobalStateMgr globalStateMgr, @Mocked EditLog editLog) {
+        ClusterSnapshotMgr clusterSnapshotMgr = new ClusterSnapshotMgr();
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+
+                globalStateMgr.getClusterSnapshotMgr();
+                result = clusterSnapshotMgr;
+
+                globalStateMgr.getEditLog();
+                minTimes = 0;
+                result = editLog;
+
+                editLog.logErasePartition(anyLong);
+                minTimes = 0;
+            }
+        };
+
+        long dbId = 1;
+        long tableId = 2;
+        DataProperty dataProperty = new DataProperty(TStorageMedium.HDD);
+        CatalogRecycleBin recycleBin = new CatalogRecycleBin();
+
+        // Create non-recoverable partition with retention period = 7200 seconds (2 hours)
+        Partition p1 = new Partition(101, 102, "p1", null, null);
+        RecycleRangePartitionInfo info1 =
+                new RecycleRangePartitionInfo(dbId, tableId, p1, null, dataProperty, (short) 2, false, null);
+        info1.setRecoverable(false);
+        info1.setRetentionPeriod(7200);
+        recycleBin.recyclePartition(info1);
+
+        // Used to check that `catalog_trash_expire_second` will not take effect while retention period is set
+        long defaultTrashExpireSecond = Config.catalog_trash_expire_second;
+        Config.catalog_trash_expire_second = 3600; // default 1 hour
+        long now = System.currentTimeMillis();
+
+        // Case 1: should not expire after 1.5 hours (less than retention period)
+        long recycleTime1 = now - 5400 * 1000L; // 1.5 hours ago
+        recycleBin.idToRecycleTime.put(p1.getId(), recycleTime1);
+        recycleBin.erasePartition(now);
+        // time not expired
+        Assertions.assertNotNull(recycleBin.getPartition(p1.getId()));
+
+        // Case 2: should expire after 2.5 hours (exceeds retention period)
+        long recycleTime2 = now - 9000 * 1000L; // 2.5 hours ago
+        recycleBin.idToRecycleTime.put(p1.getId(), recycleTime2);
+        recycleBin.erasePartition(now);
+        waitPartitionClearFinished(recycleBin, p1.getId(), now);
+        Assertions.assertNull(recycleBin.getPartition(p1.getId()));
+
+        // reset default trash expire second
+        Config.catalog_trash_expire_second = defaultTrashExpireSecond;
+    }
+
+    @Test
+    public void testGetAdjustedRecycleTimestampWithRetentionPeriod() {
+        CatalogRecycleBin recycleBin = new CatalogRecycleBin();
+        long dbId = 1;
+        long tableId = 2;
+        DataProperty dataProperty = new DataProperty(TStorageMedium.HDD);
+
+        // Non-recoverable partition with retention period
+        Partition p1 = new Partition(201, 202, "p1", null, null);
+        RecycleRangePartitionInfo info1 =
+                new RecycleRangePartitionInfo(dbId, tableId, p1, null, dataProperty, (short) 2, false, null);
+        info1.setRecoverable(false);
+        info1.setRetentionPeriod(3600);
+        recycleBin.recyclePartition(info1);
+        
+        // Non-recoverable partition without retention period
+        Partition p2 = new Partition(301, 302, "p2", null, null);
+        RecycleRangePartitionInfo info2 =
+                new RecycleRangePartitionInfo(dbId, tableId, p2, null, dataProperty, (short) 2, false, null);
+        info2.setRecoverable(false);
+        recycleBin.recyclePartition(info2);
+
+        // With retention period: should return original recycle timestamp
+        long adjustedTime1 = Deencapsulation.invoke(recycleBin, "getAdjustedRecycleTimestamp", p1.getId());
+        Assertions.assertEquals(recycleBin.idToRecycleTime.get(p1.getId()), adjustedTime1);
+
+        // Without retention period: should return 0 for non-recoverable partition
+        long adjustedTime2 = Deencapsulation.invoke(recycleBin, "getAdjustedRecycleTimestamp", p2.getId());
+        Assertions.assertEquals(0, adjustedTime2);
+    }
 }

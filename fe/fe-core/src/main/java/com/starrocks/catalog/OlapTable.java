@@ -1461,22 +1461,24 @@ public class OlapTable extends Table {
     }
 
     // This is a private method.
-    // Call public "dropPartitionAndReserveTablet" and "dropPartition"
+    // Call public "dropPartitionAndReserveTablet", "dropPartition" and "dropPartitionWithRetention"
     private void dropPartition(long dbId, String partitionName, boolean isForceDrop, boolean reserveTablets) {
         Partition partition = nameToPartition.get(partitionName);
         if (partition == null) {
             return;
         }
-
         if (!reserveTablets) {
             RecyclePartitionInfo recyclePartitionInfo = buildRecyclePartitionInfo(dbId, partition);
             recyclePartitionInfo.setRecoverable(!isForceDrop);
             GlobalStateMgr.getCurrentState().getRecycleBin().recyclePartition(recyclePartitionInfo);
         }
+        removePartitionFromInnerState(partition);
+    }
 
+    private void removePartitionFromInnerState(Partition partition) {
         partitionInfo.dropPartition(partition.getId());
         idToPartition.remove(partition.getId());
-        nameToPartition.remove(partitionName);
+        nameToPartition.remove(partition.getName());
         physicalPartitionIdToPartitionId.keySet().removeAll(partition.getSubPartitions()
                 .stream().map(PhysicalPartition::getId)
                 .collect(Collectors.toList()));
@@ -1518,6 +1520,33 @@ public class OlapTable extends Table {
 
     public void dropPartition(long dbId, String partitionName, boolean isForceDrop) {
         dropPartition(dbId, partitionName, isForceDrop, false);
+    }
+
+    /**
+     *  Try to retain the partition for a while to avoid tablet missing errors.
+     *  This method is used in `insert overwrite`, `mv rewrite` etc. scenarios,
+     *  where we don't want to delete data immediately
+     *
+     *  This method is not thread safe. The caller should ensure that this method is called under lock.
+     */
+    public void dropPartitionWithRetention(long dbId, String partitionName, long partitionRetentionPeriod) {
+        Partition partition = nameToPartition.get(partitionName);
+        if (partition == null) {
+            return;
+        }
+        if (partitionRetentionPeriod > 0) {
+            RecyclePartitionInfo recyclePartitionInfo = buildRecyclePartitionInfo(dbId, partition);
+            // mark the partition as not recoverable
+            recyclePartitionInfo.setRecoverable(false);
+            // retain partition tablets with specified period
+            recyclePartitionInfo.setRetentionPeriod(partitionRetentionPeriod);
+            GlobalStateMgr.getCurrentState().getRecycleBin().recyclePartition(recyclePartitionInfo);
+
+            removePartitionFromInnerState(partition);
+        } else {
+            // if `partitionRetentionPeriod` is not valid, fallback to drop partition forcefully
+            dropPartition(dbId, partitionName, true);
+        }
     }
 
     // check input partition has temporary partition
@@ -2867,7 +2896,7 @@ public class OlapTable extends Table {
                 Partition oldPartition = nameToPartition.get(oldPartitionName);
                 if (oldPartition != null) {
                     // drop old partition
-                    dropPartition(dbId, oldPartitionName, true);
+                    dropPartitionWithRetention(dbId, oldPartitionName, Config.partition_recycle_retention_period_secs);
                 }
                 // add new partition
                 addPartition(partition);
@@ -2966,7 +2995,7 @@ public class OlapTable extends Table {
         // 1. drop old partitions
         for (String partitionName : partitionNames) {
             // This will also drop all tablets of the partition from TabletInvertedIndex
-            dropPartition(dbId, partitionName, true);
+            dropPartitionWithRetention(dbId, partitionName, Config.partition_recycle_retention_period_secs);
         }
 
         // 2. add temp partitions' range info to rangeInfo, and remove them from
@@ -3002,7 +3031,7 @@ public class OlapTable extends Table {
         // drop source partition
         Partition srcPartition = nameToPartition.get(sourcePartitionName);
         if (srcPartition != null) {
-            dropPartition(dbId, sourcePartitionName, true);
+            dropPartitionWithRetention(dbId, sourcePartitionName, Config.partition_recycle_retention_period_secs);
         }
 
         Partition partition = tempPartitions.getPartition(tempPartitionName);
