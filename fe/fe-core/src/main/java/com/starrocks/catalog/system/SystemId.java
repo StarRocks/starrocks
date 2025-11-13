@@ -110,6 +110,8 @@ public class SystemId {
 
     public static final long SYS_DB_ID = 100L;
 
+    public static final long STATISTICS_DB_ID = 200L;
+
     public static final long ROLE_EDGES_ID = 101L;
     public static final long GRANTS_TO_ROLES_ID = 102L;
     public static final long GRANTS_TO_USERS_ID = 103L;

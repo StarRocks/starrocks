@@ -194,10 +194,11 @@ public class StatisticUtils {
         if (FeConstants.runningUnitTest) {
             return true;
         }
+        // Statistics database is now built-in and should always exist
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(StatsConstants.STATISTICS_DB_NAME);
         // check database
         if (db == null) {
-            LOG.warn("Statistics database {} not found", StatsConstants.STATISTICS_DB_NAME);
+            LOG.warn("Statistics database {} not found (should be built-in)", StatsConstants.STATISTICS_DB_NAME);
             return false;
         }
 

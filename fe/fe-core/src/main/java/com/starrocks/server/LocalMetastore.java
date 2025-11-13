@@ -34,6 +34,9 @@
 
 package com.starrocks.server;
 
+import static com.starrocks.server.GlobalStateMgr.NEXT_ID_INIT_VALUE;
+import static com.starrocks.server.GlobalStateMgr.isCheckpointThread;
+
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
@@ -94,6 +97,7 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.View;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
+import com.starrocks.catalog.system.statistics.StatisticsDb;
 import com.starrocks.catalog.system.sys.SysDb;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AlreadyExistsException;
@@ -241,6 +245,7 @@ import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.sql.util.EitherOr;
+import com.starrocks.statistic.StatsConstants;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.TabletTaskExecutor;
@@ -252,12 +257,6 @@ import com.starrocks.thrift.TTabletType;
 import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.cngroup.CRAcquireContext;
 import com.starrocks.warehouse.cngroup.ComputeResource;
-import org.apache.commons.collections.CollectionUtils;
-import org.apache.commons.lang3.StringUtils;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.threeten.extra.PeriodDuration;
-
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -276,9 +275,11 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import javax.validation.constraints.NotNull;
-
-import static com.starrocks.server.GlobalStateMgr.NEXT_ID_INIT_VALUE;
-import static com.starrocks.server.GlobalStateMgr.isCheckpointThread;
+import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.threeten.extra.PeriodDuration;
 
 public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(LocalMetastore.class);
@@ -316,6 +317,30 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 "starrocks id shouldn't larger than " + NEXT_ID_INIT_VALUE);
         idToDb.put(starRocksDb.getId(), starRocksDb);
         fullNameToDb.put(starRocksDb.getFullName(), starRocksDb);
+    }
+
+    /**
+     * Initialize statistics database with compatibility check.
+     * If the database already exists (from checkpoint/edit log), use the existing one.
+     * Otherwise, create a built-in statistics database.
+     */
+    private void initStatisticsDb() {
+        // Check if _statistics_ database already exists (from checkpoint/edit log)
+        Database existingDb = fullNameToDb.get(StatsConstants.STATISTICS_DB_NAME);
+        if (existingDb != null) {
+            // Database already exists from previous version, use existing one
+            // Mark it as system database for protection
+            LOG.info("Statistics database already exists with ID: {}, using existing database", existingDb.getId());
+            return;
+        }
+
+        // Database doesn't exist, create built-in one
+        StatisticsDb statisticsDb = new StatisticsDb();
+        Preconditions.checkState(statisticsDb.getId() < NEXT_ID_INIT_VALUE,
+                "StatisticsDb id shouldn't larger than " + NEXT_ID_INIT_VALUE);
+        idToDb.put(statisticsDb.getId(), statisticsDb);
+        fullNameToDb.put(statisticsDb.getFullName(), statisticsDb);
+        LOG.info("Created built-in statistics database with ID: {}", statisticsDb.getId());
     }
 
     boolean tryLock(boolean mustLock) {
@@ -483,6 +508,11 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 throw new MetaNotFoundException("Database not found");
             }
             db = this.fullNameToDb.get(dbName);
+            // Prevent dropping system databases
+            if (InfoSchemaDb.isInfoSchemaDb(db.getId()) || SysDb.DATABASE_NAME.equalsIgnoreCase(db.getFullName())
+                    || StatisticsDb.isStatisticsDb(db.getId()) || StatisticsDb.isStatisticsDb(db.getFullName())) {
+                throw new DdlException("Cannot drop system database: " + dbName);
+            }
             if (!isForceDrop && !db.getTemporaryTables().isEmpty()) {
                 throw new DdlException("The database [" + dbName + "] " +
                         "cannot be dropped because there are still some temporary tables in it. " +
@@ -2510,8 +2540,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             // Then we reassemble the origin cluster name with lower case db name,
             // and finally get information_schema db from the name map.
             String dbName = ClusterNamespace.getNameFromFullName(name);
-            if (dbName.equalsIgnoreCase(InfoSchemaDb.DATABASE_NAME) ||
-                    dbName.equalsIgnoreCase(SysDb.DATABASE_NAME)) {
+            if (dbName.equalsIgnoreCase(InfoSchemaDb.DATABASE_NAME) || dbName.equalsIgnoreCase(SysDb.DATABASE_NAME)
+                    || dbName.equalsIgnoreCase(StatisticsDb.DATABASE_NAME)) {
                 return fullNameToDb.get(dbName.toLowerCase());
             }
         }
@@ -5306,6 +5336,9 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
         recreateTabletInvertIndex();
         GlobalStateMgr.getCurrentState().getEsRepository().loadTableFromCatalog();
+
+        // Initialize statistics database after loading from checkpoint
+        initStatisticsDb();
     }
 
     @Override

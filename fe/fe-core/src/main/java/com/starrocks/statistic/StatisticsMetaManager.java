@@ -14,6 +14,17 @@
 
 package com.starrocks.statistic;
 
+import static com.starrocks.catalog.InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
+import static com.starrocks.statistic.StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME;
+import static com.starrocks.statistic.StatsConstants.EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME;
+import static com.starrocks.statistic.StatsConstants.FULL_STATISTICS_TABLE_NAME;
+import static com.starrocks.statistic.StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME;
+import static com.starrocks.statistic.StatsConstants.MULTI_COLUMN_STATISTICS_TABLE_NAME;
+import static com.starrocks.statistic.StatsConstants.QUERY_HISTORY_TABLE_NAME;
+import static com.starrocks.statistic.StatsConstants.SAMPLE_STATISTICS_TABLE_NAME;
+import static com.starrocks.statistic.StatsConstants.SPM_BASELINE_TABLE_NAME;
+import static com.starrocks.statistic.StatsConstants.STATISTICS_DB_NAME;
+
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
@@ -36,7 +47,6 @@ import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.ColumnDef;
-import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.KeysDesc;
@@ -48,24 +58,12 @@ import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.TypeFactory;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
-import static com.starrocks.catalog.InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
-import static com.starrocks.statistic.StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME;
-import static com.starrocks.statistic.StatsConstants.EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME;
-import static com.starrocks.statistic.StatsConstants.FULL_STATISTICS_TABLE_NAME;
-import static com.starrocks.statistic.StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME;
-import static com.starrocks.statistic.StatsConstants.MULTI_COLUMN_STATISTICS_TABLE_NAME;
-import static com.starrocks.statistic.StatsConstants.QUERY_HISTORY_TABLE_NAME;
-import static com.starrocks.statistic.StatsConstants.SAMPLE_STATISTICS_TABLE_NAME;
-import static com.starrocks.statistic.StatsConstants.SPM_BASELINE_TABLE_NAME;
-import static com.starrocks.statistic.StatsConstants.STATISTICS_DB_NAME;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 public class StatisticsMetaManager extends FrontendDaemon {
     private static final Logger LOG = LogManager.getLogger(StatisticsMetaManager.class);
@@ -74,26 +72,13 @@ public class StatisticsMetaManager extends FrontendDaemon {
         super("statistics meta manager", 60L * 1000L);
     }
 
-    private boolean checkDatabaseExist() {
-        return GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(STATISTICS_DB_NAME) != null;
-    }
-
-    private boolean createDatabase() {
-        LOG.info("create statistics db start");
-        CreateDbStmt dbStmt = new CreateDbStmt(false, STATISTICS_DB_NAME);
-        try {
-            GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(dbStmt.getFullDbName());
-        } catch (StarRocksException e) {
-            LOG.warn("Failed to create database ", e);
-            return false;
-        }
-        LOG.info("create statistics db down");
-        return checkDatabaseExist();
-    }
-
     private boolean checkTableExist(String tableName) {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(STATISTICS_DB_NAME);
-        Preconditions.checkState(db != null);
+        if (db == null) {
+            // Database should always exist as built-in, but handle gracefully
+            LOG.warn("Statistics database not found, this should not happen");
+            return false;
+        }
         return GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName) != null;
     }
 
@@ -544,14 +529,9 @@ public class StatisticsMetaManager extends FrontendDaemon {
 
     @Override
     protected void runAfterCatalogReady() {
-        // To make UT pass, some UT will create database and table
+        // Database is now built-in and always exists, no need to create it
+        // To make UT pass, some UT will create tables
         trySleep(Config.statistic_manager_sleep_time_sec * 1000);
-        while (!checkDatabaseExist()) {
-            if (createDatabase()) {
-                break;
-            }
-            trySleep(10000);
-        }
 
         refreshStatisticsTable(SAMPLE_STATISTICS_TABLE_NAME);
         refreshStatisticsTable(FULL_STATISTICS_TABLE_NAME);
@@ -571,12 +551,7 @@ public class StatisticsMetaManager extends FrontendDaemon {
     }
 
     public void createStatisticsTablesForTest() {
-        while (!checkDatabaseExist()) {
-            if (createDatabase()) {
-                break;
-            }
-            trySleep(1);
-        }
+        // Database is now built-in and always exists, no need to create it
 
         boolean existsSample = false;
         boolean existsFull = false;
