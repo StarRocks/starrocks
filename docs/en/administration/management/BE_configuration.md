@@ -1168,7 +1168,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Type: Int
 - Unit: Seconds
 - Is mutable: Yes
-- Description: Interval in seconds that the ProfileReportWorker uses to (1) decide when to report per-fragment profile information for LOAD queries and (2) sleep between reporting cycles. The worker compares current time against each task's last_report_time using (profile_report_interval * 1000) ms to determine if a profile should be re-reported for both non-pipeline and pipeline load tasks. At each loop the worker reads the current value (mutable at runtime); if the configured value is <= 0 the worker forces it to 1 and emits a warning. Changing this value affects the next reporting decision and sleep duration.
+- Description: Interval in seconds that the ProfileReportWorker uses to (1) decide when to report per-fragment profile information for LOAD queries and (2) sleep between reporting cycles. The worker compares current time against each task's last_report_time using (profile_report_interval * 1000) ms to determine if a profile should be re-reported for both non-pipeline and pipeline load tasks. At each loop the worker reads the current value (mutable at runtime); if the configured value is less than or euqual to 0 the worker forces it to 1 and emits a warning. Changing this value affects the next reporting decision and sleep duration.
 - Introduced in: v3.2.0
 
 ### Storage
