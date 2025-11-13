@@ -312,7 +312,7 @@ public class MvTransparentUnionRewriteHiveTest extends MVTestBase {
                 for (String query : sqls) {
                     logSysInfo(query);
                     String plan = getFragmentPlan(query);
-                    PlanTestBase.assertContains(plan, "mv0" );
+                    PlanTestBase.assertContains(plan, "mv0");
                 }
             }
 
