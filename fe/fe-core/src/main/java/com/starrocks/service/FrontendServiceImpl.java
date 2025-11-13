@@ -211,6 +211,7 @@ import com.starrocks.thrift.TFeLocksRes;
 import com.starrocks.thrift.TFeMemoryReq;
 import com.starrocks.thrift.TFeMemoryRes;
 import com.starrocks.thrift.TFeResult;
+import com.starrocks.thrift.TFeThreadInfo;
 import com.starrocks.thrift.TFetchResourceResult;
 import com.starrocks.thrift.TFinishCheckpointRequest;
 import com.starrocks.thrift.TFinishCheckpointResponse;
@@ -225,6 +226,8 @@ import com.starrocks.thrift.TGetDbsParams;
 import com.starrocks.thrift.TGetDbsResult;
 import com.starrocks.thrift.TGetDictQueryParamRequest;
 import com.starrocks.thrift.TGetDictQueryParamResponse;
+import com.starrocks.thrift.TGetFeThreadsRequest;
+import com.starrocks.thrift.TGetFeThreadsResponse;
 import com.starrocks.thrift.TGetGrantsToRolesOrUserRequest;
 import com.starrocks.thrift.TGetGrantsToRolesOrUserResponse;
 import com.starrocks.thrift.TGetKeysRequest;
@@ -257,13 +260,6 @@ import com.starrocks.thrift.TGetTablesParams;
 import com.starrocks.thrift.TGetTablesResult;
 import com.starrocks.thrift.TGetTabletScheduleRequest;
 import com.starrocks.thrift.TGetTabletScheduleResponse;
-import com.starrocks.thrift.TGetFeThreadsRequest;
-import com.starrocks.thrift.TGetFeThreadsResponse;
-import com.starrocks.thrift.TFeThreadInfo;
-
-import java.lang.management.ManagementFactory;
-import java.lang.management.ThreadInfo;
-import java.lang.management.ThreadMXBean;
 import com.starrocks.thrift.TGetTaskInfoResult;
 import com.starrocks.thrift.TGetTaskRunInfoResult;
 import com.starrocks.thrift.TGetTasksParams;
@@ -387,6 +383,9 @@ import org.apache.thrift.TException;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.IOException;
+import java.lang.management.ManagementFactory;
+import java.lang.management.ThreadInfo;
+import java.lang.management.ThreadMXBean;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -2726,8 +2725,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             ThreadInfo[] threadInfos = threadMXBean.getThreadInfo(threadIds);
 
             List<TFeThreadInfo> threads = Lists.newArrayList();
-            Pair<String, Integer> selfNode = GlobalStateMgr.getCurrentState().getNodeMgr().getSelfNode();
-            String feId = selfNode.first + ":" + selfNode.second;
+            String feId = GlobalStateMgr.getCurrentState().getNodeMgr().getSelfNode().toString();
 
             for (ThreadInfo threadInfo : threadInfos) {
                 if (threadInfo == null) {
