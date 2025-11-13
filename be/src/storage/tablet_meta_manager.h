@@ -113,8 +113,17 @@ public:
 
     static Status walk(KVStore* meta, std::function<bool(long, long, std::string_view)> const& func);
 
+    // Iterates through tablet metadata with timeout. If the iteration times out,
+    // returns TIMEOUT status.
     static Status walk_until_timeout(KVStore* meta, std::function<bool(long, long, std::string_view)> const& func,
                                      int64_t limit_time);
+
+    // Iterates through tablet metadata with timeout. If the iteration times out,
+    // it triggers a compaction of the meta KVStore and retries the iteration
+    // from the last processed key without timeout.
+    static Status walk_with_compact_on_timeout(KVStore* meta,
+                                               std::function<bool(long, long, std::string_view)> const& func,
+                                               int64_t limit_time);
 
     static Status load_json_meta(DataDir* store, const std::string& meta_path);
 
