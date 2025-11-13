@@ -38,11 +38,13 @@ import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.type.Type;
 
 import java.util.List;
 import java.util.Map;
@@ -98,7 +100,209 @@ public class SplitTopNAggregateRule extends TransformationRule {
                 && ss.getColumnStatistics().values().stream().noneMatch(ColumnStatistic::isUnknown)) {
             return false;
         }
+
+        // Get scan statistics for checking column average row size
+        Statistics scanStatistics = input.inputAt(0).inputAt(0).getStatistics();
+
+        // Calculate columns that will be read twice (once in each scan)
+        List<ColumnRefOperator> orderByRefs = topN.getOrderByElements().stream().map(Ordering::getColumnRef).toList();
+        List<ColumnRefOperator> splitAggregations = splitTopNAggregations(agg, orderByRefs);
+        if (splitAggregations.isEmpty()) {
+            return false;
+        }
+
+        // First scan (join right side) needs: groupingKeys + splitAggregations used columns + predicate columns
+        ColumnRefSet firstScanColumns = new ColumnRefSet();
+        firstScanColumns.union(agg.getGroupingKeys());
+        splitAggregations.forEach(c -> firstScanColumns.union(agg.getAggregations().get(c).getUsedColumns()));
+        if (scan.getPredicate() != null) {
+            firstScanColumns.union(scan.getPredicate().getUsedColumns());
+        }
+
+        // Check predicate and column type constraints only for duplicated columns
+        if (!checkPredicateAndColumnConstraints(scan, scanStatistics, firstScanColumns)) {
+            return false;
+        }
+
         return true;
+    }
+
+    /**
+     * Check predicate and column type constraints for split topN aggregate optimization.
+     * Only check columns that will be read twice (duplicated columns).
+     * <p>
+     * Rules:
+     * 1. No predicate: allow if duplicated columns have no long string/complex types
+     * 2. Single predicate:
+     * - Fixed-length types: allow (low cost for predicate evaluation)
+     * - String types:
+     * - Long strings (averageRowSize > 5 or no statistics): disallow (high cost for reading and evaluation)
+     * - Short strings (averageRowSize <= 5) + col != '': allow (low cost, likely to reduce agg input)
+     * 3. Multiple predicates: disallow (complex case)
+     */
+    private boolean checkPredicateAndColumnConstraints(LogicalOlapScanOperator scan, Statistics scanStatistics,
+                                                       ColumnRefSet duplicatedColumns) {
+        if (duplicatedColumns.size() > 3) {
+            return false;
+        }
+
+        if (hasLongStringOrComplexType(scan, duplicatedColumns, scanStatistics)) {
+            return false;
+        }
+
+        ScalarOperator predicate = scan.getPredicate();
+        List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
+
+        // Case 1: No predicate
+        if (conjuncts.isEmpty()) {
+            return true;
+        }
+
+        if (conjuncts.size() > 1 || predicate)
+
+        // Case 3: Single predicate
+        ScalarOperator singlePredicate = conjuncts.get(0);
+
+        // Extract column references from the predicate that are in duplicated columns
+        List<ColumnRefOperator> predicateColumns = singlePredicate.getColumnRefs().stream()
+                .filter(colRef -> duplicatedColumns.contains(colRef))
+                .collect(java.util.stream.Collectors.toList());
+
+        if (predicateColumns.isEmpty()) {
+            // No duplicated column in predicate, check all duplicated columns
+            return !hasLongStringOrComplexType(scan, duplicatedColumns, scanStatistics);
+        }
+
+        // Check each duplicated column used in the predicate
+        // If any column doesn't meet the requirements, disallow the optimization
+        for (ColumnRefOperator colRef : predicateColumns) {
+            Type colType = colRef.getType();
+
+            // Complex type: disallow
+            if (isComplexType(colType)) {
+                return false;
+            }
+
+            // Check if it's a fixed-length type (non-string, non-complex)
+            if (!colType.isStringType()) {
+                // Fixed-length type: allow (low cost)
+                continue;
+            }
+
+            // String type: need to check average row size and predicate form
+            // Long string: disallow if averageRowSize > 5 or no statistics
+            if (isLongString(colRef, scanStatistics)) {
+                return false;
+            }
+
+            // Short string: only allow if predicate is col != ''
+            if (!isNotEqualEmptyStringPredicate(singlePredicate, colRef)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Check if the duplicated columns have long string or complex type columns.
+     * Long string is determined by averageRowSize > 5 or no statistics.
+     */
+    private boolean hasLongStringOrComplexType(LogicalOlapScanOperator scan, ColumnRefSet duplicatedColumns,
+                                               Statistics scanStatistics) {
+        for (ColumnRefOperator colRef : scan.getColRefToColumnMetaMap().keySet()) {
+            if (!duplicatedColumns.contains(colRef)) {
+                continue;
+            }
+
+            Type colType = colRef.getType();
+
+            if (colType.isStringType()) {
+                if (isLongString(colRef, scanStatistics)) {
+                    return true;
+                }
+            }
+
+            if (isComplexType(colType)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Check if a string column is a long string based on statistics.
+     * Returns true if:
+     * - No statistics available, OR
+     * - averageRowSize > 5
+     */
+    private boolean isLongString(ColumnRefOperator colRef, Statistics scanStatistics) {
+        if (scanStatistics == null) {
+            // No statistics: treat as long string to be safe
+            return true;
+        }
+
+        ColumnStatistic columnStatistic = scanStatistics.getColumnStatistics().get(colRef);
+        if (columnStatistic == null || columnStatistic.isUnknown()) {
+            // No statistics for this column: treat as long string to be safe
+            return true;
+        }
+
+        double averageRowSize = columnStatistic.getAverageRowSize();
+        // Long string if averageRowSize > 5
+        return averageRowSize > 5;
+    }
+
+    /**
+     * Check if a type is complex type (ARRAY, MAP, STRUCT, JSON, VARIANT).
+     */
+    private boolean isComplexType(Type type) {
+        return type.isComplexType() || type.isJsonType() || type.isVariantType();
+    }
+
+    /**
+     * Check if the predicate is of form: col != '' (not equal to empty string).
+     */
+    private boolean isNotEqualEmptyStringPredicate(ScalarOperator predicate, ColumnRefOperator colRef) {
+        if (!(predicate instanceof BinaryPredicateOperator)) {
+            return false;
+        }
+
+        BinaryPredicateOperator binPred = (BinaryPredicateOperator) predicate;
+        if (binPred.getBinaryType() != BinaryType.NE) {
+            return false;
+        }
+
+        // Check if one side is the column and the other is empty string constant
+        ScalarOperator left = binPred.getChild(0);
+        ScalarOperator right = binPred.getChild(1);
+
+        return (isColumnRef(left, colRef) && isEmptyStringConstant(right)) ||
+                (isColumnRef(right, colRef) && isEmptyStringConstant(left));
+    }
+
+    /**
+     * Check if the operator is a ColumnRefOperator matching the given column.
+     */
+    private boolean isColumnRef(ScalarOperator op, ColumnRefOperator colRef) {
+        return op instanceof ColumnRefOperator && op.equals(colRef);
+    }
+
+    /**
+     * Check if the operator is a ConstantOperator representing empty string.
+     */
+    private boolean isEmptyStringConstant(ScalarOperator op) {
+        if (!(op instanceof ConstantOperator)) {
+            return false;
+        }
+
+        ConstantOperator constOp = (ConstantOperator) op;
+        if (constOp.isNull() || !constOp.getType().isStringType()) {
+            return false;
+        }
+
+        String value = constOp.getVarchar();
+        return value != null && value.isEmpty();
     }
 
     @Override
