@@ -109,15 +109,6 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Description: The BE thrift server port, which is used to receive requests from FEs.
 - Introduced in: -
 
-##### thrift_port (Deprecated)
-
-- Default: 0
-- Type: Int
-- Unit: Port
-- Is mutable: No
-- Description: Deprecated configuration for the Thrift service port. Please set `be_port` instead. When this item is set to a non‑zero value and the process is started in CN mode (`as_cn=true`), this value is used as the port for the ImpalaInternalService/BackendService Thrift server; otherwise the `be_port` is used. Setting it to `0` disables this legacy override and allows `be_port` to control the Thrift port. This configuration is deprecated, and the startup script logs a warning if it is used.
-- Introduced in: v3.2.0
-
 ##### brpc_port
 
 - Default: 8060
@@ -1068,15 +1059,6 @@ When this value is set to `0`, the system uses twice of the CPU core count as th
 When this value is set to less than `0`, the system uses the product of its absolute value and the CPU core count as the value.
 - Introduced in: v3.1.12, 3.2.7
 
-##### column_mode_partial_update_insert_batch_size
-
-- Default: 4096
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: Batch size for column mode partial update when processing inserted rows. If this item is set to `0` or negative, it will be clamped to `1` to avoid infinite loop. This item controls the number of newly inserted rows processed in each batch. Larger values can improve write performance but will consume more memory.
-- Introduced in: v3.5.10, v4.0.2
-
 ##### max_runnings_transactions_per_txn_map
 
 - Default: 100
@@ -1094,6 +1076,15 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Is mutable: Yes
 - Description: Specifies whether to log the HTTP requests and responses for Stream Load jobs.
 - Introduced in: v2.5.17, v3.0.9, v3.1.6, v3.2.1
+
+##### column_mode_partial_update_insert_batch_size
+
+- Default: 4096
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Batch size for column mode partial update when processing inserted rows. If this item is set to `0` or negative, it will be clamped to `1` to avoid infinite loop. This item controls the number of newly inserted rows processed in each batch. Larger values can improve write performance but will consume more memory.
+- Introduced in: v3.5.10, v4.0.2
 
 ### Loading and unloading
 
@@ -1896,15 +1887,6 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: Limits how many size-tiered levels may be merged into a single primary-key real-time compaction task. During the PK size-tiered compaction selection, StarRocks builds ordered "levels" of rowsets by size and will add successive levels into the chosen compaction input until this limit is reached (the code uses compaction_level `<=` size_tiered_max_compaction_level). The value is inclusive and counts the number of distinct size tiers merged (the top level is counted as 1). Effective only when the PK size-tiered compaction strategy is enabled; raising it lets a compaction task include more levels (larger, more I/O- and CPU-intensive merges, potential higher write amplification), while lowering it restricts merges and reduces task size and resource usage.
 - Introduced in: v4.0.0
 
-##### enable_strict_delvec_crc_check
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: When enable_strict_delvec_crc_check is set to true, we will perform a strict CRC32 check on the delete vector, and if a mismatch is detected, a failure will be returned.
-- Introduced in: -
-
 ##### size_tiered_min_level_size
 
 - Default: 131072
@@ -2083,6 +2065,15 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Unit: -
 - Is mutable: Yes
 - Description: The maximum number of pending versions that are tolerable on a Primary Key tablet. Pending versions refer to versions that are committed but not applied yet.
+- Introduced in: -
+
+##### enable_strict_delvec_crc_check
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: When enable_strict_delvec_crc_check is set to true, we will perform a strict CRC32 check on the delete vector, and if a mismatch is detected, a failure will be returned.
 - Introduced in: -
 
 ##### pindex_major_compaction_limit_per_disk

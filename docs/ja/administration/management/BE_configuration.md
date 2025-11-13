@@ -126,6 +126,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: bRPC の bthreads の数。値 `-1` は CPU スレッドと同じ数を示します。
 - 導入バージョン: -
 
+##### enable_https
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: No
+- 説明: この項目を `true` に設定すると、BE の bRPC サーバは TLS を使用するように設定されます: `ServerOptions.ssl_options` は BE 起動時に `ssl_certificate_path` と `ssl_private_key_path` で指定された証明書と秘密鍵で設定されます。これにより受信 bRPC 接続に対して HTTPS/TLS が有効になり、クライアントは TLS を用いて接続する必要があります。証明書と鍵のファイルが存在し、BE プロセスからアクセス可能であり、bRPC/SSL の期待に合致していることを確認してください。
+- 導入バージョン: v4.0.0
+
 ##### brpc_stub_expire_s
 
 - デフォルト: 3600
@@ -161,6 +170,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 可変: いいえ
 - 説明: BE プロセスのメモリ上限。パーセンテージ ("80%") または物理的な制限 ("100G") として設定できます。デフォルトのハードリミットはサーバーのメモリサイズの 90% で、ソフトリミットは 80% です。同じサーバーで他のメモリ集約型サービスと一緒に StarRocks をデプロイしたい場合、このパラメータを設定する必要があります。
 - 導入バージョン: -
+
+##### enable_jemalloc_memory_tracker
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: No
+- 説明: この項目を `true` に設定すると、BE はバックグラウンドスレッド（jemalloc_tracker_daemon）を起動し、1秒ごとに jemalloc の統計をポーリングして GlobalEnv の jemalloc メタデータ MemTracker を jemalloc の "stats.metadata" 値で更新します。これにより jemalloc のメタデータ消費が StarRocks プロセスメモリのアカウンティングに含まれ、jemalloc 内部で使用されるメモリが過小報告されるのを防ぎます。このトラッカーは非 macOS ビルドでのみコンパイル／起動されます（#ifndef __APPLE__）および "jemalloc_tracker_daemon" という名前のデーモンスレッドとして動作します。この設定は起動時の振る舞いや MemTracker 状態を維持するスレッドに影響するため、変更には再起動が必要です。jemalloc を使用していない場合や jemalloc のトラッキングを意図的に別方式で管理している場合のみ無効にしてください。その他の場合は正確なメモリアカウンティングと割当て保護を維持するため有効のままにしてください。
+- 導入バージョン: v3.2.12
 
 ##### abort_on_large_memory_allocation
 
@@ -299,6 +317,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 導入バージョン: 3.2.3
 
 ### ユーザー、ロール、および権限
+
+##### ssl_certificate_path
+
+- デフォルト: 
+- タイプ: String
+- 単位: -
+- 変更可能: No
+- 説明: enable_https が true のときに BE の brpc サーバが使用する TLS/SSL 証明書ファイル（PEM）の絶対パスです。BE 起動時にこの値は `brpc::ServerOptions::ssl_options().default_cert.certificate` にコピーされます。必ず対応する秘密鍵を `ssl_private_key_path` にも設定してください。必要に応じてサーバ証明書と中間証明書を PEM 形式で（証明書チェーンとして）提供してください。ファイルは StarRocks BE プロセスから読み取り可能である必要があり、起動時にのみ適用されます。enable_https が有効でかつ未設定または無効な場合、brpc の TLS 設定に失敗しサーバが正しく起動できない可能性があります。
+- 導入バージョン: v4.0.0
 
 ### クエリエンジン
 
@@ -912,15 +939,6 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
   この値が `0` 未満に設定されている場合、システムはその絶対値と CPU コア数の積を値として使用します。
 - 導入バージョン: 3.1.12, 3.2.7
 
-##### column_mode_partial_update_insert_batch_size
-
-- デフォルト: 4096
-- タイプ: Int
-- 単位: -
-- 可変: はい
-- 説明: 挿入行を処理する際の列モード部分更新におけるバッチサイズ。この項目が `0` または負の数値に設定されている場合、無限ループを回避するため `1` に制限されます。この項目は各バッチで処理される新規挿入行の数を制御します。大きな値は書き込みパフォーマンスを向上させますが、より多くのメモリを消費します。
-- 導入バージョン: v3.5.10, v4.0.2
-
 ##### max_runnings_transactions_per_txn_map
 
 - デフォルト: 100
@@ -938,6 +956,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 可変: はい
 - 説明: Stream Load ジョブの HTTP リクエストとレスポンスをログに記録するかどうかを指定します。
 - 導入バージョン: v2.5.17, v3.0.9, v3.1.6, v3.2.1
+
+##### column_mode_partial_update_insert_batch_size
+
+- デフォルト: 4096
+- タイプ: Int
+- 単位: -
+- 可変: はい
+- 説明: 挿入行を処理する際の列モード部分更新におけるバッチサイズ。この項目が `0` または負の数値に設定されている場合、無限ループを回避するため `1` に制限されます。この項目は各バッチで処理される新規挿入行の数を制御します。大きな値は書き込みパフォーマンスを向上させますが、より多くのメモリを消費します。
+- 導入バージョン: v3.5.10, v4.0.2
 
 ### ロードとアンロード
 
@@ -1605,15 +1632,6 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: enable_pk_parallel_execution が true に設定されている場合、インポートまたはコンパクションで生成されるデータがこの閾値を超えると、Primary Key テーブルの並列実行戦略が有効になります。
 - 導入バージョン: -
 
-##### enable_strict_delvec_crc_check
-
-- デフォルト: true
-- タイプ: Boolean
-- 単位: -
-- 可変: はい
-- 説明: enable_strict_delvec_crc_check を true に設定すると、delete vector の CRC32 を厳密にチェックし、一致しない場合はエラーを返します。
-- 導入バージョン: -
-
 ##### size_tiered_min_level_size
 
 - デフォルト: 131072
@@ -1783,6 +1801,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 単位: -
 - 可変: はい
 - 説明: 主キー タブレットで許容される最大保留バージョン数。保留バージョンは、コミットされているがまだ適用されていないバージョンを指します。
+- 導入バージョン: -
+
+##### enable_strict_delvec_crc_check
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 可変: はい
+- 説明: enable_strict_delvec_crc_check を true に設定すると、delete vector の CRC32 を厳密にチェックし、一致しない場合はエラーを返します。
 - 導入バージョン: -
 
 ##### pindex_major_compaction_limit_per_disk
@@ -2134,6 +2161,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
   - `true`: ホスト名をIPアドレスに変換します。
   - `false` (デフォルト): エラーURLに元のホスト名を保持します。
 - 導入バージョン: v4.0.1
+
+##### memory_high_level
+
+- デフォルト: 75
+- タイプ: Long
+- 単位: Percent
+- 変更可能: Yes
+- 説明: プロセスメモリ上限のパーセンテージとして表現される高水位メモリ閾値。プロセスの総メモリ消費がこの割合を超えると、BE は段階的にメモリを解放し始めます（現状ではデータキャッシュや update キャッシュの退避による）。モニタはこの値を使用して memory_high = mem_limit * memory_high_level / 100 を計算し、消費量が `>` memory_high の場合は GC アドバイザに導かれた制御された退避を行います；消費が別の設定である memory_urgent_level を超えると、より積極的な即時削減が行われます。この値はしきい値を超えた場合に特定のメモリ集約型操作（例えば primary-key preload）を無効化するかどうかの判定にも利用されます。memory_urgent_level との検証条件を満たす必要があります（memory_urgent_level `>` memory_high_level、memory_high_level `>=` 1、memory_urgent_level `<=` 100）。
+- 導入バージョン: v3.2.0
 
 ##### upload_buffer_size
 

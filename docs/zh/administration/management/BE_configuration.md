@@ -123,6 +123,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：bRPC 的 bthread 线程数量，`-1` 表示和 CPU 核数一样。
 - 引入版本：-
 
+##### enable_https
+
+- 默认值: false
+- 类型: Boolean
+- 単位: -
+- 是否可变: No
+- 描述: 当此项设置为 `true` 时，BE 的 bRPC 服务端会配置为使用 TLS：`ServerOptions.ssl_options` 会在 BE 启动时填充由 `ssl_certificate_path` 和 `ssl_private_key_path` 指定的证书和私钥。这为传入的 bRPC 连接启用 HTTPS/TLS；客户端必须使用 TLS 连接。请确保证书和密钥文件存在、BE 进程可访问，且符合 bRPC/SSL 期望。
+- 引入版本: v4.0.0
+
 ##### brpc_stub_expire_s
 
 - 默认值: 3600
@@ -185,6 +194,24 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 是否动态：否
 - 描述：心跳线程数。
 - 引入版本：-
+
+##### get_pindex_worker_count
+
+- 默认值: 0
+- 类型: Int
+- 单位: -
+- 是否可变: 是
+- 描述: 设置 UpdateManager 中名为 "get_pindex" 的线程池的 worker 线程数量，该线程池用于加载/获取持久索引数据（在为主键表应用 rowsets 时使用）。在运行时，配置更新会调整该池的最大线程数：如果 `>0` 则应用该值；如果为 0，则运行时回调使用 CPU 核心数 (CpuInfo::num_cores())。在初始化时，线程池的最大线程数按 max(get_pindex_worker_count, max_apply_thread_cnt * 2) 计算，其中 max_apply_thread_cnt 是 apply-thread 池的最大值。增大该值可以提高 pindex 加载的并行度；减小则可降低并发及内存/CPU 使用。
+- 引入版本: v3.2.0
+
+##### transaction_apply_thread_pool_num_min
+
+- 默认值: 0
+- 类型: Int
+- 单位: Threads
+- 是否可变: 是
+- 描述: 设置 BE 的 UpdateManager 中 "update_apply" 线程池的最小线程数——该线程池用于为主键表应用 rowsets。值为 0 表示禁用固定最小值（没有强制的下限）；当 transaction_apply_worker_count 也为 0 时，线程池的最大线程数默认等于 CPU 核心数，因此有效的 worker 容量等同于 CPU 核心数。你可以增大此值以保证应用事务时的基础并发度；设置过高可能会增加 CPU 争用。变更会在运行时通过 update_config HTTP handler 应用（它会在 apply 线程池上调用 update_min_threads）。
+- 引入版本: v3.2.11
 
 ##### be_service_threads
 
@@ -293,6 +320,19 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 是否动态：否
 - 描述：bRPC 最大的包容量。
 - 引入版本：-
+
+### 元数据与集群管理
+
+##### cluster_id
+
+- 默认值: -1
+- 类型: Int
+- 単位: -
+- 是否可变: No
+- 描述: 此 StarRocks backend 的全局集群标识符。启动时 StorageEngine 会将 config::cluster_id 读入其生效的 cluster id，并验证所有数据根路径包含相同的 cluster id（参见 StorageEngine::_check_all_root_path_cluster_id）。值为 -1 表示“未设置”——引擎可以从现有数据目录或来自 master 心跳中推导生效 id。如果配置了非负 id，则配置的 id 与数据目录中存储的 id 之间的任何不匹配都会导致启动校验失败（Status::Corruption）。当某些 root 缺少 id 且引擎被允许写入 id（options.need_write_cluster_id）时，引擎会将生效 id 持久化到这些 root 中。
+- 引入版本: v3.2.0
+
+### 用户，角色及权限
 
 ### 查询引擎
 
@@ -897,15 +937,6 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 当该参数被设置为小于 `0` 时，系统使用该参数的绝对值与 CPU 核数的乘积。
 - 引入版本：3.1.12, 3.2.7
 
-##### column_mode_partial_update_insert_batch_size
-
-- 默认值：4096
-- 类型：Int
-- 单位：-
-- 是否动态：是
-- 描述：列模式部分更新中处理插入行时的批次大小。如果设置为 `0` 或负数，将会被限制为 `1` 以避免无限循环。该参数控制每次批量处理新插入行的数量，较大的值可以提高写入性能但会占用更多内存。
-- 引入版本：v3.5.10, v4.0.2
-
 ##### max_runnings_transactions_per_txn_map
 
 - 默认值：100
@@ -923,6 +954,17 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 是否动态：是
 - 描述：是否在日志中记录 Stream Load 的 HTTP 请求和响应信息。`true` 表示启用，`false` 表示不启用。
 - 引入版本：v2.5.17, v3.0.9, v3.1.6, v3.2.1
+
+##### column_mode_partial_update_insert_batch_size
+
+- 默认值：4096
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：列模式部分更新中处理插入行时的批次大小。如果设置为 `0` 或负数，将会被限制为 `1` 以避免无限循环。该参数控制每次批量处理新插入行的数量，较大的值可以提高写入性能但会占用更多内存。
+- 引入版本：v3.5.10, v4.0.2
+
+### 导入导出
 
 ### 统计信息
 
@@ -1579,15 +1621,6 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：当enable_pk_parallel_execution设置为true后，导入或者compaction生成的数据大于该阈值时，Primary Key 表并行执行策略将被启用。
 - 引入版本：-
 
-##### enable_strict_delvec_crc_check
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：当enable_strict_delvec_crc_check设置为true后，我们会对delete vector的crc32进行严格检查，如果不一致，将返回失败。
-- 引入版本：-
-
 ##### size_tiered_min_level_size
 
 - 默认值：131072
@@ -1757,6 +1790,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 单位：-
 - 是否动态：是
 - 描述：主键表每个 Tablet 上允许已提交 (Commit) 但是未 Apply 的最大版本数。
+- 引入版本：-
+
+##### enable_strict_delvec_crc_check
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：当enable_strict_delvec_crc_check设置为true后，我们会对delete vector的crc32进行严格检查，如果不一致，将返回失败。
 - 引入版本：-
 
 ##### pindex_major_compaction_limit_per_disk
