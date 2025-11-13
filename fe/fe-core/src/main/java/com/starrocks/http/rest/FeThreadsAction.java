@@ -57,14 +57,14 @@ public class FeThreadsAction extends RestBaseAction {
             ThreadInfo[] threadInfos = threadMXBean.getThreadInfo(threadIds);
 
             List<Map<String, Object>> threads = new ArrayList<>();
-            String feId = GlobalStateMgr.getCurrentState().getNodeMgr().getSelfNode().getHost() + ":" +
-                    GlobalStateMgr.getCurrentState().getNodeMgr().getSelfNode().getHttpPort();
+            String feId = GlobalStateMgr.getCurrentState().getNodeMgr().getSelfNode().toString();
 
             for (ThreadInfo threadInfo : threadInfos) {
                 if (threadInfo == null) {
                     continue;
                 }
                 Map<String, Object> threadData = new HashMap<>();
+                threadData.put("fe_id", feId);
                 threadData.put("thread_id", threadInfo.getThreadId());
                 threadData.put("thread_name", threadInfo.getThreadName());
                 threadData.put("thread_state", threadInfo.getThreadState().toString());
