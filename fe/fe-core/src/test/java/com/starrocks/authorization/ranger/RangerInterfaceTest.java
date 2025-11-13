@@ -37,7 +37,7 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.parser.SqlParser;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
@@ -105,7 +105,7 @@ public class RangerInterfaceTest {
         ConnectContext connectContext = new ConnectContext();
         connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
         TableName tableName = new TableName("db", "tbl");
-        List<Column> columns = Lists.newArrayList(new Column("v1", Type.INT));
+        List<Column> columns = Lists.newArrayList(new Column("v1", IntegerType.INT));
 
         RangerStarRocksAccessController connectScheduler = new RangerStarRocksAccessController();
         try {
@@ -155,7 +155,7 @@ public class RangerInterfaceTest {
         ConnectContext connectContext = new ConnectContext();
         connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
         TableName tableName = new TableName("db", "tbl");
-        List<Column> columns = Lists.newArrayList(new Column("v1", Type.INT));
+        List<Column> columns = Lists.newArrayList(new Column("v1", IntegerType.INT));
 
         Map<String, Expr> e = rangerStarRocksAccessController.getColumnMaskingPolicy(connectContext, tableName, columns);
         Assertions.assertTrue(new ArrayList<>(e.values()).get(0) instanceof NullLiteral);

@@ -50,6 +50,7 @@ import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.thrift.TStatisticData;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.Type;
 import org.apache.commons.lang.StringEscapeUtils;
 import org.apache.commons.lang.StringUtils;
@@ -321,10 +322,10 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
             row.add(new StringLiteral(catalogName));
             row.add(new StringLiteral(db.getOriginName()));
             row.add(new StringLiteral(table.getName()));
-            row.add(new IntLiteral(data.getRowCount(), Type.BIGINT)); // row count, 8 byte
-            row.add(new IntLiteral((long) data.getDataSize(), Type.BIGINT)); // data size, 8 byte
+            row.add(new IntLiteral(data.getRowCount(), IntegerType.BIGINT)); // row count, 8 byte
+            row.add(new IntLiteral((long) data.getDataSize(), IntegerType.BIGINT)); // data size, 8 byte
             row.add(hllDeserialize(data.getHll())); // hll, 32 kB
-            row.add(new IntLiteral(data.getNullCount(), Type.BIGINT)); // null count, 8 byte
+            row.add(new IntLiteral(data.getNullCount(), IntegerType.BIGINT)); // null count, 8 byte
             row.add(new StringLiteral(data.getMax())); // max, 200 byte
             row.add(new StringLiteral(data.getMin())); // min, 200 byte
             row.add(nowFn()); // update time, 8 byte

@@ -30,7 +30,7 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.persist.OperationType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TTabletType;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
@@ -70,7 +70,7 @@ public class AnalyzeMgrEditLogTest {
 
         // Create columns
         List<Column> columns = Lists.newArrayList();
-        Column col1 = new Column("col1", Type.INT);
+        Column col1 = new Column("col1", IntegerType.INT);
         col1.setIsKey(true);
         columns.add(col1);
 

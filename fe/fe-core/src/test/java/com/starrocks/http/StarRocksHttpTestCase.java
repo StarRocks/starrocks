@@ -76,7 +76,9 @@ import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.TransactionStatus;
-import com.starrocks.type.Type;
+import com.starrocks.type.DateType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.IntegerType;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.handler.codec.http.DefaultFullHttpResponse;
@@ -169,9 +171,9 @@ public abstract class StarRocksHttpTestCase {
 
     public static OlapTable newEmptyTable(String name) {
         GlobalStateMgr.getCurrentState().getTabletInvertedIndex().clear();
-        Column k1 = new Column("k1", Type.BIGINT);
-        Column k2 = new Column("k2", Type.DOUBLE);
-        Column k3 = new Column("k3", Type.DATETIME);
+        Column k1 = new Column("k1", IntegerType.BIGINT);
+        Column k2 = new Column("k2", FloatType.DOUBLE);
+        Column k3 = new Column("k3", DateType.DATETIME);
         List<Column> columns = new ArrayList<>();
         columns.add(k1);
         columns.add(k2);
@@ -206,8 +208,8 @@ public abstract class StarRocksHttpTestCase {
 
     public static OlapTable newTable(String name, long replicaDataSize) {
         GlobalStateMgr.getCurrentState().getTabletInvertedIndex().clear();
-        Column k1 = new Column("k1", Type.BIGINT);
-        Column k2 = new Column("k2", Type.DOUBLE);
+        Column k1 = new Column("k1", IntegerType.BIGINT);
+        Column k2 = new Column("k2", FloatType.DOUBLE);
         List<Column> columns = new ArrayList<>();
         columns.add(k1);
         columns.add(k2);
@@ -260,8 +262,8 @@ public abstract class StarRocksHttpTestCase {
     }
 
     private static EsTable newEsTable(String name) {
-        Column k1 = new Column("k1", Type.BIGINT);
-        Column k2 = new Column("k2", Type.DOUBLE);
+        Column k1 = new Column("k1", IntegerType.BIGINT);
+        Column k2 = new Column("k2", FloatType.DOUBLE);
         List<Column> columns = new ArrayList<>();
         columns.add(k1);
         columns.add(k2);

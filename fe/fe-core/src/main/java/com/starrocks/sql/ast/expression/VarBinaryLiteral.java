@@ -22,6 +22,7 @@ import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.type.Type;
+import com.starrocks.type.VarbinaryType;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
@@ -41,13 +42,13 @@ public class VarBinaryLiteral extends LiteralExpr {
 
     public VarBinaryLiteral() {
         super();
-        this.type = Type.VARBINARY;
+        this.type = VarbinaryType.VARBINARY;
     }
 
     public VarBinaryLiteral(byte[] value) {
         super();
         this.value = value;
-        this.type = Type.VARBINARY;
+        this.type = VarbinaryType.VARBINARY;
         analysisDone();
     }
 
@@ -64,7 +65,7 @@ public class VarBinaryLiteral extends LiteralExpr {
         if (hexString.length() % 2 != 0) {
             throw new ParsingException(PARSER_ERROR_MSG.invalidBinaryFormat(), pos);
         }
-        this.type = Type.VARBINARY;
+        this.type = VarbinaryType.VARBINARY;
         this.value = BaseEncoding.base16().decode(hexString);
     }
 

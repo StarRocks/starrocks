@@ -67,6 +67,7 @@ import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.sql.common.EngineType;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
@@ -255,7 +256,7 @@ public class CreateTableAnalyzer {
             }
 
             if (columnDef.isAutoIncrement()) {
-                if (columnDef.getType() != Type.BIGINT) {
+                if (columnDef.getType() != IntegerType.BIGINT) {
                     throw new SemanticException("The AUTO_INCREMENT column must be BIGINT", columnDef.getPos());
                 }
             }

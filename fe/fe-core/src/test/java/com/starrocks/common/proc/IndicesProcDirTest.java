@@ -31,7 +31,7 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.clone.BalanceStat;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.thrift.TStorageMedium;
-import com.starrocks.type.Type;
+import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -44,7 +44,7 @@ public class IndicesProcDirTest {
     public void testFetchResult() throws AnalysisException {
         Database db = new Database(10000L, "IndicesProcDirTestDB");
 
-        List<Column> col = Lists.newArrayList(new Column("province", Type.VARCHAR));
+        List<Column> col = Lists.newArrayList(new Column("province", VarcharType.VARCHAR));
         PartitionInfo listPartition = new ListPartitionInfo(PartitionType.LIST, col);
         long partitionId = 1025;
         listPartition.setDataProperty(partitionId, DataProperty.DEFAULT_DATA_PROPERTY);

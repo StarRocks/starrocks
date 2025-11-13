@@ -67,6 +67,7 @@ import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.sql.optimizer.task.TaskContext;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.Type;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
@@ -102,7 +103,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
     private final Map<Long, Set<Integer>> tableIdToStringColumnIds = Maps.newHashMap();
     private final Map<Pair<Long, String>, ColumnDict> globalDictCache = Maps.newHashMap();
 
-    public static final Type ID_TYPE = Type.INT;
+    public static final Type ID_TYPE = IntegerType.INT;
 
     static class DecodeContext {
         // The parent operators whether it needs the child operators to encode

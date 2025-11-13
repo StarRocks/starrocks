@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.util;
 
+import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
@@ -57,9 +58,17 @@ public class TypePlus {
 
     public Type getType() {
         if (rectifiedType == null) {
-            if (type instanceof ScalarType) {
-                ScalarType scalarType = (ScalarType) type;
-                rectifiedType = TypeFactory.createType(scalarType.getPrimitiveType(), len, precision, scale);
+            if (type instanceof ScalarType scalarType) {
+                PrimitiveType primitiveType = scalarType.getPrimitiveType();
+                switch (primitiveType) {
+                    case CHAR -> rectifiedType = TypeFactory.createCharType(len);
+                    case VARCHAR -> rectifiedType = TypeFactory.createVarcharType(len);
+                    case VARBINARY -> rectifiedType = TypeFactory.createVarbinary(len);
+                    case DECIMALV2 -> rectifiedType = TypeFactory.createDecimalV2Type(precision, scale);
+                    case DECIMAL32, DECIMAL64, DECIMAL128, DECIMAL256 ->
+                            rectifiedType = TypeFactory.createDecimalV3Type(primitiveType, precision, scale);
+                    default -> rectifiedType = TypeFactory.createType(primitiveType);
+                }
             } else {
                 rectifiedType = type;
             }
@@ -69,8 +78,7 @@ public class TypePlus {
 
     public Type getDecayedType() {
         if (decayedType == null) {
-            if (type instanceof ScalarType) {
-                ScalarType scalarType = (ScalarType) type;
+            if (type instanceof ScalarType scalarType) {
                 decayedType = TypeFactory.createType(scalarType.getPrimitiveType());
             } else {
                 decayedType = type;

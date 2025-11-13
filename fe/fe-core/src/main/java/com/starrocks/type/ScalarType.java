@@ -52,17 +52,8 @@ import java.util.Objects;
  */
 public class ScalarType extends Type implements Cloneable {
 
-    // SQL allows the engine to pick the default precision. We pick the largest
-    // precision that is supported by the smallest decimal type in the BE (4 bytes).
-    public static final int DEFAULT_PRECISION = 9;
-    public static final int DEFAULT_SCALE = 0; // SQL standard
-    // Longest supported VARCHAR and CHAR, chosen to match Hive.
-    public static final int DEFAULT_STRING_LENGTH = 65533;
-    // 1GB for each line, it's enough
-    public static final int CATALOG_MAX_VARCHAR_LENGTH = 1024 * 1024 * 1024;
     public static final int MAX_CHAR_LENGTH = 255;
-    // HLL DEFAULT LENGTH  2^14(registers) + 1(type)
-    public static final int MAX_HLL_LENGTH = 16385;
+
     @SerializedName(value = "type")
     private final PrimitiveType type;
 

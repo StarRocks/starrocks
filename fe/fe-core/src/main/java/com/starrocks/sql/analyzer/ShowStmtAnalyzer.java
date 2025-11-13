@@ -90,7 +90,7 @@ import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.ast.spm.ShowBaselinePlanStmt;
 import com.starrocks.sql.common.MetaUtils;
-import com.starrocks.type.Type;
+import com.starrocks.type.DateType;
 import org.apache.commons.lang.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -710,7 +710,7 @@ public class ShowStmtAnalyzer {
                             + "\"2019-12-22|2019-12-22 22:22:00\"");
                 }
                 try {
-                    subExpr.setChild(1, (subExpr.getChild(1)).castTo(Type.DATETIME));
+                    subExpr.setChild(1, (subExpr.getChild(1)).castTo(DateType.DATETIME));
                 } catch (AnalysisException e) {
                     throw new SemanticException("expression %s cast to datetime error: %s",
                             subExpr.getChild(1).toString(), e.getMessage());

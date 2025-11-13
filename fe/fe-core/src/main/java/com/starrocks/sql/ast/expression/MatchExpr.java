@@ -19,7 +19,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.type.Type;
+import com.starrocks.type.BooleanType;
 
 import java.util.Objects;
 
@@ -44,7 +44,7 @@ public class MatchExpr extends Expr {
         children.add(e1);
         Preconditions.checkNotNull(e2);
         children.add(e2);
-        setType(Type.BOOLEAN);
+        setType(BooleanType.BOOLEAN);
     }
 
     protected MatchExpr(MatchExpr other) {
@@ -55,7 +55,7 @@ public class MatchExpr extends Expr {
             Preconditions.checkNotNull(child);
             this.children.add(child.clone());
         }
-        setType(Type.BOOLEAN);
+        setType(BooleanType.BOOLEAN);
     }
 
     public enum MatchOperator {

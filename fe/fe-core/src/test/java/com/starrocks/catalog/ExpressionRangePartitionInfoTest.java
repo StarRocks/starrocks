@@ -36,9 +36,11 @@ import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.type.DateType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
+import com.starrocks.type.VarcharType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
@@ -78,7 +80,7 @@ public class ExpressionRangePartitionInfoTest {
         fnChildren.add(slotRef2);
         functionCallExpr = new FunctionCallExpr("date_trunc", fnChildren);
         functionCallExpr.setFn(ExprUtils.getBuiltinFunction(
-                "date_trunc", new Type[] {Type.VARCHAR, Type.DATETIME}, Function.CompareMode.IS_IDENTICAL));
+                "date_trunc", new Type[] {VarcharType.VARCHAR, DateType.DATETIME}, Function.CompareMode.IS_IDENTICAL));
 
         FeConstants.runningUnitTest = true;
         UtFrameUtils.createMinStarRocksCluster();

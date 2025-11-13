@@ -42,6 +42,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.InvalidType;
 import com.starrocks.type.Type;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -143,7 +144,7 @@ public class CastExpr extends Expr {
         }
 
         FunctionName fnName = new FunctionName(getFnName(type));
-        Function searchDesc = new Function(fnName, ExprUtils.collectChildReturnTypes(this), Type.INVALID, false);
+        Function searchDesc = new Function(fnName, ExprUtils.collectChildReturnTypes(this), InvalidType.INVALID, false);
         if (isImplicit) {
             fn = GlobalStateMgr.getCurrentState().getFunction(
                     searchDesc, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);

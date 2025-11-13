@@ -25,7 +25,7 @@ import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -39,7 +39,7 @@ public class NormalizePredicateRuleTest {
         ScalarOperatorRewriteContext context = new ScalarOperatorRewriteContext();
 
         BinaryPredicateOperator bpo = new BinaryPredicateOperator(BinaryType.EQ,
-                new ColumnRefOperator(1, Type.INT, "test", true),
+                new ColumnRefOperator(1, IntegerType.INT, "test", true),
                 ConstantOperator.createInt(1));
 
         ScalarOperator result = rule.apply(bpo, context);
@@ -56,7 +56,7 @@ public class NormalizePredicateRuleTest {
 
         BinaryPredicateOperator bpo = new BinaryPredicateOperator(BinaryType.EQ,
                 ConstantOperator.createInt(1),
-                new ColumnRefOperator(1, Type.INT, "test", true));
+                new ColumnRefOperator(1, IntegerType.INT, "test", true));
 
         ScalarOperator result = rule.apply(bpo, context);
 
@@ -86,13 +86,13 @@ public class NormalizePredicateRuleTest {
 
         InPredicateOperator inOp = new InPredicateOperator(
                 ConstantOperator.createInt(1),
-                new ColumnRefOperator(0, Type.INT, "col1", true)
+                new ColumnRefOperator(0, IntegerType.INT, "col1", true)
         );
 
         ScalarOperator result = rule.apply(inOp, context);
         BinaryPredicateOperator eqOp = new BinaryPredicateOperator(BinaryType.EQ,
                 ConstantOperator.createInt(1),
-                new ColumnRefOperator(0, Type.INT, "col1", true)
+                new ColumnRefOperator(0, IntegerType.INT, "col1", true)
         );
 
         assertEquals(eqOp, result);
@@ -107,10 +107,10 @@ public class NormalizePredicateRuleTest {
                                 ConstantOperator.createBoolean(true)),
                         new BinaryPredicateOperator(BinaryType.EQ,
                                 ConstantOperator.createInt(1),
-                                new ColumnRefOperator(1, Type.INT, "test1", true))),
+                                new ColumnRefOperator(1, IntegerType.INT, "test1", true))),
                 new BinaryPredicateOperator(BinaryType.EQ,
                         ConstantOperator.createInt(1),
-                        new ColumnRefOperator(1, Type.INT, "test1", true)));
+                        new ColumnRefOperator(1, IntegerType.INT, "test1", true)));
 
         ScalarOperatorRewriter operatorRewriter = new ScalarOperatorRewriter();
         ScalarOperator result = operatorRewriter
@@ -127,15 +127,15 @@ public class NormalizePredicateRuleTest {
         InPredicateOperator inOp = new InPredicateOperator(
                 true,
                 ConstantOperator.createInt(1),
-                new ColumnRefOperator(0, Type.INT, "col1", true),
-                new ColumnRefOperator(0, Type.INT, "col1", true)
+                new ColumnRefOperator(0, IntegerType.INT, "col1", true),
+                new ColumnRefOperator(0, IntegerType.INT, "col1", true)
         );
 
         CompoundPredicateOperator compoundPredicateOperator =
                 new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND, inOp,
                         new BinaryPredicateOperator(BinaryType.GE,
                                 ConstantOperator.createInt(1),
-                                new ColumnRefOperator(1, Type.INT, "test1", true))
+                                new ColumnRefOperator(1, IntegerType.INT, "test1", true))
                 );
 
         ScalarOperatorRewriter operatorRewriter = new ScalarOperatorRewriter();
@@ -148,10 +148,10 @@ public class NormalizePredicateRuleTest {
         InPredicateOperator inOp = new InPredicateOperator(
                 false,
                 ConstantOperator.createInt(1063),
-                new ColumnRefOperator(0, Type.INT, "col1", false),
-                new ColumnRefOperator(1, Type.INT, "col2", false),
-                new ColumnRefOperator(2, Type.INT, "col3", false),
-                new ColumnRefOperator(3, Type.INT, "col4", false)
+                new ColumnRefOperator(0, IntegerType.INT, "col1", false),
+                new ColumnRefOperator(1, IntegerType.INT, "col2", false),
+                new ColumnRefOperator(2, IntegerType.INT, "col3", false),
+                new ColumnRefOperator(3, IntegerType.INT, "col4", false)
         );
 
         ScalarOperatorRewriter operatorRewriter = new ScalarOperatorRewriter();

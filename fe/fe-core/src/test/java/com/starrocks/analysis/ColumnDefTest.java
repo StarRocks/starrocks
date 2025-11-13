@@ -50,6 +50,12 @@ import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.type.ArrayType;
+import com.starrocks.type.BitmapType;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.HLLType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.PercentileType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
@@ -69,12 +75,12 @@ public class ColumnDefTest {
 
     @BeforeEach
     public void setUp() {
-        intCol = new TypeDef(TypeFactory.createType(PrimitiveType.INT));
-        BigIntCol = new TypeDef(TypeFactory.createType(PrimitiveType.BIGINT));
+        intCol = new TypeDef(IntegerType.INT);
+        BigIntCol = new TypeDef(IntegerType.BIGINT);
         stringCol = new TypeDef(TypeFactory.createCharType(10));
-        floatCol = new TypeDef(TypeFactory.createType(PrimitiveType.FLOAT));
-        booleanCol = new TypeDef(TypeFactory.createType(PrimitiveType.BOOLEAN));
-        arrayIntCol = new TypeDef(new ArrayType(Type.INT));
+        floatCol = new TypeDef(FloatType.FLOAT);
+        booleanCol = new TypeDef(BooleanType.BOOLEAN);
+        arrayIntCol = new TypeDef(new ArrayType(IntegerType.INT));
     }
 
     @Test
@@ -291,7 +297,7 @@ public class ColumnDefTest {
     public void testArrayHLL() {
         assertThrows(SemanticException.class, () -> {
             ColumnDef column =
-                    new ColumnDef("col", new TypeDef(new ArrayType(Type.HLL)), false, null, null,
+                    new ColumnDef("col", new TypeDef(new ArrayType(HLLType.HLL)), false, null, null,
                             true, DefaultValueDef.NOT_SET, "");
             ColumnDefAnalyzer.analyze(column, true);
         });
@@ -301,7 +307,7 @@ public class ColumnDefTest {
     public void testArrayBitmap() {
         assertThrows(SemanticException.class, () -> {
             ColumnDef column =
-                    new ColumnDef("col", new TypeDef(new ArrayType(Type.BITMAP)), false, null, null, true,
+                    new ColumnDef("col", new TypeDef(new ArrayType(BitmapType.BITMAP)), false, null, null, true,
                             DefaultValueDef.NOT_SET,
                             "");
             ColumnDefAnalyzer.analyze(column, true);
@@ -311,7 +317,7 @@ public class ColumnDefTest {
     @Test
     public void testArrayPercentile() {
         assertThrows(SemanticException.class, () -> {
-            ColumnDef column = new ColumnDef("col", new TypeDef(new ArrayType(Type.PERCENTILE)), false, null, null, true,
+            ColumnDef column = new ColumnDef("col", new TypeDef(new ArrayType(PercentileType.PERCENTILE)), false, null, null, true,
                     DefaultValueDef.NOT_SET, "");
             ColumnDefAnalyzer.analyze(column, true);
         });
@@ -340,7 +346,7 @@ public class ColumnDefTest {
     @Test
     public void testColumnWithAggStateDesc() throws AnalysisException {
         AggregateFunction sum = AggregateFunction.createBuiltin(FunctionSet.SUM,
-                Lists.<Type>newArrayList(Type.INT), Type.BIGINT, Type.BIGINT, false, true, false);
+                Lists.<Type>newArrayList(IntegerType.INT), IntegerType.BIGINT, IntegerType.BIGINT, false, true, false);
         AggStateDesc aggStateDesc = new AggStateDesc(sum);
         ColumnDef column = new ColumnDef("col", BigIntCol, "utf8", false, AggregateType.AGG_STATE_UNION,
                 aggStateDesc, Boolean.FALSE, DefaultValueDef.NOT_SET, Boolean.TRUE, null, "");

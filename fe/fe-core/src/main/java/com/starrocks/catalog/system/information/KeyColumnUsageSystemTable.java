@@ -17,7 +17,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.thrift.TSchemaTableType;
-import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.TypeFactory;
 
 import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
@@ -40,9 +40,9 @@ public class KeyColumnUsageSystemTable {
                         .column("TABLE_SCHEMA", TypeFactory.createVarchar(NAME_CHAR_LEN))
                         .column("TABLE_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
                         .column("COLUMN_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("ORDINAL_POSITION", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("ORDINAL_POSITION", IntegerType.BIGINT)
                         .column("POSITION_IN_UNIQUE_CONSTRAINT",
-                                TypeFactory.createType(PrimitiveType.BIGINT))
+                                IntegerType.BIGINT)
                         .column("REFERENCED_TABLE_SCHEMA", TypeFactory.createVarchar(64))
                         .column("REFERENCED_TABLE_NAME", TypeFactory.createVarchar(64))
                         .column("REFERENCED_COLUMN_NAME", TypeFactory.createVarchar(64))

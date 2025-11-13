@@ -42,6 +42,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.type.Type;
+import com.starrocks.type.UnknownType;
 import org.apache.avro.Schema;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.conf.Configuration;
@@ -446,7 +447,7 @@ public class HiveMetastoreApiConverter {
                 type = ColumnTypeConverter.fromHiveType(fieldSchema.getType());
             } catch (InternalError | Exception e) {
                 LOG.error("Failed to convert hive type {} on {}", fieldSchema.getType(), table.getTableName(), e);
-                type = Type.UNKNOWN_TYPE;
+                type = UnknownType.UNKNOWN_TYPE;
             }
             Column column = new Column(fieldSchema.getName(), type, true, comment);
             fullSchema.add(column);
@@ -463,7 +464,7 @@ public class HiveMetastoreApiConverter {
                 type = TrinoViewColumnTypeConverter.fromTrinoType(col.getType());
             } catch (InternalError | Exception e) {
                 LOG.error("Failed to convert trino view type {} on {}", col.getType(), table.getTableName(), e);
-                type = Type.UNKNOWN_TYPE;
+                type = UnknownType.UNKNOWN_TYPE;
             }
             Column column = new Column(col.getName(), type, true);
             fullSchema.add(column);
@@ -486,7 +487,7 @@ public class HiveMetastoreApiConverter {
                 type = fromHudiType(fieldSchema.schema());
             } catch (InternalError | Exception e) {
                 LOG.error("Failed to convert hudi type {}", fieldSchema.schema().getType().getName(), e);
-                type = Type.UNKNOWN_TYPE;
+                type = UnknownType.UNKNOWN_TYPE;
             }
             String fieldName = fieldSchema.name();
             Column column = new Column(fieldName, type, true, schemaCommentMap.get(fieldName));

@@ -28,7 +28,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.thrift.TSchemaTableType;
-import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.TypeFactory;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections4.CollectionUtils;
@@ -50,7 +50,7 @@ public class WarehouseMetricsSystemTable extends SystemTable {
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("WAREHOUSE_ID", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("WAREHOUSE_ID", IntegerType.BIGINT)
                         .column("WAREHOUSE_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
                         .column("QUEUE_PENDING_LENGTH", TypeFactory.createVarchar(NAME_CHAR_LEN))
                         .column("QUEUE_RUNNING_LENGTH", TypeFactory.createVarchar(NAME_CHAR_LEN))

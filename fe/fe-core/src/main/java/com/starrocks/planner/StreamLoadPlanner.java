@@ -69,7 +69,7 @@ import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TScanRangeParams;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWriteQuorumType;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -181,7 +181,7 @@ public class StreamLoadPlanner {
             // add op type column
             SlotDescriptor slotDesc = descTable.addSlotDescriptor(tupleDesc);
             slotDesc.setIsMaterialized(true);
-            slotDesc.setColumn(new Column(Load.LOAD_OP_COLUMN, Type.TINYINT));
+            slotDesc.setColumn(new Column(Load.LOAD_OP_COLUMN, IntegerType.TINYINT));
             slotDesc.setIsNullable(false);
         }
 

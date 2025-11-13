@@ -16,6 +16,8 @@
 package com.starrocks.type;
 
 public class AnyArrayType extends PseudoType {
+    public static final AnyArrayType ANY_ARRAY = new AnyArrayType();
+
     @Override
     public boolean equals(Object t) {
         return t instanceof AnyArrayType;

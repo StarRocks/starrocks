@@ -19,6 +19,7 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.thrift.TFunctionBinaryType;
+import com.starrocks.type.BooleanType;
 import com.starrocks.type.Type;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -48,7 +49,7 @@ public final class AggStateIf extends AggregateFunction {
             FunctionName functionName = new FunctionName(aggFunc.functionName() + FunctionSet.AGG_STATE_IF_SUFFIX);
             List<Type> argTypes = new ArrayList<>();
             argTypes.addAll(Arrays.asList(aggFunc.getArgs()));
-            argTypes.add(Type.BOOLEAN);
+            argTypes.add(BooleanType.BOOLEAN);
             AggStateIf aggStateIf = new AggStateIf(functionName, argTypes, aggFunc.getReturnType(),
                     aggFunc.getIntermediateTypeOrReturnType());
             aggStateIf.setBinaryType(TFunctionBinaryType.BUILTIN);

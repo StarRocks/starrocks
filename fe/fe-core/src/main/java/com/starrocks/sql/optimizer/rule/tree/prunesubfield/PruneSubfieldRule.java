@@ -37,8 +37,10 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.rule.transformation.TransformationRule;
+import com.starrocks.type.JsonType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.Type;
+import com.starrocks.type.VarcharType;
 
 import java.util.List;
 import java.util.Map;
@@ -146,11 +148,11 @@ public class PruneSubfieldRule extends TransformationRule {
 
         static {
             Function jsonInt = ExprUtils.getBuiltinFunction(FunctionSet.GET_JSON_INT,
-                    new Type[] {Type.JSON, Type.VARCHAR}, Function.CompareMode.IS_IDENTICAL);
+                    new Type[] {JsonType.JSON, VarcharType.VARCHAR}, Function.CompareMode.IS_IDENTICAL);
             Function jsonDouble = ExprUtils.getBuiltinFunction(FunctionSet.GET_JSON_DOUBLE,
-                    new Type[] {Type.JSON, Type.VARCHAR}, Function.CompareMode.IS_IDENTICAL);
+                    new Type[] {JsonType.JSON, VarcharType.VARCHAR}, Function.CompareMode.IS_IDENTICAL);
             Function jsonString = ExprUtils.getBuiltinFunction(FunctionSet.GET_JSON_STRING,
-                    new Type[] {Type.JSON, Type.VARCHAR}, Function.CompareMode.IS_IDENTICAL);
+                    new Type[] {JsonType.JSON, VarcharType.VARCHAR}, Function.CompareMode.IS_IDENTICAL);
 
             SUPPORT_GET_TYPE = ImmutableMap.<PrimitiveType, Function>builder()
                     .put(PrimitiveType.BIGINT, jsonInt)

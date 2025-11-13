@@ -44,6 +44,7 @@ import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.type.Type;
+import com.starrocks.type.VarcharType;
 
 import java.util.ArrayList;
 
@@ -86,15 +87,15 @@ public class ColumnDef implements ParseNode {
             if (expr != null) {
                 this.expr = expr;
             } else {
-                this.expr = NullLiteral.create(Type.VARCHAR);
+                this.expr = NullLiteral.create(VarcharType.VARCHAR);
             }
         }
 
         private static final String ZERO = new String(new byte[] {0});
         // no default value
-        public static DefaultValueDef NOT_SET = new DefaultValueDef(false, NullLiteral.create(Type.VARCHAR));
+        public static DefaultValueDef NOT_SET = new DefaultValueDef(false, NullLiteral.create(VarcharType.VARCHAR));
         // default null
-        public static DefaultValueDef NULL_DEFAULT_VALUE = new DefaultValueDef(true, NullLiteral.create(Type.VARCHAR));
+        public static DefaultValueDef NULL_DEFAULT_VALUE = new DefaultValueDef(true, NullLiteral.create(VarcharType.VARCHAR));
         // default "value", "0" means empty hll or bitmap
         public static DefaultValueDef EMPTY_VALUE = new DefaultValueDef(true, new StringLiteral(ZERO));
         // default value for date type CURRENT_TIMESTAMP

@@ -95,7 +95,16 @@ import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
 import com.starrocks.sql.spm.SPMFunctions;
 import com.starrocks.thrift.TFunctionBinaryType;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.FunctionType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.InvalidType;
+import com.starrocks.type.NullType;
 import com.starrocks.type.Type;
+import com.starrocks.type.VarcharType;
 
 import java.time.LocalDateTime;
 import java.util.Comparator;
@@ -232,26 +241,26 @@ public class ScalarOperatorToExpr {
                     NullLiteral nullLiteral = new NullLiteral();
                     nullLiteral.setType(literal.getType());
                     hackTypeNull(nullLiteral);
-                    nullLiteral.setOriginType(Type.NULL);
+                    nullLiteral.setOriginType(NullType.NULL);
                     return nullLiteral;
                 }
 
                 if (type.isBoolean()) {
                     return new BoolLiteral(literal.getBoolean());
                 } else if (type.isTinyint()) {
-                    return new IntLiteral(literal.getTinyInt(), Type.TINYINT);
+                    return new IntLiteral(literal.getTinyInt(), IntegerType.TINYINT);
                 } else if (type.isSmallint()) {
-                    return new IntLiteral(literal.getSmallint(), Type.SMALLINT);
+                    return new IntLiteral(literal.getSmallint(), IntegerType.SMALLINT);
                 } else if (type.isInt()) {
-                    return new IntLiteral(literal.getInt(), Type.INT);
+                    return new IntLiteral(literal.getInt(), IntegerType.INT);
                 } else if (type.isBigint()) {
-                    return new IntLiteral(literal.getBigint(), Type.BIGINT);
+                    return new IntLiteral(literal.getBigint(), IntegerType.BIGINT);
                 } else if (type.isLargeint()) {
                     return new LargeIntLiteral(literal.getLargeInt().toString());
                 } else if (type.isFloat()) {
-                    return new FloatLiteral(literal.getDouble(), Type.FLOAT);
+                    return new FloatLiteral(literal.getDouble(), FloatType.FLOAT);
                 } else if (type.isDouble()) {
-                    return new FloatLiteral(literal.getDouble(), Type.DOUBLE);
+                    return new FloatLiteral(literal.getDouble(), FloatType.DOUBLE);
                 } else if (type.isDate()) {
                     LocalDateTime ldt = literal.getDate();
                     return new DateLiteral(ldt.getYear(), ldt.getMonthValue(), ldt.getDayOfMonth());
@@ -260,7 +269,7 @@ public class ScalarOperatorToExpr {
                     return new DateLiteral(ldt.getYear(), ldt.getMonthValue(), ldt.getDayOfMonth(), ldt.getHour(),
                             ldt.getMinute(), ldt.getSecond(), ldt.getNano() / 1000);
                 } else if (type.isTime()) {
-                    return new FloatLiteral(literal.getTime(), Type.TIME);
+                    return new FloatLiteral(literal.getTime(), DateType.TIME);
                 } else if (type.isDecimalOfAnyVersion()) {
                     DecimalLiteral d = new DecimalLiteral(literal.getDecimal());
                     d.uncheckedCastTo(type);
@@ -299,7 +308,7 @@ public class ScalarOperatorToExpr {
                 callExpr = new CompoundPredicate(CompoundPredicate.Operator.NOT,
                         buildExpr.build(predicate.getChild(0), context), null);
             }
-            callExpr.setType(Type.BOOLEAN);
+            callExpr.setType(BooleanType.BOOLEAN);
             callExpr.setIndexOnlyFilter(predicate.isIndexOnlyFilter());
             return callExpr;
         }
@@ -308,7 +317,7 @@ public class ScalarOperatorToExpr {
             BinaryPredicate call = new BinaryPredicate(predicate.getBinaryType(),
                     buildExpr.build(predicate.getChildren().get(0), context),
                     buildExpr.build(predicate.getChildren().get(1), context));
-            call.setType(Type.BOOLEAN);
+            call.setType(BooleanType.BOOLEAN);
             call.setIndexOnlyFilter(predicate.isIndexOnlyFilter());
             return call;
         }
@@ -318,7 +327,7 @@ public class ScalarOperatorToExpr {
             BetweenPredicate call = new BetweenPredicate(buildExpr.build(predicate.getChild(0), context),
                     buildExpr.build(predicate.getChild(1), context),
                     buildExpr.build(predicate.getChild(2), context), predicate.isNotBetween());
-            call.setType(Type.BOOLEAN);
+            call.setType(BooleanType.BOOLEAN);
             return call;
         }
 
@@ -339,7 +348,7 @@ public class ScalarOperatorToExpr {
             InPredicate expr =
                     new InPredicate(buildExpr.build(predicate.getChild(0), context), args, predicate.isNotIn());
 
-            expr.setType(Type.BOOLEAN);
+            expr.setType(BooleanType.BOOLEAN);
             return expr;
         }
 
@@ -368,9 +377,9 @@ public class ScalarOperatorToExpr {
         }
 
         static Function isNullFN = new Function(new FunctionName("is_null_pred"),
-                new Type[] {Type.INVALID}, Type.BOOLEAN, false);
+                new Type[] {InvalidType.INVALID}, BooleanType.BOOLEAN, false);
         static Function isNotNullFN = new Function(new FunctionName("is_not_null_pred"),
-                new Type[] {Type.INVALID}, Type.BOOLEAN, false);
+                new Type[] {InvalidType.INVALID}, BooleanType.BOOLEAN, false);
 
         {
             isNullFN.setBinaryType(TFunctionBinaryType.BUILTIN);
@@ -388,7 +397,7 @@ public class ScalarOperatorToExpr {
                 expr.setFn(isNullFN);
             }
 
-            expr.setType(Type.BOOLEAN);
+            expr.setType(BooleanType.BOOLEAN);
             return expr;
         }
 
@@ -408,7 +417,7 @@ public class ScalarOperatorToExpr {
                     new Type[] {child1.getType(), child2.getType()},
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF));
 
-            expr.setType(Type.BOOLEAN);
+            expr.setType(BooleanType.BOOLEAN);
             return expr;
         }
 
@@ -624,7 +633,7 @@ public class ScalarOperatorToExpr {
             newArguments.addAll(arguments);
 
             LambdaFunctionExpr result = new LambdaFunctionExpr(newArguments, commonSubOperatorMap);
-            result.setType(Type.FUNCTION);
+            result.setType(FunctionType.FUNCTION);
             result.checkValidAfterToExpr();
             return result;
         }
@@ -645,10 +654,10 @@ public class ScalarOperatorToExpr {
             // 2. use a placeholder instead of string column to build DictMapping
             if (key.getType().isArrayType()) {
                 context.colRefToExpr.put(key, new PlaceHolderExpr(dictColumn.getId(), dictExpr.isNullable(),
-                        Type.ARRAY_VARCHAR));
+                        ArrayType.ARRAY_VARCHAR));
             } else {
                 context.colRefToExpr.put(key, new PlaceHolderExpr(dictColumn.getId(), dictExpr.isNullable(),
-                        Type.VARCHAR));
+                        VarcharType.VARCHAR));
             }
             final Expr callExpr = buildExpr.build(call, context);
             // 3. recover the previous column

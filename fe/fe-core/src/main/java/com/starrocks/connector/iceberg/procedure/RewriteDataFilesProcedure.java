@@ -23,7 +23,8 @@ import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
-import com.starrocks.type.Type;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.IntegerType;
 import org.apache.velocity.VelocityContext;
 import org.apache.velocity.app.VelocityEngine;
 import org.slf4j.Logger;
@@ -59,10 +60,10 @@ public class RewriteDataFilesProcedure extends IcebergTableProcedure {
         super(
                 PROCEDURE_NAME,
                 Arrays.asList(
-                        new NamedArgument(REWRITE_ALL, Type.BOOLEAN, false),
-                        new NamedArgument(MIN_FILE_SIZE_BYTES, Type.BIGINT, false),
-                        new NamedArgument(BATCH_SIZE, Type.BIGINT, false),
-                        new NamedArgument(BATCH_PARALLELISM, Type.BIGINT, false)
+                        new NamedArgument(REWRITE_ALL, BooleanType.BOOLEAN, false),
+                        new NamedArgument(MIN_FILE_SIZE_BYTES, IntegerType.BIGINT, false),
+                        new NamedArgument(BATCH_SIZE, IntegerType.BIGINT, false),
+                        new NamedArgument(BATCH_PARALLELISM, IntegerType.BIGINT, false)
                 ),
                 IcebergTableOperation.REWRITE_DATA_FILES
         );
@@ -76,26 +77,26 @@ public class RewriteDataFilesProcedure extends IcebergTableProcedure {
         }
 
         boolean rewriteAll = args.get(REWRITE_ALL) != null && args.get(REWRITE_ALL)
-                .castTo(Type.BOOLEAN)
+                .castTo(BooleanType.BOOLEAN)
                 .map(ConstantOperator::getBoolean)
                 .orElseThrow(() -> new StarRocksConnectorException("invalid argument type for %s, expected BOOLEAN",
                         REWRITE_ALL));
         long minFileSizeBytes = args.get(MIN_FILE_SIZE_BYTES) != null ? args.get(MIN_FILE_SIZE_BYTES)
-                .castTo(Type.BIGINT)
+                .castTo(IntegerType.BIGINT)
                 .map(ConstantOperator::getBigint)
                 .filter(v -> v > 0)
                 .orElseThrow(() -> new StarRocksConnectorException("invalid argument type for %s, expected positive BIGINT",
                         MIN_FILE_SIZE_BYTES))
                 : DEFAULT_MIN_FILE_SIZE_BYTES;
         long batchSize = args.get(BATCH_SIZE) != null ? args.get(BATCH_SIZE)
-                .castTo(Type.BIGINT)
+                .castTo(IntegerType.BIGINT)
                 .map(ConstantOperator::getBigint)
                 .filter(v -> v > 0)
                 .orElseThrow(() -> new StarRocksConnectorException("invalid argument type for %s, expected positive BIGINT",
                         BATCH_SIZE))
                 : DEFAULT_BATCH_SIZE;
         long batchParallelism = args.get(BATCH_PARALLELISM) != null ? args.get(BATCH_PARALLELISM)
-                .castTo(Type.BIGINT)
+                .castTo(IntegerType.BIGINT)
                 .map(ConstantOperator::getBigint)
                 .filter(v -> v > 0)
                 .orElseThrow(() -> new StarRocksConnectorException("invalid argument type for %s, expected positive BIGINT",

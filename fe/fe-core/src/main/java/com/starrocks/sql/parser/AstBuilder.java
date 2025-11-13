@@ -530,14 +530,32 @@ import com.starrocks.sql.parser.rewriter.CompoundPredicateExprRewriter;
 import com.starrocks.sql.util.EitherOr;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.transaction.GtidGenerator;
+import com.starrocks.type.AnyMapType;
 import com.starrocks.type.ArrayType;
+import com.starrocks.type.BitmapType;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.CharType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.DecimalType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.FunctionType;
+import com.starrocks.type.HLLType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.JsonType;
 import com.starrocks.type.MapType;
+import com.starrocks.type.NullType;
+import com.starrocks.type.PercentileType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
+import com.starrocks.type.StringType;
 import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
+import com.starrocks.type.UnknownType;
+import com.starrocks.type.VarbinaryType;
+import com.starrocks.type.VarcharType;
+import com.starrocks.type.VariantType;
 import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.RuleContext;
 import org.antlr.v4.runtime.Token;
@@ -1199,7 +1217,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             } else if (defaultDescContext.CURRENT_TIMESTAMP() != null) {
                 List<Expr> expr = Lists.newArrayList();
                 if (defaultDescContext.INTEGER_VALUE() != null) {
-                    expr.add(new IntLiteral(Long.parseLong(defaultDescContext.INTEGER_VALUE().getText()), Type.INT));
+                    expr.add(new IntLiteral(Long.parseLong(defaultDescContext.INTEGER_VALUE().getText()), IntegerType.INT));
                 }
                 defaultValueDef = new ColumnDef.DefaultValueDef(true, (expr.size() == 1),
                         new FunctionCallExpr("current_timestamp", expr));
@@ -7479,7 +7497,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
             if (!shouldFallbackToNormal) {
                 String rawText = extractRawText(context.integerList());
-                List<Expr> firstElementList = List.of(new IntLiteral((Long) rawValueList.get(0), Type.BIGINT));
+                List<Expr> firstElementList = List.of(new IntLiteral((Long) rawValueList.get(0), IntegerType.BIGINT));
                 return new LargeInPredicate(compareExpr, rawText, rawValueList, literalCount,
                         isNotIn, firstElementList, createPos(context));
             }
@@ -7688,7 +7706,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         // but time_slice only support INT type when executed in BE
         try {
             if (value instanceof IntLiteral) {
-                exprs.add(new IntLiteral(((IntLiteral) value).getValue(), Type.INT));
+                exprs.add(new IntLiteral(((IntLiteral) value).getValue(), IntegerType.INT));
             } else {
                 exprs.add(value);
             }
@@ -7854,7 +7872,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             } else {
                 exprs = Collections.emptyList();
             }
-            return new MapExpr(Type.ANY_MAP, exprs, pos);
+            return new MapExpr(AnyMapType.ANY_MAP, exprs, pos);
         }
 
         if (functionName.equals(FunctionSet.SUBSTR) || functionName.equals(FunctionSet.SUBSTRING)) {
@@ -8093,7 +8111,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             com.starrocks.sql.parser.StarRocksParser.SpecialDateTimeExpressionContext context) {
         List<Expr> expr = Lists.newArrayList();
         if (context.INTEGER_VALUE() != null) {
-            expr.add(new IntLiteral(Long.parseLong(context.INTEGER_VALUE().getText()), Type.INT));
+            expr.add(new IntLiteral(Long.parseLong(context.INTEGER_VALUE().getText()), IntegerType.INT));
         }
         return new FunctionCallExpr(context.name.getText().toUpperCase(), new FunctionParams(false, expr));
     }
@@ -8240,9 +8258,9 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         String value = ((StringLiteral) visit(context.string())).getValue();
         try {
             if (context.DATE() != null) {
-                return new DateLiteral(value, Type.DATE);
+                return new DateLiteral(value, DateType.DATE);
             } else {
-                return new DateLiteral(value, Type.DATETIME);
+                return new DateLiteral(value, DateType.DATETIME);
             }
         } catch (AnalysisException e) {
             throw new ParsingException(PARSER_ERROR_MSG.invalidDateFormat(value), pos);
@@ -8350,7 +8368,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     @Override
     public ParseNode visitMapConstructor(com.starrocks.sql.parser.StarRocksParser.MapConstructorContext context) {
         NodePosition pos = createPos(context);
-        Type type = Type.ANY_MAP;
+        Type type = AnyMapType.ANY_MAP;
         if (context.mapType() != null) {
             type = getMapType(context.mapType());
         }
@@ -8505,7 +8523,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                 throw new IllegalArgumentException("The right part of map lambda functions can accept at most 2 " +
                         "expressions, but there are " + exprs.size());
             }
-            expr = new MapExpr(Type.ANY_MAP, exprs); // key expr, value expr.
+            expr = new MapExpr(AnyMapType.ANY_MAP, exprs); // key expr, value expr.
         }
         arguments.add(expr); // put lambda body to the first argument
         for (int i = 0; i < names.size(); ++i) {
@@ -9410,7 +9428,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             length = Integer.parseInt(context.typeParameter().INTEGER_VALUE().toString());
         }
         if (context.STRING() != null || context.TEXT() != null) {
-            ScalarType type = TypeFactory.createVarcharType(ScalarType.DEFAULT_STRING_LENGTH);
+            ScalarType type = TypeFactory.createVarcharType(StringType.DEFAULT_STRING_LENGTH);
             return type;
         } else if (context.VARCHAR() != null) {
             ScalarType type = TypeFactory.createVarcharType(length);
@@ -9419,7 +9437,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             ScalarType type = TypeFactory.createCharType(length);
             return type;
         } else if (context.SIGNED() != null) {
-            return Type.INT;
+            return IntegerType.INT;
         } else if (context.HLL() != null) {
             ScalarType type = TypeFactory.createHllType();
             return type;
@@ -9427,7 +9445,98 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             ScalarType type = TypeFactory.createVarbinary(length);
             return type;
         } else {
-            return TypeFactory.createType(context.getChild(0).getText());
+            String typeStr = context.getChild(0).getText();
+            ScalarType res = getTypeByName(typeStr);
+            return res;
+        }
+    }
+
+    private ScalarType getTypeByName(String typeName) {
+        if (typeName == null) {
+            return null;
+        }
+
+        String upperTypeName = typeName.toUpperCase();
+        switch (upperTypeName) {
+            // Null type
+            case "NULL_TYPE":
+                return NullType.NULL;
+
+            // Boolean type
+            case "BOOLEAN":
+                return BooleanType.BOOLEAN;
+
+            // Integer types
+            case "TINYINT":
+                return IntegerType.TINYINT;
+            case "SMALLINT":
+                return IntegerType.SMALLINT;
+            case "INTEGER":
+            case "UNSIGNED":
+            case "INT":
+                return IntegerType.INT;
+            case "BIGINT":
+                return IntegerType.BIGINT;
+            case "LARGEINT":
+                return IntegerType.LARGEINT;
+
+            // Float types
+            case "FLOAT":
+                return FloatType.FLOAT;
+            case "DOUBLE":
+                return FloatType.DOUBLE;
+
+            // Decimal types
+            case "DECIMAL":
+            case "DECIMALV2":
+                return DecimalType.DEFAULT_DECIMALV2;
+            case "DECIMAL32":
+                return DecimalType.DECIMAL32;
+            case "DECIMAL64":
+                return DecimalType.DECIMAL64;
+            case "DECIMAL128":
+                return DecimalType.DECIMAL128;
+            case "DECIMAL256":
+                return DecimalType.DECIMAL256;
+
+            // String types
+            case "STRING":
+                return StringType.DEFAULT_STRING;
+            case "CHAR":
+                return CharType.CHAR;
+            case "VARCHAR":
+                return VarcharType.VARCHAR;
+
+            // Date/Time types
+            case "DATE":
+                return DateType.DATE;
+            case "DATETIME":
+                return DateType.DATETIME;
+            case "TIME":
+                return DateType.TIME;
+
+            // Binary types
+            case "VARBINARY":
+                return VarbinaryType.VARBINARY;
+
+            // Special types
+            case "HLL":
+                return HLLType.HLL;
+            case "BITMAP":
+                return BitmapType.BITMAP;
+            case "PERCENTILE":
+                return PercentileType.PERCENTILE;
+            case "JSON":
+                return JsonType.JSON;
+            case "VARIANT":
+                return VariantType.VARIANT;
+            case "FUNCTION":
+                return FunctionType.FUNCTION;
+            case "UNKNOWN_TYPE":
+                return UnknownType.UNKNOWN_TYPE;
+
+            default:
+                return null;
         }
     }
 
@@ -9470,7 +9579,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                 }
                 return TypeFactory.createDecimalV2Type(precision);
             }
-            return Type.DEFAULT_DECIMALV2;
+            return DecimalType.DEFAULT_DECIMALV2;
         } else {
             throw new IllegalArgumentException("Unsupported type " + context.getText());
         }

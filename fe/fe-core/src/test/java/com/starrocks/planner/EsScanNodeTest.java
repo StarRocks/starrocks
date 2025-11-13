@@ -26,7 +26,7 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TNetworkAddress;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.jupiter.api.BeforeEach;
@@ -66,7 +66,7 @@ public class EsScanNodeTest extends EsTestCase {
     public void test(@Mocked EsTable esTable)  throws Exception {
 
         List<Column> columns = new ArrayList<>();
-        Column k1 = new Column("k1", Type.BIGINT);
+        Column k1 = new Column("k1", IntegerType.BIGINT);
         columns.add(k1);
 
         esTable = fakeEsTable("doe", "doe", "doc", columns);

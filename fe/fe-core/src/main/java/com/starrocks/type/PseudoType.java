@@ -23,10 +23,6 @@ package com.starrocks.type;
  * Reference: https://www.postgresql.org/docs/12/datatype-pseudo.html
  */
 public class PseudoType extends Type {
-    public static final PseudoType ANY_ELEMENT = new AnyElementType();
-    public static final PseudoType ANY_ARRAY = new AnyArrayType();
-    public static final PseudoType ANY_MAP = new AnyMapType();
-    public static final PseudoType ANY_STRUCT = new AnyStructType();
 
     @Override
     protected String prettyPrint(int lpad) {

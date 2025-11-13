@@ -89,7 +89,7 @@ import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletSchema;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TTaskType;
-import com.starrocks.type.Type;
+import com.starrocks.type.VarcharType;
 import com.starrocks.warehouse.Warehouse;
 import io.opentelemetry.api.trace.StatusCode;
 import org.apache.logging.log4j.LogManager;
@@ -1027,7 +1027,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
 
         for (Column column : table.getColumns()) {
-            if (Type.VARCHAR.equals(column.getType())) {
+            if (VarcharType.VARCHAR.equals(column.getType())) {
                 IDictManager.getInstance().removeGlobalDict(table.getId(), column.getColumnId());
             }
         }

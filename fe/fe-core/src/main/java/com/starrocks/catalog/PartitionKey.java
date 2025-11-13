@@ -50,6 +50,7 @@ import com.starrocks.sql.ast.expression.MaxLiteral;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.common.TypeManager;
+import com.starrocks.type.DateType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
@@ -166,14 +167,14 @@ public class PartitionKey implements Comparable<PartitionKey>, Writable {
 
     public static PartitionKey ofDateTime(LocalDateTime dateTime) throws AnalysisException {
         PartitionKey partitionKey = new PartitionKey();
-        partitionKey.keys.add(new DateLiteral(dateTime, Type.DATETIME));
+        partitionKey.keys.add(new DateLiteral(dateTime, DateType.DATETIME));
         partitionKey.types.add(PrimitiveType.DATETIME);
         return partitionKey;
     }
 
     public static PartitionKey ofDate(LocalDate date) throws AnalysisException {
         PartitionKey partitionKey = new PartitionKey();
-        partitionKey.keys.add(new DateLiteral(LocalDateTime.of(date, LocalTime.MIN), Type.DATE));
+        partitionKey.keys.add(new DateLiteral(LocalDateTime.of(date, LocalTime.MIN), DateType.DATE));
         partitionKey.types.add(PrimitiveType.DATE);
         return partitionKey;
     }

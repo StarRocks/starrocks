@@ -43,7 +43,10 @@ import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.statistic.StatsConstants;
-import com.starrocks.type.Type;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.DecimalType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.BeforeAll;
@@ -117,13 +120,13 @@ public class PredicateReorderRuleTest {
 
         columnRefFactory = new ColumnRefFactory();
 
-        v1 = columnRefFactory.create("v1", Type.INT, true);
-        v2 = columnRefFactory.create("v2", Type.INT, true);
-        v3 = columnRefFactory.create("v3", Type.DECIMALV2, true);
-        v4 = columnRefFactory.create("v4", Type.BOOLEAN, true);
-        v5 = columnRefFactory.create("v5", Type.BOOLEAN, false);
-        v6 = columnRefFactory.create("v6", Type.BOOLEAN, false);
-        v7 = columnRefFactory.create("v7", Type.DATETIME, false);
+        v1 = columnRefFactory.create("v1", IntegerType.INT, true);
+        v2 = columnRefFactory.create("v2", IntegerType.INT, true);
+        v3 = columnRefFactory.create("v3", DecimalType.DECIMALV2, true);
+        v4 = columnRefFactory.create("v4", BooleanType.BOOLEAN, true);
+        v5 = columnRefFactory.create("v5", BooleanType.BOOLEAN, false);
+        v6 = columnRefFactory.create("v6", BooleanType.BOOLEAN, false);
+        v7 = columnRefFactory.create("v7", DateType.DATETIME, false);
 
         Statistics.Builder builder = Statistics.builder();
         builder.setOutputRowCount(10000);
@@ -239,14 +242,14 @@ public class PredicateReorderRuleTest {
         ConstantOperator constantOperatorDouble0 = ConstantOperator.createDouble(150);
 
         // t0.v1 + t1.v1 = 15
-        CastOperator castOperatorV10 = new CastOperator(Type.BIGINT, v1);
-        CastOperator castOperatorV11 = new CastOperator(Type.BIGINT, v1);
-        CallOperator add0 = new CallOperator("add", Type.BIGINT, Lists.newArrayList(castOperatorV10, castOperatorV11));
+        CastOperator castOperatorV10 = new CastOperator(IntegerType.BIGINT, v1);
+        CastOperator castOperatorV11 = new CastOperator(IntegerType.BIGINT, v1);
+        CallOperator add0 = new CallOperator("add", IntegerType.BIGINT, Lists.newArrayList(castOperatorV10, castOperatorV11));
         BinaryPredicateOperator intEq0 = BinaryPredicateOperator.eq(add0, constantOperatorInt0);
         // t0.v2 + t1.v2 = 150
-        CastOperator castOperatorV20 = new CastOperator(Type.BIGINT, v2);
-        CastOperator castOperatorV21 = new CastOperator(Type.BIGINT, v2);
-        CallOperator add1 = new CallOperator("add", Type.BIGINT, Lists.newArrayList(castOperatorV20, castOperatorV21));
+        CastOperator castOperatorV20 = new CastOperator(IntegerType.BIGINT, v2);
+        CastOperator castOperatorV21 = new CastOperator(IntegerType.BIGINT, v2);
+        CallOperator add1 = new CallOperator("add", IntegerType.BIGINT, Lists.newArrayList(castOperatorV20, castOperatorV21));
         BinaryPredicateOperator intEq1 = BinaryPredicateOperator.eq(add1, constantOperatorDouble0);
 
         ScalarOperator and = CompoundPredicateOperator.and(intEq0, intEq1);

@@ -15,6 +15,8 @@
 package com.starrocks.type;
 
 public class AnyMapType extends PseudoType {
+    public static final AnyMapType ANY_MAP = new AnyMapType();
+
     @Override
     public boolean equals(Object obj) {
         return obj instanceof AnyMapType;

@@ -34,6 +34,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.NullType;
 import com.starrocks.type.Type;
 import org.apache.commons.lang3.StringUtils;
 
@@ -70,7 +72,7 @@ public class SPMFunctions {
         if (expr.getChildren().stream().anyMatch(p -> !p.isConstant())) {
             throw new SemanticException("spm function's parameters must be const");
         }
-        return getSPMFunction(expr.getFnName().getFunction(), Type.NULL, argsTypes);
+        return getSPMFunction(expr.getFnName().getFunction(), NullType.NULL, argsTypes);
     }
 
     private static Function getSPMFunction(String fnName, Type type, List<Type> argsTypes) {
@@ -110,11 +112,11 @@ public class SPMFunctions {
     }
 
     public static FunctionCallExpr newFunc(String func, long placeholderID, List<Expr> input) {
-        List<Expr> children = Lists.newArrayList(new IntLiteral(placeholderID, Type.BIGINT));
+        List<Expr> children = Lists.newArrayList(new IntLiteral(placeholderID, IntegerType.BIGINT));
         children.addAll(input);
         FunctionCallExpr expr = new FunctionCallExpr(func, children);
-        expr.setFn(getSPMFunction(func, Type.NULL, children.stream().map(Expr::getType).toList()));
-        expr.setType(Type.NULL);
+        expr.setFn(getSPMFunction(func, NullType.NULL, children.stream().map(Expr::getType).toList()));
+        expr.setType(NullType.NULL);
         return expr;
     }
 
@@ -141,9 +143,9 @@ public class SPMFunctions {
         CallOperator call = (CallOperator) operator;
         call.setType(type);
         List<Type> argTypes = Lists.newArrayList();
-        argTypes.add(Type.BIGINT);
-        if (!call.getChild(0).getType().equals(Type.BIGINT)) {
-            call.setChild(0, new CastOperator(Type.BIGINT, call.getChild(0)));
+        argTypes.add(IntegerType.BIGINT);
+        if (!call.getChild(0).getType().equals(IntegerType.BIGINT)) {
+            call.setChild(0, new CastOperator(IntegerType.BIGINT, call.getChild(0)));
         }
         for (int i = 1; i < call.getChildren().size(); i++) {
             call.setChild(i, new CastOperator(type, call.getChild(i)));

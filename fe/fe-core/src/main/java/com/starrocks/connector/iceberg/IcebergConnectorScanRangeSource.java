@@ -52,7 +52,7 @@ import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
 import org.apache.hadoop.fs.Path;
 import org.apache.iceberg.ContentFile;
 import org.apache.iceberg.DataFile;
@@ -335,9 +335,9 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
             if (name.equalsIgnoreCase(DATA_SEQUENCE_NUMBER) || name.equalsIgnoreCase(SPEC_ID)) {
                 LiteralExpr value;
                 if (name.equalsIgnoreCase(DATA_SEQUENCE_NUMBER)) {
-                    value = LiteralExpr.create(String.valueOf(file.dataSequenceNumber()), Type.BIGINT);
+                    value = LiteralExpr.create(String.valueOf(file.dataSequenceNumber()), IntegerType.BIGINT);
                 } else {
-                    value = LiteralExpr.create(String.valueOf(file.specId()), Type.INT);
+                    value = LiteralExpr.create(String.valueOf(file.specId()), IntegerType.INT);
                 }
 
                 extendedColumns.put(slot.getId().asInt(), ExprToThriftVisitor.treeToThrift(value));

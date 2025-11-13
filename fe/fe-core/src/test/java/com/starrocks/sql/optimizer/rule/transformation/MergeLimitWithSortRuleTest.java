@@ -24,7 +24,7 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -37,7 +37,7 @@ public class MergeLimitWithSortRuleTest {
     public void transform() {
         OptExpression limit = new OptExpression(LogicalLimitOperator.init(10, 2));
         OptExpression sort = new OptExpression(new LogicalTopNOperator(
-                Lists.newArrayList(new Ordering(new ColumnRefOperator(1, Type.INT, "name", true), false, false))));
+                Lists.newArrayList(new Ordering(new ColumnRefOperator(1, IntegerType.INT, "name", true), false, false))));
 
         limit.getInputs().add(sort);
 

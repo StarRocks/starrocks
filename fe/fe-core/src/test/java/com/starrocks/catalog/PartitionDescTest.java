@@ -21,8 +21,8 @@ import com.starrocks.common.DdlException;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.expression.TypeDef;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.Type;
 import org.apache.commons.lang.NotImplementedException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -65,7 +65,7 @@ public class PartitionDescTest {
         // Since toPartitionInfo method was removed, we now use PartitionInfoBuilder directly
         // We expect DdlException for unsupported partition types
         assertThrows(DdlException.class, () -> {
-            Column id = new Column("id", Type.BIGINT);
+            Column id = new Column("id", IntegerType.BIGINT);
             List<Column> columns = Lists.newArrayList(id);
             Map<String, Long> partitionNameToId = new HashMap<>();
             partitionNameToId.put("p1", 1003L);

@@ -86,6 +86,11 @@ import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.optimizer.rule.mv.MVUtils;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.BitmapType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.HLLType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.PercentileType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.Type;
 import org.apache.logging.log4j.LogManager;
@@ -646,9 +651,9 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                 PrimitiveType argPrimitiveType = baseType.getPrimitiveType();
                 if (argPrimitiveType == PrimitiveType.TINYINT || argPrimitiveType == PrimitiveType.SMALLINT
                         || argPrimitiveType == PrimitiveType.INT) {
-                    type = Type.BIGINT;
+                    type = IntegerType.BIGINT;
                 } else if (argPrimitiveType == PrimitiveType.FLOAT) {
-                    type = Type.DOUBLE;
+                    type = FloatType.DOUBLE;
                 } else {
                     type = baseType;
                 }
@@ -658,7 +663,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                 type = baseType;
                 break;
             case FunctionSet.BITMAP_UNION:
-                type = Type.BITMAP;
+                type = BitmapType.BITMAP;
                 break;
             case FunctionSet.BITMAP_AGG:
                 // Compatible aggregation models
@@ -667,25 +672,25 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                             Function.CompareMode.IS_IDENTICAL);
                     defineExpr = new FunctionCallExpr(FunctionSet.TO_BITMAP, Lists.newArrayList(defineExpr));
                     defineExpr.setFn(fn);
-                    defineExpr.setType(Type.BITMAP);
+                    defineExpr.setType(BitmapType.BITMAP);
                 } else {
                     throw new SemanticException("Unsupported bitmap_agg type:" + baseType);
                 }
                 functionName = FunctionSet.BITMAP_UNION;
-                type = Type.BITMAP;
+                type = BitmapType.BITMAP;
                 break;
             case FunctionSet.HLL_UNION:
-                type = Type.HLL;
+                type = HLLType.HLL;
                 break;
             case FunctionSet.PERCENTILE_UNION:
-                type = Type.PERCENTILE;
+                type = PercentileType.PERCENTILE;
                 break;
             case FunctionSet.COUNT:
                 mvAggregateType = AggregateType.SUM;
                 defineExpr = new CaseExpr(null, Lists.newArrayList(new CaseWhenClause(
                         new IsNullPredicate(defineExpr, false),
-                        new IntLiteral(0, Type.BIGINT))), new IntLiteral(1, Type.BIGINT));
-                type = Type.BIGINT;
+                        new IntLiteral(0, IntegerType.BIGINT))), new IntLiteral(1, IntegerType.BIGINT));
+                type = IntegerType.BIGINT;
                 break;
             default:
                 throw new UnsupportedMVException("Unsupported function:" + functionName);

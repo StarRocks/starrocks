@@ -22,6 +22,7 @@ import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.sql.ast.expression.FunctionParams;
 import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.Type;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -99,7 +100,7 @@ public class DefaultExpr {
             List<Expr> exprs = Lists.newArrayList();
             Type[] argumentTypes = new Type[] {};
             if (parameter != null) {
-                exprs.add(new IntLiteral(Long.parseLong(parameter), Type.INT));
+                exprs.add(new IntLiteral(Long.parseLong(parameter), IntegerType.INT));
                 argumentTypes = exprs.stream().map(Expr::getType).toArray(Type[]::new);
             }
             FunctionCallExpr functionCallExpr =

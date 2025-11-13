@@ -33,7 +33,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.type.Type;
+import com.starrocks.type.VarcharType;
 
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -198,17 +198,19 @@ public class ColumnRangePredicate extends RangePredicate {
     private Range<ConstantOperator> convertRange(Range<ConstantOperator> from, DateTimeFormatter format) {
         if (from.hasLowerBound() && from.hasUpperBound()) {
             return Range.range(
-                    ConstantOperator.createChar(from.lowerEndpoint().getDate().toLocalDate().format(format), Type.VARCHAR),
+                    ConstantOperator.createChar(from.lowerEndpoint().getDate().toLocalDate().format(format),
+                            VarcharType.VARCHAR),
                     from.lowerBoundType(),
-                    ConstantOperator.createChar(from.upperEndpoint().getDate().toLocalDate().format(format), Type.VARCHAR),
+                    ConstantOperator.createChar(from.upperEndpoint().getDate().toLocalDate().format(format),
+                            VarcharType.VARCHAR),
                     from.upperBoundType());
         } else if (from.hasUpperBound()) {
             return Range.upTo(ConstantOperator.createChar(
-                    from.upperEndpoint().getDate().toLocalDate().format(format), Type.VARCHAR),
+                    from.upperEndpoint().getDate().toLocalDate().format(format), VarcharType.VARCHAR),
                     from.upperBoundType());
         } else if (from.hasLowerBound()) {
             return Range.downTo(ConstantOperator.createChar(
-                    from.lowerEndpoint().getDate().toLocalDate().format(format), Type.VARCHAR),
+                    from.lowerEndpoint().getDate().toLocalDate().format(format), VarcharType.VARCHAR),
                     from.lowerBoundType());
         }
         return Range.all();

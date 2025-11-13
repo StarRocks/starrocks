@@ -37,7 +37,7 @@ import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletStat;
 import com.starrocks.thrift.TTabletStatResult;
 import com.starrocks.thrift.TTabletType;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Delegate;
@@ -80,10 +80,10 @@ public class TabletStatMgrTest {
 
         // Columns
         List<Column> columns = new ArrayList<Column>();
-        Column k1 = new Column("k1", Type.INT, true, null, "", "");
+        Column k1 = new Column("k1", IntegerType.INT, true, null, "", "");
         columns.add(k1);
-        columns.add(new Column("k2", Type.BIGINT, true, null, "", ""));
-        columns.add(new Column("v", Type.BIGINT, false, AggregateType.SUM, "0", ""));
+        columns.add(new Column("k2", IntegerType.BIGINT, true, null, "", ""));
+        columns.add(new Column("v", IntegerType.BIGINT, false, AggregateType.SUM, "0", ""));
 
         // Tablet2 is LocalTablet
         TabletMeta tabletMeta2 = new TabletMeta(DB_ID, TABLE_ID, PARTITION_ID, INDEX_ID, TStorageMedium.HDD);
@@ -139,10 +139,10 @@ public class TabletStatMgrTest {
 
         // Schema
         List<Column> columns = Lists.newArrayList();
-        Column k1 = new Column("k1", Type.INT, true, null, "", "");
+        Column k1 = new Column("k1", IntegerType.INT, true, null, "", "");
         columns.add(k1);
-        columns.add(new Column("k2", Type.BIGINT, true, null, "", ""));
-        columns.add(new Column("v", Type.BIGINT, false, AggregateType.SUM, "0", ""));
+        columns.add(new Column("k2", IntegerType.BIGINT, true, null, "", ""));
+        columns.add(new Column("v", IntegerType.BIGINT, false, AggregateType.SUM, "0", ""));
 
         long visibleVersionTime = System.currentTimeMillis();
 

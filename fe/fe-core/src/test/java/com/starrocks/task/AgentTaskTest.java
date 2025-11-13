@@ -58,8 +58,7 @@ import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletSchema;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TTaskType;
-import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.TypeFactory;
+import com.starrocks.type.IntegerType;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
@@ -116,8 +115,8 @@ public class AgentTaskTest {
         agentBatchTask = new AgentBatchTask();
 
         columns = new LinkedList<Column>();
-        columns.add(new Column("k1", TypeFactory.createType(PrimitiveType.INT), false, null, "1", ""));
-        columns.add(new Column("v1", TypeFactory.createType(PrimitiveType.INT), false, AggregateType.SUM, "1", ""));
+        columns.add(new Column("k1", IntegerType.INT, false, null, "1", ""));
+        columns.add(new Column("v1", IntegerType.INT, false, AggregateType.SUM, "1", ""));
 
         PartitionKey pk1 = PartitionKey.createInfinityPartitionKey(Arrays.asList(columns.get(0)), false);
         PartitionKey pk2 =

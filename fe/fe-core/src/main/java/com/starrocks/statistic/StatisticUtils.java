@@ -56,7 +56,9 @@ import com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.transaction.InsertOverwriteJobStats;
 import com.starrocks.transaction.TransactionState;
-import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.HLLType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.ScalarType;
 import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
@@ -327,35 +329,36 @@ public class StatisticUtils {
 
         if (tableName.equals(StatsConstants.SAMPLE_STATISTICS_TABLE_NAME)) {
             return ImmutableList.of(
-                    new ColumnDef("table_id", new TypeDef(TypeFactory.createType(PrimitiveType.BIGINT))),
+                    new ColumnDef("table_id", new TypeDef(IntegerType.BIGINT)),
                     new ColumnDef("column_name", new TypeDef(columnNameType)),
-                    new ColumnDef("db_id", new TypeDef(TypeFactory.createType(PrimitiveType.BIGINT))),
+                    new ColumnDef("db_id", new TypeDef(IntegerType.BIGINT)),
                     new ColumnDef("table_name", new TypeDef(tableNameType)),
                     new ColumnDef("db_name", new TypeDef(dbNameType)),
-                    new ColumnDef("row_count", new TypeDef(TypeFactory.createType(PrimitiveType.BIGINT))),
-                    new ColumnDef("data_size", new TypeDef(TypeFactory.createType(PrimitiveType.BIGINT))),
-                    new ColumnDef("distinct_count", new TypeDef(TypeFactory.createType(PrimitiveType.BIGINT))),
-                    new ColumnDef("null_count", new TypeDef(TypeFactory.createType(PrimitiveType.BIGINT))),
+                    new ColumnDef("row_count", new TypeDef(IntegerType.BIGINT)),
+                    new ColumnDef("data_size", new TypeDef(IntegerType.BIGINT)),
+                    new ColumnDef("distinct_count", new TypeDef(IntegerType.BIGINT)),
+                    new ColumnDef("null_count", new TypeDef(IntegerType.BIGINT)),
                     new ColumnDef("max", new TypeDef(maxType)),
                     new ColumnDef("min", new TypeDef(minType)),
-                    new ColumnDef("update_time", new TypeDef(TypeFactory.createType(PrimitiveType.DATETIME)))
+                    new ColumnDef("update_time", new TypeDef(DateType.DATETIME))
             );
         } else if (tableName.equals(StatsConstants.FULL_STATISTICS_TABLE_NAME)) {
             return ImmutableList.of(
-                    new ColumnDef("table_id", new TypeDef(TypeFactory.createType(PrimitiveType.BIGINT))),
-                    new ColumnDef("partition_id", new TypeDef(TypeFactory.createType(PrimitiveType.BIGINT))),
+                    new ColumnDef("table_id", new TypeDef(IntegerType.BIGINT)),
+                    new ColumnDef("partition_id", new TypeDef(IntegerType.BIGINT)),
                     new ColumnDef("column_name", new TypeDef(columnNameType)),
-                    new ColumnDef("db_id", new TypeDef(TypeFactory.createType(PrimitiveType.BIGINT))),
+                    new ColumnDef("db_id", new TypeDef(IntegerType.BIGINT)),
                     new ColumnDef("table_name", new TypeDef(tableNameType)),
                     new ColumnDef("partition_name", new TypeDef(partitionNameType)),
-                    new ColumnDef("row_count", new TypeDef(TypeFactory.createType(PrimitiveType.BIGINT))),
-                    new ColumnDef("data_size", new TypeDef(TypeFactory.createType(PrimitiveType.BIGINT))),
-                    new ColumnDef("ndv", new TypeDef(TypeFactory.createType(PrimitiveType.HLL))),
-                    new ColumnDef("null_count", new TypeDef(TypeFactory.createType(PrimitiveType.BIGINT))),
+                    new ColumnDef("row_count", new TypeDef(IntegerType.BIGINT)),
+                    new ColumnDef("data_size", new TypeDef(IntegerType.BIGINT)),
+                    new ColumnDef("ndv", new TypeDef(HLLType.HLL)),
+                    new ColumnDef("null_count", new TypeDef(IntegerType.BIGINT)),
                     new ColumnDef("max", new TypeDef(maxType)),
                     new ColumnDef("min", new TypeDef(minType)),
-                    new ColumnDef("update_time", new TypeDef(TypeFactory.createType(PrimitiveType.DATETIME))),
-                    new ColumnDef("collection_size", new TypeDef(TypeFactory.createType(PrimitiveType.BIGINT)), false, null,
+                    new ColumnDef("update_time", new TypeDef(DateType.DATETIME)),
+                    new ColumnDef("collection_size",
+                            new TypeDef(IntegerType.BIGINT), false, null,
                             null, true, new ColumnDef.DefaultValueDef(true, new StringLiteral("-1")), "")
             );
         } else if (tableName.equals(StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME)) {
@@ -366,25 +369,25 @@ public class StatisticUtils {
                     new ColumnDef("catalog_name", new TypeDef(catalogNameType)),
                     new ColumnDef("db_name", new TypeDef(dbNameType)),
                     new ColumnDef("table_name", new TypeDef(tableNameType)),
-                    new ColumnDef("row_count", new TypeDef(TypeFactory.createType(PrimitiveType.BIGINT))),
-                    new ColumnDef("data_size", new TypeDef(TypeFactory.createType(PrimitiveType.BIGINT))),
-                    new ColumnDef("ndv", new TypeDef(TypeFactory.createType(PrimitiveType.HLL))),
-                    new ColumnDef("null_count", new TypeDef(TypeFactory.createType(PrimitiveType.BIGINT))),
+                    new ColumnDef("row_count", new TypeDef(IntegerType.BIGINT)),
+                    new ColumnDef("data_size", new TypeDef(IntegerType.BIGINT)),
+                    new ColumnDef("ndv", new TypeDef(HLLType.HLL)),
+                    new ColumnDef("null_count", new TypeDef(IntegerType.BIGINT)),
                     new ColumnDef("max", new TypeDef(maxType)),
                     new ColumnDef("min", new TypeDef(minType)),
-                    new ColumnDef("update_time", new TypeDef(TypeFactory.createType(PrimitiveType.DATETIME)))
+                    new ColumnDef("update_time", new TypeDef(DateType.DATETIME))
             );
         } else if (tableName.equals(StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME)) {
             return ImmutableList.of(
-                    new ColumnDef("table_id", new TypeDef(TypeFactory.createType(PrimitiveType.BIGINT))),
+                    new ColumnDef("table_id", new TypeDef(IntegerType.BIGINT)),
                     new ColumnDef("column_name", new TypeDef(columnNameType)),
-                    new ColumnDef("db_id", new TypeDef(TypeFactory.createType(PrimitiveType.BIGINT))),
+                    new ColumnDef("db_id", new TypeDef(IntegerType.BIGINT)),
                     new ColumnDef("table_name", new TypeDef(tableNameType)),
                     new ColumnDef("buckets", new TypeDef(bucketsType), false, null, null,
                             true, ColumnDef.DefaultValueDef.NOT_SET, ""),
                     new ColumnDef("mcv", new TypeDef(mostCommonValueType), false, null, null,
                             true, ColumnDef.DefaultValueDef.NOT_SET, ""),
-                    new ColumnDef("update_time", new TypeDef(TypeFactory.createType(PrimitiveType.DATETIME)))
+                    new ColumnDef("update_time", new TypeDef(DateType.DATETIME))
             );
         } else if (tableName.equals(StatsConstants.EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME)) {
             return ImmutableList.of(
@@ -397,17 +400,17 @@ public class StatisticUtils {
                             true, ColumnDef.DefaultValueDef.NOT_SET, ""),
                     new ColumnDef("mcv", new TypeDef(mostCommonValueType), false, null, null,
                             true, ColumnDef.DefaultValueDef.NOT_SET, ""),
-                    new ColumnDef("update_time", new TypeDef(TypeFactory.createType(PrimitiveType.DATETIME)))
+                    new ColumnDef("update_time", new TypeDef(DateType.DATETIME))
             );
         } else if (tableName.equals(StatsConstants.MULTI_COLUMN_STATISTICS_TABLE_NAME)) {
             return ImmutableList.of(
-                    new ColumnDef("table_id", new TypeDef(TypeFactory.createType(PrimitiveType.BIGINT))),
+                    new ColumnDef("table_id", new TypeDef(IntegerType.BIGINT)),
                     new ColumnDef("column_ids", new TypeDef(TypeFactory.createVarcharType(65530))),
-                    new ColumnDef("db_id", new TypeDef(TypeFactory.createType(PrimitiveType.BIGINT))),
+                    new ColumnDef("db_id", new TypeDef(IntegerType.BIGINT)),
                     new ColumnDef("table_name", new TypeDef(tableNameType)),
                     new ColumnDef("column_names", new TypeDef(columnNameType)),
-                    new ColumnDef("ndv",  new TypeDef(TypeFactory.createType(PrimitiveType.BIGINT))),
-                    new ColumnDef("update_time", new TypeDef(TypeFactory.createType(PrimitiveType.DATETIME)))
+                    new ColumnDef("ndv",  new TypeDef(IntegerType.BIGINT)),
+                    new ColumnDef("update_time", new TypeDef(DateType.DATETIME))
             );
         } else {
             throw new StarRocksPlannerException("Not support stats table " + tableName, ErrorType.INTERNAL_ERROR);

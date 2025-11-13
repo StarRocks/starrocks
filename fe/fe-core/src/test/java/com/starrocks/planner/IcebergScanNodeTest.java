@@ -46,7 +46,7 @@ import com.starrocks.thrift.TIcebergTable;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TSinkCommitInfo;
 import com.starrocks.thrift.TTableDescriptor;
-import com.starrocks.type.ScalarType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.TypeFactory;
 import mockit.Expectations;
 import mockit.Mock;
@@ -915,10 +915,10 @@ public class IcebergScanNodeTest {
 
         // Create three bucket properties
         List<BucketProperty> bucketProperties = new ArrayList<>();
-        Column column1 = new Column("test_col1", ScalarType.INT);
-        Column column2 = new Column("test_col2", ScalarType.INT);
-        Column column3 = new Column("test_col3", ScalarType.INT);
-        Column column4 = new Column("test_col4", ScalarType.INT);
+        Column column1 = new Column("test_col1", IntegerType.INT);
+        Column column2 = new Column("test_col2", IntegerType.INT);
+        Column column3 = new Column("test_col3", IntegerType.INT);
+        Column column4 = new Column("test_col4", IntegerType.INT);
         BucketProperty bucketProperty1 = new BucketProperty(TBucketFunction.MURMUR3_X86_32, 2, column1);
         BucketProperty bucketProperty2 = new BucketProperty(TBucketFunction.MURMUR3_X86_32, 3, column2);
         BucketProperty bucketProperty3 = new BucketProperty(TBucketFunction.MURMUR3_X86_32, 4, column3);

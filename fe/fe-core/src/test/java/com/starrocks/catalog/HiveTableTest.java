@@ -50,7 +50,7 @@ import com.starrocks.server.TableFactoryProvider;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.common.EngineType;
 import com.starrocks.thrift.TTableDescriptor;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -140,7 +140,7 @@ public class HiveTableTest {
         Assertions.assertEquals("hive_table", hiveTable.getCatalogTableName());
         Assertions.assertEquals(hdfsPath, hiveTable.getTableLocation());
         Assertions.assertEquals(Lists.newArrayList("col1"), hiveTable.getPartitionColumnNames());
-        Assertions.assertEquals(new Column("col1", Type.INT, true), hiveTable.getPartitionColumns().get(0));
+        Assertions.assertEquals(new Column("col1", IntegerType.INT, true), hiveTable.getPartitionColumns().get(0));
         Assertions.assertEquals(Lists.newArrayList("col2"), hiveTable.getDataColumnNames());
         Assertions.assertFalse(hiveTable.isUnPartitioned());
 

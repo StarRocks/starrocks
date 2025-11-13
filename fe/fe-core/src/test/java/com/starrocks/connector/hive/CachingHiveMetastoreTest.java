@@ -25,8 +25,9 @@ import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.type.BitmapType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.Type;
 import mockit.Expectations;
 import org.apache.hadoop.hive.metastore.api.NoSuchObjectException;
 import org.junit.jupiter.api.AfterEach;
@@ -111,8 +112,8 @@ public class CachingHiveMetastoreTest {
         Assertions.assertEquals(Lists.newArrayList("col1"), hiveTable.getPartitionColumnNames());
         Assertions.assertEquals(Lists.newArrayList("col2"), hiveTable.getDataColumnNames());
         Assertions.assertEquals("hdfs://127.0.0.1:10000/hive", hiveTable.getTableLocation());
-        Assertions.assertEquals(Type.INT, hiveTable.getPartitionColumns().get(0).getType());
-        Assertions.assertEquals(Type.INT, hiveTable.getBaseSchema().get(0).getType());
+        Assertions.assertEquals(IntegerType.INT, hiveTable.getPartitionColumns().get(0).getType());
+        Assertions.assertEquals(IntegerType.INT, hiveTable.getBaseSchema().get(0).getType());
         Assertions.assertEquals("hive_catalog", hiveTable.getCatalogName());
     }
 
@@ -458,7 +459,7 @@ public class CachingHiveMetastoreTest {
                 expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
         HivePartition hivePartition = HivePartition.builder()
                 // Unsupported type
-                .setColumns(Lists.newArrayList(new Column("c1", Type.BITMAP)))
+                .setColumns(Lists.newArrayList(new Column("c1", BitmapType.BITMAP)))
                 .setStorageFormat(HiveStorageFormat.PARQUET)
                 .setDatabaseName("db")
                 .setTableName("table")

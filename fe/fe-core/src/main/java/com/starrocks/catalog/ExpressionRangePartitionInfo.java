@@ -36,8 +36,9 @@ import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
+import com.starrocks.type.InvalidType;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.Type;
+import com.starrocks.type.StringType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -142,11 +143,11 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo implements 
         // TODO: Later, for automatically partitioned tables,
         //  partitions of materialized views (also created automatically),
         //  and partition by expr tables will use ExpressionRangePartitionInfoV2
-        if (slotRef.getType() == Type.INVALID) {
+        if (slotRef.getType() == InvalidType.INVALID) {
             if (partitionExpr instanceof FunctionCallExpr) {
                 if (MvUtils.isStr2Date(partitionExpr)) {
                     // `str2date`'s input argument type should always be string
-                    slotRef.setType(Type.STRING);
+                    slotRef.setType(StringType.STRING);
                 } else {
                     // otherwise input argument type is the same as the partition column's type
                     slotRef.setType(partitionColumn.getType());

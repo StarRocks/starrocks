@@ -63,7 +63,7 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.statistics.CacheDictManager;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import com.starrocks.thrift.TResultBatch;
-import com.starrocks.type.Type;
+import com.starrocks.type.VarcharType;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.handler.codec.http.HttpResponseStatus;
@@ -609,7 +609,7 @@ public class MetaFunctions {
         CacheDictManager instance = CacheDictManager.getInstance();
         Optional<ColumnDict> dict = instance.getGlobalDictSync(table.getId(), ColumnId.create(column));
         if (dict.isEmpty()) {
-            return ConstantOperator.createNull(Type.VARCHAR);
+            return ConstantOperator.createNull(VarcharType.VARCHAR);
         } else {
             return ConstantOperator.createVarchar(dict.get().toJson());
         }

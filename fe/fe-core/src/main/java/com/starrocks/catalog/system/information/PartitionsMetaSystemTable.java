@@ -17,7 +17,10 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.thrift.TSchemaTableType;
-import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.TypeFactory;
 
 import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
@@ -34,36 +37,36 @@ public class PartitionsMetaSystemTable {
                         .column("DB_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
                         .column("TABLE_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
                         .column("PARTITION_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("PARTITION_ID", TypeFactory.createType(PrimitiveType.BIGINT))
-                        .column("COMPACT_VERSION", TypeFactory.createType(PrimitiveType.BIGINT))
-                        .column("VISIBLE_VERSION", TypeFactory.createType(PrimitiveType.BIGINT))
-                        .column("VISIBLE_VERSION_TIME", TypeFactory.createType(PrimitiveType.DATETIME))
-                        .column("NEXT_VERSION", TypeFactory.createType(PrimitiveType.BIGINT))
-                        .column("DATA_VERSION", TypeFactory.createType(PrimitiveType.BIGINT))
-                        .column("VERSION_EPOCH", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("PARTITION_ID", IntegerType.BIGINT)
+                        .column("COMPACT_VERSION", IntegerType.BIGINT)
+                        .column("VISIBLE_VERSION", IntegerType.BIGINT)
+                        .column("VISIBLE_VERSION_TIME", DateType.DATETIME)
+                        .column("NEXT_VERSION", IntegerType.BIGINT)
+                        .column("DATA_VERSION", IntegerType.BIGINT)
+                        .column("VERSION_EPOCH", IntegerType.BIGINT)
                         .column("VERSION_TXN_TYPE", TypeFactory.createVarchar(NAME_CHAR_LEN))
                         .column("PARTITION_KEY", TypeFactory.createVarchar(NAME_CHAR_LEN))
                         // corresponding to `Range` or `List` in `SHOW PARTITIONS FROM XXX`
                         .column("PARTITION_VALUE", TypeFactory.createVarchar(NAME_CHAR_LEN))
                         .column("DISTRIBUTION_KEY", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("BUCKETS", TypeFactory.createType(PrimitiveType.INT))
-                        .column("REPLICATION_NUM", TypeFactory.createType(PrimitiveType.INT))
+                        .column("BUCKETS", IntegerType.INT)
+                        .column("REPLICATION_NUM", IntegerType.INT)
                         .column("STORAGE_MEDIUM", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("COOLDOWN_TIME", TypeFactory.createType(PrimitiveType.DATETIME))
-                        .column("LAST_CONSISTENCY_CHECK_TIME", TypeFactory.createType(PrimitiveType.DATETIME))
-                        .column("IS_IN_MEMORY", TypeFactory.createType(PrimitiveType.BOOLEAN))
-                        .column("IS_TEMP", TypeFactory.createType(PrimitiveType.BOOLEAN))
-                        .column("DATA_SIZE", TypeFactory.createType(PrimitiveType.BIGINT))
-                        .column("ROW_COUNT", TypeFactory.createType(PrimitiveType.BIGINT))
-                        .column("ENABLE_DATACACHE", TypeFactory.createType(PrimitiveType.BOOLEAN))
-                        .column("AVG_CS", TypeFactory.createType(PrimitiveType.DOUBLE))
-                        .column("P50_CS", TypeFactory.createType(PrimitiveType.DOUBLE))
-                        .column("MAX_CS", TypeFactory.createType(PrimitiveType.DOUBLE))
+                        .column("COOLDOWN_TIME", DateType.DATETIME)
+                        .column("LAST_CONSISTENCY_CHECK_TIME", DateType.DATETIME)
+                        .column("IS_IN_MEMORY", BooleanType.BOOLEAN)
+                        .column("IS_TEMP", BooleanType.BOOLEAN)
+                        .column("DATA_SIZE", IntegerType.BIGINT)
+                        .column("ROW_COUNT", IntegerType.BIGINT)
+                        .column("ENABLE_DATACACHE", BooleanType.BOOLEAN)
+                        .column("AVG_CS", FloatType.DOUBLE)
+                        .column("P50_CS", FloatType.DOUBLE)
+                        .column("MAX_CS", FloatType.DOUBLE)
                         .column("STORAGE_PATH", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("STORAGE_SIZE", TypeFactory.createType(PrimitiveType.BIGINT))
-                        .column("TABLET_BALANCED", TypeFactory.createType(PrimitiveType.BOOLEAN))
-                        .column("METADATA_SWITCH_VERSION", TypeFactory.createType(PrimitiveType.BIGINT))
-                        .column("PATH_ID", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("STORAGE_SIZE", IntegerType.BIGINT)
+                        .column("TABLET_BALANCED", BooleanType.BOOLEAN)
+                        .column("METADATA_SWITCH_VERSION", IntegerType.BIGINT)
+                        .column("PATH_ID", IntegerType.BIGINT)
                         .build(), TSchemaTableType.SCH_PARTITIONS_META);
     }
 }

@@ -18,24 +18,24 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.expression.TypeDef;
-import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
-import com.starrocks.type.TypeFactory;
+import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 public class StructFieldDescTest {
     @Test
     public void testAnalyze() {
-        StructField field1 = new StructField("v1", Type.INT);
-        StructField field2 = new StructField("v2", Type.VARCHAR);
-        StructField field3 = new StructField("v3", Type.INT);
+        StructField field1 = new StructField("v1", IntegerType.INT);
+        StructField field2 = new StructField("v2", VarcharType.VARCHAR);
+        StructField field3 = new StructField("v3", IntegerType.INT);
 
         Assertions.assertEquals("StructField[name='v3', type=INT, position=0, fieldId=-1, fieldPhysicalName='']",
                 field3.toString());
-        StructField unnamedField = new StructField(null, Type.VARCHAR);
+        StructField unnamedField = new StructField(null, VarcharType.VARCHAR);
         Assertions.assertEquals("StructField[name='', type=VARCHAR, position=0, fieldId=-1, fieldPhysicalName='']",
                 unnamedField.toString());
 
@@ -45,7 +45,7 @@ public class StructFieldDescTest {
 
         Column structCol1 = new Column("structCol1", type);
 
-        Type addType = TypeFactory.createType(PrimitiveType.INT);
+        Type addType = IntegerType.INT;
         TypeDef addTypeDef = new TypeDef(addType);
         Column intCol1 = new Column("intCol1", addType);
 

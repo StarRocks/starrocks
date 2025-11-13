@@ -23,7 +23,7 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.sql.ast.PartitionValue;
-import com.starrocks.type.Type;
+import com.starrocks.type.DateType;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
 import org.openjdk.jmh.annotations.Fork;
@@ -76,7 +76,7 @@ public class SyncPartitionBench {
 
     private static final Date START_DATETIME = TimeUtils.getTimeAsDate("2000-01-01 00:00:00");
     private static final SimpleDateFormat DATETIME_FORMAT = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-    private static final Column PARTITION_COLUMN = new Column("k1", Type.DATETIME);
+    private static final Column PARTITION_COLUMN = new Column("k1", DateType.DATETIME);
 
     private final PCellSortedSet srcRangeMap = PCellSortedSet.of();
     private final PCellSortedSet dstRangeMap = PCellSortedSet.of();

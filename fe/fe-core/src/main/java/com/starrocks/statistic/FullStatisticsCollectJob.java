@@ -40,6 +40,7 @@ import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.thrift.TStatisticData;
 import com.starrocks.type.ArrayType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.MapType;
 import com.starrocks.type.Type;
 import org.apache.commons.lang.StringEscapeUtils;
@@ -219,16 +220,16 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
             params.add("now()");
             params.add(String.valueOf(data.getCollectionSize() <= 0 ? -1 : data.getCollectionSize()));
             // int
-            row.add(new IntLiteral(table.getId(), Type.BIGINT)); // table id, 8 byte
-            row.add(new IntLiteral(data.getPartitionId(), Type.BIGINT)); // partition id, 8 byte
+            row.add(new IntLiteral(table.getId(), IntegerType.BIGINT)); // table id, 8 byte
+            row.add(new IntLiteral(data.getPartitionId(), IntegerType.BIGINT)); // partition id, 8 byte
             row.add(new StringLiteral(data.getColumnName())); // column name, 20 byte
-            row.add(new IntLiteral(db.getId(), Type.BIGINT)); // db id, 8 byte
+            row.add(new IntLiteral(db.getId(), IntegerType.BIGINT)); // db id, 8 byte
             row.add(new StringLiteral(tableName)); // table name, 50 byte
             row.add(new StringLiteral(partitionName)); // partition name, 10 byte
-            row.add(new IntLiteral(data.getRowCount(), Type.BIGINT)); // row count, 8 byte
-            row.add(new IntLiteral((long) data.getDataSize(), Type.BIGINT)); // data size, 8 byte
+            row.add(new IntLiteral(data.getRowCount(), IntegerType.BIGINT)); // row count, 8 byte
+            row.add(new IntLiteral((long) data.getDataSize(), IntegerType.BIGINT)); // data size, 8 byte
             row.add(hllDeserialize(data.getHll())); // hll, 32 kB
-            row.add(new IntLiteral(data.getNullCount(), Type.BIGINT)); // null count, 8 byte
+            row.add(new IntLiteral(data.getNullCount(), IntegerType.BIGINT)); // null count, 8 byte
             row.add(new StringLiteral(data.getMax())); // max, 200 byte
             row.add(new StringLiteral(data.getMin())); // min, 200 byte
             row.add(nowFn()); // update time, 8 byte

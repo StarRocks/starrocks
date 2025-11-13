@@ -17,7 +17,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.thrift.TSchemaTableType;
-import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.TypeFactory;
 
 import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
@@ -31,7 +31,7 @@ public class BeBvarsSystemTable {
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("BE_ID", TypeFactory.createType(PrimitiveType.BIGINT), false)
+                        .column("BE_ID", IntegerType.BIGINT, false)
                         .column("NAME", TypeFactory.createVarchar(NAME_CHAR_LEN), false)
                         .column("VALUE", TypeFactory.createVarchar(NAME_CHAR_LEN), false)
                         .build(), TSchemaTableType.SCH_BE_BVARS);

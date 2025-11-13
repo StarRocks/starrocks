@@ -18,7 +18,8 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.thrift.TSchemaTableType;
-import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.TypeFactory;
 
 import static com.starrocks.catalog.system.SystemTable.FN_REFLEN;
@@ -36,24 +37,24 @@ public class TemporaryTablesTable {
                 .column("TABLE_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
                 .column("TABLE_TYPE", TypeFactory.createVarchar(NAME_CHAR_LEN))
                 .column("ENGINE", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                .column("VERSION", TypeFactory.createType(PrimitiveType.BIGINT))
+                .column("VERSION", IntegerType.BIGINT)
                 .column("ROW_FORMAT", TypeFactory.createVarchar(10))
-                .column("TABLE_ROWS", TypeFactory.createType(PrimitiveType.BIGINT))
-                .column("AVG_ROW_LENGTH", TypeFactory.createType(PrimitiveType.BIGINT))
-                .column("DATA_LENGTH", TypeFactory.createType(PrimitiveType.BIGINT))
-                .column("MAX_DATA_LENGTH", TypeFactory.createType(PrimitiveType.BIGINT))
-                .column("INDEX_LENGTH", TypeFactory.createType(PrimitiveType.BIGINT))
-                .column("DATA_FREE", TypeFactory.createType(PrimitiveType.BIGINT))
-                .column("AUTO_INCREMENT", TypeFactory.createType(PrimitiveType.BIGINT))
-                .column("CREATE_TIME", TypeFactory.createType(PrimitiveType.DATETIME))
-                .column("UPDATE_TIME", TypeFactory.createType(PrimitiveType.DATETIME))
-                .column("CHECK_TIME", TypeFactory.createType(PrimitiveType.DATETIME))
+                .column("TABLE_ROWS", IntegerType.BIGINT)
+                .column("AVG_ROW_LENGTH", IntegerType.BIGINT)
+                .column("DATA_LENGTH", IntegerType.BIGINT)
+                .column("MAX_DATA_LENGTH", IntegerType.BIGINT)
+                .column("INDEX_LENGTH", IntegerType.BIGINT)
+                .column("DATA_FREE", IntegerType.BIGINT)
+                .column("AUTO_INCREMENT", IntegerType.BIGINT)
+                .column("CREATE_TIME", DateType.DATETIME)
+                .column("UPDATE_TIME", DateType.DATETIME)
+                .column("CHECK_TIME", DateType.DATETIME)
                 .column("TABLE_COLLATION", TypeFactory.createVarchar(MY_CS_NAME_SIZE))
-                .column("CHECKSUM", TypeFactory.createType(PrimitiveType.BIGINT))
+                .column("CHECKSUM", IntegerType.BIGINT)
                 .column("CREATE_OPTIONS", TypeFactory.createVarchar(255))
                 .column("TABLE_COMMENT", TypeFactory.createVarchar(2048))
                 .column("SESSION", TypeFactory.createVarchar(128))
-                .column("TABLE_ID", TypeFactory.createType(PrimitiveType.BIGINT))
+                .column("TABLE_ID", IntegerType.BIGINT)
                 .build(), TSchemaTableType.SCH_TEMP_TABLES);
     }
 }

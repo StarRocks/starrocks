@@ -23,7 +23,10 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
-import com.starrocks.type.Type;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -38,7 +41,7 @@ public class PredicateStatisticsCalculatorTest {
         builder.setOutputRowCount(1000);
         double min = Utils.getLongFromDateTime(LocalDateTime.of(2020, 1, 1, 0, 0, 0));
         double max = Utils.getLongFromDateTime(LocalDateTime.of(2021, 6, 1, 0, 0, 0));
-        ColumnRefOperator columnRefOperator = new ColumnRefOperator(0, Type.DATE, "id_date", true);
+        ColumnRefOperator columnRefOperator = new ColumnRefOperator(0, DateType.DATE, "id_date", true);
         Statistics statistics = builder.addColumnStatistic(columnRefOperator,
                 ColumnStatistic.builder().setMinValue(min).setMaxValue(max).
                         setDistinctValuesCount(100).setNullsFraction(0).setAverageRowSize(10).build()).build();
@@ -57,7 +60,7 @@ public class PredicateStatisticsCalculatorTest {
         builder.setOutputRowCount(1000);
         double min = Utils.getLongFromDateTime(LocalDateTime.of(2020, 1, 1, 0, 0, 0));
         double max = Utils.getLongFromDateTime(LocalDateTime.of(2021, 6, 1, 0, 0, 0));
-        ColumnRefOperator columnRefOperator = new ColumnRefOperator(0, Type.DATE, "id_date", true);
+        ColumnRefOperator columnRefOperator = new ColumnRefOperator(0, DateType.DATE, "id_date", true);
         Statistics statistics = builder.addColumnStatistic(columnRefOperator,
                 ColumnStatistic.builder().setMinValue(min).setMaxValue(max).
                         setDistinctValuesCount(100).setNullsFraction(0).setAverageRowSize(10).build()).build();
@@ -79,8 +82,8 @@ public class PredicateStatisticsCalculatorTest {
 
     @Test
     public void testColumnEqualToColumn() {
-        ColumnRefOperator c1 = new ColumnRefOperator(0, Type.INT, "c1", true);
-        ColumnRefOperator c2 = new ColumnRefOperator(1, Type.INT, "c2", true);
+        ColumnRefOperator c1 = new ColumnRefOperator(0, IntegerType.INT, "c1", true);
+        ColumnRefOperator c2 = new ColumnRefOperator(1, IntegerType.INT, "c2", true);
 
         Statistics statistics = Statistics.builder()
                 .addColumnStatistic(c1,
@@ -103,13 +106,13 @@ public class PredicateStatisticsCalculatorTest {
 
     @Test
     public void testNullEqStatistic() throws Exception {
-        ColumnRefOperator c1 = new ColumnRefOperator(0, Type.INT, "c1", true);
+        ColumnRefOperator c1 = new ColumnRefOperator(0, IntegerType.INT, "c1", true);
         Statistics statistics = Statistics.builder()
                 .addColumnStatistic(c1, ColumnStatistic.builder().setNullsFraction(0.5).setDistinctValuesCount(10).build())
                 .setOutputRowCount(10000).build();
 
         BinaryPredicateOperator binaryPredicateOperator = new BinaryPredicateOperator(
-                BinaryType.EQ_FOR_NULL, c1, ConstantOperator.createNull(Type.INT));
+                BinaryType.EQ_FOR_NULL, c1, ConstantOperator.createNull(IntegerType.INT));
         Statistics estimatedStatistics =
                 PredicateStatisticsCalculator.statisticsCalculate(binaryPredicateOperator, statistics);
         Assertions.assertEquals(5000, estimatedStatistics.getOutputRowCount(), 0.001);
@@ -118,10 +121,10 @@ public class PredicateStatisticsCalculatorTest {
 
     @Test
     public void testConcatExpressionCalculate() {
-        ColumnRefOperator c1 = new ColumnRefOperator(0, Type.VARCHAR, "c1", true);
-        ConstantOperator c2 = new ConstantOperator("-", Type.VARCHAR);
-        ColumnRefOperator c3 = new ColumnRefOperator(1, Type.VARCHAR, "c3", true);
-        CallOperator concat = new CallOperator("concat", Type.VARCHAR, Lists.newArrayList(c1, c2, c3));
+        ColumnRefOperator c1 = new ColumnRefOperator(0, VarcharType.VARCHAR, "c1", true);
+        ConstantOperator c2 = new ConstantOperator("-", VarcharType.VARCHAR);
+        ColumnRefOperator c3 = new ColumnRefOperator(1, VarcharType.VARCHAR, "c3", true);
+        CallOperator concat = new CallOperator("concat", VarcharType.VARCHAR, Lists.newArrayList(c1, c2, c3));
         Statistics statistics = Statistics.builder()
                 .addColumnStatistic(c1, ColumnStatistic.builder().setNullsFraction(0.2).setDistinctValuesCount(10).build())
                 .addColumnStatistic(c3, ColumnStatistic.builder().setNullsFraction(0.4).setDistinctValuesCount(10).build())
@@ -132,7 +135,7 @@ public class PredicateStatisticsCalculatorTest {
 
     @Test
     public void testEstimateInPredicateWithHistogramNumeric() {
-        ColumnRefOperator columnRef = new ColumnRefOperator(1, Type.INT, "c1", true);
+        ColumnRefOperator columnRef = new ColumnRefOperator(1, IntegerType.INT, "c1", true);
 
         List<Bucket> buckets = Lists.newArrayList(
                 new Bucket(1, 9, 100L, 20L),
@@ -180,7 +183,7 @@ public class PredicateStatisticsCalculatorTest {
 
     @Test
     public void testEstimateNotInPredicateWithHistogram() {
-        ColumnRefOperator columnRef = new ColumnRefOperator(3, Type.BIGINT, "c3", true);
+        ColumnRefOperator columnRef = new ColumnRefOperator(3, IntegerType.BIGINT, "c3", true);
 
         List<Bucket> buckets = List.of(
                 new Bucket(101, 149, 150L, 25L),
@@ -228,7 +231,7 @@ public class PredicateStatisticsCalculatorTest {
 
     @Test
     public void testEstimateInPredicateWithStringType() {
-        ColumnRefOperator columnRef = new ColumnRefOperator(2, Type.VARCHAR, "c2", true);
+        ColumnRefOperator columnRef = new ColumnRefOperator(2, VarcharType.VARCHAR, "c2", true);
 
         Map<String, Long> mcv = Map.of(
                 "apple", 50L,
@@ -267,7 +270,7 @@ public class PredicateStatisticsCalculatorTest {
 
     @Test
     public void testEstimateInPredicateWithBooleanType() {
-        ColumnRefOperator columnRef = new ColumnRefOperator(6, Type.BOOLEAN, "c6", true);
+        ColumnRefOperator columnRef = new ColumnRefOperator(6, BooleanType.BOOLEAN, "c6", true);
 
         Map<String, Long> mcv = Map.of(
                 "1", 600L,
@@ -301,7 +304,7 @@ public class PredicateStatisticsCalculatorTest {
 
     @Test
     public void testEstimateInPredicateWithOutOfRangeConstants() {
-        ColumnRefOperator columnRef = new ColumnRefOperator(7, Type.INT, "c7", true);
+        ColumnRefOperator columnRef = new ColumnRefOperator(7, IntegerType.INT, "c7", true);
 
         List<Bucket> buckets = Lists.newArrayList(
                 new Bucket(10, 19, 100L, 10L),

@@ -23,7 +23,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.connector.ColumnTypeConverter;
 import com.starrocks.sql.ast.CreateTableStmt;
-import com.starrocks.type.Type;
+import com.starrocks.type.UnknownType;
 
 import java.util.List;
 import java.util.Map;
@@ -97,7 +97,7 @@ public class HiveTableFactory extends ExternalTableFactory {
                 throw new DdlException("column [" + column.getName() + "] not exists in hive");
             }
 
-            if (oColumn.getType() == Type.UNKNOWN_TYPE) {
+            if (oColumn.getType() == UnknownType.UNKNOWN_TYPE) {
                 throw new DdlException("Column type convert failed on column: " + column.getName());
             }
 

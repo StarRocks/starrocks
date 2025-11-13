@@ -18,7 +18,8 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.thrift.TSchemaTableType;
-import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.TypeFactory;
 
 import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
@@ -32,16 +33,16 @@ public class RoutineLoadJobsSystemTable {
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("ID", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("ID", IntegerType.BIGINT)
                         .column("NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("CREATE_TIME", TypeFactory.createType(PrimitiveType.DATETIME))
-                        .column("PAUSE_TIME", TypeFactory.createType(PrimitiveType.DATETIME))
-                        .column("END_TIME", TypeFactory.createType(PrimitiveType.DATETIME))
+                        .column("CREATE_TIME", DateType.DATETIME)
+                        .column("PAUSE_TIME", DateType.DATETIME)
+                        .column("END_TIME", DateType.DATETIME)
                         .column("DB_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
                         .column("TABLE_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
                         .column("STATE", TypeFactory.createVarchar(NAME_CHAR_LEN))
                         .column("DATA_SOURCE_TYPE", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("CURRENT_TASK_NUM", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("CURRENT_TASK_NUM", IntegerType.BIGINT)
                         .column("JOB_PROPERTIES", TypeFactory.createVarchar(NAME_CHAR_LEN))
                         .column("DATA_SOURCE_PROPERTIES", TypeFactory.createVarchar(NAME_CHAR_LEN))
                         .column("CUSTOM_PROPERTIES", TypeFactory.createVarchar(NAME_CHAR_LEN))

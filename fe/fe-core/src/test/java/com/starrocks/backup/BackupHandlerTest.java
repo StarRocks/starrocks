@@ -85,6 +85,7 @@ import com.starrocks.thrift.TFinishTaskRequest;
 import com.starrocks.thrift.TSnapshotRequest;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.Type;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Delegate;
@@ -532,7 +533,7 @@ public class BackupHandlerTest {
         BackupMeta backupMeta = new BackupMeta(Lists.newArrayList());
         List<Function> fns = Lists.newArrayList();
         Function f1 = new Function(new FunctionName(db.getFullName(), "wrong_name"),
-                new Type[] {Type.INT}, new String[] {"argName"}, Type.INT, false);
+                new Type[] {IntegerType.INT}, new String[] {"argName"}, IntegerType.INT, false);
         fns.add(f1);
         backupMeta.setFunctions(fns);
 
@@ -540,7 +541,7 @@ public class BackupHandlerTest {
                 handler.checkAndFilterRestoreFunctionsInBackupMeta(restoreStmt2, backupMeta));
 
         Function f2 = new Function(new FunctionName(db.getFullName(), "test_function"),
-                new Type[] {Type.INT}, new String[] {"argName"}, Type.INT, false);
+                new Type[] {IntegerType.INT}, new String[] {"argName"}, IntegerType.INT, false);
         fns.clear();
         fns.add(f2);
         backupMeta.setFunctions(fns);

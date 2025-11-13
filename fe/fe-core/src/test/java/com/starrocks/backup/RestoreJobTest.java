@@ -79,6 +79,7 @@ import com.starrocks.thrift.TFinishTaskRequest;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTaskType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.Type;
 import mockit.Delegate;
 import mockit.Expectations;
@@ -1012,7 +1013,7 @@ public class RestoreJobTest {
     public void testRestoreAddFunction() {
         backupMeta = new BackupMeta(Lists.newArrayList());
         Function f1 = new Function(new FunctionName(db.getFullName(), "test_function"),
-                new Type[] {Type.INT}, new String[] {"argName"}, Type.INT, false);
+                new Type[] {IntegerType.INT}, new String[] {"argName"}, IntegerType.INT, false);
 
         backupMeta.setFunctions(Lists.newArrayList(f1));
         job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(),

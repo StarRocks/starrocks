@@ -31,7 +31,7 @@ import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.LimitElement;
 import com.starrocks.sql.ast.expression.StringLiteral;
-import com.starrocks.type.Type;
+import com.starrocks.type.DateType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -74,7 +74,7 @@ public class OptimizeProcDir implements ProcDirInterface {
             return ((StringLiteral) subExpr.getChild(1)).getValue().equals(element);
         }
         if (subExpr.getChild(1) instanceof DateLiteral) {
-            Long leftVal = (new DateLiteral((String) element, Type.DATETIME)).getLongValue();
+            Long leftVal = (new DateLiteral((String) element, DateType.DATETIME)).getLongValue();
             Long rightVal = ((DateLiteral) subExpr.getChild(1)).getLongValue();
             switch (binaryPredicate.getOp()) {
                 case EQ:

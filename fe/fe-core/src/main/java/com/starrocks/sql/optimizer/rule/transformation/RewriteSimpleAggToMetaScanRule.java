@@ -46,7 +46,9 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.statistics.IMinMaxStatsMgr;
 import com.starrocks.sql.optimizer.statistics.StatsVersion;
 import com.starrocks.statistic.StatisticUtils;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.Type;
+import com.starrocks.type.VarcharType;
 
 import java.time.LocalDateTime;
 import java.util.Collections;
@@ -115,7 +117,7 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
 
             Column copiedColumn = new Column(c);
             if (aggCall.getFnName().equals(FunctionSet.COUNT)) {
-                copiedColumn.setType(Type.BIGINT);
+                copiedColumn.setType(IntegerType.BIGINT);
             }
             copiedColumn.setIsAllowNull(true);
             newScanColumnRefs.put(metaColumn, copiedColumn);
@@ -127,9 +129,9 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
                     || aggCall.getFnName().equals(FunctionSet.COLUMN_SIZE)
                     || aggCall.getFnName().equals(FunctionSet.COLUMN_COMPRESSED_SIZE)) {
                 aggFunction = ExprUtils.getBuiltinFunction(FunctionSet.SUM,
-                        new Type[] {Type.BIGINT}, Function.CompareMode.IS_IDENTICAL);
+                        new Type[] {IntegerType.BIGINT}, Function.CompareMode.IS_IDENTICAL);
                 newAggFnName = FunctionSet.SUM;
-                newAggReturnType = Type.BIGINT;
+                newAggReturnType = IntegerType.BIGINT;
             }
             CallOperator newAggCall = new CallOperator(newAggFnName, newAggReturnType,
                     Collections.singletonList(metaColumn), aggFunction);
@@ -280,9 +282,9 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
 
                 ConstantOperator mm;
                 if (call.getFnName().equals(FunctionSet.MAX)) {
-                    mm = new ConstantOperator(minMax.get().maxValue(), Type.VARCHAR);
+                    mm = new ConstantOperator(minMax.get().maxValue(), VarcharType.VARCHAR);
                 } else {
-                    mm = new ConstantOperator(minMax.get().minValue(), Type.VARCHAR);
+                    mm = new ConstantOperator(minMax.get().minValue(), VarcharType.VARCHAR);
                 }
                 Optional<ConstantOperator> re = mm.castTo(call.getType());
                 re.ifPresent(cc -> constantMap.put(entry.getKey(), cc));
@@ -307,7 +309,7 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
             // all aggregations can be replaced
             Preconditions.checkState(newAggCalls.isEmpty());
             LogicalValuesOperator row = new LogicalValuesOperator(scanOperator.getOutputColumns().subList(0, 1),
-                    List.of(List.of(ConstantOperator.createNull(Type.BIGINT))));
+                    List.of(List.of(ConstantOperator.createNull(IntegerType.BIGINT))));
             return Optional.of(OptExpression.create(project, OptExpression.create(row)));
         }
 

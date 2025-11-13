@@ -32,10 +32,17 @@ import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.type.ArrayType;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.DecimalType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.InvalidType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
+import com.starrocks.type.VarbinaryType;
+import com.starrocks.type.VarcharType;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -114,7 +121,7 @@ public class DecimalV3FunctionAnalyzer {
             }
             Type commonType = TypeManager.getCommonType(argTypes, commonTypeStartIdx, argTypes.length);
             Type[] newArgType = new Type[argTypes.length];
-            newArgType[0] = isIfFunc ? Type.BOOLEAN : argTypes[0];
+            newArgType[0] = isIfFunc ? BooleanType.BOOLEAN : argTypes[0];
             Arrays.fill(newArgType, commonTypeStartIdx, argTypes.length, commonType);
             return newArgType;
         }
@@ -203,12 +210,13 @@ public class DecimalV3FunctionAnalyzer {
             } else {
                 returnScale = Math.max(expectedScale, 0);
             }
-            returnType = TypeFactory.createType(returnPrimitiveType, -1, returnPrecision, returnScale);
+            returnType = createType(returnPrimitiveType, -1, returnPrecision, returnScale);
         } else if (ExprUtils.containsSlotRef(secondArg)) {
             returnScale = originalScale;
-            returnType = TypeFactory.createType(returnPrimitiveType, -1, returnPrecision, returnScale);
+            returnType = createType(returnPrimitiveType, -1, returnPrecision, returnScale);
         } else {
-            return ExprUtils.getBuiltinFunction(fn.getFunctionName().getFunction(), new Type[] {Type.DOUBLE, Type.INT},
+            return ExprUtils.getBuiltinFunction(fn.getFunctionName().getFunction(),
+                    new Type[] {FloatType.DOUBLE, IntegerType.INT},
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         }
 
@@ -224,6 +232,26 @@ public class DecimalV3FunctionAnalyzer {
         newFn.setUserVisible(fn.isUserVisible());
 
         return newFn;
+    }
+
+    /**
+     * Create a scalar type with specified parameters.
+     *
+     * @param type      the primitive type
+     * @param len       length for CHAR/VARCHAR types
+     * @param precision precision for DECIMAL types
+     * @param scale     scale for DECIMAL types
+     * @return the created ScalarType
+     */
+    private static ScalarType createType(PrimitiveType type, int len, int precision, int scale) {
+        return switch (type) {
+            case CHAR -> TypeFactory.createCharType(len);
+            case VARCHAR -> TypeFactory.createVarcharType(len);
+            case VARBINARY -> TypeFactory.createVarbinary(len);
+            case DECIMALV2 -> TypeFactory.createDecimalV2Type(precision, scale);
+            case DECIMAL32, DECIMAL64, DECIMAL128, DECIMAL256 -> TypeFactory.createDecimalV3Type(type, precision, scale);
+            default -> TypeFactory.createType(type);
+        };
     }
 
     public static AggregateFunction rectifyAggregationFunction(AggregateFunction fn, Type argType, Type returnType) {
@@ -386,7 +414,7 @@ public class DecimalV3FunctionAnalyzer {
         if (FunctionSet.ARRAY_SLICE.equals(fnName)) {
             Type[] clone = Arrays.copyOf(argumentTypes, argumentTypes.length);
             for (int i = 1; i < clone.length; i++) {
-                clone[i] = Type.BIGINT;
+                clone[i] = IntegerType.BIGINT;
             }
 
             argumentTypes = clone;
@@ -415,7 +443,7 @@ public class DecimalV3FunctionAnalyzer {
             // can not work. Because of this reason, stddev and variance on very small decimal numbers always
             // yields a zero, so we use double instead of decimal128(38,9) to compute stddev and variance of
             // decimal types.
-            Type[] doubleArgTypes = Stream.of(argumentTypes).map(t -> Type.DOUBLE).toArray(Type[]::new);
+            Type[] doubleArgTypes = Stream.of(argumentTypes).map(t -> FloatType.DOUBLE).toArray(Type[]::new);
             return ExprUtils.getBuiltinFunction(fnName, doubleArgTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         }
 
@@ -436,9 +464,9 @@ public class DecimalV3FunctionAnalyzer {
 
         Function newFn = fn;
         if (DECIMAL_AGG_FUNCTION_SAME_TYPE.contains(fnName) || DECIMAL_AGG_FUNCTION_WIDER_TYPE.contains(fnName)) {
-            Type commonType = Type.INVALID;
+            Type commonType = InvalidType.INVALID;
             if (FunctionSet.HISTOGRAM.equals(fnName) || FunctionSet.HISTOGRAM_HLL_NDV.equals(fnName)) {
-                commonType = Type.VARCHAR;
+                commonType = VarcharType.VARCHAR;
             } else if (DECIMAL_AGG_FUNCTION_SAME_TYPE.contains(fnName)) {
                 commonType = argumentTypes[0];
             } else if (DECIMAL_AGG_FUNCTION_WIDER_TYPE.contains(fnName) && argumentTypes[0].isDecimalV3()) {
@@ -472,7 +500,7 @@ public class DecimalV3FunctionAnalyzer {
             newFn = fn.copy();
             newFn.setArgsType(argTypes);
             newFn.setRetType(returnType);
-            ((AggregateFunction) newFn).setIntermediateType(Type.VARBINARY);
+            ((AggregateFunction) newFn).setIntermediateType(VarbinaryType.VARBINARY);
         } else if (DECIMAL_UNARY_FUNCTION_SET.contains(fnName)) {
             Type commonType = argumentTypes[0];
             Type returnType = fn.getReturnType();
@@ -503,7 +531,7 @@ public class DecimalV3FunctionAnalyzer {
             // And we need to downgrade to double version if second param is neither int literal nor SlotRef expression
             Type commonType = argumentTypes[0].isDecimalV3() ?
                     TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, argumentTypes[0].getPrecision(),
-                            ((ScalarType) argumentTypes[0]).getScalarScale()) : Type.DEFAULT_DECIMAL128;
+                            ((ScalarType) argumentTypes[0]).getScalarScale()) : DecimalType.DEFAULT_DECIMAL128;
             List<Type> argTypes = Arrays.stream(fn.getArgs()).map(t -> t.isDecimalV3() ? commonType : t)
                     .collect(Collectors.toList());
             newFn = getFunctionOfRound(params, fn, argTypes);

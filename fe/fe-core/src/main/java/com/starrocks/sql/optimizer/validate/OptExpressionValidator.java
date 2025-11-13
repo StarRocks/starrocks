@@ -33,6 +33,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.BaseScalarOperatorShuttle;
+import com.starrocks.type.DateType;
 import com.starrocks.type.Type;
 
 import java.util.List;
@@ -245,7 +246,7 @@ public class OptExpressionValidator extends OptExpressionVisitor<OptExpression, 
             if (needDateValidate()
                     && ("str_to_date".equals(fnName) || "str2date".equals(fnName))
                     && call.getChild(0).isConstantRef()) {
-                checkDateType((ConstantOperator) call.getChild(0), Type.DATETIME);
+                checkDateType((ConstantOperator) call.getChild(0), DateType.DATETIME);
             } else {
                 super.visitCall(call, context);
             }

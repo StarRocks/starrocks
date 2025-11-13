@@ -62,6 +62,7 @@ import com.starrocks.thrift.TPartitionMap;
 import com.starrocks.thrift.TSortOrder;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.Type;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.NullOrder;
@@ -422,9 +423,9 @@ public class IcebergTable extends Table {
                             if (expr instanceof FunctionCallExpr) {
                                 Type[] args;
                                 if (((FunctionCallExpr) expr).getParams().exprs().size() == 2) {
-                                    args = new Type[] {column.getType(), Type.INT};
+                                    args = new Type[] {column.getType(), IntegerType.INT};
                                     if (expr.getChild(1) instanceof IntLiteral) {
-                                        expr.getChild(1).setType(Type.INT);
+                                        expr.getChild(1).setType(IntegerType.INT);
                                     } else {
                                         throw new SemanticException("Unsupported function call %s", expr.toString());
                                     }

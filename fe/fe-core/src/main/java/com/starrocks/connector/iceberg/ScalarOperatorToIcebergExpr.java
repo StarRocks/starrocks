@@ -34,9 +34,13 @@ import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.DateType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
 import com.starrocks.type.TypeFactory;
+import com.starrocks.type.VarbinaryType;
+import com.starrocks.type.VarcharType;
 import org.apache.iceberg.exceptions.ValidationException;
 import org.apache.iceberg.expressions.Binder;
 import org.apache.iceberg.expressions.Expression;
@@ -346,13 +350,13 @@ public class ScalarOperatorToIcebergExpr {
             Optional<ConstantOperator> res = Optional.empty();
             switch (resultTypeID) {
                 case BOOLEAN:
-                    res = operator.castTo(com.starrocks.type.Type.BOOLEAN);
+                    res = operator.castTo(BooleanType.BOOLEAN);
                     break;
                 case DATE:
-                    res = operator.castTo(com.starrocks.type.Type.DATE);
+                    res = operator.castTo(DateType.DATE);
                     break;
                 case TIMESTAMP:
-                    res = operator.castTo(com.starrocks.type.Type.DATETIME);
+                    res = operator.castTo(DateType.DATETIME);
                     break;
                 case STRING:
                 case UUID:
@@ -360,11 +364,11 @@ public class ScalarOperatorToIcebergExpr {
                     if (operator.getType().isNumericType()) {
                         return null;
                     } else {
-                        res = operator.castTo(com.starrocks.type.Type.VARCHAR);
+                        res = operator.castTo(VarcharType.VARCHAR);
                     }
                     break;
                 case BINARY:
-                    res = operator.castTo(com.starrocks.type.Type.VARBINARY);
+                    res = operator.castTo(VarbinaryType.VARBINARY);
                     break;
                     // num usually don't need cast, and num and string has different comparator
                     // cast is dangerous.

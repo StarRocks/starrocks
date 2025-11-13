@@ -28,7 +28,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -45,8 +45,8 @@ public class PredicateSplitTest {
         Assertions.assertNull(split.getResidualPredicates());
 
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-        ColumnRefOperator columnRef1 = columnRefFactory.create("col1", Type.INT, false);
-        ColumnRefOperator columnRef2 = columnRefFactory.create("col2", Type.INT, false);
+        ColumnRefOperator columnRef1 = columnRefFactory.create("col1", IntegerType.INT, false);
+        ColumnRefOperator columnRef2 = columnRefFactory.create("col2", IntegerType.INT, false);
         BinaryPredicateOperator binaryPredicate = new BinaryPredicateOperator(
                 BinaryType.EQ, columnRef1, columnRef2);
         BinaryPredicateOperator binaryPredicate2 = new BinaryPredicateOperator(
@@ -55,7 +55,7 @@ public class PredicateSplitTest {
         List<ScalarOperator> arguments = Lists.newArrayList();
         arguments.add(columnRef1);
         arguments.add(columnRef2);
-        CallOperator callOperator = new CallOperator(FunctionSet.SUM, Type.INT, arguments);
+        CallOperator callOperator = new CallOperator(FunctionSet.SUM, IntegerType.INT, arguments);
         BinaryPredicateOperator binaryPredicate3 = new BinaryPredicateOperator(
                 BinaryType.GE, callOperator, ConstantOperator.createInt(1));
         ScalarOperator andPredicate = Utils.compoundAnd(binaryPredicate, binaryPredicate2, binaryPredicate3);
@@ -67,10 +67,10 @@ public class PredicateSplitTest {
 
     @Test
     public void testSplitPredicateWithMultiRange() {
-        ColumnRefOperator a = new ColumnRefOperator(0, Type.INT, "a", false);
-        ColumnRefOperator b = new ColumnRefOperator(1, Type.INT, "b", false);
-        ColumnRefOperator c = new ColumnRefOperator(2, Type.INT, "c", false);
-        ColumnRefOperator d = new ColumnRefOperator(3, Type.INT, "d", false);
+        ColumnRefOperator a = new ColumnRefOperator(0, IntegerType.INT, "a", false);
+        ColumnRefOperator b = new ColumnRefOperator(1, IntegerType.INT, "b", false);
+        ColumnRefOperator c = new ColumnRefOperator(2, IntegerType.INT, "c", false);
+        ColumnRefOperator d = new ColumnRefOperator(3, IntegerType.INT, "d", false);
 
         ScalarOperator rangePredicate = CompoundPredicateOperator.or(
                 CompoundPredicateOperator.and(
@@ -181,7 +181,7 @@ public class PredicateSplitTest {
     @Test
     public void testSplitPredicate2() {
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-        ColumnRefOperator columnRef1 = columnRefFactory.create("col1", Type.INT, false);
+        ColumnRefOperator columnRef1 = columnRefFactory.create("col1", IntegerType.INT, false);
         BinaryPredicateOperator predicate1 = new BinaryPredicateOperator(
                 BinaryType.EQ, columnRef1, ConstantOperator.createInt(1));
         ScalarOperator predicate2 =  CompoundPredicateOperator.or(
@@ -199,7 +199,7 @@ public class PredicateSplitTest {
     @Test
     public void testSplitPredicate3() {
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-        ColumnRefOperator columnRef1 = columnRefFactory.create("col1", Type.INT, false);
+        ColumnRefOperator columnRef1 = columnRefFactory.create("col1", IntegerType.INT, false);
         BinaryPredicateOperator predicate1 = new BinaryPredicateOperator(
                 BinaryType.EQ, columnRef1, ConstantOperator.createInt(1));
         ScalarOperator predicate2 =  CompoundPredicateOperator.or(

@@ -52,7 +52,7 @@ import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.ast.expression.VariableExpr;
 import com.starrocks.sql.common.MetaUtils;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
@@ -237,7 +237,7 @@ public class DeleteAnalyzer {
             selectList.addItem(item);
         }
         try {
-            selectList.addItem(new SelectListItem(new IntLiteral(1, Type.TINYINT), Load.LOAD_OP_COLUMN));
+            selectList.addItem(new SelectListItem(new IntLiteral(1, IntegerType.TINYINT), Load.LOAD_OP_COLUMN));
         } catch (Exception e) {
             throw new SemanticException("analyze delete failed", e);
         }

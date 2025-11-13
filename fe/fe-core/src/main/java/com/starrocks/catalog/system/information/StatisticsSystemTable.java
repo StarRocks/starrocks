@@ -17,7 +17,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.thrift.TSchemaTableType;
-import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.TypeFactory;
 
 import static com.starrocks.catalog.system.SystemTable.MAX_FIELD_VARCHAR_LENGTH;
@@ -36,14 +36,14 @@ public class StatisticsSystemTable {
                         .column("TABLE_CATALOG", TypeFactory.createVarchar(512))
                         .column("TABLE_SCHEMA", TypeFactory.createVarchar(64))
                         .column("TABLE_NAME", TypeFactory.createVarchar(64))
-                        .column("NON_UNIQUE", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("NON_UNIQUE", IntegerType.BIGINT)
                         .column("INDEX_SCHEMA", TypeFactory.createVarchar(64))
                         .column("INDEX_NAME", TypeFactory.createVarchar(64))
-                        .column("SEQ_IN_INDEX", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("SEQ_IN_INDEX", IntegerType.BIGINT)
                         .column("COLUMN_NAME", TypeFactory.createVarchar(64))
                         .column("COLLATION", TypeFactory.createVarchar(1))
-                        .column("CARDINALITY", TypeFactory.createType(PrimitiveType.BIGINT))
-                        .column("SUB_PART", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("CARDINALITY", IntegerType.BIGINT)
+                        .column("SUB_PART", IntegerType.BIGINT)
                         .column("PACKED", TypeFactory.createVarchar(10))
                         .column("NULLABLE", TypeFactory.createVarchar(3))
                         .column("INDEX_TYPE", TypeFactory.createVarchar(16))

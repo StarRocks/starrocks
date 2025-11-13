@@ -109,6 +109,7 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
 import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.thrift.TResultSinkType;
+import com.starrocks.type.NullType;
 import com.starrocks.type.Type;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.iceberg.PartitionSpec;
@@ -607,7 +608,7 @@ public class InsertPlanner {
             boolean isAutoIncrement = targetColumn.isAutoIncrement();
             if (insertStatement.getTargetColumnNames() == null) {
                 for (List<Expr> row : values.getRows()) {
-                    if (isAutoIncrement && row.get(columnIdx).getType() == Type.NULL) {
+                    if (isAutoIncrement && row.get(columnIdx).getType() == NullType.NULL) {
                         throw new SemanticException(" `NULL` value is not supported for an AUTO_INCREMENT column: " +
                                 targetColumn.getName() + " You can use `default` for an" +
                                 " AUTO INCREMENT column");
@@ -626,7 +627,7 @@ public class InsertPlanner {
                 int idx = insertStatement.getTargetColumnNames().indexOf(targetColumn.getName().toLowerCase());
                 if (idx != -1) {
                     for (List<Expr> row : values.getRows()) {
-                        if (isAutoIncrement && row.get(idx).getType() == Type.NULL) {
+                        if (isAutoIncrement && row.get(idx).getType() == NullType.NULL) {
                             throw new SemanticException(
                                     " `NULL` value is not supported for an AUTO_INCREMENT column: " +
                                             targetColumn.getName() + " You can use `default` for an" +
@@ -995,7 +996,7 @@ public class InsertPlanner {
             if (tablePartitionColumnNames.contains(columnName)) {
                 int index = partitionColNames.indexOf(columnName);
                 LiteralExpr expr = (LiteralExpr) partitionColValues.get(index);
-                Type type = expr.isConstantNull() ? Type.NULL : column.getType();
+                Type type = expr.isConstantNull() ? NullType.NULL : column.getType();
                 ScalarOperator scalarOperator =
                         ConstantOperator.createObject(expr.getRealObjectValue(), type);
                 ColumnRefOperator col = columnRefFactory

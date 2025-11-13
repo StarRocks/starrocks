@@ -39,7 +39,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.common.ExceptionChecker;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
 import mockit.Expectations;
 import mockit.Injectable;
 import org.junit.jupiter.api.Test;
@@ -85,7 +85,7 @@ public class PartitionPhaseTest extends EsTestCase {
             }
         };
         List<Column> columns = new ArrayList<>();
-        Column k1 = new Column("k1", Type.BIGINT);
+        Column k1 = new Column("k1", IntegerType.BIGINT);
         columns.add(k1);
         EsTable esTableBefore7X = fakeEsTable("doe", "doe", "doc", columns);
         SearchContext context = new SearchContext(esTableBefore7X);

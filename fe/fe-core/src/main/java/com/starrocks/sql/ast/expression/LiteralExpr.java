@@ -44,7 +44,13 @@ import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.DateType;
+import com.starrocks.type.DecimalType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.StringType;
 import com.starrocks.type.Type;
+import com.starrocks.type.VarcharType;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -305,20 +311,20 @@ public abstract class LiteralExpr extends Expr implements Comparable<LiteralExpr
     public static LiteralExpr parseLiteral(int encode) throws AnalysisException {
         if (MYSQL_LITERAL_TYPE_ENCODE_MAP == null) {
             MYSQL_LITERAL_TYPE_ENCODE_MAP = new ImmutableMap.Builder<Integer, LiteralExpr>()
-                    .put(0, LiteralExpr.create("0", Type.DECIMAL32))    // MYSQL_TYPE_DECIMAL
-                    .put(1, LiteralExpr.create("0", Type.TINYINT))     // MYSQL_TYPE_TINY
-                    .put(2, LiteralExpr.create("0", Type.SMALLINT))     // MYSQL_TYPE_SHORT
-                    .put(3, LiteralExpr.create("0", Type.INT))          // MYSQL_TYPE_LONG
-                    .put(4, LiteralExpr.create("0", Type.FLOAT))        // MYSQL_TYPE_FLOAT
-                    .put(5, LiteralExpr.create("0", Type.DOUBLE))        // MYSQL_TYPE_DOUBLE
-                    .put(7, LiteralExpr.create("1970-01-01 00:00:00", Type.DATETIME)) // MYSQL_TYPE_TIMESTAMP2
-                    .put(8, LiteralExpr.create("0", Type.BIGINT))       // MYSQL_TYPE_LONGLONG
-                    .put(10, LiteralExpr.create("1970-01-01", Type.DATE))       // MYSQL_TYPE_DATE
-                    .put(12, LiteralExpr.create("1970-01-01 00:00:00", Type.DATETIME))      // MYSQL_TYPE_DATETIME
-                    .put(15, LiteralExpr.create("", Type.VARCHAR))      // MYSQL_TYPE_VARCHAR
-                    .put(17, LiteralExpr.create("1970-01-01 00:00:00", Type.DATETIME))      // MYSQL_TYPE_TIMESTAMP2
-                    .put(253, LiteralExpr.create("", Type.STRING))      // MYSQL_TYPE_STRING
-                    .put(254, LiteralExpr.create("", Type.STRING))      // MYSQL_TYPE_STRING
+                    .put(0, LiteralExpr.create("0", DecimalType.DECIMAL32))    // MYSQL_TYPE_DECIMAL
+                    .put(1, LiteralExpr.create("0", IntegerType.TINYINT))     // MYSQL_TYPE_TINY
+                    .put(2, LiteralExpr.create("0", IntegerType.SMALLINT))     // MYSQL_TYPE_SHORT
+                    .put(3, LiteralExpr.create("0", IntegerType.INT))          // MYSQL_TYPE_LONG
+                    .put(4, LiteralExpr.create("0", FloatType.FLOAT))        // MYSQL_TYPE_FLOAT
+                    .put(5, LiteralExpr.create("0", FloatType.DOUBLE))        // MYSQL_TYPE_DOUBLE
+                    .put(7, LiteralExpr.create("1970-01-01 00:00:00", DateType.DATETIME)) // MYSQL_TYPE_TIMESTAMP2
+                    .put(8, LiteralExpr.create("0", IntegerType.BIGINT))       // MYSQL_TYPE_LONGLONG
+                    .put(10, LiteralExpr.create("1970-01-01", DateType.DATE))       // MYSQL_TYPE_DATE
+                    .put(12, LiteralExpr.create("1970-01-01 00:00:00", DateType.DATETIME))      // MYSQL_TYPE_DATETIME
+                    .put(15, LiteralExpr.create("", VarcharType.VARCHAR))      // MYSQL_TYPE_VARCHAR
+                    .put(17, LiteralExpr.create("1970-01-01 00:00:00", DateType.DATETIME))      // MYSQL_TYPE_TIMESTAMP2
+                    .put(253, LiteralExpr.create("", StringType.STRING))      // MYSQL_TYPE_STRING
+                    .put(254, LiteralExpr.create("", StringType.STRING))      // MYSQL_TYPE_STRING
                     .build();
         }
         LiteralExpr literalExpr = MYSQL_LITERAL_TYPE_ENCODE_MAP.get(encode);

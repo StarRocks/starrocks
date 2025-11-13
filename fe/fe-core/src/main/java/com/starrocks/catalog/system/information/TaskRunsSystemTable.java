@@ -42,7 +42,6 @@ import com.starrocks.thrift.TGetTasksParams;
 import com.starrocks.thrift.TSchemaTableType;
 import com.starrocks.thrift.TTaskRunInfo;
 import com.starrocks.thrift.TUserIdentity;
-import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
 import org.apache.commons.lang3.NotImplementedException;
@@ -56,6 +55,9 @@ import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
+
+import static com.starrocks.type.DateType.DATETIME;
+import static com.starrocks.type.IntegerType.BIGINT;
 
 public class TaskRunsSystemTable extends SystemTable {
     private static final Logger LOG = LogManager.getLogger(SystemTable.class);
@@ -75,20 +77,20 @@ public class TaskRunsSystemTable extends SystemTable {
                 builder()
                         .column("QUERY_ID", TypeFactory.createVarchar(64))
                         .column("TASK_NAME", TypeFactory.createVarchar(64))
-                        .column("CREATE_TIME", TypeFactory.createType(PrimitiveType.DATETIME))
-                        .column("FINISH_TIME", TypeFactory.createType(PrimitiveType.DATETIME))
+                        .column("CREATE_TIME", DATETIME)
+                        .column("FINISH_TIME", DATETIME)
                         .column("STATE", TypeFactory.createVarchar(16))
                         .column("CATALOG", TypeFactory.createVarchar(64))
                         .column("DATABASE", TypeFactory.createVarchar(64))
                         .column("DEFINITION", TypeFactory.createVarchar(MAX_FIELD_VARCHAR_LENGTH))
-                        .column("EXPIRE_TIME", TypeFactory.createType(PrimitiveType.DATETIME))
-                        .column("ERROR_CODE", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("EXPIRE_TIME", DATETIME)
+                        .column("ERROR_CODE", BIGINT)
                         .column("ERROR_MESSAGE", TypeFactory.createVarchar(MAX_FIELD_VARCHAR_LENGTH))
                         .column("PROGRESS", TypeFactory.createVarchar(64))
                         .column("EXTRA_MESSAGE", TypeFactory.createVarchar(8192))
                         .column("PROPERTIES", TypeFactory.createVarcharType(512))
                         .column("JOB_ID", TypeFactory.createVarcharType(64))
-                        .column("PROCESS_TIME", TypeFactory.createType(PrimitiveType.DATETIME))
+                        .column("PROCESS_TIME", DATETIME)
                         .build(), TSchemaTableType.SCH_TASK_RUNS);
     }
 

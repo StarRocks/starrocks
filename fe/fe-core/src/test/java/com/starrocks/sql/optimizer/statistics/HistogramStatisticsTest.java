@@ -20,7 +20,8 @@ import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
-import com.starrocks.type.Type;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -34,7 +35,7 @@ import java.util.Optional;
 public class HistogramStatisticsTest {
     @Test
     public void testColumnToConstant() {
-        ColumnRefOperator columnRefOperator = new ColumnRefOperator(0, Type.BIGINT, "v1", true);
+        ColumnRefOperator columnRefOperator = new ColumnRefOperator(0, IntegerType.BIGINT, "v1", true);
 
         List<Bucket> bucketList = new ArrayList<>();
         bucketList.add(new Bucket(1D, 10D, 100L, 20L));
@@ -166,7 +167,7 @@ public class HistogramStatisticsTest {
 
     @Test
     public void testColumnToColumn() {
-        ColumnRefOperator leftColumnRefOperator = new ColumnRefOperator(0, Type.BIGINT, "v1", true);
+        ColumnRefOperator leftColumnRefOperator = new ColumnRefOperator(0, IntegerType.BIGINT, "v1", true);
         List<Bucket> leftBucketList = new ArrayList<>();
         leftBucketList.add(new Bucket(1D, 10D, 100L, 20L));
         leftBucketList.add(new Bucket(15D, 20D, 200L, 20L));
@@ -184,7 +185,7 @@ public class HistogramStatisticsTest {
         leftMcv.put("17", 200L);
         Histogram leftHistogram = new Histogram(leftBucketList, leftMcv);
 
-        ColumnRefOperator rightColumnRefOperator = new ColumnRefOperator(1, Type.BIGINT, "v2", true);
+        ColumnRefOperator rightColumnRefOperator = new ColumnRefOperator(1, IntegerType.BIGINT, "v2", true);
         List<Bucket> rightBucketList = new ArrayList<>();
         rightBucketList.add(new Bucket(1D, 15D, 200L, 20L));
         rightBucketList.add(new Bucket(18D, 38D, 300L, 20L));
@@ -253,27 +254,27 @@ public class HistogramStatisticsTest {
         ColumnStatistic columnStatistic = new ColumnStatistic(1, 50, 0, 4, 500,
                 histogram, ColumnStatistic.StatisticType.ESTIMATE);
         Optional<Histogram> notExist = BinaryPredicateStatisticCalculator.updateHistWithGreaterThan(columnStatistic,
-                Optional.of(new ConstantOperator(400, Type.BIGINT)), true);
+                Optional.of(new ConstantOperator(400, IntegerType.BIGINT)), true);
         Assertions.assertFalse(notExist.isPresent());
 
         notExist = BinaryPredicateStatisticCalculator.updateHistWithLessThan(columnStatistic,
-                Optional.of(new ConstantOperator(-1, Type.BIGINT)), true);
+                Optional.of(new ConstantOperator(-1, IntegerType.BIGINT)), true);
         Assertions.assertFalse(notExist.isPresent());
 
         // only one bucket in histogram can cover the predicate range
         Optional<Histogram> exist = BinaryPredicateStatisticCalculator.updateHistWithGreaterThan(columnStatistic,
-                Optional.of(new ConstantOperator(18, Type.BIGINT)), true);
+                Optional.of(new ConstantOperator(18, IntegerType.BIGINT)), true);
         Assertions.assertEquals(exist.get().getBuckets().size(), 1);
         exist = BinaryPredicateStatisticCalculator.updateHistWithLessThan(columnStatistic,
-                Optional.of(new ConstantOperator(3, Type.BIGINT)), true);
+                Optional.of(new ConstantOperator(3, IntegerType.BIGINT)), true);
         Assertions.assertEquals(exist.get().getBuckets().size(), 1);
 
         // all the two bucket in histogram can cover the predicate range
         exist = BinaryPredicateStatisticCalculator.updateHistWithGreaterThan(columnStatistic,
-                Optional.of(new ConstantOperator(3, Type.BIGINT)), true);
+                Optional.of(new ConstantOperator(3, IntegerType.BIGINT)), true);
         Assertions.assertEquals(exist.get().getBuckets().size(), 2);
         exist = BinaryPredicateStatisticCalculator.updateHistWithLessThan(columnStatistic,
-                Optional.of(new ConstantOperator(18, Type.BIGINT)), true);
+                Optional.of(new ConstantOperator(18, IntegerType.BIGINT)), true);
         Assertions.assertEquals(exist.get().getBuckets().size(), 2);
     }
 
@@ -290,19 +291,19 @@ public class HistogramStatisticsTest {
 
         // histogram doesn't contain the constant
         Optional<Histogram> notExist = BinaryPredicateStatisticCalculator.updateHistWithEqual(columnStatistic,
-                Optional.of(new ConstantOperator(12, Type.BIGINT)));
+                Optional.of(new ConstantOperator(12, IntegerType.BIGINT)));
         Assertions.assertFalse(notExist.isPresent());
 
         // histogram contains the constant in the mcv
         Optional<Histogram> exist = BinaryPredicateStatisticCalculator.updateHistWithEqual(columnStatistic,
-                Optional.of(new ConstantOperator(22, Type.BIGINT)));
+                Optional.of(new ConstantOperator(22, IntegerType.BIGINT)));
         Assertions.assertTrue(exist.isPresent());
         Assertions.assertEquals(exist.get().getBuckets().size(), 0);
         Assertions.assertEquals(exist.get().getMCV(), mcv);
 
         // histogram contains the constant in a bucket
         exist = BinaryPredicateStatisticCalculator.updateHistWithEqual(columnStatistic,
-                Optional.of(new ConstantOperator(2, Type.BIGINT)));
+                Optional.of(new ConstantOperator(2, IntegerType.BIGINT)));
         Assertions.assertTrue(exist.isPresent());
         Assertions.assertEquals(exist.get().getBuckets().size(), 0);
         Assertions.assertTrue(exist.get().getMCV().containsKey("2"));
@@ -318,7 +319,7 @@ public class HistogramStatisticsTest {
         Map<String, Long> mcv = Maps.newHashMap();
         mcv.put("11", 500L);
         Histogram histogram = new Histogram(bucketList, mcv);
-        ColumnRefOperator columnRefOperator = new ColumnRefOperator(0, Type.BIGINT, "v1", true);
+        ColumnRefOperator columnRefOperator = new ColumnRefOperator(0, IntegerType.BIGINT, "v1", true);
         ColumnStatistic columnStatistic = new ColumnStatistic(1, 50, 0, 4, 40,
                 histogram, ColumnStatistic.StatisticType.ESTIMATE);
         BinaryPredicateOperator eq10 = new BinaryPredicateOperator(
@@ -360,7 +361,7 @@ public class HistogramStatisticsTest {
         Map<String, Long> mcv = Maps.newHashMap();
         mcv.put("0", 500L);
         Histogram histogram = new Histogram(new ArrayList<>(), mcv);
-        ColumnRefOperator columnRefOperator = new ColumnRefOperator(0, Type.BOOLEAN, "b1", true);
+        ColumnRefOperator columnRefOperator = new ColumnRefOperator(0, BooleanType.BOOLEAN, "b1", true);
         ColumnStatistic columnStatistic = new ColumnStatistic(0, 1, 0, 4, 2, histogram, ColumnStatistic.StatisticType.ESTIMATE);
         BinaryPredicateOperator eq10 = new BinaryPredicateOperator(
                 BinaryType.EQ,
@@ -382,7 +383,7 @@ public class HistogramStatisticsTest {
         mcv.put("0", 500L);
         mcv.put("1", 500L);
         histogram = new Histogram(new ArrayList<>(), mcv);
-        columnRefOperator = new ColumnRefOperator(0, Type.BOOLEAN, "b1", true);
+        columnRefOperator = new ColumnRefOperator(0, BooleanType.BOOLEAN, "b1", true);
         columnStatistic = new ColumnStatistic(0, 1, 0, 4, 2, histogram, ColumnStatistic.StatisticType.ESTIMATE);
         builder = Statistics.builder();
         builder.setOutputRowCount(100000);
@@ -417,8 +418,8 @@ public class HistogramStatisticsTest {
         ColumnStatistic columnStatisticRight = new ColumnStatistic(1, 50, 0, 4, 500,
                 histogramRight, ColumnStatistic.StatisticType.ESTIMATE);
 
-        Optional<Histogram> notExist = BinaryPredicateStatisticCalculator.updateHistWithJoin(columnStatisticLeft, Type.BIGINT,
-                columnStatisticRight, Type.BIGINT);
+        Optional<Histogram> notExist = BinaryPredicateStatisticCalculator.updateHistWithJoin(
+                columnStatisticLeft, IntegerType.BIGINT, columnStatisticRight, IntegerType.BIGINT);
         Assertions.assertTrue(notExist.isEmpty());
 
         // MCV to MCV intersection.
@@ -436,8 +437,8 @@ public class HistogramStatisticsTest {
         columnStatisticRight = new ColumnStatistic(1, 50, 0, 4, 500,
                 histogramRight, ColumnStatistic.StatisticType.ESTIMATE);
 
-        Optional<Histogram> exist = BinaryPredicateStatisticCalculator.updateHistWithJoin(columnStatisticLeft, Type.BIGINT,
-                columnStatisticRight, Type.BIGINT);
+        Optional<Histogram> exist = BinaryPredicateStatisticCalculator.updateHistWithJoin(
+                columnStatisticLeft, IntegerType.BIGINT, columnStatisticRight, IntegerType.BIGINT);
         Assertions.assertTrue(exist.isPresent());
         Assertions.assertNull(exist.get().getBuckets());
         Assertions.assertEquals(exist.get().getMCV().size(), 1);
@@ -464,8 +465,8 @@ public class HistogramStatisticsTest {
         columnStatisticRight = new ColumnStatistic(1, 50, 0, 4, 500,
                 histogramRight, ColumnStatistic.StatisticType.ESTIMATE);
 
-        exist = BinaryPredicateStatisticCalculator.updateHistWithJoin(columnStatisticLeft, Type.BIGINT,
-                columnStatisticRight, Type.BIGINT);
+        exist = BinaryPredicateStatisticCalculator.updateHistWithJoin(columnStatisticLeft, IntegerType.BIGINT,
+                columnStatisticRight, IntegerType.BIGINT);
         Assertions.assertTrue(exist.isPresent());
         Assertions.assertTrue(exist.get().getBuckets().isEmpty());
         Assertions.assertEquals(exist.get().getMCV().size(), 2);
@@ -493,8 +494,8 @@ public class HistogramStatisticsTest {
         columnStatisticRight = new ColumnStatistic(1, 50, 0, 4, 500,
                 histogramRight, ColumnStatistic.StatisticType.ESTIMATE);
 
-        exist = BinaryPredicateStatisticCalculator.updateHistWithJoin(columnStatisticLeft, Type.BIGINT,
-                columnStatisticRight, Type.BIGINT);
+        exist = BinaryPredicateStatisticCalculator.updateHistWithJoin(columnStatisticLeft, IntegerType.BIGINT,
+                columnStatisticRight, IntegerType.BIGINT);
         Assertions.assertTrue(exist.isPresent());
         Assertions.assertTrue(exist.get().getBuckets().isEmpty());
         Assertions.assertEquals(exist.get().getMCV().size(), 2);
@@ -516,8 +517,8 @@ public class HistogramStatisticsTest {
         columnStatisticRight = new ColumnStatistic(1, 50, 0, 4, 500,
                 histogramRight, ColumnStatistic.StatisticType.ESTIMATE);
 
-        exist = BinaryPredicateStatisticCalculator.updateHistWithJoin(columnStatisticLeft, Type.BIGINT,
-                columnStatisticRight, Type.BIGINT);
+        exist = BinaryPredicateStatisticCalculator.updateHistWithJoin(columnStatisticLeft, IntegerType.BIGINT,
+                columnStatisticRight, IntegerType.BIGINT);
         Assertions.assertTrue(exist.isPresent());
         Assertions.assertTrue(exist.get().getMCV().isEmpty());
         Assertions.assertEquals(exist.get().getBuckets().size(), 1);
@@ -542,8 +543,8 @@ public class HistogramStatisticsTest {
         columnStatisticRight = new ColumnStatistic(1, 50, 0, 4, 500,
                 histogramRight, ColumnStatistic.StatisticType.ESTIMATE);
 
-        exist = BinaryPredicateStatisticCalculator.updateHistWithJoin(columnStatisticLeft, Type.BIGINT,
-                columnStatisticRight, Type.BIGINT);
+        exist = BinaryPredicateStatisticCalculator.updateHistWithJoin(columnStatisticLeft, IntegerType.BIGINT,
+                columnStatisticRight, IntegerType.BIGINT);
         Assertions.assertTrue(exist.isPresent());
         Assertions.assertTrue(exist.get().getMCV().isEmpty());
         Assertions.assertEquals(exist.get().getBuckets().size(), 1);

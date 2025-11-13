@@ -93,6 +93,9 @@ import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.dump.HiveMetaStoreTableDumpInfo;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.NullType;
 import com.starrocks.type.Type;
 import org.apache.commons.collections.CollectionUtils;
 
@@ -775,10 +778,10 @@ public class QueryAnalyzer {
 
         private List<Column> getBinlogMetaColumns() {
             List<Column> columns = new ArrayList<>();
-            columns.add(new Column(BINLOG_OP_COLUMN_NAME, Type.TINYINT));
-            columns.add(new Column(BINLOG_VERSION_COLUMN_NAME, Type.BIGINT));
-            columns.add(new Column(BINLOG_SEQ_ID_COLUMN_NAME, Type.BIGINT));
-            columns.add(new Column(BINLOG_TIMESTAMP_COLUMN_NAME, Type.BIGINT));
+            columns.add(new Column(BINLOG_OP_COLUMN_NAME, IntegerType.TINYINT));
+            columns.add(new Column(BINLOG_VERSION_COLUMN_NAME, IntegerType.BIGINT));
+            columns.add(new Column(BINLOG_SEQ_ID_COLUMN_NAME, IntegerType.BIGINT));
+            columns.add(new Column(BINLOG_TIMESTAMP_COLUMN_NAME, IntegerType.BIGINT));
             return columns;
         }
 
@@ -913,7 +916,8 @@ public class QueryAnalyzer {
                 AnalyzerUtils.verifyNoWindowFunctions(joinEqual, "JOIN");
                 AnalyzerUtils.verifyNoGroupingFunctions(joinEqual, "JOIN");
 
-                if (!joinEqual.getType().matchesType(Type.BOOLEAN) && !joinEqual.getType().matchesType(Type.NULL)) {
+                if (!joinEqual.getType().matchesType(BooleanType.BOOLEAN)
+                        && !joinEqual.getType().matchesType(NullType.NULL)) {
                     throw new SemanticException("WHERE clause must evaluate to a boolean: actual type %s",
                             joinEqual.getType());
                 }

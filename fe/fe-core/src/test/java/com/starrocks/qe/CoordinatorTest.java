@@ -45,7 +45,7 @@ import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TPartitionType;
 import com.starrocks.thrift.TScanRangeParams;
 import com.starrocks.thrift.TUniqueId;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
@@ -200,8 +200,8 @@ public class CoordinatorTest extends PlanTestBase {
         TupleDescriptor scanTuple = new TupleDescriptor(new TupleId(2));
         scanTuple.setTable(getOlapTable("t0"));
         TupleDescriptor aggTuple = new TupleDescriptor(new TupleId(3));
-        SlotDescriptor groupBySlot = new SlotDescriptor(new SlotId(4), "groupBy", Type.INT, false);
-        SlotDescriptor aggFuncSlot = new SlotDescriptor(new SlotId(5), "aggFunc", Type.INT, false);
+        SlotDescriptor groupBySlot = new SlotDescriptor(new SlotId(4), "groupBy", IntegerType.INT, false);
+        SlotDescriptor aggFuncSlot = new SlotDescriptor(new SlotId(5), "aggFunc", IntegerType.INT, false);
         aggTuple.addSlot(groupBySlot);
         aggTuple.addSlot(aggFuncSlot);
 

@@ -31,7 +31,7 @@ import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TScanRangeParams;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
@@ -84,7 +84,8 @@ public class BucketAwareBackendSelectorTest {
     }
 
     private ColocatedBackendSelector.Assignment genColocatedAssignment(int bucketNum, int numScanNodes) {
-        BucketProperty bucketProperty = new BucketProperty(TBucketFunction.MURMUR3_X86_32, 10, new Column("c1", Type.INT));
+        BucketProperty bucketProperty = new BucketProperty(TBucketFunction.MURMUR3_X86_32, 10,
+                new Column("c1", IntegerType.INT));
         return new ColocatedBackendSelector.Assignment(bucketNum, numScanNodes, Optional.of(List.of(bucketProperty)));
     }
 

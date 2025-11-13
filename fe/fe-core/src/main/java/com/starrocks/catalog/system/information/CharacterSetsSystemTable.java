@@ -17,7 +17,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.thrift.TSchemaTableType;
-import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.TypeFactory;
 
 import static com.starrocks.catalog.system.SystemTable.builder;
@@ -35,7 +35,7 @@ public class CharacterSetsSystemTable {
                         .column("CHARACTER_SET_NAME", TypeFactory.createVarchar(512))
                         .column("DEFAULT_COLLATE_NAME", TypeFactory.createVarchar(64))
                         .column("DESCRIPTION", TypeFactory.createVarchar(64))
-                        .column("MAXLEN", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("MAXLEN", IntegerType.BIGINT)
                         .build(), TSchemaTableType.SCH_CHARSETS);
     }
 }

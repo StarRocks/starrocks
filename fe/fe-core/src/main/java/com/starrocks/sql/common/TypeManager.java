@@ -23,14 +23,24 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.type.ArrayType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.DecimalType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.FunctionType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.InvalidType;
+import com.starrocks.type.JsonType;
 import com.starrocks.type.MapType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
+import com.starrocks.type.StringType;
 import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeCompatibilityMatrix;
 import com.starrocks.type.TypeFactory;
+import com.starrocks.type.UnknownType;
+import com.starrocks.type.VarcharType;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -68,7 +78,7 @@ public class TypeManager {
             return t1.isNull() ? t2 : t1;
         }
 
-        return Type.INVALID;
+        return InvalidType.INVALID;
     }
 
     public static Type getCommonSuperType(List<Type> types) {
@@ -97,24 +107,24 @@ public class TypeManager {
     private static Type getCommonMapType(MapType t1, MapType t2) {
         Type keyCommon = getCommonSuperType(t1.getKeyType(), t2.getKeyType());
         if (!keyCommon.isValid()) {
-            return Type.INVALID;
+            return InvalidType.INVALID;
         }
         Type valueCommon = getCommonSuperType(t1.getValueType(), t2.getValueType());
         if (!valueCommon.isValid()) {
-            return Type.INVALID;
+            return InvalidType.INVALID;
         }
         return new MapType(keyCommon, valueCommon);
     }
 
     private static Type getCommonStructType(StructType t1, StructType t2) {
         if (t1.getFields().size() != t2.getFields().size()) {
-            return Type.INVALID;
+            return InvalidType.INVALID;
         }
         ArrayList<StructField> fields = Lists.newArrayList();
         for (int i = 0; i < t1.getFields().size(); ++i) {
             Type fieldCommon = getCommonSuperType(t1.getField(i).getType(), t2.getField(i).getType());
             if (!fieldCommon.isValid()) {
-                return Type.INVALID;
+                return InvalidType.INVALID;
             }
 
             // default t1's field name
@@ -147,7 +157,7 @@ public class TypeManager {
             compatibleType = getCompatibleTypeForBetweenAndIn(compatibleType, types.get(i), isBetween);
         }
 
-        if (Type.VARCHAR.equals(compatibleType)) {
+        if (VarcharType.VARCHAR.equals(compatibleType)) {
             if (types.get(0).isDateType()) {
                 return types.get(0);
             }
@@ -188,7 +198,7 @@ public class TypeManager {
         }
 
         if (t1.isJsonType() || t2.isJsonType()) {
-            return Type.JSON;
+            return JsonType.JSON;
         }
 
 
@@ -196,7 +206,7 @@ public class TypeManager {
         PrimitiveType t2ResultType = getResultType(t2).getPrimitiveType();
         // Following logical is compatible with MySQL.
         if ((t1ResultType == PrimitiveType.VARCHAR && t2ResultType == PrimitiveType.VARCHAR)) {
-            return Type.VARCHAR;
+            return VarcharType.VARCHAR;
         }
         if (t1ResultType == PrimitiveType.BIGINT && t2ResultType == PrimitiveType.BIGINT) {
             return getAssignmentCompatibleType(t1, t2, false);
@@ -206,27 +216,27 @@ public class TypeManager {
                 || t1ResultType == PrimitiveType.DECIMALV2)
                 && (t2ResultType == PrimitiveType.BIGINT
                 || t2ResultType == PrimitiveType.DECIMALV2)) {
-            return Type.DECIMALV2;
+            return DecimalType.DECIMALV2;
         }
         if ((t1ResultType == PrimitiveType.BIGINT
                 || t1ResultType == PrimitiveType.LARGEINT)
                 && (t2ResultType == PrimitiveType.BIGINT
                 || t2ResultType == PrimitiveType.LARGEINT)) {
-            return Type.LARGEINT;
+            return IntegerType.LARGEINT;
         }
-        return Type.DOUBLE;
+        return FloatType.DOUBLE;
     }
 
     private static Type getResultType(Type type) {
         return switch (type.getPrimitiveType()) {
-            case BOOLEAN, TINYINT, SMALLINT, INT, BIGINT -> Type.BIGINT;
-            case LARGEINT -> Type.LARGEINT;
-            case FLOAT, DOUBLE -> Type.DOUBLE;
-            case DATE, DATETIME, TIME, CHAR, VARCHAR, HLL, BITMAP, PERCENTILE, JSON -> Type.VARCHAR;
-            case DECIMALV2 -> Type.DECIMALV2;
+            case BOOLEAN, TINYINT, SMALLINT, INT, BIGINT -> IntegerType.BIGINT;
+            case LARGEINT -> IntegerType.LARGEINT;
+            case FLOAT, DOUBLE -> FloatType.DOUBLE;
+            case DATE, DATETIME, TIME, CHAR, VARCHAR, HLL, BITMAP, PERCENTILE, JSON -> VarcharType.VARCHAR;
+            case DECIMALV2 -> DecimalType.DECIMALV2;
             case DECIMAL32, DECIMAL64, DECIMAL128, DECIMAL256 -> type;
-            case FUNCTION -> Type.FUNCTION;
-            default -> Type.INVALID;
+            case FUNCTION -> FunctionType.FUNCTION;
+            default -> InvalidType.INVALID;
         };
     }
 
@@ -252,7 +262,7 @@ public class TypeManager {
         }
         if (type1.isComplexType() || type2.isComplexType() || type1.isOnlyMetricType() || type2.isOnlyMetricType()) {
             // We don't support complex type (map/struct) for GT/LT predicate.
-            return Type.INVALID;
+            return InvalidType.INVALID;
         }
 
         if (type1.equals(type2)) {
@@ -264,7 +274,7 @@ public class TypeManager {
         }
 
         if (type1.isJsonType() || type2.isJsonType()) {
-            return Type.JSON;
+            return JsonType.JSON;
         }
 
         if (type1.isDecimalV3() || type2.isDecimalV3()) {
@@ -277,7 +287,7 @@ public class TypeManager {
         BiFunction<Type, Type, Boolean> isDataAndString =
                 (a, b) -> a.isDateType() && (b.isStringType() || b.isDateType());
         if (isDataAndString.apply(type1, type2) || isDataAndString.apply(type2, type1)) {
-            return Type.DATETIME;
+            return DateType.DATETIME;
         }
 
         // number type
@@ -293,17 +303,17 @@ public class TypeManager {
             return type1;
         }
 
-        return Type.DOUBLE;
+        return FloatType.DOUBLE;
     }
 
     private static Type getEquivalenceBaseType(Type type1, Type type2) {
-        Type baseType = Type.STRING;
+        Type baseType = StringType.STRING;
         if (ConnectContext.get() != null && SessionVariableConstants.DECIMAL.equalsIgnoreCase(ConnectContext.get()
                 .getSessionVariable().getCboEqBaseType())) {
-            baseType = Type.DEFAULT_DECIMAL128;
+            baseType = DecimalType.DEFAULT_DECIMAL128;
             // TODO(stephen): support auto scale up decimal precision
             if (type1.isDecimal256() || type2.isDecimal256()) {
-                baseType = Type.DEFAULT_DECIMAL256;
+                baseType = DecimalType.DEFAULT_DECIMAL256;
             }
             if (type1.isDecimalOfAnyVersion() || type2.isDecimalOfAnyVersion()) {
                 baseType = type1.isDecimalOfAnyVersion() ? type1 : type2;
@@ -311,7 +321,7 @@ public class TypeManager {
         }
         if (ConnectContext.get() != null && SessionVariableConstants.DOUBLE.equalsIgnoreCase(ConnectContext.get()
                 .getSessionVariable().getCboEqBaseType())) {
-            baseType = Type.DOUBLE;
+            baseType = FloatType.DOUBLE;
         }
         return baseType;
     }
@@ -385,7 +395,7 @@ public class TypeManager {
             return true;
         } else if (from.isJsonType() && to.isMapType()) {
             MapType map = (MapType) to;
-            return canCastTo(Type.VARCHAR, map.getKeyType()) && canCastTo(Type.JSON, map.getValueType());
+            return canCastTo(VarcharType.VARCHAR, map.getKeyType()) && canCastTo(JsonType.JSON, map.getValueType());
         } else if (from.isBoolean() && to.isComplexType()) {
             // for mock nest type with NULL value, the cast must return NULL
             // like cast(map{1: NULL} as MAP<int, int>)
@@ -406,7 +416,7 @@ public class TypeManager {
         if (t1.isScalarType() && t2.isScalarType()) {
             return getAssignmentCompatibleType((ScalarType) t1, (ScalarType) t2, strict);
         }
-        return ScalarType.INVALID;
+        return InvalidType.INVALID;
     }
 
     public static Type getCommonType(Type[] argTypes, int fromIndex, int toIndex) {
@@ -440,7 +450,7 @@ public class TypeManager {
         if (t1.isNull() || t2.isNull()) {
             return t1.isNull() ? t2 : t1;
         }
-        return Type.INVALID;
+        return InvalidType.INVALID;
     }
 
     // getAssigmentCompatibleTypeOfDecimalV3 is used by FunctionCallExpr for finding the common Type of argument types.
@@ -492,9 +502,9 @@ public class TypeManager {
             case DATETIME:
             case TIME:
             case JSON:
-                return Type.DOUBLE;
+                return FloatType.DOUBLE;
             default:
-                return Type.INVALID;
+                return InvalidType.INVALID;
         }
     }
 
@@ -540,10 +550,10 @@ public class TypeManager {
      */
     public static ScalarType getAssignmentCompatibleType(ScalarType t1, ScalarType t2, boolean strict) {
         if (!t1.isValid() || !t2.isValid()) {
-            return Type.INVALID;
+            return InvalidType.INVALID;
         }
         if (t1.isUnknown() || t2.isUnknown()) {
-            return Type.UNKNOWN_TYPE;
+            return UnknownType.UNKNOWN_TYPE;
         }
         if (t1.equals(t2)) {
             return t1;
@@ -561,7 +571,7 @@ public class TypeManager {
             if (t1IsHLL && t2IsHLL) {
                 return TypeFactory.createHllType();
             }
-            return Type.INVALID;
+            return InvalidType.INVALID;
         }
 
         if (t1.isStringType() || t2.isStringType()) {
@@ -577,15 +587,15 @@ public class TypeManager {
         }
 
         if (t1.isDecimalOfAnyVersion() && t2.isDate() || t1.isDate() && t2.isDecimalOfAnyVersion()) {
-            return Type.INVALID;
+            return InvalidType.INVALID;
         }
 
         if (t1.isDecimalV2() || t2.isDecimalV2()) {
-            return Type.DECIMALV2;
+            return DecimalType.DECIMALV2;
         }
 
         if (t1.isFunctionType() || t2.isFunctionType()) {
-            return Type.INVALID;
+            return InvalidType.INVALID;
         }
 
         PrimitiveType smallerType =
@@ -636,7 +646,7 @@ public class TypeManager {
         boolean hasDecimal256 = lhs.isDecimal256() || rhs.isDecimal256();
         // TODO(stephen): support auto scale up decimal precision
         if ((precision > 38 && !hasDecimal256) || (precision > 76)) {
-            return ScalarType.DOUBLE;
+            return FloatType.DOUBLE;
         } else {
             // the common type's PrimitiveType of two decimal types should wide enough, i.e
             // the common type of (DECIMAL32, DECIMAL64) should be DECIMAL64

@@ -18,7 +18,8 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.thrift.TSchemaTableType;
-import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.TypeFactory;
 
 import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
@@ -33,27 +34,27 @@ public class StreamLoadsSystemTable {
                 Table.TableType.SCHEMA,
                 builder()
                         .column("LABEL", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("ID", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("ID", IntegerType.BIGINT)
                         .column("LOAD_ID", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("TXN_ID", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("TXN_ID", IntegerType.BIGINT)
                         .column("DB_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
                         .column("TABLE_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
                         .column("STATE", TypeFactory.createVarchar(NAME_CHAR_LEN))
                         .column("ERROR_MSG", TypeFactory.createVarchar(NAME_CHAR_LEN))
                         .column("TRACKING_URL", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("CHANNEL_NUM", TypeFactory.createType(PrimitiveType.BIGINT))
-                        .column("PREPARED_CHANNEL_NUM", TypeFactory.createType(PrimitiveType.BIGINT))
-                        .column("NUM_ROWS_NORMAL", TypeFactory.createType(PrimitiveType.BIGINT))
-                        .column("NUM_ROWS_AB_NORMAL", TypeFactory.createType(PrimitiveType.BIGINT))
-                        .column("NUM_ROWS_UNSELECTED", TypeFactory.createType(PrimitiveType.BIGINT))
-                        .column("NUM_LOAD_BYTES", TypeFactory.createType(PrimitiveType.BIGINT))
-                        .column("TIMEOUT_SECOND", TypeFactory.createType(PrimitiveType.BIGINT))
-                        .column("CREATE_TIME_MS", TypeFactory.createType(PrimitiveType.DATETIME))
-                        .column("BEFORE_LOAD_TIME_MS", TypeFactory.createType(PrimitiveType.DATETIME))
-                        .column("START_LOADING_TIME_MS", TypeFactory.createType(PrimitiveType.DATETIME))
-                        .column("START_PREPARING_TIME_MS", TypeFactory.createType(PrimitiveType.DATETIME))
-                        .column("FINISH_PREPARING_TIME_MS", TypeFactory.createType(PrimitiveType.DATETIME))
-                        .column("END_TIME_MS", TypeFactory.createType(PrimitiveType.DATETIME))
+                        .column("CHANNEL_NUM", IntegerType.BIGINT)
+                        .column("PREPARED_CHANNEL_NUM", IntegerType.BIGINT)
+                        .column("NUM_ROWS_NORMAL", IntegerType.BIGINT)
+                        .column("NUM_ROWS_AB_NORMAL", IntegerType.BIGINT)
+                        .column("NUM_ROWS_UNSELECTED", IntegerType.BIGINT)
+                        .column("NUM_LOAD_BYTES", IntegerType.BIGINT)
+                        .column("TIMEOUT_SECOND", IntegerType.BIGINT)
+                        .column("CREATE_TIME_MS", DateType.DATETIME)
+                        .column("BEFORE_LOAD_TIME_MS", DateType.DATETIME)
+                        .column("START_LOADING_TIME_MS", DateType.DATETIME)
+                        .column("START_PREPARING_TIME_MS", DateType.DATETIME)
+                        .column("FINISH_PREPARING_TIME_MS", DateType.DATETIME)
+                        .column("END_TIME_MS", DateType.DATETIME)
                         .column("CHANNEL_STATE", TypeFactory.createVarchar(NAME_CHAR_LEN))
                         .column("TYPE", TypeFactory.createVarchar(NAME_CHAR_LEN))
                         .column("TRACKING_SQL", TypeFactory.createVarchar(NAME_CHAR_LEN))

@@ -66,6 +66,7 @@ import com.starrocks.thrift.TTabletInternalParallelMode;
 import com.starrocks.thrift.TWorkGroup;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.StringType;
 import com.starrocks.type.Type;
 import org.apache.commons.lang3.EnumUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -547,7 +548,7 @@ public class SetStmtAnalyzer {
     public static void calcuteUserVariable(UserVariable userVariable) {
         Expr expression = userVariable.getUnevaluatedExpression();
         if (expression instanceof NullLiteral) {
-            userVariable.setEvaluatedExpression(NullLiteral.create(Type.STRING));
+            userVariable.setEvaluatedExpression(NullLiteral.create(StringType.STRING));
         } else {
             Expr foldedExpression;
             foldedExpression = ExprUtils.analyzeAndCastFold(expression);
@@ -558,7 +559,7 @@ public class SetStmtAnalyzer {
                 SelectList selectList = new SelectList(Lists.newArrayList(
                         new SelectListItem(userVariable.getUnevaluatedExpression(), null)), false);
 
-                List<Expr> row = Lists.newArrayList(NullLiteral.create(Type.STRING));
+                List<Expr> row = Lists.newArrayList(NullLiteral.create(StringType.STRING));
                 List<List<Expr>> rows = new ArrayList<>();
                 rows.add(row);
                 ValuesRelation valuesRelation = new ValuesRelation(rows, Lists.newArrayList(""));

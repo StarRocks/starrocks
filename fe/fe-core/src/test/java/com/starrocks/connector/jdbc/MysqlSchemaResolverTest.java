@@ -23,7 +23,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.type.Type;
+import com.starrocks.type.VarcharType;
 import com.starrocks.utframe.UtFrameUtils;
 import com.zaxxer.hikari.HikariDataSource;
 import mockit.Expectations;
@@ -195,7 +195,7 @@ public class MysqlSchemaResolverTest {
         try {
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
             Integer size = jdbcMetadata.listPartitionColumns("test", "tbl1",
-                    Arrays.asList(new Column("d", Type.VARCHAR))).size();
+                    Arrays.asList(new Column("d", VarcharType.VARCHAR))).size();
             Assertions.assertTrue(size > 0);
         } catch (Exception e) {
             Assertions.fail(e.getMessage());
@@ -214,7 +214,7 @@ public class MysqlSchemaResolverTest {
             };
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
             Integer size = jdbcMetadata.listPartitionColumns("test", "tbl1",
-                    Arrays.asList(new Column("d", Type.VARCHAR))).size();
+                    Arrays.asList(new Column("d", VarcharType.VARCHAR))).size();
             Assertions.assertTrue(size == 0);
         } catch (Exception e) {
             Assertions.fail(e.getMessage());
@@ -225,8 +225,8 @@ public class MysqlSchemaResolverTest {
     public void testGetPartitions() {
         try {
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
-            JDBCTable jdbcTable = new JDBCTable(100000, "tbl1", Arrays.asList(new Column("d", Type.VARCHAR)),
-                    Arrays.asList(new Column("d", Type.VARCHAR)), "test", "catalog", properties);
+            JDBCTable jdbcTable = new JDBCTable(100000, "tbl1", Arrays.asList(new Column("d", VarcharType.VARCHAR)),
+                    Arrays.asList(new Column("d", VarcharType.VARCHAR)), "test", "catalog", properties);
             Integer size = jdbcMetadata.getPartitions(jdbcTable, Arrays.asList("20230810")).size();
             Assertions.assertTrue(size > 0);
         } catch (Exception e) {
@@ -239,8 +239,8 @@ public class MysqlSchemaResolverTest {
         try {
             JDBCCacheTestUtil.openCacheEnable(connectContext);
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
-            JDBCTable jdbcTable = new JDBCTable(100000, "tbl1", Arrays.asList(new Column("d", Type.VARCHAR)),
-                    Arrays.asList(new Column("d", Type.VARCHAR)), "test", "catalog", properties);
+            JDBCTable jdbcTable = new JDBCTable(100000, "tbl1", Arrays.asList(new Column("d", VarcharType.VARCHAR)),
+                    Arrays.asList(new Column("d", VarcharType.VARCHAR)), "test", "catalog", properties);
             int size = jdbcMetadata.getPartitions(jdbcTable, Arrays.asList("20230810")).size();
             Assertions.assertTrue(size > 0);
             int sizeWithCache = jdbcMetadata.getPartitions(jdbcTable, Arrays.asList("20230810")).size();
@@ -258,7 +258,7 @@ public class MysqlSchemaResolverTest {
     @Test
     public void testGetPartitions_NonPartitioned() throws DdlException {
         JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
-        List<Column> columns = Arrays.asList(new Column("d", Type.VARCHAR));
+        List<Column> columns = Arrays.asList(new Column("d", VarcharType.VARCHAR));
         JDBCTable jdbcTable = new JDBCTable(100000, "tbl1", columns, Lists.newArrayList(),
                 "test", "catalog", properties);
         int size = jdbcMetadata.getPartitions(jdbcTable, Arrays.asList("20230810")).size();
@@ -278,8 +278,8 @@ public class MysqlSchemaResolverTest {
                 }
             };
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
-            JDBCTable jdbcTable = new JDBCTable(100000, "tbl1", Arrays.asList(new Column("d", Type.VARCHAR)),
-                    Arrays.asList(new Column("d", Type.VARCHAR)), "test", "catalog", properties);
+            JDBCTable jdbcTable = new JDBCTable(100000, "tbl1", Arrays.asList(new Column("d", VarcharType.VARCHAR)),
+                    Arrays.asList(new Column("d", VarcharType.VARCHAR)), "test", "catalog", properties);
             Integer size = jdbcMetadata.getPartitions(jdbcTable, Arrays.asList("20230810")).size();
             Assertions.assertTrue(size == 0);
         } catch (Exception e) {
@@ -298,8 +298,8 @@ public class MysqlSchemaResolverTest {
                 }
             };
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
-            JDBCTable jdbcTable = new JDBCTable(100000, "tbl1", Arrays.asList(new Column("d", Type.VARCHAR)),
-                    Arrays.asList(new Column("d", Type.VARCHAR)), "test", "catalog", properties);
+            JDBCTable jdbcTable = new JDBCTable(100000, "tbl1", Arrays.asList(new Column("d", VarcharType.VARCHAR)),
+                    Arrays.asList(new Column("d", VarcharType.VARCHAR)), "test", "catalog", properties);
             Integer size = jdbcMetadata.getPartitions(jdbcTable, Arrays.asList("tbl1")).size();
             Assertions.assertTrue(size == 1);
 
@@ -325,7 +325,7 @@ public class MysqlSchemaResolverTest {
                 }
             };
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
-            List<Column> columns = Arrays.asList(new Column("d", Type.VARCHAR));
+            List<Column> columns = Arrays.asList(new Column("d", VarcharType.VARCHAR));
             JDBCTable jdbcTable = new JDBCTable(100000, "tbl1", columns, Lists.newArrayList(),
                     "test", "catalog", properties);
             jdbcMetadata.getPartitions(jdbcTable, Arrays.asList("20230810")).size();
@@ -351,7 +351,7 @@ public class MysqlSchemaResolverTest {
                 }
             };
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
-            List<Column> columns = Arrays.asList(new Column("d", Type.VARCHAR));
+            List<Column> columns = Arrays.asList(new Column("d", VarcharType.VARCHAR));
             JDBCTable jdbcTable = new JDBCTable(100000, "tbl1", columns, Lists.newArrayList(),
                     "test", "catalog", properties);
             jdbcMetadata.getPartitions(jdbcTable, Arrays.asList("20230810")).size();

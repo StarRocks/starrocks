@@ -28,7 +28,7 @@ import com.starrocks.sql.ast.expression.LargeStringLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.type.Type;
+import com.starrocks.type.VarcharType;
 import org.assertj.core.util.Lists;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -40,7 +40,7 @@ import java.util.Map;
 public class MySqlAndJDBCScanNodeTest {
 
     private List<Expr> createConjuncts() {
-        Expr slotRef = new SlotRef("col", new SlotDescriptor(new SlotId(1), "col", Type.VARCHAR, true));
+        Expr slotRef = new SlotRef("col", new SlotDescriptor(new SlotId(1), "col", VarcharType.VARCHAR, true));
         Expr expr0 = new InPredicate(slotRef,
                 Lists.newArrayList(new LargeStringLiteral(Strings.repeat("ABCDE", 11), NodePosition.ZERO)), true);
         Expr expr1 = new BinaryPredicate(BinaryType.EQ, slotRef, StringLiteral.create("ABC"));
@@ -58,7 +58,7 @@ public class MySqlAndJDBCScanNodeTest {
         properties.put("database", "test_db");
         properties.put("table", "test_table");
         MysqlTable mysqlTable = new MysqlTable(1, "mysql_table",
-                Collections.singletonList(new Column("col", Type.VARCHAR)), properties);
+                Collections.singletonList(new Column("col", VarcharType.VARCHAR)), properties);
         TupleDescriptor tupleDesc = new TupleDescriptor(new TupleId(1));
         tupleDesc.setTable(mysqlTable);
         MysqlScanNode scanNode = new MysqlScanNode(new PlanNodeId(1), tupleDesc, mysqlTable);
@@ -82,7 +82,7 @@ public class MySqlAndJDBCScanNodeTest {
         properties.put("checksum", "checksum");
         properties.put("driver_class", "driver_class");
         JDBCTable mysqlTable = new JDBCTable(1, "jdbc_table",
-                Collections.singletonList(new Column("col", Type.VARCHAR)), properties);
+                Collections.singletonList(new Column("col", VarcharType.VARCHAR)), properties);
         TupleDescriptor tupleDesc = new TupleDescriptor(new TupleId(1));
         tupleDesc.setTable(mysqlTable);
         JDBCScanNode scanNode = new JDBCScanNode(new PlanNodeId(1), tupleDesc, mysqlTable);

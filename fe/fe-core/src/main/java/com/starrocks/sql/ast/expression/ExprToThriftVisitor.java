@@ -41,7 +41,7 @@ import com.starrocks.thrift.TLargeIntLiteral;
 import com.starrocks.thrift.TPlaceHolder;
 import com.starrocks.thrift.TSlotRef;
 import com.starrocks.thrift.TStringLiteral;
-import com.starrocks.type.Type;
+import com.starrocks.type.BooleanType;
 import com.starrocks.type.TypeSerializer;
 
 import java.nio.ByteBuffer;
@@ -76,7 +76,7 @@ public class ExprToThriftVisitor implements AstVisitorExtendInterface<Void, TExp
     public static void treeToThriftHelper(Expr expr, TExpr container, BiConsumer<Expr, TExprNode> consumer) {
         if (expr.getType().isNull()) {
             Preconditions.checkState(expr instanceof NullLiteral || expr instanceof SlotRef);
-            treeToThriftHelper(NullLiteral.create(Type.BOOLEAN), container, consumer);
+            treeToThriftHelper(NullLiteral.create(BooleanType.BOOLEAN), container, consumer);
             return;
         }
 

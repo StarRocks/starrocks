@@ -16,6 +16,7 @@ package com.starrocks.sql.ast.expression;
 
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
+import com.starrocks.type.StringType;
 import com.starrocks.type.Type;
 
 /**
@@ -67,7 +68,7 @@ public class Parameter extends Expr {
         }
         // use STRING as default type, since string is compatible with almost all types in the type inference
         if (res.isInvalid()) {
-            res = Type.STRING;
+            res = StringType.STRING;
         }
         return res;
     }

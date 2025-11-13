@@ -30,6 +30,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.Type;
 
 import java.util.ArrayList;
@@ -83,7 +85,8 @@ public class RewriteCountIfFunction extends TransformationRule {
                 newChild.addAll(aggFunction.getArguments());
 
                 Function countFn =
-                        ExprUtils.getBuiltinFunction(FunctionSet.COUNT_IF, new Type[] {Type.TINYINT, Type.BOOLEAN},
+                        ExprUtils.getBuiltinFunction(FunctionSet.COUNT_IF,
+                                new Type[] {IntegerType.TINYINT, BooleanType.BOOLEAN},
                                 Function.CompareMode.IS_IDENTICAL);
                 Preconditions.checkState(countFn != null);
 

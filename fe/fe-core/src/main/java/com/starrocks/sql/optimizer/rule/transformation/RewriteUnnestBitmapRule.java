@@ -30,6 +30,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import com.starrocks.type.BitmapType;
 import com.starrocks.type.Type;
 
 import java.util.List;
@@ -104,7 +105,7 @@ public class RewriteUnnestBitmapRule extends TransformationRule {
         columnRefMap.put(bitmapColumn, bitmapToArrayArg);
 
         TableFunction unnestBitmapFn =
-                (TableFunction) ExprUtils.getBuiltinFunction(FunctionSet.UNNEST_BITMAP, new Type[] {Type.BITMAP},
+                (TableFunction) ExprUtils.getBuiltinFunction(FunctionSet.UNNEST_BITMAP, new Type[] {BitmapType.BITMAP},
                         Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         List<Pair<ColumnRefOperator, ScalarOperator>> fnParamColumnProject =
                 Lists.newArrayList(Pair.create(bitmapColumn, bitmapColumn));

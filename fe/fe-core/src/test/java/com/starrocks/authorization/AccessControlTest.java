@@ -19,7 +19,7 @@ import com.starrocks.catalog.UserIdentity;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.sql.ast.expression.TableName;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -76,24 +76,28 @@ public class AccessControlTest {
 
         Assertions.assertThrows(AccessDeniedException.class, () ->
                 accessControl.checkFunctionAction(context, null,
-                        new ScalarFunction(new FunctionName("db", "fn"), Lists.newArrayList(Type.INT), Type.INT, false),
+                        new ScalarFunction(new FunctionName("db", "fn"),
+                                Lists.newArrayList(IntegerType.INT), IntegerType.INT, false),
                         PrivilegeType.USAGE));
 
         Assertions.assertThrows(AccessDeniedException.class, () ->
                 accessControl.checkAnyActionOnFunction(context, "db",
-                        new ScalarFunction(new FunctionName("db", "fn"), Lists.newArrayList(Type.INT), Type.INT, false)));
+                        new ScalarFunction(new FunctionName("db", "fn"),
+                                Lists.newArrayList(IntegerType.INT), IntegerType.INT, false)));
 
         Assertions.assertThrows(AccessDeniedException.class, () ->
                 accessControl.checkAnyActionOnAnyFunction(context, "db"));
 
         Assertions.assertThrows(AccessDeniedException.class, () ->
                 accessControl.checkGlobalFunctionAction(context,
-                        new ScalarFunction(new FunctionName("db", "fn"), Lists.newArrayList(Type.INT), Type.INT, false),
+                        new ScalarFunction(new FunctionName("db", "fn"),
+                                Lists.newArrayList(IntegerType.INT), IntegerType.INT, false),
                         PrivilegeType.USAGE));
 
         Assertions.assertThrows(AccessDeniedException.class, () ->
                 accessControl.checkAnyActionOnGlobalFunction(context,
-                        new ScalarFunction(new FunctionName("db", "fn"), Lists.newArrayList(Type.INT), Type.INT, false)));
+                        new ScalarFunction(new FunctionName("db", "fn"),
+                                Lists.newArrayList(IntegerType.INT), IntegerType.INT, false)));
 
         Assertions.assertThrows(AccessDeniedException.class, () ->
                 accessControl.checkActionInDb(context, "db", PrivilegeType.USAGE));

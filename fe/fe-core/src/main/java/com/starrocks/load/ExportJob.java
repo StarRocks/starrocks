@@ -107,8 +107,8 @@ import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.type.CharType;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.Type;
 import com.starrocks.warehouse.cngroup.CRAcquireContext;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.commons.lang.StringUtils;
@@ -478,7 +478,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
             SlotDescriptor slotDesc = exportTupleDesc.getSlots().get(i);
             SlotRef slotRef = new SlotRef(slotDesc);
             if (slotDesc.getType().getPrimitiveType() == PrimitiveType.CHAR) {
-                slotRef.setType(Type.CHAR);
+                slotRef.setType(CharType.CHAR);
             }
             outputExprs.add(slotRef);
         }

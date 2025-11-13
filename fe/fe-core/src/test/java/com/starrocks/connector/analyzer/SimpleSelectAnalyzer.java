@@ -42,6 +42,8 @@ import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.LimitElement;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.NullType;
 import com.starrocks.type.Type;
 
 import java.util.ArrayList;
@@ -230,7 +232,7 @@ public class SimpleSelectAnalyzer {
         AnalyzerUtils.verifyNoWindowFunctions(predicate, "WHERE");
         AnalyzerUtils.verifyNoGroupingFunctions(predicate, "WHERE");
 
-        if (!predicate.getType().matchesType(Type.BOOLEAN) && !predicate.getType().matchesType(Type.NULL)) {
+        if (!predicate.getType().matchesType(BooleanType.BOOLEAN) && !predicate.getType().matchesType(NullType.NULL)) {
             throw new SemanticException("WHERE clause must evaluate to a boolean: actual type %s", predicate.getType());
         }
 
@@ -359,7 +361,7 @@ public class SimpleSelectAnalyzer {
 
             analyzeExpression(predicate, analyzeState);
 
-            if (!predicate.getType().matchesType(Type.BOOLEAN) && !predicate.getType().matchesType(Type.NULL)) {
+            if (!predicate.getType().matchesType(BooleanType.BOOLEAN) && !predicate.getType().matchesType(NullType.NULL)) {
                 throw new SemanticException("HAVING clause must evaluate to a boolean: actual type %s",
                         predicate.getType());
             }
