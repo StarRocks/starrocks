@@ -558,7 +558,7 @@ StatusOr<bool> LakeReplicationTxnManager::determine_final_filename(
 }
 
 Status LakeReplicationTxnManager::update_tablet_metadata_segment_sizes(
-        std::shared_ptr<TabletMetadataPB> tablet_metadata,
+        const std::shared_ptr<TabletMetadataPB>& tablet_metadata,
         const std::unordered_map<std::string, size_t>& segment_size_changes) {
     if (segment_size_changes.empty()) {
         return Status::OK();
