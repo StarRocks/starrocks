@@ -68,6 +68,7 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.catalog.system.information.AnalyzeStatusSystemTable;
 import com.starrocks.catalog.system.information.ColumnStatsUsageSystemTable;
+import com.starrocks.catalog.system.information.FeThreadsSystemTable;
 import com.starrocks.catalog.system.information.MaterializedViewsSystemTable;
 import com.starrocks.catalog.system.information.TablesSystemTable;
 import com.starrocks.catalog.system.information.TaskRunsSystemTable;
@@ -212,7 +213,6 @@ import com.starrocks.thrift.TFeLocksRes;
 import com.starrocks.thrift.TFeMemoryReq;
 import com.starrocks.thrift.TFeMemoryRes;
 import com.starrocks.thrift.TFeResult;
-import com.starrocks.thrift.TFeThreadInfo;
 import com.starrocks.thrift.TFetchResourceResult;
 import com.starrocks.thrift.TFinishCheckpointRequest;
 import com.starrocks.thrift.TFinishCheckpointResponse;
@@ -384,9 +384,6 @@ import org.apache.thrift.TException;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.IOException;
-import java.lang.management.ManagementFactory;
-import java.lang.management.ThreadInfo;
-import java.lang.management.ThreadMXBean;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -2716,85 +2713,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
     @Override
     public TGetFeThreadsResponse getFeThreads(TGetFeThreadsRequest request) throws TException {
-        TGetFeThreadsResponse response = new TGetFeThreadsResponse();
-        TStatus status = new TStatus(TStatusCode.OK);
-        response.setStatus(status);
-
-        try {
-            ThreadMXBean threadMXBean = ManagementFactory.getThreadMXBean();
-            long[] threadIds = threadMXBean.getAllThreadIds();
-            ThreadInfo[] threadInfos = threadMXBean.getThreadInfo(threadIds);
-
-            List<TFeThreadInfo> threads = Lists.newArrayList();
-            Pair<String, Integer> selfNode = GlobalStateMgr.getCurrentState().getNodeMgr().getSelfNode();
-            String feAddress = selfNode.first + ":" + selfNode.second;
-
-            for (ThreadInfo threadInfo : threadInfos) {
-                if (threadInfo == null) {
-                    continue;
-                }
-                TFeThreadInfo threadData = new TFeThreadInfo();
-                threadData.setFe_address(feAddress);
-                threadData.setThread_id(threadInfo.getThreadId());
-                threadData.setThread_name(threadInfo.getThreadName());
-                
-                // Get thread object to check daemon status and get thread group name
-                Thread thread = findThreadById(threadInfo.getThreadId());
-                String groupName = "";
-                if (thread != null && thread.getThreadGroup() != null) {
-                    groupName = thread.getThreadGroup().getName();
-                }
-                threadData.setGroup_name(groupName);
-                threadData.setThread_state(threadInfo.getThreadState().toString());
-                threadData.setIs_daemon(thread != null && thread.isDaemon());
-                threadData.setPriority(threadInfo.getPriority());
-
-                // Get CPU time if supported
-                long cpuTime = -1;
-                long userTime = -1;
-                if (threadMXBean.isThreadCpuTimeSupported()) {
-                    cpuTime = threadMXBean.getThreadCpuTime(threadInfo.getThreadId());
-                    if (cpuTime != -1) {
-                        cpuTime = cpuTime / 1000000; // Convert nanoseconds to milliseconds
-                    }
-                    if (threadMXBean instanceof com.sun.management.ThreadMXBean) {
-                        com.sun.management.ThreadMXBean sunThreadMXBean =
-                                (com.sun.management.ThreadMXBean) threadMXBean;
-                        userTime = sunThreadMXBean.getThreadUserTime(threadInfo.getThreadId());
-                        if (userTime != -1) {
-                            userTime = userTime / 1000000; // Convert nanoseconds to milliseconds
-                        }
-                    }
-                }
-                threadData.setCpu_time_ms(cpuTime);
-                threadData.setUser_time_ms(userTime);
-
-                threads.add(threadData);
-            }
-
-            response.setThreads(threads);
-        } catch (Exception e) {
-            LOG.warn("Failed to get FE threads", e);
-            status.setStatus_code(TStatusCode.INTERNAL_ERROR);
-            status.addToError_msgs("Failed to get FE threads: " + e.getMessage());
-        }
-
-        return response;
-    }
-
-    private Thread findThreadById(long threadId) {
-        ThreadGroup rootGroup = Thread.currentThread().getThreadGroup();
-        while (rootGroup.getParent() != null) {
-            rootGroup = rootGroup.getParent();
-        }
-        Thread[] threads = new Thread[rootGroup.activeCount() * 2];
-        int count = rootGroup.enumerate(threads, true);
-        for (int i = 0; i < count; i++) {
-            if (threads[i].getId() == threadId) {
-                return threads[i];
-            }
-        }
-        return null;
+        return FeThreadsSystemTable.generateFeThreadsResponse(request);
     }
 
     @Override
