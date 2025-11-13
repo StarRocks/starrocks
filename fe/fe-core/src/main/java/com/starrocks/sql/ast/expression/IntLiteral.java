@@ -46,9 +46,6 @@ import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.Type;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.math.BigDecimal;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -231,12 +228,6 @@ public class IntLiteral extends LiteralExpr {
         return new IntLiteral(value);
     }
 
-    public static IntLiteral read(DataInput in) throws IOException {
-        IntLiteral literal = new IntLiteral();
-        literal.readFields(in);
-        return literal;
-    }
-
     @Override
     public boolean isMinValue() {
         switch (type.getPrimitiveType()) {
@@ -367,17 +358,6 @@ public class IntLiteral extends LiteralExpr {
     public void swapSign() throws NotImplementedException {
         // swapping sign does not change the type
         value = -value;
-    }
-
-    @Override
-    public void write(DataOutput out) throws IOException {
-        super.write(out);
-        out.writeLong(value);
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-        value = in.readLong();
     }
 
     @Override

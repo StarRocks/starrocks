@@ -37,7 +37,6 @@ package com.starrocks.sql.ast.expression;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.io.Text;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
@@ -45,9 +44,6 @@ import com.starrocks.type.DateType;
 import com.starrocks.type.Type;
 import com.starrocks.type.VarcharType;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Objects;
@@ -227,23 +223,6 @@ public class StringLiteral extends LiteralExpr {
             return stringLiteral;
         }
         return super.uncheckedCastTo(targetType);
-    }
-
-    @Override
-    public void write(DataOutput out) throws IOException {
-        super.write(out);
-        Text.writeString(out, value);
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-        value = Text.readString(in);
-    }
-
-    public static StringLiteral read(DataInput in) throws IOException {
-        StringLiteral literal = new StringLiteral();
-        literal.readFields(in);
-        return literal;
     }
 
     @Override

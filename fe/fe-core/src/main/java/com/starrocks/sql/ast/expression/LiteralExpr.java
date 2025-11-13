@@ -52,9 +52,6 @@ import com.starrocks.type.StringType;
 import com.starrocks.type.Type;
 import com.starrocks.type.VarcharType;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
@@ -239,13 +236,6 @@ public abstract class LiteralExpr extends Expr implements Comparable<LiteralExpr
     @Override
     public boolean supportSerializable() {
         return true;
-    }
-
-    @Override
-    public void write(DataOutput out) throws IOException {
-    }
-
-    public void readFields(DataInput in) throws IOException {
     }
 
     @Override
