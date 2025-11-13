@@ -60,6 +60,8 @@ class MysqlPreparedStmtLib(object):
         cursor = self.connector.cursor()
         try:
             cursor.execute(sql)
+            if not cursor.with_rows:
+                return None
             return self._res_to_str(cursor.fetchall())
         finally:
             cursor.close()
