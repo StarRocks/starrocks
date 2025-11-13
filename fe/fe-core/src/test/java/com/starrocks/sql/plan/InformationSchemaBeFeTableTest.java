@@ -136,6 +136,7 @@ public class InformationSchemaBeFeTableTest {
                 Assertions.assertNotNull(stmt.getResultSet().getString("FE_ADDRESS"));
                 Assertions.assertNotNull(stmt.getResultSet().getLong("THREAD_ID"));
                 Assertions.assertNotNull(stmt.getResultSet().getString("THREAD_NAME"));
+                Assertions.assertNotNull(stmt.getResultSet().getString("GROUP_NAME"));
                 Assertions.assertNotNull(stmt.getResultSet().getString("THREAD_STATE"));
                 Assertions.assertNotNull(stmt.getResultSet().getBoolean("IS_DAEMON"));
                 Assertions.assertNotNull(stmt.getResultSet().getInt("PRIORITY"));

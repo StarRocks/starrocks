@@ -34,6 +34,7 @@ public class FeThreadsSystemTable {
                         .column("FE_ADDRESS", TypeFactory.createVarchar(NAME_CHAR_LEN))
                         .column("THREAD_ID", TypeFactory.createType(PrimitiveType.BIGINT))
                         .column("THREAD_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("GROUP_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
                         .column("THREAD_STATE", TypeFactory.createVarchar(NAME_CHAR_LEN))
                         .column("IS_DAEMON", TypeFactory.createType(PrimitiveType.BOOLEAN))
                         .column("PRIORITY", TypeFactory.createType(PrimitiveType.INT))

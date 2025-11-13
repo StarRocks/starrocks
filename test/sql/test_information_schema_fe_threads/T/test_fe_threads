@@ -9,6 +9,7 @@ select
     fe_address is not null,
     thread_id > 0,
     thread_name is not null,
+    group_name is not null,
     thread_state is not null,
     is_daemon is not null,
     priority >= 0,
@@ -42,6 +43,10 @@ where thread_name like '%main%'
    or thread_name like '%Finalizer%'
    or thread_name like '%Reference Handler%'
    or thread_name like '%RMI%';
+
+-- Test 8a: Verify GROUP_NAME is populated
+select count(*) > 0 from information_schema.fe_threads 
+where group_name is not null and group_name != '';
 
 -- Test 9: Verify thread priorities are in valid range (typically 1-10)
 select count(*) >= 0 from information_schema.fe_threads 
