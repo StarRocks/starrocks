@@ -113,6 +113,78 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The retention period of system log files. The default value `7d` specifies that each system log file can be retained for 7 days. StarRocks checks each system log file and deletes those that were generated 7 days ago.
 - Introduced in: -
 
+##### sys_log_enable_compress
+
+- Default: false
+- Type: boolean
+- Unit: -
+- Is mutable: No
+- Description: When this item is set to `true`, the system appends a ".gz" postfix to rotated system log filenames so Log4j will produce gzip-compressed rotated FE system logs (for example, fe.log.*). This value is read during Log4j configuration generation (Log4jConfig.initLogging / generateActiveLog4jXmlConfig) and controls the `sys_file_postfix` property used in the RollingFile filePattern. Enabling this feature reduces disk usage for retained logs but increases CPU and I/O during rollovers and changes log filenames, so that tools or scripts that read logs must be able to handle .gz files. Note that audit logs use a separate configuration for compression, that is, `audit_log_enable_compress`.
+- Introduced in: v3.2.12
+
+##### sys_log_warn_modules
+
+- Default: {}
+- Type: String[]
+- Unit: -
+- Is mutable: No
+- Description: A list of logger names or package prefixes that the system will configure at startup as WARN-level loggers and route to the warning appender (SysWF) — the `fe.warn.log` file. Entries are inserted into the generated Log4j configuration (alongside builtin warn modules such as org.apache.kafka, org.apache.hudi, and org.apache.hadoop.io.compress) and produce logger elements like `<Logger name="... " level="WARN"><AppenderRef ref="SysWF"/></Logger>`. Fully-qualified package and class prefixes (for example, "com.example.lib") are recommended to suppress noisy INFO/DEBUG output into the regular log and to allow warnings to be captured separately.
+- Introduced in: v3.2.13
+
+##### sys_log_to_console
+
+- Default: false (unless the environment variable `SYS_LOG_TO_CONSOLE` is set to "1")
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: When this item is set to `true`, the system configures Log4j to send all logs to the console (ConsoleErr appender) instead of the file-based appenders. This value is read when generating the active Log4j XML configuration (which affects the root logger and per-module logger appender selection). Its value is captured from the `SYS_LOG_TO_CONSOLE` environment variable at process startup. Changing it at runtime has no effect. This configuration is commonly used in containerized or CI environments where stdout/stderr log collection is preferred over writing log files.
+- Introduced in: v3.2.0
+
+##### sys_log_format
+
+- Default: "plaintext"
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: Selects the Log4j layout used for FE logs. Valid values: `"plaintext"` (Default) and `"json"`. The values are case-insensitive. `"plaintext"` configures PatternLayout with human-readable timestamps, level, thread, class.method:line and stack traces for WARN/ERROR. `"json"` configures JsonTemplateLayout and emits structured JSON events (UTC timestamps, level, thread id/name, source file/method/line, message, exception stackTrace) suitable for log aggregators (ELK, Splunk). JSON output abides by `sys_log_json_max_string_length` and `sys_log_json_profile_max_string_length` for maximum string lengths.
+- Introduced in: v3.2.10
+
+##### sys_log_json_max_string_length
+
+- Default: 1048576
+- Type: Int
+- Unit: Bytes
+- Is mutable: No
+- Description: Sets the JsonTemplateLayout "maxStringLength" value used for the JSON-formatted system logs. When `sys_log_format` is set to `"json"`, string-valued fields (for example "message" and stringified exception stack traces) are truncated if their length exceeds this limit. The value is injected into the generated Log4j XML in `Log4jConfig.generateActiveLog4jXmlConfig()`, and is applied to default, warning, audit, dump and bigquery layouts. The profile layout uses a separate configuration (`sys_log_json_profile_max_string_length`). Lowering this value reduces log size but can truncate useful information.
+- Introduced in: 3.2.11
+
+##### sys_log_json_profile_max_string_length
+
+- Default: 104857600 (100 MB)
+- Type: Int
+- Unit: Bytes
+- Is mutable: No
+- Description: Sets the maxStringLength of JsonTemplateLayout for profile (and related feature) log appenders when `sys_log_format` is "json". String field values in JSON-formatted profile logs will be truncated to this byte length; non-string fields are unaffected. This item is applied in Log4jConfig `JsonTemplateLayout maxStringLength` and is ignored when `plaintext` logging is used. Keep the value large enough for full messages you need, but note larger values increase log size and I/O.
+- Introduced in: v3.2.11
+
+##### enable_audit_sql
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: When this item is set to `true`, the FE audit subsystem records the SQL text of statements into FE audit logs (`fe.audit.log`) processed by ConnectProcessor. The stored statement respects other controls: encrypted statements are redacted (`AuditEncryptionChecker`), sensitive credentials may be redacted or desensitized if `enable_sql_desensitize_in_log` is set, and digest recording is controlled by `enable_sql_digest`. When it is set to `false`, ConnectProcessor replaces the statement text with "?" in audit events — other audit fields (user, host, duration, status, slow-query detection via `qe_slow_log_ms`, and metrics) are still recorded. Enabling SQL audit increases forensic and troubleshooting visibility but may expose sensitive SQL content and increase log volume and I/O; disabling it improves privacy at the cost of losing full-statement visibility in audit logs.
+- Introduced in: -
+
+##### enable_sql_desensitize_in_log
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: When this item is set to `true`, the system replaces or hides sensitive SQL content before it is written to logs and query-detail records. Code paths that honor this configuration include ConnectProcessor.formatStmt (audit logs), StmtExecutor.addRunningQueryDetail (query details), and SimpleExecutor.formatSQL (internal executor logs). With the feature enabled, invalid SQLs may be replaced with a fixed desensitized message, credentials (user/password) are hidden, and the SQL formatter is required to produce a sanitized representation (it can also enable digest-style output). This reduces leakage of sensitive literals and credentials in audit/internal logs but also means logs and query details no longer contain the original full SQL text (which can affect replay or debugging).
+- Introduced in: -
+
 ##### audit_log_dir
 
 - Default: StarRocksFE.STARROCKS_HOME_DIR + "/log"
@@ -149,6 +221,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The threshold used to determine whether a query is a slow query. If the response time of a query exceeds this threshold, it is recorded as a slow query in **fe.audit.log**.
 - Introduced in: -
 
+##### enable_qe_slow_log
+
+- Default: true
+- Type: Boolean
+- Unit: N/A
+- Is mutable: Yes
+- Description: When enabled, the FE builtin audit plugin (AuditLogBuilder) will write query events whose measured execution time ("Time" field) exceeds the threshold configured by qe_slow_log_ms into the slow-query audit log (AuditLog.getSlowAudit). If disabled, those slow-query entries are suppressed (regular query and connection audit logs are unaffected). The slow-audit entries follow the global audit_log_json_format setting (JSON vs. plain string). Use this flag to control generation of slow-query audit volume independently of regular audit logging; turning it off may reduce log I/O when qe_slow_log_ms is low or workloads produce many long-running queries.
+- Introduced in: 3.2.11
+
 ##### audit_log_roll_interval
 
 - Default: DAY
@@ -168,6 +249,42 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Is mutable: No
 - Description: The retention period of audit log files. The default value `30d` specifies that each audit log file can be retained for 30 days. StarRocks checks each audit log file and deletes those that were generated 30 days ago.
 - Introduced in: -
+
+##### audit_log_json_format
+
+- Default: false
+- Type: Boolean
+- Unit: N/A
+- Is mutable: Yes
+- Description: When true, FE audit events are emitted as structured JSON (Jackson ObjectMapper serializing a Map of annotated AuditEvent fields) instead of the default pipe-separated "key=value" string. The setting affects all built-in audit sinks handled by AuditLogBuilder: connection audit, query audit, big-query audit (big-query threshold fields are added to the JSON when the event qualifies), and slow-audit output. Fields annotated for big-query thresholds and the "features" field are treated specially (excluded from normal audit entries; included in big-query or feature logs as applicable). Enable this to make logs machine-parsable for log collectors or SIEMs; note it changes the log format and may require updating any existing parsers that expect the legacy pipe-separated format.
+- Introduced in: 3.2.7
+
+##### audit_log_enable_compress
+
+- Default: false
+- Type: Boolean
+- Unit: N/A
+- Is mutable: No
+- Description: When true, the generated Log4j2 configuration appends a ".gz" postfix to rotated audit log filenames (fe.audit.log.*) so that Log4j2 will produce compressed (.gz) archived audit log files on rollover. The setting is read during FE startup in Log4jConfig.initLogging and is applied to the RollingFile appender for audit logs; it only affects rotated/archived files, not the active audit log. Because the value is initialized at startup, changing it requires restarting the FE to take effect. Use alongside audit log rotation settings (audit_log_dir, audit_log_roll_interval, audit_roll_maxsize, audit_log_roll_num).
+- Introduced in: 3.2.12
+
+##### slow_lock_threshold_ms
+
+- Default: 3000L
+- Type: long
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: Threshold (in ms) used to classify a lock operation or a held lock as "slow". When the elapsed wait or hold time for a lock exceeds this value, StarRocks will (depending on context) emit diagnostic logs, include stack traces or waiter/owner info, and—in LockManager—start deadlock detection after this delay. It's used by LockUtils (slow-lock logging), QueryableReentrantReadWriteLock (filtering slow readers), LockManager (deadlock-detection delay and slow-lock trace), LockChecker (periodic slow-lock detection), and other callers (e.g., DiskAndTabletLoadReBalancer logging). Lowering the value increases sensitivity and logging/diagnostic overhead; setting it to 0 or negative disables the initial wait-based deadlock-detection delay behavior. Tune together with slow_lock_log_every_ms, slow_lock_print_stack, and slow_lock_stack_trace_reserve_levels.
+- Introduced in: 3.2.0
+
+##### slow_lock_log_every_ms
+
+- Default: 3000L
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: Minimum interval (in ms) to wait before emitting another "slow lock" warning for the same SlowLockLogStats instance. LockUtils checks this value after a lock wait exceeds slow_lock_threshold_ms and will suppress additional warnings until slow_lock_log_every_ms milliseconds have passed since the last logged slow-lock event. Use a larger value to reduce log volume during prolonged contention or a smaller value to get more frequent diagnostics. Changes take effect at runtime for subsequent checks.
+- Introduced in: v3.2.0
 
 ##### dump_log_dir
 
@@ -457,6 +574,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ### Metadata and cluster management
 
+##### enable_internal_sql
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: When this item is set to `true`, internal SQL statements executed by internal components (for example, SimpleExecutor) are preserved and written into internal audit or log messages (and can be further desensitized if `enable_sql_desensitize_in_log` is set). When it is set to `false`, internal SQL text is suppressed: formatting code (SimpleExecutor.formatSQL) returns "?" and the actual statement is not emitted to internal audit or log messages. This configuration does not change execution semantics of internal statements — it only controls logging and visibility of internal SQL for privacy or security.
+- Introduced in: -
+
 ##### meta_dir
 
 - Default: StarRocksFE.STARROCKS_HOME_DIR + "/meta"
@@ -628,6 +754,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: Whether to delete a BE after the BE is decommissioned. `TRUE` indicates that the BE is deleted immediately after it is decommissioned. `FALSE` indicates that the BE is not deleted after it is decommissioned.
 - Introduced in: -
 
+##### txn_latency_metric_report_groups
+
+- Default: An empty string
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: A comma-separated list of transaction latency metric groups to report. Load types are categorized into logical groups for monitoring. When a group is enabled, its name is added as a 'type' label to transaction metrics. Valid values: `stream_load`, `routine_load`, `broker_load`, `insert`, and `compaction` (availabl only for shared-data clusters). Example: `"stream_load,routine_load"`.
+- Introduced in: v4.0
+
 ##### ignore_materialized_view_error
 
 - Default: false
@@ -755,15 +890,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
   - After enabling this feature, all related names will be stored in lowercase, and all SQL commands containing these names will automatically convert them to lowercase.
   - You can enable this feature only when creating a cluster. **After the cluster is started, the value of this configuration cannot be modified by any means**. Any attempt to modify it will result in an error. FE will fail to start when it detects that the value of this configuration item is inconsistent with that when the cluster was first started.
   - Currently, this feature does not support JDBC catalog and table names. Do not enable this feature if you want to perform case-insensitive processing on JDBC or ODBC data sources.
-- Introduced in: v4.0
-
-##### txn_latency_metric_report_groups
-
-- Default: An empty string
-- Type: String
-- Unit: -
-- Is mutable: Yes
-- Description: A comma-separated list of transaction latency metric groups to report. Load types are categorized into logical groups for monitoring. When a group is enabled, its name is added as a 'type' label to transaction metrics. Valid values: `stream_load`, `routine_load`, `broker_load`, `insert`, and `compaction` (availabl only for shared-data clusters). Example: `"stream_load,routine_load"`.
 - Introduced in: v4.0
 
 ### User, role, and privilege
@@ -1065,6 +1191,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The interval for checking data updates during automatic collection.
 - Introduced in: -
 
+##### enable_predicate_columns_collection
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable predicate columns collection. If disabled, predicate columns will not be recorded during query optimization.
+- Introduced in: -
+
 ##### statistic_cache_columns
 
 - Default: 100000
@@ -1163,15 +1298,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Is mutable: Yes
 - Description: Whether to enable automatic collection for the NDV information of the ARRAY type.
 - Introduced in: v4.0
-
-##### enable_predicate_columns_collection
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether to enable predicate columns collection. If disabled, predicate columns will not be recorded during query optimization.
-- Introduced in: -
 
 ##### histogram_buckets_size
 
@@ -2670,8 +2796,6 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Is mutable: Yes
 - Description: Whether to prefer string type for fixed length varchar columns in materialized view creation and CTAS operations.
 - Introduced in: v4.0.0
-
-<EditionSpecificFEItem />
 
 ##### backup_job_default_timeout_ms
 
