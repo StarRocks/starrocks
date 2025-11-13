@@ -69,7 +69,7 @@ public class MVCompensationBuilder {
         if (queryPlanOpt.isPresent()) {
             List<LogicalScanOperator> scanOperators = MvUtils.getScanOperator(queryPlanOpt.get());
             // If no partition to refresh, return directly.
-            PCellSortedSet mvToRefreshPartitionNames = mvUpdateInfo.getMvToRefreshPartitionNames();
+            PCellSortedSet mvToRefreshPartitionNames = mvUpdateInfo.getMVToRefreshPCells();
             if (PCellUtils.isEmpty(mvToRefreshPartitionNames)) {
                 return MVCompensation.noCompensate(sessionVariable);
             }

@@ -912,6 +912,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
   この値が `0` 未満に設定されている場合、システムはその絶対値と CPU コア数の積を値として使用します。
 - 導入バージョン: 3.1.12, 3.2.7
 
+##### column_mode_partial_update_insert_batch_size
+
+- デフォルト: 4096
+- タイプ: Int
+- 単位: -
+- 可変: はい
+- 説明: 挿入行を処理する際の列モード部分更新におけるバッチサイズ。この項目が `0` または負の数値に設定されている場合、無限ループを回避するため `1` に制限されます。この項目は各バッチで処理される新規挿入行の数を制御します。大きな値は書き込みパフォーマンスを向上させますが、より多くのメモリを消費します。
+- 導入バージョン: v3.5.10, v4.0.2
+
 ##### max_runnings_transactions_per_txn_map
 
 - デフォルト: 100
@@ -1594,6 +1603,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 単位: -
 - 可変: はい
 - 説明: enable_pk_parallel_execution が true に設定されている場合、インポートまたはコンパクションで生成されるデータがこの閾値を超えると、Primary Key テーブルの並列実行戦略が有効になります。
+- 導入バージョン: -
+
+##### enable_strict_delvec_crc_check
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 可変: はい
+- 説明: enable_strict_delvec_crc_check を true に設定すると、delete vector の CRC32 を厳密にチェックし、一致しない場合はエラーを返します。
 - 導入バージョン: -
 
 ##### size_tiered_min_level_size

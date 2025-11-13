@@ -297,7 +297,7 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVTestBase {
                         Thread.sleep(1000);
                     }
                     MvUpdateInfo mvUpdateInfo = getMvUpdateInfo(mv);
-                    Assertions.assertTrue(mvUpdateInfo.getMvToRefreshType() == MvUpdateInfo.MvToRefreshType.PARTIAL);
+                    Assertions.assertTrue(mvUpdateInfo.getMVToRefreshType() == MvUpdateInfo.MvToRefreshType.PARTIAL);
                     Assertions.assertTrue(mvUpdateInfo.isValidRewrite());
                     partitionsToRefresh1 = getPartitionNamesToRefreshForMv(mv);
                     Assertions.assertFalse(partitionsToRefresh1.isEmpty());

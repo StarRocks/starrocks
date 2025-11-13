@@ -2403,6 +2403,12 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long histogram_max_sample_row_count = 10000000;
 
+    /**
+     * collect distinct count in histogram buckets
+     */
+    @ConfField(mutable = true)
+    public static String histogram_collect_bucket_ndv_mode = "none";
+
     @ConfField(mutable = true, comment = "Use table sample instead of row-level bernoulli sample to collect statistics")
     public static boolean enable_use_table_sample_collect_statistics = true;
 
@@ -3953,12 +3959,6 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static long default_statistics_output_row_count = 1L;
-
-    /**
-     * Whether enable dynamic tablet.
-     */
-    @ConfField(mutable = true, comment = "Whether enable dynamic tablet.")
-    public static boolean enable_dynamic_tablet = false;
 
     /**
      * The default scheduler interval for dynamic tablet jobs.

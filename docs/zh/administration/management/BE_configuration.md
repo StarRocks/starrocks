@@ -897,6 +897,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 当该参数被设置为小于 `0` 时，系统使用该参数的绝对值与 CPU 核数的乘积。
 - 引入版本：3.1.12, 3.2.7
 
+##### column_mode_partial_update_insert_batch_size
+
+- 默认值：4096
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：列模式部分更新中处理插入行时的批次大小。如果设置为 `0` 或负数，将会被限制为 `1` 以避免无限循环。该参数控制每次批量处理新插入行的数量，较大的值可以提高写入性能但会占用更多内存。
+- 引入版本：v3.5.10, v4.0.2
+
 ##### max_runnings_transactions_per_txn_map
 
 - 默认值：100
@@ -1568,6 +1577,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 单位：-
 - 是否动态：是
 - 描述：当enable_pk_parallel_execution设置为true后，导入或者compaction生成的数据大于该阈值时，Primary Key 表并行执行策略将被启用。
+- 引入版本：-
+
+##### enable_strict_delvec_crc_check
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：当enable_strict_delvec_crc_check设置为true后，我们会对delete vector的crc32进行严格检查，如果不一致，将返回失败。
 - 引入版本：-
 
 ##### size_tiered_min_level_size

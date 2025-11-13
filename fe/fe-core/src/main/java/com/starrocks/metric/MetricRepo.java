@@ -237,6 +237,12 @@ public final class MetricRepo {
     public static List<GaugeMetricImpl<Long>> GAUGE_MEMORY_USAGE_STATS;
     public static List<GaugeMetricImpl<Long>> GAUGE_OBJECT_COUNT_STATS;
 
+    public static Histogram HISTO_CACHE_MISS_RATIO;
+    public static GaugeMetricImpl<Float> GAUGE_CACHE_MISS_RATIO_AVERAGE;
+    public static GaugeMetricImpl<Float> GAUGE_CACHE_MISS_RATIO_P50;
+    public static GaugeMetricImpl<Float> GAUGE_CACHE_MISS_RATIO_P90;
+    public static GaugeMetricImpl<Float> GAUGE_CACHE_MISS_RATIO_P99;
+
     // Currently, we use gauge for safe mode metrics, since we do not have unTyped metrics till now
     public static GaugeMetricImpl<Integer> GAUGE_SAFE_MODE;
 
@@ -462,6 +468,32 @@ public final class MetricRepo {
         GAUGE_QUERY_LATENCY_P999.addLabel(new MetricLabel("type", "999_quantile"));
         GAUGE_QUERY_LATENCY_P999.setValue(0.0);
         STARROCKS_METRIC_REGISTER.addMetric(GAUGE_QUERY_LATENCY_P999);
+
+        HISTO_CACHE_MISS_RATIO = METRIC_REGISTER.histogram(MetricRegistry.name("query", "cache_miss_ratio", "permille"));
+
+        GAUGE_CACHE_MISS_RATIO_AVERAGE =
+                new GaugeMetricImpl<>("cache_miss_ratio", MetricUnit.NOUNIT, "average of cache miss ratio");
+        GAUGE_CACHE_MISS_RATIO_AVERAGE.addLabel(new MetricLabel("type", "average"));
+        GAUGE_CACHE_MISS_RATIO_AVERAGE.setValue(0.0f);
+        STARROCKS_METRIC_REGISTER.addMetric(GAUGE_CACHE_MISS_RATIO_AVERAGE);
+
+        GAUGE_CACHE_MISS_RATIO_P50 =
+                new GaugeMetricImpl<>("cache_miss_ratio", MetricUnit.NOUNIT, "p50 of cache miss ratio");
+        GAUGE_CACHE_MISS_RATIO_P50.addLabel(new MetricLabel("type", "50_quantile"));
+        GAUGE_CACHE_MISS_RATIO_P50.setValue(0.0f);
+        STARROCKS_METRIC_REGISTER.addMetric(GAUGE_CACHE_MISS_RATIO_P50);
+
+        GAUGE_CACHE_MISS_RATIO_P90 =
+                new GaugeMetricImpl<>("cache_miss_ratio", MetricUnit.NOUNIT, "p90 of cache miss ratio");
+        GAUGE_CACHE_MISS_RATIO_P90.addLabel(new MetricLabel("type", "90_quantile"));
+        GAUGE_CACHE_MISS_RATIO_P90.setValue(0.0f);
+        STARROCKS_METRIC_REGISTER.addMetric(GAUGE_CACHE_MISS_RATIO_P90);
+
+        GAUGE_CACHE_MISS_RATIO_P99 =
+                new GaugeMetricImpl<>("cache_miss_ratio", MetricUnit.NOUNIT, "p99 of cache miss ratio");
+        GAUGE_CACHE_MISS_RATIO_P99.addLabel(new MetricLabel("type", "99_quantile"));
+        GAUGE_CACHE_MISS_RATIO_P99.setValue(0.0f);
+        STARROCKS_METRIC_REGISTER.addMetric(GAUGE_CACHE_MISS_RATIO_P99);
 
         GAUGE_SAFE_MODE = new GaugeMetricImpl<>("safe_mode", MetricUnit.NOUNIT, "safe mode flag");
         GAUGE_SAFE_MODE.addLabel(new MetricLabel("type", "safe_mode"));

@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <mutex>
+#include <semaphore>
 #include <set>
 
 #include "column/column.h"
@@ -35,6 +36,7 @@
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 #include "util/blocking_queue.hpp"
+#include "util/failpoint/fail_point.h"
 
 namespace starrocks::pipeline {
 struct RuntimeMembershipFilterBuildParam;
@@ -229,6 +231,10 @@ public:
     void set_has_push_down_to_storage(bool v) { _has_push_down_to_storage = v; }
     bool has_push_down_to_storage() const { return _has_push_down_to_storage; }
 
+#ifdef FIU_ENABLE
+    failpoint::OneToAnyBarrier barrier;
+#endif
+
 private:
     friend class HashJoinNode;
     friend class hashJoiner;
@@ -252,6 +258,7 @@ private:
 
     std::atomic<const RuntimeFilter*> _runtime_filter = nullptr;
     std::shared_ptr<const RuntimeFilter> _shared_runtime_filter = nullptr;
+    RuntimeState* _runtime_state = nullptr;
     pipeline::Observable _observable;
     bool _has_push_down_to_storage = false;
 };

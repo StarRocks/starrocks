@@ -758,7 +758,7 @@ public class MvRewritePreprocessor {
                            MvUpdateInfo mvUpdateInfo) {
         MaterializedView mv = mvWithPlanContext.getMV();
         MvPlanContext mvPlanContext = mvWithPlanContext.getMvPlanContext();
-        PCellSortedSet partitionNamesToRefresh = mvUpdateInfo.getMvToRefreshPartitionNames();
+        PCellSortedSet partitionNamesToRefresh = mvUpdateInfo.getMVToRefreshPCells();
         if (!checkMvPartitionNamesToRefresh(connectContext, mv, partitionNamesToRefresh, mvPlanContext)) {
             return;
         }
@@ -775,7 +775,9 @@ public class MvRewritePreprocessor {
             logMVPrepare(connectContext, "Prepare MV {} failed to build materialization context", mv.getName());
             return;
         }
-        synchronized (materializationContext) {
+        // add valid candidate mv to query materialization context, needs to synchronize queryMaterializationContext
+        // to avoid race condition when multiple threads are adding valid candidate mvs to query materialization context
+        synchronized (queryMaterializationContext) {
             queryMaterializationContext.addValidCandidateMV(materializationContext);
         }
         logMVPrepare(tracers, connectContext, mv, "Prepare MV {} success", mv.getName());
@@ -990,7 +992,7 @@ public class MvRewritePreprocessor {
         LogicalOlapScanOperator scanMvOp;
         synchronized (materializationContext.getQueryRefFactory()) {
             scanMvOp = createScanMvOperator(mv, materializationContext.getQueryRefFactory(),
-                    mvUpdateInfo.getMvToRefreshPartitionNames(), false);
+                    mvUpdateInfo.getMVToRefreshPCells(), false);
         }
         materializationContext.setScanMvOperator(scanMvOp);
         // should keep the sequence of schema

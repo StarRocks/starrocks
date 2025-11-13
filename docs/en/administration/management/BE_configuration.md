@@ -1068,6 +1068,15 @@ When this value is set to `0`, the system uses twice of the CPU core count as th
 When this value is set to less than `0`, the system uses the product of its absolute value and the CPU core count as the value.
 - Introduced in: v3.1.12, 3.2.7
 
+##### column_mode_partial_update_insert_batch_size
+
+- Default: 4096
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Batch size for column mode partial update when processing inserted rows. If this item is set to `0` or negative, it will be clamped to `1` to avoid infinite loop. This item controls the number of newly inserted rows processed in each batch. Larger values can improve write performance but will consume more memory.
+- Introduced in: v3.5.10, v4.0.2
+
 ##### max_runnings_transactions_per_txn_map
 
 - Default: 100
@@ -1886,6 +1895,15 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Is mutable: Yes
 - Description: Limits how many size-tiered levels may be merged into a single primary-key real-time compaction task. During the PK size-tiered compaction selection, StarRocks builds ordered "levels" of rowsets by size and will add successive levels into the chosen compaction input until this limit is reached (the code uses compaction_level <= size_tiered_max_compaction_level). The value is inclusive and counts the number of distinct size tiers merged (the top level is counted as 1). Effective only when the PK size-tiered compaction strategy is enabled; raising it lets a compaction task include more levels (larger, more I/O- and CPU-intensive merges, potential higher write amplification), while lowering it restricts merges and reduces task size and resource usage.
 - Introduced in: v4.0.0
+
+##### enable_strict_delvec_crc_check
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: When enable_strict_delvec_crc_check is set to true, we will perform a strict CRC32 check on the delete vector, and if a mismatch is detected, a failure will be returned.
+- Introduced in: -
 
 ##### size_tiered_min_level_size
 

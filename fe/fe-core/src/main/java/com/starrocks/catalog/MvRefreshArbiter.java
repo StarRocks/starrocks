@@ -141,7 +141,7 @@ public class MvRefreshArbiter {
                     return Optional.empty();
                 }
                 // NOTE: if base table is mv, check to refresh partition names as the base table's update info.
-                return Optional.of(!mvUpdateInfo.getMvToRefreshPartitionNames().isEmpty());
+                return Optional.of(!mvUpdateInfo.getMVToRefreshPCells().isEmpty());
             }
             return Optional.of(false);
         } else {
@@ -182,8 +182,8 @@ public class MvRefreshArbiter {
                     return null;
                 }
                 // NOTE: if base table is mv, check to refresh partition names as the base table's update info.
-                updatedPCellSet.addAll(mvUpdateInfo.getMvToRefreshPartitionNames());
-                baseTableUpdateInfo.addMVPartitionNameToCellMap(mvUpdateInfo.getMvPartitionNameToCellMap());
+                updatedPCellSet.addAll(mvUpdateInfo.getMVToRefreshPCells());
+                baseTableUpdateInfo.addMVPartitionNameToCellMap(mvUpdateInfo.getRefBaseNestedMVPCells());
             }
             // update base table's partition info
             baseTableUpdateInfo.addToRefreshPartitionNames(updatedPCellSet);

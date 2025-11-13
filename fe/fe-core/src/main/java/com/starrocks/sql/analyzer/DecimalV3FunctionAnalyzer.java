@@ -74,6 +74,7 @@ public class DecimalV3FunctionAnalyzer {
                     .add(FunctionSet.ANY_VALUE)
                     .add(FunctionSet.APPROX_TOP_K)
                     .add(FunctionSet.HISTOGRAM)
+                    .add(FunctionSet.HISTOGRAM_HLL_NDV)
                     .add(FunctionSet.ARRAY_UNIQUE_AGG) // array_unique_agg(array<decimal>) -> array<decimal>
                     .addAll(DECIMAL_ARRAY_AGG_FUNCTION_SAME_TYPE)
                     .build();
@@ -436,7 +437,7 @@ public class DecimalV3FunctionAnalyzer {
         Function newFn = fn;
         if (DECIMAL_AGG_FUNCTION_SAME_TYPE.contains(fnName) || DECIMAL_AGG_FUNCTION_WIDER_TYPE.contains(fnName)) {
             Type commonType = Type.INVALID;
-            if (FunctionSet.HISTOGRAM.equals(fnName)) {
+            if (FunctionSet.HISTOGRAM.equals(fnName) || FunctionSet.HISTOGRAM_HLL_NDV.equals(fnName)) {
                 commonType = Type.VARCHAR;
             } else if (DECIMAL_AGG_FUNCTION_SAME_TYPE.contains(fnName)) {
                 commonType = argumentTypes[0];

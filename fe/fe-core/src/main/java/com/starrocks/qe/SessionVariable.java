@@ -186,6 +186,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String TRANSACTION_READ_ONLY = "transaction_read_only";
     public static final String DEFAULT_STORAGE_ENGINE = "default_storage_engine";
     public static final String DEFAULT_TMP_STORAGE_ENGINE = "default_tmp_storage_engine";
+    public static final String DEFAULT_AUTHENTICATION_PLUGIN = "default_authentication_plugin"; 
+    public static final String AUTHENTICATION_POLICY = "authentication_policy"; 
     public static final String CHARACTER_SET_CLIENT = "character_set_client";
     public static final String CHARACTER_SET_CONNNECTION = "character_set_connection";
     public static final String CHARACTER_SET_RESULTS = "character_set_results";
@@ -1216,6 +1218,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private String defaultStorageEngine = "InnoDB";
     @VariableMgr.VarAttr(name = DEFAULT_TMP_STORAGE_ENGINE)
     private String defaultTmpStorageEngine = "InnoDB";
+    @VariableMgr.VarAttr(name = DEFAULT_AUTHENTICATION_PLUGIN)
+    private String defaultAuthenticationPlugin = "mysql_native_password"; 
+    @VariableMgr.VarAttr(name = AUTHENTICATION_POLICY)
+    private String authenticationPolicy = "*,,"; 
 
     // this is used to make c3p0 library happy
     @VariableMgr.VarAttr(name = CHARACTER_SET_CLIENT)
