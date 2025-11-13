@@ -963,7 +963,6 @@ Status FragmentExecutor::execute(ExecEnv* exec_env) {
     auto* runtime_state = _fragment_ctx->runtime_state();
     runtime_state->set_fragment_prepared(true);
 
-
     return Status::OK();
 }
 
