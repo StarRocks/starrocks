@@ -293,19 +293,23 @@ public class AnalyzeInsertTest {
             {
                 hiveTable.supportInsert();
                 result = true;
+                minTimes = 0;
 
                 hiveTable.isHiveTable();
                 result = true;
+                minTimes = 0;
 
                 hiveTable.isUnPartitioned();
                 result = false;
+                minTimes = 0;
 
                 hiveTable.getHiveTableType();
                 result = HiveTable.HiveTableType.EXTERNAL_TABLE;
+                minTimes = 0;
             }
         };
 
-        analyzeFail("insert into hive_catalog.db.tbl select 1, 2, 3",
+        analyzeFail("insert into hive_catalog.db.tbl select 1, 2, 3", 
                 "Only support to write hive managed table");
     }
 
