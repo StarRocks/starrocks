@@ -207,6 +207,7 @@ OUTPUT_COMPILE_TIME=OFF
 WITH_TENANN=ON
 WITH_RELATIVE_SRC_PATH=ON
 ENABLE_MULTI_DYNAMIC_LIBS=OFF
+BUILD_BE_MODULE=all
 
 # Default to OFF, turn it ON if current shell is non-interactive
 WITH_MAVEN_BATCH_MODE=OFF
@@ -308,6 +309,7 @@ else
             --enable-shared-data|--use-staros) USE_STAROS=ON; shift ;;
             --with-bench) WITH_BENCH=ON; shift ;;
             --with-dynamic) ENABLE_MULTI_DYNAMIC_LIBS=ON; shift ;;
+            --module) BUILD_BE_MODULE=$2; shift 2 ;;
             --with-clang-tidy) WITH_CLANG_TIDY=ON; shift ;;
             --without-java-ext) BUILD_JAVA_EXT=OFF; shift ;;
             --without-starcache) WITH_STARCACHE=OFF; shift ;;
@@ -380,6 +382,7 @@ echo "Get params:
     WITH_MAVEN_BATCH_MODE       -- $WITH_MAVEN_BATCH_MODE
     DISABLE_JAVA_CHECK_STYLE    -- $DISABLE_JAVA_CHECK_STYLE
     ENABLE_MULTI_DYNAMIC_LIBS   -- $ENABLE_MULTI_DYNAMIC_LIBS
+    BUILD_BE_MODULE             -- $BUILD_BE_MODULE
 "
 
 check_tool()
@@ -509,12 +512,26 @@ if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
                   -DWITH_RELATIVE_SRC_PATH=${WITH_RELATIVE_SRC_PATH}    \
                   ..
 
-    time ${BUILD_SYSTEM} -j${PARALLEL}
+    if [ "${BUILD_BE_MODULE}" != "all" ] ; then
+        echo "build Backend module: ${BUILD_BE_MODULE}"
+        time ${BUILD_SYSTEM} -j${PARALLEL} $BUILD_BE_MODULE
+    else
+        time ${BUILD_SYSTEM} -j${PARALLEL}
+        echo "Build all Backend modules"
+    fi
+
     if [ "${WITH_CLANG_TIDY}" == "ON" ];then
         exit 0
     fi
 
-    ${BUILD_SYSTEM} install
+    # install target
+    if [ "${BUILD_BE_MODULE}" != "all" ] ; then
+        echo "install Backend module: ${BUILD_BE_MODULE}"
+        ${CMAKE_CMD} -DCOMPONENT=$BUILD_BE_MODULE -P cmake_install.cmake
+    else 
+        ${BUILD_SYSTEM} install
+    fi
+
 
     # Build Java Extensions
     if [ ${BUILD_JAVA_EXT} = "ON" ]; then
@@ -649,6 +666,10 @@ if [ ${BUILD_BE} -eq 1 ]; then
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/jemalloc/lib-shared/libjemalloc.so.2 ${STARROCKS_OUTPUT}/be/lib/libjemalloc.so.2
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/jemalloc-debug/lib/libjemalloc.so.2 ${STARROCKS_OUTPUT}/be/lib/libjemalloc-dbg.so.2
     ln -s ./libjemalloc.so.2 ${STARROCKS_OUTPUT}/be/lib/libjemalloc.so
+    
+    if [ "${ENABLE_MULTI_DYNAMIC_LIBS}" == "ON" ];then
+        cp -r -p ${STARROCKS_THIRDPARTY}/installed/lib64/libfmt.so.8 ${STARROCKS_OUTPUT}/be/lib/libfmt.so.8
+    fi
 
     # Copy pprof and FlameGraph tools
     if [ -d "${STARROCKS_THIRDPARTY}/installed/flamegraph" ]; then

@@ -1041,12 +1041,7 @@ endif()
 
 # Add all external dependencies. They should come after the starrocks libs.
 
-set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} ${STARROCKS_DEPENDENCIES})
-
-IF( NOT ENABLE_MULTI_DYNAMIC_LIBS)
-    set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} hdfs)
-ENDIF()
-set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} jvm)
+set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} ${STARROCKS_DEPENDENCIES} hdfs jvm)
 
 set(BUILD_FOR_SANITIZE "OFF")
 set(DEP_SANITIZE_LIBS "")
@@ -1088,7 +1083,7 @@ FUNCTION(ADD_BE_LIB LIB_NAME)
         # support build and install component 
         # ${CMAKE_CMD} -DCOMPONENT=$LIB_NAME -P cmake_install.cmake
         ADD_LIBRARY(${LIB_NAME} SHARED ${ARGN})
-        target_link_libraries(${LIB_NAME} PRIVATE -Wl,--allow-shlib-undefined ${WRAP_LINKER_FLAGS} ${DEP_SANITIZE_LIBS})
+        target_link_libraries(${LIB_NAME} PRIVATE ${WRAP_LINKER_FLAGS} ${DEP_SANITIZE_LIBS})
         install(TARGETS ${LIB_NAME}
             LIBRARY DESTINATION ${OUTPUT_DIR}/lib COMPONENT ${LIB_NAME} 
             ARCHIVE DESTINATION ${OUTPUT_DIR}/lib COMPONENT ${LIB_NAME} 
@@ -1099,15 +1094,17 @@ FUNCTION(ADD_BE_LIB LIB_NAME)
     set(ALL_BE_LIBS "${ALL_BE_LIBS};${LIB_NAME}" CACHE INTERNAL "All BE libraries")
 ENDFUNCTION()
 
+set (STARROCKS_STATIC_LINK_LIBS ${WL_LINK_STATIC} -lgomp -lbfd)
+
 if (NOT ("${MAKE_TEST}" STREQUAL "ON" AND "${BUILD_FOR_SANITIZE}" STREQUAL "ON"))
     # In other words, turn to dynamic link when MAKE_TEST and BUILD_TYPE == *SAN
     # otherwise do static link gcc's lib
-    set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libstdc++ -static-libgcc)
+    set(STARROCKS_STATIC_LINK_LIBS ${STARROCKS_STATIC_LINK_LIBS} -static-libstdc++ -static-libgcc)
 endif()
 
 set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS}
-    ${WL_LINK_STATIC} -lgomp -lbfd
-    ${WL_LINK_DYNAMIC} -lresolv -liberty -lc -lm -ldl -rdynamic -pthread -Wl,-wrap,__cxa_throw -Wl,-wrap,__floattidf
+    ${STARROCKS_STATIC_LINK_LIBS}
+    ${WL_LINK_DYNAMIC} -lresolv -liberty -lc -lm -ldl -rdynamic -pthread ${WRAP_LINKER_FLAGS}
 )
 
 # link gcov if WITH_GCOV is on
