@@ -1869,8 +1869,10 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_with_delvec_corrupt) {
     DeferOp defer([]() {
         SyncPoint::GetInstance()->ClearCallBack("MetaFileBuilder::_finalize_delvec");
         SyncPoint::GetInstance()->DisableProcessing();
+        config::enable_strict_delvec_crc_check = false;
     });
 
+    config::enable_strict_delvec_crc_check = true;
     SyncPoint::GetInstance()->EnableProcessing();
     SyncPoint::GetInstance()->SetCallBack("MetaFileBuilder::_finalize_delvec", [](void* buf) {
         auto* b = static_cast<Buffer<uint8_t>*>(buf);
