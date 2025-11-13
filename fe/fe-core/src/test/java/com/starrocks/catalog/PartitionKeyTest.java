@@ -37,6 +37,7 @@ package com.starrocks.catalog;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DateUtils;
+import com.starrocks.common.util.PartitionKeySerializer;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.type.DateType;
@@ -181,7 +182,7 @@ public class PartitionKeyTest {
         DataOutputStream dos = new DataOutputStream(new FileOutputStream(file));
 
         PartitionKey keyEmpty = new PartitionKey();
-        keyEmpty.write(dos);
+        PartitionKeySerializer.write(dos, keyEmpty);
 
         List<PartitionValue> keys = new ArrayList<PartitionValue>();
         List<Column> columns = new ArrayList<Column>();
@@ -199,18 +200,17 @@ public class PartitionKeyTest {
         columns.add(new Column("column11", DateType.DATETIME, true, null, "", ""));
 
         PartitionKey key = PartitionKey.createPartitionKey(keys, columns);
-        key.write(dos);
+        PartitionKeySerializer.write(dos, key);
 
         dos.flush();
         dos.close();
 
         // 2. Read objects from file
         DataInputStream dis = new DataInputStream(new FileInputStream(file));
-        PartitionKey rKeyEmpty = PartitionKey.read(dis);
+        PartitionKey rKeyEmpty = PartitionKeySerializer.read(dis);
         Assertions.assertTrue(keyEmpty.equals(rKeyEmpty));
 
-        PartitionKey rKey = new PartitionKey();
-        rKey.readFields(dis);
+        PartitionKey rKey = PartitionKeySerializer.read(dis);
         Assertions.assertTrue(key.equals(rKey));
         Assertions.assertTrue(key.equals(key));
         Assertions.assertFalse(key.equals(this));

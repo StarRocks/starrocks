@@ -76,6 +76,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.PartitionKeySerializer;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -1000,12 +1001,12 @@ public class LeaderImpl {
                     tRange.setPartition_id(range.getKey());
                     ByteArrayOutputStream output = new ByteArrayOutputStream();
                     DataOutputStream stream = new DataOutputStream(output);
-                    range.getValue().lowerEndpoint().write(stream);
+                    PartitionKeySerializer.write(stream, range.getValue().lowerEndpoint());
                     tRange.setStart_key(output.toByteArray());
 
                     output = new ByteArrayOutputStream();
                     stream = new DataOutputStream(output);
-                    range.getValue().upperEndpoint().write(stream);
+                    PartitionKeySerializer.write(stream, range.getValue().upperEndpoint());
                     tRange.setEnd_key(output.toByteArray());
                     tRange.setBase_desc(basePartitionDesc);
                     tRange.setIs_temp(tempRanges.containsKey(range.getKey()));
