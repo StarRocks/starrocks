@@ -51,7 +51,7 @@ import java.util.Map;
 /*
  * e.g.
  *    select a, b, count(c) as cc, sum(d)
- *    from t
+ *    from t group by a, b
  *    order by cc limit 10
  *
  * -> select t.a, t.b, cc, sum(d)
