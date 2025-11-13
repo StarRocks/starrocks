@@ -15,6 +15,8 @@
 package com.starrocks.common.util;
 
 import com.google.common.collect.ImmutableSet;
+import com.google.re2j.Matcher;
+import com.google.re2j.Pattern;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.fs.hdfs.HdfsFsManager;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
@@ -22,8 +24,6 @@ import com.starrocks.sql.ast.LoadStmt;
 
 import java.util.HashSet;
 import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * Utility class to redact sensitive credentials from SQL strings.
