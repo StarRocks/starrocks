@@ -56,6 +56,12 @@ static const std::string ALIYUN_OSS_ACCESS_KEY = "aliyun.oss.access_key";
 static const std::string ALIYUN_OSS_SECRET_KEY = "aliyun.oss.secret_key";
 static const std::string ALIYUN_OSS_ENDPOINT = "aliyun.oss.endpoint";
 
+static const std::string HUAWEI_OBS_ACCESS_KEY = "fs.obs.access_key";
+static const std::string HUAWEI_OBS_SECRET_KEY = "fs.obs.secret_key";
+static const std::string HUAWEI_OBS_ACCESS_KEY_DOT = "fs.obs.access.key";
+static const std::string HUAWEI_OBS_SECRET_KEY_DOT = "fs.obs.secret.key";
+static const std::string HUAWEI_OBS_ENDPOINT = "fs.obs.endpoint";
+
 class CloudConfigurationFactory {
 public:
     static const AWSCloudConfiguration create_aws(const TCloudConfiguration& t_cloud_configuration) {
