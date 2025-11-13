@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+export LD_LIBRARY_PATH=$(dirname $($STARROCKS_GCC_HOME/bin/g++ -print-file-name=libstdc++.so)):$LD_LIBRARY_PATH#!/usr/bin/env bash
 # Licensed to the Apache Software Foundation (ASF) under one
 # or more contributor license agreements.  See the NOTICE file
 # distributed with this work for additional information
@@ -511,7 +511,7 @@ if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
                   -DCMAKE_EXPORT_COMPILE_COMMANDS=ON                    \
                   -DBUILD_FORMAT_LIB=${BUILD_FORMAT_LIB}                \
                   -DWITH_RELATIVE_SRC_PATH=${WITH_RELATIVE_SRC_PATH}    \
-                  ..
+                  .. --trace
 
     if [ "${BUILD_BE_MODULE}" != "all" ] ; then
         echo "build Backend module: ${BUILD_BE_MODULE}"
@@ -661,13 +661,18 @@ if [ ${BUILD_BE} -eq 1 ]; then
         cp -r -p ${STARROCKS_HOME}/be/output/conf/asan_suppressions.conf ${STARROCKS_OUTPUT}/be/conf/
     fi
     cp -r -p ${STARROCKS_HOME}/be/output/lib/starrocks_be ${STARROCKS_OUTPUT}/be/lib/
-    cp -r -p ${STARROCKS_HOME}/be/output/lib/*.so ${STARROCKS_OUTPUT}/be/lib/
+    cp -r -p ${STARROCKS_HOME}/be/output/lib/*.so ${STARROCKS_HOME}/be/output/lib/*.so.* ${STARROCKS_OUTPUT}/be/lib/ 2>/dev/null || true
     mv ${STARROCKS_OUTPUT}/be/lib/libmockjvm.so ${STARROCKS_OUTPUT}/be/lib/libjvm.so
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/jemalloc/bin/jeprof ${STARROCKS_OUTPUT}/be/bin
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/jemalloc/lib-shared/libjemalloc.so.2 ${STARROCKS_OUTPUT}/be/lib/libjemalloc.so.2
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/jemalloc-debug/lib/libjemalloc.so.2 ${STARROCKS_OUTPUT}/be/lib/libjemalloc-dbg.so.2
     ln -s ./libjemalloc.so.2 ${STARROCKS_OUTPUT}/be/lib/libjemalloc.so
-    
+
+    if [ "${ENABLE_MULTI_DYNAMIC_LIBS}" == "ON" ] ; then
+        LIBSTDCXX_DIR=$(dirname $($STARROCKS_GCC_HOME/bin/g++ -print-file-name=libstdc++.so))
+        cp -r $LIBSTDCXX_DIR/libstdc++.so* ${STARROCKS_OUTPUT}/be/lib/
+        cp -r $LIBSTDCXX_DIR/libgcc.so* ${STARROCKS_OUTPUT}/be/lib/
+    fi
     # Copy pprof and FlameGraph tools
     if [ -d "${STARROCKS_THIRDPARTY}/installed/flamegraph" ]; then
         mkdir -p ${STARROCKS_OUTPUT}/be/bin/flamegraph/
