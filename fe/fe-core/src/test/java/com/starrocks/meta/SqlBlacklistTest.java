@@ -17,7 +17,6 @@ package com.starrocks.meta;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.persist.DeleteSqlBlackLists;
 import com.starrocks.persist.SqlBlackListPersistInfo;
-import com.starrocks.persist.WALApplier;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
@@ -33,7 +32,6 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
 
 import java.util.List;
 import java.util.regex.Pattern;
