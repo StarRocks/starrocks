@@ -2579,12 +2579,14 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 }
             }
             if (this.defineQueryParseNode == null) {
-                try {
-                    connectContext.setDatabase(db.getOriginName());
-                    this.defineQueryParseNode = MvUtils.getQueryAst(viewDefineSql, connectContext);
-                } catch (Exception e) {
-                    // ignore
-                    LOG.warn("parse view define sql failed:", e);
+                if (!Strings.isNullOrEmpty(viewDefineSql)) {
+                    try {
+                        connectContext.setDatabase(db.getOriginName());
+                        this.defineQueryParseNode = MvUtils.getQueryAst(viewDefineSql, connectContext);
+                    } catch (Exception e) {
+                        // ignore
+                        LOG.warn("parse view define sql failed:", e);
+                    }
                 }
             }
         }
