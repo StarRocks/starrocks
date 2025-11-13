@@ -13,7 +13,6 @@ displayed_sidebar: docs
 | FE_ADDRESS     | FE ノードのアドレス（形式：`host:port`）。                   |
 | THREAD_ID      | Java スレッド ID。                                            |
 | THREAD_NAME    | スレッド名。                                                  |
-| GROUP_NAME     | スレッドが属するスレッドグループの名前。                     |
 | THREAD_STATE   | スレッドの状態。可能な値：`NEW`、`RUNNABLE`、`BLOCKED`、`WAITING`、`TIMED_WAITING`、`TERMINATED`。 |
 | IS_DAEMON      | スレッドがデーモンスレッドであるかどうか（`true`）またはそうでないか（`false`）を示します。 |
 | PRIORITY       | スレッドの優先度（通常は 1-10）。                            |
@@ -31,7 +30,7 @@ SELECT * FROM information_schema.fe_threads;
 ### 状態でスレッドをクエリ
 
 ```sql
-SELECT thread_id, thread_name, group_name, thread_state 
+SELECT thread_id, thread_name, thread_state 
 FROM information_schema.fe_threads 
 WHERE thread_state = 'RUNNABLE';
 ```
@@ -66,18 +65,10 @@ LIMIT 10;
 ### 特定のスレッド名を検索
 
 ```sql
-SELECT thread_id, thread_name, group_name, thread_state 
+SELECT thread_id, thread_name, thread_state 
 FROM information_schema.fe_threads 
 WHERE thread_name LIKE '%main%' 
    OR thread_name LIKE '%GC%';
-```
-
-### スレッドグループ名でクエリ
-
-```sql
-SELECT thread_id, thread_name, group_name, thread_state 
-FROM information_schema.fe_threads 
-WHERE group_name = 'main';
 ```
 
 ### デーモンスレッドの状態でカウント

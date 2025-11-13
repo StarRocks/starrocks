@@ -13,7 +13,6 @@ The following fields are provided in `fe_threads`:
 | FE_ADDRESS     | Address of the FE node (format: `host:port`).               |
 | THREAD_ID      | Java thread ID.                                              |
 | THREAD_NAME    | Name of the thread.                                          |
-| GROUP_NAME     | Name of the thread group to which the thread belongs.       |
 | THREAD_STATE   | State of the thread. Possible values: `NEW`, `RUNNABLE`, `BLOCKED`, `WAITING`, `TIMED_WAITING`, `TERMINATED`. |
 | IS_DAEMON      | Indicates whether the thread is a daemon thread (`true`) or not (`false`). |
 | PRIORITY       | Thread priority (typically 1-10).                           |
@@ -31,7 +30,7 @@ SELECT * FROM information_schema.fe_threads;
 ### Query threads by state
 
 ```sql
-SELECT thread_id, thread_name, group_name, thread_state 
+SELECT thread_id, thread_name, thread_state 
 FROM information_schema.fe_threads 
 WHERE thread_state = 'RUNNABLE';
 ```
@@ -66,18 +65,10 @@ LIMIT 10;
 ### Search for specific thread names
 
 ```sql
-SELECT thread_id, thread_name, group_name, thread_state 
+SELECT thread_id, thread_name, thread_state 
 FROM information_schema.fe_threads 
 WHERE thread_name LIKE '%main%' 
    OR thread_name LIKE '%GC%';
-```
-
-### Query threads by group name
-
-```sql
-SELECT thread_id, thread_name, group_name, thread_state 
-FROM information_schema.fe_threads 
-WHERE group_name = 'main';
 ```
 
 ### Count threads by daemon status
