@@ -24,7 +24,6 @@
 #include "common/object_pool.h"
 #include "exec/hash_joiner.h"
 #include "exec/join/join_hash_map.h"
-#include "exprs/agg/distinct.h"
 #include "exprs/expr_context.h"
 #include "gutil/casts.h"
 #include "runtime/descriptors.h"
