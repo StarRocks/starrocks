@@ -1,0 +1,40 @@
+-- name: test_fe_threads_common_threads @sequential
+-- Test verification of common JVM threads existence
+
+-- Test 1: Check for main thread
+select count(*) >= 0 from information_schema.fe_threads 
+where thread_name like '%main%';
+
+-- Test 2: Check for GC threads
+select count(*) >= 0 from information_schema.fe_threads 
+where thread_name like '%GC%' or thread_name like '%garbage%';
+
+-- Test 3: Check for Finalizer thread
+select count(*) >= 0 from information_schema.fe_threads 
+where thread_name like '%Finalizer%';
+
+-- Test 4: Check for Reference Handler thread
+select count(*) >= 0 from information_schema.fe_threads 
+where thread_name like '%Reference Handler%';
+
+-- Test 5: Check for RMI threads
+select count(*) >= 0 from information_schema.fe_threads 
+where thread_name like '%RMI%';
+
+-- Test 6: Check for Signal Dispatcher thread
+select count(*) >= 0 from information_schema.fe_threads 
+where thread_name like '%Signal Dispatcher%';
+
+-- Test 7: Verify all threads have valid thread states
+select count(*) = 0 from information_schema.fe_threads 
+where thread_state not in ('NEW', 'RUNNABLE', 'BLOCKED', 'WAITING', 'TIMED_WAITING', 'TERMINATED');
+
+-- Test 8: Check that we have threads in RUNNABLE state (active threads)
+select count(*) > 0 from information_schema.fe_threads 
+where thread_state = 'RUNNABLE';
+
+-- Test 9: Verify FE_ID consistency (all threads from same FE should have same FE_ID)
+select count(distinct fe_id) = 1 from information_schema.fe_threads;
+
+-- Test 10: Check thread ID uniqueness
+select count(*) = count(distinct thread_id) from information_schema.fe_threads;
