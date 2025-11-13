@@ -1567,4 +1567,46 @@ public class MvRewritePreprocessorTest extends MVTestBase {
                     Assertions.assertNull(wrapper.getMvPlanContext());
                 });
     }
+
+    @Test
+    public void testMaterializedViewWrapperCompareToEqualsConsistency() {
+        List<String> mvs = ImmutableList.of(
+                "create materialized view wrapper_test_mv17 distributed by random as select k1, v1 from t1",
+                "create materialized view wrapper_test_mv18 distributed by random as select k1, v2 from t1"
+        );
+
+        starRocksAssert.withMaterializedViews(mvs,
+                (obj) -> {
+                    MaterializedView mv1 = getMv(DB_NAME, "wrapper_test_mv17");
+                    MaterializedView mv2 = getMv(DB_NAME, "wrapper_test_mv18");
+
+                    // Test with same level - should maintain (compareTo==0) == equals() contract
+                    MaterializedViewWrapper wrapper1Level0 = MaterializedViewWrapper.create(mv1, 0);
+                    MaterializedViewWrapper wrapper2Level0 = MaterializedViewWrapper.create(mv2, 0);
+
+                    // Different MVs at same level
+                    int compareResult = wrapper1Level0.compareTo(wrapper2Level0);
+                    boolean equalsResult = wrapper1Level0.equals(wrapper2Level0);
+
+                    // Contract: (x.compareTo(y)==0) == (x.equals(y))
+                    // Since MVs are different, equals should be false and compareTo should be non-zero
+                    Assertions.assertFalse(equalsResult);
+                    Assertions.assertNotEquals(0, compareResult);
+
+                    // Same MV at same level
+                    MaterializedViewWrapper wrapper1Copy = MaterializedViewWrapper.create(mv1, 0);
+                    int sameMvCompare = wrapper1Level0.compareTo(wrapper1Copy);
+                    boolean sameMvEquals = wrapper1Level0.equals(wrapper1Copy);
+
+                    // Both should be true/zero
+                    Assertions.assertTrue(sameMvEquals);
+                    Assertions.assertEquals(0, sameMvCompare);
+
+                    // Verify ordering is deterministic and based on MV ID
+                    long id1 = mv1.getId();
+                    long id2 = mv2.getId();
+                    int expectedOrder = Long.compare(id1, id2);
+                    Assertions.assertEquals(expectedOrder, compareResult);
+                });
+    }
 }

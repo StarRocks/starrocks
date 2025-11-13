@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.function;
 
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
@@ -296,7 +297,8 @@ public class MetaFunctions {
         TableName tableName = TableName.fromString(name.getVarchar());
         Table table = inspectExternalTable(tableName);
         JsonArray array = new JsonArray();
-        collectRelatedMvsRecursively(table, array, 0);
+        Set<MvId> visited = Sets.newHashSet();
+        collectRelatedMvsRecursively(table, array, 0, visited);
 
         String json = array.toString();
         return ConstantOperator.createVarchar(json);
@@ -308,18 +310,22 @@ public class MetaFunctions {
      * @param array The JSON array to add results to
      * @param level The depth level in the MV hierarchy (0 for direct, 1 for nested, etc.)
      */
-    private static void collectRelatedMvsRecursively(Table table, JsonArray array, int level) {
+    private static void collectRelatedMvsRecursively(Table table, JsonArray array, int level, Set<MvId> visited) {
         Set<MvId> relatedMvs = table.getRelatedMaterializedViews();
-        for (MvId mv : SetUtils.emptyIfNull(relatedMvs)) {
+        for (MvId mvId : SetUtils.emptyIfNull(relatedMvs)) {
+            if (visited.contains(mvId)) {
+                continue;
+            }
+            visited.add(mvId);
             // Get the database for this MV using its dbId from mvId
-            long mvDbId = mv.getDbId();
+            long mvDbId = mvId.getDbId();
             Optional<Database> mayMvDb = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetDb(mvDbId);
             if (!mayMvDb.isPresent()) {
                 continue;
             }
 
             Optional<Table> mayMvTable = GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .mayGetTable(mvDbId, mv.getId());
+                    .mayGetTable(mvDbId, mvId.getId());
             if (!mayMvTable.isPresent()) {
                 continue;
             }
@@ -328,13 +334,13 @@ public class MetaFunctions {
 
             String mvName = mvTable.getName();
             JsonObject obj = new JsonObject();
-            obj.add("id", new JsonPrimitive(mv.getId()));
+            obj.add("id", new JsonPrimitive(mvId.getId()));
             obj.add("name", mvName != null ? new JsonPrimitive(mvName) : JsonNull.INSTANCE);
             obj.add("level", new JsonPrimitive(level));
 
             // Create nested related_mvs array
             JsonArray nestedMvs = new JsonArray();
-            collectRelatedMvsRecursively(mvTable, nestedMvs, level + 1);
+            collectRelatedMvsRecursively(mvTable, nestedMvs, level + 1,  visited);
             obj.add("related_mvs", nestedMvs);
             array.add(obj);
         }

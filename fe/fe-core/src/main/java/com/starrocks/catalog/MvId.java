@@ -28,7 +28,8 @@ public class MvId {
     @SerializedName(value = "id")
     private final long id;
 
-    private final Supplier<String> lazyName;
+    // ignore in gson serialization
+    private final transient Supplier<String> lazyName;
 
     public MvId(long dbId, long id) {
         this.dbId = dbId;

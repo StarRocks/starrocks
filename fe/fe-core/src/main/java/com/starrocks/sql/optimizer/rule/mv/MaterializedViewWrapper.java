@@ -75,11 +75,12 @@ public class MaterializedViewWrapper implements Comparable<MaterializedViewWrapp
 
     @Override
     public int compareTo(MaterializedViewWrapper o) {
-        int ans = Integer.compare(level, o.level);
-        if (ans != 0) {
-            return ans;
+        // First compare by level
+        int levelCompare = Integer.compare(level, o.level);
+        if (levelCompare != 0) {
+            return levelCompare;
         }
-        return Integer.compare(mv.hashCode(), o.mv.hashCode());
+        return Long.compare(mv.getId(), o.mv.getId());
     }
 
     @Override
