@@ -228,4 +228,9 @@ public class ArrowFlightSqlConnectContext extends ConnectContext {
         Coordinator coordinator = coordinatorFuture.getNow(null);
         return !(coordinator instanceof DefaultCoordinator);
     }
+
+    @Override
+    public String getCommandStr() {
+        return "ARROW_FLIGHT_SQL.Query";
+    }
 }
