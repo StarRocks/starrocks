@@ -929,8 +929,6 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     FAIL_POINT_TRIGGER_EXECUTE(fragment_prepare_sleep, { sleep(2); });
 
     RETURN_IF_ERROR(_query_ctx->fragment_mgr()->register_ctx(request.fragment_instance_id(), _fragment_ctx));
-    auto* runtime_state = _fragment_ctx->runtime_state();
-    runtime_state->set_fragment_prepared(true);
     _query_ctx->mark_prepared();
     prepare_success = true;
 
@@ -961,6 +959,9 @@ Status FragmentExecutor::execute(ExecEnv* exec_env) {
     DCHECK(_fragment_ctx->enable_resource_group());
     auto* executor = _wg->executors()->driver_executor();
     RETURN_IF_ERROR(_fragment_ctx->submit_active_drivers(executor));
+
+    auto* runtime_state = _fragment_ctx->runtime_state();
+    runtime_state->set_fragment_prepared(true);
 
     return Status::OK();
 }
