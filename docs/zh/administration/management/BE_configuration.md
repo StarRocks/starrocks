@@ -127,7 +127,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 - 默认值: 3600
 - 类型: Int
-- 単位: Seconds
+- 单位: Seconds
 - 是否可变: Yes
 - 描述: BRPC stub 缓存的过期时间，默认 60 minutes。
 - 引入版本: -
@@ -159,6 +159,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：BE 进程内存上限。可设为比例上限（如 "80%"）或物理上限（如 "100G"）。默认的硬限制为服务器内存大小的 90%，软限制为 80%。如果您希望在同一台服务器上同时部署 StarRocks 和其他内存密集型服务，则需要配置此参数。
 - 引入版本：-
 
+##### enable_jemalloc_memory_tracker
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: 否
+- 描述: 该项设置为 `true` 时，BE 会启动一个后台线程（`jemalloc_tracker_daemon`），该线程以每秒一次的频率轮询 Jemalloc 统计信息，并将 Jemalloc 的 "stats.metadata" 值更新到 GlobalEnv 的 Jemalloc 元数据 MemTracker 中。这可确保 Jemalloc 元数据的消耗被计入 StarRocks 进程的内存统计，防止低报 Jemalloc 内部使用的内存。该 Tracker 仅在非 macOS 构建上编译/启动（#ifndef __APPLE__），并以名为 "jemalloc_tracker_daemon" 的守护线程运行。仅在未使用 Jemalloc 或者 Jemalloc 跟踪被有意以不同方式管理时才禁用，否则请保持启用以维护准确的内存计量和分配保护。
+- 引入版本: v3.2.12
+
 ##### heartbeat_service_port
 
 - 默认值：9050
@@ -177,6 +186,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：心跳线程数。
 - 引入版本：-
 
+##### be_service_threads
+
+- 默认值: 64
+- 类型: Int
+- 单位: Threads
+- 是否可变: 否
+- 描述: BE Thrift 服务用于处理后端 RPC/执行请求的工作线程数。该值在创建 BackendService 时传递给 ThriftServer，用于控制可用的并发请求处理器数量；当所有工作线程都忙碌时，请求会排队。根据预期的并发 RPC 负载和可用的 CPU/内存调整：增大该值可以提高并发度，但也会增加每线程内存和上下文切换开销；减小则限制并行处理能力，可能增加请求延迟。
+- 引入版本: v3.2.0
+
 ##### compress_rowbatches
 
 - 默认值：true
@@ -185,6 +203,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 是否动态：否
 - 描述：BE 之间 RPC 通信是否压缩 RowBatch，用于查询层之间的数据传输。`true` 表示压缩，`false` 表示不压缩。
 - 引入版本：-
+
+##### rpc_compress_ratio_threshold
+
+- 默认值: 1.1
+- 类型: Double
+- 单位: -
+- 是否可变: 是
+- 描述: 在决定是否以压缩形式通过网络发送序列化的 row-batches 时使用的阈值（uncompressed_size / compressed_size）。当尝试压缩时（例如在 DataStreamSender、exchange sink、tablet sink 的索引通道、dictionary cache writer 中），StarRocks 会计算 compress_ratio = uncompressed_size / compressed_size；仅当 compress_ratio `>` rpc_compress_ratio_threshold 时才使用压缩后的负载。默认值 1.1 意味着压缩数据必须至少比未压缩小约 9.1% 才会被使用。将该值调低以偏好压缩（以更多 CPU 换取更小的带宽）；将其调高以避免压缩开销，除非压缩能带来更大的尺寸缩减。注意：此项适用于 RPC/shuffle 序列化，仅在启用 row-batch 压缩（compress_rowbatches）时生效。
+- 引入版本: v3.2.0
 
 ##### thrift_client_retry_interval_ms
 
@@ -551,6 +578,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 是否动态：否
 - 描述：Pipeline 执行引擎在线程池中执行 PREPARE Fragment 的队列长度。
 - 引入版本：-
+
+##### lake_tablet_ignore_invalid_delete_predicate
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 控制是否忽略 tablet rowset 元数据中可能由逻辑删除在列名重命名后引入到重复键（duplicate key）表中的无效 delete predicates 的布尔值。
+- 引入版本: v4.0
 
 ##### max_hdfs_file_handle
 
@@ -926,6 +962,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：汇报 Workgroup 的间隔。汇报所有 Workgroup 的最新版本。
 - 引入版本：-
 
+##### profile_report_interval
+
+- 默认值: 30
+- 类型: Int
+- 单位: Seconds
+- 是否可变: Yes
+- 描述: ProfileReportWorker 用于（1）决定何时上报 LOAD 查询的每个 fragment 的 profile 信息以及（2）在上报周期之间休眠的间隔（秒）。该 worker 使用 (profile_report_interval * 1000) ms 将当前时间与每个任务的 last_report_time 进行比较，以确定是否需要对非 pipeline 和 pipeline 的 load 任务重新上报 profile。在每次循环中，worker 会读取当前值（运行时可变）；如果配置值小于等于 0，worker 会强制将其设为 1 并发出警告。修改此值会影响下一次的上报判断和休眠时长。
+- 引入版本: v3.2.0
+
 ### 存储
 
 ##### drop_tablet_worker_count
@@ -937,6 +982,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：删除 Tablet 的线程数。
 - 引入版本：-
 
+##### delete_worker_count_high_priority
+
+- 默认值: 1
+- 类型: Int
+- 单位: Threads
+- 是否可变: No
+- 描述: 在 DeleteTaskWorkerPool 中被分配为高优先级删除线程的工作线程数。启动时 AgentServer 使用 total threads = delete_worker_count_normal_priority + delete_worker_count_high_priority 创建删除线程池；前 delete_worker_count_high_priority 个线程被标记为专门尝试弹出 TPriority::HIGH 任务（它们轮询高优先级删除任务，若无可用任务则睡眠/循环）。增加此值可以提高高优先级删除请求的并发性；减少它会降低专用容量并可能增加高优先级删除的延迟。更改需要重启进程才能生效。
+- 引入版本: v3.2.0
+
 ##### alter_tablet_worker_count
 
 - 默认值：3
@@ -945,6 +999,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 是否动态：是
 - 描述：进行 Schema Change 的线程数。自 2.5 版本起，该参数由静态变为动态。
 - 引入版本：-
+
+##### parallel_clone_task_per_path
+
+- 默认值: 8
+- 类型: Int
+- 单位: Threads
+- 是否可变: Yes
+- 描述: 在 BE 的每个存储路径上分配的并行 clone 工作线程数。BE 启动时，clone 线程池的最大线程数计算为 max(number_of_store_paths * parallel_clone_task_per_path, MIN_CLONE_TASK_THREADS_IN_POOL)。例如，若有 4 个存储路径且默认=8，则 clone 池最大 = 32。此设置直接控制 BE 处理的 CLONE 任务（tablet 副本拷贝）的并发度：增加它会提高并行 clone 吞吐量，但也会增加 CPU、磁盘和网络争用；减少它会限制同时进行的 clone 任务并可能限制 FE 调度的 clone 操作。该值应用于动态 clone 线程池，可通过 update-config 路径在运行时更改（会导致 agent_server 更新 clone 池的最大线程数）。
+- 引入版本: v3.2.0
 
 ##### storage_medium_migrate_count
 
@@ -1089,6 +1152,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 是否动态：是
 - 描述：单个 Schema Change 任务允许占用的最大内存。
 - 引入版本：-
+
+##### memory_ratio_for_sorting_schema_change
+
+- 默认值: 0.8
+- 类型: Double
+- 单位: - (unitless ratio)
+- 是否可变: Yes
+- 描述: 在排序型 schema-change 操作期间，用作 memtable 最大缓冲区大小的每线程 schema-change 内存限制的比例。该比例会与 memory_limitation_per_thread_for_schema_change（以 GB 配置并转换为字节）相乘以计算 max_buffer_size，且结果上限为 4GB。SchemaChangeWithSorting 和 SortedSchemaChange 在创建 MemTable/DeltaWriter 时使用此值。增大该比例允许更大的内存缓冲区（减少 flush/merge 次数），但会增加内存压力风险；减小该比例会导致更频繁的 flush，从而增加 I/O/merge 开销。
+- 引入版本: v3.2.0
 
 ##### update_cache_expire_sec
 
@@ -1597,6 +1669,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：在导入线程内存占用达到硬上限后，是否允许新的导入线程。`true` 表示允许新导入线程，`false` 表示拒绝新导入线程。
 - 引入版本：v3.3.2
 
+##### compaction_memory_limit_per_worker
+
+- 默认值: 2147483648
+- 类型: Int
+- 单位: Bytes
+- 是否可变: No
+- 描述: 每个 Compaction 线程允许的最大内存大小。
+- 引入版本: -
+
 ##### tablet_stat_cache_update_interval_second
 
 - 默认值：300
@@ -2028,6 +2109,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
   - `false`（默认）：在错误 URL 中保留原始主机名。
 - 引入版本：v4.0.1
 
+##### memory_high_level
+
+- 默认值: 75
+- 类型: Long
+- 单位: Percent
+- 是否可变: 是
+- 描述: 以进程内存上限的百分比表示的高水位内存阈值。当总内存消耗上升超过该百分比时，BE 开始逐步释放内存（目前通过驱逐 data cache 和 update cache）以缓解压力。监控器使用此值来计算 `memory_high = mem_limit * memory_high_level / 100`，并且如果消耗大于 memory_high，则在 GC advisor 的指导下执行受控驱逐；如果消耗超过 memory_urgent_level（一个单独的配置），则会进行更激进的即时回收。此值还用于在超过阈值时禁用某些高内存消耗的操作（例如 primary-key preload）。必须满足与 memory_urgent_level 的校验关系（memory_urgent_level `>` memory_high_level，memory_high_level `>=` 1，memory_urgent_level `<=` 100）。
+- 引入版本: v3.2.0
+
 ##### user_function_dir
 
 - 默认值：`${STARROCKS_HOME}/lib/udf`
@@ -2041,19 +2131,19 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 - 默认值: 15000
 - 类型: Int
-- 単位: Milliseconds
+- 单位: Milliseconds
 - 是否可变: Yes
 - 描述: 当上一次检查的 RPC 成功时，从副本向主副本检查其状态的时间间隔。
-- 引入版本: 3.5.1
+- 引入版本: v3.5.1
 
 ##### load_replica_status_check_interval_ms_on_failure
 
 - 默认值: 2000
 - 类型: Int
-- 単位: Milliseconds
+- 单位: Milliseconds
 - 是否可变: Yes
 - 描述: 当上一次检查的 RPC 失败时，从副本向主副本检查其状态的时间间隔。
-- 引入版本: 3.5.1
+- 引入版本: v3.5.1
 
 ##### enable_token_check
 

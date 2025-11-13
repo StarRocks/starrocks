@@ -162,6 +162,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: BE プロセスのメモリ上限。パーセンテージ ("80%") または物理的な制限 ("100G") として設定できます。デフォルトのハードリミットはサーバーのメモリサイズの 90% で、ソフトリミットは 80% です。同じサーバーで他のメモリ集約型サービスと一緒に StarRocks をデプロイしたい場合、このパラメータを設定する必要があります。
 - 導入バージョン: -
 
+##### abort_on_large_memory_allocation
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: N/A
+- 変更可能: Yes
+- 説明: 単一の割り当て要求が設定された large-allocation 閾値を超えた場合（g_large_memory_alloc_failure_threshold > 0 かつ 要求サイズ > 閾値）、プロセスがどのように応答するかを制御します。true の場合、こうした大きな割り当てが検出されると直ちに std::abort() を呼び出して（ハードクラッシュ）終了します。false の場合は割り当てがブロックされ、アロケータは失敗（nullptr または ENOMEM）を返すため、呼び出し元がエラーを処理できます。このチェックは TRY_CATCH_BAD_ALLOC パスでラップされていない割り当てに対してのみ有効です（mem hook は bad-alloc を捕捉している場合に別のフローを使用します）。予期しない巨大な割り当ての fail-fast デバッグ目的で有効にしてください。運用環境では、過大な割り当て試行で即時プロセス中断を望む場合を除き無効のままにしてください。
+- 導入バージョン: 3.4.3, 3.5.0, 4.0.0
+
 ##### heartbeat_service_port
 
 - デフォルト: 9050
@@ -268,6 +277,28 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 可変: いいえ
 - 説明: bRPC の最大ボディサイズ。
 - 導入バージョン: -
+
+### メタデータとクラスタ管理
+
+##### cluster_id
+
+- デフォルト: -1
+- タイプ: Int
+- 単位: N/A
+- 変更可能: No
+- 説明: この StarRocks backend のグローバルクラスタ識別子。起動時に StorageEngine は config::cluster_id を実効クラスタ ID として読み取り、すべての data root パスが同じクラスタ ID を含んでいることを検証します（StorageEngine::_check_all_root_path_cluster_id を参照）。値が -1 の場合は「未設定」を意味し、エンジンは既存のデータディレクトリまたはマスターのハートビートから実効 ID を導出することがあります。非負の ID が設定されている場合、設定された ID とデータディレクトリに格納されている ID の不一致は起動時の検証に失敗を引き起こします（Status::Corruption）。一部の root に ID が欠けており、エンジンが ID の書き込みを許可されている場合（options.need_write_cluster_id）、それらの root に実効 ID を永続化します。この設定は不変であるため、変更するには異なる設定でプロセスを再起動する必要があります。
+- 導入バージョン: 3.2.0
+
+##### update_schema_worker_count
+
+- デフォルト: 3
+- タイプ: Int
+- 単位: Threads
+- 変更可能: No
+- 説明: BE の "update_schema" 動的 ThreadPool で TTaskType::UPDATE_SCHEMA タスクを処理するワーカースレッドの最大数を設定します。ThreadPool は起動時に agent_server 内で作成され、最小 0 スレッド（アイドル時にゼロまでスケールダウン可能）、最大はこの設定値と等しくなります。プールはデフォルトのアイドルタイムアウトと事実上無制限のキューを使用します。より多くの同時スキーマ更新タスクを許可するにはこの値を増やします（CPU とメモリ使用量が増加します）。並列スキーマ操作を制限したい場合は値を下げます。このオプションはランタイムで変更できないため、変更には BE の再起動が必要です。
+- 導入バージョン: 3.2.3
+
+### ユーザー、ロール、および権限
 
 ### クエリエンジン
 
@@ -552,6 +583,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 可変: いいえ
 - 説明: Pipeline 実行エンジンの PREPARE Fragment スレッドプールの最大キュー長。
 - 導入バージョン: -
+
+##### lake_tablet_ignore_invalid_delete_predicate
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: Yes
+- 説明: カラム名が変更された後に論理削除によって重複キーのテーブルの tablet rowset メタデータに導入される可能性のある無効な delete predicate を無視するかどうかを制御するブール値。
+- 導入バージョン: v4.0
 
 ##### max_hdfs_file_handle
 
@@ -899,6 +939,8 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: Stream Load ジョブの HTTP リクエストとレスポンスをログに記録するかどうかを指定します。
 - 導入バージョン: v2.5.17, v3.0.9, v3.1.6, v3.2.1
 
+### ロードとアンロード
+
 ### 統計レポート
 
 ##### report_task_interval_seconds
@@ -938,6 +980,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 導入バージョン: -
 
 ### ストレージ
+
+##### create_tablet_worker_count
+
+- デフォルト: 3
+- タイプ: Int
+- 単位: Threads
+- 変更可能: Yes
+- 説明: FE により送信される TTaskType::CREATE（create-tablet）タスクを処理する AgentServer のスレッドプール内の最大ワーカースレッド数を設定します。BE 起動時にこの値はスレッドプールの max として使用されます（プールは min threads = 1、max queue size = unlimited で作成されます）。ランタイムで変更すると ExecEnv::agent_server()->get_thread_pool(TTaskType::CREATE)->update_max_threads(...) が呼ばれます。バルクロードやパーティション作成時など、同時の tablet 作成スループットを上げたい場合に増やしてください。減らすと同時作成操作が制限されます。値を上げると CPU、メモリ、I/O の並列性が増し競合が発生する可能性があります。スレッドプールは少なくとも 1 スレッドを保証するため、1 未満の値は実質的な効果がありません。
+- 導入バージョン: 3.2.0
 
 ##### drop_tablet_worker_count
 
@@ -1092,6 +1143,24 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: 異常なレプリケーションによって残された期限切れのスナップショットをシステムがクリアする時間間隔。
 - 導入バージョン: v3.3.5
 
+##### lz4_acceleration
+
+- デフォルト: 1
+- タイプ: Int
+- 単位: N/A
+- 変更可能: はい
+- 説明: 組み込みの LZ4 圧縮器で使用される LZ4 の "acceleration" パラメータを制御します（LZ4_compress_fast_continue に渡されます）。値を大きくすると圧縮率を犠牲にして圧縮速度を優先し、値を小さく（1）すると圧縮は良くなりますが遅くなります。有効範囲: MIN=1, MAX=65537。この設定は BlockCompression にあるすべての LZ4 ベースのコーデック（例: LZ4 および Hadoop-LZ4）に影響し、圧縮の実行方法のみを変更します — LZ4 フォーマットや復号の互換性は変わりません。出力サイズが許容される CPU バウンドや低レイテンシのワークロードでは上げてチューニングしてください（例: 4、8、...）；ストレージや I/O に敏感なワークロードでは 1 のままにしてください。スループットとサイズのトレードオフはデータ依存性が高いため、変更前に代表的なデータでテストしてください。
+- 導入バージョン: 3.4.1, 3.5.0, 4.0.0
+
+##### lz4_expected_compression_ratio
+
+- デフォルト: 2.1
+- タイプ: double
+- 単位: Dimensionless (compression ratio)
+- 変更可能: はい
+- 説明: シリアライゼーション圧縮戦略が観測された LZ4 圧縮を「良い」と判断するために使用する閾値です。compress_strategy.cpp では、この値が観測された compress_ratio を割る形で lz4_expected_compression_speed_mbps と合わせて報酬メトリクスを計算します；結合した報酬が > 1.0 であれば戦略は正のフィードバックを記録します。この値を上げると期待される圧縮率が高くなり（条件を満たしにくく）、下げると観測された圧縮が満足と見なされやすくなります。典型的なデータの圧縮しやすさに合わせて調整してください。 有効範囲: MIN=1, MAX=65537。
+- 導入バージョン: 3.4.1, 3.5.0, 4.0.0
+
 ##### memory_limitation_per_thread_for_schema_change
 
 - デフォルト: 2
@@ -1148,6 +1217,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
   - ストレージ媒体が SSD の場合、ディレクトリの末尾に `,medium:ssd` を追加します。
   - ストレージ媒体が HDD の場合、ディレクトリの末尾に `,medium:hdd` を追加します。
 - 導入バージョン: -
+
+##### enable_transparent_data_encryption
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: N/A
+- 変更可能: No
+- 説明: 有効にすると、StarRocks は新規に書き込まれるストレージオブジェクト（segment files、delete/update files、rowset segments、lake SSTs、persistent index files など）に対してオンディスクの暗号化アーティファクトを作成します。Writers（RowsetWriter/SegmentWriter、lake UpdateManager/LakePersistentIndex および関連するコードパス）は KeyCache から暗号化情報を要求し、書き込み可能なファイルに encryption_info を付与し、rowset / segment / sstable メタデータ（segment_encryption_metas、delete/update encryption metadata）に encryption_meta を永続化します。Frontend と Backend/CN の暗号化フラグは一致している必要があり、不一致の場合は BE がハートビート時に中止します（LOG(FATAL)）。このフラグはランタイムで変更できないため、デプロイ前に有効化し、鍵管理（KEK）および KeyCache がクラスタ全体で適切に構成・同期されていることを確認してください。
+- 導入バージョン: 3.3.1, 3.4.0, 3.5.0, 4.0.0
 
 ##### max_percentage_of_error_disk
 
@@ -1229,6 +1307,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 可変: はい
 - 説明: ゴミファイルをクリーンアップする時間間隔。デフォルト値は v2.5.17、v3.0.9、v3.1.6 以降、259,200 から 86,400 に変更されました。
 - 導入バージョン: -
+
+##### data_page_size
+
+- デフォルト: 65536
+- タイプ: Int
+- 単位: Bytes
+- 変更可能: No
+- 説明: 列データおよびインデックスページを構築する際に使用されるターゲットの非圧縮ページサイズ（バイト）。この値は ColumnWriterOptions.data_page_size と IndexedColumnWriterOptions.index_page_size にコピーされ、ページビルダ（例: BinaryPlainPageBuilder::is_page_full およびバッファ予約ロジック）によってページを完了するタイミングや確保するメモリ量の判断に参照されます。値が 0 の場合、ビルダ内のページサイズ制限は無効化されます。この値を変更するとページ数、メタデータのオーバーヘッド、メモリ予約、および I/O/圧縮のトレードオフに影響します（ページを小さくするとページ数とメタデータが増え、ページを大きくするとページ数は減り圧縮効率が向上する可能性があるがメモリのスパイクが大きくなる）。変更はランタイムで反映されないため、完全に有効にするにはプロセスの再起動と再作成された rowset が必要です。
+- 導入バージョン: 3.2.4
 
 ##### base_compaction_check_interval_seconds
 
@@ -1802,11 +1889,11 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 ##### loop_count_wait_fragments_finish
 
 - デフォルト: 2
-- タイプ: Int
+- 型: Int
 - 単位: -
 - 変更可能: Yes
 - 説明: BE/CN プロセスが終了する際に待機するループ回数。各ループは固定間隔の 10 秒です。ループ待機を無効にするには `0` に設定できます。v3.4 以降、この項目は変更可能になり、デフォルト値は `0` から `2` に変更されました。
-- 導入バージョン: v2.5
+- 導入: v2.5
 
 ##### graceful_exit_wait_for_frontend_heartbeat
 
@@ -2047,6 +2134,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
   - `true`: ホスト名をIPアドレスに変換します。
   - `false` (デフォルト): エラーURLに元のホスト名を保持します。
 - 導入バージョン: v4.0.1
+
+##### upload_buffer_size
+
+- デフォルト: 4194304
+- タイプ: Int
+- 単位: Bytes
+- 変更可能: Yes
+- 説明: スナップショットファイルをリモートストレージ（broker や直接 FileSystem）へアップロードする際のファイルコピー操作で使用するバッファサイズ（バイト単位）。アップロード経路（snapshot_loader.cpp）では、この値が各アップロードストリームの読み書きチャンクサイズとして fs::copy に渡されます。デフォルトは 4 MiB です。高レイテンシや高帯域のリンクではこの値を増やすことでスループットが向上することがありますが、同時アップロードごとのメモリ使用量が増加します。値を小さくするとストリームごとのメモリは減少しますが転送効率が落ちる可能性があります。upload_worker_count や利用可能な全体メモリと合わせて調整してください。
+- 導入バージョン: 3.2.13
 
 ##### user_function_dir
 
