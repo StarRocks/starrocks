@@ -125,10 +125,19 @@ public class UnionToValuesRule extends TransformationRule {
                 // 1th child's original output only contain one element because of the same name 'test1',
                 // use new ColumnRefOperator to avoid the conflict.
                 final ColumnRefFactory columnRefFactory = context.getColumnRefFactory();
-                final List<ColumnRefOperator> newColRefs = unionOp.getChildOutputColumns().get(0)
-                        .stream()
-                        .map(c -> columnRefFactory.create(c, c.getType(), c.isNullable()))
-                        .collect(Collectors.toUnmodifiableList());
+                List<List<ColumnRefOperator>> childOutputs = unionOp.getChildOutputColumns();
+                int columnCount = childOutputs.get(0).size();
+                List<ColumnRefOperator> newColRefs = Lists.newArrayList();
+                for (int i = 0; i < columnCount; i++) {
+                    ColumnRefOperator c = childOutputs.get(0).get(i);
+                    boolean nullable = false;
+
+                    // merge nullable property for each rows
+                    for (List<ColumnRefOperator> childOutput : childOutputs) {
+                        nullable = nullable || childOutput.get(i).isNullable();
+                    }
+                    newColRefs.add(columnRefFactory.create(c, c.getType(), nullable));
+                }
                 final LogicalValuesOperator newValuesOperator = new LogicalValuesOperator.Builder()
                         .setColumnRefSet(newColRefs)
                         .setRows(newRows)
