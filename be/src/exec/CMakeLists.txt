@@ -208,8 +208,6 @@ set(EXEC_FILES
     pipeline/pipeline_builder.cpp
     pipeline/project_operator.cpp
     pipeline/dict_decode_operator.cpp
-    pipeline/result_sink_operator.cpp
-    pipeline/olap_table_sink_operator.cpp
     pipeline/scan/balanced_chunk_buffer.cpp
     pipeline/scan/chunk_source.cpp
     pipeline/scan/morsel.cpp
@@ -229,6 +227,8 @@ set(EXEC_FILES
     pipeline/scan/schema_scan_operator.cpp
     pipeline/scan/schema_scan_context.cpp
     pipeline/sink/connector_sink_operator.cpp
+    pipeline/sink/olap_table_sink_operator.cpp
+    pipeline/sink/result_sink_operator.cpp
     pipeline/sink/sink_io_buffer.cpp
     pipeline/sink/table_function_table_sink_operator.cpp
     pipeline/sink/blackhole_table_sink_operator.cpp
