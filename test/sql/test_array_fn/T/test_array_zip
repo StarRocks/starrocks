@@ -1,0 +1,9 @@
+-- name: test_array_zip @mac
+SELECT zip([1, 2], ['1b', '2b']) AS result;
+SELECT zip([1, 2], ['1b', null, '3b']) AS result;
+SELECT zip([1, 2, 3], ['a', 'b', 'c'], [10, 20, 30]) AS result;
+SELECT zip([], []) AS result;
+SELECT zip([1, 2, 3]) AS result;
+SELECT zip(null, [1, 2]) AS result;
+SELECT zip([1, null, 3], ['a', 'b', null]) AS result;
+SELECT * FROM (SELECT 1 AS id) WHERE id = 1 AND zip([1], ['a']) IS NOT NULL;
