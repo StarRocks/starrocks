@@ -36,6 +36,8 @@ static std::string delvec_cache_key(int64_t tablet_id, const DelvecPagePB& page)
     DelvecCacheKeyPB cache_key_pb;
     cache_key_pb.set_id(tablet_id);
     cache_key_pb.mutable_delvec_page()->CopyFrom(page);
+    // Do not include crc32c_gen_version in cache key
+    cache_key_pb.mutable_delvec_page()->clear_crc32c_gen_version();
     return cache_key_pb.SerializeAsString();
 }
 
@@ -463,6 +465,7 @@ Status MetaFileBuilder::_finalize_delvec(int64_t version, int64_t txn_id) {
             each_delvec.second.set_offset(iter->second.offset());
             each_delvec.second.set_size(iter->second.size());
             each_delvec.second.set_crc32c(iter->second.crc32c());
+            each_delvec.second.set_crc32c_gen_version(version);
             // record from cache key to segment id, so we can fill up cache later
             _cache_key_to_segment_id[delvec_cache_key(_tablet_meta->id(), each_delvec.second)] = iter->first;
             _delvecs.erase(iter);
@@ -472,6 +475,7 @@ Status MetaFileBuilder::_finalize_delvec(int64_t version, int64_t txn_id) {
     // 2. insert new delvec to meta
     for (auto&& each_delvec : _delvecs) {
         each_delvec.second.set_version(version);
+        each_delvec.second.set_crc32c_gen_version(version);
         (*_tablet_meta->mutable_delvec_meta()->mutable_delvecs())[each_delvec.first] = each_delvec.second;
         // record from cache key to segment id, so we can fill up cache later
         _cache_key_to_segment_id[delvec_cache_key(_tablet_meta->id(), each_delvec.second)] = each_delvec.first;
@@ -583,6 +587,75 @@ void MetaFileBuilder::finalize_sstable_meta(const PersistentIndexSstableMetaPB& 
     _tablet_meta->mutable_sstable_meta()->CopyFrom(sstable_meta);
 }
 
+<<<<<<< HEAD
+=======
+// get delvec by DelvecPagePB
+Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, const DelvecPagePB& delvec_page,
+                   bool fill_cache, const LakeIOOptions& lake_io_opts, DelVector* delvec) {
+    VLOG(2) << fmt::format("get_del_vec {} tabletid {}", delvec_page.ShortDebugString(), metadata.id());
+    std::string buf;
+    raw::stl_string_resize_uninitialized(&buf, delvec_page.size());
+    // find in cache
+    std::string cache_key = delvec_cache_key(metadata.id(), delvec_page);
+    auto cached_delvec = tablet_mgr->metacache()->lookup_delvec(cache_key);
+    if (cached_delvec != nullptr) {
+        delvec->copy_from(*cached_delvec);
+        return Status::OK();
+    }
+
+    // lookup delvec file name and then read it
+    auto iter = metadata.delvec_meta().version_to_file().find(delvec_page.version());
+    if (iter == metadata.delvec_meta().version_to_file().end()) {
+        LOG(ERROR) << "Can't find delvec file name for tablet: " << metadata.id()
+                   << ", version: " << delvec_page.version();
+        return Status::InternalError("Can't find delvec file name");
+    }
+    const auto& delvec_name = iter->second.name();
+    RandomAccessFileOptions opts{.skip_fill_local_cache = !lake_io_opts.fill_data_cache};
+    std::unique_ptr<RandomAccessFile> rf;
+    if (lake_io_opts.fs && lake_io_opts.location_provider) {
+        ASSIGN_OR_RETURN(rf,
+                         lake_io_opts.fs->new_random_access_file(
+                                 opts, lake_io_opts.location_provider->delvec_location(metadata.id(), delvec_name)));
+    } else {
+        ASSIGN_OR_RETURN(rf, fs::new_random_access_file(opts, tablet_mgr->delvec_location(metadata.id(), delvec_name)));
+    }
+    RETURN_IF_ERROR(rf->read_at_fully(delvec_page.offset(), buf.data(), delvec_page.size()));
+    if (delvec_page.has_crc32c() && delvec_page.crc32c_gen_version() == delvec_page.version()) {
+        // check crc32c
+        uint32_t crc32c = crc32c::Value(buf.data(), delvec_page.size());
+        if (crc32c != crc32c::Unmask(delvec_page.crc32c())) {
+            // NOTICE : In some ABA upgrade/downgrade scenarios, misjudgments may occur.
+            // For example, version A includes the code for generating and verifying the CRC32 of delete vectors,
+            // while version B does not yet support it.
+            // Consider a situation where a delete vector and its corresponding CRC32 are correctly generated in version A.
+            // After downgrading to version B, the delete vector is updated, but since version B does not support
+            // CRC32-related logic, the CRC32 is not updated. Later, when upgrading back to version A,
+            // the CRC32 verification fails.
+            LOG(ERROR) << fmt::format(
+                    "delvec crc32c mismatch, tabletid {}, delvecfile {}, offset {}, size {}, expect crc32c {}, actual "
+                    "crc32c {}",
+                    metadata.id(), delvec_name, delvec_page.offset(), delvec_page.size(),
+                    crc32c::Unmask(delvec_page.crc32c()), crc32c);
+            if (config::enable_strict_delvec_crc_check) {
+                return Status::Corruption(fmt::format("delvec crc32c mismatch. expect crc32c {}, actual {}",
+                                                      crc32c::Unmask(delvec_page.crc32c()), crc32c));
+            }
+        }
+    }
+    // parse delvec
+    RETURN_IF_ERROR(delvec->load(delvec_page.version(), buf.data(), delvec_page.size()));
+    // put in cache
+    if (fill_cache) {
+        auto delvec_cache_ptr = std::make_shared<DelVector>();
+        delvec_cache_ptr->copy_from(*delvec);
+        tablet_mgr->metacache()->cache_delvec(cache_key, delvec_cache_ptr);
+    }
+    TRACE("end load delvec");
+    return Status::OK();
+}
+
+>>>>>>> 569ab61330 ([BugFix] fix delvec crc32 upgrade compatibility (#65442))
 Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, uint32_t segment_id, bool fill_cache,
                    const LakeIOOptions& lake_io_opts, DelVector* delvec) {
     // find delvec by segment id
