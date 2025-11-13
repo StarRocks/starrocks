@@ -177,5 +177,12 @@ public class SqlBlackList {
 
     // ids used in sql blacklist
     private final AtomicLong ids = new AtomicLong();
+
+    protected void cleanup() {
+        try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
+            sqlBlackListMap.clear();
+            ids.set(0);
+        }
+    }
 }
 

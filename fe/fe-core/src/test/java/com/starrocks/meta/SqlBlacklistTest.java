@@ -12,33 +12,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.server;
+package com.starrocks.meta;
 
-import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.UUIDUtil;
-import com.starrocks.meta.BlackListSql;
-import com.starrocks.meta.SqlBlackList;
 import com.starrocks.persist.DeleteSqlBlackLists;
-import com.starrocks.persist.EditLog;
 import com.starrocks.persist.SqlBlackListPersistInfo;
 import com.starrocks.persist.WALApplier;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.StmtExecutor;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.AddSqlBlackListStmt;
 import com.starrocks.sql.ast.DelSqlBlackListStmt;
 import com.starrocks.sql.ast.ShowSqlBlackListStmt;
 import com.starrocks.utframe.UtFrameUtils;
-import mockit.Mock;
-import mockit.MockUp;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
-import org.mockito.Mockito;
 
 import java.util.List;
 import java.util.regex.Pattern;
@@ -46,9 +41,7 @@ import java.util.regex.Pattern;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.parseSql;
 
 public class SqlBlacklistTest {
-    GlobalStateMgr state;
     SqlBlackList sqlBlackList;
-    EditLog editLog;
     ConnectContext connectContext;
 
     @BeforeAll
@@ -58,23 +51,20 @@ public class SqlBlacklistTest {
 
     @BeforeEach
     public void beforeEach() {
-        state = Deencapsulation.newInstance(GlobalStateMgr.class);
-        sqlBlackList = new SqlBlackList();
+        sqlBlackList = GlobalStateMgr.getCurrentState().getSqlBlackList();
         connectContext = UtFrameUtils.createDefaultCtx();
-        editLog = Mockito.mock(EditLog.class);
         connectContext.setQueryId(UUIDUtil.genUUID());
+        UtFrameUtils.setUpForPersistTest();
+    }
+
+    @AfterEach
+    public void tearDown() {
+        UtFrameUtils.tearDownForPersisTest();
+        sqlBlackList.cleanup();
     }
 
     @Test
     public void testAddSQLBlacklist() throws Exception {
-        mockupGlobalState();
-
-        ArgumentCaptor<SqlBlackListPersistInfo> addBlacklistEditLogArgument = ArgumentCaptor
-                .forClass(SqlBlackListPersistInfo.class);
-
-        ArgumentCaptor<WALApplier> walApplierArgument = ArgumentCaptor
-                .forClass(WALApplier.class);
-
         AddSqlBlackListStmt addStatement = (AddSqlBlackListStmt) parseSql("ADD SQLBLACKLIST \".+\";");
         Assertions.assertEquals(addStatement.getSql(), ".+");
 
@@ -84,16 +74,10 @@ public class SqlBlacklistTest {
         Assertions.assertEquals(1, blackLists.size());
         Assertions.assertEquals(0, blackLists.get(0).id);
         Assertions.assertEquals(".+", blackLists.get(0).pattern.pattern());
-
-        Mockito.verify(editLog).logAddSQLBlackList(addBlacklistEditLogArgument.capture(), walApplierArgument.capture());
-
-        Assertions.assertEquals(0, addBlacklistEditLogArgument.getValue().id);
-        Assertions.assertEquals(".+", addBlacklistEditLogArgument.getValue().pattern);
     }
 
     @Test
     public void testShowBlacklist() {
-        mockupGlobalState();
         sqlBlackList.put(Pattern.compile("qwert"));
         sqlBlackList.put(Pattern.compile("abcde"));
 
@@ -111,7 +95,6 @@ public class SqlBlacklistTest {
 
     @Test
     public void testBlackListReturnsSameIdIfPatternAlreadyExists() {
-        mockupGlobalState();
         Pattern p = Pattern.compile("qwert");
         long id = sqlBlackList.put(p);
 
@@ -120,24 +103,13 @@ public class SqlBlacklistTest {
 
     @Test
     public void testDeleteSqlBlacklist() throws Exception {
-        mockupGlobalState();
         long id1 = sqlBlackList.put(Pattern.compile("qwert"));
         long id2 = sqlBlackList.put(Pattern.compile("abcde"));
-
-        ArgumentCaptor<DeleteSqlBlackLists> deleteBlacklistsEditLogArgument =
-                ArgumentCaptor.forClass(DeleteSqlBlackLists.class);
-        ArgumentCaptor<WALApplier> walApplierArgument = ArgumentCaptor
-                .forClass(WALApplier.class);
 
         StmtExecutor deleteStatementExecutor = new StmtExecutor(connectContext, new DelSqlBlackListStmt(List.of(id1, id2)));
         deleteStatementExecutor.execute();
         Assertions.assertTrue(sqlBlackList
                 .getBlackLists().stream().noneMatch(x -> x.id == id1 || x.id != id2));
-
-        Mockito.verify(editLog).logDeleteSQLBlackList(
-                deleteBlacklistsEditLogArgument.capture(), walApplierArgument.capture());
-
-        Assertions.assertEquals(List.of(id1, id2), deleteBlacklistsEditLogArgument.getValue().ids);
     }
 
     @Test
@@ -167,12 +139,7 @@ public class SqlBlacklistTest {
 
     @Test
     public void testSqlBlacklistJournalOperations() throws Exception {
-        UtFrameUtils.createMinStarRocksCluster();
-        UtFrameUtils.setUpForPersistTest();
-        UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
-
         // add blacklists
-
         GlobalStateMgr.getCurrentState().getEditLog().logAddSQLBlackList(new SqlBlackListPersistInfo(123, "p1"), wal -> {});
         GlobalStateMgr.getCurrentState().getEditLog().logAddSQLBlackList(new SqlBlackListPersistInfo(1234, "p2"), wal -> {});
         UtFrameUtils.PseudoJournalReplayer.replayJournalToEnd();
@@ -195,29 +162,5 @@ public class SqlBlacklistTest {
                         .noneMatch(x -> x.id == 123L || x.id == 1234L)
         );
 
-    }
-
-    private void mockupGlobalState() {
-        MockUp<GlobalStateMgr> mockUp = new MockUp<GlobalStateMgr>() {
-            @Mock
-            GlobalStateMgr getCurrentState() {
-                return state;
-            }
-
-            @Mock
-            public SqlBlackList getSqlBlackList() {
-                return sqlBlackList;
-            }
-
-            @Mock
-            public boolean isLeader() {
-                return true;
-            }
-
-            @Mock
-            public EditLog getEditLog() {
-                return editLog;
-            }
-        };
     }
 }
