@@ -720,6 +720,129 @@ public class MvRewritePreprocessor {
                 candidateMvNames);
     }
 
+<<<<<<< HEAD
+=======
+    private void prepareMV(Tracers tracers, Set<Table> queryTables, MaterializedViewWrapper mvWithPlanContext,
+                           MvUpdateInfo mvUpdateInfo) {
+        MaterializedView mv = mvWithPlanContext.getMV();
+        MvPlanContext mvPlanContext = mvWithPlanContext.getMvPlanContext();
+        PCellSortedSet partitionNamesToRefresh = mvUpdateInfo.getMVToRefreshPCells();
+        if (!checkMvPartitionNamesToRefresh(connectContext, mv, partitionNamesToRefresh, mvPlanContext)) {
+            return;
+        }
+        if (partitionNamesToRefresh.isEmpty()) {
+            logMVPrepare(tracers, connectContext, mv, "MV {} has no partitions to refresh", mv.getName());
+        } else {
+            logMVPrepare(tracers, mv, "MV' partitions to refresh(size: {}): {}", partitionNamesToRefresh.size(),
+                    partitionNamesToRefresh);
+        }
+
+        MaterializationContext materializationContext = buildMaterializationContext(context, mv, mvPlanContext,
+                mvUpdateInfo, queryTables, mvWithPlanContext.getLevel());
+        if (materializationContext == null) {
+            logMVPrepare(connectContext, "Prepare MV {} failed to build materialization context", mv.getName());
+            return;
+        }
+        // add valid candidate mv to query materialization context, needs to synchronize queryMaterializationContext
+        // to avoid race condition when multiple threads are adding valid candidate mvs to query materialization context
+        synchronized (queryMaterializationContext) {
+            queryMaterializationContext.addValidCandidateMV(materializationContext);
+        }
+        logMVPrepare(tracers, connectContext, mv, "Prepare MV {} success", mv.getName());
+    }
+
+    /**
+     * MV Preprocessing timeout is calculated based on the number of MVs to ensure mv preprocessor does not take too long.
+     * @param mvCount: the number of MVs to process
+     * @return: timeout in milliseconds for each MV preparation
+     */
+    private long getPrepareTimeoutMsPerMV(int mvCount) {
+        long defaultTimeout = connectContext.getSessionVariable().getOptimizerExecuteTimeout() / 2;
+        if (mvCount == 0) {
+            return defaultTimeout;
+        }
+        // Ensure at least 1 second per MV, but not more than the total timeout
+        return Math.max(1000, defaultTimeout / mvCount);
+    }
+
+    /**
+     * Process MVs with individual timeouts to allow continuation even if some timeout.
+     * Each MV gets a timeout of total_timeout / number_of_mvs to ensure fair distribution.
+     * 
+     * @param tracers Tracers for logging
+     * @param queryTables Query tables
+     * @param mvInfos List of MV info pairs to process
+     * @param exec Executor for async processing
+     */
+    private void processMVsWithIndividualTimeouts(Tracers tracers, Set<Table> queryTables,
+                                                 List<Pair<MaterializedViewWrapper, MvUpdateInfo>> mvInfos,
+                                                 Executor exec) {
+        if (mvInfos.isEmpty()) {
+            return;
+        }
+        long individualTimeoutMs = getPrepareTimeoutMsPerMV(mvInfos.size());
+        logMVPrepare(connectContext, "Processing {} MVs with individual timeout of {} ms each", mvInfos.size(),
+                individualTimeoutMs);
+        
+        // Use thread-safe collections for tracking results from async operations
+        List<CompletableFuture<Void>> futures = Lists.newArrayListWithExpectedSize(mvInfos.size());
+        Set<String> timeoutMvNames = ConcurrentHashMap.newKeySet();
+        Set<String> failedMvNames = ConcurrentHashMap.newKeySet();
+        
+        // Create futures for each MV - don't handle exceptions here, handle them after get()
+        for (Pair<MaterializedViewWrapper, MvUpdateInfo> mvInfo : mvInfos) {
+            CompletableFuture<Void> future = CompletableFuture.supplyAsync(
+                    () -> {
+                        prepareMV(tracers, queryTables, mvInfo.first, mvInfo.second);
+                        return null;
+                    }, exec);
+            
+            futures.add(future);
+        }
+        
+        // Wait for each future with individual timeout and handle results
+        for (int i = 0; i < futures.size(); i++) {
+            CompletableFuture<Void> future = futures.get(i);
+            MaterializedView mv = mvInfos.get(i).first.getMV();
+            String mvName = mv.getName();
+            
+            try {
+                future.get(individualTimeoutMs, TimeUnit.MILLISECONDS);
+                // Success - no action needed
+            } catch (TimeoutException e) {
+                LOG.warn("MV {} preparation timeout after {} ms", mvName, individualTimeoutMs);
+                timeoutMvNames.add(mvName);
+                logMVPrepare(connectContext, "MV {} preparation timed out after {} ms", mvName, individualTimeoutMs);
+                // Cancel the future to stop processing
+                future.cancel(true);
+            } catch (InterruptedException e) {
+                LOG.warn("MV {} preparation interrupted", mvName);
+                Thread.currentThread().interrupt();
+                throw new RuntimeException("MV preparation interrupted", e);
+            } catch (ExecutionException e) {
+                // Unwrap the actual cause from ExecutionException
+                Throwable cause = e.getCause() != null ? e.getCause() : e;
+                LOG.warn("MV {} preparation failed with exception", mvName, cause);
+                logMVPrepare(connectContext, "MV {} preparation failed: {}", mvName, DebugUtil.getStackTrace(cause));
+                failedMvNames.add(mvName);
+            } catch (Exception e) {
+                // Catch any other unexpected exceptions
+                LOG.warn("MV {} preparation failed with unexpected exception", mvName, e);
+                logMVPrepare(connectContext, "MV {} preparation failed: {}", mvName, DebugUtil.getStackTrace(e));
+                failedMvNames.add(mvName);
+            }
+        }
+        
+        // Log summary
+        int successCount = mvInfos.size() - timeoutMvNames.size() - failedMvNames.size();
+        logMVPrepare(connectContext, "MV preparation summary: {} successful, {} timeout, {} failed out of {} total. " +
+                        "Timeout MVs: {}, Failed MVs: {}",
+                successCount, timeoutMvNames.size(), failedMvNames.size(), mvInfos.size(), 
+                timeoutMvNames.isEmpty() ? "none" : timeoutMvNames,
+                failedMvNames.isEmpty() ? "none" : failedMvNames);
+    }
+
+>>>>>>> c1f5917b44 ([UT] [BugFix] Fix a mv preparation bug found by unstable uts (#65432))
     /**
      * Get mv's partition names to refresh for partitioned MV.
      * @param mv:  input materialized view
