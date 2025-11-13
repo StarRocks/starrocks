@@ -6,7 +6,7 @@ select count(*) > 0 from information_schema.fe_threads;
 
 -- Test 2: Verify all columns exist and have valid data
 select 
-    fe_id is not null,
+    fe_address is not null,
     thread_id > 0,
     thread_name is not null,
     thread_state is not null,
@@ -30,8 +30,8 @@ select distinct thread_state
 from information_schema.fe_threads 
 order by thread_state;
 
--- Test 7: Verify FE_ID format (should be host:port)
-select fe_id like '%:%' from information_schema.fe_threads limit 1;
+-- Test 7: Verify fe_address format (should be host:port)
+select fe_address like '%:%' from information_schema.fe_threads limit 1;
 
 -- Test 8: Check for common JVM thread names
 select count(*) > 0 from information_schema.fe_threads 

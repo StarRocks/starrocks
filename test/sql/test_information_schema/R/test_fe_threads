@@ -4,7 +4,7 @@ select count(*) > 0 from information_schema.fe_threads;
 1
 -- !result
 select 
-    fe_id is not null,
+    fe_address is not null,
     thread_id > 0,
     thread_name is not null,
     thread_state is not null,
@@ -36,7 +36,7 @@ RUNNABLE
 TIMED_WAITING
 WAITING
 -- !result
-select fe_id like '%:%' from information_schema.fe_threads limit 1;
+select fe_address like '%:%' from information_schema.fe_threads limit 1;
 -- result:
 1
 -- !result
@@ -78,4 +78,16 @@ select count(*) >= 0 from information_schema.fe_threads
 where user_time_ms >= 0;
 -- result:
 1
+-- !result
+[UC] select thread_name from information_schema.fe_threads order by cpu_time_ms desc limit 3;
+-- result:
+UNKNOWN 172.26.92.227_8034_1709578860161(-1)
+ReportHandler
+AutoStatistic
+-- !result
+[UC] select thread_name from information_schema.fe_threads order by user_time_ms desc limit 3;
+-- result:
+UNKNOWN 172.26.92.227_8034_1709578860161(-1)
+ReportHandler
+AutoStatistic
 -- !result
