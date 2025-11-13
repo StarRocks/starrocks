@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/pipeline/result_sink_operator.h"
+#include "exec/pipeline/sink/result_sink_operator.h"
 
 #include <arrow/type.h>
 

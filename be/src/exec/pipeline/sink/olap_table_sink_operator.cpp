@@ -12,13 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/pipeline/olap_table_sink_operator.h"
+#include "exec/pipeline/sink/olap_table_sink_operator.h"
 
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/tablet_sink.h"
-#include "exprs/expr.h"
 #include "runtime/buffer_control_block.h"
-#include "runtime/query_statistics.h"
 #include "runtime/result_buffer_mgr.h"
 #include "runtime/runtime_state.h"
 
