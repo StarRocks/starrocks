@@ -114,6 +114,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：系统日志文件的保留时长。默认值 `7d` 表示系统日志文件可以保留 7 天，保留时长超过 7 天的系统日志文件会被删除。
 - 引入版本：-
 
+##### sys_log_json_max_string_length
+
+- 默认值: 1048576
+- 类型: Int
+- 単位: Bytes
+- 是否可变: 否
+- 描述: 设置用于系统 JSON 格式系统日志的 JsonTemplateLayout 的 "maxStringLength" 值。当 `sys_log_format` 被设置为 `"json"` 时，如果字符串类型字段（例如 "message" 和字符串化的异常堆栈跟踪）的长度超过此限制则会被截断。该值在 `Log4jConfig.generateActiveLog4jXmlConfig()` 中注入到生成的 Log4j XML，并应用于 default、warning、audit、dump 和 bigquery 布局；Profile 布局使用单独的配置（`sys_log_json_profile_max_string_length`）。降低此值可减少日志大小，但可能截断有用信息。由于此设置不可变，更改需要重启或重新配置负责重新生成 Log4j 配置的进程。
+- 引入版本: v3.2.11
+
+##### sys_log_json_profile_max_string_length
+
+- 默认值: 104857600 (100 MB)
+- 类型: Int
+- 単位: Bytes
+- 是否可变: 否
+- 描述: 当 `sys_log_format` 为 `"json"` 时，为 Profile（及相关功能）日志 Appender 设置 JsonTemplateLayout 的 maxStringLength。JSON 格式的 Profile 日志中的字符串字段值将被截断到此字节长度；非字符串字段不受影响。此设置在 Log4jConfig（JsonTemplateLayout 的 maxStringLength）中应用，在使用纯文本日志时被忽略。请将值设置为能够包含所需完整消息的足够大值，但注意过大的值会增加日志大小和 I/O。
+- 引入版本: v3.2.11
+
 ##### audit_log_dir
 
 - 默认值：StarRocksFE.STARROCKS_HOME_DIR + "/log"
@@ -273,6 +291,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：是否在 FE 节点上同时启用 HTTPS 服务器和 HTTP 服务器。
 - 引入版本：v4.0
 
+##### ssl_cipher_whitelist
+
+- 默认值: Empty string
+- 类型: String
+- 単位: -
+- 是否可变: No
+- 描述: 基于 IANA 名称的 SSL 密文 Suite 白名单，多项以逗号分隔，支持正则表达式。如果同时设置了白名单和黑名单，则黑名单优先。
+- 引入版本: v4.0
+
+##### ssl_cipher_blacklist
+
+- 默认值: Empty string
+- 类型: String
+- 単位: -
+- 是否可变: No
+- 描述:基于 IANA 名称的 SSL 密文 Suite 黑名单，多项以逗号分隔，支持正则表达式。如果同时设置了白名单和黑名单，则黑名单优先。
+- 引入版本: v4.0
+
 ##### http_worker_threads_num
 
 - 默认值：0
@@ -380,6 +416,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否动态：否
 - 描述：MySQL 服务器中用于处理 I/O 事件的最大线程数。
 - 引入版本：-
+
+##### mysql_service_nio_enable_keep_alive
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: 否
+- 描述: 是否为 MySQL 连接启用 TCP Keep-Alive。适用于位于负载均衡器后且长时间空闲的连接。
+- 引入版本: -
 
 ##### max_mysql_service_task_threads_num
 
@@ -602,6 +647,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：BE 被下线后，是否删除该 BE。true 代表 BE 被下线后会立即删除该 BE。False 代表下线完成后不删除 BE。
 - 引入版本：-
 
+##### txn_latency_metric_report_groups
+
+- 默认值：空字符串
+- 类型：String
+- 单位：-
+- 是否可变: 是
+- 描述：需要汇报的事务延迟监控指标组，多个指标组通过逗号分隔。导入类型基于监控组分类，被启用的组其名称会作为 'type' 标签添加到监控指标中。常见的组包括 `stream_load`、`routine_load`、`broker_load`、`insert`，以及 `compaction` (仅适用于存算分离集群)。示例：`"stream_load,routine_load"`。
+- 引入版本: v4.0
+
 ##### ignore_materialized_view_error
 
 - 默认值：false
@@ -730,15 +784,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
   - 您只能在创建集群时启用此功能。**集群启动后，此配置项的值无法通过任何方式修改**。任何修改尝试均会导致错误。当 FE 检测到此配置项的值与集群首次启动时不一致时，FE 将无法启动。  
   - 目前，此功能不支持 JDBC Catalog 和表名。若需对 JDBC 或 ODBC 数据源进行大小写不敏感处理，请勿启用此功能。
 - 引入版本：v4.0
-
-##### txn_latency_metric_report_groups
-
-- 默认值：空字符串
-- 类型：String
-- 单位：-
-- 是否可变: 是
-- 描述：需要汇报的事务延迟监控指标组，多个指标组通过逗号分隔。导入类型基于监控组分类，被启用的组其名称会作为 'type' 标签添加到监控指标中。常见的组包括 `stream_load`、`routine_load`、`broker_load`、`insert`，以及 `compaction` (仅适用于存算分离集群)。示例：`"stream_load,routine_load"`。
-- 引入版本: v4.0
 
 ### 用户，角色及权限
 
@@ -1039,6 +1084,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：自动定期采集任务中，检测数据更新的间隔时间。
 - 引入版本：-
 
+##### enable_predicate_columns_collection
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否启用 Predicate Column 采集。如果禁用，在查询优化期间将不会记录 Predicate Column。
+- 引入版本：-
+
 ##### statistic_cache_columns
 
 - 默认值：100000
@@ -1137,15 +1191,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否动态：是
 - 描述：是否允许自动采集 ARRAY 类型列的 NDV 信息。
 - 引入版本：v4.0
-
-##### enable_predicate_columns_collection
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：是否启用 Predicate Column 采集。如果禁用，在查询优化期间将不会记录 Predicate Column。
-- 引入版本：-
 
 ##### histogram_buckets_size
 
@@ -1473,6 +1518,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否动态：是
 - 描述：预提交事务的默认超时时间。
 - 引入版本：-
+
+##### finish_transaction_default_lock_timeout_ms
+
+- 默认值: 1000
+- 类型: Int
+- 单位: MilliSeconds
+- 是否可变: 是
+- 描述: 完成事务时获取数据库和表锁的默认超时时间。
+- 引入版本: v4.0.0, v3.5.8
 
 ##### max_load_timeout_second
 
@@ -2624,8 +2678,6 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 是否动态：是
 - 描述：在物化视图创建和 CTAS 操作中，是否优先对固定长度的 VARCHAR 列使用 STRING 类型。
 - 引入版本：v4.0.0
-
-<EditionSpecificFEItem />
 
 ##### backup_job_default_timeout_ms
 

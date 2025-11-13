@@ -113,6 +113,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: システムログファイルの保持期間。デフォルト値 `7d` は、各システムログファイルが 7 日間保持されることを指定します。StarRocks は各システムログファイルをチェックし、7 日前に生成されたものを削除します。
 - 導入バージョン: -
 
+##### enable_audit_sql
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: N/A
+- 変更可能: No
+- 説明: true の場合、Frontend の監査サブシステムは ConnectProcessor によって処理される FE の監査ログ (fe.audit.log) にステートメントの SQL テキストを記録します。格納されるステートメントは他の制御を尊重します：暗号化されたステートメントは (AuditEncryptionChecker により) マスキングされ、認証情報は enable_sql_desensitize_in_log が設定されていると赤字化または脱感作される可能性があり、ダイジェストの記録は enable_sql_digest で制御されます。false の場合、ConnectProcessor は監査イベント内のステートメントテキストを "?" に置き換えます — 他の監査フィールド（user、host、duration、status、qe_slow_log_ms によるスロークエリ検出、メトリクス）は引き続き記録されます。SQL 監査を有効にするとフォレンジックやトラブルシューティングの可視性は向上しますが、機密性の高い SQL 内容が露出したりログの量および I/O が増加したりする可能性があります。無効にすると監査ログでの完全なステートメントの可視性を失う代わりにプライバシーが向上します。このオプションはランタイムで変更できません。
+- 導入バージョン: -
+
 ##### audit_log_dir
 
 - デフォルト: StarRocksFE.STARROCKS_HOME_DIR + "/log"
@@ -270,6 +279,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 単位: -
 - 変更可能: No
 - 説明: FEノードにおいて、HTTP サーバーと並行して HTTPS サーバーを有効化するかどうか。
+- 導入バージョン: v4.0
+
+##### ssl_cipher_whitelist
+
+- デフォルト: Empty string
+- タイプ: String
+- 単位: -
+- 変更可能: No
+- 説明: カンマ区切りのリストで、IANA 名称による SSL 暗号スイートを正規表現でホワイトリスト登録します。ホワイトリストとブラックリストの両方が設定されている場合はブラックリストが優先されます。
+- 導入バージョン: v4.0
+
+##### ssl_cipher_blacklist
+
+- デフォルト: Empty string
+- タイプ: String
+- 単位: -
+- 変更可能: No
+- 説明: カンマ区切りのリストで、IANA 名称による SSL 暗号スイートを正規表現でブラックリスト登録します。ホワイトリストとブラックリストの両方が設定されている場合はブラックリストが優先されます。
 - 導入バージョン: v4.0
 
 ##### http_worker_threads_num
@@ -438,6 +465,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 導入バージョン: -
 
 ### メタデータとクラスタ管理
+
+##### enable_internal_sql
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: N/A
+- 変更可能: No
+- 説明: 有効にすると、内部コンポーネント（たとえば SimpleExecutor）によって実行される内部 SQL ステートメントが保持され、内部の監査/ログ出力に書き込まれます（enable_sql_desensitize_in_log が設定されている場合はさらに脱感作されることがあります）。無効にすると内部 SQL テキストは抑止されます：フォーマットコード（SimpleExecutor.formatSQL）は "?" を返し、実際のステートメントは内部の監査/ログメッセージに出力されません。このフラグは内部ステートメントの実行意味論を変更するものではなく、プライバシー/セキュリティのために内部 SQL のログ出力と可視性のみを制御します。フラグは変更可能ではないため、変更するには再起動が必要です。
+- 導入バージョン: -
 
 ##### meta_dir
 
@@ -610,6 +646,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: BE を廃止した後に削除するかどうか。`TRUE` は、BE が廃止された直後に削除されることを示します。`FALSE` は、BE が廃止された後に削除されないことを示します。
 - 導入バージョン: -
 
+##### txn_latency_metric_report_groups
+
+- デフォルト: 空の文字列
+- タイプ: String
+- Unit: -
+- 変更可能: はい
+- 説明: カンマ区切りで指定する、レポート対象のトランザクション遅延メトリックグループのリスト。 ロードタイプは監視用に論理グループに分類されます。 グループを有効化すると、その名前がトランザクションメトリックの 'type' ラベルとして追加されます。 有効な値: `stream_load`, `routine_load`, `broker_load`, `insert`, `compaction` (共有データクラスタでのみ利用可能)。 例: `"stream_load,routine_load"`。
+- 導入バージョン: v4.0
+
 ##### ignore_materialized_view_error
 
 - デフォルト: false
@@ -737,15 +782,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
   - この機能を有効にすると、関連するすべての名前が小文字で保存され、これらの名前を含むすべての SQL コマンドは自動的に小文字に変換されます。  
   - この機能はクラスターを作成する際にのみ有効にできます。**クラスターが起動された後、この設定項目の値はどのような手段でも変更できません**。この設定を変更しようとするとエラーが発生します。FE は、この設定項目の値がクラスターが最初に起動された際の値と一致しない場合、起動に失敗します。  
   - 現在は、この機能は JDBC カタログ名とテーブル名をサポートしていません。JDBC または ODBC データソースで大文字小文字を区別しない処理を実行したい場合は、この機能を有効にしないでください。
-- 導入バージョン: v4.0
-
-##### txn_latency_metric_report_groups
-
-- デフォルト: 空の文字列
-- タイプ: String
-- Unit: -
-- 変更可能: はい
-- 説明: カンマ区切りで指定する、レポート対象のトランザクション遅延メトリックグループのリスト。 ロードタイプは監視用に論理グループに分類されます。 グループを有効化すると、その名前がトランザクションメトリックの 'type' ラベルとして追加されます。 有効な値: `stream_load`, `routine_load`, `broker_load`, `insert`, `compaction` (共有データクラスタでのみ利用可能)。 例: `"stream_load,routine_load"`。
 - 導入バージョン: v4.0
 
 ### ユーザー、ロール、および権限
@@ -1045,6 +1081,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 単位: 秒
 - 変更可能: はい
 - 説明: 自動収集中にデータの更新をチェックする間隔。
+- 導入バージョン: -
+
+##### enable_predicate_columns_collection
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: 述語カラムの収集を有効にするかどうか。無効にすると、クエリ最適化中に述語カラムは記録されません。
 - 導入バージョン: -
 
 ##### statistic_cache_columns
@@ -1472,6 +1517,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能: はい
 - 説明: 準備済みトランザクションのデフォルトのタイムアウト期間。
 - 導入バージョン: -
+
+##### finish_transaction_default_lock_timeout_ms
+
+- デフォルト: 1000
+- タイプ: Int
+- 単位: MilliSeconds
+- 変更可能: Yes
+- 説明: トランザクションを完了する際に db および table ロックを取得するためのデフォルトのタイムアウト。
+- 導入バージョン: v4.0.0, v3.5.8
 
 ##### max_load_timeout_second
 
@@ -2617,8 +2671,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: マテリアライズドビューの作成とCTAS操作において、固定長のVARCHAR列に対してSTRING型を優先するかどうか。
 - 導入バージョン: v4.0.0
 
-<EditionSpecificFEItem />
-
 ##### backup_job_default_timeout_ms
 
 - デフォルト: 86400 * 1000
@@ -2636,6 +2688,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能: いいえ
 - 説明: FE が使用する文字セット。
 - 導入バージョン: -
+
+##### enable_collect_tablet_num_in_show_proc_backend_disk_path
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: Yes
+- 説明: `SHOW PROC /BACKENDS/{id}` コマンドで各ディスクの tablet 数を収集する機能を有効にするかどうか。
+- 導入バージョン: v4.0.1, v3.5.8
 
 ##### enable_metric_calculator
 
@@ -3140,6 +3201,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能: いいえ
 - 説明: JWT 内のオーディエンス (`aud`) を識別するために使用される文字列のリスト。リスト内のいずれかの値が JWT のオーディエンスと一致する場合にのみ、JWT は有効と見なされます。
 - 導入バージョン: v3.5.0
+
+##### enable_trace_historical_node
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: システムが履歴ノードをトレースできるようにするかどうか。これを`true`に設定すると、Cache Sharing機能を有効にし、弾性スケーリング時にシステムが適切なキャッシュノードを選択できるようになります。
+- 導入バージョン: v3.5.1
 
 
 
